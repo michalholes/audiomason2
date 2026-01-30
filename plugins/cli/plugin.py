@@ -62,6 +62,11 @@ class CLIPlugin:
 
         command = sys.argv[1]
 
+        # Handle --help and -h flags
+        if command in ("--help", "-h"):
+            self._print_usage()
+            return
+
         if command == "process":
             await self._process_command(sys.argv[2:])
         elif command == "wizard":

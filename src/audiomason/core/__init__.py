@@ -84,3 +84,32 @@ __all__ = [
     "detect_chapters",
     "detect_format",
 ]
+
+
+def main():
+    """Main entry point for audiomason CLI."""
+    import asyncio
+    import sys
+    from pathlib import Path
+    
+    # Find plugins directory
+    project_root = Path(__file__).parent.parent.parent.parent
+    plugins_dir = project_root / "plugins"
+    
+    if not plugins_dir.exists():
+        print(f"Error: plugins directory not found at {plugins_dir}")
+        sys.exit(1)
+    
+    # Add CLI plugin to path
+    sys.path.insert(0, str(plugins_dir / "cli"))
+    
+    try:
+        from plugin import CLIPlugin
+        cli = CLIPlugin()
+        asyncio.run(cli.run())
+    except ImportError as e:
+        print(f"Error: Failed to load CLI plugin: {e}")
+        sys.exit(1)
+    except KeyboardInterrupt:
+        print("\nInterrupted")
+        sys.exit(0)

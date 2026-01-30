@@ -1,0 +1,57 @@
+[paths]
+# repo_root = "/home/pi/audiomason2"
+# patch_dir = "/home/pi/audiomason2/patches"
+
+[git]
+allow_push_fail = true
+default_branch = "main"
+fetch_always = true
+require_up_to_date = true
+
+[workspace]
+enabled = true
+base = "local_head"
+delete_on_success = true
+
+[scope]
+allow_outside_files = false
+declared_untouched_fail = true
+allow_declared_untouched = false
+enforce_files_only = true
+no_op_fail = true
+
+[gates]
+#order = []
+order = ["ruff", "pytest", "mypy"]
+ruff_autofix = true
+ruff_format = true
+pytest_use_venv = true
+
+[promotion]
+mode = "copy_files"
+fail_if_live_files_changed = true
+live_changed_resolution = "fail"
+commit_and_push = true
+rollback_on_failure = true
+
+[logging]
+log_retention = 20
+
+[security]
+ascii_only_patch = true
+block_subprocess_network_best_effort = true
+patch_jail = true
+patch_jail_unshare_net = true
+live_repo_guard = true
+live_repo_guard_scope = "patch"
+rollback_workspace_on_fail = true
+
+ruff_targets = ["src", "audit", "scripts", "tests"]
+pytest_targets = ["tests"]
+mypy_targets = ["src", "audit", "scripts"]
+
+[audit]
+# If true, fail fast when new audit domains are added without updating audit/audit_rubric.yaml
+# with required runtime evidence commands.
+post_success_audit = false
+audit_rubric_guard = true
