@@ -30,7 +30,9 @@ class ParallelProcessor:
         self.max_concurrent = max_concurrent
         self.semaphore = asyncio.Semaphore(max_concurrent)
 
-    async def process_book(self, context: ProcessingContext, pipeline_path: Path) -> ProcessingContext:
+    async def process_book(
+        self, context: ProcessingContext, pipeline_path: Path
+    ) -> ProcessingContext:
         """Process single book with semaphore.
 
         Args:
@@ -67,15 +69,15 @@ class ParallelProcessor:
 
         # Process with progress tracking
         results = []
-        
+
         for i, task in enumerate(asyncio.as_completed(tasks)):
             try:
                 result = await task
                 results.append(result)
-                
+
                 if progress_callback:
                     progress_callback(i + 1, len(tasks), result)
-                    
+
             except Exception as e:
                 # Log error but continue with other books
                 print(f"Error processing book: {e}")
@@ -124,15 +126,13 @@ class BatchQueue:
             try:
                 # Get book from queue (with timeout)
                 context = await asyncio.wait_for(self.queue.get(), timeout=1.0)
-                
+
                 # Process book
-                result = await self.pipeline_executor.execute_from_yaml(
-                    self.pipeline_path, context
-                )
-                
+                result = await self.pipeline_executor.execute_from_yaml(self.pipeline_path, context)
+
                 self.results.append(result)
                 self.queue.task_done()
-                
+
             except asyncio.TimeoutError:
                 # No books in queue, continue
                 continue
@@ -143,16 +143,16 @@ class BatchQueue:
     async def start(self) -> None:
         """Start processing queue."""
         self.running = True
-        
+
         # Start worker tasks
         workers = []
         for _ in range(self.max_concurrent):
             worker = asyncio.create_task(self.worker())
             workers.append(worker)
-        
+
         # Wait for all tasks to complete
         await self.queue.join()
-        
+
         # Stop workers
         self.running = False
         await asyncio.gather(*workers, return_exceptions=True)

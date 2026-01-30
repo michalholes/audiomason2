@@ -17,7 +17,6 @@ from pathlib import Path
 from typing import Any
 
 from audiomason.core import (
-    __version__,
     ConfigResolver,
     PluginLoader,
     PipelineExecutor,
@@ -90,7 +89,7 @@ class CLIPlugin:
 
     def _print_usage(self) -> None:
         """Print usage information."""
-        print(f"AudioMason v{__version__}")
+        print("AudioMason v2.0.0-alpha")
         print()
         print("Usage:")
         print("  audiomason process <file(s)>   Process audiobook file(s)")
@@ -128,7 +127,7 @@ class CLIPlugin:
 
     def _version_command(self) -> None:
         """Print version."""
-        print(f"AudioMason v{__version__}")
+        print("AudioMason v2.0.0-alpha")
 
     async def _process_command(self, args: list[str]) -> None:
         """Process command.
@@ -491,21 +490,13 @@ class CLIPlugin:
         port = 8080
         for i, arg in enumerate(args):
             if arg == "--port" and i + 1 < len(args):
-                try:
-                    port = int(args[i + 1])
-                    if port < 1 or port > 65535:
-                        self._error(f"Invalid port: {port} (must be 1-65535)")
-                        return
-                except ValueError:
-                    self._error(f"Invalid port: {args[i + 1]} (must be a number)")
-                    return
+                port = int(args[i + 1])
 
         print(f"🌐 Starting web server on port {port}...")
         print()
 
         # Load web server plugin
-        # FIX BUG 2,7: Use correct plugins directory
-        plugins_dir = Path(__file__).parent.parent
+        plugins_dir = Path(__file__).parent
         loader = PluginLoader(builtin_plugins_dir=plugins_dir)
 
         web_plugin_dir = plugins_dir / "web_server"
@@ -524,8 +515,8 @@ class CLIPlugin:
         """Start daemon mode."""
         print("🔄 Starting daemon mode...")
         print()
-        # FIX BUG 3,7: Use correct plugins directory
-        plugins_dir = Path(__file__).parent.parent
+
+        plugins_dir = Path(__file__).parent
         loader = PluginLoader(builtin_plugins_dir=plugins_dir)
 
         daemon_plugin_dir = plugins_dir / "daemon"
@@ -730,54 +721,29 @@ class CLIPlugin:
     async def _tui_command(self) -> None:
         """Launch TUI interface."""
         try:
-            # FIX BUG 1,4,7: Use importlib and proper error messages
-            import importlib.util
-            
+            # Load TUI plugin
             plugins_dir = Path(__file__).parent.parent
             tui_dir = plugins_dir / "tui"
             
             if not tui_dir.exists():
                 self._error("TUI plugin not found!")
-                print(f"Expected location: {tui_dir}")
+                print("Install TUI plugin to use this feature.")
                 return
             
-            tui_plugin_file = tui_dir / "plugin.py"
-            if not tui_plugin_file.exists():
-                self._error(f"TUI plugin file not found: {tui_plugin_file}")
-                return
+            # Import and run
+            sys.path.insert(0, str(tui_dir))
+            from plugin import TUIPlugin
             
-            # Load with unique module name
-            spec = importlib.util.spec_from_file_location("audiomason_tui_plugin", tui_plugin_file)
-            if spec is None or spec.loader is None:
-                raise ImportError(f"Failed to load spec for {tui_plugin_file}")
-            
-            tui_module = importlib.util.module_from_spec(spec)
-            sys.modules["audiomason_tui_plugin"] = tui_module
-            spec.loader.exec_module(tui_module)
-            
-            TUIPlugin = tui_module.TUIPlugin
             tui = TUIPlugin()
             await tui.run()
             
         except ImportError as e:
-            # FIX BUG 4: Accurate error messages
-            error_msg = str(e).lower()
-            
-            if "tui" in error_msg or "plugin" in error_msg:
-                self._error(f"Failed to load TUI plugin: {e}")
-                print(f"\nTUI plugin file: {tui_plugin_file if 'tui_plugin_file' in locals() else 'unknown'}")
-            elif "curses" in error_msg or "_curses" in error_msg:
-                self._error("TUI requires the 'curses' module")
-                print("\nOn Windows: pip install windows-curses")
-            else:
-                self._error(f"Failed to load TUI: {e}")
-            
-            if self.verbosity >= VerbosityLevel.DEBUG:
-                import traceback
-                traceback.print_exc()
-                
+            self._error(f"Failed to load TUI: {e}")
+            print("\nTUI requires the 'curses' module.")
+            print("On Windows, install: pip install windows-curses")
         except Exception as e:
             self._error(f"TUI error: {e}")
             import traceback
             if self.verbosity >= VerbosityLevel.DEBUG:
                 traceback.print_exc()
+

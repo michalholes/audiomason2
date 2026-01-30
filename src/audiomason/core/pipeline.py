@@ -177,9 +177,7 @@ class PipelineExecutor:
 
         while remaining:
             # Find steps with no dependencies
-            current_level = [
-                step_map[step_id] for step_id in remaining if in_degree[step_id] == 0
-            ]
+            current_level = [step_map[step_id] for step_id in remaining if in_degree[step_id] == 0]
 
             if not current_level:
                 # Cycle detected

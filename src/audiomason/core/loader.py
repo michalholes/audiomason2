@@ -237,13 +237,13 @@ class PluginLoader:
                 raise PluginError(f"Module file not found: {module_file}")
 
             # Load module
-                        # Load module
+            # Load module
             #
             # IMPORTANT: never register external plugin modules under a generic name like
             # 'plugin' in sys.modules. Multiple plugins can legitimately use entrypoints
             # like 'plugin:SomePlugin', which would otherwise overwrite each other and
             # pollute global import state.
-            plugin_key = plugin_dir.name.replace('-', '_').replace('.', '_')
+            plugin_key = plugin_dir.name.replace("-", "_").replace(".", "_")
             unique_module_name = f"audiomason._plugins.{plugin_key}.{module_name}"
             spec = importlib.util.spec_from_file_location(unique_module_name, module_file)
             if spec is None or spec.loader is None:

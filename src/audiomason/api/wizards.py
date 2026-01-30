@@ -29,19 +29,22 @@ class WizardAPI:
             List of wizard info dicts
         """
         wizards = []
-        
+
         for wizard_file in self.wizards_dir.glob("*.yaml"):
             import yaml
+
             with open(wizard_file) as f:
                 wizard = yaml.safe_load(f)
-            
-            wizards.append({
-                "name": wizard.get("wizard", {}).get("name", wizard_file.stem),
-                "description": wizard.get("wizard", {}).get("description", ""),
-                "filename": wizard_file.name,
-                "steps": len(wizard.get("wizard", {}).get("steps", [])),
-            })
-        
+
+            wizards.append(
+                {
+                    "name": wizard.get("wizard", {}).get("name", wizard_file.stem),
+                    "description": wizard.get("wizard", {}).get("description", ""),
+                    "filename": wizard_file.name,
+                    "steps": len(wizard.get("wizard", {}).get("steps", [])),
+                }
+            )
+
         return wizards
 
     def get_wizard(self, name: str) -> dict[str, Any]:
@@ -54,11 +57,12 @@ class WizardAPI:
             Wizard definition
         """
         wizard_file = self.wizards_dir / f"{name}.yaml"
-        
+
         if not wizard_file.exists():
             raise FileNotFoundError(f"Wizard not found: {name}")
-        
+
         import yaml
+
         with open(wizard_file) as f:
             return yaml.safe_load(f)
 
@@ -74,19 +78,20 @@ class WizardAPI:
         wizard_name = wizard_def.get("wizard", {}).get("name")
         if not wizard_name:
             raise ValueError("Wizard name is required")
-        
+
         # Convert name to filename
         filename = wizard_name.lower().replace(" ", "_")
         wizard_file = self.wizards_dir / f"{filename}.yaml"
-        
+
         if wizard_file.exists():
             raise FileExistsError(f"Wizard already exists: {wizard_name}")
-        
+
         # Save wizard
         import yaml
+
         with open(wizard_file, "w") as f:
             yaml.safe_dump(wizard_def, f, default_flow_style=False)
-        
+
         return {"message": f"Wizard '{wizard_name}' created", "filename": filename}
 
     def update_wizard(self, name: str, wizard_def: dict[str, Any]) -> dict[str, str]:
@@ -100,15 +105,16 @@ class WizardAPI:
             Success message
         """
         wizard_file = self.wizards_dir / f"{name}.yaml"
-        
+
         if not wizard_file.exists():
             raise FileNotFoundError(f"Wizard not found: {name}")
-        
+
         # Save wizard
         import yaml
+
         with open(wizard_file, "w") as f:
             yaml.safe_dump(wizard_def, f, default_flow_style=False)
-        
+
         wizard_name = wizard_def.get("wizard", {}).get("name", name)
         return {"message": f"Wizard '{wizard_name}' updated"}
 
@@ -122,10 +128,10 @@ class WizardAPI:
             Success message
         """
         wizard_file = self.wizards_dir / f"{name}.yaml"
-        
+
         if not wizard_file.exists():
             raise FileNotFoundError(f"Wizard not found: {name}")
-        
+
         wizard_file.unlink()
-        
+
         return {"message": f"Wizard '{name}' deleted"}

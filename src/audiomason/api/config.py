@@ -26,6 +26,7 @@ class ConfigAPI:
         """Load configuration from file."""
         if self.config_file.exists():
             import yaml
+
             with open(self.config_file) as f:
                 self.config = yaml.safe_load(f) or {}
         else:
@@ -34,6 +35,7 @@ class ConfigAPI:
     def _save_config(self) -> None:
         """Save configuration to file."""
         import yaml
+
         with open(self.config_file, "w") as f:
             yaml.safe_dump(self.config, f, default_flow_style=False)
 
@@ -145,7 +147,7 @@ class ConfigAPI:
         # Deep merge
         self._deep_merge(self.config, updates)
         self._save_config()
-        
+
         return {"message": "Configuration updated"}
 
     def _deep_merge(self, base: dict, updates: dict) -> None:
@@ -169,5 +171,5 @@ class ConfigAPI:
         """
         self.config = self._get_defaults()
         self._save_config()
-        
+
         return {"message": "Configuration reset to defaults"}

@@ -145,13 +145,15 @@ def test_enhanced_cli():
         print("✓ Verbosity levels defined")
 
         # Test parsing
-        files, opts = cli._parse_args([
-            "test.m4a",
-            "--author",
-            "Test",
-            "--verbose",
-            "--loudnorm",
-        ])
+        files, opts = cli._parse_args(
+            [
+                "test.m4a",
+                "--author",
+                "Test",
+                "--verbose",
+                "--loudnorm",
+            ]
+        )
         assert len(files) >= 0  # May not exist
         assert opts.get("author") == "Test"
         assert opts.get("verbose") is True

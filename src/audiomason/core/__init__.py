@@ -91,24 +91,70 @@ def main():
     import asyncio
     import sys
     from pathlib import Path
+    import importlib.util
     
-    # Find plugins directory
-    project_root = Path(__file__).parent.parent.parent.parent
-    plugins_dir = project_root / "plugins"
+    # FIX BUG 6: Use proper method to find project root
+    # Try multiple strategies to locate plugins directory
     
-    if not plugins_dir.exists():
-        print(f"Error: plugins directory not found at {plugins_dir}")
+    # Strategy 1: Relative to installed package location
+    core_location = Path(__file__).parent  # .../site-packages/audiomason/core
+    package_root = core_location.parent    # .../site-packages/audiomason
+    
+    # Strategy 2: Development environment (git checkout)
+    dev_plugins = package_root.parent.parent / "plugins"
+    
+    # Strategy 3: Installed package (look for plugins as sibling)
+    installed_plugins = package_root.parent / "plugins"
+    
+    # Try to find plugins directory
+    plugins_dir = None
+    for candidate in [dev_plugins, installed_plugins]:
+        if candidate.exists() and candidate.is_dir():
+            plugins_dir = candidate
+            break
+    
+    if plugins_dir is None:
+        # Last resort: check environment variable
+        import os
+        env_plugins = os.getenv("AUDIOMASON_PLUGINS_DIR")
+        if env_plugins:
+            plugins_dir = Path(env_plugins)
+    
+    if plugins_dir is None or not plugins_dir.exists():
+        print(f"Error: plugins directory not found")
+        print(f"Tried:")
+        print(f"  - {dev_plugins}")
+        print(f"  - {installed_plugins}")
+        print(f"Set AUDIOMASON_PLUGINS_DIR environment variable to specify location")
         sys.exit(1)
     
-    # Add CLI plugin to path
-    sys.path.insert(0, str(plugins_dir / "cli"))
+    # FIX BUG 1: Use importlib instead of manipulating sys.path with generic "plugin" name
+    cli_plugin_file = plugins_dir / "cli" / "plugin.py"
+    
+    if not cli_plugin_file.exists():
+        print(f"Error: CLI plugin not found at {cli_plugin_file}")
+        sys.exit(1)
     
     try:
-        from plugin import CLIPlugin
+        # Load the CLI plugin module with a unique name
+        spec = importlib.util.spec_from_file_location("audiomason_cli_plugin", cli_plugin_file)
+        if spec is None or spec.loader is None:
+            raise ImportError(f"Failed to load spec for {cli_plugin_file}")
+        
+        cli_module = importlib.util.module_from_spec(spec)
+        sys.modules["audiomason_cli_plugin"] = cli_module
+        spec.loader.exec_module(cli_module)
+        
+        # Get the CLIPlugin class
+        CLIPlugin = cli_module.CLIPlugin
+        
         cli = CLIPlugin()
         asyncio.run(cli.run())
+        
     except ImportError as e:
         print(f"Error: Failed to load CLI plugin: {e}")
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
     except KeyboardInterrupt:
         print("\nInterrupted")

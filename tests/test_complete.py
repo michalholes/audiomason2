@@ -41,7 +41,7 @@ def test_all_plugins():
 
     for plugin_name in expected:
         plugin_dir = plugins_dir / plugin_name
-        
+
         if not plugin_dir.exists():
             print(f"❌ {plugin_name:25s} - Directory not found")
             failed.append(plugin_name)
@@ -93,14 +93,14 @@ def test_plugin_lines():
     print()
 
     plugins_dir = Path(__file__).parent.parent / "plugins"
-    
+
     total_lines = 0
     plugins_stats = []
 
     for plugin_dir in plugins_dir.iterdir():
         if not plugin_dir.is_dir():
             continue
-            
+
         plugin_py = plugin_dir / "plugin.py"
         if plugin_py.exists():
             lines = len(plugin_py.read_text().splitlines())
@@ -136,10 +136,10 @@ def test_pipelines():
     executor = PipelineExecutor(loader)
 
     pipelines = ["minimal.yaml", "standard.yaml"]
-    
+
     for pipeline_name in pipelines:
         pipeline_path = pipelines_dir / pipeline_name
-        
+
         if not pipeline_path.exists():
             print(f"❌ {pipeline_name:20s} - Not found")
             continue
@@ -147,11 +147,11 @@ def test_pipelines():
         try:
             pipeline = executor.load_pipeline(pipeline_path)
             print(f"✅ {pipeline_name:20s} - {pipeline.name} ({len(pipeline.steps)} steps)")
-            
+
             for step in pipeline.steps:
                 parallel = " (parallel)" if step.parallel else ""
                 print(f"   {step.id:15s} → {step.plugin}{parallel}")
-                
+
         except Exception as e:
             print(f"❌ {pipeline_name:20s} - Failed: {e}")
 
@@ -162,16 +162,16 @@ def main():
     """Run all tests."""
     try:
         print()
-        
+
         # Test 1: Plugin loading
         plugins_ok = test_all_plugins()
-        
+
         # Test 2: Code stats
         test_plugin_lines()
-        
+
         # Test 3: Pipelines
         test_pipelines()
-        
+
         print("=" * 70)
         if plugins_ok:
             print("✅ COMPLETE TEST SUITE PASSED")
@@ -179,12 +179,13 @@ def main():
             print("⚠️  SOME TESTS FAILED")
         print("=" * 70)
         print()
-        
+
         return 0 if plugins_ok else 1
-        
+
     except Exception as e:
         print(f"\n❌ Test suite failed: {e}")
         import traceback
+
         traceback.print_exc()
         return 1
 
