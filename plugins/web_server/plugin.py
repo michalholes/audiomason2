@@ -20,6 +20,15 @@ try:
 except ImportError:
     HAS_FASTAPI = False
     FastAPI = None
+    File = None
+    Form = None
+    UploadFile = None
+    WebSocket = None
+    WebSocketDisconnect = None
+    HTMLResponse = None
+    JSONResponse = None
+    StaticFiles = None
+    uvicorn = None
 
 from audiomason.core import (
     ConfigResolver,

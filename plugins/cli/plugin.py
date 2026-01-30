@@ -17,7 +17,6 @@ from pathlib import Path
 from typing import Any
 
 from audiomason.core import (
-    __version__,
     ConfigResolver,
     PluginLoader,
     PipelineExecutor,
@@ -55,11 +54,42 @@ class CLIPlugin:
         self.config = config or {}
         self.verbosity = VerbosityLevel.NORMAL
 
+    def _extract_verbosity_from_argv(self) -> None:
+        """Extract verbosity flags from sys.argv and remove them.
+        
+        This allows verbosity flags to be in ANY position:
+        - audiomason -d tui
+        - audiomason tui -d
+        - audiomason -v wizard advanced
+        """
+        # Check all arguments for verbosity flags
+        args_to_remove = []
+        
+        for i, arg in enumerate(sys.argv):
+            if arg in ("-q", "--quiet"):
+                self.verbosity = VerbosityLevel.QUIET
+                args_to_remove.append(i)
+            elif arg in ("-v", "--verbose"):
+                self.verbosity = VerbosityLevel.VERBOSE
+                args_to_remove.append(i)
+            elif arg in ("-d", "--debug"):
+                self.verbosity = VerbosityLevel.DEBUG
+                args_to_remove.append(i)
+        
+        # Remove verbosity flags from sys.argv (in reverse order to preserve indices)
+        for i in reversed(args_to_remove):
+            sys.argv.pop(i)
+        
+        self._debug(f"Verbosity level set to: {self.verbosity}")
+
     async def run(self) -> None:
         """Run CLI - main entry point."""
         if len(sys.argv) < 2:
             self._print_usage()
             return
+
+        # Extract verbosity flags from ANY position in argv
+        self._extract_verbosity_from_argv()
 
         command = sys.argv[1]
 
@@ -90,7 +120,7 @@ class CLIPlugin:
 
     def _print_usage(self) -> None:
         """Print usage information."""
-        print(f"AudioMason v{__version__}")
+        print("AudioMason v2.0.0-alpha")
         print()
         print("Usage:")
         print("  audiomason process <file(s)>   Process audiobook file(s)")
@@ -128,7 +158,7 @@ class CLIPlugin:
 
     def _version_command(self) -> None:
         """Print version."""
-        print(f"AudioMason v{__version__}")
+        print("AudioMason v2.0.0-alpha")
 
     async def _process_command(self, args: list[str]) -> None:
         """Process command.
@@ -144,14 +174,8 @@ class CLIPlugin:
             self._print_usage()
             return
 
-        # Set verbosity
-        if cli_args.get("quiet"):
-            self.verbosity = VerbosityLevel.QUIET
-        elif cli_args.get("debug"):
-            self.verbosity = VerbosityLevel.DEBUG
-        elif cli_args.get("verbose"):
-            self.verbosity = VerbosityLevel.VERBOSE
-
+        # Verbosity is already set globally in run()
+        
         self._info(f"🎧 AudioMason v2 - Processing {len(files)} file(s)")
         self._info("")
 
@@ -487,57 +511,62 @@ class CLIPlugin:
         Args:
             args: Command arguments
         """
+        self._debug(f"Starting web server with verbosity: {self.verbosity}")
+        
         # Parse port
         port = 8080
         for i, arg in enumerate(args):
             if arg == "--port" and i + 1 < len(args):
-                try:
-                    port = int(args[i + 1])
-                    if port < 1 or port > 65535:
-                        self._error(f"Invalid port: {port} (must be 1-65535)")
-                        return
-                except ValueError:
-                    self._error(f"Invalid port: {args[i + 1]} (must be a number)")
-                    return
+                port = int(args[i + 1])
 
-        print(f"🌐 Starting web server on port {port}...")
-        print()
+        self._info(f"🌐 Starting web server on port {port}...")
+        self._info("")
 
         # Load web server plugin
-        # FIX BUG 2,7: Use correct plugins directory
         plugins_dir = Path(__file__).parent.parent
         loader = PluginLoader(builtin_plugins_dir=plugins_dir)
 
         web_plugin_dir = plugins_dir / "web_server"
         if not web_plugin_dir.exists():
-            print("❌ Web server plugin not found")
+            self._error("❌ Web server plugin not found")
             return
 
         try:
             web_plugin = loader.load_plugin(web_plugin_dir, validate=False)
             web_plugin.config["port"] = port
+            # Pass verbosity to web server
+            web_plugin.verbosity = self.verbosity
             await web_plugin.run()
         except Exception as e:
-            print(f"❌ Error starting web server: {e}")
+            self._error(f"❌ Error starting web server: {e}")
+            if self.verbosity >= VerbosityLevel.DEBUG:
+                import traceback
+                traceback.print_exc()
 
     async def _daemon_command(self) -> None:
         """Start daemon mode."""
-        print("🔄 Starting daemon mode...")
-        print()
-        # FIX BUG 3,7: Use correct plugins directory
+        self._debug(f"Starting daemon mode with verbosity: {self.verbosity}")
+        self._info("🔄 Starting daemon mode...")
+        self._info("")
+
         plugins_dir = Path(__file__).parent.parent
         loader = PluginLoader(builtin_plugins_dir=plugins_dir)
 
         daemon_plugin_dir = plugins_dir / "daemon"
         if not daemon_plugin_dir.exists():
-            print("❌ Daemon plugin not found")
+            self._error("❌ Daemon plugin not found")
             return
 
         try:
             daemon_plugin = loader.load_plugin(daemon_plugin_dir, validate=False)
+            # Pass verbosity to daemon
+            daemon_plugin.verbosity = self.verbosity
             await daemon_plugin.run()
         except Exception as e:
-            print(f"❌ Error starting daemon: {e}")
+            self._error(f"❌ Error starting daemon: {e}")
+            if self.verbosity >= VerbosityLevel.DEBUG:
+                import traceback
+                traceback.print_exc()
 
     async def _checkpoints_command(self, args: list[str]) -> None:
         """Manage checkpoints.
@@ -729,53 +758,30 @@ class CLIPlugin:
     
     async def _tui_command(self) -> None:
         """Launch TUI interface."""
+        self._debug(f"Launching TUI with verbosity level: {self.verbosity}")
+        
         try:
-            # FIX BUG 1,4,7: Use importlib and proper error messages
-            import importlib.util
-            
+            # Load TUI plugin
             plugins_dir = Path(__file__).parent.parent
             tui_dir = plugins_dir / "tui"
             
             if not tui_dir.exists():
                 self._error("TUI plugin not found!")
-                print(f"Expected location: {tui_dir}")
+                print("Install TUI plugin to use this feature.")
                 return
             
-            tui_plugin_file = tui_dir / "plugin.py"
-            if not tui_plugin_file.exists():
-                self._error(f"TUI plugin file not found: {tui_plugin_file}")
-                return
+            # Import and run
+            sys.path.insert(0, str(tui_dir))
+            from plugin import TUIPlugin
             
-            # Load with unique module name
-            spec = importlib.util.spec_from_file_location("audiomason_tui_plugin", tui_plugin_file)
-            if spec is None or spec.loader is None:
-                raise ImportError(f"Failed to load spec for {tui_plugin_file}")
-            
-            tui_module = importlib.util.module_from_spec(spec)
-            sys.modules["audiomason_tui_plugin"] = tui_module
-            spec.loader.exec_module(tui_module)
-            
-            TUIPlugin = tui_module.TUIPlugin
-            tui = TUIPlugin()
+            # Pass verbosity level to TUI
+            tui = TUIPlugin(config={"verbosity": self.verbosity})
             await tui.run()
             
         except ImportError as e:
-            # FIX BUG 4: Accurate error messages
-            error_msg = str(e).lower()
-            
-            if "tui" in error_msg or "plugin" in error_msg:
-                self._error(f"Failed to load TUI plugin: {e}")
-                print(f"\nTUI plugin file: {tui_plugin_file if 'tui_plugin_file' in locals() else 'unknown'}")
-            elif "curses" in error_msg or "_curses" in error_msg:
-                self._error("TUI requires the 'curses' module")
-                print("\nOn Windows: pip install windows-curses")
-            else:
-                self._error(f"Failed to load TUI: {e}")
-            
-            if self.verbosity >= VerbosityLevel.DEBUG:
-                import traceback
-                traceback.print_exc()
-                
+            self._error(f"Failed to load TUI: {e}")
+            print("\nTUI requires the 'curses' module.")
+            print("On Windows, install: pip install windows-curses")
         except Exception as e:
             self._error(f"TUI error: {e}")
             import traceback
