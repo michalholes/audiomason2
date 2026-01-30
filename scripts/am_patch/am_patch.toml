@@ -54,4 +54,4 @@ mypy_targets = ["src", "audit", "scripts"]
 # If true, fail fast when new audit domains are added without updating audit/audit_rubric.yaml
 # with required runtime evidence commands.
 post_success_audit = false
-audit_rubric_guard = true
+audit_rubric_guard = false

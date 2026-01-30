@@ -9,6 +9,20 @@ import pytest
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 
+@pytest.fixture(autouse=True)
+def _isolate_generic_plugin_module():
+    """Ensure 'plugin' module cache does not leak between tests.
+
+    Some tests temporarily add a plugin directory to sys.path and import from a local
+    plugin.py via `import plugin` / `from plugin import ...`. If another test (or the
+    plugin loader) has already populated sys.modules['plugin'], Python will reuse that
+    cached module even when sys.path changes.
+    """
+    sys.modules.pop("plugin", None)
+    yield
+    sys.modules.pop("plugin", None)
+
+
 @pytest.fixture
 def temp_audio_file(tmp_path):
     """Create temporary fake audio file.
