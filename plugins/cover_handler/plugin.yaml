@@ -1,0 +1,25 @@
+name: cover_handler
+version: 1.0.0
+description: "Cover image handling: extract, download, convert, embed"
+author: "AudioMason Team <team@audiomason.com>"
+license: MIT
+
+entrypoint: plugin:CoverHandlerPlugin
+
+interfaces:
+  - IProcessor
+
+hooks:
+  - post_metadata
+
+dependencies:
+  python: ">=3.11"
+  system:
+    - ffmpeg>=5.0
+
+config_schema:
+  cover_size:
+    type: integer
+    default: 1400
+
+test_level: basic

@@ -1,0 +1,35 @@
+name: daemon
+version: 1.0.0
+description: "Daemon mode - watch folders and auto-process new files"
+author: "AudioMason Team <team@audiomason.com>"
+license: MIT
+
+entrypoint: plugin:DaemonPlugin
+
+interfaces:
+  - IUI
+
+hooks: []
+
+dependencies:
+  python: ">=3.11"
+
+config_schema:
+  watch_folders:
+    type: array
+    items:
+      type: string
+    default: []
+  interval:
+    type: integer
+    default: 30
+  on_success:
+    type: string
+    default: move_to_output
+    enum: [move_to_output, keep, delete]
+  on_error:
+    type: string
+    default: move_to_error
+    enum: [move_to_error, keep, delete]
+
+test_level: basic

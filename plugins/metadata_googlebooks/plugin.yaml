@@ -1,0 +1,25 @@
+name: metadata_googlebooks
+version: 1.0.0
+description: "Fetch metadata from Google Books API"
+author: "AudioMason Team <team@audiomason.com>"
+license: MIT
+
+entrypoint: plugin:GoogleBooksPlugin
+
+interfaces:
+  - IProvider
+
+hooks: []
+
+dependencies:
+  python: ">=3.11"
+  system:
+    - curl
+
+config_schema:
+  api_key:
+    type: string
+    default: null
+    description: "Google Books API key (optional, increases rate limit)"
+
+test_level: basic

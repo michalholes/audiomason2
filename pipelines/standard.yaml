@@ -1,0 +1,36 @@
+pipeline:
+  name: standard
+  description: "Standard pipeline - conversion + metadata + covers + tags"
+  
+  steps:
+    # Step 1: Import source file to staging area
+    - id: import
+      plugin: file_io
+      interface: IProcessor
+      after: []
+    
+    # Step 2: Convert audio (M4A/Opus → MP3)
+    - id: convert
+      plugin: audio_processor
+      interface: IProcessor
+      after: [import]
+    
+    # Step 3: Handle cover (extract/download)
+    - id: cover
+      plugin: cover_handler
+      interface: IProcessor
+      after: [convert]
+      parallel: true
+    
+    # Step 4: Write ID3 tags
+    - id: tags
+      plugin: id3_tagger
+      interface: IProcessor
+      after: [convert]
+      parallel: true
+    
+    # Step 5: Export to output directory
+    - id: export
+      plugin: file_io
+      interface: IProcessor
+      after: [cover, tags]
