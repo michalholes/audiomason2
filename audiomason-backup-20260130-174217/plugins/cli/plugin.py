@@ -64,10 +64,6 @@ class CLIPlugin:
 
         if command == "process":
             await self._process_command(sys.argv[2:])
-        elif command == "wizard":
-            await self._wizard_command(sys.argv[2:])
-        elif command == "tui":
-            await self._tui_command()
         elif command == "version":
             self._version_command()
         elif command == "help":
@@ -88,8 +84,6 @@ class CLIPlugin:
         print()
         print("Usage:")
         print("  audiomason process <file(s)>   Process audiobook file(s)")
-        print("  audiomason wizard [name]       Run wizard (interactive)")
-        print("  audiomason tui                 Terminal UI (ncurses)")
         print("  audiomason web [--port PORT]   Start web server")
         print("  audiomason daemon              Start daemon mode")
         print("  audiomason checkpoints         Manage checkpoints")
@@ -112,13 +106,13 @@ class CLIPlugin:
         print("  -d, --debug                    Debug mode (everything)")
         print()
         print("Examples:")
-        print("  audiomason tui                 Launch terminal interface")
-        print("  audiomason wizard              List available wizards")
-        print("  audiomason wizard quick_import Run quick import wizard")
         print("  audiomason process book.m4a")
         print('  audiomason process book.m4a --author "George Orwell" --title "1984"')
         print("  audiomason web --port 8080")
+        print("  audiomason daemon")
+        print('  audiomason process book.m4a --author "George Orwell" --title "1984"')
         print("  audiomason process *.m4a --bitrate 320k --loudnorm -v")
+        print("  audiomason process book.m4a --cover url --cover-url https://example.com/cover.jpg")
 
     def _version_command(self) -> None:
         """Print version."""
@@ -561,184 +555,3 @@ class CLIPlugin:
 
             deleted = manager.cleanup_old_checkpoints(days=days)
             print(f"Deleted {deleted} checkpoint(s) older than {days} days")
-    
-    async def _wizard_command(self, args: list[str]) -> None:
-        """Run wizard command.
-        
-        Args:
-            args: Command arguments
-        """
-        from audiomason.wizard_engine import WizardEngine
-        
-        wizards_dir = Path(__file__).parent.parent.parent / "wizards"
-        
-        # List wizards if no args
-        if not args:
-            print("🧙 Available Wizards:")
-            print()
-            
-            if not wizards_dir.exists():
-                print("  No wizards found!")
-                print(f"  Create wizards in: {wizards_dir}")
-                return
-            
-            wizard_files = list(wizards_dir.glob("*.yaml"))
-            if not wizard_files:
-                print("  No wizards found!")
-                return
-            
-            for wizard_file in sorted(wizard_files):
-                # Load wizard to get name and description
-                import yaml
-                try:
-                    with open(wizard_file) as f:
-                        wizard_def = yaml.safe_load(f)
-                    
-                    wizard = wizard_def.get('wizard', {})
-                    name = wizard.get('name', wizard_file.stem)
-                    desc = wizard.get('description', 'No description')
-                    
-                    print(f"  {wizard_file.stem}")
-                    print(f"    Name: {name}")
-                    print(f"    Description: {desc}")
-                    print()
-                except Exception as e:
-                    print(f"  {wizard_file.stem} (error: {e})")
-                    print()
-            
-            print("Run a wizard with: audiomason wizard <name>")
-            return
-        
-        # Run specified wizard
-        wizard_name = args[0]
-        wizard_file = wizards_dir / f"{wizard_name}.yaml"
-        
-        if not wizard_file.exists():
-            self._error(f"Wizard not found: {wizard_name}")
-            print(f"Available wizards: {', '.join([f.stem for f in wizards_dir.glob('*.yaml')])}")
-            return
-        
-        print(f"🧙 Running wizard: {wizard_name}")
-        print()
-        
-        # Create wizard engine
-        plugins_dir = Path(__file__).parent.parent
-        loader = PluginLoader(builtin_plugins_dir=plugins_dir)
-        
-        # Load commonly used plugins
-        for plugin in ["audio_processor", "file_io", "id3_tagger", "cover_handler"]:
-            plugin_dir = plugins_dir / plugin
-            if plugin_dir.exists():
-                try:
-                    loader.load_plugin(plugin_dir, validate=False)
-                except Exception:
-                    pass
-        
-        engine = WizardEngine(loader)
-        
-        # Set input handler for interactive prompts
-        def input_handler(prompt: str, options: dict) -> str:
-            """Handle user input for wizard steps."""
-            if options.get('type') == 'choice':
-                # Choice step
-                choices = options.get('choices', [])
-                default = options.get('default')
-                
-                print(f"\n{prompt}")
-                for i, choice in enumerate(choices, 1):
-                    marker = " (default)" if choice == default else ""
-                    print(f"  {i}. {choice}{marker}")
-                
-                while True:
-                    user_input = input("Select [1-{}]: ".format(len(choices))).strip()
-                    
-                    if not user_input and default:
-                        return default
-                    
-                    if user_input.isdigit():
-                        idx = int(user_input) - 1
-                        if 0 <= idx < len(choices):
-                            return choices[idx]
-                    
-                    print("Invalid choice, try again")
-            else:
-                # Input step
-                required = options.get('required', False)
-                default = options.get('default')
-                
-                if default:
-                    prompt_text = f"{prompt} [{default}]: "
-                else:
-                    prompt_text = f"{prompt}: "
-                
-                while True:
-                    value = input(prompt_text).strip()
-                    
-                    if not value and default:
-                        return default
-                    
-                    if required and not value:
-                        print("This field is required")
-                        continue
-                    
-                    return value
-        
-        engine.set_input_handler(input_handler)
-        
-        # Set progress callback
-        def progress_callback(step_name: str, current: int, total: int):
-            """Show progress."""
-            percent = int((current / total) * 100)
-            print(f"[{current}/{total}] {step_name}... ({percent}%)")
-        
-        engine.set_progress_callback(progress_callback)
-        
-        # Run wizard
-        try:
-            context = engine.run_wizard_from_file(wizard_file)
-            
-            print()
-            print("✅ Wizard completed successfully!")
-            print()
-            print(f"  Author: {context.author}")
-            print(f"  Title: {context.title}")
-            if context.year:
-                print(f"  Year: {context.year}")
-            print()
-            
-        except Exception as e:
-            print()
-            self._error(f"Wizard failed: {e}")
-            import traceback
-            if self.verbosity >= VerbosityLevel.DEBUG:
-                traceback.print_exc()
-    
-    async def _tui_command(self) -> None:
-        """Launch TUI interface."""
-        try:
-            # Load TUI plugin
-            plugins_dir = Path(__file__).parent.parent
-            tui_dir = plugins_dir / "tui"
-            
-            if not tui_dir.exists():
-                self._error("TUI plugin not found!")
-                print("Install TUI plugin to use this feature.")
-                return
-            
-            # Import and run
-            sys.path.insert(0, str(tui_dir))
-            from plugin import TUIPlugin
-            
-            tui = TUIPlugin()
-            await tui.run()
-            
-        except ImportError as e:
-            self._error(f"Failed to load TUI: {e}")
-            print("\nTUI requires the 'curses' module.")
-            print("On Windows, install: pip install windows-curses")
-        except Exception as e:
-            self._error(f"TUI error: {e}")
-            import traceback
-            if self.verbosity >= VerbosityLevel.DEBUG:
-                traceback.print_exc()
-

@@ -1,0 +1,17 @@
+plugin:
+  name: "tui"
+  version: "2.0.0"
+  description: "Terminal user interface (ncurses)"
+  author: "AudioMason Team"
+  
+  interfaces:
+    - "tui"
+  
+  dependencies:
+    - "curses"
+  
+  config:
+    # TUI has no config options currently
+  
+  entry_points:
+    tui: "TUIPlugin"

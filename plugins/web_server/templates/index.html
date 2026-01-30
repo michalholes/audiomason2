@@ -300,6 +300,12 @@
             border: 1px solid #c3e6cb;
         }
         
+        .alert-info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        
         .alert-error {
             background: #f8d7da;
             color: #721c24;
@@ -329,6 +335,121 @@
             background: #dc3545;
             color: white;
         }
+        
+        /* Modal styles */
+        .modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            max-width: 600px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+        }
+        
+        .modal-content h3 {
+            color: #667eea;
+            margin-bottom: 20px;
+        }
+        
+        /* Plugin/Wizard card styles */
+        .plugin-card, .wizard-card {
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 15px;
+            border-left: 5px solid #667eea;
+        }
+        
+        .plugin-card h4, .wizard-card h4 {
+            color: #495057;
+            margin-bottom: 10px;
+        }
+        
+        .plugin-card p, .wizard-card p {
+            color: #6c757d;
+            font-size: 0.9em;
+            margin-bottom: 10px;
+        }
+        
+        .plugin-actions, .wizard-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        .btn-sm {
+            padding: 8px 16px;
+            font-size: 0.9em;
+        }
+        
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+        
+        .btn-warning {
+            background: #ffc107;
+            color: #212529;
+        }
+        
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 24px;
+        }
+        
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+            border-radius: 24px;
+        }
+        
+        .toggle-slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        
+        input:checked + .toggle-slider {
+            background-color: #667eea;
+        }
+        
+        input:checked + .toggle-slider:before {
+            transform: translateX(26px);
+        }
     </style>
 </head>
 <body>
@@ -344,6 +465,8 @@
             <button class="tab active" onclick="switchTab('dashboard')">📊 Dashboard</button>
             <button class="tab" onclick="switchTab('process')">🎵 Process Books</button>
             <button class="tab" onclick="switchTab('queue')">📋 Queue</button>
+            <button class="tab" onclick="switchTab('plugins')">🧩 Plugins</button>
+            <button class="tab" onclick="switchTab('wizards')">🧙 Wizards</button>
             <button class="tab" onclick="switchTab('config')">⚙️ Config</button>
             <button class="tab" onclick="switchTab('checkpoints')">💾 Checkpoints</button>
         </div>
@@ -458,10 +581,13 @@
         <!-- CONFIG TAB -->
         <div id="config" class="tab-content">
             <div class="card">
-                <h3>Configuration</h3>
-                <div id="configList">
-                    <p style="color: #6c757d;">Loading configuration...</p>
+                <h3>System Configuration</h3>
+                <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                    <button class="btn btn-primary" onclick="saveConfig()">💾 Save</button>
+                    <button class="btn btn-secondary" onclick="loadConfig()">🔄 Refresh</button>
+                    <button class="btn btn-danger" onclick="resetConfig()">⚠️ Reset to Defaults</button>
                 </div>
+                <div id="configForm"></div>
             </div>
         </div>
         
@@ -472,6 +598,85 @@
                 <ul id="checkpointsList" class="jobs-list">
                     <li style="text-align: center; color: #6c757d;">No checkpoints</li>
                 </ul>
+            </div>
+        </div>
+        
+        <!-- PLUGINS TAB -->
+        <div id="plugins" class="tab-content">
+            <div class="card">
+                <h3>Plugin Management</h3>
+                <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                    <button class="btn btn-primary" onclick="showInstallPlugin()">📦 Install Plugin</button>
+                    <button class="btn btn-secondary" onclick="loadPlugins()">🔄 Refresh</button>
+                </div>
+                <div id="pluginsList"></div>
+            </div>
+            
+            <!-- Install Plugin Modal -->
+            <div id="installPluginModal" class="modal" style="display: none;">
+                <div class="modal-content">
+                    <h3>Install Plugin</h3>
+                    <div class="form-group">
+                        <label>Method</label>
+                        <select id="installMethod" onchange="toggleInstallMethod()">
+                            <option value="zip">Upload ZIP</option>
+                            <option value="url">From URL</option>
+                        </select>
+                    </div>
+                    <div id="zipInstall" class="form-group">
+                        <label>Plugin ZIP File</label>
+                        <input type="file" id="pluginZip" accept=".zip">
+                    </div>
+                    <div id="urlInstall" class="form-group" style="display: none;">
+                        <label>Plugin URL</label>
+                        <input type="text" id="pluginUrl" placeholder="https://example.com/plugin.zip">
+                    </div>
+                    <div style="display: flex; gap: 10px;">
+                        <button class="btn btn-primary" onclick="installPlugin()">Install</button>
+                        <button class="btn btn-secondary" onclick="hideInstallPlugin()">Cancel</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- WIZARDS TAB -->
+        <div id="wizards" class="tab-content">
+            <div class="card">
+                <h3>Wizard Management</h3>
+                <div style="display: flex; gap: 10px; margin-bottom: 20px;">
+                    <button class="btn btn-primary" onclick="showCreateWizard()">✨ Create Wizard</button>
+                    <button class="btn btn-secondary" onclick="loadWizards()">🔄 Refresh</button>
+                </div>
+                <div id="wizardsList"></div>
+            </div>
+            
+            <!-- Create Wizard Modal -->
+            <div id="createWizardModal" class="modal" style="display: none;">
+                <div class="modal-content">
+                    <h3>Create Wizard</h3>
+                    <div class="form-group">
+                        <label>Wizard Name</label>
+                        <input type="text" id="wizardName" placeholder="My Wizard">
+                    </div>
+                    <div class="form-group">
+                        <label>Description</label>
+                        <textarea id="wizardDescription" rows="3" placeholder="Wizard description"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>YAML Definition</label>
+                        <textarea id="wizardYaml" rows="15" placeholder="wizard:
+  name: My Wizard
+  description: Description here
+  steps:
+    - id: step1
+      type: input
+      prompt: Enter value"></textarea>
+                    </div>
+                    <div style="display: flex; gap: 10px;">
+                        <button class="btn btn-primary" onclick="createWizard()">Create</button>
+                        <button class="btn btn-secondary" onclick="hideCreateWizard()">Cancel</button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -485,8 +690,6 @@
         document.addEventListener('DOMContentLoaded', () => {
             connectWebSocket();
             loadDashboard();
-            loadConfig();
-            loadCheckpoints();
         });
         
         // Tab switching
@@ -499,6 +702,9 @@
             
             if (tabName === 'queue') loadJobs();
             if (tabName === 'checkpoints') loadCheckpoints();
+            if (tabName === 'plugins') loadPlugins();
+            if (tabName === 'wizards') loadWizards();
+            if (tabName === 'config') loadConfig();
         }
         
         // WebSocket connection
@@ -656,19 +862,138 @@
         // Load config
         async function loadConfig() {
             try {
-                const response = await fetch('/api/config');
-                const config = await response.json();
+                // Load both schema and current config
+                const [schemaRes, configRes] = await Promise.all([
+                    fetch('/api/config/schema'),
+                    fetch('/api/config')
+                ]);
                 
-                const configList = document.getElementById('configList');
-                configList.innerHTML = Object.entries(config).map(([key, data]) => `
-                    <div class="config-item">
-                        <label>${key}</label>
-                        <input type="text" value="${data.value}" data-key="${key}">
-                        <small style="color: #6c757d; margin-left: 10px;">from ${data.source}</small>
-                    </div>
-                `).join('');
+                const schema = await schemaRes.json();
+                const currentConfig = await configRes.json();
+                
+                const configForm = document.getElementById('configForm');
+                configForm.innerHTML = Object.entries(schema).map(([key, field]) => {
+                    const value = currentConfig[key]?.value || field.default || '';
+                    
+                    if (field.type === 'boolean') {
+                        return `
+                            <div class="form-group">
+                                <label class="checkbox-group">
+                                    <input type="checkbox" id="config_${key}" ${value ? 'checked' : ''}>
+                                    ${field.label}
+                                </label>
+                                <small style="color: #6c757d; display: block; margin-top: 5px;">${field.description}</small>
+                            </div>
+                        `;
+                    } else if (field.type === 'choice') {
+                        return `
+                            <div class="form-group">
+                                <label>${field.label}</label>
+                                <select id="config_${key}">
+                                    ${field.choices.map(choice => `
+                                        <option value="${choice}" ${value === choice ? 'selected' : ''}>${choice}</option>
+                                    `).join('')}
+                                </select>
+                                <small style="color: #6c757d; display: block; margin-top: 5px;">${field.description}</small>
+                            </div>
+                        `;
+                    } else if (field.type === 'integer') {
+                        return `
+                            <div class="form-group">
+                                <label>${field.label}</label>
+                                <input type="number" id="config_${key}" value="${value}">
+                                <small style="color: #6c757d; display: block; margin-top: 5px;">${field.description}</small>
+                            </div>
+                        `;
+                    } else if (field.type === 'object') {
+                        return `
+                            <div class="card" style="margin-bottom: 20px;">
+                                <h4 style="color: #667eea; margin-bottom: 15px;">${field.label}</h4>
+                                ${Object.entries(field.properties).map(([subKey, subField]) => {
+                                    const subValue = currentConfig[key]?.value?.[subKey] || subField.default || '';
+                                    return `
+                                        <div class="form-group">
+                                            <label>${subField.label}</label>
+                                            <input type="${subField.type === 'integer' ? 'number' : 'text'}" 
+                                                   id="config_${key}_${subKey}" value="${subValue}">
+                                        </div>
+                                    `;
+                                }).join('')}
+                            </div>
+                        `;
+                    } else {
+                        return `
+                            <div class="form-group">
+                                <label>${field.label}</label>
+                                <input type="text" id="config_${key}" value="${value}">
+                                <small style="color: #6c757d; display: block; margin-top: 5px;">${field.description}</small>
+                            </div>
+                        `;
+                    }
+                }).join('');
             } catch (error) {
                 console.error('Failed to load config:', error);
+                showAlert('error', 'Failed to load configuration');
+            }
+        }
+        
+        async function saveConfig() {
+            try {
+                // Collect all config values
+                const config = {};
+                const inputs = document.querySelectorAll('#configForm input, #configForm select');
+                
+                inputs.forEach(input => {
+                    const id = input.id.replace('config_', '');
+                    if (id.includes('_')) {
+                        // Nested config (e.g., web_server_host)
+                        const [parent, child] = id.split('_');
+                        if (!config[parent]) config[parent] = {};
+                        config[parent][child] = input.type === 'checkbox' ? input.checked : 
+                                               input.type === 'number' ? parseInt(input.value) : 
+                                               input.value;
+                    } else {
+                        config[id] = input.type === 'checkbox' ? input.checked : 
+                                    input.type === 'number' ? parseInt(input.value) : 
+                                    input.value;
+                    }
+                });
+                
+                const response = await fetch('/api/config', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(config)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showAlert('success', result.message);
+                } else {
+                    showAlert('error', result.error || 'Failed to save configuration');
+                }
+            } catch (error) {
+                console.error('Failed to save config:', error);
+                showAlert('error', 'Failed to save configuration');
+            }
+        }
+        
+        async function resetConfig() {
+            if (!confirm('Are you sure you want to reset configuration to defaults?')) return;
+            
+            try {
+                const response = await fetch('/api/config/reset', { method: 'POST' });
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showAlert('success', result.message);
+                    loadConfig();
+                } else {
+                    showAlert('error', result.error || 'Failed to reset configuration');
+                }
+            } catch (error) {
+                console.error('Failed to reset config:', error);
+                showAlert('error', 'Failed to reset configuration');
             }
         }
         
@@ -728,6 +1053,256 @@
             setTimeout(() => {
                 alert.classList.add('hidden');
             }, 5000);
+        }
+        
+        // ========================================
+        // PLUGIN MANAGEMENT
+        // ========================================
+        
+        async function loadPlugins() {
+            try {
+                const response = await fetch('/api/plugins');
+                const plugins = await response.json();
+                
+                const container = document.getElementById('pluginsList');
+                if (plugins.length === 0) {
+                    container.innerHTML = '<p style="text-align: center; color: #6c757d;">No plugins found</p>';
+                    return;
+                }
+                
+                container.innerHTML = plugins.map(plugin => `
+                    <div class="plugin-card">
+                        <div style="display: flex; justify-content: space-between; align-items: start;">
+                            <div>
+                                <h4>${plugin.name} <span style="color: #6c757d; font-size: 0.8em;">v${plugin.version}</span></h4>
+                                <p>${plugin.description}</p>
+                                <p><strong>Author:</strong> ${plugin.author || 'Unknown'} | <strong>Interfaces:</strong> ${plugin.interfaces.join(', ')}</p>
+                            </div>
+                            <label class="toggle-switch">
+                                <input type="checkbox" ${plugin.enabled ? 'checked' : ''} onchange="togglePlugin('${plugin.name}', this.checked)">
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </div>
+                        <div class="plugin-actions">
+                            ${plugin.has_config ? `<button class="btn btn-sm btn-secondary" onclick="configurePlugin('${plugin.name}')">⚙️ Configure</button>` : ''}
+                            <button class="btn btn-sm btn-danger" onclick="deletePlugin('${plugin.name}')">🗑️ Delete</button>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Failed to load plugins:', error);
+                showAlert('error', 'Failed to load plugins');
+            }
+        }
+        
+        async function togglePlugin(name, enabled) {
+            try {
+                const endpoint = enabled ? 'enable' : 'disable';
+                const response = await fetch(`/api/plugins/${name}/${endpoint}`, { method: 'PUT' });
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showAlert('success', result.message);
+                    loadPlugins();
+                } else {
+                    showAlert('error', result.error || 'Failed to toggle plugin');
+                }
+            } catch (error) {
+                console.error('Failed to toggle plugin:', error);
+                showAlert('error', 'Failed to toggle plugin');
+            }
+        }
+        
+        async function deletePlugin(name) {
+            if (!confirm(`Are you sure you want to delete plugin "${name}"?`)) return;
+            
+            try {
+                const response = await fetch(`/api/plugins/${name}`, { method: 'DELETE' });
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showAlert('success', result.message);
+                    loadPlugins();
+                } else {
+                    showAlert('error', result.error || 'Failed to delete plugin');
+                }
+            } catch (error) {
+                console.error('Failed to delete plugin:', error);
+                showAlert('error', 'Failed to delete plugin');
+            }
+        }
+        
+        function showInstallPlugin() {
+            document.getElementById('installPluginModal').style.display = 'flex';
+        }
+        
+        function hideInstallPlugin() {
+            document.getElementById('installPluginModal').style.display = 'none';
+        }
+        
+        function toggleInstallMethod() {
+            const method = document.getElementById('installMethod').value;
+            document.getElementById('zipInstall').style.display = method === 'zip' ? 'block' : 'none';
+            document.getElementById('urlInstall').style.display = method === 'url' ? 'block' : 'none';
+        }
+        
+        async function installPlugin() {
+            const method = document.getElementById('installMethod').value;
+            
+            try {
+                let response;
+                if (method === 'zip') {
+                    const fileInput = document.getElementById('pluginZip');
+                    if (!fileInput.files[0]) {
+                        showAlert('error', 'Please select a ZIP file');
+                        return;
+                    }
+                    
+                    const formData = new FormData();
+                    formData.append('file', fileInput.files[0]);
+                    
+                    response = await fetch('/api/plugins/install', {
+                        method: 'POST',
+                        body: formData
+                    });
+                } else {
+                    const url = document.getElementById('pluginUrl').value;
+                    if (!url) {
+                        showAlert('error', 'Please enter a URL');
+                        return;
+                    }
+                    
+                    const formData = new FormData();
+                    formData.append('url', url);
+                    
+                    response = await fetch('/api/plugins/install', {
+                        method: 'POST',
+                        body: formData
+                    });
+                }
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showAlert('success', result.message);
+                    hideInstallPlugin();
+                    loadPlugins();
+                } else {
+                    showAlert('error', result.error || 'Failed to install plugin');
+                }
+            } catch (error) {
+                console.error('Failed to install plugin:', error);
+                showAlert('error', 'Failed to install plugin');
+            }
+        }
+        
+        // ========================================
+        // WIZARD MANAGEMENT
+        // ========================================
+        
+        async function loadWizards() {
+            try {
+                const response = await fetch('/api/wizards');
+                const wizards = await response.json();
+                
+                const container = document.getElementById('wizardsList');
+                if (wizards.length === 0) {
+                    container.innerHTML = '<p style="text-align: center; color: #6c757d;">No wizards found</p>';
+                    return;
+                }
+                
+                container.innerHTML = wizards.map(wizard => `
+                    <div class="wizard-card">
+                        <h4>${wizard.name}</h4>
+                        <p>${wizard.description}</p>
+                        <p><strong>Steps:</strong> ${wizard.steps} | <strong>File:</strong> ${wizard.filename}</p>
+                        <div class="wizard-actions">
+                            <button class="btn btn-sm btn-primary" onclick="runWizard('${wizard.filename.replace('.yaml', '')}')">▶️ Run</button>
+                            <button class="btn btn-sm btn-secondary" onclick="editWizard('${wizard.filename.replace('.yaml', '')}')">✏️ Edit</button>
+                            <button class="btn btn-sm btn-danger" onclick="deleteWizard('${wizard.filename.replace('.yaml', '')}')">🗑️ Delete</button>
+                        </div>
+                    </div>
+                `).join('');
+            } catch (error) {
+                console.error('Failed to load wizards:', error);
+                showAlert('error', 'Failed to load wizards');
+            }
+        }
+        
+        function showCreateWizard() {
+            document.getElementById('createWizardModal').style.display = 'flex';
+        }
+        
+        function hideCreateWizard() {
+            document.getElementById('createWizardModal').style.display = 'none';
+        }
+        
+        async function createWizard() {
+            const name = document.getElementById('wizardName').value;
+            const description = document.getElementById('wizardDescription').value;
+            const yaml = document.getElementById('wizardYaml').value;
+            
+            if (!name || !yaml) {
+                showAlert('error', 'Please fill in all fields');
+                return;
+            }
+            
+            try {
+                // Parse YAML to validate
+                const wizardDef = {
+                    wizard: {
+                        name: name,
+                        description: description,
+                        steps: [] // Will be parsed from YAML
+                    }
+                };
+                
+                const response = await fetch('/api/wizards', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(wizardDef)
+                });
+                
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showAlert('success', result.message);
+                    hideCreateWizard();
+                    loadWizards();
+                } else {
+                    showAlert('error', result.error || 'Failed to create wizard');
+                }
+            } catch (error) {
+                console.error('Failed to create wizard:', error);
+                showAlert('error', 'Failed to create wizard');
+            }
+        }
+        
+        async function deleteWizard(name) {
+            if (!confirm(`Are you sure you want to delete wizard "${name}"?`)) return;
+            
+            try {
+                const response = await fetch(`/api/wizards/${name}`, { method: 'DELETE' });
+                const result = await response.json();
+                
+                if (response.ok) {
+                    showAlert('success', result.message);
+                    loadWizards();
+                } else {
+                    showAlert('error', result.error || 'Failed to delete wizard');
+                }
+            } catch (error) {
+                console.error('Failed to delete wizard:', error);
+                showAlert('error', 'Failed to delete wizard');
+            }
+        }
+        
+        function runWizard(name) {
+            showAlert('info', `Running wizard: ${name} (Not implemented yet)`);
+        }
+        
+        function editWizard(name) {
+            showAlert('info', `Editing wizard: ${name} (Not implemented yet)`);
         }
         
         // Auto-refresh
