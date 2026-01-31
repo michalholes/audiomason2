@@ -1,0 +1,21 @@
+:root { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+body { margin: 0; background: #0b0f14; color: #e6edf3; }
+.topbar { display:flex; align-items:center; padding: 10px 14px; border-bottom:1px solid #1f2a37; background:#0b0f14; position:sticky; top:0; }
+.brand { font-weight: 700; letter-spacing: 0.3px; }
+.status { font-size: 12px; opacity: 0.8; }
+.spacer { flex:1; }
+.layout { display:flex; min-height: calc(100vh - 42px); }
+.nav { width: 220px; border-right:1px solid #1f2a37; padding: 10px; }
+.nav a { display:block; padding: 8px 10px; border-radius: 10px; color:#c9d1d9; text-decoration:none; }
+.nav a.active { background:#111827; color:#fff; }
+.main { flex:1; padding: 14px; }
+.grid { display:grid; gap: 12px; }
+.card { border:1px solid #1f2a37; border-radius: 14px; padding: 12px; background:#0d141c; }
+.card h3 { margin:0 0 10px 0; font-size: 14px; }
+.kv { display:flex; gap:10px; flex-wrap:wrap; }
+.kv .item { min-width: 180px; }
+.kv .label { font-size: 12px; opacity:0.7; }
+.kv .value { font-size: 13px; }
+.table { width:100%; border-collapse:collapse; }
+.table th, .table td { padding: 8px 10px; border-bottom:1px solid #1f2a37; font-size: 13px; text-align:left; }
+.small { font-size: 12px; opacity: 0.8; }

@@ -1,19 +1,11 @@
 name: web_interface
 version: 0.1.0
-description: "Server-driven Web UI registry and API (variant B)"
-author: "AudioMason2"
-license: MIT
-
-entrypoint: plugin:WebInterfacePlugin
-
-interfaces:
-  - IWebInterface
-
+description: "Modern server-driven web interface (independent server)"
+author: "AudioMason"
+license: "MIT"
+entrypoint: "plugin:WebInterfacePlugin"
+interfaces: []
 hooks: []
-
-dependencies:
-  python: ">=3.11"
-
+dependencies: {}
 config_schema: {}
-
 test_level: none
