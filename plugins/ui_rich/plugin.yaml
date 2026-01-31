@@ -1,0 +1,28 @@
+name: ui_rich
+version: 1.0.0
+description: "Rich UI enhancements: progress bars, colored output, better formatting"
+author: "Michal Holeš <michal@holes.sk>"
+license: MIT
+
+entrypoint: plugin:RichUIPlugin
+
+interfaces:
+  - IEnricher
+
+hooks: []
+
+dependencies:
+  python: ">=3.11"
+  packages:
+    - rich>=13.0.0
+
+config_schema:
+  color:
+    type: boolean
+    default: true
+  progress_style:
+    type: string
+    default: bar
+    enum: [bar, spinner, dots]
+
+test_level: basic
