@@ -1,0 +1,13 @@
+name: cover_handler_sync
+version: 1.0.0
+description: Synchronous cover handler - extract, download, embed cover art
+author: Michal Holeš
+entrypoint: plugin:CoverHandlerSync
+
+interfaces:
+  - IProcessor
+
+config:
+  cover_preference: embedded
+  cover_fallback: file
+  default_cover_name: cover.jpg

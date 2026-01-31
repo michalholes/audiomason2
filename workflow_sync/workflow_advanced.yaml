@@ -1,0 +1,164 @@
+# AudioMason Advanced Workflow - všetky funkcie zapnuté
+# Metadata fetch, cover download, chapter splitting, loudnorm
+
+workflow:
+  name: "Advanced Import"
+  description: "Full-featured import with online metadata and chapter splitting"
+  
+  preflight_steps:
+    - id: choose_source
+      type: menu
+      enabled: true
+      prompt: "Choose source number, or 'a' for all"
+      default: "1"
+    
+    - id: clean_inbox
+      type: yes_no
+      enabled: true
+      prompt: "Clean inbox after import"
+      default: no
+      skip_if_set: true
+    
+    - id: publish
+      type: yes_no
+      enabled: true
+      prompt: "Publish after import"
+      default: yes  # Advanced workflow default publikuje
+      skip_if_set: true
+    
+    - id: wipe_id3
+      type: yes_no
+      enabled: true
+      prompt: "Wipe all existing ID3 tags"
+      default: yes  # Advanced workflow vždy wipne
+      skip_if_set: true
+    
+    - id: clean_stage
+      type: yes_no
+      enabled: true
+      prompt: "Clean stage after import"
+      default: yes
+      skip_if_set: true
+    
+    # Nové otázky pre advanced
+    - id: fetch_metadata
+      type: yes_no
+      enabled: true
+      prompt: "Fetch metadata from online sources"
+      default: yes
+      skip_if_set: true
+    
+    - id: split_chapters
+      type: yes_no
+      enabled: true
+      prompt: "Split audiobook by chapters (M4A/M4B)"
+      default: no
+      skip_if_set: true
+    
+    - id: loudnorm
+      type: yes_no
+      enabled: true
+      prompt: "Apply loudness normalization"
+      default: yes
+      skip_if_set: true
+    
+    - id: author
+      type: input
+      enabled: true
+      prompt: "Author name"
+      required: true
+      hint_from: source_name
+      hint_pattern: "^([^-]+)"
+    
+    - id: title
+      type: input
+      enabled: true
+      prompt: "Book title"
+      required: true
+      hint_from: source_name
+      hint_pattern: " - (.+?)(?:\\s*\\(\\d{4}\\))?(?:\\s*\\([A-Z]{2}\\))?$"
+  
+  processing_steps:
+    - id: import
+      plugin: file_io_sync
+      method: import_to_stage
+      enabled: true
+      description: "Import to staging"
+    
+    # Fetch metadata ak zapnuté
+    - id: fetch_metadata
+      plugin: metadata_sync
+      method: process
+      enabled: true
+      description: "Fetch metadata from Google Books/OpenLibrary"
+      condition: "answers.fetch_metadata == true"
+    
+    - id: detect_cover
+      plugin: cover_handler_sync
+      method: process
+      enabled: true
+      description: "Detect/extract cover art"
+    
+    # Audio processing - použije answers pre loudnorm/split_chapters
+    - id: audio_process
+      plugin: audio_processor_sync
+      method: process_files
+      enabled: true
+      description: "Process audio (convert, normalize, split)"
+    
+    - id: id3_tag
+      plugin: id3_tagger_sync
+      method: tag_files
+      enabled: true
+      description: "Apply ID3 tags with metadata"
+    
+    - id: export
+      plugin: file_io_sync
+      method: export_to_output
+      enabled: true
+      description: "Export to output directory"
+      condition: "answers.publish == true"
+    
+    - id: cleanup_stage
+      plugin: file_io_sync
+      method: cleanup_stage
+      enabled: true
+      description: "Clean staging directory"
+      condition: "answers.clean_stage == true"
+    
+    - id: cleanup_inbox
+      plugin: file_io_sync
+      method: cleanup_inbox
+      enabled: true
+      description: "Clean inbox source"
+      condition: "answers.clean_inbox == true"
+
+verbosity:
+  quiet:
+    - errors
+  
+  normal:
+    - errors
+    - prompts
+    - progress
+    - workflow_steps
+  
+  verbose:
+    - errors
+    - prompts
+    - progress
+    - workflow_steps
+    - plugin_calls
+    - file_operations
+    - api_responses
+  
+  debug:
+    - errors
+    - prompts
+    - progress
+    - workflow_steps
+    - plugin_calls
+    - file_operations
+    - config_values
+    - ffmpeg_output
+    - api_responses
