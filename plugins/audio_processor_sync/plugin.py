@@ -37,7 +37,7 @@ class AudioProcessorSync:
     - Format detection
     """
 
-    SUPPORTED_FORMATS = {'.m4a', '.m4b', '.opus', '.ogg', '.flac', '.wav'}
+    SUPPORTED_FORMATS = {'.m4a', '.m4b', '.opus', '.ogg', '.flac', '.wav', '.mp3'}
 
     def __init__(self, config: dict | None = None) -> None:
         """Initialize plugin.
@@ -346,10 +346,20 @@ class AudioProcessorSync:
         
         stage_dir = context.stage_dir
         
+        # Debug: show what we're looking for
+        self._log_debug(f"Looking for audio files in: {stage_dir}")
+        self._log_debug(f"Stage dir exists: {stage_dir.exists()}")
+        if stage_dir.exists():
+            all_files = list(stage_dir.rglob('*'))
+            self._log_debug(f"Total files in stage: {len([f for f in all_files if f.is_file()])}")
+        
         # Find all audio files
         audio_files = []
         for ext in self.SUPPORTED_FORMATS:
-            audio_files.extend(stage_dir.rglob(f'*{ext}'))
+            found = list(stage_dir.rglob(f'*{ext}'))
+            if found:
+                self._log_debug(f"Pattern '*{ext}': found {len(found)} files")
+            audio_files.extend(found)
         
         if not audio_files:
             raise AudioProcessingError(f"No audio files found in {stage_dir}")
