@@ -1,0 +1,1 @@
+"""TUI plugin package."""

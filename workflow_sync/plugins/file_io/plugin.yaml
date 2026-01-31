@@ -1,0 +1,25 @@
+name: file_io
+version: 1.0.0
+description: "File I/O operations: import to stage, export to output"
+author: "Michal Holeš <michal@holes.sk>"
+license: MIT
+
+entrypoint: plugin:FileIOPlugin
+
+interfaces:
+  - IProcessor
+
+hooks: []
+
+dependencies:
+  python: ">=3.11"
+
+config_schema:
+  stage_dir:
+    type: string
+    default: "/tmp/audiomason/stage"
+  output_dir:
+    type: string
+    default: "~/Audiobooks/output"
+
+test_level: basic

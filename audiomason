@@ -1,0 +1,38 @@
+#!/usr/bin/env python3
+"""AudioMason v2 - Main entry point."""
+
+import asyncio
+import sys
+from pathlib import Path
+
+# Add src to path
+sys.path.insert(0, str(Path(__file__).parent / "src"))
+
+from audiomason.core import PluginLoader
+
+
+async def main() -> None:
+    """Main entry point."""
+    # Load CLI plugin
+    plugins_dir = Path(__file__).parent / "plugins"
+    loader = PluginLoader(builtin_plugins_dir=plugins_dir)
+
+    cli_plugin_dir = plugins_dir / "cli"
+    if not cli_plugin_dir.exists():
+        print("Error: CLI plugin not found")
+        print(f"Expected: {cli_plugin_dir}")
+        sys.exit(1)
+
+    try:
+        cli_plugin = loader.load_plugin(cli_plugin_dir, validate=False)
+        await cli_plugin.run()
+    except KeyboardInterrupt:
+        print("\n\nInterrupted.")
+        sys.exit(130)
+    except Exception as e:
+        print(f"Error: {e}")
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

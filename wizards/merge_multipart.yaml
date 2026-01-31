@@ -1,0 +1,159 @@
+wizard:
+  name: "Merge Multi-part"
+  description: "Merge multiple parts of a single audiobook (e.g., Part 1, Part 2)"
+  
+  steps:
+    # Step 1: Get author and title
+    - id: author
+      type: input
+      prompt: "Author name"
+      required: true
+    
+    - id: title
+      type: input
+      prompt: "Complete book title (without part numbers)"
+      required: true
+    
+    # Step 2: Select source files/folders
+    - id: selection_method
+      type: choice
+      prompt: "How to select parts?"
+      choices:
+        - "Manual selection"
+        - "Auto-detect from folder"
+        - "By date"
+      default: "Auto-detect from folder"
+    
+    # Step 3a: Manual selection
+    - id: manual_select
+      type: condition
+      condition: "selection_method == 'Manual selection'"
+      if_true:
+        - id: part1
+          type: input
+          prompt: "Path to Part 1"
+          required: true
+        
+        - id: part2
+          type: input
+          prompt: "Path to Part 2"
+          required: true
+        
+        - id: part3
+          type: input
+          prompt: "Path to Part 3 (optional, press Enter to skip)"
+          required: false
+        
+        - id: part4
+          type: input
+          prompt: "Path to Part 4 (optional, press Enter to skip)"
+          required: false
+    
+    # Step 3b: Auto-detect
+    - id: auto_detect
+      type: condition
+      condition: "selection_method == 'Auto-detect from folder'"
+      if_true:
+        - id: source_folder
+          type: input
+          prompt: "Folder containing all parts"
+          required: true
+        
+        - id: detect_parts
+          type: plugin_call
+          plugin: file_io
+          method: detect_multipart
+    
+    # Step 3c: By date
+    - id: by_date
+      type: condition
+      condition: "selection_method == 'By date'"
+      if_true:
+        - id: source_folder
+          type: input
+          prompt: "Folder containing all parts"
+          required: true
+        
+        - id: sort_parts
+          type: plugin_call
+          plugin: file_io
+          method: sort_by_date
+    
+    # Step 4: Numbering format
+    - id: numbering_format
+      type: choice
+      prompt: "Chapter numbering format"
+      choices:
+        - "1_01.mp3, 1_02.mp3, 2_01.mp3, 2_02.mp3"
+        - "001.mp3, 002.mp3, 003.mp3"
+        - "Part1_01.mp3, Part1_02.mp3, Part2_01.mp3"
+      default: "1_01.mp3, 1_02.mp3, 2_01.mp3, 2_02.mp3"
+    
+    # Step 5: Process each part
+    - id: target_bitrate
+      type: choice
+      prompt: "Audio bitrate"
+      choices:
+        - "128k"
+        - "192k"
+        - "256k"
+      default: "192k"
+    
+    - id: loudnorm
+      type: choice
+      prompt: "Enable loudness normalization?"
+      choices:
+        - "yes"
+        - "no"
+      default: "yes"
+    
+    # Step 6: Merge and process
+    - id: merge
+      type: plugin_call
+      plugin: file_io
+      method: merge_multipart
+      params:
+        numbering_format: "${numbering_format}"
+        loudnorm: "${loudnorm == 'yes'}"
+    
+    # Step 7: Apply unified ID3 tags
+    - id: tag
+      type: plugin_call
+      plugin: id3_tagger
+      method: process
+      params:
+        unified: true
+    
+    # Step 8: Handle cover
+    - id: cover_source
+      type: choice
+      prompt: "Cover image source"
+      choices:
+        - "Use from Part 1"
+        - "Download from metadata"
+        - "Use existing cover.jpg"
+      default: "Use from Part 1"
+    
+    - id: cover_handle
+      type: plugin_call
+      plugin: cover_handler
+      method: process
+      params:
+        source: "${cover_source}"
+    
+    # Step 9: Organize output
+    - id: organize
+      type: plugin_call
+      plugin: file_io
+      method: organize
+      params:
+        merge_mode: true
+  
+  cleanup:
+    on_success:
+      source_files: "move"
+      temp_files: "delete"
+    on_error:
+      action: "continue"
+    on_duplicate:
+      action: "ask"

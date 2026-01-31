@@ -1,0 +1,23 @@
+name: example_plugin
+version: 1.0.0
+description: "Example plugin demonstrating the plugin system"
+author: "Michal Holeš <michal@holes.sk>"
+license: MIT
+
+entrypoint: plugin:ExamplePlugin
+
+interfaces:
+  - IProcessor
+
+hooks:
+  - post_process
+
+dependencies:
+  python: ">=3.11"
+
+config_schema:
+  message:
+    type: string
+    default: "Hello from plugin!"
+
+test_level: none

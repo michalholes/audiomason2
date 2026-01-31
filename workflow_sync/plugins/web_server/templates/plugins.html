@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+
+{% block title %}Plugins - AudioMason v2{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h3>Loaded Plugins ({{ plugins|length }})</h3>
+    
+    {% if plugins %}
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Version</th>
+                <th>Description</th>
+                <th>Author</th>
+                <th>Interfaces</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for plugin in plugins %}
+            <tr>
+                <td><strong>{{ plugin.name }}</strong></td>
+                <td><span class="badge badge-info">{{ plugin.version }}</span></td>
+                <td>{{ plugin.description }}</td>
+                <td>{{ plugin.author }}</td>
+                <td>
+                    {% for interface in plugin.interfaces %}
+                        <span class="badge badge-success">{{ interface }}</span>
+                    {% endfor %}
+                </td>
+                <td>
+                    {% if plugin.enabled %}
+                        <span class="badge badge-success">Enabled</span>
+                    {% else %}
+                        <span class="badge badge-warning">Disabled</span>
+                    {% endif %}
+                </td>
+                <td>
+                    <button class="btn btn-sm btn-secondary" onclick="togglePlugin('{{ plugin.name }}', {{ 'false' if plugin.enabled else 'true' }})">
+                        {{ 'Disable' if plugin.enabled else 'Enable' }}
+                    </button>
+                    <button class="btn btn-sm btn-danger" onclick="deletePlugin('{{ plugin.name }}')">Delete</button>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color: #6c757d; text-align: center; padding: 40px;">
+        No plugins loaded
+    </p>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h3>Plugin Management</h3>
+    <p style="color: #6c757d; margin-bottom: 15px;">
+        Install new plugins from ZIP files or URLs to extend AudioMason functionality.
+    </p>
+    
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+        <button class="btn btn-primary" onclick="showInstallPlugin()">
+            ➕ Install Plugin
+        </button>
+        <button class="btn btn-primary" onclick="location.reload()">
+            🔄 Refresh List
+        </button>
+    </div>
+</div>
+
+<!-- Install Plugin Modal -->
+<div id="installModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 1000;">
+    <div style="background: white; max-width: 600px; margin: 100px auto; padding: 30px; border-radius: 10px;">
+        <h3 style="margin-bottom: 20px;">Install Plugin</h3>
+        
+        <form id="installForm" enctype="multipart/form-data">
+            <div class="form-group">
+                <label>Method</label>
+                <select id="installMethod" onchange="toggleInstallMethod()">
+                    <option value="zip">Upload ZIP</option>
+                    <option value="url">From URL</option>
+                </select>
+            </div>
+            
+            <div id="zipInstall" class="form-group">
+                <label>Plugin ZIP File</label>
+                <input type="file" id="pluginZip" accept=".zip">
+            </div>
+            
+            <div id="urlInstall" class="form-group" style="display: none;">
+                <label>Plugin URL</label>
+                <input type="text" id="pluginUrl" placeholder="https://example.com/plugin.zip">
+            </div>
+            
+            <div style="display: flex; gap: 10px; margin-top: 20px;">
+                <button type="submit" class="btn btn-primary">Install</button>
+                <button type="button" class="btn btn-secondary" onclick="hideInstallPlugin()">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function showInstallPlugin() {
+    document.getElementById('installModal').style.display = 'block';
+}
+
+function hideInstallPlugin() {
+    document.getElementById('installModal').style.display = 'none';
+}
+
+function toggleInstallMethod() {
+    const method = document.getElementById('installMethod').value;
+    document.getElementById('zipInstall').style.display = method === 'zip' ? 'block' : 'none';
+    document.getElementById('urlInstall').style.display = method === 'url' ? 'block' : 'none';
+}
+
+// Install plugin
+document.getElementById('installForm').addEventListener('submit', async function(e) {
+    e.preventDefault();
+    
+    const method = document.getElementById('installMethod').value;
+    const formData = new FormData();
+    
+    if (method === 'zip') {
+        const file = document.getElementById('pluginZip').files[0];
+        if (!file) {
+            alert('Please select a ZIP file');
+            return;
+        }
+        formData.append('files', file);
+    } else {
+        const url = document.getElementById('pluginUrl').value;
+        if (!url) {
+            alert('Please enter a URL');
+            return;
+        }
+        formData.append('url', url);
+    }
+    
+    try {
+        const response = await fetch('/api/plugins/install', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const result = await response.json();
+        
+        if (response.ok) {
+            alert(result.message);
+            hideInstallPlugin();
+            location.reload();
+        } else {
+            alert('Installation failed: ' + (result.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Error: ' + error.message);
+    }
+});
+
+// Toggle plugin enable/disable
+async function togglePlugin(name, enable) {
+    const action = enable ? 'enable' : 'disable';
+    
+    try {
+        const response = await fetch(`/api/plugins/${name}/${action}`, { method: 'PUT' });
+        const result = await response.json();
+        
+        if (response.ok) {
+            alert(result.message);
+            location.reload();
+        } else {
+            alert(`Failed to ${action}: ` + (result.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Error: ' + error.message);
+    }
+}
+
+// Delete plugin
+async function deletePlugin(name) {
+    if (!confirm(`Delete plugin "${name}"? This cannot be undone.`)) return;
+    
+    try {
+        const response = await fetch(`/api/plugins/${name}`, { method: 'DELETE' });
+        const result = await response.json();
+        
+        if (response.ok) {
+            alert(result.message);
+            location.reload();
+        } else {
+            alert('Delete failed: ' + (result.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Error: ' + error.message);
+    }
+}
+</script>
+{% endblock %}

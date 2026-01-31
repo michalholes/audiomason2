@@ -1,0 +1,31 @@
+name: basic_wizard_sync
+version: 1.0.0
+description: Synchronous basic wizard - complete audiobook import workflow
+author: Michal Holeš
+entrypoint: plugin:BasicWizardSync
+
+interfaces:
+  - IProcessor
+
+config:
+  # Paths
+  inbox_dir: ~/Audiobooks/inbox
+  stage_dir: /tmp/audiomason/stage
+  output_dir: ~/Audiobooks/output
+  
+  # Processing defaults
+  clean_inbox: ask
+  clean_stage: yes
+  publish: ask
+  wipe_id3: no
+  
+  # Audio settings
+  bitrate: 128k
+  loudnorm: false
+  split_chapters: false
+  
+  # Metadata
+  fetch_metadata: yes
+  
+  # Verbosity
+  verbosity: 1
