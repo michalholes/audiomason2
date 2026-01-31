@@ -206,6 +206,8 @@ class ConfigResolver:
             # Paths
             "ffmpeg_path": "ffmpeg",
             "output_dir": str(Path.home() / "Audiobooks" / "output"),
+            "inbox_dir": str(Path.home() / "Audiobooks" / "inbox"),
+            "outbox_dir": str(Path.home() / "Audiobooks" / "outbox"),
             "plugins_dir": str(Path.home() / ".audiomason" / "plugins"),
             "stage_dir": "/tmp/audiomason/stage",
             # Audio

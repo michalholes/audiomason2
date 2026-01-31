@@ -42,18 +42,39 @@ class StepResult:
 class WizardEngine:
     """Execute YAML-based wizards."""
 
-    def __init__(self, loader: PluginLoader, verbosity: int = VerbosityLevel.NORMAL):
+    def __init__(self, loader: PluginLoader, verbosity: int = VerbosityLevel.NORMAL, config_resolver=None):
         """Initialize wizard engine.
 
         Args:
             loader: Plugin loader for executing plugin calls
             verbosity: Verbosity level
+            config_resolver: Optional ConfigResolver for accessing config values
         """
         self.loader = loader
         self.verbosity = verbosity
+        self.config_resolver = config_resolver
         self.context: ProcessingContext | None = None
         self.user_input_handler: Callable | None = None
         self.progress_callback: Callable | None = None
+
+    def _debug(self, msg: str) -> None:
+        """Log debug message."""
+        if self.verbosity >= VerbosityLevel.DEBUG:
+            print(f"[DEBUG] {msg}")
+
+    def _verbose(self, msg: str) -> None:
+        """Log verbose message."""
+        if self.verbosity >= VerbosityLevel.VERBOSE:
+            print(f"[VERBOSE] {msg}")
+
+    def _info(self, msg: str) -> None:
+        """Log info message."""
+        if self.verbosity >= VerbosityLevel.NORMAL:
+            print(msg)
+
+    def _error(self, msg: str) -> None:
+        """Log error message (always shown)."""
+        print(f"[ERROR] {msg}")
 
     def set_input_handler(self, handler: Callable[[str, dict], str]):
         """Set custom input handler for interactive steps.
@@ -88,10 +109,12 @@ class WizardEngine:
 
         try:
             with open(path, "r") as f:
+                self._debug(f"Loading wizard from: {path}")
                 wizard_def = yaml.safe_load(f)
         except yaml.YAMLError as e:
             raise WizardError(f"Invalid YAML: {e}")
 
+        self._verbose(f"Wizard loaded: {wizard_def.get('wizard', {}).get('name', 'Unknown')}")
         # Validate structure
         if not isinstance(wizard_def, dict):
             raise WizardError("Wizard definition must be a dictionary")
@@ -122,6 +145,8 @@ class WizardEngine:
         step_type = step.get("type", "input")
         step_id = step.get("id", "unknown")
 
+        self._debug(f"Executing step: {step_id} (type: {step_type})")
+        
         try:
             if step_type == "input":
                 return self._execute_input_step(step, context)
@@ -158,8 +183,18 @@ class WizardEngine:
             field = step.get("id")
             if hasattr(context, field):
                 default = getattr(context, field)
+        
+        # Use inbox_dir from config as default for source_path
+        if not default and step.get("id") == "source_path" and self.config_resolver:
+            try:
+                inbox_dir, source = self.config_resolver.resolve('inbox_dir')
+                default = inbox_dir
+                self._debug(f"Using inbox_dir from config as default: {inbox_dir} (from {source})")
+            except Exception as e:
+                self._debug(f"Could not get inbox_dir from config: {e}")
 
         # Get user input
+        self._verbose(f"Prompting user: {prompt}")
         if self.user_input_handler:
             options = {"required": required, "default": default, "validate": validate}
             value = self.user_input_handler(prompt, options)
@@ -255,12 +290,15 @@ class WizardEngine:
             return StepResult(success=False, error="No plugin specified")
 
         # Get plugin
-        plugin = self.loader.plugins.get(plugin_name)
+        self._debug(f"Getting plugin: {plugin_name}")
+        plugin = self.loader.get_plugin(plugin_name)
         if not plugin:
+            self._error(f"Plugin not found: {plugin_name}")
             return StepResult(success=False, error=f"Plugin not found: {plugin_name}")
 
         # Execute method
         try:
+            self._verbose(f"Calling {plugin_name}.{method}()")
             if hasattr(plugin, method):
                 result = getattr(plugin, method)(context, **params)
                 return StepResult(success=True, value=result)
@@ -374,12 +412,24 @@ class WizardEngine:
             context = ProcessingContext(id="wizard", source=Path("."), state=State.INIT)
 
         self.context = context
+        
+        # Set output_dir from config (outbox_dir) if available
+        if self.config_resolver and not hasattr(context, 'output_dir'):
+            try:
+                outbox_dir, source = self.config_resolver.resolve('outbox_dir')
+                context.output_dir = outbox_dir
+                self._debug(f"Set output_dir from config: {outbox_dir} (from {source})")
+            except Exception as e:
+                self._debug(f"Could not set output_dir from config: {e}")
 
         # Execute steps
+        self._info("Starting wizard execution...")
         total_steps = len(steps)
         for i, step in enumerate(steps, 1):
             step_id = step.get("id", f"step_{i}")
 
+            self._debug(f"Step {i}/{total_steps}: {step_id}")
+            
             # Progress callback
             if self.progress_callback:
                 self.progress_callback(step_id, i, total_steps)
@@ -388,6 +438,7 @@ class WizardEngine:
             result = self.execute_step(step, context)
 
             if not result.success:
+                self._error(f"Step '{step_id}' failed: {result.error}")
                 error_msg = f"Wizard failed at step '{step_id}': {result.error}"
                 context.state = State.ERROR
                 context.add_error(error_msg)
@@ -398,12 +449,15 @@ class WizardEngine:
                     continue
                 elif on_error == "stop":
                     raise WizardError(error_msg)
+            else:
+                self._debug(f"Step '{step_id}' completed successfully")
 
             # Check if should skip remaining steps
             if result.skip_remaining:
                 break
 
         # Mark as complete
+        self._info("Wizard execution completed!")
         context.state = State.DONE
 
         return context

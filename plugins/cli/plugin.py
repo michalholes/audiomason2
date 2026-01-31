@@ -792,6 +792,25 @@ class CLIPlugin:
         plugins_dir = Path(__file__).parent.parent
         loader = PluginLoader(builtin_plugins_dir=plugins_dir)
         
+        # Create config resolver
+        cli_args = self._parse_cli_args()
+        config_resolver = ConfigResolver(
+            cli_args=cli_args,
+            user_config_path=Path.home() / ".config/audiomason/config.yaml",
+            system_config_path=Path("/etc/audiomason/config.yaml")
+        )
+        
+        # Debug: Show loaded config values
+        if self.verbosity >= VerbosityLevel.DEBUG:
+            try:
+                inbox_dir, inbox_source = config_resolver.resolve('inbox_dir')
+                outbox_dir, outbox_source = config_resolver.resolve('outbox_dir')
+                self._debug(f"Config loaded:")
+                self._debug(f"  inbox_dir: {inbox_dir} (from {inbox_source})")
+                self._debug(f"  outbox_dir: {outbox_dir} (from {outbox_source})")
+            except Exception as e:
+                self._debug(f"  Config values unavailable: {e}")
+        
         # Load commonly used plugins
         for plugin in ["audio_processor", "file_io", "id3_tagger", "cover_handler"]:
             plugin_dir = plugins_dir / plugin
@@ -801,7 +820,7 @@ class CLIPlugin:
                 except Exception:
                     pass
         
-        engine = WizardEngine(loader, verbosity=self.verbosity)
+        engine = WizardEngine(loader, verbosity=self.verbosity, config_resolver=config_resolver)
         
         # Set input handler for interactive prompts
         def input_handler(prompt: str, options: dict) -> str:
