@@ -64,8 +64,8 @@
     <div style="background: white; padding: 20px; border-radius: 8px;">
         <ol style="color: #495057; line-height: 2;">
             <li><span class="badge badge-info">CLI Args</span> - Highest priority (command-line arguments)</li>
-            <li><span class="badge badge-success">Environment</span> - Environment variables</li>
-            <li><span class="badge badge-warning">User Config</span> - ~/.audiomason/config.yaml</li>
+            <li><span class="badge badge-success">Environment</span> - Environment variables (AUDIOMASON_*)</li>
+            <li><span class="badge badge-warning">User Config</span> - ~/.config/audiomason/config.yaml</li>
             <li><span class="badge badge-warning">System Config</span> - /etc/audiomason/config.yaml</li>
             <li><span class="badge">Default</span> - Lowest priority (built-in defaults)</li>
         </ol>
@@ -74,87 +74,96 @@
 
 <div class="card">
     <h3>Edit Configuration</h3>
+    <p style="color: #6c757d; margin-bottom: 20px;">
+        Edit configuration values. Changes will be saved to <code>~/.config/audiomason/config.yaml</code>.
+    </p>
+    
     <form id="configForm">
+        {% for key, data in config.items() %}
         <div class="form-group">
-            <label>Output Directory</label>
-            <input type="text" name="output_dir" value="{{ config.output_dir.value if config.output_dir else '' }}" placeholder="/path/to/output">
-        </div>
-        
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-            <div class="form-group">
-                <label>Target Bitrate</label>
-                <select name="target_bitrate">
-                    <option value="64k" {% if config.target_bitrate and config.target_bitrate.value == "64k" %}selected{% endif %}>64 kbps</option>
-                    <option value="96k" {% if config.target_bitrate and config.target_bitrate.value == "96k" %}selected{% endif %}>96 kbps</option>
-                    <option value="128k" {% if config.target_bitrate and config.target_bitrate.value == "128k" %}selected{% endif %}>128 kbps</option>
-                    <option value="192k" {% if config.target_bitrate and config.target_bitrate.value == "192k" %}selected{% endif %}>192 kbps</option>
-                    <option value="256k" {% if config.target_bitrate and config.target_bitrate.value == "256k" %}selected{% endif %}>256 kbps</option>
-                </select>
-            </div>
+            <label>
+                <strong>{{ key }}</strong>
+                <span style="color: #6c757d; font-size: 0.9em; margin-left: 10px;">({{ data.source }})</span>
+            </label>
             
-            <div class="form-group">
-                <label>FFmpeg Threads</label>
-                <input type="number" name="ffmpeg_threads" value="{{ config.ffmpeg_threads.value if config.ffmpeg_threads else '4' }}" min="1" max="32">
-            </div>
-        </div>
-        
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
-            <div class="form-group">
-                <label>
-                    <input type="checkbox" name="loudnorm" {% if config.loudnorm and config.loudnorm.value %}checked{% endif %} style="width: auto; margin-right: 8px;">
-                    Loudness Normalization
+            {% if data.value is sameas true or data.value is sameas false %}
+                <label class="checkbox-group">
+                    <input type="checkbox" name="{{ key }}" {% if data.value %}checked{% endif %}>
+                    Enable
                 </label>
-            </div>
-            
-            <div class="form-group">
-                <label>
-                    <input type="checkbox" name="split_chapters" {% if config.split_chapters and config.split_chapters.value %}checked{% endif %} style="width: auto; margin-right: 8px;">
-                    Split by Chapters
-                </label>
-            </div>
+            {% elif data.value is number %}
+                <input type="number" name="{{ key }}" value="{{ data.value }}">
+            {% else %}
+                <input type="text" name="{{ key }}" value="{{ data.value if data.value is not none else '' }}">
+            {% endif %}
         </div>
+        {% endfor %}
         
-        <button type="submit" class="btn btn-primary">
-            💾 Save Configuration
-        </button>
-        <button type="button" class="btn btn-danger" onclick="location.reload()">
-            ❌ Cancel
-        </button>
+        <div style="display: flex; gap: 10px; margin-top: 20px;">
+            <button type="submit" class="btn btn-primary">💾 Save Configuration</button>
+            <button type="button" class="btn btn-secondary" onclick="location.reload()">🔄 Reset</button>
+            <button type="button" class="btn btn-danger" onclick="resetToDefaults()">⚠️ Reset to Defaults</button>
+        </div>
     </form>
 </div>
-{% endblock %}
 
-{% block extra_scripts %}
 <script>
-document.getElementById('configForm').addEventListener('submit', async (e) => {
+// Save configuration
+document.getElementById('configForm').addEventListener('submit', async function(e) {
     e.preventDefault();
     
     const formData = new FormData(e.target);
-    const config = Object.fromEntries(formData.entries());
+    const config = {};
     
-    // Convert checkboxes
-    config.loudnorm = formData.get('loudnorm') ? true : false;
-    config.split_chapters = formData.get('split_chapters') ? true : false;
+    for (let [key, value] of formData.entries()) {
+        // Handle checkboxes
+        const input = document.querySelector(`input[name="${key}"]`);
+        if (input.type === 'checkbox') {
+            config[key] = input.checked;
+        } else if (input.type === 'number') {
+            config[key] = parseFloat(value);
+        } else {
+            config[key] = value;
+        }
+    }
     
     try {
         const response = await fetch('/api/config', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+            headers: {'Content-Type': 'application/json'},
             body: JSON.stringify(config)
         });
         
-        if (!response.ok) {
-            throw new Error('Configuration update failed');
+        const result = await response.json();
+        
+        if (response.ok) {
+            alert(result.message);
+            location.reload();
+        } else {
+            alert('Save failed: ' + (result.error || 'Unknown error'));
         }
-        
-        alert('Configuration saved successfully!');
-        location.reload();
-        
     } catch (error) {
-        alert(`Error: ${error.message}`);
+        alert('Error: ' + error.message);
     }
 });
+
+// Reset to defaults
+async function resetToDefaults() {
+    if (!confirm('Reset all configuration to defaults? This cannot be undone.')) return;
+    
+    try {
+        const response = await fetch('/api/config/reset', { method: 'POST' });
+        const result = await response.json();
+        
+        if (response.ok) {
+            alert(result.message);
+            location.reload();
+        } else {
+            alert('Reset failed: ' + (result.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Error: ' + error.message);
+    }
+}
 </script>
 {% endblock %}

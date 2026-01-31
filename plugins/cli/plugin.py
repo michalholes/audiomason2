@@ -54,6 +54,67 @@ class CLIPlugin:
         self.config = config or {}
         self.verbosity = VerbosityLevel.NORMAL
 
+    def _parse_cli_args(self) -> dict[str, Any]:
+        """Parse all CLI arguments into a dictionary for ConfigResolver.
+        
+        Returns:
+            Dictionary of CLI arguments
+        """
+        cli_args = {}
+        args = sys.argv[1:]  # Skip program name
+        i = 0
+        
+        while i < len(args):
+            arg = args[i]
+            
+            # Verbosity flags
+            if arg in ("-q", "--quiet"):
+                self.verbosity = VerbosityLevel.QUIET
+                cli_args["verbosity"] = "quiet"
+            elif arg in ("-v", "--verbose"):
+                self.verbosity = VerbosityLevel.VERBOSE
+                cli_args["verbosity"] = "verbose"
+            elif arg in ("-d", "--debug"):
+                self.verbosity = VerbosityLevel.DEBUG
+                cli_args["verbosity"] = "debug"
+            
+            # Port flag
+            elif arg == "--port" and i + 1 < len(args):
+                cli_args["web.port"] = int(args[i + 1])
+                i += 1  # Skip next arg
+            
+            # Bitrate flag
+            elif arg == "--bitrate" and i + 1 < len(args):
+                cli_args["audio.bitrate"] = args[i + 1]
+                i += 1
+            
+            # Output directory
+            elif arg == "--output" and i + 1 < len(args):
+                cli_args["output_dir"] = args[i + 1]
+                i += 1
+            
+            # Pipeline
+            elif arg == "--pipeline" and i + 1 < len(args):
+                cli_args["pipeline"] = args[i + 1]
+                i += 1
+            
+            # Loudnorm flag
+            elif arg == "--loudnorm":
+                cli_args["audio.loudnorm"] = True
+            elif arg == "--no-loudnorm":
+                cli_args["audio.loudnorm"] = False
+            
+            # Split chapters
+            elif arg == "--split-chapters":
+                cli_args["audio.split_chapters"] = True
+            elif arg == "--no-split-chapters":
+                cli_args["audio.split_chapters"] = False
+            
+            i += 1
+        
+        self._debug(f"Parsed CLI args: {cli_args}")
+        return cli_args
+    
     def _extract_verbosity_from_argv(self) -> None:
         """Extract verbosity flags from sys.argv and remove them.
         
@@ -513,11 +574,19 @@ class CLIPlugin:
         """
         self._debug(f"Starting web server with verbosity: {self.verbosity}")
         
-        # Parse port
-        port = 8080
-        for i, arg in enumerate(args):
-            if arg == "--port" and i + 1 < len(args):
-                port = int(args[i + 1])
+        # Parse CLI arguments
+        cli_args = self._parse_cli_args()
+        
+        # Create ConfigResolver with CLI args
+        config_resolver = ConfigResolver(cli_args=cli_args)
+        
+        # Resolve web server port
+        try:
+            port, source = config_resolver.resolve("web.port")
+            self._verbose(f"Using port {port} (source: {source})")
+        except:
+            port = 8080
+            self._debug("Using default port 8080")
 
         self._info(f"🌐 Starting web server on port {port}...")
         self._info("")
@@ -533,15 +602,19 @@ class CLIPlugin:
 
         try:
             web_plugin = loader.load_plugin(web_plugin_dir, validate=False)
-            web_plugin.config["port"] = port
-            # Pass verbosity to web server
+            
+            # Pass ConfigResolver and PluginLoader
+            web_plugin.config_resolver = config_resolver
+            web_plugin.plugin_loader = loader
             web_plugin.verbosity = self.verbosity
+            
             await web_plugin.run()
         except Exception as e:
             self._error(f"❌ Error starting web server: {e}")
             if self.verbosity >= VerbosityLevel.DEBUG:
                 import traceback
                 traceback.print_exc()
+
 
     async def _daemon_command(self) -> None:
         """Start daemon mode."""

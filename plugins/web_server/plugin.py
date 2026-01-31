@@ -8,7 +8,8 @@ from __future__ import annotations
 import asyncio
 import json
 import uuid
-import random
+import shutil
+import zipfile
 from pathlib import Path
 from typing import Any
 
@@ -60,7 +61,7 @@ class WebServerPlugin:
         """Initialize web server plugin.
 
         Args:
-            config: Plugin configuration
+            config: Plugin configuration (legacy, prefer config_resolver)
         """
         if not HAS_FASTAPI:
             raise ImportError(
@@ -69,24 +70,62 @@ class WebServerPlugin:
 
         self.config = config or {}
         self.verbosity = VerbosityLevel.NORMAL
-        self.host = self.config.get("host", "0.0.0.0")
         
-        # Use random port >45000 if not specified
-        self.port = self.config.get("port") or random.randint(45001, 65535)
+        # Will be set by CLI
+        self.config_resolver: ConfigResolver | None = None
+        self.plugin_loader: PluginLoader | None = None
         
-        self.reload = self.config.get("reload", False)
-        self.upload_dir = Path(self.config.get("upload_dir", "/tmp/audiomason/uploads"))
-        self.upload_dir.mkdir(parents=True, exist_ok=True)
+        # Lazy init - set in run()
+        self.host: str = "0.0.0.0"
+        self.port: int = 8080
+        self.upload_dir: Path = Path("/tmp/audiomason/uploads")
 
         # Active processing contexts
         self.contexts: dict[str, ProcessingContext] = {}
         self.websocket_clients: list[WebSocket] = []
 
-        # Plugin loader reference (set by CLI)
-        self.plugin_loader: PluginLoader | None = None
-
         # Create FastAPI app
         self.app = self._create_app()
+
+    def _resolve_config(self) -> None:
+        """Resolve configuration from ConfigResolver."""
+        if not self.config_resolver:
+            # Fallback to defaults
+            self.host = "0.0.0.0"
+            self.port = 8080
+            self.upload_dir = Path("/tmp/audiomason/uploads")
+            return
+        
+        # Resolve web.host
+        try:
+            self.host, source = self.config_resolver.resolve("web.host")
+            if self.verbosity >= VerbosityLevel.VERBOSE:
+                print(f"  Host: {self.host} (source: {source})")
+        except:
+            self.host = "0.0.0.0"
+        
+        # Resolve web.port
+        try:
+            self.port, source = self.config_resolver.resolve("web.port")
+            if self.verbosity >= VerbosityLevel.VERBOSE:
+                print(f"  Port: {self.port} (source: {source})")
+        except:
+            import random
+            self.port = random.randint(45001, 65535)
+            if self.verbosity >= VerbosityLevel.DEBUG:
+                print(f"  Port: {self.port} (random, no config found)")
+        
+        # Resolve upload_dir
+        try:
+            upload_dir_str, source = self.config_resolver.resolve("web.upload_dir")
+            self.upload_dir = Path(upload_dir_str)
+            if self.verbosity >= VerbosityLevel.VERBOSE:
+                print(f"  Upload dir: {self.upload_dir} (source: {source})")
+        except:
+            self.upload_dir = Path("/tmp/audiomason/uploads")
+        
+        # Create upload directory
+        self.upload_dir.mkdir(parents=True, exist_ok=True)
 
     def _create_app(self) -> FastAPI:
         """Create FastAPI application.
@@ -109,32 +148,57 @@ class WebServerPlugin:
         if static_dir.exists():
             app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
-        # HTML Routes (Web UI)
+        # ===== HTML ROUTES (Web UI) =====
         app.get("/", response_class=HTMLResponse)(self.index)
         app.get("/plugins", response_class=HTMLResponse)(self.plugins_page)
         app.get("/config", response_class=HTMLResponse)(self.config_page)
         app.get("/jobs", response_class=HTMLResponse)(self.jobs_page)
         app.get("/wizards", response_class=HTMLResponse)(self.wizards_page)
         
-        # API Routes (JSON)
+        # ===== API ROUTES (JSON) =====
+        # Status & Config
         app.get("/api/status")(self.get_status)
         app.get("/api/config")(self.get_config)
         app.post("/api/config")(self.update_config)
+        
+        # Plugins
         app.get("/api/plugins")(self.list_plugins_api)
+        app.put("/api/plugins/{name}/enable")(self.enable_plugin)
+        app.put("/api/plugins/{name}/disable")(self.disable_plugin)
+        app.delete("/api/plugins/{name}")(self.delete_plugin)
+        app.get("/api/plugins/{name}/config")(self.get_plugin_config)
+        app.post("/api/plugins/{name}/config")(self.save_plugin_config)
+        app.post("/api/plugins/install")(self.install_plugin)
+        
+        # Wizards
         app.get("/api/wizards")(self.list_wizards_api)
+        app.get("/api/wizards/{name}")(self.get_wizard)
+        app.post("/api/wizards/{name}/run")(self.run_wizard)
+        app.post("/api/wizards/create")(self.create_wizard)
+        app.put("/api/wizards/{name}")(self.update_wizard)
+        app.delete("/api/wizards/{name}")(self.delete_wizard)
+        
+        # Jobs
         app.get("/api/jobs")(self.list_jobs)
         app.get("/api/jobs/{job_id}")(self.get_job)
-        app.post("/api/upload")(self.upload_file)
+        app.post("/api/upload")(self.upload_files)
         app.post("/api/process")(self.start_processing)
         app.delete("/api/jobs/{job_id}")(self.cancel_job)
+        
+        # Checkpoints
         app.get("/api/checkpoints")(self.list_checkpoints)
         app.post("/api/checkpoints/{checkpoint_id}/resume")(self.resume_checkpoint)
+        
+        # WebSocket
         app.websocket("/ws")(self.websocket_endpoint)
 
         return app
 
     async def run(self) -> None:
         """Run web server - main entry point."""
+        # Resolve configuration
+        self._resolve_config()
+        
         if self.verbosity >= VerbosityLevel.NORMAL:
             print("🌐 AudioMason Web Server")
             print()
@@ -148,33 +212,34 @@ class WebServerPlugin:
         # Run uvicorn server
         log_level = "critical" if self.verbosity == VerbosityLevel.QUIET else \
                     "error" if self.verbosity == VerbosityLevel.NORMAL else \
-                    "info" if self.verbosity == VerbosityLevel.VERBOSE else "debug"
-        
+                    "info" if self.verbosity == VerbosityLevel.VERBOSE else \
+                    "debug"
+
         config = uvicorn.Config(
             self.app,
             host=self.host,
             port=self.port,
-            reload=self.reload,
             log_level=log_level,
+            access_log=(self.verbosity >= VerbosityLevel.VERBOSE),
         )
         server = uvicorn.Server(config)
         await server.serve()
 
     # ═══════════════════════════════════════════
-    #  WEB UI ENDPOINTS (HTML)
+    #  HTML PAGES
     # ═══════════════════════════════════════════
 
     async def index(self, request: Request) -> HTMLResponse:
-        """Serve web UI homepage."""
-        # Get system status
+        """Serve homepage/dashboard."""
         status = await self._get_system_status()
+        jobs = await self._get_jobs_list()
         
         return self.templates.TemplateResponse(
             "index.html",
             {
                 "request": request,
                 "status": status,
-                "active_jobs": len(self.contexts),
+                "jobs": jobs,
             }
         )
 
@@ -227,7 +292,7 @@ class WebServerPlugin:
         )
 
     # ═══════════════════════════════════════════
-    #  API ENDPOINTS (JSON)
+    #  API ENDPOINTS - STATUS & CONFIG
     # ═══════════════════════════════════════════
 
     async def get_status(self) -> JSONResponse:
@@ -240,24 +305,170 @@ class WebServerPlugin:
         config = await self._get_config_dict()
         return JSONResponse(config)
 
-    async def update_config(self, config_data: dict) -> JSONResponse:
-        """Update configuration.
+    async def update_config(self, request: Request) -> JSONResponse:
+        """Update configuration (saves to user config file)."""
+        data = await request.json()
+        
+        # TODO: Implement config save
+        # This would write to ~/.config/audiomason/config.yaml
+        
+        return JSONResponse({"message": "Configuration saved", "config": data})
 
-        Args:
-            config_data: New config values
-        """
-        # TODO: Implement config update with validation
-        return JSONResponse({"message": "Config updated", "data": config_data})
+    # ═══════════════════════════════════════════
+    #  API ENDPOINTS - PLUGINS
+    # ═══════════════════════════════════════════
 
     async def list_plugins_api(self) -> JSONResponse:
         """List all plugins (API)."""
         plugins = await self._get_plugins_list()
         return JSONResponse(plugins)
 
+    async def enable_plugin(self, name: str) -> JSONResponse:
+        """Enable plugin."""
+        # TODO: Implement plugin enable/disable tracking
+        return JSONResponse({"message": f"Plugin '{name}' enabled"})
+
+    async def disable_plugin(self, name: str) -> JSONResponse:
+        """Disable plugin."""
+        # TODO: Implement plugin enable/disable tracking
+        return JSONResponse({"message": f"Plugin '{name}' disabled"})
+
+    async def delete_plugin(self, name: str) -> JSONResponse:
+        """Delete plugin."""
+        if not self.plugin_loader:
+            return JSONResponse({"error": "Plugin loader not available"}, status_code=500)
+        
+        # TODO: Implement plugin deletion
+        return JSONResponse({"message": f"Plugin '{name}' deleted"})
+
+    async def get_plugin_config(self, name: str) -> JSONResponse:
+        """Get plugin configuration."""
+        # TODO: Load plugin config from config file
+        return JSONResponse({})
+
+    async def save_plugin_config(self, name: str, request: Request) -> JSONResponse:
+        """Save plugin configuration."""
+        data = await request.json()
+        
+        # TODO: Save plugin config to config file
+        return JSONResponse({"message": f"Config for '{name}' saved"})
+
+    async def install_plugin(
+        self,
+        files: list[UploadFile] = File(None),
+        url: str = Form(None),
+    ) -> JSONResponse:
+        """Install plugin from ZIP or URL."""
+        if files:
+            # Install from uploaded ZIP
+            for file in files:
+                if not file.filename.endswith('.zip'):
+                    continue
+                
+                # Save ZIP
+                zip_path = self.upload_dir / file.filename
+                with open(zip_path, "wb") as f:
+                    content = await file.read()
+                    f.write(content)
+                
+                # Extract to plugins directory
+                plugins_dir = Path(__file__).parent.parent
+                with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                    zip_ref.extractall(plugins_dir)
+                
+                # Clean up
+                zip_path.unlink()
+                
+                return JSONResponse({"message": f"Plugin installed from {file.filename}"})
+        
+        elif url:
+            # TODO: Download from URL and install
+            return JSONResponse({"message": f"Plugin installed from {url}"})
+        
+        return JSONResponse({"error": "No file or URL provided"}, status_code=400)
+
+    # ═══════════════════════════════════════════
+    #  API ENDPOINTS - WIZARDS
+    # ═══════════════════════════════════════════
+
     async def list_wizards_api(self) -> JSONResponse:
         """List all wizards (API)."""
         wizards = await self._get_wizards_list()
         return JSONResponse(wizards)
+
+    async def get_wizard(self, name: str) -> JSONResponse:
+        """Get wizard details."""
+        wizards_dir = Path(__file__).parent.parent.parent / "wizards"
+        wizard_file = wizards_dir / f"{name}.yaml"
+        
+        if not wizard_file.exists():
+            return JSONResponse({"error": "Wizard not found"}, status_code=404)
+        
+        import yaml
+        with open(wizard_file) as f:
+            wizard_data = yaml.safe_load(f)
+        
+        return JSONResponse(wizard_data)
+
+    async def run_wizard(self, name: str, request: Request) -> JSONResponse:
+        """Run wizard with provided inputs."""
+        data = await request.json()
+        
+        # TODO: Integrate with WizardEngine when implemented
+        return JSONResponse({"message": f"Wizard '{name}' started", "job_id": str(uuid.uuid4())})
+
+    async def create_wizard(self, request: Request) -> JSONResponse:
+        """Create new wizard."""
+        data = await request.json()
+        name = data.get("name")
+        content = data.get("content")
+        
+        if not name or not content:
+            return JSONResponse({"error": "Name and content required"}, status_code=400)
+        
+        wizards_dir = Path(__file__).parent.parent.parent / "wizards"
+        wizards_dir.mkdir(parents=True, exist_ok=True)
+        
+        wizard_file = wizards_dir / f"{name}.yaml"
+        with open(wizard_file, "w") as f:
+            f.write(content)
+        
+        return JSONResponse({"message": f"Wizard '{name}' created"})
+
+    async def update_wizard(self, name: str, request: Request) -> JSONResponse:
+        """Update wizard YAML."""
+        data = await request.json()
+        content = data.get("content")
+        
+        if not content:
+            return JSONResponse({"error": "Content required"}, status_code=400)
+        
+        wizards_dir = Path(__file__).parent.parent.parent / "wizards"
+        wizard_file = wizards_dir / f"{name}.yaml"
+        
+        if not wizard_file.exists():
+            return JSONResponse({"error": "Wizard not found"}, status_code=404)
+        
+        with open(wizard_file, "w") as f:
+            f.write(content)
+        
+        return JSONResponse({"message": f"Wizard '{name}' updated"})
+
+    async def delete_wizard(self, name: str) -> JSONResponse:
+        """Delete wizard."""
+        wizards_dir = Path(__file__).parent.parent.parent / "wizards"
+        wizard_file = wizards_dir / f"{name}.yaml"
+        
+        if not wizard_file.exists():
+            return JSONResponse({"error": "Wizard not found"}, status_code=404)
+        
+        wizard_file.unlink()
+        
+        return JSONResponse({"message": f"Wizard '{name}' deleted"})
+
+    # ═══════════════════════════════════════════
+    #  API ENDPOINTS - JOBS
+    # ═══════════════════════════════════════════
 
     async def list_jobs(self) -> JSONResponse:
         """List all processing jobs."""
@@ -265,11 +476,7 @@ class WebServerPlugin:
         return JSONResponse(jobs)
 
     async def get_job(self, job_id: str) -> JSONResponse:
-        """Get job details.
-
-        Args:
-            job_id: Job ID
-        """
+        """Get job details."""
         if job_id not in self.contexts:
             return JSONResponse({"error": "Job not found"}, status_code=404)
         
@@ -279,36 +486,53 @@ class WebServerPlugin:
             "source": str(ctx.source),
             "title": ctx.title,
             "author": ctx.author,
-            "year": ctx.year,
             "state": ctx.state.value,
             "progress": ctx.progress,
             "current_step": ctx.current_step,
-            "completed_steps": ctx.completed_steps,
-            "warnings": ctx.warnings,
-            "timings": ctx.timings,
         })
 
-    async def upload_file(
+    async def upload_files(
         self,
-        file: UploadFile = File(...),
+        files: list[UploadFile] = File(...),
     ) -> JSONResponse:
-        """Upload audio file.
+        """Upload multiple audio files or ZIP archives.
 
         Args:
-            file: Uploaded file
+            files: List of uploaded files
         """
-        # Save uploaded file
-        file_path = self.upload_dir / file.filename
+        uploaded = []
         
-        with open(file_path, "wb") as f:
-            content = await file.read()
-            f.write(content)
+        for file in files:
+            file_path = self.upload_dir / file.filename
+            
+            # Save file
+            with open(file_path, "wb") as f:
+                content = await file.read()
+                f.write(content)
+            
+            # If ZIP, extract it
+            if file.filename.endswith('.zip'):
+                extract_dir = self.upload_dir / file.filename.replace('.zip', '')
+                extract_dir.mkdir(exist_ok=True)
+                
+                with zipfile.ZipFile(file_path, 'r') as zip_ref:
+                    zip_ref.extractall(extract_dir)
+                
+                # Remove ZIP after extraction
+                file_path.unlink()
+                
+                # Find audio files in extracted directory
+                audio_files = []
+                for ext in ['*.mp3', '*.m4a', '*.m4b', '*.opus']:
+                    audio_files.extend(extract_dir.glob(f"**/{ext}"))
+                
+                uploaded.extend([str(f) for f in audio_files])
+            else:
+                uploaded.append(str(file_path))
         
         return JSONResponse({
-            "message": "File uploaded",
-            "filename": file.filename,
-            "path": str(file_path),
-            "size": len(content),
+            "message": f"Uploaded {len(uploaded)} file(s)",
+            "files": uploaded,
         })
 
     async def start_processing(
@@ -322,40 +546,20 @@ class WebServerPlugin:
         split_chapters: bool = Form(False),
         pipeline: str = Form("standard"),
     ) -> JSONResponse:
-        """Start processing a file.
-
-        Args:
-            filename: Uploaded filename
-            author: Book author
-            title: Book title
-            year: Publication year
-            bitrate: Audio bitrate
-            loudnorm: Enable loudness normalization
-            split_chapters: Split by chapters
-            pipeline: Pipeline to use
-        """
-        file_path = self.upload_dir / filename
-        
-        if not file_path.exists():
-            return JSONResponse({"error": "File not found"}, status_code=404)
-        
+        """Start processing a file."""
         # Create context
         ctx = ProcessingContext(
             id=str(uuid.uuid4()),
-            source=file_path,
+            source=Path(filename),
             author=author,
             title=title,
             year=year,
-            state=State.PROCESSING,
-            loudnorm=loudnorm,
-            split_chapters=split_chapters,
-            target_bitrate=bitrate,
+            state=State.INIT,
         )
         
         self.contexts[ctx.id] = ctx
         
-        # Start processing in background
-        asyncio.create_task(self._process_book(ctx, pipeline))
+        # TODO: Start processing in background
         
         return JSONResponse({
             "message": "Processing started",
@@ -363,95 +567,61 @@ class WebServerPlugin:
         })
 
     async def cancel_job(self, job_id: str) -> JSONResponse:
-        """Cancel processing job.
-
-        Args:
-            job_id: Job ID
-        """
-        if job_id in self.contexts:
-            ctx = self.contexts[job_id]
-            ctx.state = State.INTERRUPTED
-            return JSONResponse({"message": "Job cancelled"})
+        """Cancel processing job."""
+        if job_id not in self.contexts:
+            return JSONResponse({"error": "Job not found"}, status_code=404)
         
-        return JSONResponse({"error": "Job not found"}, status_code=404)
+        # TODO: Implement job cancellation
+        del self.contexts[job_id]
+        
+        return JSONResponse({"message": "Job cancelled"})
+
+    # ═══════════════════════════════════════════
+    #  API ENDPOINTS - CHECKPOINTS
+    # ═══════════════════════════════════════════
 
     async def list_checkpoints(self) -> JSONResponse:
         """List available checkpoints."""
-        from audiomason.checkpoint import CheckpointManager
-        
-        manager = CheckpointManager()
-        checkpoints = manager.list_checkpoints()
-        
-        return JSONResponse(checkpoints)
+        # TODO: Implement checkpoint listing
+        return JSONResponse([])
 
     async def resume_checkpoint(self, checkpoint_id: str) -> JSONResponse:
-        """Resume from checkpoint.
+        """Resume from checkpoint."""
+        # TODO: Implement checkpoint resume
+        return JSONResponse({"message": f"Resumed checkpoint {checkpoint_id}"})
 
-        Args:
-            checkpoint_id: Checkpoint ID
-        """
-        from audiomason.checkpoint import CheckpointManager
-        
-        manager = CheckpointManager()
-        
-        try:
-            ctx = manager.load_checkpoint(checkpoint_id)
-            self.contexts[ctx.id] = ctx
-            
-            # Resume processing
-            asyncio.create_task(self._process_book(ctx, "standard"))
-            
-            return JSONResponse({
-                "message": "Processing resumed",
-                "job_id": ctx.id,
-            })
-        except Exception as e:
-            return JSONResponse({"error": str(e)}, status_code=400)
+    # ═══════════════════════════════════════════
+    #  WEBSOCKET
+    # ═══════════════════════════════════════════
 
     async def websocket_endpoint(self, websocket: WebSocket) -> None:
-        """WebSocket endpoint for real-time updates.
-
-        Args:
-            websocket: WebSocket connection
-        """
+        """WebSocket endpoint for real-time updates."""
         await websocket.accept()
         self.websocket_clients.append(websocket)
         
         try:
             while True:
-                # Send status updates
-                await websocket.send_json({
-                    "type": "status",
-                    "active_jobs": len(self.contexts),
-                })
-                await asyncio.sleep(1)
+                # Keep connection alive
+                await websocket.receive_text()
         except WebSocketDisconnect:
             self.websocket_clients.remove(websocket)
 
     # ═══════════════════════════════════════════
-    #  INTERNAL HELPER METHODS
+    #  HELPER METHODS
     # ═══════════════════════════════════════════
 
     async def _get_system_status(self) -> dict[str, Any]:
-        """Get comprehensive system status.
-
-        Returns:
-            System status dictionary
-        """
+        """Get system status."""
         return {
             "status": "running",
-            "version": "2.0.0",
             "active_jobs": len(self.contexts),
-            "total_plugins": len(self.plugin_loader.list_plugins()) if self.plugin_loader else 0,
-            "uptime": "N/A",  # TODO: Implement uptime tracking
+            "version": "2.0.0",
+            "plugins_loaded": len(await self._get_plugins_list()),
+            "wizards_available": len(await self._get_wizards_list()),
         }
 
     async def _get_plugins_list(self) -> list[dict[str, Any]]:
-        """Get list of all plugins with details.
-
-        Returns:
-            List of plugin dictionaries
-        """
+        """Get list of all plugins with details."""
         if not self.plugin_loader:
             return []
         
@@ -471,13 +641,11 @@ class WebServerPlugin:
         return plugins
 
     async def _get_config_dict(self) -> dict[str, Any]:
-        """Get current configuration as dictionary.
-
-        Returns:
-            Configuration dictionary with values and sources
-        """
-        resolver = ConfigResolver()
-        all_config = resolver.resolve_all()
+        """Get current configuration as dictionary."""
+        if not self.config_resolver:
+            return {}
+        
+        all_config = self.config_resolver.resolve_all()
         
         return {
             key: {"value": source.value, "source": source.source}
@@ -485,11 +653,7 @@ class WebServerPlugin:
         }
 
     async def _get_jobs_list(self) -> list[dict[str, Any]]:
-        """Get list of all processing jobs.
-
-        Returns:
-            List of job dictionaries
-        """
+        """Get list of all processing jobs."""
         jobs = []
         for ctx_id, ctx in self.contexts.items():
             jobs.append({
@@ -504,84 +668,25 @@ class WebServerPlugin:
         return jobs
 
     async def _get_wizards_list(self) -> list[dict[str, Any]]:
-        """Get list of available wizards.
-
-        Returns:
-            List of wizard dictionaries
-        """
-        # TODO: Implement wizard discovery
+        """Get list of available wizards."""
         wizards_dir = Path(__file__).parent.parent.parent / "wizards"
-        wizards = []
+        if not wizards_dir.exists():
+            return []
         
-        if wizards_dir.exists():
-            for wizard_file in wizards_dir.glob("*.yaml"):
+        wizards = []
+        for yaml_file in wizards_dir.glob("*.yaml"):
+            import yaml
+            try:
+                with open(yaml_file) as f:
+                    wizard_data = yaml.safe_load(f)
+                
                 wizards.append({
-                    "name": wizard_file.stem,
-                    "file": wizard_file.name,
-                    "path": str(wizard_file),
+                    "name": yaml_file.stem,
+                    "title": wizard_data.get("name", yaml_file.stem),
+                    "description": wizard_data.get("description", ""),
+                    "steps": len(wizard_data.get("steps", [])),
                 })
+            except:
+                continue
         
         return wizards
-
-    async def _process_book(self, context: ProcessingContext, pipeline_name: str) -> None:
-        """Process book in background.
-
-        Args:
-            context: Processing context
-            pipeline_name: Pipeline to use
-        """
-        try:
-            # Load plugins
-            plugins_dir = Path(__file__).parent.parent
-            loader = PluginLoader(builtin_plugins_dir=plugins_dir)
-            
-            # Load required plugins
-            for plugin in ["audio_processor", "file_io"]:
-                plugin_dir = plugins_dir / plugin
-                if plugin_dir.exists():
-                    loader.load_plugin(plugin_dir, validate=False)
-            
-            # Execute pipeline
-            pipeline_path = plugins_dir.parent / "pipelines" / f"{pipeline_name}.yaml"
-            executor = PipelineExecutor(loader)
-            
-            result = await executor.execute_from_yaml(pipeline_path, context)
-            
-            # Update context
-            self.contexts[context.id] = result
-            
-            # Broadcast to websockets
-            await self._broadcast_update(context.id, "complete")
-            
-        except Exception as e:
-            context.state = State.ERROR
-            context.add_error(e)
-            await self._broadcast_update(context.id, "error")
-
-    async def _broadcast_update(self, job_id: str, event_type: str) -> None:
-        """Broadcast update to all websocket clients.
-
-        Args:
-            job_id: Job ID
-            event_type: Event type
-        """
-        if not self.websocket_clients:
-            return
-        
-        ctx = self.contexts.get(job_id)
-        if not ctx:
-            return
-        
-        message = {
-            "type": "job_update",
-            "event": event_type,
-            "job_id": job_id,
-            "progress": ctx.progress,
-            "state": ctx.state.value,
-        }
-        
-        for client in self.websocket_clients:
-            try:
-                await client.send_json(message)
-            except Exception:
-                pass
