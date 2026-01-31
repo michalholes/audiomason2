@@ -1,0 +1,6 @@
+# Python virtualenvs
+/venv/
+/.venv/
+
+# patches
+/patches/
