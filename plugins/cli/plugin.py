@@ -58,7 +58,7 @@ class CLIPlugin:
         """Parse all CLI arguments into a dictionary for ConfigResolver.
         
         Returns:
-            Dictionary of CLI arguments
+            Dictionary of CLI arguments with nested structure for dotted keys
         """
         cli_args = {}
         # Use original argv (before verbosity extraction)
@@ -76,14 +76,18 @@ class CLIPlugin:
             elif arg in ("-d", "--debug"):
                 cli_args["verbosity"] = "debug"
             
-            # Port flag
+            # Port flag - nested under 'web'
             elif arg == "--port" and i + 1 < len(args):
-                cli_args["web.port"] = int(args[i + 1])
+                if "web" not in cli_args:
+                    cli_args["web"] = {}
+                cli_args["web"]["port"] = int(args[i + 1])
                 i += 1  # Skip next arg
             
-            # Bitrate flag
+            # Bitrate flag - nested under 'audio'
             elif arg == "--bitrate" and i + 1 < len(args):
-                cli_args["audio.bitrate"] = args[i + 1]
+                if "audio" not in cli_args:
+                    cli_args["audio"] = {}
+                cli_args["audio"]["bitrate"] = args[i + 1]
                 i += 1
             
             # Output directory
@@ -96,17 +100,25 @@ class CLIPlugin:
                 cli_args["pipeline"] = args[i + 1]
                 i += 1
             
-            # Loudnorm flag
+            # Loudnorm flag - nested under 'audio'
             elif arg == "--loudnorm":
-                cli_args["audio.loudnorm"] = True
+                if "audio" not in cli_args:
+                    cli_args["audio"] = {}
+                cli_args["audio"]["loudnorm"] = True
             elif arg == "--no-loudnorm":
-                cli_args["audio.loudnorm"] = False
+                if "audio" not in cli_args:
+                    cli_args["audio"] = {}
+                cli_args["audio"]["loudnorm"] = False
             
-            # Split chapters
+            # Split chapters - nested under 'audio'
             elif arg == "--split-chapters":
-                cli_args["audio.split_chapters"] = True
+                if "audio" not in cli_args:
+                    cli_args["audio"] = {}
+                cli_args["audio"]["split_chapters"] = True
             elif arg == "--no-split-chapters":
-                cli_args["audio.split_chapters"] = False
+                if "audio" not in cli_args:
+                    cli_args["audio"] = {}
+                cli_args["audio"]["split_chapters"] = False
             
             i += 1
         
@@ -578,15 +590,22 @@ class CLIPlugin:
         # Parse CLI arguments
         cli_args = self._parse_cli_args()
         
+        if self.verbosity >= VerbosityLevel.DEBUG:
+            print(f"[DEBUG] Parsed CLI args: {cli_args}")
+        
         # Create ConfigResolver with CLI args
         config_resolver = ConfigResolver(cli_args=cli_args)
         
         # Resolve web server port
         try:
             port, source = config_resolver.resolve("web.port")
+            if self.verbosity >= VerbosityLevel.DEBUG:
+                print(f"[DEBUG] Resolved port {port} from {source}")
             self._verbose(f"Using port {port} (source: {source})")
-        except:
+        except Exception as e:
             port = 8080
+            if self.verbosity >= VerbosityLevel.DEBUG:
+                print(f"[DEBUG] Failed to resolve web.port: {e}, using default 8080")
             self._debug("Using default port 8080")
 
         self._info(f"🌐 Starting web server on port {port}...")
@@ -595,19 +614,50 @@ class CLIPlugin:
         # Load web server plugin
         plugins_dir = Path(__file__).parent.parent
         loader = PluginLoader(builtin_plugins_dir=plugins_dir)
+        
+        if self.verbosity >= VerbosityLevel.DEBUG:
+            print(f"[DEBUG] Plugins directory: {plugins_dir}")
+            print(f"[DEBUG] Loading all plugins...")
+        
+        # Load all plugins first (so web UI can list them)
+        plugin_dirs = [d for d in plugins_dir.iterdir() 
+                      if d.is_dir() and (d / "plugin.yaml").exists()]
+        
+        if self.verbosity >= VerbosityLevel.DEBUG:
+            print(f"[DEBUG] Found {len(plugin_dirs)} plugin directories")
+        
+        for plugin_dir in plugin_dirs:
+            try:
+                if self.verbosity >= VerbosityLevel.DEBUG:
+                    print(f"[DEBUG]   Loading: {plugin_dir.name}...")
+                loader.load_plugin(plugin_dir, validate=False)
+                if self.verbosity >= VerbosityLevel.DEBUG:
+                    print(f"[DEBUG]     ✓ Loaded")
+            except Exception as e:
+                if self.verbosity >= VerbosityLevel.DEBUG:
+                    print(f"[DEBUG]     ✗ Failed: {e}")
+        
+        if self.verbosity >= VerbosityLevel.DEBUG:
+            loaded = loader.list_plugins()
+            print(f"[DEBUG] Successfully loaded {len(loaded)} plugins: {loaded}")
 
-        web_plugin_dir = plugins_dir / "web_server"
-        if not web_plugin_dir.exists():
+        # Get web_server plugin
+        web_plugin = loader.get_plugin("web_server")
+        if not web_plugin:
             self._error("❌ Web server plugin not found")
             return
 
         try:
-            web_plugin = loader.load_plugin(web_plugin_dir, validate=False)
-            
             # Pass ConfigResolver and PluginLoader
             web_plugin.config_resolver = config_resolver
             web_plugin.plugin_loader = loader
             web_plugin.verbosity = self.verbosity
+            
+            if self.verbosity >= VerbosityLevel.DEBUG:
+                print(f"[DEBUG] Web plugin initialized with:")
+                print(f"[DEBUG]   - config_resolver: {config_resolver is not None}")
+                print(f"[DEBUG]   - plugin_loader: {loader is not None}")
+                print(f"[DEBUG]   - verbosity: {self.verbosity}")
             
             await web_plugin.run()
         except Exception as e:

@@ -747,27 +747,40 @@ class WebServerPlugin:
                 
                 if self.verbosity >= VerbosityLevel.DEBUG:
                     print(f"[DEBUG] Parsing wizard: {yaml_file.stem}")
-                    print(f"[DEBUG]   Data keys: {list(wizard_data.keys())}")
-                    print(f"[DEBUG]   Steps: {wizard_data.get('steps', [])}")
+                    print(f"[DEBUG]   Raw keys: {list(wizard_data.keys())}")
                 
-                steps = wizard_data.get("steps", [])
+                # Handle nested structure: wizard_data may have 'wizard' root key
+                if 'wizard' in wizard_data:
+                    wizard = wizard_data['wizard']
+                    if self.verbosity >= VerbosityLevel.DEBUG:
+                        print(f"[DEBUG]   Found nested 'wizard' key")
+                        print(f"[DEBUG]   Wizard keys: {list(wizard.keys())}")
+                else:
+                    wizard = wizard_data
+                    if self.verbosity >= VerbosityLevel.DEBUG:
+                        print(f"[DEBUG]   Using flat structure")
+                
+                steps = wizard.get("steps", [])
                 if not isinstance(steps, list):
                     if self.verbosity >= VerbosityLevel.DEBUG:
                         print(f"[DEBUG]   WARNING: steps is not a list: {type(steps)}")
                     steps = []
+                else:
+                    if self.verbosity >= VerbosityLevel.DEBUG:
+                        print(f"[DEBUG]   Found {len(steps)} steps")
                 
                 wizards.append({
                     "name": yaml_file.stem,
-                    "title": wizard_data.get("name", yaml_file.stem),
-                    "description": wizard_data.get("description", ""),
+                    "title": wizard.get("name", yaml_file.stem),
+                    "description": wizard.get("description", ""),
                     "steps": len(steps),
                 })
                 
                 if self.verbosity >= VerbosityLevel.DEBUG:
-                    print(f"[DEBUG]   Added wizard with {len(steps)} steps")
+                    print(f"[DEBUG]   ✓ Added wizard '{wizard.get('name', yaml_file.stem)}' with {len(steps)} steps")
             except Exception as e:
                 if self.verbosity >= VerbosityLevel.DEBUG:
-                    print(f"[DEBUG] Failed to parse {yaml_file.stem}: {e}")
+                    print(f"[DEBUG] ✗ Failed to parse {yaml_file.stem}: {e}")
                     import traceback
                     traceback.print_exc()
                 continue

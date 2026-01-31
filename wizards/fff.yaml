@@ -1,0 +1,17 @@
+name: My Wizard
+description: A sample wizard workflow
+
+steps:
+  - id: input_author
+    type: input
+    prompt: "Enter author name"
+    required: true
+  
+  - id: input_title
+    type: input
+    prompt: "Enter book title"
+    required: true
+  
+  - id: confirm
+    type: confirm
+    prompt: "Process with these settings?"
