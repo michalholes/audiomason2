@@ -1,6 +1,6 @@
-"""Web Server plugin - FastAPI REST API + Web UI.
+"""Web Server plugin - FastAPI REST API + Jinja2 Web UI.
 
-Provides complete web interface for AudioMason control.
+Provides complete web interface for AudioMason control with dynamic templates.
 """
 
 from __future__ import annotations
@@ -8,13 +8,15 @@ from __future__ import annotations
 import asyncio
 import json
 import uuid
+import random
 from pathlib import Path
 from typing import Any
 
 try:
-    from fastapi import FastAPI, File, Form, UploadFile, WebSocket, WebSocketDisconnect
-    from fastapi.responses import HTMLResponse, JSONResponse
+    from fastapi import FastAPI, File, Form, UploadFile, WebSocket, WebSocketDisconnect, Request
+    from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
     from fastapi.staticfiles import StaticFiles
+    from fastapi.templating import Jinja2Templates
     import uvicorn
     HAS_FASTAPI = True
 except ImportError:
@@ -27,8 +29,11 @@ except ImportError:
     WebSocketDisconnect = None
     HTMLResponse = None
     JSONResponse = None
+    RedirectResponse = None
     StaticFiles = None
+    Jinja2Templates = None
     uvicorn = None
+    Request = None
 
 from audiomason.core import (
     ConfigResolver,
@@ -49,7 +54,7 @@ class VerbosityLevel:
 
 
 class WebServerPlugin:
-    """Web server plugin with REST API and Web UI."""
+    """Web server plugin with REST API and dynamic Jinja2 Web UI."""
 
     def __init__(self, config: dict | None = None) -> None:
         """Initialize web server plugin.
@@ -59,13 +64,16 @@ class WebServerPlugin:
         """
         if not HAS_FASTAPI:
             raise ImportError(
-                "FastAPI not installed. Install with: pip install fastapi uvicorn python-multipart websockets"
+                "FastAPI not installed. Install with: pip install fastapi uvicorn python-multipart websockets jinja2"
             )
 
         self.config = config or {}
         self.verbosity = VerbosityLevel.NORMAL
         self.host = self.config.get("host", "0.0.0.0")
-        self.port = self.config.get("port", 8080)
+        
+        # Use random port >45000 if not specified
+        self.port = self.config.get("port") or random.randint(45001, 65535)
+        
         self.reload = self.config.get("reload", False)
         self.upload_dir = Path(self.config.get("upload_dir", "/tmp/audiomason/uploads"))
         self.upload_dir.mkdir(parents=True, exist_ok=True)
@@ -73,6 +81,9 @@ class WebServerPlugin:
         # Active processing contexts
         self.contexts: dict[str, ProcessingContext] = {}
         self.websocket_clients: list[WebSocket] = []
+
+        # Plugin loader reference (set by CLI)
+        self.plugin_loader: PluginLoader | None = None
 
         # Create FastAPI app
         self.app = self._create_app()
@@ -89,16 +100,28 @@ class WebServerPlugin:
             version="2.0.0",
         )
 
+        # Setup Jinja2 templates
+        templates_dir = Path(__file__).parent / "templates"
+        self.templates = Jinja2Templates(directory=str(templates_dir))
+
         # Mount static files
         static_dir = Path(__file__).parent / "static"
         if static_dir.exists():
             app.mount("/static", StaticFiles(directory=str(static_dir)), name="static")
 
-        # Routes
-        app.get("/")(self.index)
+        # HTML Routes (Web UI)
+        app.get("/", response_class=HTMLResponse)(self.index)
+        app.get("/plugins", response_class=HTMLResponse)(self.plugins_page)
+        app.get("/config", response_class=HTMLResponse)(self.config_page)
+        app.get("/jobs", response_class=HTMLResponse)(self.jobs_page)
+        app.get("/wizards", response_class=HTMLResponse)(self.wizards_page)
+        
+        # API Routes (JSON)
         app.get("/api/status")(self.get_status)
         app.get("/api/config")(self.get_config)
         app.post("/api/config")(self.update_config)
+        app.get("/api/plugins")(self.list_plugins_api)
+        app.get("/api/wizards")(self.list_wizards_api)
         app.get("/api/jobs")(self.list_jobs)
         app.get("/api/jobs/{job_id}")(self.get_job)
         app.post("/api/upload")(self.upload_file)
@@ -138,56 +161,84 @@ class WebServerPlugin:
         await server.serve()
 
     # ═══════════════════════════════════════════
-    #  API ENDPOINTS
+    #  WEB UI ENDPOINTS (HTML)
     # ═══════════════════════════════════════════
 
-    async def index(self) -> HTMLResponse:
+    async def index(self, request: Request) -> HTMLResponse:
         """Serve web UI homepage."""
-        html_file = Path(__file__).parent / "templates" / "index.html"
+        # Get system status
+        status = await self._get_system_status()
         
-        if html_file.exists():
-            return HTMLResponse(html_file.read_text())
+        return self.templates.TemplateResponse(
+            "index.html",
+            {
+                "request": request,
+                "status": status,
+                "active_jobs": len(self.contexts),
+            }
+        )
+
+    async def plugins_page(self, request: Request) -> HTMLResponse:
+        """Serve plugins management page."""
+        plugins = await self._get_plugins_list()
         
-        # Fallback minimal UI
-        return HTMLResponse("""
-<!DOCTYPE html>
-<html>
-<head>
-    <title>AudioMason Web UI</title>
-    <style>
-        body { font-family: Arial, sans-serif; max-width: 1200px; margin: 50px auto; padding: 20px; }
-        h1 { color: #2c3e50; }
-        .section { margin: 20px 0; padding: 20px; border: 1px solid #ddd; border-radius: 5px; }
-    </style>
-</head>
-<body>
-    <h1>🎧 AudioMason Web UI</h1>
-    <div class="section">
-        <h2>Upload & Process</h2>
-        <p>API URL: <code>/api/upload</code></p>
-        <p>Docs: <a href="/docs">/docs</a></p>
-    </div>
-</body>
-</html>
-        """)
+        return self.templates.TemplateResponse(
+            "plugins.html",
+            {
+                "request": request,
+                "plugins": plugins,
+            }
+        )
+
+    async def config_page(self, request: Request) -> HTMLResponse:
+        """Serve configuration page."""
+        config = await self._get_config_dict()
+        
+        return self.templates.TemplateResponse(
+            "config.html",
+            {
+                "request": request,
+                "config": config,
+            }
+        )
+
+    async def jobs_page(self, request: Request) -> HTMLResponse:
+        """Serve jobs monitoring page."""
+        jobs = await self._get_jobs_list()
+        
+        return self.templates.TemplateResponse(
+            "jobs.html",
+            {
+                "request": request,
+                "jobs": jobs,
+            }
+        )
+
+    async def wizards_page(self, request: Request) -> HTMLResponse:
+        """Serve wizards page."""
+        wizards = await self._get_wizards_list()
+        
+        return self.templates.TemplateResponse(
+            "wizards.html",
+            {
+                "request": request,
+                "wizards": wizards,
+            }
+        )
+
+    # ═══════════════════════════════════════════
+    #  API ENDPOINTS (JSON)
+    # ═══════════════════════════════════════════
 
     async def get_status(self) -> JSONResponse:
         """Get system status."""
-        return JSONResponse({
-            "status": "running",
-            "active_jobs": len(self.contexts),
-            "version": "2.0.0",
-        })
+        status = await self._get_system_status()
+        return JSONResponse(status)
 
     async def get_config(self) -> JSONResponse:
         """Get current configuration."""
-        resolver = ConfigResolver()
-        all_config = resolver.resolve_all()
-        
-        return JSONResponse({
-            key: {"value": source.value, "source": source.source}
-            for key, source in all_config.items()
-        })
+        config = await self._get_config_dict()
+        return JSONResponse(config)
 
     async def update_config(self, config_data: dict) -> JSONResponse:
         """Update configuration.
@@ -195,22 +246,22 @@ class WebServerPlugin:
         Args:
             config_data: New config values
         """
-        # TODO: Implement config update
+        # TODO: Implement config update with validation
         return JSONResponse({"message": "Config updated", "data": config_data})
+
+    async def list_plugins_api(self) -> JSONResponse:
+        """List all plugins (API)."""
+        plugins = await self._get_plugins_list()
+        return JSONResponse(plugins)
+
+    async def list_wizards_api(self) -> JSONResponse:
+        """List all wizards (API)."""
+        wizards = await self._get_wizards_list()
+        return JSONResponse(wizards)
 
     async def list_jobs(self) -> JSONResponse:
         """List all processing jobs."""
-        jobs = []
-        for ctx_id, ctx in self.contexts.items():
-            jobs.append({
-                "id": ctx_id,
-                "title": ctx.title,
-                "author": ctx.author,
-                "state": ctx.state.value,
-                "progress": ctx.progress,
-                "current_step": ctx.current_step,
-            })
-        
+        jobs = await self._get_jobs_list()
         return JSONResponse(jobs)
 
     async def get_job(self, job_id: str) -> JSONResponse:
@@ -378,8 +429,99 @@ class WebServerPlugin:
             self.websocket_clients.remove(websocket)
 
     # ═══════════════════════════════════════════
-    #  INTERNAL METHODS
+    #  INTERNAL HELPER METHODS
     # ═══════════════════════════════════════════
+
+    async def _get_system_status(self) -> dict[str, Any]:
+        """Get comprehensive system status.
+
+        Returns:
+            System status dictionary
+        """
+        return {
+            "status": "running",
+            "version": "2.0.0",
+            "active_jobs": len(self.contexts),
+            "total_plugins": len(self.plugin_loader.list_plugins()) if self.plugin_loader else 0,
+            "uptime": "N/A",  # TODO: Implement uptime tracking
+        }
+
+    async def _get_plugins_list(self) -> list[dict[str, Any]]:
+        """Get list of all plugins with details.
+
+        Returns:
+            List of plugin dictionaries
+        """
+        if not self.plugin_loader:
+            return []
+        
+        plugins = []
+        for plugin_name in self.plugin_loader.list_plugins():
+            manifest = self.plugin_loader.get_manifest(plugin_name)
+            if manifest:
+                plugins.append({
+                    "name": manifest.name,
+                    "version": manifest.version,
+                    "description": manifest.description,
+                    "author": manifest.author,
+                    "interfaces": manifest.interfaces,
+                    "enabled": True,  # TODO: Track enabled state
+                })
+        
+        return plugins
+
+    async def _get_config_dict(self) -> dict[str, Any]:
+        """Get current configuration as dictionary.
+
+        Returns:
+            Configuration dictionary with values and sources
+        """
+        resolver = ConfigResolver()
+        all_config = resolver.resolve_all()
+        
+        return {
+            key: {"value": source.value, "source": source.source}
+            for key, source in all_config.items()
+        }
+
+    async def _get_jobs_list(self) -> list[dict[str, Any]]:
+        """Get list of all processing jobs.
+
+        Returns:
+            List of job dictionaries
+        """
+        jobs = []
+        for ctx_id, ctx in self.contexts.items():
+            jobs.append({
+                "id": ctx_id,
+                "title": ctx.title,
+                "author": ctx.author,
+                "state": ctx.state.value,
+                "progress": ctx.progress,
+                "current_step": ctx.current_step,
+            })
+        
+        return jobs
+
+    async def _get_wizards_list(self) -> list[dict[str, Any]]:
+        """Get list of available wizards.
+
+        Returns:
+            List of wizard dictionaries
+        """
+        # TODO: Implement wizard discovery
+        wizards_dir = Path(__file__).parent.parent.parent / "wizards"
+        wizards = []
+        
+        if wizards_dir.exists():
+            for wizard_file in wizards_dir.glob("*.yaml"):
+                wizards.append({
+                    "name": wizard_file.stem,
+                    "file": wizard_file.name,
+                    "path": str(wizard_file),
+                })
+        
+        return wizards
 
     async def _process_book(self, context: ProcessingContext, pipeline_name: str) -> None:
         """Process book in background.

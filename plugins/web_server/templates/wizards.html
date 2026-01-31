@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+
+{% block title %}Wizards - AudioMason v2{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h3>Available Wizards ({{ wizards|length }})</h3>
+    <p style="color: #6c757d; margin-bottom: 20px;">
+        Wizards guide you through common AudioMason workflows step-by-step.
+    </p>
+    
+    {% if wizards %}
+    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px;">
+        {% for wizard in wizards %}
+        <div style="background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.05);">
+            <h4 style="color: #667eea; margin-bottom: 10px;">
+                🧙 {{ wizard.name|replace('_', ' ')|title }}
+            </h4>
+            <p style="color: #6c757d; font-size: 0.9em; margin-bottom: 15px;">
+                {{ wizard.file }}
+            </p>
+            <button class="btn btn-primary" onclick="runWizard('{{ wizard.name }}')">
+                Run Wizard
+            </button>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p style="color: #6c757d; text-align: center; padding: 40px;">
+        No wizards available
+    </p>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h3>Create Custom Wizard</h3>
+    <p style="color: #6c757d; margin-bottom: 15px;">
+        Create your own wizard workflow with YAML configuration.
+    </p>
+    <button class="btn btn-primary" onclick="alert('Feature coming soon - use TUI or CLI to create wizards')">
+        ➕ Create New Wizard
+    </button>
+</div>
+
+<div class="card">
+    <h3>What are Wizards?</h3>
+    <div style="background: white; padding: 20px; border-radius: 8px;">
+        <p style="color: #495057; line-height: 1.8; margin-bottom: 15px;">
+            Wizards are interactive workflows that guide you through complex AudioMason tasks.
+            They can:
+        </p>
+        <ul style="color: #495057; line-height: 2;">
+            <li>Process audiobooks with custom settings</li>
+            <li>Apply multiple effects in sequence</li>
+            <li>Configure plugin pipelines</li>
+            <li>Automate repetitive tasks</li>
+            <li>Validate and fix metadata</li>
+        </ul>
+        <p style="color: #6c757d; margin-top: 15px; font-size: 0.9em;">
+            💡 Tip: Use the TUI (Text User Interface) or CLI to access more wizard features.
+        </p>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+async function runWizard(wizardName) {
+    alert(`Running wizard: ${wizardName}\n\nThis feature is currently only available through the TUI and CLI interfaces.\n\nRun: audiomason wizard run ${wizardName}`);
+}
+</script>
+{% endblock %}

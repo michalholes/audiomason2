@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+
+{% block title %}Plugins - AudioMason v2{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h3>Loaded Plugins ({{ plugins|length }})</h3>
+    
+    {% if plugins %}
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Version</th>
+                <th>Description</th>
+                <th>Author</th>
+                <th>Interfaces</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for plugin in plugins %}
+            <tr>
+                <td><strong>{{ plugin.name }}</strong></td>
+                <td><span class="badge badge-info">{{ plugin.version }}</span></td>
+                <td>{{ plugin.description }}</td>
+                <td>{{ plugin.author }}</td>
+                <td>
+                    {% for interface in plugin.interfaces %}
+                        <span class="badge badge-success">{{ interface }}</span>
+                    {% endfor %}
+                </td>
+                <td>
+                    {% if plugin.enabled %}
+                        <span class="badge badge-success">Enabled</span>
+                    {% else %}
+                        <span class="badge badge-warning">Disabled</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color: #6c757d; text-align: center; padding: 40px;">
+        No plugins loaded
+    </p>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h3>Plugin Management</h3>
+    <p style="color: #6c757d; margin-bottom: 15px;">
+        Manage AudioMason plugins. Plugins extend functionality with new processors, outputs, and interfaces.
+    </p>
+    
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+        <button class="btn btn-primary" onclick="alert('Feature coming soon')">
+            ➕ Install Plugin
+        </button>
+        <button class="btn btn-primary" onclick="location.reload()">
+            🔄 Refresh List
+        </button>
+        <button class="btn btn-danger" onclick="alert('Feature coming soon')">
+            🗑️ Remove Plugin
+        </button>
+    </div>
+</div>
+
+<div class="card">
+    <h3>Plugin Statistics</h3>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-top: 15px;">
+        <div style="background: white; padding: 20px; border-radius: 8px; text-align: center;">
+            <div style="font-size: 2em; color: #667eea; margin-bottom: 10px;">
+                {{ plugins|length }}
+            </div>
+            <div style="color: #6c757d; font-size: 0.9em;">Total Plugins</div>
+        </div>
+        
+        <div style="background: white; padding: 20px; border-radius: 8px; text-align: center;">
+            <div style="font-size: 2em; color: #28a745; margin-bottom: 10px;">
+                {{ plugins|selectattr('enabled')|list|length }}
+            </div>
+            <div style="color: #6c757d; font-size: 0.9em;">Enabled</div>
+        </div>
+        
+        <div style="background: white; padding: 20px; border-radius: 8px; text-align: center;">
+            <div style="font-size: 2em; color: #17a2b8; margin-bottom: 10px;">
+                {{ plugins|map(attribute='interfaces')|sum(start=[])|unique|list|length }}
+            </div>
+            <div style="color: #6c757d; font-size: 0.9em;">Interfaces</div>
+        </div>
+    </div>
+</div>
+{% endblock %}

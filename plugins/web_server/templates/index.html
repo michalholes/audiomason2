@@ -1,1316 +1,201 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AudioMason v2 - Web Control Panel</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
-        }
-        
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            background: white;
-            border-radius: 20px;
-            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
-            overflow: hidden;
-        }
-        
-        .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 30px;
-            text-align: center;
-        }
-        
-        .header h1 {
-            font-size: 2.5em;
-            margin-bottom: 10px;
-        }
-        
-        .header p {
-            opacity: 0.9;
-            font-size: 1.1em;
-        }
-        
-        .tabs {
-            display: flex;
-            background: #f8f9fa;
-            border-bottom: 2px solid #e9ecef;
-        }
-        
-        .tab {
-            flex: 1;
-            padding: 20px;
-            text-align: center;
-            cursor: pointer;
-            border: none;
-            background: none;
-            font-size: 1em;
-            font-weight: 600;
-            color: #6c757d;
-            transition: all 0.3s;
-        }
-        
-        .tab:hover {
-            background: #e9ecef;
-            color: #495057;
-        }
-        
-        .tab.active {
-            background: white;
-            color: #667eea;
-            border-bottom: 3px solid #667eea;
-        }
-        
-        .tab-content {
-            padding: 30px;
-            display: none;
-        }
-        
-        .tab-content.active {
-            display: block;
-        }
-        
-        .card {
-            background: #f8f9fa;
-            border-radius: 10px;
-            padding: 25px;
-            margin-bottom: 20px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.05);
-        }
-        
-        .card h3 {
-            color: #667eea;
-            margin-bottom: 15px;
-            font-size: 1.3em;
-        }
-        
-        .form-group {
-            margin-bottom: 20px;
-        }
-        
-        .form-group label {
-            display: block;
-            font-weight: 600;
-            margin-bottom: 8px;
-            color: #495057;
-        }
-        
-        .form-group input,
-        .form-group select,
-        .form-group textarea {
-            width: 100%;
-            padding: 12px;
-            border: 2px solid #e9ecef;
-            border-radius: 8px;
-            font-size: 1em;
-            transition: border 0.3s;
-        }
-        
-        .form-group input:focus,
-        .form-group select:focus,
-        .form-group textarea:focus {
-            outline: none;
-            border-color: #667eea;
-        }
-        
-        .checkbox-group {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-        
-        .checkbox-group input[type="checkbox"] {
-            width: auto;
-            cursor: pointer;
-        }
-        
-        .btn {
-            padding: 12px 30px;
-            border: none;
-            border-radius: 8px;
-            font-size: 1em;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-        
-        .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-        }
-        
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
-        }
-        
-        .btn-secondary {
-            background: #6c757d;
-            color: white;
-        }
-        
-        .btn-danger {
-            background: #dc3545;
-            color: white;
-        }
-        
-        .file-upload {
-            border: 3px dashed #667eea;
-            border-radius: 10px;
-            padding: 40px;
-            text-align: center;
-            cursor: pointer;
-            transition: all 0.3s;
-        }
-        
-        .file-upload:hover {
-            background: #f8f9fa;
-            border-color: #764ba2;
-        }
-        
-        .file-upload input {
-            display: none;
-        }
-        
-        .jobs-list {
-            list-style: none;
-        }
-        
-        .job-item {
-            background: white;
-            padding: 20px;
-            margin-bottom: 15px;
-            border-radius: 10px;
-            border-left: 5px solid #667eea;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        
-        .job-info h4 {
-            color: #495057;
-            margin-bottom: 5px;
-        }
-        
-        .job-info p {
-            color: #6c757d;
-            font-size: 0.9em;
-        }
-        
-        .progress-bar {
-            height: 8px;
-            background: #e9ecef;
-            border-radius: 10px;
-            overflow: hidden;
-            margin: 10px 0;
-        }
-        
-        .progress-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #667eea, #764ba2);
-            transition: width 0.3s;
-        }
-        
-        .status-badge {
-            padding: 5px 15px;
-            border-radius: 20px;
-            font-size: 0.85em;
-            font-weight: 600;
-        }
-        
-        .status-processing {
-            background: #ffc107;
-            color: white;
-        }
-        
-        .status-done {
-            background: #28a745;
-            color: white;
-        }
-        
-        .status-error {
-            background: #dc3545;
-            color: white;
-        }
-        
-        .stats-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            margin-bottom: 30px;
-        }
-        
-        .stat-card {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 25px;
-            border-radius: 10px;
-            text-align: center;
-        }
-        
-        .stat-card h2 {
-            font-size: 2.5em;
-            margin-bottom: 5px;
-        }
-        
-        .stat-card p {
-            opacity: 0.9;
-        }
-        
-        .config-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 15px;
-            background: white;
-            margin-bottom: 10px;
-            border-radius: 8px;
-        }
-        
-        .config-item label {
-            font-weight: 600;
-            color: #495057;
-        }
-        
-        .config-item input {
-            width: 300px;
-            padding: 8px;
-            border: 2px solid #e9ecef;
-            border-radius: 5px;
-        }
-        
-        .alert {
-            padding: 15px 20px;
-            border-radius: 8px;
-            margin-bottom: 20px;
-        }
-        
-        .alert-success {
-            background: #d4edda;
-            color: #155724;
-            border: 1px solid #c3e6cb;
-        }
-        
-        .alert-info {
-            background: #d1ecf1;
-            color: #0c5460;
-            border: 1px solid #bee5eb;
-        }
-        
-        .alert-error {
-            background: #f8d7da;
-            color: #721c24;
-            border: 1px solid #f5c6cb;
-        }
-        
-        .hidden {
-            display: none;
-        }
-        
-        #connectionStatus {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            padding: 10px 20px;
-            border-radius: 20px;
-            font-weight: 600;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
-        }
-        
-        .connected {
-            background: #28a745;
-            color: white;
-        }
-        
-        .disconnected {
-            background: #dc3545;
-            color: white;
-        }
-        
-        /* Modal styles */
-        .modal {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0, 0, 0, 0.7);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 1000;
-        }
-        
-        .modal-content {
-            background: white;
-            padding: 30px;
-            border-radius: 15px;
-            max-width: 600px;
-            width: 90%;
-            max-height: 90vh;
-            overflow-y: auto;
-        }
-        
-        .modal-content h3 {
-            color: #667eea;
-            margin-bottom: 20px;
-        }
-        
-        /* Plugin/Wizard card styles */
-        .plugin-card, .wizard-card {
-            background: white;
-            padding: 20px;
-            border-radius: 10px;
-            margin-bottom: 15px;
-            border-left: 5px solid #667eea;
-        }
-        
-        .plugin-card h4, .wizard-card h4 {
-            color: #495057;
-            margin-bottom: 10px;
-        }
-        
-        .plugin-card p, .wizard-card p {
-            color: #6c757d;
-            font-size: 0.9em;
-            margin-bottom: 10px;
-        }
-        
-        .plugin-actions, .wizard-actions {
-            display: flex;
-            gap: 10px;
-            margin-top: 15px;
-        }
-        
-        .btn-sm {
-            padding: 8px 16px;
-            font-size: 0.9em;
-        }
-        
-        .btn-success {
-            background: #28a745;
-            color: white;
-        }
-        
-        .btn-warning {
-            background: #ffc107;
-            color: #212529;
-        }
-        
-        .toggle-switch {
-            position: relative;
-            display: inline-block;
-            width: 50px;
-            height: 24px;
-        }
-        
-        .toggle-switch input {
-            opacity: 0;
-            width: 0;
-            height: 0;
-        }
-        
-        .toggle-slider {
-            position: absolute;
-            cursor: pointer;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-color: #ccc;
-            transition: .4s;
-            border-radius: 24px;
-        }
-        
-        .toggle-slider:before {
-            position: absolute;
-            content: "";
-            height: 16px;
-            width: 16px;
-            left: 4px;
-            bottom: 4px;
-            background-color: white;
-            transition: .4s;
-            border-radius: 50%;
-        }
-        
-        input:checked + .toggle-slider {
-            background-color: #667eea;
-        }
-        
-        input:checked + .toggle-slider:before {
-            transform: translateX(26px);
-        }
-    </style>
-</head>
-<body>
-    <div id="connectionStatus" class="disconnected">● Disconnected</div>
-    
-    <div class="container">
-        <div class="header">
-            <h1>🎧 AudioMason v2</h1>
-            <p>Complete Web Control Panel</p>
+{% extends "base.html" %}
+
+{% block title %}Dashboard - AudioMason v2{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h3>System Status</h3>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-top: 15px;">
+        <div style="background: white; padding: 20px; border-radius: 8px; text-align: center;">
+            <div style="font-size: 2.5em; color: #667eea; margin-bottom: 10px;">
+                <span class="status-indicator status-{{ status.status }}"></span>
+                {{ status.status|upper }}
+            </div>
+            <div style="color: #6c757d; font-size: 0.9em;">System Status</div>
         </div>
         
-        <div class="tabs">
-            <button class="tab active" onclick="switchTab('dashboard')">📊 Dashboard</button>
-            <button class="tab" onclick="switchTab('process')">🎵 Process Books</button>
-            <button class="tab" onclick="switchTab('queue')">📋 Queue</button>
-            <button class="tab" onclick="switchTab('plugins')">🧩 Plugins</button>
-            <button class="tab" onclick="switchTab('wizards')">🧙 Wizards</button>
-            <button class="tab" onclick="switchTab('config')">⚙️ Config</button>
-            <button class="tab" onclick="switchTab('checkpoints')">💾 Checkpoints</button>
+        <div style="background: white; padding: 20px; border-radius: 8px; text-align: center;">
+            <div style="font-size: 2.5em; color: #667eea; margin-bottom: 10px;">
+                {{ status.active_jobs }}
+            </div>
+            <div style="color: #6c757d; font-size: 0.9em;">Active Jobs</div>
         </div>
         
-        <!-- DASHBOARD TAB -->
-        <div id="dashboard" class="tab-content active">
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <h2 id="statActiveJobs">0</h2>
-                    <p>Active Jobs</p>
-                </div>
-                <div class="stat-card">
-                    <h2 id="statCompleted">0</h2>
-                    <p>Completed</p>
-                </div>
-                <div class="stat-card">
-                    <h2 id="statErrors">0</h2>
-                    <p>Errors</p>
-                </div>
+        <div style="background: white; padding: 20px; border-radius: 8px; text-align: center;">
+            <div style="font-size: 2.5em; color: #667eea; margin-bottom: 10px;">
+                {{ status.total_plugins }}
             </div>
-            
-            <div class="card">
-                <h3>System Status</h3>
-                <p><strong>Status:</strong> <span id="systemStatus">Running</span></p>
-                <p><strong>Version:</strong> 2.0.0-alpha</p>
-                <p><strong>API URL:</strong> <code id="apiUrl">http://localhost:8080</code></p>
-            </div>
-            
-            <div class="card">
-                <h3>Recent Activity</h3>
-                <ul id="recentActivity" class="jobs-list">
-                    <li>No recent activity</li>
-                </ul>
-            </div>
+            <div style="color: #6c757d; font-size: 0.9em;">Loaded Plugins</div>
         </div>
         
-        <!-- PROCESS TAB -->
-        <div id="process" class="tab-content">
-            <div id="uploadAlert" class="alert hidden"></div>
-            
-            <div class="card">
-                <h3>Upload Audio File</h3>
-                <div class="file-upload" onclick="document.getElementById('fileInput').click()">
-                    <input type="file" id="fileInput" accept=".m4a,.m4b,.opus,.mp3" onchange="handleFileSelect(event)">
-                    <p style="font-size: 3em; margin-bottom: 10px;">📁</p>
-                    <p style="font-size: 1.2em; font-weight: 600; margin-bottom: 5px;">Click to upload</p>
-                    <p style="color: #6c757d;">M4A, M4B, Opus, or MP3 files</p>
-                    <p id="selectedFile" style="margin-top: 15px; color: #667eea; font-weight: 600;"></p>
-                </div>
+        <div style="background: white; padding: 20px; border-radius: 8px; text-align: center;">
+            <div style="font-size: 2.5em; color: #667eea; margin-bottom: 10px;">
+                v{{ status.version }}
             </div>
-            
-            <div class="card">
-                <h3>Book Information</h3>
-                <div class="form-group">
-                    <label>Author *</label>
-                    <input type="text" id="author" placeholder="George Orwell" required>
-                </div>
-                <div class="form-group">
-                    <label>Title *</label>
-                    <input type="text" id="title" placeholder="1984" required>
-                </div>
-                <div class="form-group">
-                    <label>Year</label>
-                    <input type="number" id="year" placeholder="1949">
-                </div>
-            </div>
-            
-            <div class="card">
-                <h3>Processing Options</h3>
-                <div class="form-group">
-                    <label>Audio Bitrate</label>
-                    <select id="bitrate">
-                        <option value="96k">96k</option>
-                        <option value="128k" selected>128k</option>
-                        <option value="192k">192k</option>
-                        <option value="256k">256k</option>
-                        <option value="320k">320k</option>
-                    </select>
-                </div>
-                <div class="form-group checkbox-group">
-                    <input type="checkbox" id="loudnorm">
-                    <label for="loudnorm">Enable Loudness Normalization</label>
-                </div>
-                <div class="form-group checkbox-group">
-                    <input type="checkbox" id="splitChapters">
-                    <label for="splitChapters">Split by Chapters (M4A only)</label>
-                </div>
-                <div class="form-group">
-                    <label>Pipeline</label>
-                    <select id="pipeline">
-                        <option value="minimal">Minimal (conversion only)</option>
-                        <option value="standard" selected>Standard (full processing)</option>
-                    </select>
-                </div>
-            </div>
-            
-            <button class="btn btn-primary" onclick="startProcessing()" style="width: 100%; font-size: 1.2em;">
-                🚀 Start Processing
-            </button>
-        </div>
-        
-        <!-- QUEUE TAB -->
-        <div id="queue" class="tab-content">
-            <div class="card">
-                <h3>Active Jobs</h3>
-                <ul id="jobsList" class="jobs-list">
-                    <li style="text-align: center; color: #6c757d;">No active jobs</li>
-                </ul>
-            </div>
-        </div>
-        
-        <!-- CONFIG TAB -->
-        <div id="config" class="tab-content">
-            <div class="card">
-                <h3>System Configuration</h3>
-                <div style="display: flex; gap: 10px; margin-bottom: 20px;">
-                    <button class="btn btn-primary" onclick="saveConfig()">💾 Save</button>
-                    <button class="btn btn-secondary" onclick="loadConfig()">🔄 Refresh</button>
-                    <button class="btn btn-danger" onclick="resetConfig()">⚠️ Reset to Defaults</button>
-                </div>
-                <div id="configForm"></div>
-            </div>
-        </div>
-        
-        <!-- CHECKPOINTS TAB -->
-        <div id="checkpoints" class="tab-content">
-            <div class="card">
-                <h3>Available Checkpoints</h3>
-                <ul id="checkpointsList" class="jobs-list">
-                    <li style="text-align: center; color: #6c757d;">No checkpoints</li>
-                </ul>
-            </div>
-        </div>
-        
-        <!-- PLUGINS TAB -->
-        <div id="plugins" class="tab-content">
-            <div class="card">
-                <h3>Plugin Management</h3>
-                <div style="display: flex; gap: 10px; margin-bottom: 20px;">
-                    <button class="btn btn-primary" onclick="showInstallPlugin()">📦 Install Plugin</button>
-                    <button class="btn btn-secondary" onclick="loadPlugins()">🔄 Refresh</button>
-                </div>
-                <div id="pluginsList"></div>
-            </div>
-            
-            <!-- Install Plugin Modal -->
-            <div id="installPluginModal" class="modal" style="display: none;">
-                <div class="modal-content">
-                    <h3>Install Plugin</h3>
-                    <div class="form-group">
-                        <label>Method</label>
-                        <select id="installMethod" onchange="toggleInstallMethod()">
-                            <option value="zip">Upload ZIP</option>
-                            <option value="url">From URL</option>
-                        </select>
-                    </div>
-                    <div id="zipInstall" class="form-group">
-                        <label>Plugin ZIP File</label>
-                        <input type="file" id="pluginZip" accept=".zip">
-                    </div>
-                    <div id="urlInstall" class="form-group" style="display: none;">
-                        <label>Plugin URL</label>
-                        <input type="text" id="pluginUrl" placeholder="https://example.com/plugin.zip">
-                    </div>
-                    <div style="display: flex; gap: 10px;">
-                        <button class="btn btn-primary" onclick="installPlugin()">Install</button>
-                        <button class="btn btn-secondary" onclick="hideInstallPlugin()">Cancel</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-        
-        <!-- WIZARDS TAB -->
-        <div id="wizards" class="tab-content">
-            <div class="card">
-                <h3>Wizard Management</h3>
-                <div style="display: flex; gap: 10px; margin-bottom: 20px;">
-                    <button class="btn btn-primary" onclick="showCreateWizard()">✨ Create Wizard</button>
-                    <button class="btn btn-secondary" onclick="loadWizards()">🔄 Refresh</button>
-                </div>
-                <div id="wizardsList"></div>
-            </div>
-            
-            <!-- Create Wizard Modal -->
-            <div id="createWizardModal" class="modal" style="display: none;">
-                <div class="modal-content">
-                    <h3>Create Wizard</h3>
-                    <div class="form-group">
-                        <label>Wizard Name</label>
-                        <input type="text" id="wizardName" placeholder="My Wizard">
-                    </div>
-                    <div class="form-group">
-                        <label>Description</label>
-                        <textarea id="wizardDescription" rows="3" placeholder="Wizard description"></textarea>
-                    </div>
-                    <div class="form-group">
-                        <label>YAML Definition</label>
-                        <textarea id="wizardYaml" rows="15" placeholder="wizard:
-  name: My Wizard
-  description: Description here
-  steps:
-    - id: step1
-      type: input
-      prompt: Enter value"></textarea>
-                    </div>
-                    <div style="display: flex; gap: 10px;">
-                        <button class="btn btn-primary" onclick="createWizard()">Create</button>
-                        <button class="btn btn-secondary" onclick="hideCreateWizard()">Cancel</button>
-                    </div>
-                </div>
-            </div>
+            <div style="color: #6c757d; font-size: 0.9em;">Version</div>
         </div>
     </div>
-    
-    <script>
-        // Global state
-        let ws = null;
-        let uploadedFile = null;
+</div>
+
+<div class="card">
+    <h3>Quick Actions</h3>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-top: 15px;">
+        <a href="/jobs" class="btn btn-primary" style="text-align: center;">
+            📊 View Jobs
+        </a>
+        <a href="/plugins" class="btn btn-primary" style="text-align: center;">
+            🔌 Manage Plugins
+        </a>
+        <a href="/config" class="btn btn-primary" style="text-align: center;">
+            ⚙️ Configuration
+        </a>
+        <a href="/wizards" class="btn btn-primary" style="text-align: center;">
+            🧙 Run Wizard
+        </a>
+    </div>
+</div>
+
+<div class="card">
+    <h3>Upload & Process</h3>
+    <form id="uploadForm" enctype="multipart/form-data">
+        <div class="form-group">
+            <label>Audio File</label>
+            <input type="file" name="file" accept="audio/*,.m4b" required>
+        </div>
         
-        // Initialize
-        document.addEventListener('DOMContentLoaded', () => {
-            connectWebSocket();
-            loadDashboard();
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+            <div class="form-group">
+                <label>Author</label>
+                <input type="text" name="author" placeholder="Author name" required>
+            </div>
+            
+            <div class="form-group">
+                <label>Title</label>
+                <input type="text" name="title" placeholder="Book title" required>
+            </div>
+        </div>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px;">
+            <div class="form-group">
+                <label>Year</label>
+                <input type="number" name="year" placeholder="2024" min="1900" max="2100">
+            </div>
+            
+            <div class="form-group">
+                <label>Bitrate</label>
+                <select name="bitrate">
+                    <option value="64k">64 kbps</option>
+                    <option value="96k">96 kbps</option>
+                    <option value="128k" selected>128 kbps</option>
+                    <option value="192k">192 kbps</option>
+                    <option value="256k">256 kbps</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label>Pipeline</label>
+                <select name="pipeline">
+                    <option value="standard" selected>Standard</option>
+                    <option value="minimal">Minimal</option>
+                    <option value="full">Full Processing</option>
+                </select>
+            </div>
+        </div>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" name="loudnorm" style="width: auto; margin-right: 8px;">
+                    Loudness Normalization
+                </label>
+            </div>
+            
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" name="split_chapters" style="width: auto; margin-right: 8px;">
+                    Split by Chapters
+                </label>
+            </div>
+        </div>
+        
+        <button type="submit" class="btn btn-primary">
+            🚀 Upload & Process
+        </button>
+    </form>
+</div>
+
+<div class="card">
+    <h3>Recent Activity</h3>
+    <p style="color: #6c757d;">
+        {% if active_jobs > 0 %}
+            {{ active_jobs }} job(s) currently processing
+        {% else %}
+            No active jobs
+        {% endif %}
+    </p>
+    <a href="/jobs" class="btn btn-primary" style="margin-top: 15px;">
+        View All Jobs →
+    </a>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.getElementById('uploadForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const formData = new FormData(e.target);
+    const fileInput = formData.get('file');
+    
+    if (!fileInput || fileInput.size === 0) {
+        alert('Please select a file');
+        return;
+    }
+    
+    try {
+        // Upload file first
+        const uploadData = new FormData();
+        uploadData.append('file', fileInput);
+        
+        const uploadResponse = await fetch('/api/upload', {
+            method: 'POST',
+            body: uploadData
         });
         
-        // Tab switching
-        function switchTab(tabName) {
-            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
-            
-            event.target.classList.add('active');
-            document.getElementById(tabName).classList.add('active');
-            
-            if (tabName === 'queue') loadJobs();
-            if (tabName === 'checkpoints') loadCheckpoints();
-            if (tabName === 'plugins') loadPlugins();
-            if (tabName === 'wizards') loadWizards();
-            if (tabName === 'config') loadConfig();
+        if (!uploadResponse.ok) {
+            throw new Error('Upload failed');
         }
         
-        // WebSocket connection
-        function connectWebSocket() {
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${protocol}//${window.location.host}/ws`;
-            
-            ws = new WebSocket(wsUrl);
-            
-            ws.onopen = () => {
-                document.getElementById('connectionStatus').className = 'connected';
-                document.getElementById('connectionStatus').textContent = '● Connected';
-            };
-            
-            ws.onclose = () => {
-                document.getElementById('connectionStatus').className = 'disconnected';
-                document.getElementById('connectionStatus').textContent = '● Disconnected';
-                setTimeout(connectWebSocket, 5000);
-            };
-            
-            ws.onmessage = (event) => {
-                const data = JSON.parse(event.data);
-                handleWebSocketMessage(data);
-            };
-        }
-        
-        function handleWebSocketMessage(data) {
-            if (data.type === 'status') {
-                document.getElementById('statActiveJobs').textContent = data.active_jobs;
-            }
-            if (data.type === 'job_update') {
-                loadJobs();
-            }
-        }
-        
-        // File upload
-        function handleFileSelect(event) {
-            const file = event.target.files[0];
-            if (!file) return;
-            
-            uploadedFile = file;
-            document.getElementById('selectedFile').textContent = `Selected: ${file.name}`;
-            
-            // Auto-fill metadata from filename
-            const guessedTitle = file.name.replace(/\.(m4a|m4b|opus|mp3)$/i, '');
-            if (guessedTitle.includes(' - ')) {
-                const [author, title] = guessedTitle.split(' - ');
-                document.getElementById('author').value = author.trim();
-                document.getElementById('title').value = title.trim();
-            } else {
-                document.getElementById('title').value = guessedTitle;
-            }
-        }
+        const uploadResult = await uploadResponse.json();
         
         // Start processing
-        async function startProcessing() {
-            if (!uploadedFile) {
-                showAlert('error', 'Please select a file first!');
-                return;
-            }
-            
-            const author = document.getElementById('author').value;
-            const title = document.getElementById('title').value;
-            
-            if (!author || !title) {
-                showAlert('error', 'Author and Title are required!');
-                return;
-            }
-            
-            // Upload file
-            const formData = new FormData();
-            formData.append('file', uploadedFile);
-            
-            showAlert('success', 'Uploading file...');
-            
-            try {
-                const uploadResponse = await fetch('/api/upload', {
-                    method: 'POST',
-                    body: formData
-                });
-                const uploadData = await uploadResponse.json();
-                
-                // Start processing
-                const processFormData = new FormData();
-                processFormData.append('filename', uploadData.filename);
-                processFormData.append('author', author);
-                processFormData.append('title', title);
-                processFormData.append('year', document.getElementById('year').value || '');
-                processFormData.append('bitrate', document.getElementById('bitrate').value);
-                processFormData.append('loudnorm', document.getElementById('loudnorm').checked);
-                processFormData.append('split_chapters', document.getElementById('splitChapters').checked);
-                processFormData.append('pipeline', document.getElementById('pipeline').value);
-                
-                const processResponse = await fetch('/api/process', {
-                    method: 'POST',
-                    body: processFormData
-                });
-                const processData = await processResponse.json();
-                
-                showAlert('success', `Processing started! Job ID: ${processData.job_id}`);
-                
-                // Switch to queue tab
-                setTimeout(() => {
-                    document.querySelector('[onclick*="queue"]').click();
-                }, 2000);
-                
-            } catch (error) {
-                showAlert('error', `Error: ${error.message}`);
-            }
+        const processData = new FormData();
+        processData.append('filename', uploadResult.filename);
+        processData.append('author', formData.get('author'));
+        processData.append('title', formData.get('title'));
+        processData.append('year', formData.get('year') || '');
+        processData.append('bitrate', formData.get('bitrate'));
+        processData.append('loudnorm', formData.get('loudnorm') ? 'true' : 'false');
+        processData.append('split_chapters', formData.get('split_chapters') ? 'true' : 'false');
+        processData.append('pipeline', formData.get('pipeline'));
+        
+        const processResponse = await fetch('/api/process', {
+            method: 'POST',
+            body: processData
+        });
+        
+        if (!processResponse.ok) {
+            throw new Error('Processing start failed');
         }
         
-        // Load dashboard
-        async function loadDashboard() {
-            try {
-                const response = await fetch('/api/status');
-                const data = await response.json();
-                
-                document.getElementById('systemStatus').textContent = data.status;
-                document.getElementById('statActiveJobs').textContent = data.active_jobs;
-            } catch (error) {
-                console.error('Failed to load dashboard:', error);
-            }
-        }
+        const processResult = await processResponse.json();
         
-        // Load jobs
-        async function loadJobs() {
-            try {
-                const response = await fetch('/api/jobs');
-                const jobs = await response.json();
-                
-                const jobsList = document.getElementById('jobsList');
-                
-                if (jobs.length === 0) {
-                    jobsList.innerHTML = '<li style="text-align: center; color: #6c757d;">No active jobs</li>';
-                    return;
-                }
-                
-                jobsList.innerHTML = jobs.map(job => `
-                    <li class="job-item">
-                        <div class="job-info" style="flex: 1;">
-                            <h4>${job.title} - ${job.author}</h4>
-                            <p>Step: ${job.current_step || 'Starting...'}</p>
-                            <div class="progress-bar">
-                                <div class="progress-fill" style="width: ${job.progress * 100}%"></div>
-                            </div>
-                        </div>
-                        <span class="status-badge status-${job.state}">${job.state}</span>
-                    </li>
-                `).join('');
-            } catch (error) {
-                console.error('Failed to load jobs:', error);
-            }
-        }
+        alert(`Processing started! Job ID: ${processResult.job_id}`);
+        window.location.href = '/jobs';
         
-        // Load config
-        async function loadConfig() {
-            try {
-                // Load both schema and current config
-                const [schemaRes, configRes] = await Promise.all([
-                    fetch('/api/config/schema'),
-                    fetch('/api/config')
-                ]);
-                
-                const schema = await schemaRes.json();
-                const currentConfig = await configRes.json();
-                
-                const configForm = document.getElementById('configForm');
-                configForm.innerHTML = Object.entries(schema).map(([key, field]) => {
-                    const value = currentConfig[key]?.value || field.default || '';
-                    
-                    if (field.type === 'boolean') {
-                        return `
-                            <div class="form-group">
-                                <label class="checkbox-group">
-                                    <input type="checkbox" id="config_${key}" ${value ? 'checked' : ''}>
-                                    ${field.label}
-                                </label>
-                                <small style="color: #6c757d; display: block; margin-top: 5px;">${field.description}</small>
-                            </div>
-                        `;
-                    } else if (field.type === 'choice') {
-                        return `
-                            <div class="form-group">
-                                <label>${field.label}</label>
-                                <select id="config_${key}">
-                                    ${field.choices.map(choice => `
-                                        <option value="${choice}" ${value === choice ? 'selected' : ''}>${choice}</option>
-                                    `).join('')}
-                                </select>
-                                <small style="color: #6c757d; display: block; margin-top: 5px;">${field.description}</small>
-                            </div>
-                        `;
-                    } else if (field.type === 'integer') {
-                        return `
-                            <div class="form-group">
-                                <label>${field.label}</label>
-                                <input type="number" id="config_${key}" value="${value}">
-                                <small style="color: #6c757d; display: block; margin-top: 5px;">${field.description}</small>
-                            </div>
-                        `;
-                    } else if (field.type === 'object') {
-                        return `
-                            <div class="card" style="margin-bottom: 20px;">
-                                <h4 style="color: #667eea; margin-bottom: 15px;">${field.label}</h4>
-                                ${Object.entries(field.properties).map(([subKey, subField]) => {
-                                    const subValue = currentConfig[key]?.value?.[subKey] || subField.default || '';
-                                    return `
-                                        <div class="form-group">
-                                            <label>${subField.label}</label>
-                                            <input type="${subField.type === 'integer' ? 'number' : 'text'}" 
-                                                   id="config_${key}_${subKey}" value="${subValue}">
-                                        </div>
-                                    `;
-                                }).join('')}
-                            </div>
-                        `;
-                    } else {
-                        return `
-                            <div class="form-group">
-                                <label>${field.label}</label>
-                                <input type="text" id="config_${key}" value="${value}">
-                                <small style="color: #6c757d; display: block; margin-top: 5px;">${field.description}</small>
-                            </div>
-                        `;
-                    }
-                }).join('');
-            } catch (error) {
-                console.error('Failed to load config:', error);
-                showAlert('error', 'Failed to load configuration');
-            }
-        }
-        
-        async function saveConfig() {
-            try {
-                // Collect all config values
-                const config = {};
-                const inputs = document.querySelectorAll('#configForm input, #configForm select');
-                
-                inputs.forEach(input => {
-                    const id = input.id.replace('config_', '');
-                    if (id.includes('_')) {
-                        // Nested config (e.g., web_server_host)
-                        const [parent, child] = id.split('_');
-                        if (!config[parent]) config[parent] = {};
-                        config[parent][child] = input.type === 'checkbox' ? input.checked : 
-                                               input.type === 'number' ? parseInt(input.value) : 
-                                               input.value;
-                    } else {
-                        config[id] = input.type === 'checkbox' ? input.checked : 
-                                    input.type === 'number' ? parseInt(input.value) : 
-                                    input.value;
-                    }
-                });
-                
-                const response = await fetch('/api/config', {
-                    method: 'PUT',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(config)
-                });
-                
-                const result = await response.json();
-                
-                if (response.ok) {
-                    showAlert('success', result.message);
-                } else {
-                    showAlert('error', result.error || 'Failed to save configuration');
-                }
-            } catch (error) {
-                console.error('Failed to save config:', error);
-                showAlert('error', 'Failed to save configuration');
-            }
-        }
-        
-        async function resetConfig() {
-            if (!confirm('Are you sure you want to reset configuration to defaults?')) return;
-            
-            try {
-                const response = await fetch('/api/config/reset', { method: 'POST' });
-                const result = await response.json();
-                
-                if (response.ok) {
-                    showAlert('success', result.message);
-                    loadConfig();
-                } else {
-                    showAlert('error', result.error || 'Failed to reset configuration');
-                }
-            } catch (error) {
-                console.error('Failed to reset config:', error);
-                showAlert('error', 'Failed to reset configuration');
-            }
-        }
-        
-        // Load checkpoints
-        async function loadCheckpoints() {
-            try {
-                const response = await fetch('/api/checkpoints');
-                const checkpoints = await response.json();
-                
-                const checkpointsList = document.getElementById('checkpointsList');
-                
-                if (checkpoints.length === 0) {
-                    checkpointsList.innerHTML = '<li style="text-align: center; color: #6c757d;">No checkpoints</li>';
-                    return;
-                }
-                
-                checkpointsList.innerHTML = checkpoints.map(cp => `
-                    <li class="job-item">
-                        <div class="job-info">
-                            <h4>${cp.title} - ${cp.author}</h4>
-                            <p>Progress: ${(cp.progress * 100).toFixed(0)}%</p>
-                        </div>
-                        <button class="btn btn-primary" onclick="resumeCheckpoint('${cp.id}')">
-                            Resume
-                        </button>
-                    </li>
-                `).join('');
-            } catch (error) {
-                console.error('Failed to load checkpoints:', error);
-            }
-        }
-        
-        // Resume checkpoint
-        async function resumeCheckpoint(checkpointId) {
-            try {
-                const response = await fetch(`/api/checkpoints/${checkpointId}/resume`, {
-                    method: 'POST'
-                });
-                const data = await response.json();
-                
-                alert(`Processing resumed! Job ID: ${data.job_id}`);
-                
-                // Switch to queue tab
-                document.querySelector('[onclick*="queue"]').click();
-            } catch (error) {
-                alert(`Error: ${error.message}`);
-            }
-        }
-        
-        // Show alert
-        function showAlert(type, message) {
-            const alert = document.getElementById('uploadAlert');
-            alert.className = `alert alert-${type}`;
-            alert.textContent = message;
-            alert.classList.remove('hidden');
-            
-            setTimeout(() => {
-                alert.classList.add('hidden');
-            }, 5000);
-        }
-        
-        // ========================================
-        // PLUGIN MANAGEMENT
-        // ========================================
-        
-        async function loadPlugins() {
-            try {
-                const response = await fetch('/api/plugins');
-                const plugins = await response.json();
-                
-                const container = document.getElementById('pluginsList');
-                if (plugins.length === 0) {
-                    container.innerHTML = '<p style="text-align: center; color: #6c757d;">No plugins found</p>';
-                    return;
-                }
-                
-                container.innerHTML = plugins.map(plugin => `
-                    <div class="plugin-card">
-                        <div style="display: flex; justify-content: space-between; align-items: start;">
-                            <div>
-                                <h4>${plugin.name} <span style="color: #6c757d; font-size: 0.8em;">v${plugin.version}</span></h4>
-                                <p>${plugin.description}</p>
-                                <p><strong>Author:</strong> ${plugin.author || 'Unknown'} | <strong>Interfaces:</strong> ${plugin.interfaces.join(', ')}</p>
-                            </div>
-                            <label class="toggle-switch">
-                                <input type="checkbox" ${plugin.enabled ? 'checked' : ''} onchange="togglePlugin('${plugin.name}', this.checked)">
-                                <span class="toggle-slider"></span>
-                            </label>
-                        </div>
-                        <div class="plugin-actions">
-                            ${plugin.has_config ? `<button class="btn btn-sm btn-secondary" onclick="configurePlugin('${plugin.name}')">⚙️ Configure</button>` : ''}
-                            <button class="btn btn-sm btn-danger" onclick="deletePlugin('${plugin.name}')">🗑️ Delete</button>
-                        </div>
-                    </div>
-                `).join('');
-            } catch (error) {
-                console.error('Failed to load plugins:', error);
-                showAlert('error', 'Failed to load plugins');
-            }
-        }
-        
-        async function togglePlugin(name, enabled) {
-            try {
-                const endpoint = enabled ? 'enable' : 'disable';
-                const response = await fetch(`/api/plugins/${name}/${endpoint}`, { method: 'PUT' });
-                const result = await response.json();
-                
-                if (response.ok) {
-                    showAlert('success', result.message);
-                    loadPlugins();
-                } else {
-                    showAlert('error', result.error || 'Failed to toggle plugin');
-                }
-            } catch (error) {
-                console.error('Failed to toggle plugin:', error);
-                showAlert('error', 'Failed to toggle plugin');
-            }
-        }
-        
-        async function deletePlugin(name) {
-            if (!confirm(`Are you sure you want to delete plugin "${name}"?`)) return;
-            
-            try {
-                const response = await fetch(`/api/plugins/${name}`, { method: 'DELETE' });
-                const result = await response.json();
-                
-                if (response.ok) {
-                    showAlert('success', result.message);
-                    loadPlugins();
-                } else {
-                    showAlert('error', result.error || 'Failed to delete plugin');
-                }
-            } catch (error) {
-                console.error('Failed to delete plugin:', error);
-                showAlert('error', 'Failed to delete plugin');
-            }
-        }
-        
-        function showInstallPlugin() {
-            document.getElementById('installPluginModal').style.display = 'flex';
-        }
-        
-        function hideInstallPlugin() {
-            document.getElementById('installPluginModal').style.display = 'none';
-        }
-        
-        function toggleInstallMethod() {
-            const method = document.getElementById('installMethod').value;
-            document.getElementById('zipInstall').style.display = method === 'zip' ? 'block' : 'none';
-            document.getElementById('urlInstall').style.display = method === 'url' ? 'block' : 'none';
-        }
-        
-        async function installPlugin() {
-            const method = document.getElementById('installMethod').value;
-            
-            try {
-                let response;
-                if (method === 'zip') {
-                    const fileInput = document.getElementById('pluginZip');
-                    if (!fileInput.files[0]) {
-                        showAlert('error', 'Please select a ZIP file');
-                        return;
-                    }
-                    
-                    const formData = new FormData();
-                    formData.append('file', fileInput.files[0]);
-                    
-                    response = await fetch('/api/plugins/install', {
-                        method: 'POST',
-                        body: formData
-                    });
-                } else {
-                    const url = document.getElementById('pluginUrl').value;
-                    if (!url) {
-                        showAlert('error', 'Please enter a URL');
-                        return;
-                    }
-                    
-                    const formData = new FormData();
-                    formData.append('url', url);
-                    
-                    response = await fetch('/api/plugins/install', {
-                        method: 'POST',
-                        body: formData
-                    });
-                }
-                
-                const result = await response.json();
-                
-                if (response.ok) {
-                    showAlert('success', result.message);
-                    hideInstallPlugin();
-                    loadPlugins();
-                } else {
-                    showAlert('error', result.error || 'Failed to install plugin');
-                }
-            } catch (error) {
-                console.error('Failed to install plugin:', error);
-                showAlert('error', 'Failed to install plugin');
-            }
-        }
-        
-        // ========================================
-        // WIZARD MANAGEMENT
-        // ========================================
-        
-        async function loadWizards() {
-            try {
-                const response = await fetch('/api/wizards');
-                const wizards = await response.json();
-                
-                const container = document.getElementById('wizardsList');
-                if (wizards.length === 0) {
-                    container.innerHTML = '<p style="text-align: center; color: #6c757d;">No wizards found</p>';
-                    return;
-                }
-                
-                container.innerHTML = wizards.map(wizard => `
-                    <div class="wizard-card">
-                        <h4>${wizard.name}</h4>
-                        <p>${wizard.description}</p>
-                        <p><strong>Steps:</strong> ${wizard.steps} | <strong>File:</strong> ${wizard.filename}</p>
-                        <div class="wizard-actions">
-                            <button class="btn btn-sm btn-primary" onclick="runWizard('${wizard.filename.replace('.yaml', '')}')">▶️ Run</button>
-                            <button class="btn btn-sm btn-secondary" onclick="editWizard('${wizard.filename.replace('.yaml', '')}')">✏️ Edit</button>
-                            <button class="btn btn-sm btn-danger" onclick="deleteWizard('${wizard.filename.replace('.yaml', '')}')">🗑️ Delete</button>
-                        </div>
-                    </div>
-                `).join('');
-            } catch (error) {
-                console.error('Failed to load wizards:', error);
-                showAlert('error', 'Failed to load wizards');
-            }
-        }
-        
-        function showCreateWizard() {
-            document.getElementById('createWizardModal').style.display = 'flex';
-        }
-        
-        function hideCreateWizard() {
-            document.getElementById('createWizardModal').style.display = 'none';
-        }
-        
-        async function createWizard() {
-            const name = document.getElementById('wizardName').value;
-            const description = document.getElementById('wizardDescription').value;
-            const yaml = document.getElementById('wizardYaml').value;
-            
-            if (!name || !yaml) {
-                showAlert('error', 'Please fill in all fields');
-                return;
-            }
-            
-            try {
-                // Parse YAML to validate
-                const wizardDef = {
-                    wizard: {
-                        name: name,
-                        description: description,
-                        steps: [] // Will be parsed from YAML
-                    }
-                };
-                
-                const response = await fetch('/api/wizards', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(wizardDef)
-                });
-                
-                const result = await response.json();
-                
-                if (response.ok) {
-                    showAlert('success', result.message);
-                    hideCreateWizard();
-                    loadWizards();
-                } else {
-                    showAlert('error', result.error || 'Failed to create wizard');
-                }
-            } catch (error) {
-                console.error('Failed to create wizard:', error);
-                showAlert('error', 'Failed to create wizard');
-            }
-        }
-        
-        async function deleteWizard(name) {
-            if (!confirm(`Are you sure you want to delete wizard "${name}"?`)) return;
-            
-            try {
-                const response = await fetch(`/api/wizards/${name}`, { method: 'DELETE' });
-                const result = await response.json();
-                
-                if (response.ok) {
-                    showAlert('success', result.message);
-                    loadWizards();
-                } else {
-                    showAlert('error', result.error || 'Failed to delete wizard');
-                }
-            } catch (error) {
-                console.error('Failed to delete wizard:', error);
-                showAlert('error', 'Failed to delete wizard');
-            }
-        }
-        
-        function runWizard(name) {
-            showAlert('info', `Running wizard: ${name} (Not implemented yet)`);
-        }
-        
-        function editWizard(name) {
-            showAlert('info', `Editing wizard: ${name} (Not implemented yet)`);
-        }
-        
-        // Auto-refresh
-        setInterval(() => {
-            if (document.getElementById('queue').classList.contains('active')) {
-                loadJobs();
-            }
-        }, 2000);
-    </script>
-</body>
-</html>
+    } catch (error) {
+        alert(`Error: ${error.message}`);
+    }
+});
+</script>
+{% endblock %}

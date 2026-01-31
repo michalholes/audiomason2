@@ -1,0 +1,160 @@
+{% extends "base.html" %}
+
+{% block title %}Configuration - AudioMason v2{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h3>Current Configuration</h3>
+    <p style="color: #6c757d; margin-bottom: 20px;">
+        View and manage AudioMason configuration. Settings are loaded from CLI args, environment variables, config files, and defaults.
+    </p>
+    
+    {% if config %}
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Key</th>
+                <th>Value</th>
+                <th>Source</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for key, data in config.items() %}
+            <tr>
+                <td><strong>{{ key }}</strong></td>
+                <td>
+                    {% if data.value is sameas true %}
+                        <span class="badge badge-success">True</span>
+                    {% elif data.value is sameas false %}
+                        <span class="badge badge-danger">False</span>
+                    {% elif data.value is none %}
+                        <span class="badge badge-warning">None</span>
+                    {% else %}
+                        <code>{{ data.value }}</code>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if data.source == "cli" %}
+                        <span class="badge badge-info">CLI Args</span>
+                    {% elif data.source == "env" %}
+                        <span class="badge badge-success">Environment</span>
+                    {% elif data.source == "user_config" %}
+                        <span class="badge badge-warning">User Config</span>
+                    {% elif data.source == "system_config" %}
+                        <span class="badge badge-warning">System Config</span>
+                    {% elif data.source == "default" %}
+                        <span class="badge">Default</span>
+                    {% else %}
+                        <span class="badge">{{ data.source }}</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color: #6c757d; text-align: center; padding: 40px;">
+        No configuration loaded
+    </p>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h3>Configuration Priority</h3>
+    <div style="background: white; padding: 20px; border-radius: 8px;">
+        <ol style="color: #495057; line-height: 2;">
+            <li><span class="badge badge-info">CLI Args</span> - Highest priority (command-line arguments)</li>
+            <li><span class="badge badge-success">Environment</span> - Environment variables</li>
+            <li><span class="badge badge-warning">User Config</span> - ~/.audiomason/config.yaml</li>
+            <li><span class="badge badge-warning">System Config</span> - /etc/audiomason/config.yaml</li>
+            <li><span class="badge">Default</span> - Lowest priority (built-in defaults)</li>
+        </ol>
+    </div>
+</div>
+
+<div class="card">
+    <h3>Edit Configuration</h3>
+    <form id="configForm">
+        <div class="form-group">
+            <label>Output Directory</label>
+            <input type="text" name="output_dir" value="{{ config.output_dir.value if config.output_dir else '' }}" placeholder="/path/to/output">
+        </div>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+            <div class="form-group">
+                <label>Target Bitrate</label>
+                <select name="target_bitrate">
+                    <option value="64k" {% if config.target_bitrate and config.target_bitrate.value == "64k" %}selected{% endif %}>64 kbps</option>
+                    <option value="96k" {% if config.target_bitrate and config.target_bitrate.value == "96k" %}selected{% endif %}>96 kbps</option>
+                    <option value="128k" {% if config.target_bitrate and config.target_bitrate.value == "128k" %}selected{% endif %}>128 kbps</option>
+                    <option value="192k" {% if config.target_bitrate and config.target_bitrate.value == "192k" %}selected{% endif %}>192 kbps</option>
+                    <option value="256k" {% if config.target_bitrate and config.target_bitrate.value == "256k" %}selected{% endif %}>256 kbps</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label>FFmpeg Threads</label>
+                <input type="number" name="ffmpeg_threads" value="{{ config.ffmpeg_threads.value if config.ffmpeg_threads else '4' }}" min="1" max="32">
+            </div>
+        </div>
+        
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" name="loudnorm" {% if config.loudnorm and config.loudnorm.value %}checked{% endif %} style="width: auto; margin-right: 8px;">
+                    Loudness Normalization
+                </label>
+            </div>
+            
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" name="split_chapters" {% if config.split_chapters and config.split_chapters.value %}checked{% endif %} style="width: auto; margin-right: 8px;">
+                    Split by Chapters
+                </label>
+            </div>
+        </div>
+        
+        <button type="submit" class="btn btn-primary">
+            💾 Save Configuration
+        </button>
+        <button type="button" class="btn btn-danger" onclick="location.reload()">
+            ❌ Cancel
+        </button>
+    </form>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.getElementById('configForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    
+    const formData = new FormData(e.target);
+    const config = Object.fromEntries(formData.entries());
+    
+    // Convert checkboxes
+    config.loudnorm = formData.get('loudnorm') ? true : false;
+    config.split_chapters = formData.get('split_chapters') ? true : false;
+    
+    try {
+        const response = await fetch('/api/config', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(config)
+        });
+        
+        if (!response.ok) {
+            throw new Error('Configuration update failed');
+        }
+        
+        alert('Configuration saved successfully!');
+        location.reload();
+        
+    } catch (error) {
+        alert(`Error: ${error.message}`);
+    }
+});
+</script>
+{% endblock %}
