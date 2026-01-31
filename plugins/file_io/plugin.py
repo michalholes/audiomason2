@@ -6,6 +6,14 @@ import shutil
 from pathlib import Path
 
 from audiomason.core import ProcessingContext
+from audiomason.core.context import PreflightResult
+from audiomason.core.detection import (
+    detect_format,
+    find_file_cover,
+    guess_author_from_path,
+    guess_title_from_path,
+    guess_year_from_path,
+)
 from audiomason.core.errors import FileError
 
 
@@ -15,6 +23,8 @@ class FileIOPlugin:
     Handles:
     - Import: Copy source to staging area
     - Export: Move processed files to output directory
+    - Preflight: Detect metadata from filenames
+    - Extract: Extract archives
     """
 
     def __init__(self, config: dict | None = None) -> None:
@@ -141,4 +151,130 @@ class FileIOPlugin:
         if context.converted_files:
             return await self.export_files(context)
 
+        return context
+
+    async def preflight(self, context: ProcessingContext) -> ProcessingContext:
+        """Run preflight detection on source files.
+
+        Detects metadata from filenames and paths, checks for covers,
+        and populates preflight results in context.
+
+        Args:
+            context: Processing context
+
+        Returns:
+            Updated context with preflight results
+        """
+        source = context.source
+
+        if not source.exists():
+            raise FileError(f"Source not found: {source}")
+
+        result = PreflightResult()
+
+        # Detect format
+        fmt = detect_format(source)
+        result.is_m4a = fmt == "m4a"
+        result.is_opus = fmt == "opus"
+        result.is_mp3 = fmt == "mp3"
+
+        # Guess metadata from path
+        result.guessed_author = guess_author_from_path(source)
+        result.guessed_title = guess_title_from_path(source)
+        result.guessed_year = guess_year_from_path(source)
+
+        # Check for cover file
+        parent_dir = source.parent if source.is_file() else source
+        cover = find_file_cover(parent_dir)
+        result.has_file_cover = cover is not None
+        result.file_cover_path = cover
+
+        # Store in context
+        context.preflight = result
+
+        return context
+
+    async def extract_archive(self, context: ProcessingContext) -> ProcessingContext:
+        """Extract archive file to staging area.
+
+        Supports ZIP, RAR, 7Z formats.
+
+        Args:
+            context: Processing context
+
+        Returns:
+            Updated context with extracted files
+        """
+        import zipfile
+
+        source = context.source
+
+        if not source.exists():
+            raise FileError(f"Archive not found: {source}")
+
+        # Create extraction directory
+        extract_dir = self.stage_dir / f"extract_{source.stem}"
+        extract_dir.mkdir(parents=True, exist_ok=True)
+
+        # Extract based on type
+        suffix = source.suffix.lower()
+        
+        if suffix == ".zip":
+            with zipfile.ZipFile(source, "r") as zip_ref:
+                zip_ref.extractall(extract_dir)
+        elif suffix == ".rar":
+            try:
+                import rarfile
+                with rarfile.RarFile(source, "r") as rar_ref:
+                    rar_ref.extractall(extract_dir)
+            except ImportError:
+                raise FileError(
+                    "RAR support not available. Install with: pip install rarfile"
+                )
+        elif suffix == ".7z":
+            try:
+                import py7zr
+                with py7zr.SevenZipFile(source, "r") as sz_ref:
+                    sz_ref.extractall(extract_dir)
+            except ImportError:
+                raise FileError(
+                    "7Z support not available. Install with: pip install py7zr"
+                )
+        else:
+            raise FileError(f"Unsupported archive format: {suffix}")
+
+        context.stage_dir = extract_dir
+        context.add_warning(f"Extracted to: {extract_dir}")
+
+        return context
+
+    async def organize(
+        self,
+        context: ProcessingContext,
+        structure: str = "flat",
+        filename_format: str = "original",
+    ) -> ProcessingContext:
+        """Organize output files according to structure and naming convention.
+
+        Args:
+            context: Processing context
+            structure: Directory structure ("flat", "by_author", "by_genre")
+            filename_format: Filename format ("original", "01.mp3", "chapter_01.mp3")
+
+        Returns:
+            Updated context
+        """
+        # TODO: Implement full organization logic
+        # For now, this is a placeholder that does nothing
+        # 
+        # Planned features:
+        # - structure == "flat": All files in one directory
+        # - structure == "by_author": Author/Title/files
+        # - structure == "by_genre": Genre/Author/Title/files
+        # 
+        # - filename_format == "original": Keep original names
+        # - filename_format == "01.mp3": Sequential numbering
+        # - filename_format == "chapter_01.mp3": "chapter_" prefix + number
+        
+        context.add_warning("organize() called but not yet fully implemented")
         return context

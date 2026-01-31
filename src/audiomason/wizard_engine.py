@@ -6,6 +6,7 @@ workflows defined in YAML files.
 
 from __future__ import annotations
 
+import asyncio
 import yaml
 from pathlib import Path
 from typing import Any, Callable
@@ -300,7 +301,12 @@ class WizardEngine:
         try:
             self._verbose(f"Calling {plugin_name}.{method}()")
             if hasattr(plugin, method):
-                result = getattr(plugin, method)(context, **params)
+                method_obj = getattr(plugin, method)
+                # Check if method is async
+                if asyncio.iscoroutinefunction(method_obj):
+                    result = asyncio.run(method_obj(context, **params))
+                else:
+                    result = method_obj(context, **params)
                 return StepResult(success=True, value=result)
             else:
                 return StepResult(success=False, error=f"Method not found: {plugin_name}.{method}")
@@ -336,6 +342,13 @@ class WizardEngine:
 
     def _evaluate_condition(self, condition: str, context: ProcessingContext) -> bool:
         """Evaluate condition string.
+        
+        Supports:
+        - Simple comparisons: field == 'value', field != 'value'
+        - Logical operators: condition1 or condition2, condition1 and condition2
+        - Existence checks: field exists
+        
+        Note: For complex conditions with 'or'/'and', splits into parts and evaluates recursively.
 
         Args:
             condition: Condition expression (e.g., "author == 'Unknown'")
@@ -344,29 +357,58 @@ class WizardEngine:
         Returns:
             Boolean result
         """
-        # Simple condition evaluator
-        # Supports: field == value, field != value, field exists
-
         if not condition:
             return True
+        
+        condition = condition.strip()
+        
+        # Handle 'or' operator (lower precedence)
+        if " or " in condition:
+            parts = condition.split(" or ")
+            return any(self._evaluate_condition(part.strip(), context) for part in parts)
+        
+        # Handle 'and' operator (higher precedence)
+        if " and " in condition:
+            parts = condition.split(" and ")
+            return all(self._evaluate_condition(part.strip(), context) for part in parts)
 
-        # Parse condition
+        # Handle equality
         if "==" in condition:
-            field, value = condition.split("==")
+            # Split only on first occurrence to handle quotes properly
+            parts = condition.split("==", 1)
+            if len(parts) != 2:
+                self._debug(f"Invalid condition format: {condition}")
+                return False
+            field, value = parts
             field = field.strip()
             value = value.strip().strip("\"'")
-            return getattr(context, field, None) == value
-
-        elif "!=" in condition:
-            field, value = condition.split("!=")
+            
+            # Get field value from context
+            context_value = getattr(context, field, None)
+            return context_value == value
+        
+        # Handle inequality
+        if "!=" in condition:
+            # Split only on first occurrence
+            parts = condition.split("!=", 1)
+            if len(parts) != 2:
+                self._debug(f"Invalid condition format: {condition}")
+                return False
+            field, value = parts
             field = field.strip()
             value = value.strip().strip("\"'")
-            return getattr(context, field, None) != value
-
-        elif "exists" in condition:
+            
+            # Get field value from context
+            context_value = getattr(context, field, None)
+            return context_value != value
+        
+        # Handle existence check
+        if " exists" in condition or condition.endswith("exists"):
             field = condition.replace("exists", "").strip()
             return hasattr(context, field) and getattr(context, field) is not None
-
+        
+        # If no operator found, log warning and return True
+        self._debug(f"Unknown condition format: {condition}, defaulting to True")
         return True
 
     def _execute_set_value(self, step: dict, context: ProcessingContext) -> StepResult:
