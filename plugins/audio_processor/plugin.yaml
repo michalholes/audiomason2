@@ -1,7 +1,7 @@
 name: audio_processor
 version: 1.0.0
 description: "Audio processing: M4A/Opus to MP3 conversion, chapter splitting, normalization"
-author: "AudioMason Team <team@audiomason.com>"
+author: "AudioMason Team <michal@holes.sk>"
 license: MIT
 
 entrypoint: plugin:AudioProcessorPlugin

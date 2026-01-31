@@ -249,4 +249,10 @@ class ConfigResolver:
                 "check_updates": True,
                 "auto_load": True,
             },
+            # Web server
+            "web": {
+                "host": "0.0.0.0",
+                "port": 8080,
+                "upload_dir": "/tmp/audiomason/uploads",
+            },
         }

@@ -1,7 +1,7 @@
 name: metadata_googlebooks
 version: 1.0.0
 description: "Fetch metadata from Google Books API"
-author: "AudioMason Team <team@audiomason.com>"
+author: "AudioMason Team <michal@holes.sk>"
 license: MIT
 
 entrypoint: plugin:GoogleBooksPlugin

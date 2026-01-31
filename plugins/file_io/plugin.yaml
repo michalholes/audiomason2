@@ -1,7 +1,7 @@
 name: file_io
 version: 1.0.0
 description: "File I/O operations: import to stage, export to output"
-author: "AudioMason Team <team@audiomason.com>"
+author: "AudioMason Team <michal@holes.sk>"
 license: MIT
 
 entrypoint: plugin:FileIOPlugin

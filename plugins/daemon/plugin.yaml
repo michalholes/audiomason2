@@ -1,7 +1,7 @@
 name: daemon
 version: 1.0.0
 description: "Daemon mode - watch folders and auto-process new files"
-author: "AudioMason Team <team@audiomason.com>"
+author: "AudioMason Team <michal@holes.sk>"
 license: MIT
 
 entrypoint: plugin:DaemonPlugin

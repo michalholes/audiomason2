@@ -314,12 +314,66 @@ class WebServerPlugin:
 
     async def update_config(self, request: Request) -> JSONResponse:
         """Update configuration (saves to user config file)."""
-        data = await request.json()
-        
-        # TODO: Implement config save
-        # This would write to ~/.config/audiomason/config.yaml
-        
-        return JSONResponse({"message": "Configuration saved", "config": data})
+        try:
+            data = await request.json()
+            
+            if self.verbosity >= VerbosityLevel.DEBUG:
+                print(f"[DEBUG] Config save request")
+                print(f"[DEBUG]   Data keys: {list(data.keys())}")
+            
+            # Get user config path
+            config_path = Path.home() / ".config" / "audiomason" / "config.yaml"
+            config_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            if self.verbosity >= VerbosityLevel.DEBUG:
+                print(f"[DEBUG]   Config path: {config_path}")
+            
+            # Load existing config or start fresh
+            existing = {}
+            if config_path.exists():
+                import yaml
+                with open(config_path) as f:
+                    existing = yaml.safe_load(f) or {}
+                if self.verbosity >= VerbosityLevel.DEBUG:
+                    print(f"[DEBUG]   Loaded existing config with {len(existing)} keys")
+            
+            # Update with new values (nested merge)
+            def merge_dict(base: dict, updates: dict) -> dict:
+                """Recursively merge dictionaries."""
+                result = base.copy()
+                for key, value in updates.items():
+                    if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+                        result[key] = merge_dict(result[key], value)
+                    else:
+                        result[key] = value
+                return result
+            
+            updated = merge_dict(existing, data)
+            
+            if self.verbosity >= VerbosityLevel.DEBUG:
+                print(f"[DEBUG]   Merged config has {len(updated)} keys")
+            
+            # Save to YAML
+            import yaml
+            with open(config_path, 'w') as f:
+                yaml.dump(updated, f, default_flow_style=False, allow_unicode=True)
+            
+            if self.verbosity >= VerbosityLevel.DEBUG:
+                print(f"[DEBUG]   ✓ Saved to {config_path}")
+            
+            return JSONResponse({
+                "message": "Configuration saved successfully",
+                "path": str(config_path),
+                "config": updated,
+            })
+        except Exception as e:
+            if self.verbosity >= VerbosityLevel.DEBUG:
+                print(f"[DEBUG] ERROR saving config: {e}")
+                import traceback
+                traceback.print_exc()
+            return JSONResponse({
+                "error": f"Failed to save configuration: {str(e)}"
+            }, status_code=500)
 
     # ═══════════════════════════════════════════
     #  API ENDPOINTS - PLUGINS

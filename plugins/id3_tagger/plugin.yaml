@@ -1,7 +1,7 @@
 name: id3_tagger
 version: 1.0.0
 description: "Write ID3 tags to MP3 files"
-author: "AudioMason Team <team@audiomason.com>"
+author: "AudioMason Team <michal@holes.sk>"
 license: MIT
 
 entrypoint: plugin:ID3TaggerPlugin
