@@ -94,6 +94,8 @@ class WebServerPlugin:
             self.host = "0.0.0.0"
             self.port = 8080
             self.upload_dir = Path("/tmp/audiomason/uploads")
+            if self.verbosity >= VerbosityLevel.DEBUG:
+                print(f"[DEBUG] No ConfigResolver, using defaults")
             return
         
         # Resolve web.host
@@ -101,19 +103,22 @@ class WebServerPlugin:
             self.host, source = self.config_resolver.resolve("web.host")
             if self.verbosity >= VerbosityLevel.VERBOSE:
                 print(f"  Host: {self.host} (source: {source})")
-        except:
+        except Exception as e:
             self.host = "0.0.0.0"
+            if self.verbosity >= VerbosityLevel.DEBUG:
+                print(f"[DEBUG] Failed to resolve web.host: {e}, using default")
         
         # Resolve web.port
         try:
             self.port, source = self.config_resolver.resolve("web.port")
             if self.verbosity >= VerbosityLevel.VERBOSE:
                 print(f"  Port: {self.port} (source: {source})")
-        except:
+        except Exception as e:
             import random
             self.port = random.randint(45001, 65535)
             if self.verbosity >= VerbosityLevel.DEBUG:
-                print(f"  Port: {self.port} (random, no config found)")
+                print(f"[DEBUG] Failed to resolve web.port: {e}")
+                print(f"[DEBUG] Using random port: {self.port}")
         
         # Resolve upload_dir
         try:
@@ -121,8 +126,10 @@ class WebServerPlugin:
             self.upload_dir = Path(upload_dir_str)
             if self.verbosity >= VerbosityLevel.VERBOSE:
                 print(f"  Upload dir: {self.upload_dir} (source: {source})")
-        except:
+        except Exception as e:
             self.upload_dir = Path("/tmp/audiomason/uploads")
+            if self.verbosity >= VerbosityLevel.DEBUG:
+                print(f"[DEBUG] Failed to resolve web.upload_dir: {e}, using default")
         
         # Create upload directory
         self.upload_dir.mkdir(parents=True, exist_ok=True)
@@ -500,35 +507,67 @@ class WebServerPlugin:
         Args:
             files: List of uploaded files
         """
+        if self.verbosity >= VerbosityLevel.DEBUG:
+            print(f"[DEBUG] Upload request: {len(files)} file(s)")
+        
         uploaded = []
+        errors = []
         
         for file in files:
-            file_path = self.upload_dir / file.filename
-            
-            # Save file
-            with open(file_path, "wb") as f:
-                content = await file.read()
-                f.write(content)
-            
-            # If ZIP, extract it
-            if file.filename.endswith('.zip'):
-                extract_dir = self.upload_dir / file.filename.replace('.zip', '')
-                extract_dir.mkdir(exist_ok=True)
+            try:
+                file_path = self.upload_dir / file.filename
                 
-                with zipfile.ZipFile(file_path, 'r') as zip_ref:
-                    zip_ref.extractall(extract_dir)
+                if self.verbosity >= VerbosityLevel.DEBUG:
+                    print(f"[DEBUG] Processing file: {file.filename}")
                 
-                # Remove ZIP after extraction
-                file_path.unlink()
+                # Save file
+                with open(file_path, "wb") as f:
+                    content = await file.read()
+                    f.write(content)
                 
-                # Find audio files in extracted directory
-                audio_files = []
-                for ext in ['*.mp3', '*.m4a', '*.m4b', '*.opus']:
-                    audio_files.extend(extract_dir.glob(f"**/{ext}"))
+                if self.verbosity >= VerbosityLevel.DEBUG:
+                    print(f"[DEBUG] Saved {len(content)} bytes to {file_path}")
                 
-                uploaded.extend([str(f) for f in audio_files])
-            else:
-                uploaded.append(str(file_path))
+                # If ZIP, extract it
+                if file.filename.endswith('.zip'):
+                    extract_dir = self.upload_dir / file.filename.replace('.zip', '')
+                    extract_dir.mkdir(exist_ok=True)
+                    
+                    if self.verbosity >= VerbosityLevel.DEBUG:
+                        print(f"[DEBUG] Extracting ZIP to {extract_dir}")
+                    
+                    with zipfile.ZipFile(file_path, 'r') as zip_ref:
+                        zip_ref.extractall(extract_dir)
+                    
+                    # Remove ZIP after extraction
+                    file_path.unlink()
+                    
+                    # Find audio files in extracted directory
+                    audio_files = []
+                    for ext in ['*.mp3', '*.m4a', '*.m4b', '*.opus']:
+                        audio_files.extend(extract_dir.glob(f"**/{ext}"))
+                    
+                    if self.verbosity >= VerbosityLevel.DEBUG:
+                        print(f"[DEBUG] Found {len(audio_files)} audio files in ZIP")
+                    
+                    uploaded.extend([str(f) for f in audio_files])
+                else:
+                    uploaded.append(str(file_path))
+            except Exception as e:
+                error_msg = f"Failed to process {file.filename}: {str(e)}"
+                errors.append(error_msg)
+                if self.verbosity >= VerbosityLevel.DEBUG:
+                    print(f"[DEBUG] ERROR: {error_msg}")
+                    import traceback
+                    traceback.print_exc()
+        
+        if errors:
+            return JSONResponse({
+                "error": "Some files failed to upload",
+                "details": errors,
+                "uploaded": len(uploaded),
+                "files": uploaded,
+            }, status_code=207)  # Multi-Status
         
         return JSONResponse({
             "message": f"Uploaded {len(uploaded)} file(s)",
@@ -623,10 +662,20 @@ class WebServerPlugin:
     async def _get_plugins_list(self) -> list[dict[str, Any]]:
         """Get list of all plugins with details."""
         if not self.plugin_loader:
+            if self.verbosity >= VerbosityLevel.DEBUG:
+                print(f"[DEBUG] No plugin_loader set")
             return []
         
+        if self.verbosity >= VerbosityLevel.DEBUG:
+            print(f"[DEBUG] Getting plugin list from loader")
+        
         plugins = []
-        for plugin_name in self.plugin_loader.list_plugins():
+        plugin_names = self.plugin_loader.list_plugins()
+        
+        if self.verbosity >= VerbosityLevel.DEBUG:
+            print(f"[DEBUG] Found {len(plugin_names)} plugins: {plugin_names}")
+        
+        for plugin_name in plugin_names:
             manifest = self.plugin_loader.get_manifest(plugin_name)
             if manifest:
                 plugins.append({
@@ -637,6 +686,11 @@ class WebServerPlugin:
                     "interfaces": manifest.interfaces,
                     "enabled": True,  # TODO: Track enabled state
                 })
+                if self.verbosity >= VerbosityLevel.DEBUG:
+                    print(f"[DEBUG] Added plugin: {manifest.name}")
+            else:
+                if self.verbosity >= VerbosityLevel.DEBUG:
+                    print(f"[DEBUG] No manifest for plugin: {plugin_name}")
         
         return plugins
 
@@ -670,23 +724,52 @@ class WebServerPlugin:
     async def _get_wizards_list(self) -> list[dict[str, Any]]:
         """Get list of available wizards."""
         wizards_dir = Path(__file__).parent.parent.parent / "wizards"
+        
+        if self.verbosity >= VerbosityLevel.DEBUG:
+            print(f"[DEBUG] Looking for wizards in: {wizards_dir}")
+        
         if not wizards_dir.exists():
+            if self.verbosity >= VerbosityLevel.DEBUG:
+                print(f"[DEBUG] Wizards directory does not exist")
             return []
         
         wizards = []
-        for yaml_file in wizards_dir.glob("*.yaml"):
+        yaml_files = list(wizards_dir.glob("*.yaml"))
+        
+        if self.verbosity >= VerbosityLevel.DEBUG:
+            print(f"[DEBUG] Found {len(yaml_files)} YAML files")
+        
+        for yaml_file in yaml_files:
             import yaml
             try:
                 with open(yaml_file) as f:
                     wizard_data = yaml.safe_load(f)
                 
+                if self.verbosity >= VerbosityLevel.DEBUG:
+                    print(f"[DEBUG] Parsing wizard: {yaml_file.stem}")
+                    print(f"[DEBUG]   Data keys: {list(wizard_data.keys())}")
+                    print(f"[DEBUG]   Steps: {wizard_data.get('steps', [])}")
+                
+                steps = wizard_data.get("steps", [])
+                if not isinstance(steps, list):
+                    if self.verbosity >= VerbosityLevel.DEBUG:
+                        print(f"[DEBUG]   WARNING: steps is not a list: {type(steps)}")
+                    steps = []
+                
                 wizards.append({
                     "name": yaml_file.stem,
                     "title": wizard_data.get("name", yaml_file.stem),
                     "description": wizard_data.get("description", ""),
-                    "steps": len(wizard_data.get("steps", [])),
+                    "steps": len(steps),
                 })
-            except:
+                
+                if self.verbosity >= VerbosityLevel.DEBUG:
+                    print(f"[DEBUG]   Added wizard with {len(steps)} steps")
+            except Exception as e:
+                if self.verbosity >= VerbosityLevel.DEBUG:
+                    print(f"[DEBUG] Failed to parse {yaml_file.stem}: {e}")
+                    import traceback
+                    traceback.print_exc()
                 continue
         
         return wizards

@@ -61,7 +61,8 @@ class CLIPlugin:
             Dictionary of CLI arguments
         """
         cli_args = {}
-        args = sys.argv[1:]  # Skip program name
+        # Use original argv (before verbosity extraction)
+        args = getattr(self, '_original_argv', sys.argv)[1:]  # Skip program name
         i = 0
         
         while i < len(args):
@@ -69,13 +70,10 @@ class CLIPlugin:
             
             # Verbosity flags
             if arg in ("-q", "--quiet"):
-                self.verbosity = VerbosityLevel.QUIET
                 cli_args["verbosity"] = "quiet"
             elif arg in ("-v", "--verbose"):
-                self.verbosity = VerbosityLevel.VERBOSE
                 cli_args["verbosity"] = "verbose"
             elif arg in ("-d", "--debug"):
-                self.verbosity = VerbosityLevel.DEBUG
                 cli_args["verbosity"] = "debug"
             
             # Port flag
@@ -148,6 +146,9 @@ class CLIPlugin:
         if len(sys.argv) < 2:
             self._print_usage()
             return
+
+        # Store original argv before modification
+        self._original_argv = sys.argv.copy()
 
         # Extract verbosity flags from ANY position in argv
         self._extract_verbosity_from_argv()

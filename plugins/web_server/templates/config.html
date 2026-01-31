@@ -4,64 +4,11 @@
 
 {% block content %}
 <div class="card">
-    <h3>Current Configuration</h3>
-    <p style="color: #6c757d; margin-bottom: 20px;">
-        View and manage AudioMason configuration. Settings are loaded from CLI args, environment variables, config files, and defaults.
-    </p>
-    
-    {% if config %}
-    <table class="table">
-        <thead>
-            <tr>
-                <th>Key</th>
-                <th>Value</th>
-                <th>Source</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for key, data in config.items() %}
-            <tr>
-                <td><strong>{{ key }}</strong></td>
-                <td>
-                    {% if data.value is sameas true %}
-                        <span class="badge badge-success">True</span>
-                    {% elif data.value is sameas false %}
-                        <span class="badge badge-danger">False</span>
-                    {% elif data.value is none %}
-                        <span class="badge badge-warning">None</span>
-                    {% else %}
-                        <code>{{ data.value }}</code>
-                    {% endif %}
-                </td>
-                <td>
-                    {% if data.source == "cli" %}
-                        <span class="badge badge-info">CLI Args</span>
-                    {% elif data.source == "env" %}
-                        <span class="badge badge-success">Environment</span>
-                    {% elif data.source == "user_config" %}
-                        <span class="badge badge-warning">User Config</span>
-                    {% elif data.source == "system_config" %}
-                        <span class="badge badge-warning">System Config</span>
-                    {% elif data.source == "default" %}
-                        <span class="badge">Default</span>
-                    {% else %}
-                        <span class="badge">{{ data.source }}</span>
-                    {% endif %}
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    {% else %}
-    <p style="color: #6c757d; text-align: center; padding: 40px;">
-        No configuration loaded
-    </p>
-    {% endif %}
-</div>
-
-<div class="card">
     <h3>Configuration Priority</h3>
     <div style="background: white; padding: 20px; border-radius: 8px;">
+        <p style="color: #6c757d; margin-bottom: 15px;">
+            AudioMason configuration is loaded from multiple sources with the following priority:
+        </p>
         <ol style="color: #495057; line-height: 2;">
             <li><span class="badge badge-info">CLI Args</span> - Highest priority (command-line arguments)</li>
             <li><span class="badge badge-success">Environment</span> - Environment variables (AUDIOMASON_*)</li>
@@ -80,6 +27,7 @@
     
     <form id="configForm">
         {% for key, data in config.items() %}
+        {% if key not in ['target_format', 'version'] %}
         <div class="form-group">
             <label>
                 <strong>{{ key }}</strong>
@@ -97,6 +45,7 @@
                 <input type="text" name="{{ key }}" value="{{ data.value if data.value is not none else '' }}">
             {% endif %}
         </div>
+        {% endif %}
         {% endfor %}
         
         <div style="display: flex; gap: 10px; margin-top: 20px;">
