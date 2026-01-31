@@ -126,18 +126,39 @@ document.getElementById('audioFiles').addEventListener('change', function(e) {
 document.getElementById('uploadForm').addEventListener('submit', async function(e) {
     e.preventDefault();
     
+    const submitBtn = this.querySelector('button[type="submit"]');
+    const originalText = submitBtn.textContent;
+    
+    // Disable submit button
+    submitBtn.disabled = true;
+    submitBtn.textContent = '⏳ Uploading...';
+    
     const formData = new FormData();
     const files = document.getElementById('audioFiles').files;
+    
+    if (files.length === 0) {
+        alert('Please select files first');
+        submitBtn.disabled = false;
+        submitBtn.textContent = originalText;
+        return;
+    }
     
     for (let file of files) {
         formData.append('files', file);
     }
     
     try {
+        // Set longer timeout (5 minutes)
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 300000);
+        
         const response = await fetch('/api/upload', {
             method: 'POST',
-            body: formData
+            body: formData,
+            signal: controller.signal
         });
+        
+        clearTimeout(timeoutId);
         
         const result = await response.json();
         
@@ -146,9 +167,17 @@ document.getElementById('uploadForm').addEventListener('submit', async function(
             location.reload();
         } else {
             alert('Upload failed: ' + (result.error || 'Unknown error'));
+            submitBtn.disabled = false;
+            submitBtn.textContent = originalText;
         }
     } catch (error) {
-        alert('Upload error: ' + error.message);
+        if (error.name === 'AbortError') {
+            alert('Upload timeout - files may be too large or connection too slow');
+        } else {
+            alert('Upload error: ' + error.message);
+        }
+        submitBtn.disabled = false;
+        submitBtn.textContent = originalText;
     }
 });
 

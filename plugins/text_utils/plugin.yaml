@@ -1,7 +1,7 @@
 name: text_utils
 version: 1.0.0
 description: "Text processing utilities: strip diacritics, slugify, clean text"
-author: "AudioMason Team <michal@holes.sk>"
+author: "Michal Holeš <michal@holes.sk>"
 license: MIT
 
 entrypoint: plugin:TextUtilsPlugin

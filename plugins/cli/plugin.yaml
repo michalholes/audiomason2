@@ -1,7 +1,7 @@
 name: cli
 version: 1.0.0
 description: "Command-line interface for AudioMason"
-author: "AudioMason Team <michal@holes.sk>"
+author: "Michal Holeš <michal@holes.sk>"
 license: MIT
 
 entrypoint: plugin:CLIPlugin

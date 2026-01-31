@@ -360,10 +360,12 @@ class WebServerPlugin:
             
             if self.verbosity >= VerbosityLevel.DEBUG:
                 print(f"[DEBUG]   ✓ Saved to {config_path}")
+                print(f"[DEBUG]   NOTE: Web server needs restart to apply changes")
             
             return JSONResponse({
-                "message": "Configuration saved successfully",
+                "message": "Configuration saved to ~/.config/audiomason/config.yaml\n\n⚠️ IMPORTANT: Restart the web server for changes to take effect.",
                 "path": str(config_path),
+                "restart_required": True,
                 "config": updated,
             })
         except Exception as e:
@@ -386,13 +388,107 @@ class WebServerPlugin:
 
     async def enable_plugin(self, name: str) -> JSONResponse:
         """Enable plugin."""
-        # TODO: Implement plugin enable/disable tracking
-        return JSONResponse({"message": f"Plugin '{name}' enabled"})
+        try:
+            if self.verbosity >= VerbosityLevel.DEBUG:
+                print(f"[DEBUG] Enabling plugin: {name}")
+            
+            # Load config
+            config_path = Path.home() / ".config" / "audiomason" / "config.yaml"
+            config_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            import yaml
+            config = {}
+            if config_path.exists():
+                with open(config_path) as f:
+                    config = yaml.safe_load(f) or {}
+            
+            # Ensure plugins section exists
+            if 'plugins' not in config:
+                config['plugins'] = {}
+            if 'disabled' not in config['plugins']:
+                config['plugins']['disabled'] = []
+            
+            # Remove from disabled list
+            if name in config['plugins']['disabled']:
+                config['plugins']['disabled'].remove(name)
+                
+                if self.verbosity >= VerbosityLevel.DEBUG:
+                    print(f"[DEBUG]   Removed {name} from disabled list")
+            else:
+                if self.verbosity >= VerbosityLevel.DEBUG:
+                    print(f"[DEBUG]   Plugin {name} was not disabled")
+            
+            # Save config
+            with open(config_path, 'w') as f:
+                yaml.dump(config, f, default_flow_style=False, allow_unicode=True)
+            
+            if self.verbosity >= VerbosityLevel.DEBUG:
+                print(f"[DEBUG]   ✓ Config saved, restart required")
+            
+            return JSONResponse({
+                "message": f"Plugin '{name}' enabled\n\n⚠️ Restart the web server for changes to take effect.",
+                "restart_required": True,
+            })
+        except Exception as e:
+            if self.verbosity >= VerbosityLevel.DEBUG:
+                print(f"[DEBUG] ERROR enabling plugin: {e}")
+                import traceback
+                traceback.print_exc()
+            return JSONResponse({
+                "error": f"Failed to enable plugin: {str(e)}"
+            }, status_code=500)
 
     async def disable_plugin(self, name: str) -> JSONResponse:
         """Disable plugin."""
-        # TODO: Implement plugin enable/disable tracking
-        return JSONResponse({"message": f"Plugin '{name}' disabled"})
+        try:
+            if self.verbosity >= VerbosityLevel.DEBUG:
+                print(f"[DEBUG] Disabling plugin: {name}")
+            
+            # Load config
+            config_path = Path.home() / ".config" / "audiomason" / "config.yaml"
+            config_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            import yaml
+            config = {}
+            if config_path.exists():
+                with open(config_path) as f:
+                    config = yaml.safe_load(f) or {}
+            
+            # Ensure plugins section exists
+            if 'plugins' not in config:
+                config['plugins'] = {}
+            if 'disabled' not in config['plugins']:
+                config['plugins']['disabled'] = []
+            
+            # Add to disabled list
+            if name not in config['plugins']['disabled']:
+                config['plugins']['disabled'].append(name)
+                
+                if self.verbosity >= VerbosityLevel.DEBUG:
+                    print(f"[DEBUG]   Added {name} to disabled list")
+            else:
+                if self.verbosity >= VerbosityLevel.DEBUG:
+                    print(f"[DEBUG]   Plugin {name} already disabled")
+            
+            # Save config
+            with open(config_path, 'w') as f:
+                yaml.dump(config, f, default_flow_style=False, allow_unicode=True)
+            
+            if self.verbosity >= VerbosityLevel.DEBUG:
+                print(f"[DEBUG]   ✓ Config saved, restart required")
+            
+            return JSONResponse({
+                "message": f"Plugin '{name}' disabled\n\n⚠️ Restart the web server for changes to take effect.",
+                "restart_required": True,
+            })
+        except Exception as e:
+            if self.verbosity >= VerbosityLevel.DEBUG:
+                print(f"[DEBUG] ERROR disabling plugin: {e}")
+                import traceback
+                traceback.print_exc()
+            return JSONResponse({
+                "error": f"Failed to disable plugin: {str(e)}"
+            }, status_code=500)
 
     async def delete_plugin(self, name: str) -> JSONResponse:
         """Delete plugin."""
@@ -552,81 +648,111 @@ class WebServerPlugin:
             "current_step": ctx.current_step,
         })
 
-    async def upload_files(
-        self,
-        files: list[UploadFile] = File(...),
-    ) -> JSONResponse:
+    async def upload_files(self, request: Request) -> JSONResponse:
         """Upload multiple audio files or ZIP archives.
 
         Args:
-            files: List of uploaded files
+            request: HTTP request with multipart/form-data
         """
-        if self.verbosity >= VerbosityLevel.DEBUG:
-            print(f"[DEBUG] Upload request: {len(files)} file(s)")
-        
-        uploaded = []
-        errors = []
-        
-        for file in files:
-            try:
-                file_path = self.upload_dir / file.filename
-                
+        try:
+            # Parse multipart form data
+            form = await request.form()
+            files = form.getlist("files")
+            
+            if self.verbosity >= VerbosityLevel.DEBUG:
+                print(f"[DEBUG] Upload request received")
+                print(f"[DEBUG]   Files count: {len(files)}")
+            
+            if not files:
                 if self.verbosity >= VerbosityLevel.DEBUG:
-                    print(f"[DEBUG] Processing file: {file.filename}")
-                
-                # Save file
-                with open(file_path, "wb") as f:
+                    print(f"[DEBUG]   No files in request")
+                return JSONResponse({
+                    "error": "No files provided"
+                }, status_code=400)
+            
+            uploaded = []
+            errors = []
+            
+            for file in files:
+                try:
+                    if not hasattr(file, 'filename') or not file.filename:
+                        if self.verbosity >= VerbosityLevel.DEBUG:
+                            print(f"[DEBUG]   Skipping invalid file object")
+                        continue
+                    
+                    file_path = self.upload_dir / file.filename
+                    
+                    if self.verbosity >= VerbosityLevel.DEBUG:
+                        print(f"[DEBUG]   Processing: {file.filename}")
+                    
+                    # Save file
                     content = await file.read()
-                    f.write(content)
-                
-                if self.verbosity >= VerbosityLevel.DEBUG:
-                    print(f"[DEBUG] Saved {len(content)} bytes to {file_path}")
-                
-                # If ZIP, extract it
-                if file.filename.endswith('.zip'):
-                    extract_dir = self.upload_dir / file.filename.replace('.zip', '')
-                    extract_dir.mkdir(exist_ok=True)
+                    with open(file_path, "wb") as f:
+                        f.write(content)
                     
                     if self.verbosity >= VerbosityLevel.DEBUG:
-                        print(f"[DEBUG] Extracting ZIP to {extract_dir}")
+                        print(f"[DEBUG]     Saved {len(content)} bytes to {file_path}")
                     
-                    with zipfile.ZipFile(file_path, 'r') as zip_ref:
-                        zip_ref.extractall(extract_dir)
-                    
-                    # Remove ZIP after extraction
-                    file_path.unlink()
-                    
-                    # Find audio files in extracted directory
-                    audio_files = []
-                    for ext in ['*.mp3', '*.m4a', '*.m4b', '*.opus']:
-                        audio_files.extend(extract_dir.glob(f"**/{ext}"))
-                    
+                    # If ZIP, extract it
+                    if file.filename.endswith('.zip'):
+                        extract_dir = self.upload_dir / file.filename.replace('.zip', '')
+                        extract_dir.mkdir(exist_ok=True)
+                        
+                        if self.verbosity >= VerbosityLevel.DEBUG:
+                            print(f"[DEBUG]     Extracting ZIP to {extract_dir}")
+                        
+                        with zipfile.ZipFile(file_path, 'r') as zip_ref:
+                            zip_ref.extractall(extract_dir)
+                        
+                        # Remove ZIP after extraction
+                        file_path.unlink()
+                        
+                        # Find audio files in extracted directory
+                        audio_files = []
+                        for ext in ['*.mp3', '*.m4a', '*.m4b', '*.opus']:
+                            audio_files.extend(extract_dir.glob(f"**/{ext}"))
+                        
+                        if self.verbosity >= VerbosityLevel.DEBUG:
+                            print(f"[DEBUG]     Found {len(audio_files)} audio files in ZIP")
+                        
+                        uploaded.extend([str(f) for f in audio_files])
+                    else:
+                        uploaded.append(str(file_path))
+                        
                     if self.verbosity >= VerbosityLevel.DEBUG:
-                        print(f"[DEBUG] Found {len(audio_files)} audio files in ZIP")
-                    
-                    uploaded.extend([str(f) for f in audio_files])
-                else:
-                    uploaded.append(str(file_path))
-            except Exception as e:
-                error_msg = f"Failed to process {file.filename}: {str(e)}"
-                errors.append(error_msg)
-                if self.verbosity >= VerbosityLevel.DEBUG:
-                    print(f"[DEBUG] ERROR: {error_msg}")
-                    import traceback
-                    traceback.print_exc()
-        
-        if errors:
+                        print(f"[DEBUG]     ✓ Success")
+                        
+                except Exception as e:
+                    error_msg = f"Failed to process {getattr(file, 'filename', 'unknown')}: {str(e)}"
+                    errors.append(error_msg)
+                    if self.verbosity >= VerbosityLevel.DEBUG:
+                        print(f"[DEBUG]     ✗ ERROR: {error_msg}")
+                        import traceback
+                        traceback.print_exc()
+            
+            if self.verbosity >= VerbosityLevel.DEBUG:
+                print(f"[DEBUG] Upload complete: {len(uploaded)} files, {len(errors)} errors")
+            
+            if errors:
+                return JSONResponse({
+                    "error": "Some files failed to upload",
+                    "details": errors,
+                    "uploaded": len(uploaded),
+                    "files": uploaded,
+                }, status_code=207)  # Multi-Status
+            
             return JSONResponse({
-                "error": "Some files failed to upload",
-                "details": errors,
-                "uploaded": len(uploaded),
+                "message": f"Uploaded {len(uploaded)} file(s)",
                 "files": uploaded,
-            }, status_code=207)  # Multi-Status
-        
-        return JSONResponse({
-            "message": f"Uploaded {len(uploaded)} file(s)",
-            "files": uploaded,
-        })
+            })
+        except Exception as e:
+            if self.verbosity >= VerbosityLevel.DEBUG:
+                print(f"[DEBUG] Upload error: {e}")
+                import traceback
+                traceback.print_exc()
+            return JSONResponse({
+                "error": f"Upload failed: {str(e)}"
+            }, status_code=500)
 
     async def start_processing(
         self,

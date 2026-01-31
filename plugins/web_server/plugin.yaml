@@ -1,7 +1,7 @@
 name: web_server
 version: 1.0.0
 description: "Web UI + REST API server for AudioMason - complete control interface"
-author: "AudioMason Team <michal@holes.sk>"
+author: "Michal Holeš <michal@holes.sk>"
 license: MIT
 
 entrypoint: plugin:WebServerPlugin
