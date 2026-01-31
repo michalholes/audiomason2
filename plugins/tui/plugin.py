@@ -17,6 +17,14 @@ except ImportError:
     HAS_CURSES = False
 
 
+class VerbosityLevel:
+    """Verbosity levels."""
+    QUIET = 0    # Errors only
+    NORMAL = 1   # Progress + warnings
+    VERBOSE = 2  # Detailed info
+    DEBUG = 3    # Everything
+
+
 class TUIPlugin:
     """Terminal user interface plugin."""
     
@@ -30,6 +38,7 @@ class TUIPlugin:
             raise ImportError("curses not available")
         
         self.config = config or {}
+        self.verbosity = self.config.get("verbosity", VerbosityLevel.NORMAL)
         self.screen = None
         self.current_menu = "main"
         self.menu_stack = []
@@ -496,15 +505,25 @@ class TUIPlugin:
         wizard_name = wizard_filename.replace('.yaml', '')
         cmd = ['audiomason', 'wizard', wizard_name]
         
-        print(f"\n🧙 Running wizard: {wizard_name}\n")
+        # Add verbosity flag based on current level
+        if self.verbosity == VerbosityLevel.QUIET:
+            cmd.append('-q')
+        elif self.verbosity == VerbosityLevel.VERBOSE:
+            cmd.append('-v')
+        elif self.verbosity == VerbosityLevel.DEBUG:
+            cmd.append('-d')
+        
+        if self.verbosity >= VerbosityLevel.NORMAL:
+            print(f"\n🧙 Running wizard: {wizard_name}\n")
         
         try:
             subprocess.run(cmd)
         except Exception as e:
             print(f"Error running wizard: {e}")
         
-        print("\nPress Enter to return to TUI...")
-        input()
+        if self.verbosity >= VerbosityLevel.NORMAL:
+            print("\nPress Enter to return to TUI...")
+            input()
         
         # Reinitialize curses
         self.screen = curses.initscr()

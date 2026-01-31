@@ -15,6 +15,14 @@ from audiomason.core import ProcessingContext, PluginLoader, State
 from audiomason.core.errors import AudioMasonError
 
 
+class VerbosityLevel:
+    """Verbosity levels."""
+    QUIET = 0    # Errors only
+    NORMAL = 1   # Progress + warnings
+    VERBOSE = 2  # Detailed info
+    DEBUG = 3    # Everything
+
+
 class WizardError(AudioMasonError):
     """Wizard execution error."""
 
@@ -34,13 +42,15 @@ class StepResult:
 class WizardEngine:
     """Execute YAML-based wizards."""
 
-    def __init__(self, loader: PluginLoader):
+    def __init__(self, loader: PluginLoader, verbosity: int = VerbosityLevel.NORMAL):
         """Initialize wizard engine.
 
         Args:
             loader: Plugin loader for executing plugin calls
+            verbosity: Verbosity level
         """
         self.loader = loader
+        self.verbosity = verbosity
         self.context: ProcessingContext | None = None
         self.user_input_handler: Callable | None = None
         self.progress_callback: Callable | None = None
@@ -202,10 +212,11 @@ class WizardEngine:
             value = self.user_input_handler(prompt, options)
         else:
             # Fallback to console
-            print(f"\n{prompt}")
-            for i, choice in enumerate(choices, 1):
-                marker = " (default)" if choice == default else ""
-                print(f"  {i}. {choice}{marker}")
+            if self.verbosity >= VerbosityLevel.NORMAL:
+                print(f"\n{prompt}")
+                for i, choice in enumerate(choices, 1):
+                    marker = " (default)" if choice == default else ""
+                    print(f"  {i}. {choice}{marker}")
 
             choice_input = input("Select: ").strip()
 

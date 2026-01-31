@@ -677,7 +677,7 @@ class CLIPlugin:
                 except Exception:
                     pass
         
-        engine = WizardEngine(loader)
+        engine = WizardEngine(loader, verbosity=self.verbosity)
         
         # Set input handler for interactive prompts
         def input_handler(prompt: str, options: dict) -> str:

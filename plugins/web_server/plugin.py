@@ -40,6 +40,14 @@ from audiomason.core import (
 )
 
 
+class VerbosityLevel:
+    """Verbosity levels."""
+    QUIET = 0    # Errors only
+    NORMAL = 1   # Progress + warnings
+    VERBOSE = 2  # Detailed info
+    DEBUG = 3    # Everything
+
+
 class WebServerPlugin:
     """Web server plugin with REST API and Web UI."""
 
@@ -55,6 +63,7 @@ class WebServerPlugin:
             )
 
         self.config = config or {}
+        self.verbosity = VerbosityLevel.NORMAL
         self.host = self.config.get("host", "0.0.0.0")
         self.port = self.config.get("port", 8080)
         self.reload = self.config.get("reload", False)
@@ -103,22 +112,27 @@ class WebServerPlugin:
 
     async def run(self) -> None:
         """Run web server - main entry point."""
-        print("🌐 AudioMason Web Server")
-        print()
-        print(f"   Host: {self.host}")
-        print(f"   Port: {self.port}")
-        print(f"   URL:  http://localhost:{self.port}")
-        print()
-        print("Press Ctrl+C to stop")
-        print()
+        if self.verbosity >= VerbosityLevel.NORMAL:
+            print("🌐 AudioMason Web Server")
+            print()
+            print(f"   Host: {self.host}")
+            print(f"   Port: {self.port}")
+            print(f"   URL:  http://localhost:{self.port}")
+            print()
+            print("Press Ctrl+C to stop")
+            print()
 
         # Run uvicorn server
+        log_level = "critical" if self.verbosity == VerbosityLevel.QUIET else \
+                    "error" if self.verbosity == VerbosityLevel.NORMAL else \
+                    "info" if self.verbosity == VerbosityLevel.VERBOSE else "debug"
+        
         config = uvicorn.Config(
             self.app,
             host=self.host,
             port=self.port,
             reload=self.reload,
-            log_level="info",
+            log_level=log_level,
         )
         server = uvicorn.Server(config)
         await server.serve()
