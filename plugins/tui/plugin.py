@@ -302,7 +302,7 @@ class TUIPlugin:
                 
                 name = wizard['name']
                 desc = wizard.get('description', 'No description')
-                steps = wizard.get('steps_count', 0)
+                steps = wizard.get('steps', 0)
                 
                 line = f"{name} ({steps} steps)"
                 

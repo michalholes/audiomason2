@@ -108,6 +108,8 @@ logging:
         """Test that False values are handled correctly."""
         resolver = ConfigResolver(
             cli_args={},
+            user_config_path=tmp_path / "nonexistent.yaml",
+            system_config_path=tmp_path / "nonexistent_system.yaml",
             defaults={"loudnorm": False, "split_chapters": False},
         )
 
@@ -115,10 +117,12 @@ logging:
         assert loudnorm is False
         assert source == "default"
 
-    def test_resolve_all(self):
+    def test_resolve_all(self, tmp_path):
         """Test resolving all keys."""
         resolver = ConfigResolver(
             cli_args={"bitrate": "320k"},
+            user_config_path=tmp_path / "nonexistent.yaml",
+            system_config_path=tmp_path / "nonexistent_system.yaml",
             defaults={"bitrate": "128k", "loudnorm": False},
         )
 
