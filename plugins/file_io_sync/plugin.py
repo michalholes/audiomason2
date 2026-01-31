@@ -167,19 +167,23 @@ class FileIOSync:
                 return True
         return False
 
-    def import_to_stage(self, source: Path, context: ProcessingContext) -> Path:
+    def import_to_stage(self, context: ProcessingContext) -> ProcessingContext:
         """Import source to staging area.
         
         Args:
-            source: Source path (directory or archive)
-            context: Processing context
+            context: Processing context (must have context.source)
             
         Returns:
-            Path to stage directory
+            Updated context with stage_dir set
             
         Raises:
             FileError: If import fails
         """
+        if not hasattr(context, 'source') or not context.source:
+            raise FileError("No source in context")
+        
+        source = context.source
+        
         if not source.exists():
             raise FileError(f"Source not found: {source}")
         
@@ -209,10 +213,9 @@ class FileIOSync:
         
         # Update context
         context.stage_dir = stage_path
-        context.source = source
         
         self._log_verbose(f"Import complete: {stage_path}")
-        return stage_path
+        return context
 
     def _copy_directory(self, src: Path, dst: Path) -> None:
         """Recursively copy directory contents.
@@ -254,14 +257,14 @@ class FileIOSync:
         except Exception as e:
             raise FileError(f"Archive extraction failed: {e}") from e
 
-    def export_to_output(self, context: ProcessingContext) -> Path:
+    def export_to_output(self, context: ProcessingContext) -> ProcessingContext:
         """Export processed files to output directory.
         
         Args:
-            context: Processing context
+            context: Processing context (must have converted_files, author, title)
             
         Returns:
-            Path to output directory
+            Updated context with output_path and exported_files
             
         Raises:
             FileError: If export fails
@@ -314,31 +317,39 @@ class FileIOSync:
         context.exported_files = exported_files
         
         self._log_info(f"Exported {len(exported_files)} file(s)")
-        return output_path
+        return context
 
-    def cleanup_stage(self, context: ProcessingContext) -> None:
+    def cleanup_stage(self, context: ProcessingContext) -> ProcessingContext:
         """Clean up staging directory.
         
         Args:
-            context: Processing context
+            context: Processing context (must have stage_dir)
+            
+        Returns:
+            Updated context
         """
         if not hasattr(context, 'stage_dir') or not context.stage_dir:
-            return
+            return context
         
         stage_dir = context.stage_dir
         
         if stage_dir.exists():
             self._log_info(f"Cleaning stage: {stage_dir}")
             shutil.rmtree(stage_dir)
+        
+        return context
 
-    def cleanup_inbox(self, context: ProcessingContext) -> None:
+    def cleanup_inbox(self, context: ProcessingContext) -> ProcessingContext:
         """Clean up source from inbox.
         
         Args:
-            context: Processing context
+            context: Processing context (must have source)
+            
+        Returns:
+            Updated context
         """
         if not hasattr(context, 'source') or not context.source:
-            return
+            return context
         
         source = context.source
         
@@ -348,6 +359,8 @@ class FileIOSync:
                 shutil.rmtree(source)
             else:
                 source.unlink()
+        
+        return context
 
     @staticmethod
     def _sanitize_filename(name: str) -> str:
