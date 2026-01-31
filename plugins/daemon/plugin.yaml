@@ -17,18 +17,24 @@ dependencies:
 config_schema:
   watch_folders:
     type: array
+    description: "List of directories to watch for new audiobook files"
     items:
       type: string
     default: []
   interval:
     type: integer
+    description: "How often to check for new files (in seconds)"
     default: 30
+    minimum: 5
+    maximum: 3600
   on_success:
     type: string
+    description: "What to do with source files after successful processing"
     default: move_to_output
     enum: [move_to_output, keep, delete]
   on_error:
     type: string
+    description: "What to do with files that failed to process"
     default: move_to_error
     enum: [move_to_error, keep, delete]
 

@@ -46,6 +46,7 @@ class ConfigAPI:
             Default config dict
         """
         return {
+            "input_dir": str(Path.home() / "Audiobooks" / "input"),
             "output_dir": str(Path.home() / "Audiobooks" / "output"),
             "bitrate": "128k",
             "loudnorm": False,
@@ -75,6 +76,12 @@ class ConfigAPI:
             Schema defining config structure and types
         """
         return {
+            "input_dir": {
+                "type": "string",
+                "label": "Input Directory",
+                "description": "Directory where AudioMason looks for files to process",
+                "default": str(Path.home() / "Audiobooks" / "input"),
+            },
             "output_dir": {
                 "type": "string",
                 "label": "Output Directory",
@@ -107,11 +114,13 @@ class ConfigAPI:
                     "host": {
                         "type": "string",
                         "label": "Host",
+                        "description": "Server bind address",
                         "default": "0.0.0.0",
                     },
                     "port": {
                         "type": "integer",
                         "label": "Port",
+                        "description": "Server port number",
                         "default": 8080,
                     },
                 },
@@ -123,12 +132,14 @@ class ConfigAPI:
                     "watch_folders": {
                         "type": "array",
                         "label": "Watch Folders",
+                        "description": "Folders to monitor for new files",
                         "items": {"type": "string"},
                         "default": [],
                     },
                     "interval": {
                         "type": "integer",
                         "label": "Check Interval (seconds)",
+                        "description": "How often to check for new files",
                         "default": 30,
                     },
                 },

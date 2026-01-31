@@ -35,6 +35,14 @@ from audiomason.core.errors import (
 from audiomason.core.events import EventBus, get_event_bus
 from audiomason.core.interfaces import IEnricher, IProcessor, IProvider, IStorage, IUI
 from audiomason.core.loader import PluginLoader, PluginManifest
+from audiomason.core.logging import (
+    VerbosityLevel,
+    get_logger,
+    set_verbosity,
+    get_verbosity,
+    set_log_file,
+    set_colors,
+)
 from audiomason.core.pipeline import Pipeline, PipelineExecutor, PipelineStep
 
 __all__ = [
@@ -83,6 +91,13 @@ __all__ = [
     "find_file_cover",
     "detect_chapters",
     "detect_format",
+    # Logging
+    "VerbosityLevel",
+    "get_logger",
+    "set_verbosity",
+    "get_verbosity",
+    "set_log_file",
+    "set_colors",
 ]
 
 
