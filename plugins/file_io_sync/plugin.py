@@ -171,14 +171,15 @@ class FileIOSync:
         """Import source to staging area.
         
         Args:
-            context: Processing context (must have context.source)
+            context: Processing context (source taken from context.source)
             
         Returns:
-            Updated context with stage_dir set
+            Updated processing context
             
         Raises:
             FileError: If import fails
         """
+        # Get source from context
         if not hasattr(context, 'source') or not context.source:
             raise FileError("No source in context")
         
@@ -257,14 +258,14 @@ class FileIOSync:
         except Exception as e:
             raise FileError(f"Archive extraction failed: {e}") from e
 
-    def export_to_output(self, context: ProcessingContext) -> ProcessingContext:
+    def export_to_output(self, context: ProcessingContext) -> Path:
         """Export processed files to output directory.
         
         Args:
-            context: Processing context (must have converted_files, author, title)
+            context: Processing context
             
         Returns:
-            Updated context with output_path and exported_files
+            Path to output directory
             
         Raises:
             FileError: If export fails
@@ -317,39 +318,31 @@ class FileIOSync:
         context.exported_files = exported_files
         
         self._log_info(f"Exported {len(exported_files)} file(s)")
-        return context
+        return output_path
 
-    def cleanup_stage(self, context: ProcessingContext) -> ProcessingContext:
+    def cleanup_stage(self, context: ProcessingContext) -> None:
         """Clean up staging directory.
         
         Args:
-            context: Processing context (must have stage_dir)
-            
-        Returns:
-            Updated context
+            context: Processing context
         """
         if not hasattr(context, 'stage_dir') or not context.stage_dir:
-            return context
+            return
         
         stage_dir = context.stage_dir
         
         if stage_dir.exists():
             self._log_info(f"Cleaning stage: {stage_dir}")
             shutil.rmtree(stage_dir)
-        
-        return context
 
-    def cleanup_inbox(self, context: ProcessingContext) -> ProcessingContext:
+    def cleanup_inbox(self, context: ProcessingContext) -> None:
         """Clean up source from inbox.
         
         Args:
-            context: Processing context (must have source)
-            
-        Returns:
-            Updated context
+            context: Processing context
         """
         if not hasattr(context, 'source') or not context.source:
-            return context
+            return
         
         source = context.source
         
@@ -359,8 +352,6 @@ class FileIOSync:
                 shutil.rmtree(source)
             else:
                 source.unlink()
-        
-        return context
 
     @staticmethod
     def _sanitize_filename(name: str) -> str:
