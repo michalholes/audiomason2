@@ -91,6 +91,8 @@ class CliArgs:
     keep_workspace: bool | None
     test_mode: bool | None
 
+    success_archive_name: str | None
+
 
 def _fmt_short_help() -> str:
     return f"""am_patch.py (RUNNER_VERSION={RUNNER_VERSION})
@@ -409,6 +411,12 @@ def parse_args(argv: list[str]) -> CliArgs:
     )
     p.add_argument("--keep-workspace", dest="keep_workspace", action="store_true", default=None)
     p.add_argument("--test-mode", dest="test_mode", action="store_true", default=None)
+    p.add_argument(
+        "--success-archive-name",
+        dest="success_archive_name",
+        default=None,
+        help="Success archive zip name template (placeholders: {repo}, {branch}).",
+    )
 
     p.add_argument("--skip-ruff", dest="skip_ruff", action="store_true", default=None)
     p.add_argument("--skip-pytest", dest="skip_pytest", action="store_true", default=None)
@@ -536,6 +544,7 @@ def parse_args(argv: list[str]) -> CliArgs:
             load_latest_patch=ns.load_latest_patch,
             keep_workspace=ns.keep_workspace,
             test_mode=ns.test_mode,
+            success_archive_name=getattr(ns, "success_archive_name", None),
             post_success_audit=ns.post_success_audit,
         )
 

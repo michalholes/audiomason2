@@ -229,9 +229,10 @@ If the audit step fails:
 
 ---
 
-## patched_success.zip (SUCCESS: clean repo snapshot)
+## Success archive (SUCCESS: clean repo snapshot)
 
 On SUCCESS (in `workspace`, `finalize`, and `finalize_workspace` modes; excluding `--test-mode`), the runner
-creates `patched_success.zip` as `git archive HEAD` of the final live repo state.
+creates a git-archive success zip in `patches/`. The filename is configurable via
+`success_archive_name` / `--success-archive-name` (default `{repo}-{branch}.zip`, e.g. `audiomason2-main.zip`).
 It contains only git-tracked files and does not include logs, workspaces, caches, or patch inputs.
 

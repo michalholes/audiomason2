@@ -225,10 +225,10 @@ When building `patched.zip`, the runner excludes repository internals and tool/r
 This is independent of scope logic and does not affect patch execution, gates, or promotion semantics.
 
 
-## 7.4 Success archive (`patched_success.zip`)
+## 7.4 Success archive (git-archive zip)
 
 On SUCCESS (in `workspace`, `--finalize-live`, and `--finalize-workspace` modes; excluding `--test-mode`),
-the runner creates `patched_success.zip` as a clean `git archive HEAD` snapshot of the final live repository state.
+the runner creates a clean git-archive success zip named by `success_archive_name` (default `{repo}-{branch}.zip`, e.g. `audiomason2-main.zip`) as a clean `git archive HEAD` snapshot of the final live repository state.
 It contains only git-tracked files (as if fetched from the remote) and does not include logs, workspaces, caches, or patch inputs.
 
 Unified patch mode (`--unified-patch`):

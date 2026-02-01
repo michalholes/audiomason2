@@ -254,6 +254,7 @@ def main(argv: list[str]) -> int:
             "skip_up_to_date": cli.skip_up_to_date,
             "allow_non_main": cli.allow_non_main,
             "no_rollback": cli.no_rollback,
+            "success_archive_name": getattr(cli, "success_archive_name", None),
             "update_workspace": cli.update_workspace,
             "gates_allow_fail": cli.allow_gates_fail,
             "gates_skip_ruff": cli.skip_ruff,
@@ -901,7 +902,7 @@ def main(argv: list[str]) -> int:
             ):
                 issue_id = cli.issue_id or "unknown"
 
-                archived_path: Path | None = used_patch_for_zip
+                archived_path: Path | None = used_patch_for_zip if cli.mode == "workspace" else None
 
                 # Post-success audit (if enabled by workflow). If audit fails, treat as failure and
                 # produce diagnostics archive instead of success archive.
@@ -912,49 +913,60 @@ def main(argv: list[str]) -> int:
                         exit_code = 1
                         logger.section("AUDIT")
                         logger.line(f"post_success_audit_failed={_audit_e!r}")
-                if exit_code == 0:
-                    # Best effort: if caller returned success before archiving, archive now.
-                    if archived_path is None and patch_script is not None and patch_script.exists():
-                        archived_path = archive_patch(logger, patch_script, paths.successful_dir)
-                else:
-                    # Failure: archive the exact patch script selected for this run into
-                    # unsuccessful/.
-                    ps: Path | None = None
-                    if patch_script is not None:
-                        ps = patch_script
+                if cli.mode == "workspace":
+                    if exit_code == 0:
+                        # Best effort: if caller returned success before archiving, archive now.
+                        if (
+                            archived_path is None
+                            and patch_script is not None
+                            and patch_script.exists()
+                        ):
+                            archived_path = archive_patch(
+                                logger, patch_script, paths.successful_dir
+                            )
                     else:
-                        if cli.patch_script:
-                            raw = Path(cli.patch_script)
-                            if raw.is_absolute():
-                                ps = raw
-                            else:
-                                cand_repo = (repo_root / raw).resolve()
-                                cand_patchdir = (paths.patch_dir / raw).resolve()
-                                ps = cand_repo if cand_repo.exists() else cand_patchdir
+                        # Failure: archive the exact patch script selected for this run into
+                        # unsuccessful/.
+                        ps: Path | None = None
+                        if patch_script is not None:
+                            ps = patch_script
                         else:
-                            ps = (paths.patch_dir / f"issue_{issue_id}.py").resolve()
+                            if cli.patch_script:
+                                raw = Path(cli.patch_script)
+                                if raw.is_absolute():
+                                    ps = raw
+                                else:
+                                    cand_repo = (repo_root / raw).resolve()
+                                    cand_patchdir = (paths.patch_dir / raw).resolve()
+                                    ps = cand_repo if cand_repo.exists() else cand_patchdir
+                            else:
+                                ps = (paths.patch_dir / f"issue_{issue_id}.py").resolve()
 
-                    candidates: list[Path] = []
-                    if ps is not None:
-                        candidates.append(ps)
-                        candidates.append((paths.patch_dir / ps.name).resolve())
+                        candidates: list[Path] = []
+                        if ps is not None:
+                            candidates.append(ps)
+                            candidates.append((paths.patch_dir / ps.name).resolve())
 
-                    seen: set[str] = set()
-                    uniq: list[Path] = []
-                    for c in candidates:
-                        k = str(c)
-                        if k not in seen:
-                            seen.add(k)
-                            uniq.append(c)
+                        seen: set[str] = set()
+                        uniq: list[Path] = []
+                        for c in candidates:
+                            k = str(c)
+                            if k not in seen:
+                                seen.add(k)
+                                uniq.append(c)
 
-                    for c in uniq:
-                        if c.exists():
-                            archived_path = archive_patch(logger, c, paths.unsuccessful_dir)
-                            break
+                        for c in uniq:
+                            if c.exists():
+                                archived_path = archive_patch(
+                                    logger, c, paths.unsuccessful_dir
+                                )
+                                break
 
-                    if archived_path is None:
-                        logger.section("ARCHIVE PATCH")
-                        logger.line(f"no patch script found to archive; tried: {uniq}")
+                        if archived_path is None:
+                            logger.section("ARCHIVE PATCH")
+                            logger.line(
+                                f"no patch script found to archive; tried: {uniq}"
+                            )
 
                 # Post-success audit (if enabled by workflow). If audit fails, treat as failure and
                 # produce diagnostics archive instead of success archive.
@@ -967,7 +979,26 @@ def main(argv: list[str]) -> int:
                         logger.line(f"post_success_audit_failed={_audit_e!r}")
                 if exit_code == 0:
                     # Success: create git-archive snapshot of final repo state (no log inside).
-                    zip_path = paths.patch_dir / "patched_success.zip"
+                    # Success: create git-archive snapshot of final repo state.
+                    repo_name = repo_root.name
+                    branch_name = git_ops.current_branch(logger, repo_root).strip()
+                    if branch_name == "HEAD":
+                        branch_name = "detached"
+
+                    template = policy.success_archive_name
+                    try:
+                        rendered = template.format(repo=repo_name, branch=branch_name)
+                    except Exception as e:
+                        raise RunnerError(
+                            "POSTHOOK",
+                            "CONFIG",
+                            f"invalid success_archive_name template: {template!r} ({e!r})",
+                        ) from e
+
+                    name = Path(rendered).name
+                    if not name.lower().endswith(".zip"):
+                        name = f"{name}.zip"
+                    zip_path = paths.patch_dir / name
                     git_ops.git_archive(logger, repo_root, zip_path, treeish="HEAD")
                 else:
                     # Failure: create diagnostics archive with log + subset of repo files.

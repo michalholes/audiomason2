@@ -25,6 +25,11 @@ class Policy:
     patch_dir: str | None = None
     default_branch: str = "main"
 
+    # Success archive name template for git-archive success zip.
+    # Placeholders: {repo}, {branch}
+    # Final filename is sanitized to a basename and forced to end with ".zip".
+    success_archive_name: str = "{repo}-{branch}.zip"
+
     require_up_to_date: bool = True
     enforce_main_branch: bool = True
 
@@ -219,6 +224,8 @@ def build_policy(defaults: Policy, cfg: dict[str, Any]) -> Policy:
     _mark_cfg(p, cfg, "patch_dir")
     p.default_branch = str(cfg.get("default_branch", p.default_branch))
     _mark_cfg(p, cfg, "default_branch")
+    p.success_archive_name = str(cfg.get("success_archive_name", p.success_archive_name))
+    _mark_cfg(p, cfg, "success_archive_name")
 
     p.require_up_to_date = _as_bool(cfg, "require_up_to_date", p.require_up_to_date)
     _mark_cfg(p, cfg, "require_up_to_date")

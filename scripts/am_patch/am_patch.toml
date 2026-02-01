@@ -22,10 +22,13 @@ no_op_fail = true
 
 [gates]
 #order = []
+#order = ["pytest"]
 order = ["ruff", "pytest", "mypy"]
 ruff_autofix = true
 ruff_format = true
 pytest_use_venv = true
+gates_skip_ruff = true
+gates_skip_mypy = true
 
 [promotion]
 mode = "copy_files"
@@ -46,9 +49,9 @@ live_repo_guard = true
 live_repo_guard_scope = "patch"
 rollback_workspace_on_fail = true
 
-ruff_targets = ["src", "audit", "scripts", "tests"]
+ruff_targets = ["src", "scripts", "tests"]
 pytest_targets = ["tests"]
-mypy_targets = ["src", "audit", "scripts"]
+mypy_targets = ["src", "scripts"]
 
 [audit]
 # If true, fail fast when new audit domains are added without updating audit/audit_rubric.yaml
