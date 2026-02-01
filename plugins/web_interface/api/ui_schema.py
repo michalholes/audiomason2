@@ -1,11 +1,11 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from fastapi import FastAPI
 
 from ..util.paths import ui_overrides_path
-import json
 
 
 def _default_nav() -> list[dict[str, Any]]:
@@ -67,9 +67,7 @@ def _default_pages() -> dict[str, dict[str, Any]]:
             "title": "Plugins",
             "layout": {
                 "type": "grid",
-                "children": [
-                    {"type": "plugin_manager"}
-                ],
+                "children": [{"type": "plugin_manager"}],
             },
         },
         "stage": {

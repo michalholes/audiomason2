@@ -19,7 +19,6 @@ according to the specification (section 2.4):
 import sys
 import tempfile
 from pathlib import Path
-from unittest.mock import MagicMock, Mock, patch
 
 # Try to import pytest, but make it optional
 try:

@@ -7,12 +7,14 @@ workflows defined in YAML files.
 from __future__ import annotations
 
 import asyncio
-import yaml
-from pathlib import Path
-from typing import Any, Callable
+from collections.abc import Callable
 from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
 
-from audiomason.core import ProcessingContext, PluginLoader, State
+import yaml
+
+from audiomason.core import PluginLoader, ProcessingContext, State
 from audiomason.core.errors import AudioMasonError
 
 
@@ -112,7 +114,7 @@ class WizardEngine:
             raise WizardError(f"Wizard file not found: {path}")
 
         try:
-            with open(path, "r") as f:
+            with open(path) as f:
                 self._debug(f"Loading wizard from: {path}")
                 wizard_def = yaml.safe_load(f)
         except yaml.YAMLError as e:

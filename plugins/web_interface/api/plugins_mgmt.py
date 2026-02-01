@@ -5,12 +5,17 @@ import zipfile
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, UploadFile, File, HTTPException
+from fastapi import FastAPI, File, HTTPException, UploadFile
 
 from ..util.fs import find_repo_root
 from ..util.paths import plugins_root
-from ._am_cfg import read_am_config_text, write_am_config_text, get_disabled_plugins, set_disabled_plugins
 from ..util.yamlutil import safe_load_yaml
+from ._am_cfg import (
+    get_disabled_plugins,
+    read_am_config_text,
+    set_disabled_plugins,
+    write_am_config_text,
+)
 
 
 def _read_plugin_meta(path: Path) -> dict[str, Any]:
@@ -71,6 +76,7 @@ def mount_plugins_mgmt(app: FastAPI) -> None:
         if name == "web_interface":
             raise HTTPException(status_code=400, detail="refuse to delete web_interface")
         import shutil
+
         shutil.rmtree(target)
         return {"ok": True}
 
@@ -91,7 +97,7 @@ def mount_plugins_mgmt(app: FastAPI) -> None:
                 for n in names:
                     if not n.startswith("plugins/"):
                         continue
-                    rel = n[len("plugins/"):]
+                    rel = n[len("plugins/") :]
                     if not rel:
                         continue
                     out = root / rel

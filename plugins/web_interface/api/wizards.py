@@ -9,6 +9,8 @@ from pydantic import BaseModel
 
 from ..util.fs import find_repo_root
 from ..util.yamlutil import safe_load_yaml
+
+
 def _parse_wizard_model(yaml_text: str) -> dict[str, Any]:
     data = safe_load_yaml(yaml_text)
     if not isinstance(data, dict) or "wizard" not in data:
@@ -23,9 +25,9 @@ def _parse_wizard_model(yaml_text: str) -> dict[str, Any]:
     model_steps: list[dict[str, Any]] = []
     for i, s in enumerate(steps):
         if not isinstance(s, dict):
-            model_steps.append({"id": f"step_{i+1}", "type": "unknown", "raw": s})
+            model_steps.append({"id": f"step_{i + 1}", "type": "unknown", "raw": s})
             continue
-        sid = s.get("id") or f"step_{i+1}"
+        sid = s.get("id") or f"step_{i + 1}"
         stype = s.get("type") or "unknown"
         step = {"id": sid, "type": stype, **s}
         model_steps.append(step)
@@ -47,9 +49,9 @@ def _serialize_wizard_model(model: dict[str, Any]) -> str:
     norm_steps: list[dict[str, Any]] = []
     for i, s in enumerate(steps):
         if not isinstance(s, dict):
-            norm_steps.append({"id": f"step_{i+1}", "type": "unknown", "raw": s})
+            norm_steps.append({"id": f"step_{i + 1}", "type": "unknown", "raw": s})
             continue
-        sid = s.get("id") or f"step_{i+1}"
+        sid = s.get("id") or f"step_{i + 1}"
         stype = s.get("type") or "unknown"
         cleaned = {k: v for k, v in s.items() if k not in {"_ui"}}
         cleaned["id"] = sid
@@ -68,6 +70,7 @@ def _serialize_wizard_model(model: dict[str, Any]) -> str:
         return safe_dump_yaml(out)
 
     import yaml  # type: ignore
+
     return yaml.safe_dump(out, sort_keys=False, allow_unicode=True)
 
 
@@ -184,7 +187,6 @@ def mount_wizards(app: FastAPI) -> None:
             raise HTTPException(status_code=404, detail="not found")
         p.unlink()
         return {"ok": True}
-
 
     @app.post("/api/wizards/preview")
     def preview_wizard(body: dict[str, Any]) -> dict[str, Any]:

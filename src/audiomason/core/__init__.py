@@ -33,15 +33,15 @@ from audiomason.core.errors import (
     PluginValidationError,
 )
 from audiomason.core.events import EventBus, get_event_bus
-from audiomason.core.interfaces import IEnricher, IProcessor, IProvider, IStorage, IUI
+from audiomason.core.interfaces import IUI, IEnricher, IProcessor, IProvider, IStorage
 from audiomason.core.loader import PluginLoader, PluginManifest
 from audiomason.core.logging import (
     VerbosityLevel,
     get_logger,
-    set_verbosity,
     get_verbosity,
-    set_log_file,
     set_colors,
+    set_log_file,
+    set_verbosity,
 )
 from audiomason.core.pipeline import Pipeline, PipelineExecutor, PipelineStep
 
@@ -104,9 +104,9 @@ __all__ = [
 def main():
     """Main entry point for audiomason CLI."""
     import asyncio
+    import importlib.util
     import sys
     from pathlib import Path
-    import importlib.util
 
     # FIX BUG 6: Use proper method to find project root
     # Try multiple strategies to locate plugins directory
@@ -137,11 +137,11 @@ def main():
             plugins_dir = Path(env_plugins)
 
     if plugins_dir is None or not plugins_dir.exists():
-        print(f"Error: plugins directory not found")
-        print(f"Tried:")
+        print("Error: plugins directory not found")
+        print("Tried:")
         print(f"  - {dev_plugins}")
         print(f"  - {installed_plugins}")
-        print(f"Set AUDIOMASON_PLUGINS_DIR environment variable to specify location")
+        print("Set AUDIOMASON_PLUGINS_DIR environment variable to specify location")
         sys.exit(1)
 
     # FIX BUG 1: Use importlib instead of manipulating sys.path with generic "plugin" name

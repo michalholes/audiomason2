@@ -1,0 +1,1018 @@
+audit:
+  date: '2026-01-25'
+  auditor: ChatGPT
+  scope: RUNTIME_REQUIRED_ONLY
+  rubric_file: audit_rubric_all_in_one_v2.yaml (with injected acceptance_checks)
+  runtime_evidence_file: runtime_evidence_2026-01-25_200027.yaml
+  notes:
+  - This audit pass evaluates only runtime-required requirements using the provided runtime evidence file.
+  - Acceptance checks were derived from embedded norms + observed CLI behavior patterns for placeholder commands and --help
+    commands.
+summary:
+  counts:
+    PASS: 33
+    UNKNOWN: 56
+    DEBT: 9
+results:
+- requirement_id: LOG-01
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: &id001
+  - RQ-002
+  - RQ-001
+  - RQ-003
+  notes: All runtime acceptance checks passed.
+  evidence:
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason --help rc=0
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason run <INPUT> --pipeline <PIPE> rc=2
+- requirement_id: LOG-02
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id001
+  notes: All runtime acceptance checks passed.
+  evidence:
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason --help rc=0
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason run <INPUT> --pipeline <PIPE> rc=2
+- requirement_id: LOG-03
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements: *id001
+  notes: Non-runtime requirement not assessed in this runtime-based audit pass.
+  evidence: []
+- requirement_id: LOG-04
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id001
+  notes: All runtime acceptance checks passed.
+  evidence:
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason --help rc=0
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason run <INPUT> --pipeline <PIPE> rc=2
+- requirement_id: LOG-05
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id001
+  notes: All runtime acceptance checks passed.
+  evidence:
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason --help rc=0
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason run <INPUT> --pipeline <PIPE> rc=2
+- requirement_id: LOG-06
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements: *id001
+  notes: Non-runtime requirement not assessed in this runtime-based audit pass.
+  evidence: []
+- requirement_id: FS-01
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: &id002
+  - RQ-002
+  - RQ-001
+  - RQ-003
+  notes: All runtime acceptance checks passed.
+  evidence:
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason import <PATH> rc=2
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason run <INPUT> --pipeline <PIPE> rc=2
+- requirement_id: FS-02
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements: *id002
+  notes: Non-runtime requirement not assessed in this runtime-based audit pass.
+  evidence: []
+- requirement_id: FS-03
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id002
+  notes: All runtime acceptance checks passed.
+  evidence:
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason import <PATH> rc=2
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason run <INPUT> --pipeline <PIPE> rc=2
+- requirement_id: FS-04
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id002
+  notes: All runtime acceptance checks passed.
+  evidence:
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason import <PATH> rc=2
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason run <INPUT> --pipeline <PIPE> rc=2
+- requirement_id: FS-05
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements: *id002
+  notes: Non-runtime requirement not assessed in this runtime-based audit pass.
+  evidence: []
+- requirement_id: FS-06
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id002
+  notes: All runtime acceptance checks passed.
+  evidence:
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason import <PATH> rc=2
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason run <INPUT> --pipeline <PIPE> rc=2
+- requirement_id: PIPE-01
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: &id003
+  - RQ-002
+  - RQ-001
+  - RQ-003
+  notes: All runtime acceptance checks passed.
+  evidence:
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason run <INPUT> --pipeline <PIPE> rc=2
+- requirement_id: PIPE-02
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements: *id003
+  notes: Non-runtime requirement not assessed in this runtime-based audit pass.
+  evidence: []
+- requirement_id: PIPE-03
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id003
+  notes: All runtime acceptance checks passed.
+  evidence:
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason run <INPUT> --pipeline <PIPE> rc=2
+- requirement_id: PIPE-04
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id003
+  notes: All runtime acceptance checks passed.
+  evidence:
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason run <INPUT> --pipeline <PIPE> rc=2
+- requirement_id: PIPE-05
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements: *id003
+  notes: Non-runtime requirement not assessed in this runtime-based audit pass.
+  evidence: []
+- requirement_id: PIPE-06
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements: *id003
+  notes: Non-runtime requirement not assessed in this runtime-based audit pass.
+  evidence: []
+- requirement_id: CLI-01
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: &id004
+  - RQ-002
+  - RQ-001
+  - RQ-003
+  notes: All runtime acceptance checks passed.
+  evidence:
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason --help rc=0
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason config --help rc=0
+- requirement_id: CLI-02
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id004
+  notes: All runtime acceptance checks passed.
+  evidence:
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason --help rc=0
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason config --help rc=0
+- requirement_id: CLI-03
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements: *id004
+  notes: Non-runtime requirement not assessed in this runtime-based audit pass.
+  evidence: []
+- requirement_id: CLI-04
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id004
+  notes: All runtime acceptance checks passed.
+  evidence:
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason --help rc=0
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason config --help rc=0
+- requirement_id: CLI-05
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id004
+  notes: All runtime acceptance checks passed.
+  evidence:
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason --help rc=0
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason config --help rc=0
+- requirement_id: CLI-06
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements: *id004
+  notes: Non-runtime requirement not assessed in this runtime-based audit pass.
+  evidence: []
+- requirement_id: DAEMON-01
+  result: DEBT
+  reason: ''
+  confidence: high
+  mapped_requirements: &id005
+  - RQ-002
+  - RQ-001
+  - RQ-003
+  notes: Runtime evidence shows command surface is missing where rubric expects it.
+  evidence:
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason start --help rc=2
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: 'checks failed: returncode 2 != 0, stdout missing expected substrings, stderr contains forbidden substring'
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason stop --help rc=2
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: 'checks failed: returncode 2 != 0, stdout missing expected substrings, stderr contains forbidden substring'
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason status --help rc=2
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: 'checks failed: returncode 2 != 0, stdout missing expected substrings, stderr contains forbidden substring'
+- requirement_id: DAEMON-02
+  result: DEBT
+  reason: ''
+  confidence: high
+  mapped_requirements: *id005
+  notes: Runtime evidence shows command surface is missing where rubric expects it.
+  evidence:
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason start --help rc=2
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: 'checks failed: returncode 2 != 0, stdout missing expected substrings, stderr contains forbidden substring'
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason stop --help rc=2
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: 'checks failed: returncode 2 != 0, stdout missing expected substrings, stderr contains forbidden substring'
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason status --help rc=2
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: 'checks failed: returncode 2 != 0, stdout missing expected substrings, stderr contains forbidden substring'
+- requirement_id: DAEMON-03
+  result: DEBT
+  reason: ''
+  confidence: high
+  mapped_requirements: *id005
+  notes: Runtime evidence shows command surface is missing where rubric expects it.
+  evidence:
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason start --help rc=2
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: 'checks failed: returncode 2 != 0, stdout missing expected substrings, stderr contains forbidden substring'
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason stop --help rc=2
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: 'checks failed: returncode 2 != 0, stdout missing expected substrings, stderr contains forbidden substring'
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason status --help rc=2
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: 'checks failed: returncode 2 != 0, stdout missing expected substrings, stderr contains forbidden substring'
+- requirement_id: DAEMON-04
+  result: DEBT
+  reason: ''
+  confidence: high
+  mapped_requirements: *id005
+  notes: Runtime evidence shows command surface is missing where rubric expects it.
+  evidence:
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason start --help rc=2
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: 'checks failed: returncode 2 != 0, stdout missing expected substrings, stderr contains forbidden substring'
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason stop --help rc=2
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: 'checks failed: returncode 2 != 0, stdout missing expected substrings, stderr contains forbidden substring'
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason status --help rc=2
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: 'checks failed: returncode 2 != 0, stdout missing expected substrings, stderr contains forbidden substring'
+- requirement_id: DAEMON-05
+  result: DEBT
+  reason: ''
+  confidence: high
+  mapped_requirements: *id005
+  notes: Runtime evidence shows command surface is missing where rubric expects it.
+  evidence:
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason start --help rc=2
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: 'checks failed: returncode 2 != 0, stdout missing expected substrings, stderr contains forbidden substring'
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason stop --help rc=2
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: 'checks failed: returncode 2 != 0, stdout missing expected substrings, stderr contains forbidden substring'
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason status --help rc=2
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: 'checks failed: returncode 2 != 0, stdout missing expected substrings, stderr contains forbidden substring'
+- requirement_id: DAEMON-06
+  result: DEBT
+  reason: ''
+  confidence: high
+  mapped_requirements: *id005
+  notes: Runtime evidence shows command surface is missing where rubric expects it.
+  evidence:
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason start --help rc=2
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: 'checks failed: returncode 2 != 0, stdout missing expected substrings, stderr contains forbidden substring'
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason stop --help rc=2
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: 'checks failed: returncode 2 != 0, stdout missing expected substrings, stderr contains forbidden substring'
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason status --help rc=2
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: 'checks failed: returncode 2 != 0, stdout missing expected substrings, stderr contains forbidden substring'
+- requirement_id: IMPORT-01
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: &id006
+  - RQ-002
+  - RQ-001
+  - RQ-003
+  notes: All runtime acceptance checks passed.
+  evidence:
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason import --help rc=0
+- requirement_id: IMPORT-02
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id006
+  notes: All runtime acceptance checks passed.
+  evidence:
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason import --help rc=0
+- requirement_id: IMPORT-03
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id006
+  notes: All runtime acceptance checks passed.
+  evidence:
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason import --help rc=0
+- requirement_id: IMPORT-04
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id006
+  notes: All runtime acceptance checks passed.
+  evidence:
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason import --help rc=0
+- requirement_id: IMPORT-05
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id006
+  notes: All runtime acceptance checks passed.
+  evidence:
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason import --help rc=0
+- requirement_id: IMPORT-06
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id006
+  notes: All runtime acceptance checks passed.
+  evidence:
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason import --help rc=0
+- requirement_id: VERIFY-01
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: &id007
+  - RQ-002
+  - RQ-001
+  - RQ-003
+  notes: All runtime acceptance checks passed.
+  evidence:
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason verify --help rc=0
+- requirement_id: VERIFY-02
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id007
+  notes: All runtime acceptance checks passed.
+  evidence:
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason verify --help rc=0
+- requirement_id: VERIFY-03
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id007
+  notes: All runtime acceptance checks passed.
+  evidence:
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason verify --help rc=0
+- requirement_id: VERIFY-04
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id007
+  notes: All runtime acceptance checks passed.
+  evidence:
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason verify --help rc=0
+- requirement_id: VERIFY-05
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id007
+  notes: All runtime acceptance checks passed.
+  evidence:
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason verify --help rc=0
+- requirement_id: VERIFY-06
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id007
+  notes: All runtime acceptance checks passed.
+  evidence:
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason verify --help rc=0
+- requirement_id: PREFLIGHT-01
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: &id008
+  - RQ-002
+  - RQ-001
+  - RQ-003
+  notes: All runtime acceptance checks passed.
+  evidence:
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason preflight --help rc=0
+- requirement_id: PREFLIGHT-02
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id008
+  notes: All runtime acceptance checks passed.
+  evidence:
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason preflight --help rc=0
+- requirement_id: PREFLIGHT-03
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id008
+  notes: All runtime acceptance checks passed.
+  evidence:
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason preflight --help rc=0
+- requirement_id: PREFLIGHT-04
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id008
+  notes: All runtime acceptance checks passed.
+  evidence:
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason preflight --help rc=0
+- requirement_id: PREFLIGHT-05
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id008
+  notes: All runtime acceptance checks passed.
+  evidence:
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason preflight --help rc=0
+- requirement_id: PREFLIGHT-06
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id008
+  notes: All runtime acceptance checks passed.
+  evidence:
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason preflight --help rc=0
+- requirement_id: REPORT-01
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements: &id009
+  - RQ-002
+  - RQ-001
+  - RQ-003
+  notes: Non-runtime requirement not assessed in this runtime-based audit pass.
+  evidence: []
+- requirement_id: REPORT-02
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements: *id009
+  notes: Non-runtime requirement not assessed in this runtime-based audit pass.
+  evidence: []
+- requirement_id: REPORT-03
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements: *id009
+  notes: Non-runtime requirement not assessed in this runtime-based audit pass.
+  evidence: []
+- requirement_id: REPORT-04
+  result: DEBT
+  reason: ''
+  confidence: high
+  mapped_requirements: *id009
+  notes: Runtime evidence shows command surface is missing where rubric expects it.
+  evidence:
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason report --help rc=2
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: 'checks failed: returncode 2 != 0, stdout missing expected substrings, stderr contains forbidden substring'
+- requirement_id: REPORT-05
+  result: DEBT
+  reason: ''
+  confidence: high
+  mapped_requirements: *id009
+  notes: Runtime evidence shows command surface is missing where rubric expects it.
+  evidence:
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason report --help rc=2
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: 'checks failed: returncode 2 != 0, stdout missing expected substrings, stderr contains forbidden substring'
+- requirement_id: REPORT-06
+  result: DEBT
+  reason: ''
+  confidence: high
+  mapped_requirements: *id009
+  notes: Runtime evidence shows command surface is missing where rubric expects it.
+  evidence:
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: python -m audiomason report --help rc=2
+  - path: runtime_evidence_2026-01-25_200027.yaml
+    line: null
+    note: 'checks failed: returncode 2 != 0, stdout missing expected substrings, stderr contains forbidden substring'
+- requirement_id: METADATA-01
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements: &id010
+  - RQ-002
+  - RQ-001
+  - RQ-003
+  notes: Non-runtime requirement not assessed in this runtime-based audit pass.
+  evidence: []
+- requirement_id: METADATA-02
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements: *id010
+  notes: Non-runtime requirement not assessed in this runtime-based audit pass.
+  evidence: []
+- requirement_id: METADATA-03
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements: *id010
+  notes: Non-runtime requirement not assessed in this runtime-based audit pass.
+  evidence: []
+- requirement_id: METADATA-04
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements: *id010
+  notes: Non-runtime requirement not assessed in this runtime-based audit pass.
+  evidence: []
+- requirement_id: METADATA-05
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements: *id010
+  notes: Non-runtime requirement not assessed in this runtime-based audit pass.
+  evidence: []
+- requirement_id: METADATA-06
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements: *id010
+  notes: Non-runtime requirement not assessed in this runtime-based audit pass.
+  evidence: []
+- requirement_id: TAGS-01
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements: &id011
+  - RQ-002
+  - RQ-001
+  - RQ-003
+  notes: Non-runtime requirement not assessed in this runtime-based audit pass.
+  evidence: []
+- requirement_id: TAGS-02
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements: *id011
+  notes: Non-runtime requirement not assessed in this runtime-based audit pass.
+  evidence: []
+- requirement_id: TAGS-03
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements: *id011
+  notes: Non-runtime requirement not assessed in this runtime-based audit pass.
+  evidence: []
+- requirement_id: TAGS-04
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements: *id011
+  notes: Non-runtime requirement not assessed in this runtime-based audit pass.
+  evidence: []
+- requirement_id: TAGS-05
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements: *id011
+  notes: Non-runtime requirement not assessed in this runtime-based audit pass.
+  evidence: []
+- requirement_id: TAGS-06
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements: *id011
+  notes: Non-runtime requirement not assessed in this runtime-based audit pass.
+  evidence: []
+- requirement_id: AUDIO-01
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements: &id012
+  - RQ-002
+  - RQ-001
+  - RQ-003
+  notes: Non-runtime requirement not assessed in this runtime-based audit pass.
+  evidence: []
+- requirement_id: AUDIO-02
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements: *id012
+  notes: Non-runtime requirement not assessed in this runtime-based audit pass.
+  evidence: []
+- requirement_id: AUDIO-03
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements: *id012
+  notes: Non-runtime requirement not assessed in this runtime-based audit pass.
+  evidence: []
+- requirement_id: AUDIO-04
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements: *id012
+  notes: Non-runtime requirement not assessed in this runtime-based audit pass.
+  evidence: []
+- requirement_id: AUDIO-05
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements: *id012
+  notes: Non-runtime requirement not assessed in this runtime-based audit pass.
+  evidence: []
+- requirement_id: AUDIO-06
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements: *id012
+  notes: Non-runtime requirement not assessed in this runtime-based audit pass.
+  evidence: []
+- requirement_id: COVERS-01
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements: &id013
+  - RQ-002
+  - RQ-001
+  - RQ-003
+  notes: Non-runtime requirement not assessed in this runtime-based audit pass.
+  evidence: []
+- requirement_id: COVERS-02
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements: *id013
+  notes: Non-runtime requirement not assessed in this runtime-based audit pass.
+  evidence: []
+- requirement_id: COVERS-03
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements: *id013
+  notes: Non-runtime requirement not assessed in this runtime-based audit pass.
+  evidence: []
+- requirement_id: COVERS-04
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements: *id013
+  notes: Non-runtime requirement not assessed in this runtime-based audit pass.
+  evidence: []
+- requirement_id: COVERS-05
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements: *id013
+  notes: Non-runtime requirement not assessed in this runtime-based audit pass.
+  evidence: []
+- requirement_id: COVERS-06
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements: *id013
+  notes: Non-runtime requirement not assessed in this runtime-based audit pass.
+  evidence: []
+- requirement_id: PLUGINS-01
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements: &id014
+  - RQ-002
+  - RQ-001
+  - RQ-003
+  notes: Non-runtime requirement not assessed in this runtime-based audit pass.
+  evidence: []
+- requirement_id: PLUGINS-02
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements: *id014
+  notes: Non-runtime requirement not assessed in this runtime-based audit pass.
+  evidence: []
+- requirement_id: PLUGINS-03
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements: *id014
+  notes: Non-runtime requirement not assessed in this runtime-based audit pass.
+  evidence: []
+- requirement_id: PLUGINS-04
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements: *id014
+  notes: Non-runtime requirement not assessed in this runtime-based audit pass.
+  evidence: []
+- requirement_id: PLUGINS-05
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements: *id014
+  notes: Non-runtime requirement not assessed in this runtime-based audit pass.
+  evidence: []
+- requirement_id: PLUGINS-06
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements: *id014
+  notes: Non-runtime requirement not assessed in this runtime-based audit pass.
+  evidence: []
+- requirement_id: UTILS-01
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements: &id015
+  - RQ-002
+  - RQ-001
+  - RQ-003
+  notes: Non-runtime requirement not assessed in this runtime-based audit pass.
+  evidence: []
+- requirement_id: UTILS-02
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements: *id015
+  notes: Non-runtime requirement not assessed in this runtime-based audit pass.
+  evidence: []
+- requirement_id: UTILS-03
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements: *id015
+  notes: Non-runtime requirement not assessed in this runtime-based audit pass.
+  evidence: []
+- requirement_id: UTILS-04
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements: *id015
+  notes: Non-runtime requirement not assessed in this runtime-based audit pass.
+  evidence: []
+- requirement_id: UTILS-05
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements: *id015
+  notes: Non-runtime requirement not assessed in this runtime-based audit pass.
+  evidence: []
+- requirement_id: UTILS-06
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements: *id015
+  notes: Non-runtime requirement not assessed in this runtime-based audit pass.
+  evidence: []
+- requirement_id: CFG-01
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements:
+  - RQ-003
+  notes: CFG evaluated in static audit; not re-evaluated in runtime-only pass.
+  evidence: []
+- requirement_id: CFG-02
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements:
+  - RQ-003
+  notes: CFG evaluated in static audit; not re-evaluated in runtime-only pass.
+  evidence: []
+- requirement_id: CFG-03
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements:
+  - RQ-003
+  notes: CFG evaluated in static audit; not re-evaluated in runtime-only pass.
+  evidence: []
+- requirement_id: CFG-04
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements:
+  - RQ-003
+  notes: CFG evaluated in static audit; not re-evaluated in runtime-only pass.
+  evidence: []
+- requirement_id: CFG-05
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements:
+  - RQ-003
+  notes: CFG evaluated in static audit; not re-evaluated in runtime-only pass.
+  evidence: []
+- requirement_id: CFG-06
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements:
+  - RQ-002
+  notes: CFG evaluated in static audit; not re-evaluated in runtime-only pass.
+  evidence: []
+- requirement_id: CFG-07
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements:
+  - RQ-003
+  - RQ-002
+  notes: CFG evaluated in static audit; not re-evaluated in runtime-only pass.
+  evidence: []
+- requirement_id: CFG-08
+  result: UNKNOWN
+  reason: NO_EVIDENCE
+  confidence: low
+  mapped_requirements:
+  - RQ-003
+  - RQ-002
+  notes: CFG evaluated in static audit; not re-evaluated in runtime-only pass.
+  evidence: []

@@ -21,11 +21,9 @@ Usage:
 
 from __future__ import annotations
 
-import logging
 import sys
 from enum import IntEnum
 from pathlib import Path
-from typing import Optional
 
 
 class VerbosityLevel(IntEnum):
@@ -41,7 +39,7 @@ class VerbosityLevel(IntEnum):
 _VERBOSITY: VerbosityLevel = VerbosityLevel.NORMAL
 
 # Log file path (optional)
-_LOG_FILE: Optional[Path] = None
+_LOG_FILE: Path | None = None
 
 # Color support
 _USE_COLORS: bool = True
@@ -125,7 +123,7 @@ class AudioMasonLogger:
         Returns:
             True if should log
         """
-        return _VERBOSITY >= level
+        return level <= _VERBOSITY
 
     def _format_message(self, level: str, message: str) -> str:
         """Format log message.

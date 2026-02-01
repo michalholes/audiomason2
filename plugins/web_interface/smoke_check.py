@@ -6,8 +6,8 @@ import json
 import time
 import urllib.error
 import urllib.request
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
 
 
 def _repo_root() -> Path:
@@ -68,9 +68,15 @@ def run_smoke(base_url: str, timeout_s: float, paths: Iterable[str]) -> dict:
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="Smoke-check web_interface pages and API endpoints.")
-    ap.add_argument("--base-url", default="http://127.0.0.1:8081", help="Base URL, e.g. http://127.0.0.1:8081")
+    ap.add_argument(
+        "--base-url", default="http://127.0.0.1:8081", help="Base URL, e.g. http://127.0.0.1:8081"
+    )
     ap.add_argument("--timeout", type=float, default=3.0, help="Per-request timeout seconds")
-    ap.add_argument("--out", default="", help="Output file path (default: patches/web_interface_smoke_report.json)")
+    ap.add_argument(
+        "--out",
+        default="",
+        help="Output file path (default: patches/web_interface_smoke_report.json)",
+    )
     args = ap.parse_args()
 
     # UI pages (SPA paths) + API endpoints used by the UI

@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import re
-from typing import Any
 
 from ..util.paths import am_config_path
-from ..util.yamlutil import safe_load_yaml, safe_dump_yaml
+from ..util.yamlutil import safe_dump_yaml, safe_load_yaml
 
 
 def read_am_config_text() -> str:

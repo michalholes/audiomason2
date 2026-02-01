@@ -162,9 +162,7 @@ def _ascii_check_bytes(data: bytes, *, label: str) -> None:
 def _parse_unified_header_paths(patch_text: str) -> list[str]:
     out: list[str] = []
     for line in patch_text.splitlines():
-        if line.startswith("--- "):
-            out.append(line[4:].strip().split("\t", 1)[0].strip())
-        elif line.startswith("+++ "):
+        if line.startswith("--- ") or line.startswith("+++ "):
             out.append(line[4:].strip().split("\t", 1)[0].strip())
     return out
 

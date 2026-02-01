@@ -1,0 +1,1056 @@
+audit:
+  date: '2026-01-26'
+  auditor: ChatGPT
+  scope: ALL
+  inputs:
+    rubric: audit/audit_rubric.yaml
+    runtime_evidence: audit/results/runtime_evidence_2026-01-25_235240.yaml
+    pytest_junit: audit/results/pytest_junit.xml
+    repo_snapshot: audiomason2-main (1).zip
+  notes:
+  - This run treats pytest JUnit results as domain evidence per rubric evidence_generators.pytest_junit.
+  - Runtime acceptance checks were evaluated only when machine-checkable (dict-form).
+summary:
+  counts:
+    PASS: 89
+    PARTIAL: 8
+    DEBT: 1
+results:
+- requirement_id: CFG-01
+  result: PASS
+  reason: ''
+  confidence: high
+  mapped_requirements:
+  - RQ-003
+  notes: Defaults exist and are used as base.
+  evidence:
+  - path: src/audiomason/core/config.py
+    line: 66
+    note: defaults()
+- requirement_id: CFG-02
+  result: PASS
+  reason: ''
+  confidence: high
+  mapped_requirements:
+  - RQ-003
+  notes: Multiple config sources supported (system/user/ENV/CLI).
+  evidence:
+  - path: src/audiomason/core/config.py
+    line: 13
+    note: system/user paths
+  - path: src/audiomason/core/config.py
+    line: 148
+    note: ENV overrides
+- requirement_id: CFG-03
+  result: PASS
+  reason: ''
+  confidence: high
+  mapped_requirements:
+  - RQ-003
+  notes: Precedence implemented (system->user->env->cli).
+  evidence:
+  - path: src/audiomason/core/config.py
+    line: 238
+    note: precedence logic
+- requirement_id: CFG-04
+  result: PARTIAL
+  reason: PARTIAL_IMPL
+  confidence: medium
+  mapped_requirements:
+  - RQ-003
+  notes: Validation/coercion exists but strict schema/unknown-key handling incomplete.
+  evidence:
+  - path: src/audiomason/core/config.py
+    line: 90
+    note: mapping check
+  - path: src/audiomason/core/config.py
+    line: 122
+    note: coercion
+- requirement_id: CFG-05
+  result: DEBT
+  reason: ''
+  confidence: high
+  mapped_requirements:
+  - RQ-003
+  notes: 'Unknown-key policy not enforced: unknown YAML/ENV keys are ignored rather than erroring.'
+  evidence:
+  - path: src/audiomason/core/config.py
+    line: 136
+    note: skips keys not present in base
+- requirement_id: CFG-06
+  result: PASS
+  reason: ''
+  confidence: high
+  mapped_requirements:
+  - RQ-002
+  notes: Derived paths computed deterministically when root overridden.
+  evidence:
+  - path: src/audiomason/core/config.py
+    line: 203
+    note: derive paths
+- requirement_id: CFG-07
+  result: PARTIAL
+  reason: PARTIAL_IMPL
+  confidence: medium
+  mapped_requirements:
+  - RQ-003
+  - RQ-002
+  notes: ENV supports aliases/prefix but allowlist enforcement missing.
+  evidence:
+  - path: src/audiomason/core/config.py
+    line: 11
+    note: prefix
+- requirement_id: CFG-08
+  result: PASS
+  reason: ''
+  confidence: high
+  mapped_requirements:
+  - RQ-003
+  - RQ-002
+  notes: Config sources attribution exists; CLI surfaces sources.
+  evidence:
+  - path: src/audiomason/core/config.py
+    line: 85
+    note: sources tracked
+  - path: src/audiomason/cli/main.py
+    line: 190
+    note: CLI flag
+- requirement_id: LOG-01
+  result: PASS
+  reason: ''
+  confidence: high
+  mapped_requirements: &id001
+  - RQ-002
+  - RQ-001
+  - RQ-003
+  notes: Runtime acceptance checks passed.
+  evidence:
+  - path: audit/results/runtime_evidence_2026-01-25_235240.yaml
+    line: null
+    note: python -m audiomason --help rc=0
+- requirement_id: LOG-02
+  result: PASS
+  reason: ''
+  confidence: high
+  mapped_requirements: *id001
+  notes: Runtime acceptance checks passed.
+  evidence:
+  - path: audit/results/runtime_evidence_2026-01-25_235240.yaml
+    line: null
+    note: python -m audiomason --help rc=0
+- requirement_id: LOG-03
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id001
+  notes: Pytest evidence mapped to domain (6 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 6 matched tests; no failures
+- requirement_id: LOG-04
+  result: PASS
+  reason: ''
+  confidence: high
+  mapped_requirements: *id001
+  notes: Runtime acceptance checks passed.
+  evidence:
+  - path: audit/results/runtime_evidence_2026-01-25_235240.yaml
+    line: null
+    note: python -m audiomason --help rc=0
+- requirement_id: LOG-05
+  result: PASS
+  reason: ''
+  confidence: high
+  mapped_requirements: *id001
+  notes: Runtime acceptance checks passed.
+  evidence:
+  - path: audit/results/runtime_evidence_2026-01-25_235240.yaml
+    line: null
+    note: python -m audiomason --help rc=0
+- requirement_id: LOG-06
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id001
+  notes: Pytest evidence mapped to domain (6 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 6 matched tests; no failures
+- requirement_id: FS-01
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: &id002
+  - RQ-002
+  - RQ-001
+  - RQ-003
+  notes: Pytest evidence mapped to domain (25 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 25 matched tests; no failures
+- requirement_id: FS-02
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id002
+  notes: Pytest evidence mapped to domain (25 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 25 matched tests; no failures
+- requirement_id: FS-03
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id002
+  notes: Pytest evidence mapped to domain (25 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 25 matched tests; no failures
+- requirement_id: FS-04
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id002
+  notes: Pytest evidence mapped to domain (25 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 25 matched tests; no failures
+- requirement_id: FS-05
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id002
+  notes: Pytest evidence mapped to domain (25 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 25 matched tests; no failures
+- requirement_id: FS-06
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id002
+  notes: Pytest evidence mapped to domain (25 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 25 matched tests; no failures
+- requirement_id: PIPE-01
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: &id003
+  - RQ-002
+  - RQ-001
+  - RQ-003
+  notes: Pytest evidence mapped to domain (22 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 22 matched tests; no failures
+- requirement_id: PIPE-02
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id003
+  notes: Pytest evidence mapped to domain (22 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 22 matched tests; no failures
+- requirement_id: PIPE-03
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id003
+  notes: Pytest evidence mapped to domain (22 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 22 matched tests; no failures
+- requirement_id: PIPE-04
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id003
+  notes: Pytest evidence mapped to domain (22 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 22 matched tests; no failures
+- requirement_id: PIPE-05
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id003
+  notes: Pytest evidence mapped to domain (22 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 22 matched tests; no failures
+- requirement_id: PIPE-06
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id003
+  notes: Pytest evidence mapped to domain (22 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 22 matched tests; no failures
+- requirement_id: CLI-01
+  result: PASS
+  reason: ''
+  confidence: high
+  mapped_requirements: &id004
+  - RQ-002
+  - RQ-001
+  - RQ-003
+  notes: Runtime acceptance checks passed.
+  evidence:
+  - path: audit/results/runtime_evidence_2026-01-25_235240.yaml
+    line: null
+    note: python -m audiomason --help rc=0
+  - path: audit/results/runtime_evidence_2026-01-25_235240.yaml
+    line: null
+    note: python -m audiomason config --help rc=0
+- requirement_id: CLI-02
+  result: PASS
+  reason: ''
+  confidence: high
+  mapped_requirements: *id004
+  notes: Runtime acceptance checks passed.
+  evidence:
+  - path: audit/results/runtime_evidence_2026-01-25_235240.yaml
+    line: null
+    note: python -m audiomason --help rc=0
+  - path: audit/results/runtime_evidence_2026-01-25_235240.yaml
+    line: null
+    note: python -m audiomason config --help rc=0
+- requirement_id: CLI-03
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id004
+  notes: Pytest evidence mapped to domain (19 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 19 matched tests; no failures
+- requirement_id: CLI-04
+  result: PASS
+  reason: ''
+  confidence: high
+  mapped_requirements: *id004
+  notes: Runtime acceptance checks passed.
+  evidence:
+  - path: audit/results/runtime_evidence_2026-01-25_235240.yaml
+    line: null
+    note: python -m audiomason --help rc=0
+  - path: audit/results/runtime_evidence_2026-01-25_235240.yaml
+    line: null
+    note: python -m audiomason config --help rc=0
+- requirement_id: CLI-05
+  result: PASS
+  reason: ''
+  confidence: high
+  mapped_requirements: *id004
+  notes: Runtime acceptance checks passed.
+  evidence:
+  - path: audit/results/runtime_evidence_2026-01-25_235240.yaml
+    line: null
+    note: python -m audiomason --help rc=0
+  - path: audit/results/runtime_evidence_2026-01-25_235240.yaml
+    line: null
+    note: python -m audiomason config --help rc=0
+- requirement_id: CLI-06
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id004
+  notes: Pytest evidence mapped to domain (19 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 19 matched tests; no failures
+- requirement_id: DAEMON-01
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: &id005
+  - RQ-002
+  - RQ-001
+  - RQ-003
+  notes: Pytest evidence mapped to domain (2 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 2 matched tests; no failures
+- requirement_id: DAEMON-02
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id005
+  notes: Pytest evidence mapped to domain (2 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 2 matched tests; no failures
+- requirement_id: DAEMON-03
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id005
+  notes: Pytest evidence mapped to domain (2 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 2 matched tests; no failures
+- requirement_id: DAEMON-04
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id005
+  notes: Pytest evidence mapped to domain (2 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 2 matched tests; no failures
+- requirement_id: DAEMON-05
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id005
+  notes: Pytest evidence mapped to domain (2 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 2 matched tests; no failures
+- requirement_id: DAEMON-06
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id005
+  notes: Pytest evidence mapped to domain (2 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 2 matched tests; no failures
+- requirement_id: IMPORT-01
+  result: PASS
+  reason: ''
+  confidence: high
+  mapped_requirements: &id006
+  - RQ-002
+  - RQ-001
+  - RQ-003
+  notes: Runtime acceptance checks passed.
+  evidence:
+  - path: audit/results/runtime_evidence_2026-01-25_235240.yaml
+    line: null
+    note: python -m audiomason import --help rc=0
+- requirement_id: IMPORT-02
+  result: PASS
+  reason: ''
+  confidence: high
+  mapped_requirements: *id006
+  notes: Runtime acceptance checks passed.
+  evidence:
+  - path: audit/results/runtime_evidence_2026-01-25_235240.yaml
+    line: null
+    note: python -m audiomason import --help rc=0
+- requirement_id: IMPORT-03
+  result: PASS
+  reason: ''
+  confidence: high
+  mapped_requirements: *id006
+  notes: Runtime acceptance checks passed.
+  evidence:
+  - path: audit/results/runtime_evidence_2026-01-25_235240.yaml
+    line: null
+    note: python -m audiomason import --help rc=0
+- requirement_id: IMPORT-04
+  result: PASS
+  reason: ''
+  confidence: high
+  mapped_requirements: *id006
+  notes: Runtime acceptance checks passed.
+  evidence:
+  - path: audit/results/runtime_evidence_2026-01-25_235240.yaml
+    line: null
+    note: python -m audiomason import --help rc=0
+- requirement_id: IMPORT-05
+  result: PASS
+  reason: ''
+  confidence: high
+  mapped_requirements: *id006
+  notes: Runtime acceptance checks passed.
+  evidence:
+  - path: audit/results/runtime_evidence_2026-01-25_235240.yaml
+    line: null
+    note: python -m audiomason import --help rc=0
+- requirement_id: IMPORT-06
+  result: PASS
+  reason: ''
+  confidence: high
+  mapped_requirements: *id006
+  notes: Runtime acceptance checks passed.
+  evidence:
+  - path: audit/results/runtime_evidence_2026-01-25_235240.yaml
+    line: null
+    note: python -m audiomason import --help rc=0
+- requirement_id: VERIFY-01
+  result: PASS
+  reason: ''
+  confidence: high
+  mapped_requirements: &id007
+  - RQ-002
+  - RQ-001
+  - RQ-003
+  notes: Runtime acceptance checks passed.
+  evidence:
+  - path: audit/results/runtime_evidence_2026-01-25_235240.yaml
+    line: null
+    note: python -m audiomason verify --help rc=0
+- requirement_id: VERIFY-02
+  result: PASS
+  reason: ''
+  confidence: high
+  mapped_requirements: *id007
+  notes: Runtime acceptance checks passed.
+  evidence:
+  - path: audit/results/runtime_evidence_2026-01-25_235240.yaml
+    line: null
+    note: python -m audiomason verify --help rc=0
+- requirement_id: VERIFY-03
+  result: PASS
+  reason: ''
+  confidence: high
+  mapped_requirements: *id007
+  notes: Runtime acceptance checks passed.
+  evidence:
+  - path: audit/results/runtime_evidence_2026-01-25_235240.yaml
+    line: null
+    note: python -m audiomason verify --help rc=0
+- requirement_id: VERIFY-04
+  result: PASS
+  reason: ''
+  confidence: high
+  mapped_requirements: *id007
+  notes: Runtime acceptance checks passed.
+  evidence:
+  - path: audit/results/runtime_evidence_2026-01-25_235240.yaml
+    line: null
+    note: python -m audiomason verify --help rc=0
+- requirement_id: VERIFY-05
+  result: PASS
+  reason: ''
+  confidence: high
+  mapped_requirements: *id007
+  notes: Runtime acceptance checks passed.
+  evidence:
+  - path: audit/results/runtime_evidence_2026-01-25_235240.yaml
+    line: null
+    note: python -m audiomason verify --help rc=0
+- requirement_id: VERIFY-06
+  result: PASS
+  reason: ''
+  confidence: high
+  mapped_requirements: *id007
+  notes: Runtime acceptance checks passed.
+  evidence:
+  - path: audit/results/runtime_evidence_2026-01-25_235240.yaml
+    line: null
+    note: python -m audiomason verify --help rc=0
+- requirement_id: PREFLIGHT-01
+  result: PASS
+  reason: ''
+  confidence: high
+  mapped_requirements: &id008
+  - RQ-002
+  - RQ-001
+  - RQ-003
+  notes: Runtime acceptance checks passed.
+  evidence:
+  - path: audit/results/runtime_evidence_2026-01-25_235240.yaml
+    line: null
+    note: python -m audiomason preflight --help rc=0
+- requirement_id: PREFLIGHT-02
+  result: PASS
+  reason: ''
+  confidence: high
+  mapped_requirements: *id008
+  notes: Runtime acceptance checks passed.
+  evidence:
+  - path: audit/results/runtime_evidence_2026-01-25_235240.yaml
+    line: null
+    note: python -m audiomason preflight --help rc=0
+- requirement_id: PREFLIGHT-03
+  result: PASS
+  reason: ''
+  confidence: high
+  mapped_requirements: *id008
+  notes: Runtime acceptance checks passed.
+  evidence:
+  - path: audit/results/runtime_evidence_2026-01-25_235240.yaml
+    line: null
+    note: python -m audiomason preflight --help rc=0
+- requirement_id: PREFLIGHT-04
+  result: PASS
+  reason: ''
+  confidence: high
+  mapped_requirements: *id008
+  notes: Runtime acceptance checks passed.
+  evidence:
+  - path: audit/results/runtime_evidence_2026-01-25_235240.yaml
+    line: null
+    note: python -m audiomason preflight --help rc=0
+- requirement_id: PREFLIGHT-05
+  result: PASS
+  reason: ''
+  confidence: high
+  mapped_requirements: *id008
+  notes: Runtime acceptance checks passed.
+  evidence:
+  - path: audit/results/runtime_evidence_2026-01-25_235240.yaml
+    line: null
+    note: python -m audiomason preflight --help rc=0
+- requirement_id: PREFLIGHT-06
+  result: PASS
+  reason: ''
+  confidence: high
+  mapped_requirements: *id008
+  notes: Runtime acceptance checks passed.
+  evidence:
+  - path: audit/results/runtime_evidence_2026-01-25_235240.yaml
+    line: null
+    note: python -m audiomason preflight --help rc=0
+- requirement_id: REPORT-01
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: &id009
+  - RQ-002
+  - RQ-001
+  - RQ-003
+  notes: Pytest evidence mapped to domain (8 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 8 matched tests; no failures
+- requirement_id: REPORT-02
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id009
+  notes: Pytest evidence mapped to domain (8 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 8 matched tests; no failures
+- requirement_id: REPORT-03
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id009
+  notes: Pytest evidence mapped to domain (8 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 8 matched tests; no failures
+- requirement_id: REPORT-04
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id009
+  notes: Pytest evidence mapped to domain (8 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 8 matched tests; no failures
+- requirement_id: REPORT-05
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id009
+  notes: Pytest evidence mapped to domain (8 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 8 matched tests; no failures
+- requirement_id: REPORT-06
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id009
+  notes: Pytest evidence mapped to domain (8 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 8 matched tests; no failures
+- requirement_id: METADATA-01
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: &id010
+  - RQ-002
+  - RQ-001
+  - RQ-003
+  notes: Pytest evidence mapped to domain (13 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 13 matched tests; no failures
+- requirement_id: METADATA-02
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id010
+  notes: Pytest evidence mapped to domain (13 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 13 matched tests; no failures
+- requirement_id: METADATA-03
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id010
+  notes: Pytest evidence mapped to domain (13 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 13 matched tests; no failures
+- requirement_id: METADATA-04
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id010
+  notes: Pytest evidence mapped to domain (13 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 13 matched tests; no failures
+- requirement_id: METADATA-05
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id010
+  notes: Pytest evidence mapped to domain (13 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 13 matched tests; no failures
+- requirement_id: METADATA-06
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id010
+  notes: Pytest evidence mapped to domain (13 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 13 matched tests; no failures
+- requirement_id: TAGS-01
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: &id011
+  - RQ-002
+  - RQ-001
+  - RQ-003
+  notes: Pytest evidence mapped to domain (8 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 8 matched tests; no failures
+- requirement_id: TAGS-02
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id011
+  notes: Pytest evidence mapped to domain (8 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 8 matched tests; no failures
+- requirement_id: TAGS-03
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id011
+  notes: Pytest evidence mapped to domain (8 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 8 matched tests; no failures
+- requirement_id: TAGS-04
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id011
+  notes: Pytest evidence mapped to domain (8 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 8 matched tests; no failures
+- requirement_id: TAGS-05
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id011
+  notes: Pytest evidence mapped to domain (8 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 8 matched tests; no failures
+- requirement_id: TAGS-06
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id011
+  notes: Pytest evidence mapped to domain (8 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 8 matched tests; no failures
+- requirement_id: AUDIO-01
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: &id012
+  - RQ-002
+  - RQ-001
+  - RQ-003
+  notes: Pytest evidence mapped to domain (2 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 2 matched tests; no failures
+- requirement_id: AUDIO-02
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id012
+  notes: Pytest evidence mapped to domain (2 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 2 matched tests; no failures
+- requirement_id: AUDIO-03
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id012
+  notes: Pytest evidence mapped to domain (2 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 2 matched tests; no failures
+- requirement_id: AUDIO-04
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id012
+  notes: Pytest evidence mapped to domain (2 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 2 matched tests; no failures
+- requirement_id: AUDIO-05
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id012
+  notes: Pytest evidence mapped to domain (2 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 2 matched tests; no failures
+- requirement_id: AUDIO-06
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id012
+  notes: Pytest evidence mapped to domain (2 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 2 matched tests; no failures
+- requirement_id: COVERS-01
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: &id013
+  - RQ-002
+  - RQ-001
+  - RQ-003
+  notes: Pytest evidence mapped to domain (13 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 13 matched tests; no failures
+- requirement_id: COVERS-02
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id013
+  notes: Pytest evidence mapped to domain (13 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 13 matched tests; no failures
+- requirement_id: COVERS-03
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id013
+  notes: Pytest evidence mapped to domain (13 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 13 matched tests; no failures
+- requirement_id: COVERS-04
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id013
+  notes: Pytest evidence mapped to domain (13 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 13 matched tests; no failures
+- requirement_id: COVERS-05
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id013
+  notes: Pytest evidence mapped to domain (13 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 13 matched tests; no failures
+- requirement_id: COVERS-06
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id013
+  notes: Pytest evidence mapped to domain (13 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 13 matched tests; no failures
+- requirement_id: PLUGINS-01
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: &id014
+  - RQ-002
+  - RQ-001
+  - RQ-003
+  notes: Pytest evidence mapped to domain (1 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 1 matched tests; no failures
+- requirement_id: PLUGINS-02
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id014
+  notes: Pytest evidence mapped to domain (1 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 1 matched tests; no failures
+- requirement_id: PLUGINS-03
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id014
+  notes: Pytest evidence mapped to domain (1 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 1 matched tests; no failures
+- requirement_id: PLUGINS-04
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id014
+  notes: Pytest evidence mapped to domain (1 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 1 matched tests; no failures
+- requirement_id: PLUGINS-05
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id014
+  notes: Pytest evidence mapped to domain (1 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 1 matched tests; no failures
+- requirement_id: PLUGINS-06
+  result: PASS
+  reason: ''
+  confidence: medium
+  mapped_requirements: *id014
+  notes: Pytest evidence mapped to domain (1 tests), all passing.
+  evidence:
+  - path: audit/results/pytest_junit.xml
+    line: null
+    note: 1 matched tests; no failures
+- requirement_id: UTILS-01
+  result: PARTIAL
+  reason: PARTIAL_IMPL
+  confidence: low
+  mapped_requirements: &id015
+  - RQ-002
+  - RQ-001
+  - RQ-003
+  notes: No evaluable runtime checks; static markers only.
+  evidence: []
+- requirement_id: UTILS-02
+  result: PARTIAL
+  reason: PARTIAL_IMPL
+  confidence: low
+  mapped_requirements: *id015
+  notes: No evaluable runtime checks; static markers only.
+  evidence: []
+- requirement_id: UTILS-03
+  result: PARTIAL
+  reason: PARTIAL_IMPL
+  confidence: low
+  mapped_requirements: *id015
+  notes: No evaluable runtime checks; static markers only.
+  evidence: []
+- requirement_id: UTILS-04
+  result: PARTIAL
+  reason: PARTIAL_IMPL
+  confidence: low
+  mapped_requirements: *id015
+  notes: No evaluable runtime checks; static markers only.
+  evidence: []
+- requirement_id: UTILS-05
+  result: PARTIAL
+  reason: PARTIAL_IMPL
+  confidence: low
+  mapped_requirements: *id015
+  notes: No evaluable runtime checks; static markers only.
+  evidence: []
+- requirement_id: UTILS-06
+  result: PARTIAL
+  reason: PARTIAL_IMPL
+  confidence: low
+  mapped_requirements: *id015
+  notes: No evaluable runtime checks; static markers only.
+  evidence: []

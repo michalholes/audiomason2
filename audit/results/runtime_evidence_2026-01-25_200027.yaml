@@ -1,0 +1,1949 @@
+meta:
+  generated_at: '2026-01-25T20:00:27.296725'
+  repo: /home/pi/audiomason2
+  rubric: /home/pi/audiomason2/audit/audit_rubric_all_in_one_v2.yaml
+  python: 3.11.2
+  platform: Linux-6.12.62+rpt-rpi-v8-aarch64-with-glibc2.36
+  env:
+    PATH: /home/pi/audiomason2/.venv/bin:/home/pi/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/local/games:/usr/games
+    VIRTUAL_ENV: /home/pi/audiomason2/.venv
+commands_total: 66
+runs:
+- requirement_id: LOG-01
+  command: python -m audiomason --help
+  argv:
+  - python
+  - -m
+  - audiomason
+  - --help
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 0
+  duration_seconds: 0.414083
+  stdout: "                                                                                \n Usage: python -m audiomason\
+    \ [OPTIONS] COMMAND [ARGS]...                        \n                                                              \
+    \                  \n\u256D\u2500 Options \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256E\n\u2502 --help      \
+    \    Show this message and exit.                                  \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n\u256D\u2500 Commands \u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u256E\n\u2502 run         Run a single pipeline execution.                                 \u2502\n\
+    \u2502 config      Print resolved configuration.                                    \u2502\n\u2502 daemon      Run AudioMason\
+    \ in daemon/watch mode.                             \u2502\n\u2502 process     Process input via pipeline (optionally\
+    \ dry-run).                 \u2502\n\u2502 inspect     Inspect path and print its type.                              \
+    \   \u2502\n\u2502 describe    Describe a subsystem.                                            \u2502\n\u2502 explain\
+    \     Explain a process.                                               \u2502\n\u2502 import      AM1-like import (MVP-0/MVP-1).\
+    \                                   \u2502\n\u2502 verify      Verify library invariants.                            \
+    \           \u2502\n\u2502 preflight   Run preflight questions/gates.                                   \u2502\n\u2502\
+    \ docs        Documentation commands                                           \u2502\n\u2502 cache       Cache utilities.\
+    \                                                 \u2502\n\u2502 manifest    Manifest helpers (AM1-like).            \
+    \                         \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u256F\n\n"
+  stderr: ''
+- requirement_id: LOG-01
+  command: python -m audiomason run <INPUT> --pipeline <PIPE>
+  argv:
+  - python
+  - -m
+  - audiomason
+  - run
+  - <INPUT>
+  - --pipeline
+  - <PIPE>
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 2
+  duration_seconds: 0.349504
+  stdout: ''
+  stderr: "Usage: python -m audiomason run [OPTIONS] INPUT\nTry 'python -m audiomason run --help' for help.\n\u256D\u2500\
+    \ Error \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256E\n\u2502 Invalid value for '--pipeline': Path\
+    \ '<PIPE>' does not exist.                \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n"
+- requirement_id: LOG-02
+  command: python -m audiomason --help
+  argv:
+  - python
+  - -m
+  - audiomason
+  - --help
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 0
+  duration_seconds: 0.311301
+  stdout: "                                                                                \n Usage: python -m audiomason\
+    \ [OPTIONS] COMMAND [ARGS]...                        \n                                                              \
+    \                  \n\u256D\u2500 Options \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256E\n\u2502 --help      \
+    \    Show this message and exit.                                  \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n\u256D\u2500 Commands \u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u256E\n\u2502 run         Run a single pipeline execution.                                 \u2502\n\
+    \u2502 config      Print resolved configuration.                                    \u2502\n\u2502 daemon      Run AudioMason\
+    \ in daemon/watch mode.                             \u2502\n\u2502 process     Process input via pipeline (optionally\
+    \ dry-run).                 \u2502\n\u2502 inspect     Inspect path and print its type.                              \
+    \   \u2502\n\u2502 describe    Describe a subsystem.                                            \u2502\n\u2502 explain\
+    \     Explain a process.                                               \u2502\n\u2502 import      AM1-like import (MVP-0/MVP-1).\
+    \                                   \u2502\n\u2502 verify      Verify library invariants.                            \
+    \           \u2502\n\u2502 preflight   Run preflight questions/gates.                                   \u2502\n\u2502\
+    \ docs        Documentation commands                                           \u2502\n\u2502 cache       Cache utilities.\
+    \                                                 \u2502\n\u2502 manifest    Manifest helpers (AM1-like).            \
+    \                         \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u256F\n\n"
+  stderr: ''
+- requirement_id: LOG-02
+  command: python -m audiomason run <INPUT> --pipeline <PIPE>
+  argv:
+  - python
+  - -m
+  - audiomason
+  - run
+  - <INPUT>
+  - --pipeline
+  - <PIPE>
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 2
+  duration_seconds: 0.298512
+  stdout: ''
+  stderr: "Usage: python -m audiomason run [OPTIONS] INPUT\nTry 'python -m audiomason run --help' for help.\n\u256D\u2500\
+    \ Error \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256E\n\u2502 Invalid value for '--pipeline': Path\
+    \ '<PIPE>' does not exist.                \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n"
+- requirement_id: LOG-04
+  command: python -m audiomason --help
+  argv:
+  - python
+  - -m
+  - audiomason
+  - --help
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 0
+  duration_seconds: 0.29729
+  stdout: "                                                                                \n Usage: python -m audiomason\
+    \ [OPTIONS] COMMAND [ARGS]...                        \n                                                              \
+    \                  \n\u256D\u2500 Options \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256E\n\u2502 --help      \
+    \    Show this message and exit.                                  \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n\u256D\u2500 Commands \u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u256E\n\u2502 run         Run a single pipeline execution.                                 \u2502\n\
+    \u2502 config      Print resolved configuration.                                    \u2502\n\u2502 daemon      Run AudioMason\
+    \ in daemon/watch mode.                             \u2502\n\u2502 process     Process input via pipeline (optionally\
+    \ dry-run).                 \u2502\n\u2502 inspect     Inspect path and print its type.                              \
+    \   \u2502\n\u2502 describe    Describe a subsystem.                                            \u2502\n\u2502 explain\
+    \     Explain a process.                                               \u2502\n\u2502 import      AM1-like import (MVP-0/MVP-1).\
+    \                                   \u2502\n\u2502 verify      Verify library invariants.                            \
+    \           \u2502\n\u2502 preflight   Run preflight questions/gates.                                   \u2502\n\u2502\
+    \ docs        Documentation commands                                           \u2502\n\u2502 cache       Cache utilities.\
+    \                                                 \u2502\n\u2502 manifest    Manifest helpers (AM1-like).            \
+    \                         \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u256F\n\n"
+  stderr: ''
+- requirement_id: LOG-04
+  command: python -m audiomason run <INPUT> --pipeline <PIPE>
+  argv:
+  - python
+  - -m
+  - audiomason
+  - run
+  - <INPUT>
+  - --pipeline
+  - <PIPE>
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 2
+  duration_seconds: 0.302634
+  stdout: ''
+  stderr: "Usage: python -m audiomason run [OPTIONS] INPUT\nTry 'python -m audiomason run --help' for help.\n\u256D\u2500\
+    \ Error \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256E\n\u2502 Invalid value for '--pipeline': Path\
+    \ '<PIPE>' does not exist.                \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n"
+- requirement_id: LOG-05
+  command: python -m audiomason --help
+  argv:
+  - python
+  - -m
+  - audiomason
+  - --help
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 0
+  duration_seconds: 0.319774
+  stdout: "                                                                                \n Usage: python -m audiomason\
+    \ [OPTIONS] COMMAND [ARGS]...                        \n                                                              \
+    \                  \n\u256D\u2500 Options \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256E\n\u2502 --help      \
+    \    Show this message and exit.                                  \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n\u256D\u2500 Commands \u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u256E\n\u2502 run         Run a single pipeline execution.                                 \u2502\n\
+    \u2502 config      Print resolved configuration.                                    \u2502\n\u2502 daemon      Run AudioMason\
+    \ in daemon/watch mode.                             \u2502\n\u2502 process     Process input via pipeline (optionally\
+    \ dry-run).                 \u2502\n\u2502 inspect     Inspect path and print its type.                              \
+    \   \u2502\n\u2502 describe    Describe a subsystem.                                            \u2502\n\u2502 explain\
+    \     Explain a process.                                               \u2502\n\u2502 import      AM1-like import (MVP-0/MVP-1).\
+    \                                   \u2502\n\u2502 verify      Verify library invariants.                            \
+    \           \u2502\n\u2502 preflight   Run preflight questions/gates.                                   \u2502\n\u2502\
+    \ docs        Documentation commands                                           \u2502\n\u2502 cache       Cache utilities.\
+    \                                                 \u2502\n\u2502 manifest    Manifest helpers (AM1-like).            \
+    \                         \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u256F\n\n"
+  stderr: ''
+- requirement_id: LOG-05
+  command: python -m audiomason run <INPUT> --pipeline <PIPE>
+  argv:
+  - python
+  - -m
+  - audiomason
+  - run
+  - <INPUT>
+  - --pipeline
+  - <PIPE>
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 2
+  duration_seconds: 0.335365
+  stdout: ''
+  stderr: "Usage: python -m audiomason run [OPTIONS] INPUT\nTry 'python -m audiomason run --help' for help.\n\u256D\u2500\
+    \ Error \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256E\n\u2502 Invalid value for '--pipeline': Path\
+    \ '<PIPE>' does not exist.                \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n"
+- requirement_id: FS-01
+  command: python -m audiomason import <PATH>
+  argv:
+  - python
+  - -m
+  - audiomason
+  - import
+  - <PATH>
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 2
+  duration_seconds: 0.176972
+  stdout: 'import: status=error exit=2
+
+    error: Input not found: <PATH>
+
+    '
+  stderr: ''
+- requirement_id: FS-01
+  command: python -m audiomason run <INPUT> --pipeline <PIPE>
+  argv:
+  - python
+  - -m
+  - audiomason
+  - run
+  - <INPUT>
+  - --pipeline
+  - <PIPE>
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 2
+  duration_seconds: 0.307169
+  stdout: ''
+  stderr: "Usage: python -m audiomason run [OPTIONS] INPUT\nTry 'python -m audiomason run --help' for help.\n\u256D\u2500\
+    \ Error \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256E\n\u2502 Invalid value for '--pipeline': Path\
+    \ '<PIPE>' does not exist.                \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n"
+- requirement_id: FS-03
+  command: python -m audiomason import <PATH>
+  argv:
+  - python
+  - -m
+  - audiomason
+  - import
+  - <PATH>
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 2
+  duration_seconds: 0.186023
+  stdout: 'import: status=error exit=2
+
+    error: Input not found: <PATH>
+
+    '
+  stderr: ''
+- requirement_id: FS-03
+  command: python -m audiomason run <INPUT> --pipeline <PIPE>
+  argv:
+  - python
+  - -m
+  - audiomason
+  - run
+  - <INPUT>
+  - --pipeline
+  - <PIPE>
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 2
+  duration_seconds: 0.291372
+  stdout: ''
+  stderr: "Usage: python -m audiomason run [OPTIONS] INPUT\nTry 'python -m audiomason run --help' for help.\n\u256D\u2500\
+    \ Error \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256E\n\u2502 Invalid value for '--pipeline': Path\
+    \ '<PIPE>' does not exist.                \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n"
+- requirement_id: FS-04
+  command: python -m audiomason import <PATH>
+  argv:
+  - python
+  - -m
+  - audiomason
+  - import
+  - <PATH>
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 2
+  duration_seconds: 0.203637
+  stdout: 'import: status=error exit=2
+
+    error: Input not found: <PATH>
+
+    '
+  stderr: ''
+- requirement_id: FS-04
+  command: python -m audiomason run <INPUT> --pipeline <PIPE>
+  argv:
+  - python
+  - -m
+  - audiomason
+  - run
+  - <INPUT>
+  - --pipeline
+  - <PIPE>
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 2
+  duration_seconds: 0.352702
+  stdout: ''
+  stderr: "Usage: python -m audiomason run [OPTIONS] INPUT\nTry 'python -m audiomason run --help' for help.\n\u256D\u2500\
+    \ Error \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256E\n\u2502 Invalid value for '--pipeline': Path\
+    \ '<PIPE>' does not exist.                \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n"
+- requirement_id: FS-06
+  command: python -m audiomason import <PATH>
+  argv:
+  - python
+  - -m
+  - audiomason
+  - import
+  - <PATH>
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 2
+  duration_seconds: 0.174258
+  stdout: 'import: status=error exit=2
+
+    error: Input not found: <PATH>
+
+    '
+  stderr: ''
+- requirement_id: FS-06
+  command: python -m audiomason run <INPUT> --pipeline <PIPE>
+  argv:
+  - python
+  - -m
+  - audiomason
+  - run
+  - <INPUT>
+  - --pipeline
+  - <PIPE>
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 2
+  duration_seconds: 0.301404
+  stdout: ''
+  stderr: "Usage: python -m audiomason run [OPTIONS] INPUT\nTry 'python -m audiomason run --help' for help.\n\u256D\u2500\
+    \ Error \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256E\n\u2502 Invalid value for '--pipeline': Path\
+    \ '<PIPE>' does not exist.                \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n"
+- requirement_id: PIPE-01
+  command: python -m audiomason run <INPUT> --pipeline <PIPE>
+  argv:
+  - python
+  - -m
+  - audiomason
+  - run
+  - <INPUT>
+  - --pipeline
+  - <PIPE>
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 2
+  duration_seconds: 0.305805
+  stdout: ''
+  stderr: "Usage: python -m audiomason run [OPTIONS] INPUT\nTry 'python -m audiomason run --help' for help.\n\u256D\u2500\
+    \ Error \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256E\n\u2502 Invalid value for '--pipeline': Path\
+    \ '<PIPE>' does not exist.                \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n"
+- requirement_id: PIPE-03
+  command: python -m audiomason run <INPUT> --pipeline <PIPE>
+  argv:
+  - python
+  - -m
+  - audiomason
+  - run
+  - <INPUT>
+  - --pipeline
+  - <PIPE>
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 2
+  duration_seconds: 0.306646
+  stdout: ''
+  stderr: "Usage: python -m audiomason run [OPTIONS] INPUT\nTry 'python -m audiomason run --help' for help.\n\u256D\u2500\
+    \ Error \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256E\n\u2502 Invalid value for '--pipeline': Path\
+    \ '<PIPE>' does not exist.                \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n"
+- requirement_id: PIPE-04
+  command: python -m audiomason run <INPUT> --pipeline <PIPE>
+  argv:
+  - python
+  - -m
+  - audiomason
+  - run
+  - <INPUT>
+  - --pipeline
+  - <PIPE>
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 2
+  duration_seconds: 0.317658
+  stdout: ''
+  stderr: "Usage: python -m audiomason run [OPTIONS] INPUT\nTry 'python -m audiomason run --help' for help.\n\u256D\u2500\
+    \ Error \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256E\n\u2502 Invalid value for '--pipeline': Path\
+    \ '<PIPE>' does not exist.                \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n"
+- requirement_id: CLI-01
+  command: python -m audiomason --help
+  argv:
+  - python
+  - -m
+  - audiomason
+  - --help
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 0
+  duration_seconds: 0.308647
+  stdout: "                                                                                \n Usage: python -m audiomason\
+    \ [OPTIONS] COMMAND [ARGS]...                        \n                                                              \
+    \                  \n\u256D\u2500 Options \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256E\n\u2502 --help      \
+    \    Show this message and exit.                                  \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n\u256D\u2500 Commands \u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u256E\n\u2502 run         Run a single pipeline execution.                                 \u2502\n\
+    \u2502 config      Print resolved configuration.                                    \u2502\n\u2502 daemon      Run AudioMason\
+    \ in daemon/watch mode.                             \u2502\n\u2502 process     Process input via pipeline (optionally\
+    \ dry-run).                 \u2502\n\u2502 inspect     Inspect path and print its type.                              \
+    \   \u2502\n\u2502 describe    Describe a subsystem.                                            \u2502\n\u2502 explain\
+    \     Explain a process.                                               \u2502\n\u2502 import      AM1-like import (MVP-0/MVP-1).\
+    \                                   \u2502\n\u2502 verify      Verify library invariants.                            \
+    \           \u2502\n\u2502 preflight   Run preflight questions/gates.                                   \u2502\n\u2502\
+    \ docs        Documentation commands                                           \u2502\n\u2502 cache       Cache utilities.\
+    \                                                 \u2502\n\u2502 manifest    Manifest helpers (AM1-like).            \
+    \                         \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u256F\n\n"
+  stderr: ''
+- requirement_id: CLI-01
+  command: python -m audiomason config --help
+  argv:
+  - python
+  - -m
+  - audiomason
+  - config
+  - --help
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 0
+  duration_seconds: 0.313411
+  stdout: "                                                                                \n Usage: python -m audiomason\
+    \ config [OPTIONS]                                   \n                                                              \
+    \                  \n Print resolved configuration.                                                  \n              \
+    \                                                                  \n\u256D\u2500 Options \u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u256E\n\u2502 --json                                    Emit JSON to stdout.               \u2502\n\
+    \u2502 --sources                                 Include source attribution for     \u2502\n\u2502                   \
+    \                        each key.                          \u2502\n\u2502 --output-dir  -o                    TEXT  \
+    \                                   \u2502\n\u2502 --paths-root  -r                    TEXT                          \
+    \           \u2502\n\u2502 --library     -l                    TEXT                                     \u2502\n\u2502\
+    \ --log-mode    -m                    TEXT                                     \u2502\n\u2502 --quiet       -q  --no-quiet\
+    \                                                 \u2502\n\u2502 --json-logs   -j  --no-json-logs                    \
+    \                         \u2502\n\u2502 --help                                    Show this message and exit.       \
+    \ \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u256F\n\n"
+  stderr: ''
+- requirement_id: CLI-02
+  command: python -m audiomason --help
+  argv:
+  - python
+  - -m
+  - audiomason
+  - --help
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 0
+  duration_seconds: 0.306421
+  stdout: "                                                                                \n Usage: python -m audiomason\
+    \ [OPTIONS] COMMAND [ARGS]...                        \n                                                              \
+    \                  \n\u256D\u2500 Options \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256E\n\u2502 --help      \
+    \    Show this message and exit.                                  \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n\u256D\u2500 Commands \u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u256E\n\u2502 run         Run a single pipeline execution.                                 \u2502\n\
+    \u2502 config      Print resolved configuration.                                    \u2502\n\u2502 daemon      Run AudioMason\
+    \ in daemon/watch mode.                             \u2502\n\u2502 process     Process input via pipeline (optionally\
+    \ dry-run).                 \u2502\n\u2502 inspect     Inspect path and print its type.                              \
+    \   \u2502\n\u2502 describe    Describe a subsystem.                                            \u2502\n\u2502 explain\
+    \     Explain a process.                                               \u2502\n\u2502 import      AM1-like import (MVP-0/MVP-1).\
+    \                                   \u2502\n\u2502 verify      Verify library invariants.                            \
+    \           \u2502\n\u2502 preflight   Run preflight questions/gates.                                   \u2502\n\u2502\
+    \ docs        Documentation commands                                           \u2502\n\u2502 cache       Cache utilities.\
+    \                                                 \u2502\n\u2502 manifest    Manifest helpers (AM1-like).            \
+    \                         \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u256F\n\n"
+  stderr: ''
+- requirement_id: CLI-02
+  command: python -m audiomason config --help
+  argv:
+  - python
+  - -m
+  - audiomason
+  - config
+  - --help
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 0
+  duration_seconds: 0.304739
+  stdout: "                                                                                \n Usage: python -m audiomason\
+    \ config [OPTIONS]                                   \n                                                              \
+    \                  \n Print resolved configuration.                                                  \n              \
+    \                                                                  \n\u256D\u2500 Options \u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u256E\n\u2502 --json                                    Emit JSON to stdout.               \u2502\n\
+    \u2502 --sources                                 Include source attribution for     \u2502\n\u2502                   \
+    \                        each key.                          \u2502\n\u2502 --output-dir  -o                    TEXT  \
+    \                                   \u2502\n\u2502 --paths-root  -r                    TEXT                          \
+    \           \u2502\n\u2502 --library     -l                    TEXT                                     \u2502\n\u2502\
+    \ --log-mode    -m                    TEXT                                     \u2502\n\u2502 --quiet       -q  --no-quiet\
+    \                                                 \u2502\n\u2502 --json-logs   -j  --no-json-logs                    \
+    \                         \u2502\n\u2502 --help                                    Show this message and exit.       \
+    \ \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u256F\n\n"
+  stderr: ''
+- requirement_id: CLI-04
+  command: python -m audiomason --help
+  argv:
+  - python
+  - -m
+  - audiomason
+  - --help
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 0
+  duration_seconds: 0.309659
+  stdout: "                                                                                \n Usage: python -m audiomason\
+    \ [OPTIONS] COMMAND [ARGS]...                        \n                                                              \
+    \                  \n\u256D\u2500 Options \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256E\n\u2502 --help      \
+    \    Show this message and exit.                                  \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n\u256D\u2500 Commands \u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u256E\n\u2502 run         Run a single pipeline execution.                                 \u2502\n\
+    \u2502 config      Print resolved configuration.                                    \u2502\n\u2502 daemon      Run AudioMason\
+    \ in daemon/watch mode.                             \u2502\n\u2502 process     Process input via pipeline (optionally\
+    \ dry-run).                 \u2502\n\u2502 inspect     Inspect path and print its type.                              \
+    \   \u2502\n\u2502 describe    Describe a subsystem.                                            \u2502\n\u2502 explain\
+    \     Explain a process.                                               \u2502\n\u2502 import      AM1-like import (MVP-0/MVP-1).\
+    \                                   \u2502\n\u2502 verify      Verify library invariants.                            \
+    \           \u2502\n\u2502 preflight   Run preflight questions/gates.                                   \u2502\n\u2502\
+    \ docs        Documentation commands                                           \u2502\n\u2502 cache       Cache utilities.\
+    \                                                 \u2502\n\u2502 manifest    Manifest helpers (AM1-like).            \
+    \                         \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u256F\n\n"
+  stderr: ''
+- requirement_id: CLI-04
+  command: python -m audiomason config --help
+  argv:
+  - python
+  - -m
+  - audiomason
+  - config
+  - --help
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 0
+  duration_seconds: 0.303282
+  stdout: "                                                                                \n Usage: python -m audiomason\
+    \ config [OPTIONS]                                   \n                                                              \
+    \                  \n Print resolved configuration.                                                  \n              \
+    \                                                                  \n\u256D\u2500 Options \u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u256E\n\u2502 --json                                    Emit JSON to stdout.               \u2502\n\
+    \u2502 --sources                                 Include source attribution for     \u2502\n\u2502                   \
+    \                        each key.                          \u2502\n\u2502 --output-dir  -o                    TEXT  \
+    \                                   \u2502\n\u2502 --paths-root  -r                    TEXT                          \
+    \           \u2502\n\u2502 --library     -l                    TEXT                                     \u2502\n\u2502\
+    \ --log-mode    -m                    TEXT                                     \u2502\n\u2502 --quiet       -q  --no-quiet\
+    \                                                 \u2502\n\u2502 --json-logs   -j  --no-json-logs                    \
+    \                         \u2502\n\u2502 --help                                    Show this message and exit.       \
+    \ \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u256F\n\n"
+  stderr: ''
+- requirement_id: CLI-05
+  command: python -m audiomason --help
+  argv:
+  - python
+  - -m
+  - audiomason
+  - --help
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 0
+  duration_seconds: 0.315437
+  stdout: "                                                                                \n Usage: python -m audiomason\
+    \ [OPTIONS] COMMAND [ARGS]...                        \n                                                              \
+    \                  \n\u256D\u2500 Options \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256E\n\u2502 --help      \
+    \    Show this message and exit.                                  \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n\u256D\u2500 Commands \u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u256E\n\u2502 run         Run a single pipeline execution.                                 \u2502\n\
+    \u2502 config      Print resolved configuration.                                    \u2502\n\u2502 daemon      Run AudioMason\
+    \ in daemon/watch mode.                             \u2502\n\u2502 process     Process input via pipeline (optionally\
+    \ dry-run).                 \u2502\n\u2502 inspect     Inspect path and print its type.                              \
+    \   \u2502\n\u2502 describe    Describe a subsystem.                                            \u2502\n\u2502 explain\
+    \     Explain a process.                                               \u2502\n\u2502 import      AM1-like import (MVP-0/MVP-1).\
+    \                                   \u2502\n\u2502 verify      Verify library invariants.                            \
+    \           \u2502\n\u2502 preflight   Run preflight questions/gates.                                   \u2502\n\u2502\
+    \ docs        Documentation commands                                           \u2502\n\u2502 cache       Cache utilities.\
+    \                                                 \u2502\n\u2502 manifest    Manifest helpers (AM1-like).            \
+    \                         \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u256F\n\n"
+  stderr: ''
+- requirement_id: CLI-05
+  command: python -m audiomason config --help
+  argv:
+  - python
+  - -m
+  - audiomason
+  - config
+  - --help
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 0
+  duration_seconds: 0.304039
+  stdout: "                                                                                \n Usage: python -m audiomason\
+    \ config [OPTIONS]                                   \n                                                              \
+    \                  \n Print resolved configuration.                                                  \n              \
+    \                                                                  \n\u256D\u2500 Options \u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u256E\n\u2502 --json                                    Emit JSON to stdout.               \u2502\n\
+    \u2502 --sources                                 Include source attribution for     \u2502\n\u2502                   \
+    \                        each key.                          \u2502\n\u2502 --output-dir  -o                    TEXT  \
+    \                                   \u2502\n\u2502 --paths-root  -r                    TEXT                          \
+    \           \u2502\n\u2502 --library     -l                    TEXT                                     \u2502\n\u2502\
+    \ --log-mode    -m                    TEXT                                     \u2502\n\u2502 --quiet       -q  --no-quiet\
+    \                                                 \u2502\n\u2502 --json-logs   -j  --no-json-logs                    \
+    \                         \u2502\n\u2502 --help                                    Show this message and exit.       \
+    \ \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u256F\n\n"
+  stderr: ''
+- requirement_id: DAEMON-01
+  command: python -m audiomason start --help
+  argv:
+  - python
+  - -m
+  - audiomason
+  - start
+  - --help
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 2
+  duration_seconds: 0.296327
+  stdout: ''
+  stderr: "Usage: python -m audiomason [OPTIONS] COMMAND [ARGS]...\nTry 'python -m audiomason --help' for help.\n\u256D\u2500\
+    \ Error \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256E\n\u2502 No such command 'start'.            \
+    \                                         \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n"
+- requirement_id: DAEMON-01
+  command: python -m audiomason stop --help
+  argv:
+  - python
+  - -m
+  - audiomason
+  - stop
+  - --help
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 2
+  duration_seconds: 0.30389
+  stdout: ''
+  stderr: "Usage: python -m audiomason [OPTIONS] COMMAND [ARGS]...\nTry 'python -m audiomason --help' for help.\n\u256D\u2500\
+    \ Error \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256E\n\u2502 No such command 'stop'.             \
+    \                                         \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n"
+- requirement_id: DAEMON-01
+  command: python -m audiomason status --help
+  argv:
+  - python
+  - -m
+  - audiomason
+  - status
+  - --help
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 2
+  duration_seconds: 0.320963
+  stdout: ''
+  stderr: "Usage: python -m audiomason [OPTIONS] COMMAND [ARGS]...\nTry 'python -m audiomason --help' for help.\n\u256D\u2500\
+    \ Error \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256E\n\u2502 No such command 'status'.           \
+    \                                         \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n"
+- requirement_id: DAEMON-02
+  command: python -m audiomason start --help
+  argv:
+  - python
+  - -m
+  - audiomason
+  - start
+  - --help
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 2
+  duration_seconds: 0.297635
+  stdout: ''
+  stderr: "Usage: python -m audiomason [OPTIONS] COMMAND [ARGS]...\nTry 'python -m audiomason --help' for help.\n\u256D\u2500\
+    \ Error \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256E\n\u2502 No such command 'start'.            \
+    \                                         \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n"
+- requirement_id: DAEMON-02
+  command: python -m audiomason stop --help
+  argv:
+  - python
+  - -m
+  - audiomason
+  - stop
+  - --help
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 2
+  duration_seconds: 0.290684
+  stdout: ''
+  stderr: "Usage: python -m audiomason [OPTIONS] COMMAND [ARGS]...\nTry 'python -m audiomason --help' for help.\n\u256D\u2500\
+    \ Error \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256E\n\u2502 No such command 'stop'.             \
+    \                                         \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n"
+- requirement_id: DAEMON-02
+  command: python -m audiomason status --help
+  argv:
+  - python
+  - -m
+  - audiomason
+  - status
+  - --help
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 2
+  duration_seconds: 0.295958
+  stdout: ''
+  stderr: "Usage: python -m audiomason [OPTIONS] COMMAND [ARGS]...\nTry 'python -m audiomason --help' for help.\n\u256D\u2500\
+    \ Error \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256E\n\u2502 No such command 'status'.           \
+    \                                         \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n"
+- requirement_id: DAEMON-03
+  command: python -m audiomason start --help
+  argv:
+  - python
+  - -m
+  - audiomason
+  - start
+  - --help
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 2
+  duration_seconds: 0.296395
+  stdout: ''
+  stderr: "Usage: python -m audiomason [OPTIONS] COMMAND [ARGS]...\nTry 'python -m audiomason --help' for help.\n\u256D\u2500\
+    \ Error \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256E\n\u2502 No such command 'start'.            \
+    \                                         \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n"
+- requirement_id: DAEMON-03
+  command: python -m audiomason stop --help
+  argv:
+  - python
+  - -m
+  - audiomason
+  - stop
+  - --help
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 2
+  duration_seconds: 0.297395
+  stdout: ''
+  stderr: "Usage: python -m audiomason [OPTIONS] COMMAND [ARGS]...\nTry 'python -m audiomason --help' for help.\n\u256D\u2500\
+    \ Error \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256E\n\u2502 No such command 'stop'.             \
+    \                                         \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n"
+- requirement_id: DAEMON-03
+  command: python -m audiomason status --help
+  argv:
+  - python
+  - -m
+  - audiomason
+  - status
+  - --help
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 2
+  duration_seconds: 0.313406
+  stdout: ''
+  stderr: "Usage: python -m audiomason [OPTIONS] COMMAND [ARGS]...\nTry 'python -m audiomason --help' for help.\n\u256D\u2500\
+    \ Error \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256E\n\u2502 No such command 'status'.           \
+    \                                         \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n"
+- requirement_id: DAEMON-04
+  command: python -m audiomason start --help
+  argv:
+  - python
+  - -m
+  - audiomason
+  - start
+  - --help
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 2
+  duration_seconds: 0.296217
+  stdout: ''
+  stderr: "Usage: python -m audiomason [OPTIONS] COMMAND [ARGS]...\nTry 'python -m audiomason --help' for help.\n\u256D\u2500\
+    \ Error \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256E\n\u2502 No such command 'start'.            \
+    \                                         \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n"
+- requirement_id: DAEMON-04
+  command: python -m audiomason stop --help
+  argv:
+  - python
+  - -m
+  - audiomason
+  - stop
+  - --help
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 2
+  duration_seconds: 0.294449
+  stdout: ''
+  stderr: "Usage: python -m audiomason [OPTIONS] COMMAND [ARGS]...\nTry 'python -m audiomason --help' for help.\n\u256D\u2500\
+    \ Error \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256E\n\u2502 No such command 'stop'.             \
+    \                                         \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n"
+- requirement_id: DAEMON-04
+  command: python -m audiomason status --help
+  argv:
+  - python
+  - -m
+  - audiomason
+  - status
+  - --help
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 2
+  duration_seconds: 0.29423
+  stdout: ''
+  stderr: "Usage: python -m audiomason [OPTIONS] COMMAND [ARGS]...\nTry 'python -m audiomason --help' for help.\n\u256D\u2500\
+    \ Error \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256E\n\u2502 No such command 'status'.           \
+    \                                         \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n"
+- requirement_id: DAEMON-05
+  command: python -m audiomason start --help
+  argv:
+  - python
+  - -m
+  - audiomason
+  - start
+  - --help
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 2
+  duration_seconds: 0.297206
+  stdout: ''
+  stderr: "Usage: python -m audiomason [OPTIONS] COMMAND [ARGS]...\nTry 'python -m audiomason --help' for help.\n\u256D\u2500\
+    \ Error \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256E\n\u2502 No such command 'start'.            \
+    \                                         \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n"
+- requirement_id: DAEMON-05
+  command: python -m audiomason stop --help
+  argv:
+  - python
+  - -m
+  - audiomason
+  - stop
+  - --help
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 2
+  duration_seconds: 0.30284
+  stdout: ''
+  stderr: "Usage: python -m audiomason [OPTIONS] COMMAND [ARGS]...\nTry 'python -m audiomason --help' for help.\n\u256D\u2500\
+    \ Error \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256E\n\u2502 No such command 'stop'.             \
+    \                                         \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n"
+- requirement_id: DAEMON-05
+  command: python -m audiomason status --help
+  argv:
+  - python
+  - -m
+  - audiomason
+  - status
+  - --help
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 2
+  duration_seconds: 0.315488
+  stdout: ''
+  stderr: "Usage: python -m audiomason [OPTIONS] COMMAND [ARGS]...\nTry 'python -m audiomason --help' for help.\n\u256D\u2500\
+    \ Error \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256E\n\u2502 No such command 'status'.           \
+    \                                         \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n"
+- requirement_id: DAEMON-06
+  command: python -m audiomason start --help
+  argv:
+  - python
+  - -m
+  - audiomason
+  - start
+  - --help
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 2
+  duration_seconds: 0.317599
+  stdout: ''
+  stderr: "Usage: python -m audiomason [OPTIONS] COMMAND [ARGS]...\nTry 'python -m audiomason --help' for help.\n\u256D\u2500\
+    \ Error \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256E\n\u2502 No such command 'start'.            \
+    \                                         \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n"
+- requirement_id: DAEMON-06
+  command: python -m audiomason stop --help
+  argv:
+  - python
+  - -m
+  - audiomason
+  - stop
+  - --help
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 2
+  duration_seconds: 0.312952
+  stdout: ''
+  stderr: "Usage: python -m audiomason [OPTIONS] COMMAND [ARGS]...\nTry 'python -m audiomason --help' for help.\n\u256D\u2500\
+    \ Error \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256E\n\u2502 No such command 'stop'.             \
+    \                                         \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n"
+- requirement_id: DAEMON-06
+  command: python -m audiomason status --help
+  argv:
+  - python
+  - -m
+  - audiomason
+  - status
+  - --help
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 2
+  duration_seconds: 0.291811
+  stdout: ''
+  stderr: "Usage: python -m audiomason [OPTIONS] COMMAND [ARGS]...\nTry 'python -m audiomason --help' for help.\n\u256D\u2500\
+    \ Error \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256E\n\u2502 No such command 'status'.           \
+    \                                         \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n"
+- requirement_id: IMPORT-01
+  command: python -m audiomason import --help
+  argv:
+  - python
+  - -m
+  - audiomason
+  - import
+  - --help
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 0
+  duration_seconds: 0.313921
+  stdout: "                                                                                \n Usage: python -m audiomason\
+    \ import [OPTIONS] [INPUT]                           \n                                                              \
+    \                  \n AM1-like import (MVP-0/MVP-1).                                                 \n              \
+    \                                                                  \n\u256D\u2500 Arguments \u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u256E\n\u2502   input      [INPUT]  Input file (MVP-0)                                     \u2502\n\u2570\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n\u256D\u2500\
+    \ Options \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256E\n\u2502 --pipeline                     PATH  Pipeline\
+    \ YAML to run (optional).        \u2502\n\u2502 --library-root                 PATH  Target library root.            \
+    \        \u2502\n\u2502 --drop-root                    PATH  Override drop_root (MVP-1).             \u2502\n\u2502 --source\
+    \                       TEXT  Non-interactive source name or 1-based  \u2502\n\u2502                                 \
+    \     index (MVP-1).                          \u2502\n\u2502 --clean-inbox                        Move processed source\
+    \ into archive dir  \u2502\n\u2502                                      (MVP-1).                                \u2502\
+    \n\u2502 --archive-dir                  PATH  Archive directory for clean-inbox       \u2502\n\u2502                 \
+    \                     (MVP-1).                                \u2502\n\u2502 --yes,--non-interactive              Non-interactive\
+    \ mode.                   \u2502\n\u2502 --json                               Emit JSON summary to stdout.           \
+    \ \u2502\n\u2502 --dry-run                            Do not perform filesystem changes.      \u2502\n\u2502 --help  \
+    \                             Show this message and exit.             \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n\n"
+  stderr: ''
+- requirement_id: IMPORT-02
+  command: python -m audiomason import --help
+  argv:
+  - python
+  - -m
+  - audiomason
+  - import
+  - --help
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 0
+  duration_seconds: 0.307258
+  stdout: "                                                                                \n Usage: python -m audiomason\
+    \ import [OPTIONS] [INPUT]                           \n                                                              \
+    \                  \n AM1-like import (MVP-0/MVP-1).                                                 \n              \
+    \                                                                  \n\u256D\u2500 Arguments \u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u256E\n\u2502   input      [INPUT]  Input file (MVP-0)                                     \u2502\n\u2570\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n\u256D\u2500\
+    \ Options \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256E\n\u2502 --pipeline                     PATH  Pipeline\
+    \ YAML to run (optional).        \u2502\n\u2502 --library-root                 PATH  Target library root.            \
+    \        \u2502\n\u2502 --drop-root                    PATH  Override drop_root (MVP-1).             \u2502\n\u2502 --source\
+    \                       TEXT  Non-interactive source name or 1-based  \u2502\n\u2502                                 \
+    \     index (MVP-1).                          \u2502\n\u2502 --clean-inbox                        Move processed source\
+    \ into archive dir  \u2502\n\u2502                                      (MVP-1).                                \u2502\
+    \n\u2502 --archive-dir                  PATH  Archive directory for clean-inbox       \u2502\n\u2502                 \
+    \                     (MVP-1).                                \u2502\n\u2502 --yes,--non-interactive              Non-interactive\
+    \ mode.                   \u2502\n\u2502 --json                               Emit JSON summary to stdout.           \
+    \ \u2502\n\u2502 --dry-run                            Do not perform filesystem changes.      \u2502\n\u2502 --help  \
+    \                             Show this message and exit.             \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n\n"
+  stderr: ''
+- requirement_id: IMPORT-03
+  command: python -m audiomason import --help
+  argv:
+  - python
+  - -m
+  - audiomason
+  - import
+  - --help
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 0
+  duration_seconds: 0.308883
+  stdout: "                                                                                \n Usage: python -m audiomason\
+    \ import [OPTIONS] [INPUT]                           \n                                                              \
+    \                  \n AM1-like import (MVP-0/MVP-1).                                                 \n              \
+    \                                                                  \n\u256D\u2500 Arguments \u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u256E\n\u2502   input      [INPUT]  Input file (MVP-0)                                     \u2502\n\u2570\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n\u256D\u2500\
+    \ Options \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256E\n\u2502 --pipeline                     PATH  Pipeline\
+    \ YAML to run (optional).        \u2502\n\u2502 --library-root                 PATH  Target library root.            \
+    \        \u2502\n\u2502 --drop-root                    PATH  Override drop_root (MVP-1).             \u2502\n\u2502 --source\
+    \                       TEXT  Non-interactive source name or 1-based  \u2502\n\u2502                                 \
+    \     index (MVP-1).                          \u2502\n\u2502 --clean-inbox                        Move processed source\
+    \ into archive dir  \u2502\n\u2502                                      (MVP-1).                                \u2502\
+    \n\u2502 --archive-dir                  PATH  Archive directory for clean-inbox       \u2502\n\u2502                 \
+    \                     (MVP-1).                                \u2502\n\u2502 --yes,--non-interactive              Non-interactive\
+    \ mode.                   \u2502\n\u2502 --json                               Emit JSON summary to stdout.           \
+    \ \u2502\n\u2502 --dry-run                            Do not perform filesystem changes.      \u2502\n\u2502 --help  \
+    \                             Show this message and exit.             \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n\n"
+  stderr: ''
+- requirement_id: IMPORT-04
+  command: python -m audiomason import --help
+  argv:
+  - python
+  - -m
+  - audiomason
+  - import
+  - --help
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 0
+  duration_seconds: 0.306931
+  stdout: "                                                                                \n Usage: python -m audiomason\
+    \ import [OPTIONS] [INPUT]                           \n                                                              \
+    \                  \n AM1-like import (MVP-0/MVP-1).                                                 \n              \
+    \                                                                  \n\u256D\u2500 Arguments \u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u256E\n\u2502   input      [INPUT]  Input file (MVP-0)                                     \u2502\n\u2570\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n\u256D\u2500\
+    \ Options \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256E\n\u2502 --pipeline                     PATH  Pipeline\
+    \ YAML to run (optional).        \u2502\n\u2502 --library-root                 PATH  Target library root.            \
+    \        \u2502\n\u2502 --drop-root                    PATH  Override drop_root (MVP-1).             \u2502\n\u2502 --source\
+    \                       TEXT  Non-interactive source name or 1-based  \u2502\n\u2502                                 \
+    \     index (MVP-1).                          \u2502\n\u2502 --clean-inbox                        Move processed source\
+    \ into archive dir  \u2502\n\u2502                                      (MVP-1).                                \u2502\
+    \n\u2502 --archive-dir                  PATH  Archive directory for clean-inbox       \u2502\n\u2502                 \
+    \                     (MVP-1).                                \u2502\n\u2502 --yes,--non-interactive              Non-interactive\
+    \ mode.                   \u2502\n\u2502 --json                               Emit JSON summary to stdout.           \
+    \ \u2502\n\u2502 --dry-run                            Do not perform filesystem changes.      \u2502\n\u2502 --help  \
+    \                             Show this message and exit.             \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n\n"
+  stderr: ''
+- requirement_id: IMPORT-05
+  command: python -m audiomason import --help
+  argv:
+  - python
+  - -m
+  - audiomason
+  - import
+  - --help
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 0
+  duration_seconds: 0.304923
+  stdout: "                                                                                \n Usage: python -m audiomason\
+    \ import [OPTIONS] [INPUT]                           \n                                                              \
+    \                  \n AM1-like import (MVP-0/MVP-1).                                                 \n              \
+    \                                                                  \n\u256D\u2500 Arguments \u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u256E\n\u2502   input      [INPUT]  Input file (MVP-0)                                     \u2502\n\u2570\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n\u256D\u2500\
+    \ Options \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256E\n\u2502 --pipeline                     PATH  Pipeline\
+    \ YAML to run (optional).        \u2502\n\u2502 --library-root                 PATH  Target library root.            \
+    \        \u2502\n\u2502 --drop-root                    PATH  Override drop_root (MVP-1).             \u2502\n\u2502 --source\
+    \                       TEXT  Non-interactive source name or 1-based  \u2502\n\u2502                                 \
+    \     index (MVP-1).                          \u2502\n\u2502 --clean-inbox                        Move processed source\
+    \ into archive dir  \u2502\n\u2502                                      (MVP-1).                                \u2502\
+    \n\u2502 --archive-dir                  PATH  Archive directory for clean-inbox       \u2502\n\u2502                 \
+    \                     (MVP-1).                                \u2502\n\u2502 --yes,--non-interactive              Non-interactive\
+    \ mode.                   \u2502\n\u2502 --json                               Emit JSON summary to stdout.           \
+    \ \u2502\n\u2502 --dry-run                            Do not perform filesystem changes.      \u2502\n\u2502 --help  \
+    \                             Show this message and exit.             \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n\n"
+  stderr: ''
+- requirement_id: IMPORT-06
+  command: python -m audiomason import --help
+  argv:
+  - python
+  - -m
+  - audiomason
+  - import
+  - --help
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 0
+  duration_seconds: 0.331142
+  stdout: "                                                                                \n Usage: python -m audiomason\
+    \ import [OPTIONS] [INPUT]                           \n                                                              \
+    \                  \n AM1-like import (MVP-0/MVP-1).                                                 \n              \
+    \                                                                  \n\u256D\u2500 Arguments \u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u256E\n\u2502   input      [INPUT]  Input file (MVP-0)                                     \u2502\n\u2570\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n\u256D\u2500\
+    \ Options \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256E\n\u2502 --pipeline                     PATH  Pipeline\
+    \ YAML to run (optional).        \u2502\n\u2502 --library-root                 PATH  Target library root.            \
+    \        \u2502\n\u2502 --drop-root                    PATH  Override drop_root (MVP-1).             \u2502\n\u2502 --source\
+    \                       TEXT  Non-interactive source name or 1-based  \u2502\n\u2502                                 \
+    \     index (MVP-1).                          \u2502\n\u2502 --clean-inbox                        Move processed source\
+    \ into archive dir  \u2502\n\u2502                                      (MVP-1).                                \u2502\
+    \n\u2502 --archive-dir                  PATH  Archive directory for clean-inbox       \u2502\n\u2502                 \
+    \                     (MVP-1).                                \u2502\n\u2502 --yes,--non-interactive              Non-interactive\
+    \ mode.                   \u2502\n\u2502 --json                               Emit JSON summary to stdout.           \
+    \ \u2502\n\u2502 --dry-run                            Do not perform filesystem changes.      \u2502\n\u2502 --help  \
+    \                             Show this message and exit.             \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n\n"
+  stderr: ''
+- requirement_id: VERIFY-01
+  command: python -m audiomason verify --help
+  argv:
+  - python
+  - -m
+  - audiomason
+  - verify
+  - --help
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 0
+  duration_seconds: 0.329378
+  stdout: "                                                                                \n Usage: python -m audiomason\
+    \ verify [OPTIONS]                                   \n                                                              \
+    \                  \n Verify library invariants.                                                     \n              \
+    \                                                                  \n\u256D\u2500 Options \u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u256E\n\u2502 --library-root        PATH     Library root to verify.                       \u2502\n\
+    \u2502 --json                         Emit JSON report to stdout.                   \u2502\n\u2502 --fail-on         \
+    \    TEXT     Threshold: error|warning|never.               \u2502\n\u2502                                [default: error]\
+    \                              \u2502\n\u2502 --checks              TEXT     Comma-separated allowlist of check ids. \
+    \      \u2502\n\u2502 --skip-checks         TEXT     Comma-separated denylist of check ids.        \u2502\n\u2502 --max-issues\
+    \          INTEGER  Maximum issues to collect. [default: 2000]    \u2502\n\u2502 --help                         Show this\
+    \ message and exit.                   \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n\n"
+  stderr: ''
+- requirement_id: VERIFY-02
+  command: python -m audiomason verify --help
+  argv:
+  - python
+  - -m
+  - audiomason
+  - verify
+  - --help
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 0
+  duration_seconds: 0.325713
+  stdout: "                                                                                \n Usage: python -m audiomason\
+    \ verify [OPTIONS]                                   \n                                                              \
+    \                  \n Verify library invariants.                                                     \n              \
+    \                                                                  \n\u256D\u2500 Options \u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u256E\n\u2502 --library-root        PATH     Library root to verify.                       \u2502\n\
+    \u2502 --json                         Emit JSON report to stdout.                   \u2502\n\u2502 --fail-on         \
+    \    TEXT     Threshold: error|warning|never.               \u2502\n\u2502                                [default: error]\
+    \                              \u2502\n\u2502 --checks              TEXT     Comma-separated allowlist of check ids. \
+    \      \u2502\n\u2502 --skip-checks         TEXT     Comma-separated denylist of check ids.        \u2502\n\u2502 --max-issues\
+    \          INTEGER  Maximum issues to collect. [default: 2000]    \u2502\n\u2502 --help                         Show this\
+    \ message and exit.                   \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n\n"
+  stderr: ''
+- requirement_id: VERIFY-03
+  command: python -m audiomason verify --help
+  argv:
+  - python
+  - -m
+  - audiomason
+  - verify
+  - --help
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 0
+  duration_seconds: 0.307595
+  stdout: "                                                                                \n Usage: python -m audiomason\
+    \ verify [OPTIONS]                                   \n                                                              \
+    \                  \n Verify library invariants.                                                     \n              \
+    \                                                                  \n\u256D\u2500 Options \u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u256E\n\u2502 --library-root        PATH     Library root to verify.                       \u2502\n\
+    \u2502 --json                         Emit JSON report to stdout.                   \u2502\n\u2502 --fail-on         \
+    \    TEXT     Threshold: error|warning|never.               \u2502\n\u2502                                [default: error]\
+    \                              \u2502\n\u2502 --checks              TEXT     Comma-separated allowlist of check ids. \
+    \      \u2502\n\u2502 --skip-checks         TEXT     Comma-separated denylist of check ids.        \u2502\n\u2502 --max-issues\
+    \          INTEGER  Maximum issues to collect. [default: 2000]    \u2502\n\u2502 --help                         Show this\
+    \ message and exit.                   \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n\n"
+  stderr: ''
+- requirement_id: VERIFY-04
+  command: python -m audiomason verify --help
+  argv:
+  - python
+  - -m
+  - audiomason
+  - verify
+  - --help
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 0
+  duration_seconds: 0.313136
+  stdout: "                                                                                \n Usage: python -m audiomason\
+    \ verify [OPTIONS]                                   \n                                                              \
+    \                  \n Verify library invariants.                                                     \n              \
+    \                                                                  \n\u256D\u2500 Options \u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u256E\n\u2502 --library-root        PATH     Library root to verify.                       \u2502\n\
+    \u2502 --json                         Emit JSON report to stdout.                   \u2502\n\u2502 --fail-on         \
+    \    TEXT     Threshold: error|warning|never.               \u2502\n\u2502                                [default: error]\
+    \                              \u2502\n\u2502 --checks              TEXT     Comma-separated allowlist of check ids. \
+    \      \u2502\n\u2502 --skip-checks         TEXT     Comma-separated denylist of check ids.        \u2502\n\u2502 --max-issues\
+    \          INTEGER  Maximum issues to collect. [default: 2000]    \u2502\n\u2502 --help                         Show this\
+    \ message and exit.                   \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n\n"
+  stderr: ''
+- requirement_id: VERIFY-05
+  command: python -m audiomason verify --help
+  argv:
+  - python
+  - -m
+  - audiomason
+  - verify
+  - --help
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 0
+  duration_seconds: 0.307192
+  stdout: "                                                                                \n Usage: python -m audiomason\
+    \ verify [OPTIONS]                                   \n                                                              \
+    \                  \n Verify library invariants.                                                     \n              \
+    \                                                                  \n\u256D\u2500 Options \u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u256E\n\u2502 --library-root        PATH     Library root to verify.                       \u2502\n\
+    \u2502 --json                         Emit JSON report to stdout.                   \u2502\n\u2502 --fail-on         \
+    \    TEXT     Threshold: error|warning|never.               \u2502\n\u2502                                [default: error]\
+    \                              \u2502\n\u2502 --checks              TEXT     Comma-separated allowlist of check ids. \
+    \      \u2502\n\u2502 --skip-checks         TEXT     Comma-separated denylist of check ids.        \u2502\n\u2502 --max-issues\
+    \          INTEGER  Maximum issues to collect. [default: 2000]    \u2502\n\u2502 --help                         Show this\
+    \ message and exit.                   \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n\n"
+  stderr: ''
+- requirement_id: VERIFY-06
+  command: python -m audiomason verify --help
+  argv:
+  - python
+  - -m
+  - audiomason
+  - verify
+  - --help
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 0
+  duration_seconds: 0.306335
+  stdout: "                                                                                \n Usage: python -m audiomason\
+    \ verify [OPTIONS]                                   \n                                                              \
+    \                  \n Verify library invariants.                                                     \n              \
+    \                                                                  \n\u256D\u2500 Options \u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u256E\n\u2502 --library-root        PATH     Library root to verify.                       \u2502\n\
+    \u2502 --json                         Emit JSON report to stdout.                   \u2502\n\u2502 --fail-on         \
+    \    TEXT     Threshold: error|warning|never.               \u2502\n\u2502                                [default: error]\
+    \                              \u2502\n\u2502 --checks              TEXT     Comma-separated allowlist of check ids. \
+    \      \u2502\n\u2502 --skip-checks         TEXT     Comma-separated denylist of check ids.        \u2502\n\u2502 --max-issues\
+    \          INTEGER  Maximum issues to collect. [default: 2000]    \u2502\n\u2502 --help                         Show this\
+    \ message and exit.                   \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n\n"
+  stderr: ''
+- requirement_id: PREFLIGHT-01
+  command: python -m audiomason preflight --help
+  argv:
+  - python
+  - -m
+  - audiomason
+  - preflight
+  - --help
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 0
+  duration_seconds: 0.301593
+  stdout: "                                                                                \n Usage: python -m audiomason\
+    \ preflight [OPTIONS]                                \n                                                              \
+    \                  \n Run preflight questions/gates.                                                 \n              \
+    \                                                                  \n\u256D\u2500 Options \u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u256E\n\u2502 --library-root                 PATH     Library root to validate.            \u2502\n\
+    \u2502 --yes,--non-interactive                 Non-interactive mode.                \u2502\n\u2502 --json            \
+    \                      Emit JSON report to stdout.          \u2502\n\u2502 --fail-on                      TEXT     Threshold:\
+    \ error|warning|never.      \u2502\n\u2502                                         [default: error]                  \
+    \   \u2502\n\u2502 --questions                    TEXT     Comma-separated allowlist of         \u2502\n\u2502       \
+    \                                  question ids.                        \u2502\n\u2502 --skip-questions              \
+    \ TEXT     Comma-separated denylist of question \u2502\n\u2502                                         ids.          \
+    \                       \u2502\n\u2502 --max-issues                   INTEGER  Maximum issues to collect.           \u2502\
+    \n\u2502                                         [default: 2000]                      \u2502\n\u2502 --help          \
+    \                        Show this message and exit.          \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n\n"
+  stderr: ''
+- requirement_id: PREFLIGHT-02
+  command: python -m audiomason preflight --help
+  argv:
+  - python
+  - -m
+  - audiomason
+  - preflight
+  - --help
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 0
+  duration_seconds: 0.320069
+  stdout: "                                                                                \n Usage: python -m audiomason\
+    \ preflight [OPTIONS]                                \n                                                              \
+    \                  \n Run preflight questions/gates.                                                 \n              \
+    \                                                                  \n\u256D\u2500 Options \u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u256E\n\u2502 --library-root                 PATH     Library root to validate.            \u2502\n\
+    \u2502 --yes,--non-interactive                 Non-interactive mode.                \u2502\n\u2502 --json            \
+    \                      Emit JSON report to stdout.          \u2502\n\u2502 --fail-on                      TEXT     Threshold:\
+    \ error|warning|never.      \u2502\n\u2502                                         [default: error]                  \
+    \   \u2502\n\u2502 --questions                    TEXT     Comma-separated allowlist of         \u2502\n\u2502       \
+    \                                  question ids.                        \u2502\n\u2502 --skip-questions              \
+    \ TEXT     Comma-separated denylist of question \u2502\n\u2502                                         ids.          \
+    \                       \u2502\n\u2502 --max-issues                   INTEGER  Maximum issues to collect.           \u2502\
+    \n\u2502                                         [default: 2000]                      \u2502\n\u2502 --help          \
+    \                        Show this message and exit.          \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n\n"
+  stderr: ''
+- requirement_id: PREFLIGHT-03
+  command: python -m audiomason preflight --help
+  argv:
+  - python
+  - -m
+  - audiomason
+  - preflight
+  - --help
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 0
+  duration_seconds: 0.30855
+  stdout: "                                                                                \n Usage: python -m audiomason\
+    \ preflight [OPTIONS]                                \n                                                              \
+    \                  \n Run preflight questions/gates.                                                 \n              \
+    \                                                                  \n\u256D\u2500 Options \u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u256E\n\u2502 --library-root                 PATH     Library root to validate.            \u2502\n\
+    \u2502 --yes,--non-interactive                 Non-interactive mode.                \u2502\n\u2502 --json            \
+    \                      Emit JSON report to stdout.          \u2502\n\u2502 --fail-on                      TEXT     Threshold:\
+    \ error|warning|never.      \u2502\n\u2502                                         [default: error]                  \
+    \   \u2502\n\u2502 --questions                    TEXT     Comma-separated allowlist of         \u2502\n\u2502       \
+    \                                  question ids.                        \u2502\n\u2502 --skip-questions              \
+    \ TEXT     Comma-separated denylist of question \u2502\n\u2502                                         ids.          \
+    \                       \u2502\n\u2502 --max-issues                   INTEGER  Maximum issues to collect.           \u2502\
+    \n\u2502                                         [default: 2000]                      \u2502\n\u2502 --help          \
+    \                        Show this message and exit.          \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n\n"
+  stderr: ''
+- requirement_id: PREFLIGHT-04
+  command: python -m audiomason preflight --help
+  argv:
+  - python
+  - -m
+  - audiomason
+  - preflight
+  - --help
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 0
+  duration_seconds: 0.301612
+  stdout: "                                                                                \n Usage: python -m audiomason\
+    \ preflight [OPTIONS]                                \n                                                              \
+    \                  \n Run preflight questions/gates.                                                 \n              \
+    \                                                                  \n\u256D\u2500 Options \u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u256E\n\u2502 --library-root                 PATH     Library root to validate.            \u2502\n\
+    \u2502 --yes,--non-interactive                 Non-interactive mode.                \u2502\n\u2502 --json            \
+    \                      Emit JSON report to stdout.          \u2502\n\u2502 --fail-on                      TEXT     Threshold:\
+    \ error|warning|never.      \u2502\n\u2502                                         [default: error]                  \
+    \   \u2502\n\u2502 --questions                    TEXT     Comma-separated allowlist of         \u2502\n\u2502       \
+    \                                  question ids.                        \u2502\n\u2502 --skip-questions              \
+    \ TEXT     Comma-separated denylist of question \u2502\n\u2502                                         ids.          \
+    \                       \u2502\n\u2502 --max-issues                   INTEGER  Maximum issues to collect.           \u2502\
+    \n\u2502                                         [default: 2000]                      \u2502\n\u2502 --help          \
+    \                        Show this message and exit.          \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n\n"
+  stderr: ''
+- requirement_id: PREFLIGHT-05
+  command: python -m audiomason preflight --help
+  argv:
+  - python
+  - -m
+  - audiomason
+  - preflight
+  - --help
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 0
+  duration_seconds: 0.303307
+  stdout: "                                                                                \n Usage: python -m audiomason\
+    \ preflight [OPTIONS]                                \n                                                              \
+    \                  \n Run preflight questions/gates.                                                 \n              \
+    \                                                                  \n\u256D\u2500 Options \u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u256E\n\u2502 --library-root                 PATH     Library root to validate.            \u2502\n\
+    \u2502 --yes,--non-interactive                 Non-interactive mode.                \u2502\n\u2502 --json            \
+    \                      Emit JSON report to stdout.          \u2502\n\u2502 --fail-on                      TEXT     Threshold:\
+    \ error|warning|never.      \u2502\n\u2502                                         [default: error]                  \
+    \   \u2502\n\u2502 --questions                    TEXT     Comma-separated allowlist of         \u2502\n\u2502       \
+    \                                  question ids.                        \u2502\n\u2502 --skip-questions              \
+    \ TEXT     Comma-separated denylist of question \u2502\n\u2502                                         ids.          \
+    \                       \u2502\n\u2502 --max-issues                   INTEGER  Maximum issues to collect.           \u2502\
+    \n\u2502                                         [default: 2000]                      \u2502\n\u2502 --help          \
+    \                        Show this message and exit.          \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n\n"
+  stderr: ''
+- requirement_id: PREFLIGHT-06
+  command: python -m audiomason preflight --help
+  argv:
+  - python
+  - -m
+  - audiomason
+  - preflight
+  - --help
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 0
+  duration_seconds: 0.304064
+  stdout: "                                                                                \n Usage: python -m audiomason\
+    \ preflight [OPTIONS]                                \n                                                              \
+    \                  \n Run preflight questions/gates.                                                 \n              \
+    \                                                                  \n\u256D\u2500 Options \u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u256E\n\u2502 --library-root                 PATH     Library root to validate.            \u2502\n\
+    \u2502 --yes,--non-interactive                 Non-interactive mode.                \u2502\n\u2502 --json            \
+    \                      Emit JSON report to stdout.          \u2502\n\u2502 --fail-on                      TEXT     Threshold:\
+    \ error|warning|never.      \u2502\n\u2502                                         [default: error]                  \
+    \   \u2502\n\u2502 --questions                    TEXT     Comma-separated allowlist of         \u2502\n\u2502       \
+    \                                  question ids.                        \u2502\n\u2502 --skip-questions              \
+    \ TEXT     Comma-separated denylist of question \u2502\n\u2502                                         ids.          \
+    \                       \u2502\n\u2502 --max-issues                   INTEGER  Maximum issues to collect.           \u2502\
+    \n\u2502                                         [default: 2000]                      \u2502\n\u2502 --help          \
+    \                        Show this message and exit.          \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n\n"
+  stderr: ''
+- requirement_id: REPORT-04
+  command: python -m audiomason report --help
+  argv:
+  - python
+  - -m
+  - audiomason
+  - report
+  - --help
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 2
+  duration_seconds: 0.295347
+  stdout: ''
+  stderr: "Usage: python -m audiomason [OPTIONS] COMMAND [ARGS]...\nTry 'python -m audiomason --help' for help.\n\u256D\u2500\
+    \ Error \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256E\n\u2502 No such command 'report'. Did you mean\
+    \ 'import'?                             \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n"
+- requirement_id: REPORT-05
+  command: python -m audiomason report --help
+  argv:
+  - python
+  - -m
+  - audiomason
+  - report
+  - --help
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 2
+  duration_seconds: 0.292779
+  stdout: ''
+  stderr: "Usage: python -m audiomason [OPTIONS] COMMAND [ARGS]...\nTry 'python -m audiomason --help' for help.\n\u256D\u2500\
+    \ Error \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256E\n\u2502 No such command 'report'. Did you mean\
+    \ 'import'?                             \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n"
+- requirement_id: REPORT-06
+  command: python -m audiomason report --help
+  argv:
+  - python
+  - -m
+  - audiomason
+  - report
+  - --help
+  cwd: /home/pi/audiomason2
+  status: ok
+  returncode: 2
+  duration_seconds: 0.295546
+  stdout: ''
+  stderr: "Usage: python -m audiomason [OPTIONS] COMMAND [ARGS]...\nTry 'python -m audiomason --help' for help.\n\u256D\u2500\
+    \ Error \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256E\n\u2502 No such command 'report'. Did you mean\
+    \ 'import'?                             \u2502\n\u2570\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\
+    \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256F\n"

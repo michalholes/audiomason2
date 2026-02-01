@@ -3,15 +3,13 @@
 import tempfile
 from pathlib import Path
 
-import pytest
-
 from audiomason.core.logging import (
     VerbosityLevel,
     get_logger,
-    set_verbosity,
     get_verbosity,
-    set_log_file,
     set_colors,
+    set_log_file,
+    set_verbosity,
 )
 
 

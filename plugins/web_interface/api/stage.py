@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-import os
 from pathlib import Path
 from typing import Any
 
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 
 from ..util.fs import find_repo_root
 from ..util.paths import stage_dir_from_config
-from ._am_cfg import read_am_config_text, get_inbox_dir
+from ._am_cfg import get_inbox_dir, read_am_config_text
 
 
 def _stage_dir() -> Path:

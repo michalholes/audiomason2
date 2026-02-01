@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any
+
 from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
 
 from .api.am_config import mount_am_config
 from .api.logs import mount_logs
@@ -51,4 +50,3 @@ class WebInterfacePlugin:
             ) from e
         app = self.create_app()
         uvicorn.run(app, host=host, port=port, log_level="info")
-

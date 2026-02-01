@@ -1,6 +1,7 @@
 """Integration tests for TUI plugin."""
 
 import subprocess
+
 import pytest
 
 
@@ -76,6 +77,7 @@ class TestTUIManifest:
     def test_manifest_has_config_schema(self):
         """Test that manifest has config schema."""
         from pathlib import Path
+
         import yaml
 
         manifest_path = Path(__file__).parent.parent.parent / "plugins" / "tui" / "plugin.yaml"
@@ -91,6 +93,7 @@ class TestTUIManifest:
     def test_manifest_has_main_menu_defaults(self):
         """Test that manifest has main menu defaults."""
         from pathlib import Path
+
         import yaml
 
         manifest_path = Path(__file__).parent.parent.parent / "plugins" / "tui" / "plugin.yaml"
@@ -232,14 +235,14 @@ class TestTUIScreens:
         """Test that all screen modules exist."""
         try:
             from plugins.tui.screens import (
-                MainScreen,
-                WizardsScreen,
+                AboutScreen,
                 ConfigScreen,
-                PluginsScreen,
-                WebScreen,
                 DaemonScreen,
                 LogsScreen,
-                AboutScreen,
+                MainScreen,
+                PluginsScreen,
+                WebScreen,
+                WizardsScreen,
             )
 
             assert MainScreen is not None
