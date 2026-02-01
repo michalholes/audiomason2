@@ -47,7 +47,7 @@ If you used `-n` (allow no-op), SUCCESS does **not** imply a code change.
 ## patched.zip contents hygiene (size control)
 
 `patched.zip` is intended for reproducibility and review, not for mirroring the entire git repository internals or tool caches.
-The runner excludes the following from the archived `workspace/` tree when building `patched.zip`:
+The runner excludes the following from the archived changed/touched subset when building `patched.zip` (FAIL diagnostics):
 
 - `.git/`
 - `venv/`, `.venv/`
@@ -225,3 +225,11 @@ What this means:
 If the audit step fails:
 - The runner reports FAILURE with stage `AUDIT`.
 - The commit remains (no rollback), but the failure is visible in the log and must be addressed.
+
+---
+
+## patched_success.zip (SUCCESS: clean repo snapshot)
+
+On SUCCESS, the runner creates `patched_success.zip` as `git archive HEAD` of the final live repo state.
+It contains only git-tracked files and does not include logs, workspaces, caches, or patch inputs.
+

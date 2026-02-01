@@ -332,6 +332,8 @@ def main(argv: list[str]) -> int:
     files_for_fail_zip: list[str] = []
     failed_patch_blobs_for_zip: list[tuple[str, bytes]] = []
     patch_applied_successfully: bool = False
+    rollback_ckpt_for_posthook = None
+    rollback_ws_for_posthook = None
 
     delete_workspace_after_archive: bool = False
     ws_for_posthook = None
@@ -675,6 +677,13 @@ def main(argv: list[str]) -> int:
                 files_current = list(res.declared_files)
                 touched_for_zip = list(res.touched_files)
                 failed_patch_blobs = [(f.name, f.data) for f in res.failures]
+
+                # For patched.zip on failure: always include touched targets and failed patch blobs.
+                # This must be available even if scope enforcement fails later.
+                files_for_fail_zip = sorted(set(touched_for_zip) | set(files_current))
+                failed_patch_blobs_for_zip = list(failed_patch_blobs)
+                patch_applied_successfully = patch_applied_any
+
             else:
                 run_patch(logger, patch_script, workspace_repo=ws.repo, policy=policy)
                 patch_applied_any = True
@@ -701,8 +710,9 @@ def main(argv: list[str]) -> int:
             patch_applied_successfully = patch_applied_any
 
         except Exception:
-            # Roll back ONLY on patching failure (patch exec or scope enforcement).
-            rollback_to_checkpoint(logger, ws.repo, ckpt)
+            # Defer rollback until after diagnostics archive is created.
+            rollback_ckpt_for_posthook = ckpt
+            rollback_ws_for_posthook = ws
             raise
 
         # Live repo guard: after patching (before gates) if scope includes patch.
@@ -886,6 +896,15 @@ def main(argv: list[str]) -> int:
 
                 archived_path: Path | None = used_patch_for_zip
 
+                # Post-success audit (if enabled by workflow). If audit fails, treat as failure and
+                # produce diagnostics archive instead of success archive.
+                if exit_code == 0 and push_ok_for_posthook is True:
+                    try:
+                        _run_post_success_audit(logger, repo_root, policy)
+                    except Exception as _audit_e:
+                        exit_code = 1
+                        logger.section("AUDIT")
+                        logger.line(f"post_success_audit_failed={_audit_e!r}")
                 if exit_code == 0:
                     # Best effort: if caller returned success before archiving, archive now.
                     if archived_path is None and patch_script is not None and patch_script.exists():
@@ -930,6 +949,15 @@ def main(argv: list[str]) -> int:
                         logger.section("ARCHIVE PATCH")
                         logger.line(f"no patch script found to archive; tried: {uniq}")
 
+                # Post-success audit (if enabled by workflow). If audit fails, treat as failure and
+                # produce diagnostics archive instead of success archive.
+                if exit_code == 0 and push_ok_for_posthook is True:
+                    try:
+                        _run_post_success_audit(logger, repo_root, policy)
+                    except Exception as _audit_e:
+                        exit_code = 1
+                        logger.section("AUDIT")
+                        logger.line(f"post_success_audit_failed={_audit_e!r}")
                 if exit_code == 0:
                     # Success: create git-archive snapshot of final repo state (no log inside).
                     zip_path = paths.patch_dir / "patched_success.zip"
@@ -946,6 +974,7 @@ def main(argv: list[str]) -> int:
                         not patch_applied_successfully
                         and archived_path is not None
                         and archived_path.exists()
+                        and not getattr(policy, "unified_patch", False)
                     ):
                         include_patch_paths.append(archived_path)
 
@@ -968,14 +997,25 @@ def main(argv: list[str]) -> int:
                         include_patch_blobs=include_patch_blobs,
                         include_patch_paths=include_patch_paths,
                     )
+                # Deferred rollback after diagnostics archive (keeps workspace available for zip creation).
+                if (
+                    exit_code != 0
+                    and rollback_ws_for_posthook is not None
+                    and rollback_ckpt_for_posthook is not None
+                    and getattr(policy, "rollback_workspace_on_fail", False)
+                ):
+                    rollback_to_checkpoint(
+                        logger,
+                        rollback_ws_for_posthook.repo,
+                        rollback_ckpt_for_posthook,
+                    )
+
                 if (
                     exit_code == 0
                     and delete_workspace_after_archive
                     and ws_for_posthook is not None
                 ):
                     delete_workspace(logger, ws_for_posthook)
-                    if push_ok_for_posthook is True:
-                        _run_post_success_audit(logger, repo_root, policy)
         except Exception as _e:
             try:
                 logger.section("POSTHOOK-ERROR")

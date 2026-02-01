@@ -225,6 +225,16 @@ When building `patched.zip`, the runner excludes repository internals and tool/r
 This is independent of scope logic and does not affect patch execution, gates, or promotion semantics.
 
 
+## 7.4 Success archive (`patched_success.zip`)
+
+On SUCCESS, the runner creates `patched_success.zip` as a clean `git archive HEAD` snapshot of the final live repository state.
+It contains only git-tracked files (as if fetched from the remote) and does not include logs, workspaces, caches, or patch inputs.
+
+Unified patch mode (`--unified-patch`):
+- On FAIL, `patched.zip` may include individual failed `.patch` inputs, but never includes the original input `.zip`.
+- Lists of `touched_files`, `changed_files`, and `failed_patches` are recorded in the primary log (no separate manifest files).
+
+
 ---
 
 ## 8. Git Behavior

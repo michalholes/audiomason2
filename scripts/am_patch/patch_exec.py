@@ -145,7 +145,7 @@ class UnifiedPatchFailure:
 class UnifiedPatchResult:
     applied_ok: int
     applied_fail: int
-    declared_files: list[str]  # files from patches that applied successfully (repo-relative)
+    declared_files: list[str]  # files referenced by any patch (repo-relative)
     touched_files: list[str]  # files referenced by any patch (best-effort resolved, repo-relative)
     failures: list[UnifiedPatchFailure]
 
@@ -334,7 +334,7 @@ def run_unified_patch_bundle(
     applied_ok = 0
     applied_fail = 0
     failures: list[UnifiedPatchFailure] = []
-    declared: set[str] = set()
+    declared_all: set[str] = set()
     touched_all: set[str] = set()
 
     strip_cfg = getattr(policy, "unified_patch_strip", None)
@@ -359,6 +359,8 @@ def run_unified_patch_bundle(
         )
         for p in touched_resolved:
             touched_all.add(p)
+        for p in touched_resolved:
+            declared_all.add(p)
 
         if strip is None:
             applied_fail += 1
@@ -372,6 +374,7 @@ def run_unified_patch_bundle(
         rewritten_text, rewritten_touched = _rewrite_patch_paths(text, strip=strip)
         for p in rewritten_touched:
             touched_all.add(p)
+            declared_all.add(p)
 
         patch_path = (workspace_repo / ".am_patch" / "inputs" / name).resolve()
         _write_atomic(patch_path, rewritten_text.encode("utf-8"))
@@ -388,10 +391,8 @@ def run_unified_patch_bundle(
 
         applied_ok += 1
         logger.line("result=OK")
-        for p in rewritten_touched:
-            declared.add(p)
 
-    declared_files = sorted({p for p in declared if p and p != "/dev/null"})
+    declared_files = sorted({p for p in declared_all if p and p != "/dev/null"})
     touched_files = sorted({p for p in touched_all if p and p != "/dev/null"})
 
     logger.section("UNIFIED PATCH (summary)")
