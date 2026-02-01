@@ -40,6 +40,7 @@ from am_patch.lock import FileLock
 from am_patch.log import Logger, new_log_file
 from am_patch.manifest import load_files
 from am_patch.patch_exec import precheck_patch_script, run_patch, run_unified_patch_bundle
+from am_patch.patch_select import PatchSelectError, choose_default_patch_input, decide_unified_mode
 from am_patch.paths import default_paths, ensure_dirs
 from am_patch.scope import blessed_gate_outputs_in, changed_paths, enforce_scope_delta
 from am_patch.version import RUNNER_VERSION
@@ -557,7 +558,10 @@ def main(argv: list[str]) -> int:
                         f"patch script not found (tried: {cand_cwd} and {cand_patchdir})",
                     )
         else:
-            patch_script = (patch_dir / f"issue_{issue_id}.py").resolve()
+            try:
+                patch_script = choose_default_patch_input(patch_dir, issue_id)
+            except PatchSelectError as e:
+                raise RunnerError("PREFLIGHT", "MANIFEST", str(e)) from e
 
         if not patch_script.exists():
             raise RunnerError("PREFLIGHT", "MANIFEST", f"patch script not found: {patch_script}")
@@ -569,14 +573,14 @@ def main(argv: list[str]) -> int:
                 "PATCH_PATH",
                 f"patch script must be under {patch_dir} (got {patch_script})",
             )
-        if getattr(policy, "unified_patch", False):
-            if patch_script.suffix not in (".patch", ".zip"):
-                raise RunnerError(
-                    "PREFLIGHT",
-                    "PATCH_PATH",
-                    f"unified patch input must be .patch or .zip (got {patch_script})",
-                )
-        else:
+        try:
+            unified_mode = decide_unified_mode(
+                patch_script, explicit_unified=bool(getattr(policy, "unified_patch", False))
+            )
+        except PatchSelectError as e:
+            raise RunnerError("PREFLIGHT", "PATCH_PATH", str(e)) from e
+
+        if not unified_mode:
             precheck_patch_script(patch_script, ascii_only=policy.ascii_only_patch)
 
         # Audit rubric guard (future-proofing): fail fast when new audit domains are added
@@ -667,7 +671,7 @@ def main(argv: list[str]) -> int:
             failed_patch_blobs: list[tuple[str, bytes]] = []
             patch_applied_any = False
 
-            if getattr(policy, "unified_patch", False):
+            if unified_mode:
                 res = run_unified_patch_bundle(
                     logger,
                     patch_script,

@@ -104,6 +104,7 @@ Short-help options (have short aliases):
 - `-a` / `--allow-undeclared-paths` : allow touching files outside FILES
 - `-t` / `--allow-untouched-files` : allow declared-but-untouched FILES
 - `-l` / `--rerun-latest` : rerun latest archived patch (auto-select from patches/successful and patches/unsuccessful)
+- `-u` / `--unified-patch` : force unified patch mode (.patch/.zip). Without `-u`, runner auto-detects: `.patch`/`.zip` => unified; `.py` => patch script.
 - `-r` / `--run-all-gates` : run all gates (not only those affected by files in scope)
 - `-g` / `--allow-gates-fail` : allow gates to fail (continue)
 - `-c` / `--show-config` : print the effective config/policy and exit

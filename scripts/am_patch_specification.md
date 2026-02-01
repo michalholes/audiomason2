@@ -232,6 +232,9 @@ the runner creates `patched_success.zip` as a clean `git archive HEAD` snapshot 
 It contains only git-tracked files (as if fetched from the remote) and does not include logs, workspaces, caches, or patch inputs.
 
 Unified patch mode (`--unified-patch`):
+- Auto-detection: if PATCH_PATH ends with `.patch` or `.zip`, unified mode is implied even without `--unified-patch`.
+- `--unified-patch` forces unified mode and validates that PATCH_PATH is `.patch` or a `.zip` containing at least one `.patch` entry.
+
 - On FAIL, `patched.zip` may include individual failed `.patch` inputs, but never includes the original input `.zip`.
 - Lists of `touched_files`, `changed_files`, and `failed_patches` are recorded in the primary log (no separate manifest files).
 
