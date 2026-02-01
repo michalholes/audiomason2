@@ -1,5 +1,5 @@
 name: web_interface
-version: 0.1.0
+version: "0.1.11"
 description: "Modern server-driven web interface (independent server)"
 author: "AudioMason"
 license: "MIT"

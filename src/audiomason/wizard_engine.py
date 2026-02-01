@@ -18,10 +18,11 @@ from audiomason.core.errors import AudioMasonError
 
 class VerbosityLevel:
     """Verbosity levels."""
-    QUIET = 0    # Errors only
-    NORMAL = 1   # Progress + warnings
+
+    QUIET = 0  # Errors only
+    NORMAL = 1  # Progress + warnings
     VERBOSE = 2  # Detailed info
-    DEBUG = 3    # Everything
+    DEBUG = 3  # Everything
 
 
 class WizardError(AudioMasonError):
@@ -43,7 +44,9 @@ class StepResult:
 class WizardEngine:
     """Execute YAML-based wizards."""
 
-    def __init__(self, loader: PluginLoader, verbosity: int = VerbosityLevel.NORMAL, config_resolver=None):
+    def __init__(
+        self, loader: PluginLoader, verbosity: int = VerbosityLevel.NORMAL, config_resolver=None
+    ):
         """Initialize wizard engine.
 
         Args:
@@ -147,7 +150,7 @@ class WizardEngine:
         step_id = step.get("id", "unknown")
 
         self._debug(f"Executing step: {step_id} (type: {step_type})")
-        
+
         try:
             if step_type == "input":
                 return self._execute_input_step(step, context)
@@ -184,11 +187,11 @@ class WizardEngine:
             field = step.get("id")
             if hasattr(context, field):
                 default = getattr(context, field)
-        
+
         # Use inbox_dir from config as default for source_path
         if not default and step.get("id") == "source_path" and self.config_resolver:
             try:
-                inbox_dir, source = self.config_resolver.resolve('inbox_dir')
+                inbox_dir, source = self.config_resolver.resolve("inbox_dir")
                 default = inbox_dir
                 self._debug(f"Using inbox_dir from config as default: {inbox_dir} (from {source})")
             except Exception as e:
@@ -342,12 +345,12 @@ class WizardEngine:
 
     def _evaluate_condition(self, condition: str, context: ProcessingContext) -> bool:
         """Evaluate condition string.
-        
+
         Supports:
         - Simple comparisons: field == 'value', field != 'value'
         - Logical operators: condition1 or condition2, condition1 and condition2
         - Existence checks: field exists
-        
+
         Note: For complex conditions with 'or'/'and', splits into parts and evaluates recursively.
 
         Args:
@@ -359,14 +362,14 @@ class WizardEngine:
         """
         if not condition:
             return True
-        
+
         condition = condition.strip()
-        
+
         # Handle 'or' operator (lower precedence)
         if " or " in condition:
             parts = condition.split(" or ")
             return any(self._evaluate_condition(part.strip(), context) for part in parts)
-        
+
         # Handle 'and' operator (higher precedence)
         if " and " in condition:
             parts = condition.split(" and ")
@@ -382,11 +385,11 @@ class WizardEngine:
             field, value = parts
             field = field.strip()
             value = value.strip().strip("\"'")
-            
+
             # Get field value from context
             context_value = getattr(context, field, None)
             return context_value == value
-        
+
         # Handle inequality
         if "!=" in condition:
             # Split only on first occurrence
@@ -397,16 +400,16 @@ class WizardEngine:
             field, value = parts
             field = field.strip()
             value = value.strip().strip("\"'")
-            
+
             # Get field value from context
             context_value = getattr(context, field, None)
             return context_value != value
-        
+
         # Handle existence check
         if " exists" in condition or condition.endswith("exists"):
             field = condition.replace("exists", "").strip()
             return hasattr(context, field) and getattr(context, field) is not None
-        
+
         # If no operator found, log warning and return True
         self._debug(f"Unknown condition format: {condition}, defaulting to True")
         return True
@@ -454,11 +457,11 @@ class WizardEngine:
             context = ProcessingContext(id="wizard", source=Path("."), state=State.INIT)
 
         self.context = context
-        
+
         # Set output_dir from config (outbox_dir) if available
-        if self.config_resolver and not hasattr(context, 'output_dir'):
+        if self.config_resolver and not hasattr(context, "output_dir"):
             try:
-                outbox_dir, source = self.config_resolver.resolve('outbox_dir')
+                outbox_dir, source = self.config_resolver.resolve("outbox_dir")
                 context.output_dir = outbox_dir
                 self._debug(f"Set output_dir from config: {outbox_dir} (from {source})")
             except Exception as e:
@@ -471,7 +474,7 @@ class WizardEngine:
             step_id = step.get("id", f"step_{i}")
 
             self._debug(f"Step {i}/{total_steps}: {step_id}")
-            
+
             # Progress callback
             if self.progress_callback:
                 self.progress_callback(step_id, i, total_steps)

@@ -113,7 +113,7 @@ class CheckpointManager:
                 data = json.load(f)
 
             # Reconstruct context
-            from audiomason.core.context import State, CoverChoice
+            from audiomason.core.context import CoverChoice, State
 
             context = ProcessingContext(
                 id=data["id"],

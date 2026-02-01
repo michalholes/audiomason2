@@ -10,10 +10,10 @@ from tempfile import TemporaryDirectory
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from audiomason.core import (
-    PluginLoader,
-    PipelineExecutor,
     Pipeline,
+    PipelineExecutor,
     PipelineStep,
+    PluginLoader,
     ProcessingContext,
     State,
 )
@@ -60,7 +60,7 @@ def test_integration():
             state=State.PROCESSING,
         )
 
-        print(f"\n📦 Created context:")
+        print("\n📦 Created context:")
         print(f"   ID: {context.id[:8]}...")
         print(f"   Source: {context.source.name}")
         print(f"   Author: {context.author}")
@@ -84,7 +84,7 @@ def test_integration():
             ],
         )
 
-        print(f"\n🔄 Created pipeline:")
+        print("\n🔄 Created pipeline:")
         print(f"   Name: {pipeline.name}")
         print(f"   Steps: {len(pipeline.steps)}")
         print(f"   Step 1: {pipeline.steps[0].id} (plugin: {pipeline.steps[0].plugin})")
@@ -93,7 +93,7 @@ def test_integration():
         #  5. Execute: Run pipeline
         # ═══════════════════════════════════════════
 
-        print(f"\n⚡ Executing pipeline...")
+        print("\n⚡ Executing pipeline...")
 
         executor = PipelineExecutor(loader)
 
@@ -106,8 +106,8 @@ def test_integration():
         #  6. Verify: Check results
         # ═══════════════════════════════════════════
 
-        print(f"\n✅ Pipeline completed!")
-        print(f"\n📊 Results:")
+        print("\n✅ Pipeline completed!")
+        print("\n📊 Results:")
         print(f"   State: {result_context.state.value}")
         print(f"   Completed steps: {result_context.completed_steps}")
         print(f"   Warnings: {result_context.warnings}")
@@ -119,7 +119,7 @@ def test_integration():
         assert "ExamplePlugin" in result_context.warnings[0]
         assert "example_plugin" in result_context.timings
 
-        print(f"\n🎉 All assertions passed!")
+        print("\n🎉 All assertions passed!")
 
 
 if __name__ == "__main__":

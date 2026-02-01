@@ -39,7 +39,7 @@ from am_patch.errors import RunnerError, fingerprint
 from am_patch.lock import FileLock
 from am_patch.log import Logger, new_log_file
 from am_patch.manifest import load_files
-from am_patch.patch_exec import precheck_patch_script, run_patch
+from am_patch.patch_exec import precheck_patch_script, run_patch, run_unified_patch_bundle
 from am_patch.paths import default_paths, ensure_dirs
 from am_patch.scope import blessed_gate_outputs_in, changed_paths, enforce_scope_delta
 from am_patch.version import RUNNER_VERSION
@@ -112,7 +112,7 @@ def _run_post_success_audit(logger: Logger, repo_root: Path, policy: Policy) -> 
         raise RunnerError("AUDIT", "AUDIT_REPORT_FAILED", "audit/audit_report.py failed")
 
 
-from am_patch.archive import archive_patch, make_patched_zip
+from am_patch.archive import archive_patch, make_failure_zip
 from am_patch.gates import run_gates
 from am_patch.promote import promote_files
 from am_patch.state import load_state, save_state, update_union
@@ -280,6 +280,8 @@ def main(argv: list[str]) -> int:
             "pytest_use_venv": getattr(cli, "pytest_use_venv", None),
             "post_success_audit": getattr(cli, "post_success_audit", None),
             "test_mode": getattr(cli, "test_mode", None),
+            "unified_patch": getattr(cli, "unified_patch", None),
+            "unified_patch_strip": getattr(cli, "patch_strip", None),
             "overrides": getattr(cli, "overrides", None),
         },
     )
@@ -327,6 +329,10 @@ def main(argv: list[str]) -> int:
     lock = FileLock(paths.lock_path)
     exit_code: int = 0
     used_patch_for_zip: Path | None = None
+    files_for_fail_zip: list[str] = []
+    failed_patch_blobs_for_zip: list[tuple[str, bytes]] = []
+    patch_applied_successfully: bool = False
+
     delete_workspace_after_archive: bool = False
     ws_for_posthook = None
     push_ok_for_posthook: bool | None = None
@@ -560,8 +566,15 @@ def main(argv: list[str]) -> int:
                 "PATCH_PATH",
                 f"patch script must be under {patch_dir} (got {patch_script})",
             )
-
-        precheck_patch_script(patch_script, ascii_only=policy.ascii_only_patch)
+        if getattr(policy, "unified_patch", False):
+            if patch_script.suffix not in (".patch", ".zip"):
+                raise RunnerError(
+                    "PREFLIGHT",
+                    "PATCH_PATH",
+                    f"unified patch input must be .patch or .zip (got {patch_script})",
+                )
+        else:
+            precheck_patch_script(patch_script, ascii_only=policy.ascii_only_patch)
 
         # Audit rubric guard (future-proofing): fail fast when new audit domains are added
         # but audit/audit_rubric.yaml does not contain the required runtime evidence commands.
@@ -602,7 +615,7 @@ def main(argv: list[str]) -> int:
             git_ops.require_branch(logger, repo_root, policy.default_branch)
 
         base_sha = git_ops.head_sha(logger, repo_root)
-        files_current = load_files(patch_script)
+        files_current = [] if getattr(policy, "unified_patch", False) else load_files(patch_script)
 
         logger.section("DECLARED FILES")
         for _p in files_current:
@@ -647,7 +660,24 @@ def main(argv: list[str]) -> int:
         before = changed_paths(logger, ws.repo)
 
         try:
-            run_patch(logger, patch_script, workspace_repo=ws.repo, policy=policy)
+            touched_for_zip: list[str] = []
+            failed_patch_blobs: list[tuple[str, bytes]] = []
+            patch_applied_any = False
+
+            if getattr(policy, "unified_patch", False):
+                res = run_unified_patch_bundle(
+                    logger,
+                    patch_script,
+                    workspace_repo=ws.repo,
+                    policy=policy,
+                )
+                patch_applied_any = res.applied_ok > 0
+                files_current = list(res.declared_files)
+                touched_for_zip = list(res.touched_files)
+                failed_patch_blobs = [(f.name, f.data) for f in res.failures]
+            else:
+                run_patch(logger, patch_script, workspace_repo=ws.repo, policy=policy)
+                patch_applied_any = True
 
             after = changed_paths(logger, ws.repo)
             touched = enforce_scope_delta(
@@ -664,6 +694,11 @@ def main(argv: list[str]) -> int:
 
             # Snapshot dirty paths immediately after patch (before gates).
             dirty_after_patch = list(after)
+
+            # For patched.zip on failure: include changed files plus all touched targets (including failed patches).
+            files_for_fail_zip = sorted(set(touched) | set(touched_for_zip))
+            failed_patch_blobs_for_zip = list(failed_patch_blobs)
+            patch_applied_successfully = patch_applied_any
 
         except Exception:
             # Roll back ONLY on patching failure (patch exec or scope enforcement).
@@ -895,16 +930,44 @@ def main(argv: list[str]) -> int:
                         logger.section("ARCHIVE PATCH")
                         logger.line(f"no patch script found to archive; tried: {uniq}")
 
-                zip_name = "patched_success.zip" if exit_code == 0 else "patched.zip"
-                zip_path = paths.patch_dir / zip_name
-                ws_dir = (
-                    ws_for_posthook.root
-                    if ws_for_posthook is not None
-                    else (paths.workspaces_dir / f"issue_{issue_id}")
-                )
-                if ws_for_posthook is not None and log_path.exists():
-                    _workspace_store_current_log(ws_for_posthook, log_path)
-                make_patched_zip(logger, zip_path, ws_dir, log_path, used_patch=archived_path)
+                if exit_code == 0:
+                    # Success: create git-archive snapshot of final repo state (no log inside).
+                    zip_path = paths.patch_dir / "patched_success.zip"
+                    git_ops.git_archive(logger, repo_root, zip_path, treeish="HEAD")
+                else:
+                    # Failure: create diagnostics archive with log + subset of repo files.
+                    zip_path = paths.patch_dir / "patched.zip"
+
+                    include_patch_paths: list[Path] = []
+                    include_patch_blobs: list[tuple[str, bytes]] = []
+
+                    # Include patch script only when patching did not apply.
+                    if (
+                        not patch_applied_successfully
+                        and archived_path is not None
+                        and archived_path.exists()
+                    ):
+                        include_patch_paths.append(archived_path)
+
+                    # Unified patch mode: include only failed .patch inputs (not the original zip).
+                    for name, data in failed_patch_blobs_for_zip:
+                        include_patch_blobs.append((name, data))
+
+                    ws_repo = (
+                        ws_for_posthook.repo
+                        if ws_for_posthook is not None
+                        else (paths.workspaces_dir / f"issue_{issue_id}" / "repo")
+                    )
+
+                    make_failure_zip(
+                        logger,
+                        zip_path,
+                        workspace_repo=ws_repo,
+                        log_path=log_path,
+                        include_repo_files=files_for_fail_zip,
+                        include_patch_blobs=include_patch_blobs,
+                        include_patch_paths=include_patch_paths,
+                    )
                 if (
                     exit_code == 0
                     and delete_workspace_after_archive

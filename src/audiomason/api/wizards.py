@@ -5,7 +5,6 @@ Provides REST API endpoints for managing wizards.
 
 from __future__ import annotations
 
-import shutil
 from pathlib import Path
 from typing import Any
 

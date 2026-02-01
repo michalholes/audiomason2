@@ -12,7 +12,6 @@ Note: This test simulates the flow but won't actually convert audio
 
 import sys
 from pathlib import Path
-from tempfile import TemporaryDirectory
 
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))

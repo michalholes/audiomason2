@@ -218,28 +218,26 @@ class FileIOPlugin:
 
         # Extract based on type
         suffix = source.suffix.lower()
-        
+
         if suffix == ".zip":
             with zipfile.ZipFile(source, "r") as zip_ref:
                 zip_ref.extractall(extract_dir)
         elif suffix == ".rar":
             try:
                 import rarfile
+
                 with rarfile.RarFile(source, "r") as rar_ref:
                     rar_ref.extractall(extract_dir)
             except ImportError:
-                raise FileError(
-                    "RAR support not available. Install with: pip install rarfile"
-                )
+                raise FileError("RAR support not available. Install with: pip install rarfile")
         elif suffix == ".7z":
             try:
                 import py7zr
+
                 with py7zr.SevenZipFile(source, "r") as sz_ref:
                     sz_ref.extractall(extract_dir)
             except ImportError:
-                raise FileError(
-                    "7Z support not available. Install with: pip install py7zr"
-                )
+                raise FileError("7Z support not available. Install with: pip install py7zr")
         else:
             raise FileError(f"Unsupported archive format: {suffix}")
 
@@ -266,15 +264,15 @@ class FileIOPlugin:
         """
         # TODO: Implement full organization logic
         # For now, this is a placeholder that does nothing
-        # 
+        #
         # Planned features:
         # - structure == "flat": All files in one directory
         # - structure == "by_author": Author/Title/files
         # - structure == "by_genre": Genre/Author/Title/files
-        # 
+        #
         # - filename_format == "original": Keep original names
         # - filename_format == "01.mp3": Sequential numbering
         # - filename_format == "chapter_01.mp3": "chapter_" prefix + number
-        
+
         context.add_warning("organize() called but not yet fully implemented")
         return context

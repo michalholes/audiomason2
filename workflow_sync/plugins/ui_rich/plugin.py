@@ -14,7 +14,7 @@ from typing import Any
 
 class RichUIPlugin:
     """Rich UI enhancements.
-    
+
     Note: This is a simplified version that works without Rich library.
     For full Rich support, install: pip install rich
     """
@@ -27,14 +27,20 @@ class RichUIPlugin:
         """
         self.config = config or {}
         self.color = self.config.get("color", True)
-        
+
         # Try to import Rich
         try:
             from rich.console import Console
-            from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeRemainingColumn
-            from rich.table import Table
             from rich.panel import Panel
-            
+            from rich.progress import (
+                BarColumn,
+                Progress,
+                SpinnerColumn,
+                TextColumn,
+                TimeRemainingColumn,
+            )
+            from rich.table import Table
+
             self.has_rich = True
             self.console = Console()
             self._Progress = Progress
@@ -56,6 +62,7 @@ class RichUIPlugin:
         """
         if self.has_rich and self.console:
             from rich.panel import Panel
+
             self.console.print(Panel(f"[bold cyan]{text}[/bold cyan]"))
         else:
             print(f"\n{'=' * 70}")
@@ -132,13 +139,13 @@ class RichUIPlugin:
         """
         if self.has_rich and self.console:
             table = self._Table(title=title)
-            
+
             for header in headers:
                 table.add_column(header, style="cyan")
-            
+
             for row in rows:
                 table.add_row(*row)
-            
+
             self.console.print(table)
         else:
             # Fallback to simple formatting
@@ -158,28 +165,28 @@ class RichUIPlugin:
         """
         if self.has_rich and self.console:
             from rich.table import Table
-            
+
             table = Table(title="Processing Status")
             table.add_column("Book", style="cyan")
             table.add_column("Status", style="yellow")
             table.add_column("Progress", style="green")
-            
+
             for ctx in contexts:
-                status = ctx.state.value if hasattr(ctx, 'state') else "unknown"
-                progress = f"{ctx.progress * 100:.0f}%" if hasattr(ctx, 'progress') else "0%"
-                title = getattr(ctx, 'title', 'Unknown')
-                
+                status = ctx.state.value if hasattr(ctx, "state") else "unknown"
+                progress = f"{ctx.progress * 100:.0f}%" if hasattr(ctx, "progress") else "0%"
+                title = getattr(ctx, "title", "Unknown")
+
                 table.add_row(title, status, progress)
-            
+
             self.console.print(table)
         else:
             # Fallback
             print("\nProcessing Status:")
             print("-" * 70)
             for i, ctx in enumerate(contexts, 1):
-                title = getattr(ctx, 'title', 'Unknown')
-                status = ctx.state.value if hasattr(ctx, 'state') else "unknown"
-                progress = f"{ctx.progress * 100:.0f}%" if hasattr(ctx, 'progress') else "0%"
+                title = getattr(ctx, "title", "Unknown")
+                status = ctx.state.value if hasattr(ctx, "state") else "unknown"
+                progress = f"{ctx.progress * 100:.0f}%" if hasattr(ctx, "progress") else "0%"
                 print(f"{i}. {title:30s} {status:15s} {progress:>6s}")
             print()
 

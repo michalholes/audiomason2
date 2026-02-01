@@ -18,18 +18,18 @@ from typing import Any
 
 from audiomason.core import (
     ConfigResolver,
-    PluginLoader,
-    PipelineExecutor,
-    ProcessingContext,
-    PreflightResult,
-    State,
     CoverChoice,
+    PipelineExecutor,
+    PluginLoader,
+    PreflightResult,
+    ProcessingContext,
+    State,
     detect_file_groups,
+    detect_format,
+    find_file_cover,
     guess_author_from_path,
     guess_title_from_path,
     guess_year_from_path,
-    detect_format,
-    find_file_cover,
 )
 
 
@@ -56,18 +56,18 @@ class CLIPlugin:
 
     def _parse_cli_args(self) -> dict[str, Any]:
         """Parse all CLI arguments into a dictionary for ConfigResolver.
-        
+
         Returns:
             Dictionary of CLI arguments with nested structure for dotted keys
         """
         cli_args = {}
         # Use original argv (before verbosity extraction)
-        args = getattr(self, '_original_argv', sys.argv)[1:]  # Skip program name
+        args = getattr(self, "_original_argv", sys.argv)[1:]  # Skip program name
         i = 0
-        
+
         while i < len(args):
             arg = args[i]
-            
+
             # Verbosity flags
             if arg in ("-q", "--quiet"):
                 cli_args["verbosity"] = "quiet"
@@ -75,31 +75,31 @@ class CLIPlugin:
                 cli_args["verbosity"] = "verbose"
             elif arg in ("-d", "--debug"):
                 cli_args["verbosity"] = "debug"
-            
+
             # Port flag - nested under 'web'
             elif arg == "--port" and i + 1 < len(args):
                 if "web" not in cli_args:
                     cli_args["web"] = {}
                 cli_args["web"]["port"] = int(args[i + 1])
                 i += 1  # Skip next arg
-            
+
             # Bitrate flag - nested under 'audio'
             elif arg == "--bitrate" and i + 1 < len(args):
                 if "audio" not in cli_args:
                     cli_args["audio"] = {}
                 cli_args["audio"]["bitrate"] = args[i + 1]
                 i += 1
-            
+
             # Output directory
             elif arg == "--output" and i + 1 < len(args):
                 cli_args["output_dir"] = args[i + 1]
                 i += 1
-            
+
             # Pipeline
             elif arg == "--pipeline" and i + 1 < len(args):
                 cli_args["pipeline"] = args[i + 1]
                 i += 1
-            
+
             # Loudnorm flag - nested under 'audio'
             elif arg == "--loudnorm":
                 if "audio" not in cli_args:
@@ -109,7 +109,7 @@ class CLIPlugin:
                 if "audio" not in cli_args:
                     cli_args["audio"] = {}
                 cli_args["audio"]["loudnorm"] = False
-            
+
             # Split chapters - nested under 'audio'
             elif arg == "--split-chapters":
                 if "audio" not in cli_args:
@@ -119,15 +119,15 @@ class CLIPlugin:
                 if "audio" not in cli_args:
                     cli_args["audio"] = {}
                 cli_args["audio"]["split_chapters"] = False
-            
+
             i += 1
-        
+
         self._debug(f"Parsed CLI args: {cli_args}")
         return cli_args
-    
+
     def _extract_verbosity_from_argv(self) -> None:
         """Extract verbosity flags from sys.argv and remove them.
-        
+
         This allows verbosity flags to be in ANY position:
         - audiomason -d tui
         - audiomason tui -d
@@ -135,7 +135,7 @@ class CLIPlugin:
         """
         # Check all arguments for verbosity flags
         args_to_remove = []
-        
+
         for i, arg in enumerate(sys.argv):
             if arg in ("-q", "--quiet"):
                 self.verbosity = VerbosityLevel.QUIET
@@ -146,11 +146,11 @@ class CLIPlugin:
             elif arg in ("-d", "--debug"):
                 self.verbosity = VerbosityLevel.DEBUG
                 args_to_remove.append(i)
-        
+
         # Remove verbosity flags from sys.argv (in reverse order to preserve indices)
         for i in reversed(args_to_remove):
             sys.argv.pop(i)
-        
+
         self._debug(f"Verbosity level set to: {self.verbosity}")
 
     async def run(self) -> None:
@@ -249,7 +249,7 @@ class CLIPlugin:
             return
 
         # Verbosity is already set globally in run()
-        
+
         self._info(f"🎧 AudioMason v2 - Processing {len(files)} file(s)")
         self._info("")
 
@@ -521,7 +521,14 @@ class CLIPlugin:
                 key = arg[2:]
 
                 # Boolean flags
-                if key in ["loudnorm", "split-chapters", "split_chapters", "quiet", "verbose", "debug"]:
+                if key in [
+                    "loudnorm",
+                    "split-chapters",
+                    "split_chapters",
+                    "quiet",
+                    "verbose",
+                    "debug",
+                ]:
                     options[key.replace("-", "_")] = True
                     i += 1
                 # Value options
@@ -586,16 +593,16 @@ class CLIPlugin:
             args: Command arguments
         """
         self._debug(f"Starting web server with verbosity: {self.verbosity}")
-        
+
         # Parse CLI arguments
         cli_args = self._parse_cli_args()
-        
+
         if self.verbosity >= VerbosityLevel.DEBUG:
             print(f"[DEBUG] Parsed CLI args: {cli_args}")
-        
+
         # Create ConfigResolver with CLI args
         config_resolver = ConfigResolver(cli_args=cli_args)
-        
+
         # Resolve web server port
         try:
             port, source = config_resolver.resolve("web.port")
@@ -614,29 +621,30 @@ class CLIPlugin:
         # Load web server plugin
         plugins_dir = Path(__file__).parent.parent
         loader = PluginLoader(builtin_plugins_dir=plugins_dir)
-        
+
         if self.verbosity >= VerbosityLevel.DEBUG:
             print(f"[DEBUG] Plugins directory: {plugins_dir}")
-            print(f"[DEBUG] Loading all plugins...")
-        
+            print("[DEBUG] Loading all plugins...")
+
         # Load all plugins first (so web UI can list them)
-        plugin_dirs = [d for d in plugins_dir.iterdir() 
-                      if d.is_dir() and (d / "plugin.yaml").exists()]
-        
+        plugin_dirs = [
+            d for d in plugins_dir.iterdir() if d.is_dir() and (d / "plugin.yaml").exists()
+        ]
+
         if self.verbosity >= VerbosityLevel.DEBUG:
             print(f"[DEBUG] Found {len(plugin_dirs)} plugin directories")
-        
+
         for plugin_dir in plugin_dirs:
             try:
                 if self.verbosity >= VerbosityLevel.DEBUG:
                     print(f"[DEBUG]   Loading: {plugin_dir.name}...")
                 loader.load_plugin(plugin_dir, validate=False)
                 if self.verbosity >= VerbosityLevel.DEBUG:
-                    print(f"[DEBUG]     ✓ Loaded")
+                    print("[DEBUG]     ✓ Loaded")
             except Exception as e:
                 if self.verbosity >= VerbosityLevel.DEBUG:
                     print(f"[DEBUG]     ✗ Failed: {e}")
-        
+
         if self.verbosity >= VerbosityLevel.DEBUG:
             loaded = loader.list_plugins()
             print(f"[DEBUG] Successfully loaded {len(loaded)} plugins: {loaded}")
@@ -652,20 +660,20 @@ class CLIPlugin:
             web_plugin.config_resolver = config_resolver
             web_plugin.plugin_loader = loader
             web_plugin.verbosity = self.verbosity
-            
+
             if self.verbosity >= VerbosityLevel.DEBUG:
-                print(f"[DEBUG] Web plugin initialized with:")
+                print("[DEBUG] Web plugin initialized with:")
                 print(f"[DEBUG]   - config_resolver: {config_resolver is not None}")
                 print(f"[DEBUG]   - plugin_loader: {loader is not None}")
                 print(f"[DEBUG]   - verbosity: {self.verbosity}")
-            
+
             await web_plugin.run()
         except Exception as e:
             self._error(f"❌ Error starting web server: {e}")
             if self.verbosity >= VerbosityLevel.DEBUG:
                 import traceback
-                traceback.print_exc()
 
+                traceback.print_exc()
 
     async def _daemon_command(self) -> None:
         """Start daemon mode."""
@@ -690,6 +698,7 @@ class CLIPlugin:
             self._error(f"❌ Error starting daemon: {e}")
             if self.verbosity >= VerbosityLevel.DEBUG:
                 import traceback
+
                 traceback.print_exc()
 
     async def _checkpoints_command(self, args: list[str]) -> None:
@@ -728,43 +737,44 @@ class CLIPlugin:
 
             deleted = manager.cleanup_old_checkpoints(days=days)
             print(f"Deleted {deleted} checkpoint(s) older than {days} days")
-    
+
     async def _wizard_command(self, args: list[str]) -> None:
         """Run wizard command.
-        
+
         Args:
             args: Command arguments
         """
         from audiomason.wizard_engine import WizardEngine
-        
+
         wizards_dir = Path(__file__).parent.parent.parent / "wizards"
-        
+
         # List wizards if no args
         if not args:
             print("🧙 Available Wizards:")
             print()
-            
+
             if not wizards_dir.exists():
                 print("  No wizards found!")
                 print(f"  Create wizards in: {wizards_dir}")
                 return
-            
+
             wizard_files = list(wizards_dir.glob("*.yaml"))
             if not wizard_files:
                 print("  No wizards found!")
                 return
-            
+
             for wizard_file in sorted(wizard_files):
                 # Load wizard to get name and description
                 import yaml
+
                 try:
                     with open(wizard_file) as f:
                         wizard_def = yaml.safe_load(f)
-                    
-                    wizard = wizard_def.get('wizard', {})
-                    name = wizard.get('name', wizard_file.stem)
-                    desc = wizard.get('description', 'No description')
-                    
+
+                    wizard = wizard_def.get("wizard", {})
+                    name = wizard.get("name", wizard_file.stem)
+                    desc = wizard.get("description", "No description")
+
                     print(f"  {wizard_file.stem}")
                     print(f"    Name: {name}")
                     print(f"    Description: {desc}")
@@ -772,45 +782,45 @@ class CLIPlugin:
                 except Exception as e:
                     print(f"  {wizard_file.stem} (error: {e})")
                     print()
-            
+
             print("Run a wizard with: audiomason wizard <name>")
             return
-        
+
         # Run specified wizard
         wizard_name = args[0]
         wizard_file = wizards_dir / f"{wizard_name}.yaml"
-        
+
         if not wizard_file.exists():
             self._error(f"Wizard not found: {wizard_name}")
             print(f"Available wizards: {', '.join([f.stem for f in wizards_dir.glob('*.yaml')])}")
             return
-        
+
         print(f"🧙 Running wizard: {wizard_name}")
         print()
-        
+
         # Create wizard engine
         plugins_dir = Path(__file__).parent.parent
         loader = PluginLoader(builtin_plugins_dir=plugins_dir)
-        
+
         # Create config resolver
         cli_args = self._parse_cli_args()
         config_resolver = ConfigResolver(
             cli_args=cli_args,
             user_config_path=Path.home() / ".config/audiomason/config.yaml",
-            system_config_path=Path("/etc/audiomason/config.yaml")
+            system_config_path=Path("/etc/audiomason/config.yaml"),
         )
-        
+
         # Debug: Show loaded config values
         if self.verbosity >= VerbosityLevel.DEBUG:
             try:
-                inbox_dir, inbox_source = config_resolver.resolve('inbox_dir')
-                outbox_dir, outbox_source = config_resolver.resolve('outbox_dir')
-                self._debug(f"Config loaded:")
+                inbox_dir, inbox_source = config_resolver.resolve("inbox_dir")
+                outbox_dir, outbox_source = config_resolver.resolve("outbox_dir")
+                self._debug("Config loaded:")
                 self._debug(f"  inbox_dir: {inbox_dir} (from {inbox_source})")
                 self._debug(f"  outbox_dir: {outbox_dir} (from {outbox_source})")
             except Exception as e:
                 self._debug(f"  Config values unavailable: {e}")
-        
+
         # Load commonly used plugins
         for plugin in ["audio_processor", "file_io", "id3_tagger", "cover_handler"]:
             plugin_dir = plugins_dir / plugin
@@ -819,70 +829,70 @@ class CLIPlugin:
                     loader.load_plugin(plugin_dir, validate=False)
                 except Exception:
                     pass
-        
+
         engine = WizardEngine(loader, verbosity=self.verbosity, config_resolver=config_resolver)
-        
+
         # Set input handler for interactive prompts
         def input_handler(prompt: str, options: dict) -> str:
             """Handle user input for wizard steps."""
-            if options.get('type') == 'choice':
+            if options.get("type") == "choice":
                 # Choice step
-                choices = options.get('choices', [])
-                default = options.get('default')
-                
+                choices = options.get("choices", [])
+                default = options.get("default")
+
                 print(f"\n{prompt}")
                 for i, choice in enumerate(choices, 1):
                     marker = " (default)" if choice == default else ""
                     print(f"  {i}. {choice}{marker}")
-                
+
                 while True:
-                    user_input = input("Select [1-{}]: ".format(len(choices))).strip()
-                    
+                    user_input = input(f"Select [1-{len(choices)}]: ").strip()
+
                     if not user_input and default:
                         return default
-                    
+
                     if user_input.isdigit():
                         idx = int(user_input) - 1
                         if 0 <= idx < len(choices):
                             return choices[idx]
-                    
+
                     print("Invalid choice, try again")
             else:
                 # Input step
-                required = options.get('required', False)
-                default = options.get('default')
-                
+                required = options.get("required", False)
+                default = options.get("default")
+
                 if default:
                     prompt_text = f"{prompt} [{default}]: "
                 else:
                     prompt_text = f"{prompt}: "
-                
+
                 while True:
                     value = input(prompt_text).strip()
-                    
+
                     if not value and default:
                         return default
-                    
+
                     if required and not value:
                         print("This field is required")
                         continue
-                    
+
                     return value
-        
+
         engine.set_input_handler(input_handler)
-        
+
         # Set progress callback
         def progress_callback(step_name: str, current: int, total: int):
             """Show progress."""
             percent = int((current / total) * 100)
             print(f"[{current}/{total}] {step_name}... ({percent}%)")
-        
+
         engine.set_progress_callback(progress_callback)
-        
+
         # Run wizard
         try:
             context = engine.run_wizard_from_file(wizard_file)
-            
+
             print()
             print("✅ Wizard completed successfully!")
             print()
@@ -891,36 +901,37 @@ class CLIPlugin:
             if context.year:
                 print(f"  Year: {context.year}")
             print()
-            
+
         except Exception as e:
             print()
             self._error(f"Wizard failed: {e}")
             import traceback
+
             if self.verbosity >= VerbosityLevel.DEBUG:
                 traceback.print_exc()
-    
+
     async def _tui_command(self) -> None:
         """Launch TUI interface."""
         self._debug(f"Launching TUI with verbosity level: {self.verbosity}")
-        
+
         try:
             # Load TUI plugin
             plugins_dir = Path(__file__).parent.parent
             tui_dir = plugins_dir / "tui"
-            
+
             if not tui_dir.exists():
                 self._error("TUI plugin not found!")
                 print("Install TUI plugin to use this feature.")
                 return
-            
+
             # Import and run
             sys.path.insert(0, str(tui_dir))
             from plugin import TUIPlugin
-            
+
             # Pass verbosity level to TUI
             tui = TUIPlugin(config={"verbosity": self.verbosity})
             await tui.run()
-            
+
         except ImportError as e:
             self._error(f"Failed to load TUI: {e}")
             print("\nTUI requires the 'curses' module.")
@@ -928,5 +939,6 @@ class CLIPlugin:
         except Exception as e:
             self._error(f"TUI error: {e}")
             import traceback
+
             if self.verbosity >= VerbosityLevel.DEBUG:
                 traceback.print_exc()

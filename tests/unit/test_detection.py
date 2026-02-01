@@ -1,14 +1,11 @@
 """Unit tests for core.detection module."""
 
-import pytest
-from pathlib import Path
-
 from audiomason.core.detection import (
+    detect_file_groups,
+    detect_format,
     guess_author_from_path,
     guess_title_from_path,
     guess_year_from_path,
-    detect_file_groups,
-    detect_format,
 )
 
 

@@ -27,9 +27,7 @@ class TestPluginAutoLoading:
         plugin_dirs = loader.discover()
 
         assert len(plugin_dirs) > 0, "No plugins discovered"
-        assert any(
-            p.name == "cli" for p in plugin_dirs
-        ), "CLI plugin not discovered"
+        assert any(p.name == "cli" for p in plugin_dirs), "CLI plugin not discovered"
 
     def test_discover_user_plugins(self, tmp_path):
         """Test discovery of user plugins."""

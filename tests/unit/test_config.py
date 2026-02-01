@@ -1,7 +1,6 @@
 """Unit tests for core.config module."""
 
 import pytest
-from pathlib import Path
 
 from audiomason.core.config import ConfigResolver
 from audiomason.core.errors import ConfigError

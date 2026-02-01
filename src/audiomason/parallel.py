@@ -6,7 +6,7 @@ import asyncio
 from pathlib import Path
 from typing import Any
 
-from audiomason.core import ProcessingContext, PipelineExecutor, PluginLoader
+from audiomason.core import PipelineExecutor, ProcessingContext
 
 
 class ParallelProcessor:
@@ -133,7 +133,7 @@ class BatchQueue:
                 self.results.append(result)
                 self.queue.task_done()
 
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 # No books in queue, continue
                 continue
             except Exception as e:

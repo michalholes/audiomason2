@@ -108,7 +108,7 @@ def _as_str(d: dict[str, Any], k: str, default: str | None) -> str | None:
 
 
 def _as_list_str(d: dict[str, Any], k: str, default: list[str]) -> list[str]:
-    v = d.get(k, None)
+    v = d.get(k)
     if v is None:
         return list(default)
     if isinstance(v, list):

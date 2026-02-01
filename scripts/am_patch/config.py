@@ -34,6 +34,12 @@ class Policy:
     delete_workspace_on_success: bool = True
 
     ascii_only_patch: bool = True
+
+    # Unified patch input (.patch / .zip)
+    unified_patch: bool = False
+    unified_patch_continue: bool = True
+    unified_patch_strip: int | None = None  # None=infer
+    unified_patch_touch_on_fail: bool = True
     no_op_fail: bool = True
     allow_no_op: bool = False
     enforce_allowed_files: bool = True
@@ -108,7 +114,7 @@ def _as_str(d: dict[str, Any], k: str, default: str | None) -> str | None:
 
 
 def _as_list_str(d: dict[str, Any], k: str, default: list[str]) -> list[str]:
-    v = d.get(k, None)
+    v = d.get(k)
     if v is None:
         return list(default)
     if isinstance(v, list):

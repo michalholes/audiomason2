@@ -46,50 +46,70 @@ def archive_patch(logger: Logger, patch_script: Path, dest_dir: Path) -> Path:
     return dest
 
 
-def make_patched_zip(
+def make_failure_zip(
     logger: Logger,
     zip_path: Path,
-    include_dir: Path,
+    *,
+    workspace_repo: Path,
     log_path: Path,
-    used_patch: Path | None = None,
+    include_repo_files: list[str],
+    include_patch_blobs: list[tuple[str, bytes]] | None = None,
+    include_patch_paths: list[Path] | None = None,
 ) -> None:
+    """Create patched.zip for failure/diagnostics.
+
+    Contract:
+    - Always includes the primary log under logs/<name>.
+    - Includes only a subset of repo files from the workspace (changed/touched union).
+    - Includes patch inputs only when requested (e.g. patch not applied, or individual failed .patch files).
+    """
     logger.section("PATCHED.ZIP")
     zip_path.parent.mkdir(parents=True, exist_ok=True)
 
-    excluded_dir_names = {
-        ".git",
-        "venv",
-        ".venv",
-        ".mypy_cache",
-        ".ruff_cache",
-        ".pytest_cache",
-        "__pycache__",
-        "oldlogs",
-    }
+    # De-dup, keep deterministic order.
+    seen: set[str] = set()
+    files: list[str] = []
+    for p in include_repo_files:
+        rp = p.strip().lstrip("/")
+        if not rp or rp in seen:
+            continue
+        seen.add(rp)
+        files.append(rp)
+    files.sort()
 
-    def is_excluded(rel: Path) -> bool:
-        if rel.suffix == ".pyc":
-            return True
-        for part in rel.parts:
-            if part in excluded_dir_names:
-                return True
-        return False
+    patch_blobs = include_patch_blobs or []
+    patch_paths = include_patch_paths or []
+
+    # De-dup patch entries by archive name.
+    seen_patch: set[str] = set()
 
     with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as z:
-        # include log
         if log_path.exists():
             z.write(log_path, arcname=f"logs/{log_path.name}")
 
-        # include used patch script (best effort)
-        if used_patch is not None and used_patch.exists():
-            z.write(used_patch, arcname=f"patches/{used_patch.name}")
+        for name, data in patch_blobs:
+            arc = f"patches/{Path(name).name}"
+            if arc in seen_patch:
+                continue
+            seen_patch.add(arc)
+            z.writestr(arc, data)
 
-        # include workspace (best effort)
-        if include_dir.exists():
-            for p in include_dir.rglob("*"):
-                if p.is_file():
-                    rel = p.relative_to(include_dir)
-                    if is_excluded(rel):
-                        continue
-                    z.write(p, arcname=str(Path("workspace") / rel))
+        for p in patch_paths:
+            if not p.exists():
+                continue
+            arc = f"patches/{p.name}"
+            if arc in seen_patch:
+                continue
+            seen_patch.add(arc)
+            z.write(p, arcname=arc)
+
+        for rel in files:
+            src = (workspace_repo / rel).resolve()
+            try:
+                src.relative_to(workspace_repo.resolve())
+            except Exception:
+                continue
+            if src.is_file():
+                z.write(src, arcname=rel)
+
     logger.line(f"created patched.zip: {zip_path}")

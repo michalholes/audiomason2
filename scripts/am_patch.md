@@ -44,10 +44,10 @@ If you used `-n` (allow no-op), SUCCESS does **not** imply a code change.
 ---
 
 
-## patched.zip contents hygiene (size control)
+## patched.zip (log + changed/touched subset) contents hygiene (size control)
 
-`patched.zip` is intended for reproducibility and review, not for mirroring the entire git repository internals or tool caches.
-The runner excludes the following from the archived `workspace/` tree when building `patched.zip`:
+`patched.zip (log + changed/touched subset)` is intended for reproducibility and review, not for mirroring the entire git repository internals or tool caches.
+The runner excludes the following from the archived `workspace/` tree when building `patched.zip (log + changed/touched subset)`:
 
 - `.git/`
 - `venv/`, `.venv/`

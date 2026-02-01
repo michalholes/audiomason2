@@ -29,7 +29,7 @@ class PluginNotFoundError(PluginError):
     def __init__(self, plugin_name: str) -> None:
         super().__init__(
             f"Plugin '{plugin_name}' not found",
-            f"Check available plugins with: audiomason plugins list",
+            "Check available plugins with: audiomason plugins list",
         )
 
 

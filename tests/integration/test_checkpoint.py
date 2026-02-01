@@ -1,10 +1,7 @@
 """Integration tests for checkpoint system."""
 
-import pytest
-from pathlib import Path
-
 from audiomason.checkpoint import CheckpointManager
-from audiomason.core import ProcessingContext, State
+from audiomason.core import ProcessingContext
 
 
 class TestCheckpointManager:

@@ -342,9 +342,7 @@ class PluginLoader:
                         break
 
                 if not class_found:
-                    validation_errors.append(
-                        f"Class '{class_name}' not found in {module_file}"
-                    )
+                    validation_errors.append(f"Class '{class_name}' not found in {module_file}")
             except Exception as e:
                 validation_errors.append(f"Class validation failed: {e}")
 
@@ -362,9 +360,7 @@ class PluginLoader:
                         # Optional dependency - just warning
                         pass
                     else:
-                        validation_errors.append(
-                            f"Required dependency '{dep_name}' not available"
-                        )
+                        validation_errors.append(f"Required dependency '{dep_name}' not available")
 
         # Report errors
         if validation_errors:

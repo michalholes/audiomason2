@@ -15,7 +15,7 @@ import shutil
 from pathlib import Path
 from urllib.parse import urlparse
 
-from audiomason.core import ProcessingContext, CoverChoice
+from audiomason.core import CoverChoice, ProcessingContext
 from audiomason.core.errors import CoverError
 
 

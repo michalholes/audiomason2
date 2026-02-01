@@ -81,9 +81,7 @@ class TestAllPluginsLoadable:
         core_plugins = {"cli", "tui", "daemon", "web_server"}
 
         for plugin_name in core_plugins:
-            assert (
-                plugin_name in plugin_names
-            ), f"Core plugin '{plugin_name}' not found"
+            assert plugin_name in plugin_names, f"Core plugin '{plugin_name}' not found"
 
     def test_plugins_have_manifests(self):
         """Test that all plugins have valid plugin.yaml manifests."""
@@ -109,6 +107,4 @@ class TestAllPluginsLoadable:
             manifest = loader._load_manifest(plugin_dir)
             assert manifest.name, f"Plugin {plugin_dir.name} has no name in manifest"
             assert manifest.version, f"Plugin {plugin_dir.name} has no version"
-            assert (
-                manifest.entrypoint
-            ), f"Plugin {plugin_dir.name} has no entrypoint"
+            assert manifest.entrypoint, f"Plugin {plugin_dir.name} has no entrypoint"

@@ -48,8 +48,9 @@ def sample_context(temp_audio_file):
     Returns:
         ProcessingContext instance
     """
-    from audiomason.core import ProcessingContext, State
     import uuid
+
+    from audiomason.core import ProcessingContext, State
 
     return ProcessingContext(
         id=str(uuid.uuid4()),

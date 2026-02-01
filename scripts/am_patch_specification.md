@@ -214,7 +214,7 @@ This behavior applies to workspace promotion and `--finalize-workspace`.
 
 ### 7.3 Archive hygiene (`patched.zip`)
 
-When building `patched.zip`, the runner excludes repository internals and tool/runtime caches from the archived `workspace/` tree:
+When building `patched.zip`, the runner excludes repository internals and tool/runtime caches from the archived `changed/touched subset (no full workspace)` tree:
 
 - `.git/`
 - `venv/`, `.venv/`

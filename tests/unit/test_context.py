@@ -1,9 +1,6 @@
 """Unit tests for core.context module."""
 
-import pytest
-from pathlib import Path
-
-from audiomason.core.context import ProcessingContext, State, CoverChoice, PreflightResult
+from audiomason.core.context import CoverChoice, PreflightResult, ProcessingContext, State
 
 
 class TestProcessingContext:

@@ -5,20 +5,18 @@ Provides complete web interface for AudioMason control with dynamic templates.
 
 from __future__ import annotations
 
-import asyncio
-import json
 import uuid
-import shutil
 import zipfile
 from pathlib import Path
 from typing import Any
 
 try:
-    from fastapi import FastAPI, File, Form, UploadFile, WebSocket, WebSocketDisconnect, Request
+    import uvicorn
+    from fastapi import FastAPI, File, Form, Request, UploadFile, WebSocket, WebSocketDisconnect
     from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
     from fastapi.staticfiles import StaticFiles
     from fastapi.templating import Jinja2Templates
-    import uvicorn
+
     HAS_FASTAPI = True
 except ImportError:
     HAS_FASTAPI = False
@@ -39,19 +37,18 @@ except ImportError:
 from audiomason.core import (
     ConfigResolver,
     PluginLoader,
-    PipelineExecutor,
     ProcessingContext,
     State,
-    CoverChoice,
 )
 
 
 class VerbosityLevel:
     """Verbosity levels."""
-    QUIET = 0    # Errors only
-    NORMAL = 1   # Progress + warnings
+
+    QUIET = 0  # Errors only
+    NORMAL = 1  # Progress + warnings
     VERBOSE = 2  # Detailed info
-    DEBUG = 3    # Everything
+    DEBUG = 3  # Everything
 
 
 class WebServerPlugin:
@@ -70,11 +67,11 @@ class WebServerPlugin:
 
         self.config = config or {}
         self.verbosity = VerbosityLevel.NORMAL
-        
+
         # Will be set by CLI
         self.config_resolver: ConfigResolver | None = None
         self.plugin_loader: PluginLoader | None = None
-        
+
         # Lazy init - set in run()
         self.host: str = "0.0.0.0"
         self.port: int = 8080
@@ -95,9 +92,9 @@ class WebServerPlugin:
             self.port = 8080
             self.upload_dir = Path("/tmp/audiomason/uploads")
             if self.verbosity >= VerbosityLevel.DEBUG:
-                print(f"[DEBUG] No ConfigResolver, using defaults")
+                print("[DEBUG] No ConfigResolver, using defaults")
             return
-        
+
         # Resolve web.host
         try:
             self.host, source = self.config_resolver.resolve("web.host")
@@ -107,7 +104,7 @@ class WebServerPlugin:
             self.host = "0.0.0.0"
             if self.verbosity >= VerbosityLevel.DEBUG:
                 print(f"[DEBUG] Failed to resolve web.host: {e}, using default")
-        
+
         # Resolve web.port
         try:
             self.port, source = self.config_resolver.resolve("web.port")
@@ -115,11 +112,12 @@ class WebServerPlugin:
                 print(f"  Port: {self.port} (source: {source})")
         except Exception as e:
             import random
+
             self.port = random.randint(45001, 65535)
             if self.verbosity >= VerbosityLevel.DEBUG:
                 print(f"[DEBUG] Failed to resolve web.port: {e}")
                 print(f"[DEBUG] Using random port: {self.port}")
-        
+
         # Resolve upload_dir
         try:
             upload_dir_str, source = self.config_resolver.resolve("web.upload_dir")
@@ -130,7 +128,7 @@ class WebServerPlugin:
             self.upload_dir = Path("/tmp/audiomason/uploads")
             if self.verbosity >= VerbosityLevel.DEBUG:
                 print(f"[DEBUG] Failed to resolve web.upload_dir: {e}, using default")
-        
+
         # Create upload directory
         self.upload_dir.mkdir(parents=True, exist_ok=True)
 
@@ -161,13 +159,13 @@ class WebServerPlugin:
         app.get("/config", response_class=HTMLResponse)(self.config_page)
         app.get("/jobs", response_class=HTMLResponse)(self.jobs_page)
         app.get("/wizards", response_class=HTMLResponse)(self.wizards_page)
-        
+
         # ===== API ROUTES (JSON) =====
         # Status & Config
         app.get("/api/status")(self.get_status)
         app.get("/api/config")(self.get_config)
         app.post("/api/config")(self.update_config)
-        
+
         # Plugins
         app.get("/api/plugins")(self.list_plugins_api)
         app.put("/api/plugins/{name}/enable")(self.enable_plugin)
@@ -176,7 +174,7 @@ class WebServerPlugin:
         app.get("/api/plugins/{name}/config")(self.get_plugin_config)
         app.post("/api/plugins/{name}/config")(self.save_plugin_config)
         app.post("/api/plugins/install")(self.install_plugin)
-        
+
         # Wizards
         app.get("/api/wizards")(self.list_wizards_api)
         app.get("/api/wizards/{name}")(self.get_wizard)
@@ -184,18 +182,18 @@ class WebServerPlugin:
         app.post("/api/wizards/create")(self.create_wizard)
         app.put("/api/wizards/{name}")(self.update_wizard)
         app.delete("/api/wizards/{name}")(self.delete_wizard)
-        
+
         # Jobs
         app.get("/api/jobs")(self.list_jobs)
         app.get("/api/jobs/{job_id}")(self.get_job)
         app.post("/api/upload")(self.upload_files)
         app.post("/api/process")(self.start_processing)
         app.delete("/api/jobs/{job_id}")(self.cancel_job)
-        
+
         # Checkpoints
         app.get("/api/checkpoints")(self.list_checkpoints)
         app.post("/api/checkpoints/{checkpoint_id}/resume")(self.resume_checkpoint)
-        
+
         # WebSocket
         app.websocket("/ws")(self.websocket_endpoint)
 
@@ -205,7 +203,7 @@ class WebServerPlugin:
         """Run web server - main entry point."""
         # Resolve configuration
         self._resolve_config()
-        
+
         if self.verbosity >= VerbosityLevel.NORMAL:
             print("🌐 AudioMason Web Server")
             print()
@@ -217,10 +215,15 @@ class WebServerPlugin:
             print()
 
         # Run uvicorn server
-        log_level = "critical" if self.verbosity == VerbosityLevel.QUIET else \
-                    "error" if self.verbosity == VerbosityLevel.NORMAL else \
-                    "info" if self.verbosity == VerbosityLevel.VERBOSE else \
-                    "debug"
+        log_level = (
+            "critical"
+            if self.verbosity == VerbosityLevel.QUIET
+            else "error"
+            if self.verbosity == VerbosityLevel.NORMAL
+            else "info"
+            if self.verbosity == VerbosityLevel.VERBOSE
+            else "debug"
+        )
 
         config = uvicorn.Config(
             self.app,
@@ -240,62 +243,62 @@ class WebServerPlugin:
         """Serve homepage/dashboard."""
         status = await self._get_system_status()
         jobs = await self._get_jobs_list()
-        
+
         return self.templates.TemplateResponse(
             "index.html",
             {
                 "request": request,
                 "status": status,
                 "jobs": jobs,
-            }
+            },
         )
 
     async def plugins_page(self, request: Request) -> HTMLResponse:
         """Serve plugins management page."""
         plugins = await self._get_plugins_list()
-        
+
         return self.templates.TemplateResponse(
             "plugins.html",
             {
                 "request": request,
                 "plugins": plugins,
-            }
+            },
         )
 
     async def config_page(self, request: Request) -> HTMLResponse:
         """Serve configuration page."""
         config = await self._get_config_dict()
-        
+
         return self.templates.TemplateResponse(
             "config.html",
             {
                 "request": request,
                 "config": config,
-            }
+            },
         )
 
     async def jobs_page(self, request: Request) -> HTMLResponse:
         """Serve jobs monitoring page."""
         jobs = await self._get_jobs_list()
-        
+
         return self.templates.TemplateResponse(
             "jobs.html",
             {
                 "request": request,
                 "jobs": jobs,
-            }
+            },
         )
 
     async def wizards_page(self, request: Request) -> HTMLResponse:
         """Serve wizards page."""
         wizards = await self._get_wizards_list()
-        
+
         return self.templates.TemplateResponse(
             "wizards.html",
             {
                 "request": request,
                 "wizards": wizards,
-            }
+            },
         )
 
     # ═══════════════════════════════════════════
@@ -316,27 +319,28 @@ class WebServerPlugin:
         """Update configuration (saves to user config file)."""
         try:
             data = await request.json()
-            
+
             if self.verbosity >= VerbosityLevel.DEBUG:
-                print(f"[DEBUG] Config save request")
+                print("[DEBUG] Config save request")
                 print(f"[DEBUG]   Data keys: {list(data.keys())}")
-            
+
             # Get user config path
             config_path = Path.home() / ".config" / "audiomason" / "config.yaml"
             config_path.parent.mkdir(parents=True, exist_ok=True)
-            
+
             if self.verbosity >= VerbosityLevel.DEBUG:
                 print(f"[DEBUG]   Config path: {config_path}")
-            
+
             # Load existing config or start fresh
             existing = {}
             if config_path.exists():
                 import yaml
+
                 with open(config_path) as f:
                     existing = yaml.safe_load(f) or {}
                 if self.verbosity >= VerbosityLevel.DEBUG:
                     print(f"[DEBUG]   Loaded existing config with {len(existing)} keys")
-            
+
             # Update with new values (nested merge)
             def merge_dict(base: dict, updates: dict) -> dict:
                 """Recursively merge dictionaries."""
@@ -347,35 +351,39 @@ class WebServerPlugin:
                     else:
                         result[key] = value
                 return result
-            
+
             updated = merge_dict(existing, data)
-            
+
             if self.verbosity >= VerbosityLevel.DEBUG:
                 print(f"[DEBUG]   Merged config has {len(updated)} keys")
-            
+
             # Save to YAML
             import yaml
-            with open(config_path, 'w') as f:
+
+            with open(config_path, "w") as f:
                 yaml.dump(updated, f, default_flow_style=False, allow_unicode=True)
-            
+
             if self.verbosity >= VerbosityLevel.DEBUG:
                 print(f"[DEBUG]   ✓ Saved to {config_path}")
-                print(f"[DEBUG]   NOTE: Web server needs restart to apply changes")
-            
-            return JSONResponse({
-                "message": "Configuration saved to ~/.config/audiomason/config.yaml\n\n⚠️ IMPORTANT: Restart the web server for changes to take effect.",
-                "path": str(config_path),
-                "restart_required": True,
-                "config": updated,
-            })
+                print("[DEBUG]   NOTE: Web server needs restart to apply changes")
+
+            return JSONResponse(
+                {
+                    "message": "Configuration saved to ~/.config/audiomason/config.yaml\n\n⚠️ IMPORTANT: Restart the web server for changes to take effect.",
+                    "path": str(config_path),
+                    "restart_required": True,
+                    "config": updated,
+                }
+            )
         except Exception as e:
             if self.verbosity >= VerbosityLevel.DEBUG:
                 print(f"[DEBUG] ERROR saving config: {e}")
                 import traceback
+
                 traceback.print_exc()
-            return JSONResponse({
-                "error": f"Failed to save configuration: {str(e)}"
-            }, status_code=500)
+            return JSONResponse(
+                {"error": f"Failed to save configuration: {str(e)}"}, status_code=500
+            )
 
     # ═══════════════════════════════════════════
     #  API ENDPOINTS - PLUGINS
@@ -391,110 +399,114 @@ class WebServerPlugin:
         try:
             if self.verbosity >= VerbosityLevel.DEBUG:
                 print(f"[DEBUG] Enabling plugin: {name}")
-            
+
             # Load config
             config_path = Path.home() / ".config" / "audiomason" / "config.yaml"
             config_path.parent.mkdir(parents=True, exist_ok=True)
-            
+
             import yaml
+
             config = {}
             if config_path.exists():
                 with open(config_path) as f:
                     config = yaml.safe_load(f) or {}
-            
+
             # Ensure plugins section exists
-            if 'plugins' not in config:
-                config['plugins'] = {}
-            if 'disabled' not in config['plugins']:
-                config['plugins']['disabled'] = []
-            
+            if "plugins" not in config:
+                config["plugins"] = {}
+            if "disabled" not in config["plugins"]:
+                config["plugins"]["disabled"] = []
+
             # Remove from disabled list
-            if name in config['plugins']['disabled']:
-                config['plugins']['disabled'].remove(name)
-                
+            if name in config["plugins"]["disabled"]:
+                config["plugins"]["disabled"].remove(name)
+
                 if self.verbosity >= VerbosityLevel.DEBUG:
                     print(f"[DEBUG]   Removed {name} from disabled list")
             else:
                 if self.verbosity >= VerbosityLevel.DEBUG:
                     print(f"[DEBUG]   Plugin {name} was not disabled")
-            
+
             # Save config
-            with open(config_path, 'w') as f:
+            with open(config_path, "w") as f:
                 yaml.dump(config, f, default_flow_style=False, allow_unicode=True)
-            
+
             if self.verbosity >= VerbosityLevel.DEBUG:
-                print(f"[DEBUG]   ✓ Config saved, restart required")
-            
-            return JSONResponse({
-                "message": f"Plugin '{name}' enabled\n\n⚠️ Restart the web server for changes to take effect.",
-                "restart_required": True,
-            })
+                print("[DEBUG]   ✓ Config saved, restart required")
+
+            return JSONResponse(
+                {
+                    "message": f"Plugin '{name}' enabled\n\n⚠️ Restart the web server for changes to take effect.",
+                    "restart_required": True,
+                }
+            )
         except Exception as e:
             if self.verbosity >= VerbosityLevel.DEBUG:
                 print(f"[DEBUG] ERROR enabling plugin: {e}")
                 import traceback
+
                 traceback.print_exc()
-            return JSONResponse({
-                "error": f"Failed to enable plugin: {str(e)}"
-            }, status_code=500)
+            return JSONResponse({"error": f"Failed to enable plugin: {str(e)}"}, status_code=500)
 
     async def disable_plugin(self, name: str) -> JSONResponse:
         """Disable plugin."""
         try:
             if self.verbosity >= VerbosityLevel.DEBUG:
                 print(f"[DEBUG] Disabling plugin: {name}")
-            
+
             # Load config
             config_path = Path.home() / ".config" / "audiomason" / "config.yaml"
             config_path.parent.mkdir(parents=True, exist_ok=True)
-            
+
             import yaml
+
             config = {}
             if config_path.exists():
                 with open(config_path) as f:
                     config = yaml.safe_load(f) or {}
-            
+
             # Ensure plugins section exists
-            if 'plugins' not in config:
-                config['plugins'] = {}
-            if 'disabled' not in config['plugins']:
-                config['plugins']['disabled'] = []
-            
+            if "plugins" not in config:
+                config["plugins"] = {}
+            if "disabled" not in config["plugins"]:
+                config["plugins"]["disabled"] = []
+
             # Add to disabled list
-            if name not in config['plugins']['disabled']:
-                config['plugins']['disabled'].append(name)
-                
+            if name not in config["plugins"]["disabled"]:
+                config["plugins"]["disabled"].append(name)
+
                 if self.verbosity >= VerbosityLevel.DEBUG:
                     print(f"[DEBUG]   Added {name} to disabled list")
             else:
                 if self.verbosity >= VerbosityLevel.DEBUG:
                     print(f"[DEBUG]   Plugin {name} already disabled")
-            
+
             # Save config
-            with open(config_path, 'w') as f:
+            with open(config_path, "w") as f:
                 yaml.dump(config, f, default_flow_style=False, allow_unicode=True)
-            
+
             if self.verbosity >= VerbosityLevel.DEBUG:
-                print(f"[DEBUG]   ✓ Config saved, restart required")
-            
-            return JSONResponse({
-                "message": f"Plugin '{name}' disabled\n\n⚠️ Restart the web server for changes to take effect.",
-                "restart_required": True,
-            })
+                print("[DEBUG]   ✓ Config saved, restart required")
+
+            return JSONResponse(
+                {
+                    "message": f"Plugin '{name}' disabled\n\n⚠️ Restart the web server for changes to take effect.",
+                    "restart_required": True,
+                }
+            )
         except Exception as e:
             if self.verbosity >= VerbosityLevel.DEBUG:
                 print(f"[DEBUG] ERROR disabling plugin: {e}")
                 import traceback
+
                 traceback.print_exc()
-            return JSONResponse({
-                "error": f"Failed to disable plugin: {str(e)}"
-            }, status_code=500)
+            return JSONResponse({"error": f"Failed to disable plugin: {str(e)}"}, status_code=500)
 
     async def delete_plugin(self, name: str) -> JSONResponse:
         """Delete plugin."""
         if not self.plugin_loader:
             return JSONResponse({"error": "Plugin loader not available"}, status_code=500)
-        
+
         # TODO: Implement plugin deletion
         return JSONResponse({"message": f"Plugin '{name}' deleted"})
 
@@ -506,7 +518,7 @@ class WebServerPlugin:
     async def save_plugin_config(self, name: str, request: Request) -> JSONResponse:
         """Save plugin configuration."""
         data = await request.json()
-        
+
         # TODO: Save plugin config to config file
         return JSONResponse({"message": f"Config for '{name}' saved"})
 
@@ -519,29 +531,29 @@ class WebServerPlugin:
         if files:
             # Install from uploaded ZIP
             for file in files:
-                if not file.filename.endswith('.zip'):
+                if not file.filename.endswith(".zip"):
                     continue
-                
+
                 # Save ZIP
                 zip_path = self.upload_dir / file.filename
                 with open(zip_path, "wb") as f:
                     content = await file.read()
                     f.write(content)
-                
+
                 # Extract to plugins directory
                 plugins_dir = Path(__file__).parent.parent
-                with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+                with zipfile.ZipFile(zip_path, "r") as zip_ref:
                     zip_ref.extractall(plugins_dir)
-                
+
                 # Clean up
                 zip_path.unlink()
-                
+
                 return JSONResponse({"message": f"Plugin installed from {file.filename}"})
-        
+
         elif url:
             # TODO: Download from URL and install
             return JSONResponse({"message": f"Plugin installed from {url}"})
-        
+
         return JSONResponse({"error": "No file or URL provided"}, status_code=400)
 
     # ═══════════════════════════════════════════
@@ -557,20 +569,21 @@ class WebServerPlugin:
         """Get wizard details."""
         wizards_dir = Path(__file__).parent.parent.parent / "wizards"
         wizard_file = wizards_dir / f"{name}.yaml"
-        
+
         if not wizard_file.exists():
             return JSONResponse({"error": "Wizard not found"}, status_code=404)
-        
+
         import yaml
+
         with open(wizard_file) as f:
             wizard_data = yaml.safe_load(f)
-        
+
         return JSONResponse(wizard_data)
 
     async def run_wizard(self, name: str, request: Request) -> JSONResponse:
         """Run wizard with provided inputs."""
         data = await request.json()
-        
+
         # TODO: Integrate with WizardEngine when implemented
         return JSONResponse({"message": f"Wizard '{name}' started", "job_id": str(uuid.uuid4())})
 
@@ -579,48 +592,48 @@ class WebServerPlugin:
         data = await request.json()
         name = data.get("name")
         content = data.get("content")
-        
+
         if not name or not content:
             return JSONResponse({"error": "Name and content required"}, status_code=400)
-        
+
         wizards_dir = Path(__file__).parent.parent.parent / "wizards"
         wizards_dir.mkdir(parents=True, exist_ok=True)
-        
+
         wizard_file = wizards_dir / f"{name}.yaml"
         with open(wizard_file, "w") as f:
             f.write(content)
-        
+
         return JSONResponse({"message": f"Wizard '{name}' created"})
 
     async def update_wizard(self, name: str, request: Request) -> JSONResponse:
         """Update wizard YAML."""
         data = await request.json()
         content = data.get("content")
-        
+
         if not content:
             return JSONResponse({"error": "Content required"}, status_code=400)
-        
+
         wizards_dir = Path(__file__).parent.parent.parent / "wizards"
         wizard_file = wizards_dir / f"{name}.yaml"
-        
+
         if not wizard_file.exists():
             return JSONResponse({"error": "Wizard not found"}, status_code=404)
-        
+
         with open(wizard_file, "w") as f:
             f.write(content)
-        
+
         return JSONResponse({"message": f"Wizard '{name}' updated"})
 
     async def delete_wizard(self, name: str) -> JSONResponse:
         """Delete wizard."""
         wizards_dir = Path(__file__).parent.parent.parent / "wizards"
         wizard_file = wizards_dir / f"{name}.yaml"
-        
+
         if not wizard_file.exists():
             return JSONResponse({"error": "Wizard not found"}, status_code=404)
-        
+
         wizard_file.unlink()
-        
+
         return JSONResponse({"message": f"Wizard '{name}' deleted"})
 
     # ═══════════════════════════════════════════
@@ -636,17 +649,19 @@ class WebServerPlugin:
         """Get job details."""
         if job_id not in self.contexts:
             return JSONResponse({"error": "Job not found"}, status_code=404)
-        
+
         ctx = self.contexts[job_id]
-        return JSONResponse({
-            "id": ctx.id,
-            "source": str(ctx.source),
-            "title": ctx.title,
-            "author": ctx.author,
-            "state": ctx.state.value,
-            "progress": ctx.progress,
-            "current_step": ctx.current_step,
-        })
+        return JSONResponse(
+            {
+                "id": ctx.id,
+                "source": str(ctx.source),
+                "title": ctx.title,
+                "author": ctx.author,
+                "state": ctx.state.value,
+                "progress": ctx.progress,
+                "current_step": ctx.current_step,
+            }
+        )
 
     async def upload_files(self, request: Request) -> JSONResponse:
         """Upload multiple audio files or ZIP archives.
@@ -658,101 +673,106 @@ class WebServerPlugin:
             # Parse multipart form data
             form = await request.form()
             files = form.getlist("files")
-            
+
             if self.verbosity >= VerbosityLevel.DEBUG:
-                print(f"[DEBUG] Upload request received")
+                print("[DEBUG] Upload request received")
                 print(f"[DEBUG]   Files count: {len(files)}")
-            
+
             if not files:
                 if self.verbosity >= VerbosityLevel.DEBUG:
-                    print(f"[DEBUG]   No files in request")
-                return JSONResponse({
-                    "error": "No files provided"
-                }, status_code=400)
-            
+                    print("[DEBUG]   No files in request")
+                return JSONResponse({"error": "No files provided"}, status_code=400)
+
             uploaded = []
             errors = []
-            
+
             for file in files:
                 try:
-                    if not hasattr(file, 'filename') or not file.filename:
+                    if not hasattr(file, "filename") or not file.filename:
                         if self.verbosity >= VerbosityLevel.DEBUG:
-                            print(f"[DEBUG]   Skipping invalid file object")
+                            print("[DEBUG]   Skipping invalid file object")
                         continue
-                    
+
                     file_path = self.upload_dir / file.filename
-                    
+
                     if self.verbosity >= VerbosityLevel.DEBUG:
                         print(f"[DEBUG]   Processing: {file.filename}")
-                    
+
                     # Save file
                     content = await file.read()
                     with open(file_path, "wb") as f:
                         f.write(content)
-                    
+
                     if self.verbosity >= VerbosityLevel.DEBUG:
                         print(f"[DEBUG]     Saved {len(content)} bytes to {file_path}")
-                    
+
                     # If ZIP, extract it
-                    if file.filename.endswith('.zip'):
-                        extract_dir = self.upload_dir / file.filename.replace('.zip', '')
+                    if file.filename.endswith(".zip"):
+                        extract_dir = self.upload_dir / file.filename.replace(".zip", "")
                         extract_dir.mkdir(exist_ok=True)
-                        
+
                         if self.verbosity >= VerbosityLevel.DEBUG:
                             print(f"[DEBUG]     Extracting ZIP to {extract_dir}")
-                        
-                        with zipfile.ZipFile(file_path, 'r') as zip_ref:
+
+                        with zipfile.ZipFile(file_path, "r") as zip_ref:
                             zip_ref.extractall(extract_dir)
-                        
+
                         # Remove ZIP after extraction
                         file_path.unlink()
-                        
+
                         # Find audio files in extracted directory
                         audio_files = []
-                        for ext in ['*.mp3', '*.m4a', '*.m4b', '*.opus']:
+                        for ext in ["*.mp3", "*.m4a", "*.m4b", "*.opus"]:
                             audio_files.extend(extract_dir.glob(f"**/{ext}"))
-                        
+
                         if self.verbosity >= VerbosityLevel.DEBUG:
                             print(f"[DEBUG]     Found {len(audio_files)} audio files in ZIP")
-                        
+
                         uploaded.extend([str(f) for f in audio_files])
                     else:
                         uploaded.append(str(file_path))
-                        
+
                     if self.verbosity >= VerbosityLevel.DEBUG:
-                        print(f"[DEBUG]     ✓ Success")
-                        
+                        print("[DEBUG]     ✓ Success")
+
                 except Exception as e:
-                    error_msg = f"Failed to process {getattr(file, 'filename', 'unknown')}: {str(e)}"
+                    error_msg = (
+                        f"Failed to process {getattr(file, 'filename', 'unknown')}: {str(e)}"
+                    )
                     errors.append(error_msg)
                     if self.verbosity >= VerbosityLevel.DEBUG:
                         print(f"[DEBUG]     ✗ ERROR: {error_msg}")
                         import traceback
+
                         traceback.print_exc()
-            
+
             if self.verbosity >= VerbosityLevel.DEBUG:
                 print(f"[DEBUG] Upload complete: {len(uploaded)} files, {len(errors)} errors")
-            
+
             if errors:
-                return JSONResponse({
-                    "error": "Some files failed to upload",
-                    "details": errors,
-                    "uploaded": len(uploaded),
+                return JSONResponse(
+                    {
+                        "error": "Some files failed to upload",
+                        "details": errors,
+                        "uploaded": len(uploaded),
+                        "files": uploaded,
+                    },
+                    status_code=207,
+                )  # Multi-Status
+
+            return JSONResponse(
+                {
+                    "message": f"Uploaded {len(uploaded)} file(s)",
                     "files": uploaded,
-                }, status_code=207)  # Multi-Status
-            
-            return JSONResponse({
-                "message": f"Uploaded {len(uploaded)} file(s)",
-                "files": uploaded,
-            })
+                }
+            )
         except Exception as e:
             if self.verbosity >= VerbosityLevel.DEBUG:
                 print(f"[DEBUG] Upload error: {e}")
                 import traceback
+
                 traceback.print_exc()
-            return JSONResponse({
-                "error": f"Upload failed: {str(e)}"
-            }, status_code=500)
+            return JSONResponse({"error": f"Upload failed: {str(e)}"}, status_code=500)
 
     async def start_processing(
         self,
@@ -775,24 +795,26 @@ class WebServerPlugin:
             year=year,
             state=State.INIT,
         )
-        
+
         self.contexts[ctx.id] = ctx
-        
+
         # TODO: Start processing in background
-        
-        return JSONResponse({
-            "message": "Processing started",
-            "job_id": ctx.id,
-        })
+
+        return JSONResponse(
+            {
+                "message": "Processing started",
+                "job_id": ctx.id,
+            }
+        )
 
     async def cancel_job(self, job_id: str) -> JSONResponse:
         """Cancel processing job."""
         if job_id not in self.contexts:
             return JSONResponse({"error": "Job not found"}, status_code=404)
-        
+
         # TODO: Implement job cancellation
         del self.contexts[job_id]
-        
+
         return JSONResponse({"message": "Job cancelled"})
 
     # ═══════════════════════════════════════════
@@ -817,7 +839,7 @@ class WebServerPlugin:
         """WebSocket endpoint for real-time updates."""
         await websocket.accept()
         self.websocket_clients.append(websocket)
-        
+
         try:
             while True:
                 # Keep connection alive
@@ -843,44 +865,46 @@ class WebServerPlugin:
         """Get list of all plugins with details."""
         if not self.plugin_loader:
             if self.verbosity >= VerbosityLevel.DEBUG:
-                print(f"[DEBUG] No plugin_loader set")
+                print("[DEBUG] No plugin_loader set")
             return []
-        
+
         if self.verbosity >= VerbosityLevel.DEBUG:
-            print(f"[DEBUG] Getting plugin list from loader")
-        
+            print("[DEBUG] Getting plugin list from loader")
+
         plugins = []
         plugin_names = self.plugin_loader.list_plugins()
-        
+
         if self.verbosity >= VerbosityLevel.DEBUG:
             print(f"[DEBUG] Found {len(plugin_names)} plugins: {plugin_names}")
-        
+
         for plugin_name in plugin_names:
             manifest = self.plugin_loader.get_manifest(plugin_name)
             if manifest:
-                plugins.append({
-                    "name": manifest.name,
-                    "version": manifest.version,
-                    "description": manifest.description,
-                    "author": manifest.author,
-                    "interfaces": manifest.interfaces,
-                    "enabled": True,  # TODO: Track enabled state
-                })
+                plugins.append(
+                    {
+                        "name": manifest.name,
+                        "version": manifest.version,
+                        "description": manifest.description,
+                        "author": manifest.author,
+                        "interfaces": manifest.interfaces,
+                        "enabled": True,  # TODO: Track enabled state
+                    }
+                )
                 if self.verbosity >= VerbosityLevel.DEBUG:
                     print(f"[DEBUG] Added plugin: {manifest.name}")
             else:
                 if self.verbosity >= VerbosityLevel.DEBUG:
                     print(f"[DEBUG] No manifest for plugin: {plugin_name}")
-        
+
         return plugins
 
     async def _get_config_dict(self) -> dict[str, Any]:
         """Get current configuration as dictionary."""
         if not self.config_resolver:
             return {}
-        
+
         all_config = self.config_resolver.resolve_all()
-        
+
         return {
             key: {"value": source.value, "source": source.source}
             for key, source in all_config.items()
@@ -890,56 +914,59 @@ class WebServerPlugin:
         """Get list of all processing jobs."""
         jobs = []
         for ctx_id, ctx in self.contexts.items():
-            jobs.append({
-                "id": ctx_id,
-                "title": ctx.title,
-                "author": ctx.author,
-                "state": ctx.state.value,
-                "progress": ctx.progress,
-                "current_step": ctx.current_step,
-            })
-        
+            jobs.append(
+                {
+                    "id": ctx_id,
+                    "title": ctx.title,
+                    "author": ctx.author,
+                    "state": ctx.state.value,
+                    "progress": ctx.progress,
+                    "current_step": ctx.current_step,
+                }
+            )
+
         return jobs
 
     async def _get_wizards_list(self) -> list[dict[str, Any]]:
         """Get list of available wizards."""
         wizards_dir = Path(__file__).parent.parent.parent / "wizards"
-        
+
         if self.verbosity >= VerbosityLevel.DEBUG:
             print(f"[DEBUG] Looking for wizards in: {wizards_dir}")
-        
+
         if not wizards_dir.exists():
             if self.verbosity >= VerbosityLevel.DEBUG:
-                print(f"[DEBUG] Wizards directory does not exist")
+                print("[DEBUG] Wizards directory does not exist")
             return []
-        
+
         wizards = []
         yaml_files = list(wizards_dir.glob("*.yaml"))
-        
+
         if self.verbosity >= VerbosityLevel.DEBUG:
             print(f"[DEBUG] Found {len(yaml_files)} YAML files")
-        
+
         for yaml_file in yaml_files:
             import yaml
+
             try:
                 with open(yaml_file) as f:
                     wizard_data = yaml.safe_load(f)
-                
+
                 if self.verbosity >= VerbosityLevel.DEBUG:
                     print(f"[DEBUG] Parsing wizard: {yaml_file.stem}")
                     print(f"[DEBUG]   Raw keys: {list(wizard_data.keys())}")
-                
+
                 # Handle nested structure: wizard_data may have 'wizard' root key
-                if 'wizard' in wizard_data:
-                    wizard = wizard_data['wizard']
+                if "wizard" in wizard_data:
+                    wizard = wizard_data["wizard"]
                     if self.verbosity >= VerbosityLevel.DEBUG:
-                        print(f"[DEBUG]   Found nested 'wizard' key")
+                        print("[DEBUG]   Found nested 'wizard' key")
                         print(f"[DEBUG]   Wizard keys: {list(wizard.keys())}")
                 else:
                     wizard = wizard_data
                     if self.verbosity >= VerbosityLevel.DEBUG:
-                        print(f"[DEBUG]   Using flat structure")
-                
+                        print("[DEBUG]   Using flat structure")
+
                 steps = wizard.get("steps", [])
                 if not isinstance(steps, list):
                     if self.verbosity >= VerbosityLevel.DEBUG:
@@ -948,21 +975,26 @@ class WebServerPlugin:
                 else:
                     if self.verbosity >= VerbosityLevel.DEBUG:
                         print(f"[DEBUG]   Found {len(steps)} steps")
-                
-                wizards.append({
-                    "name": yaml_file.stem,
-                    "title": wizard.get("name", yaml_file.stem),
-                    "description": wizard.get("description", ""),
-                    "steps": len(steps),
-                })
-                
+
+                wizards.append(
+                    {
+                        "name": yaml_file.stem,
+                        "title": wizard.get("name", yaml_file.stem),
+                        "description": wizard.get("description", ""),
+                        "steps": len(steps),
+                    }
+                )
+
                 if self.verbosity >= VerbosityLevel.DEBUG:
-                    print(f"[DEBUG]   ✓ Added wizard '{wizard.get('name', yaml_file.stem)}' with {len(steps)} steps")
+                    print(
+                        f"[DEBUG]   ✓ Added wizard '{wizard.get('name', yaml_file.stem)}' with {len(steps)} steps"
+                    )
             except Exception as e:
                 if self.verbosity >= VerbosityLevel.DEBUG:
                     print(f"[DEBUG] ✗ Failed to parse {yaml_file.stem}: {e}")
                     import traceback
+
                     traceback.print_exc()
                 continue
-        
+
         return wizards

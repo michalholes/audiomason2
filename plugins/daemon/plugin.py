@@ -4,16 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import signal
-import sys
 import time
 import uuid
 from pathlib import Path
-from typing import Set
 
 from audiomason.core import (
-    ConfigResolver,
-    PluginLoader,
     PipelineExecutor,
+    PluginLoader,
     ProcessingContext,
     State,
 )
@@ -21,10 +18,11 @@ from audiomason.core import (
 
 class VerbosityLevel:
     """Verbosity levels."""
-    QUIET = 0    # Errors only
-    NORMAL = 1   # Progress + warnings
+
+    QUIET = 0  # Errors only
+    NORMAL = 1  # Progress + warnings
     VERBOSE = 2  # Detailed info
-    DEBUG = 3    # Everything
+    DEBUG = 3  # Everything
 
 
 class DaemonPlugin:
@@ -42,9 +40,9 @@ class DaemonPlugin:
         self.interval = self.config.get("interval", 30)
         self.on_success = self.config.get("on_success", "move_to_output")
         self.on_error = self.config.get("on_error", "move_to_error")
-        
+
         self.running = False
-        self.processed_files: Set[Path] = set()
+        self.processed_files: set[Path] = set()
 
     async def run(self) -> None:
         """Run daemon - main entry point."""
@@ -88,9 +86,7 @@ class DaemonPlugin:
                     print(f"Error in daemon loop: {e}")
                 await asyncio.sleep(self.interval)
 
-    async def _check_folders(
-        self, executor: PipelineExecutor, pipeline_path: Path
-    ) -> None:
+    async def _check_folders(self, executor: PipelineExecutor, pipeline_path: Path) -> None:
         """Check watch folders for new files.
 
         Args:
@@ -99,7 +95,7 @@ class DaemonPlugin:
         """
         for folder in self.watch_folders:
             folder_path = Path(folder).expanduser()
-            
+
             if not folder_path.exists():
                 continue
 
@@ -114,7 +110,7 @@ class DaemonPlugin:
 
                 if self.verbosity >= VerbosityLevel.NORMAL:
                     print(f"📁 Found new file: {file_path.name}")
-                
+
                 try:
                     await self._process_file(file_path, executor, pipeline_path)
                     self.processed_files.add(file_path)
@@ -131,7 +127,7 @@ class DaemonPlugin:
 
                 if self.verbosity >= VerbosityLevel.NORMAL:
                     print(f"📁 Found new file: {file_path.name}")
-                
+
                 try:
                     await self._process_file(file_path, executor, pipeline_path)
                     self.processed_files.add(file_path)
@@ -175,14 +171,14 @@ class DaemonPlugin:
         )
 
         if self.verbosity >= VerbosityLevel.NORMAL:
-            print(f"   ⚡ Processing...")
+            print("   ⚡ Processing...")
 
         # Process
         result = await executor.execute_from_yaml(pipeline_path, context)
 
         if result.has_errors:
-            print(f"   ❌ Failed with errors")
-            
+            print("   ❌ Failed with errors")
+
             if self.on_error == "move_to_error":
                 error_dir = file_path.parent / "error"
                 error_dir.mkdir(exist_ok=True)
@@ -192,11 +188,11 @@ class DaemonPlugin:
             elif self.on_error == "delete":
                 file_path.unlink()
                 if self.verbosity >= VerbosityLevel.NORMAL:
-                    print(f"   🗑️  Deleted source file")
+                    print("   🗑️  Deleted source file")
         else:
             if self.verbosity >= VerbosityLevel.NORMAL:
-                print(f"   ✅ Success!")
-            
+                print("   ✅ Success!")
+
             if self.on_success == "move_to_output":
                 # Already moved by pipeline
                 pass
@@ -204,7 +200,7 @@ class DaemonPlugin:
                 if file_path.exists():
                     file_path.unlink()
                     if self.verbosity >= VerbosityLevel.NORMAL:
-                        print(f"   🗑️  Deleted source file")
+                        print("   🗑️  Deleted source file")
 
     def _handle_signal(self, signum: int, frame: Any) -> None:
         """Handle shutdown signal.

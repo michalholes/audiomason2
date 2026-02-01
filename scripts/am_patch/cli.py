@@ -52,6 +52,9 @@ class CliArgs:
 
     run_all_tests: bool | None
     allow_no_op: bool | None
+
+    unified_patch: bool | None
+    patch_strip: int | None
     skip_up_to_date: bool | None
     allow_non_main: bool | None
 
@@ -271,6 +274,13 @@ TOOLING INTEGRATION
       outside FILES (bounded to ruff_targets).
       [default: ON]
 
+UNIFIED PATCH INPUT
+  -u, --unified-patch
+      Treat PATCH_PATH as a unified diff (.patch) or zip bundle of .patch files.
+
+  -p N, --patch-strip N
+      Strip N leading path components when applying unified patches (like patch -pN).
+
 POST-SUCCESS ACTIONS
   --post-success-audit / --no-post-success-audit
       Run audit report after a successful promotion and push.
@@ -355,6 +365,8 @@ def parse_args(argv: list[str]) -> CliArgs:
         "-g", "--allow-gates-fail", dest="allow_gates_fail", action="store_true", default=None
     )
     p.add_argument("-n", "--allow-no-op", dest="allow_no_op", action="store_true", default=None)
+    p.add_argument("-u", "--unified-patch", dest="unified_patch", action="store_true", default=None)
+    p.add_argument("-p", "--patch-strip", dest="patch_strip", metavar="N", type=int, default=None)
     p.add_argument("-c", "--show-config", dest="show_config", action="store_true", default=False)
     p.add_argument(
         "-f", "--finalize-live", dest="finalize_message", metavar="MESSAGE", default=None
@@ -491,6 +503,8 @@ def parse_args(argv: list[str]) -> CliArgs:
             message=None,
             run_all_tests=ns.run_all_tests,
             allow_no_op=ns.allow_no_op,
+            unified_patch=getattr(ns, "unified_patch", None),
+            patch_strip=getattr(ns, "patch_strip", None),
             skip_up_to_date=ns.skip_up_to_date,
             allow_non_main=ns.allow_non_main,
             no_rollback=ns.no_rollback,

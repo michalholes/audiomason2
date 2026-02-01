@@ -92,3 +92,13 @@ def files_changed_since(logger: Logger, repo: Path, base_sha: str, files: list[s
         if (r.stdout or "").strip():
             changed.append(f)
     return changed
+
+
+def git_archive(logger: Logger, repo: Path, out_zip: Path, treeish: str = "HEAD") -> None:
+    out_zip.parent.mkdir(parents=True, exist_ok=True)
+    r = logger.run_logged(
+        ["git", "archive", "--format=zip", "-o", str(out_zip), treeish],
+        cwd=repo,
+    )
+    if r.returncode != 0:
+        raise RunnerError("ARCHIVE", "GIT", f"git archive failed (rc={r.returncode})")

@@ -57,19 +57,19 @@ def test_all_plugins():
 
     print()
     print("=" * 70)
-    print(f"📊 RESULTS:")
+    print("📊 RESULTS:")
     print(f"   ✅ Loaded:  {len(loaded)}/{len(expected)}")
     print(f"   ❌ Failed:  {len(failed)}/{len(expected)}")
     print()
 
     if loaded:
-        print(f"✅ Successfully loaded plugins:")
+        print("✅ Successfully loaded plugins:")
         for name in loaded:
             print(f"   • {name}")
         print()
 
     if failed:
-        print(f"❌ Failed plugins:")
+        print("❌ Failed plugins:")
         for name in failed:
             print(f"   • {name}")
         print()

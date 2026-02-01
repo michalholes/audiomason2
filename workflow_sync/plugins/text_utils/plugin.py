@@ -200,7 +200,22 @@ class TextUtilsPlugin:
             return ""
 
         # Words that should stay lowercase (unless first/last)
-        lowercase_words = {"a", "an", "and", "as", "at", "but", "by", "for", "in", "of", "on", "or", "the", "to"}
+        lowercase_words = {
+            "a",
+            "an",
+            "and",
+            "as",
+            "at",
+            "but",
+            "by",
+            "for",
+            "in",
+            "of",
+            "on",
+            "or",
+            "the",
+            "to",
+        }
 
         words = text.split()
         result = []
