@@ -415,7 +415,8 @@ async function renderWizardManager(content, notify) {
           try {
             const p = await API.getJson((content.parsed_path_tmpl||"/api/wizards/{name}/parsed").replace("{name}", encodeURIComponent(name)));
             const w = p && p.wizard ? p.wizard : null;
-            const steps = (w && Array.isArray(w.steps)) ? w.steps : [];
+            let steps = (w && Array.isArray(w.steps)) ? w.steps : [];
+            if (steps.length === 0 && p && Array.isArray(p.steps)) steps = p.steps;
             if (steps.length === 0) {
               stepsBox.appendChild(el("div", { class: "hint", text: "No steps (or unable to parse YAML)." }));
             } else {
@@ -525,8 +526,15 @@ async function renderContent(content, notify) {
   }
 
   async function loadNav() {
-    const nav = await API.getJson("/api/ui/nav");
-    return Array.isArray(nav.items) ? nav.items : [];
+    try {
+      const nav = await API.getJson("/api/ui/nav");
+      return Array.isArray(nav.items) ? nav.items : [];
+    } catch (e) {
+      console.error(e);
+      return [
+        { title: "Dashboard", route: "/", page_id: "dashboard" },
+      ];
+    }
   }
 
   function routeToPageId(pathname, navItems) {
@@ -603,5 +611,15 @@ async function renderContent(content, notify) {
     await renderRoute();
   }
 
-  await renderApp();
+  try {
+    await renderApp();
+  } catch (e) {
+    console.error(e);
+    const root = document.getElementById('app') || document.body;
+    root.innerHTML = '';
+    const pre = document.createElement('pre');
+    pre.style.whiteSpace = 'pre-wrap';
+    pre.textContent = 'UI failed to start: ' + String(e);
+    root.appendChild(pre);
+  }
 })();

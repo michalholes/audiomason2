@@ -574,6 +574,8 @@ def parse_args(argv: list[str]) -> CliArgs:
         message=message,
         run_all_tests=ns.run_all_tests,
         allow_no_op=ns.allow_no_op,
+        unified_patch=getattr(ns, "unified_patch", None),
+        patch_strip=getattr(ns, "patch_strip", None),
         skip_up_to_date=ns.skip_up_to_date,
         allow_non_main=ns.allow_non_main,
         no_rollback=ns.no_rollback,

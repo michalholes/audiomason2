@@ -518,6 +518,8 @@ class WebInterfacePlugin:
         # UI assets
         if (self._ui_dir / "assets").exists():
             app.mount("/ui/assets", StaticFiles(directory=str(self._ui_dir / "assets")), name="ui_assets")
+        else:
+            raise RuntimeError(f"web_interface UI assets not found at: {self._ui_dir / 'assets'}")
 
         @app.get("/ui/", response_class=HTMLResponse)
         def ui_index() -> HTMLResponse:
@@ -526,6 +528,16 @@ class WebInterfacePlugin:
         # Root index (for convenience)
         @app.get("/", response_class=HTMLResponse)
         def root_index() -> HTMLResponse:
+            return HTMLResponse(self._index_html())
+
+        
+        # SPA fallback for direct navigation to UI routes (e.g. /plugins, /stage, /wizards, /config)
+        @app.get("/{full_path:path}", response_class=HTMLResponse)
+        def spa_fallback(full_path: str) -> HTMLResponse:
+            # Let API and static assets be handled by their own routes.
+            if full_path.startswith("api/") or full_path.startswith("ui/assets/"):
+                raise HTTPException(status_code=404, detail="Not found")
+            # Normalize: serve the same SPA shell for any other GET.
             return HTMLResponse(self._index_html())
 
         @app.get("/api/health")
