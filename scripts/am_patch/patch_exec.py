@@ -222,7 +222,31 @@ def _rewrite_patch_paths(patch_text: str, *, strip: int) -> tuple[str, list[str]
     rewritten_touched: list[str] = []
     out_lines: list[str] = []
     for line in patch_text.splitlines(True):
-        if line.startswith("--- ") or line.startswith("+++ "):
+        if line.startswith("diff --git "):
+            parts = line.rstrip("\n").split()
+            # Expected: diff --git a/PATH b/PATH
+            if len(parts) >= 4:
+                a_tok = parts[2]
+                b_tok = parts[3]
+                a_norm = _normalize_patch_path(a_tok)
+                b_norm = _normalize_patch_path(b_tok)
+                a_parts = _split_abs_like(a_norm)
+                b_parts = _split_abs_like(b_norm)
+                if strip >= len(a_parts):
+                    a_rel = "/".join(a_parts)
+                else:
+                    a_rel = "/".join(a_parts[strip:])
+                if strip >= len(b_parts):
+                    b_rel = "/".join(b_parts)
+                else:
+                    b_rel = "/".join(b_parts[strip:])
+                if a_rel.startswith("/") or ".." in a_rel.split("/"):
+                    a_rel = "/dev/null"
+                if b_rel.startswith("/") or ".." in b_rel.split("/"):
+                    b_rel = "/dev/null"
+                out_lines.append("diff --git a/" + a_rel + " b/" + b_rel + "\n")
+                continue
+                if line.startswith("--- ") or line.startswith("+++ "):
             prefix = line[:4]
             rest = line[4:].rstrip("\n")
             path_part = rest.split("\t", 1)[0].strip()

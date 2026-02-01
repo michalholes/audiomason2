@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Any
-
-import uvicorn
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
@@ -44,6 +42,13 @@ class WebInterfacePlugin:
 
         return app
 
-    def run(self, *, host: str = "0.0.0.0", port: int = 8081) -> None:
+    def run(self, host: str, port: int) -> None:
+        try:
+            import uvicorn  # type: ignore
+        except ModuleNotFoundError as e:
+            raise RuntimeError(
+                "Missing dependency: uvicorn. Install in venv: pip install uvicorn"
+            ) from e
         app = self.create_app()
         uvicorn.run(app, host=host, port=port, log_level="info")
+

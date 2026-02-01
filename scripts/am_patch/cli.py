@@ -131,6 +131,9 @@ Options:
   -n, --allow-no-op
       Allow no-op patches (override default FAIL).
 
+  -u, --unified-patch
+      Treat PATCH_PATH as a unified diff (.patch) or zip bundle of .patch files.
+
 """
 
 

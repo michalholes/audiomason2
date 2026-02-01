@@ -1,3 +1,30 @@
+async function fetchJSON(url, opts) {
+  const r = await fetch(url, opts || {});
+  if (!r.ok) {
+    const t = await r.text();
+    throw new Error(r.status + " " + r.statusText + ": " + t);
+  }
+  const ct = r.headers.get("content-type") || "";
+  if (ct.includes("application/json")) {
+    return await r.json();
+  }
+  const t = await r.text();
+  try { return JSON.parse(t); } catch { return { text: t }; }
+}
+
+window.__AM_APP_LOADED__ = true;
+window.addEventListener('unhandledrejection', function(ev){
+  try{
+    var el=document.getElementById('app')||document.body;
+    el.innerHTML='<pre style="white-space:pre-wrap;color:#fff;background:#600;padding:12px;font-family:monospace">PROMISE REJECTION: '+(ev.reason?String(ev.reason):'')+'</pre>';
+  }catch(e){}
+});
+window.onerror = function(msg, src, line, col, err){
+  try{
+    var el=document.getElementById('app')||document.body;
+    el.innerHTML='<pre style="white-space:pre-wrap;color:#fff;background:#600;padding:12px;font-family:monospace">JS ERROR: '+msg+'\n'+(err&&err.stack?err.stack:'')+'</pre>';
+  }catch(e){}
+};
 (async function () {
   const API = {
     async getJson(path) {
@@ -369,114 +396,228 @@ async function renderStageManager(content, notify) {
 }
 
 async function renderWizardManager(content, notify) {
-  const wrap = el("div", { class: "wizardMgr" });
-  const top = el("div", { class: "row" });
-  const refreshBtn = el("button", { class: "btn", text: "Refresh" });
-  top.appendChild(refreshBtn);
-  const newBtn = el("button", { class: "btn", text: "New wizard" });
-  top.appendChild(newBtn);
-  wrap.appendChild(top);
+  // content is the card body element provided by the layout renderer
+  const root = el("div", { class: "wizardManager" });
 
-  const body = el("div", { class: "wizardSplit" });
-  const listBox = el("div", { class: "wizardList" });
-  const editorBox = el("div", { class: "wizardEditor" });
-  const stepsBox = el("div", { class: "wizardSteps" });
-  body.appendChild(listBox);
-  body.appendChild(editorBox);
-  wrap.appendChild(body);
+  const header = el("div", { class: "toolbar" }, [
+    el("button", { class: "btn", text: "Refresh" }),
+    el("button", { class: "btn", text: "New wizard" }),
+  ]);
 
-  const textarea = el("textarea", { class: "jsonEditor" });
-  editorBox.appendChild(stepsBox);
-  editorBox.appendChild(textarea);
-  const saveRow = el("div", { class: "row" });
-  const saveBtn = el("button", { class: "btn", text: "Save" });
-  const delBtn = el("button", { class: "btn danger", text: "Delete" });
-  saveRow.appendChild(saveBtn);
-  saveRow.appendChild(delBtn);
-  editorBox.appendChild(saveRow);
+  const listPane = el("div", { class: "wizardList" });
+  const detailPane = el("div", { class: "wizardDetail" });
+  const editorPane = el("div", { class: "wizardEditor" });
+  const yamlPane = el("div", { class: "wizardYaml" });
+
+  const main = el("div", { class: "wizardGrid" }, [
+    el("div", { class: "wizardCol" }, [listPane]),
+    el("div", { class: "wizardColWide" }, [detailPane, editorPane, yamlPane]),
+  ]);
+
+  root.appendChild(header);
+  root.appendChild(main);
 
   let currentName = null;
+  let currentModel = null;
 
-  async function loadList() {
-    listBox.innerHTML = "";
-    let data;
-    try { data = await API.getJson(content.list_path || "/api/wizards"); }
-    catch(e){ listBox.appendChild(el("div",{class:"hint", text:String(e)})); return; }
-    const items = Array.isArray(data.items)?data.items:[];
-    for (const w of items) {
-      const btn = el("div", { class: "wizardItem", text: `${w.filename} (${w.steps||0})` });
-      btn.addEventListener("click", async ()=>{
-        const name = (w.filename || "").replace(/\.yaml$/,"");
-        currentName = name;
-        try{
-          const g = await API.getJson((content.get_path_tmpl||"/api/wizards/{name}").replace("{name}", encodeURIComponent(name)));
-          textarea.value = (g.yaml || "") + (String(g.yaml||"").endsWith("\n") ? "" : "\n");
-          stepsBox.innerHTML = "";
-          try {
-            const p = await API.getJson((content.parsed_path_tmpl||"/api/wizards/{name}/parsed").replace("{name}", encodeURIComponent(name)));
-            const w = p && p.wizard ? p.wizard : null;
-            let steps = (w && Array.isArray(w.steps)) ? w.steps : [];
-            if (steps.length === 0 && p && Array.isArray(p.steps)) steps = p.steps;
-            if (steps.length === 0) {
-              stepsBox.appendChild(el("div", { class: "hint", text: "No steps (or unable to parse YAML)." }));
-            } else {
-              const h = el("div", { class: "hint", text: `Steps: ${steps.length}` });
-              stepsBox.appendChild(h);
-              for (let i=0;i<steps.length;i++) {
-                const st = steps[i] || {};
-                const label = st.name || st.title || st.type || `step_${i+1}`;
-                stepsBox.appendChild(el("div", { class: "wizardStepItem", text: `${i+1}. ${label}` }));
-              }
-            }
-          } catch(e) {
-            stepsBox.appendChild(el("div", { class: "hint", text: String(e) }));
-          }
-        } catch(e){ notify(String(e)); }
-      });
-      listBox.appendChild(btn);
+  function setYamlText(txt) {
+    clear(yamlPane);
+    yamlPane.appendChild(el("div", { class: "subTitle", text: "YAML preview" }));
+    yamlPane.appendChild(el("pre", { class: "codeBlock", text: txt || "" }));
+  }
+
+  async function refreshYamlPreview() {
+    if (!currentModel) return;
+    try {
+      const r = await API.sendJson("POST", "/api/wizards/preview", { model: currentModel });
+      setYamlText(r.yaml || "");
+    } catch (e) {
+      setYamlText("Preview failed: " + String(e));
     }
   }
 
-  refreshBtn.addEventListener("click", loadList);
-  newBtn.addEventListener("click", ()=>{
-    currentName = null;
-    stepsBox.innerHTML = "";
-    textarea.value = "# New wizard\nname: New Wizard\ndescription: \"\"\nsteps: []\n";
-  });
+  function renderStepEditor(stepIndex) {
+    clear(editorPane);
+    if (!currentModel || !currentModel.wizard) return;
 
-  saveBtn.addEventListener("click", async ()=>{
-    const text = String(textarea.value || "");
-    try{
-      if (currentName) {
-        const path = (content.update_path_tmpl||"/api/wizards/{name}").replace("{name}", encodeURIComponent(currentName));
-        await API.sendJson("PUT", path, { yaml: text });
-        notify("Saved.");
-      } else {
-        const name = prompt("Wizard name (filename):", "new_wizard");
-        if (!name) return;
-        const r = await API.sendJson("POST", content.create_path||"/api/wizards", { name: name, yaml: text });
-        notify("Created.");
-        currentName = r.name || currentName;
+    const steps = currentModel.wizard.steps || [];
+    const s = steps[stepIndex];
+    if (!s) return;
+
+    editorPane.appendChild(el("div", { class: "subTitle", text: `Step ${stepIndex + 1}` }));
+
+    const idIn = el("input", { class: "input", value: String(s.id || "") });
+    const typeIn = el("input", { class: "input", value: String(s.type || "") });
+    const promptIn = el("input", { class: "input", value: String(s.prompt || s.label || "") });
+
+    const mkRow = (label, inputEl) =>
+      el("div", { class: "formRow" }, [el("div", { class: "formLabel", text: label }), inputEl]);
+
+    editorPane.appendChild(mkRow("id", idIn));
+    editorPane.appendChild(mkRow("type", typeIn));
+    editorPane.appendChild(mkRow("prompt/label", promptIn));
+
+    idIn.addEventListener("input", () => { s.id = idIn.value; refreshYamlPreview(); });
+    typeIn.addEventListener("input", () => { s.type = typeIn.value; refreshYamlPreview(); });
+    promptIn.addEventListener("input", () => { s.prompt = promptIn.value; s.label = promptIn.value; refreshYamlPreview(); });
+
+    const actions = el("div", { class: "toolbar" });
+    const upBtn = el("button", { class: "btn", text: "Up" });
+    const downBtn = el("button", { class: "btn", text: "Down" });
+    const delBtn = el("button", { class: "btnDanger", text: "Delete step" });
+    actions.appendChild(upBtn);
+    actions.appendChild(downBtn);
+    actions.appendChild(delBtn);
+    editorPane.appendChild(actions);
+
+    upBtn.addEventListener("click", () => {
+      if (stepIndex <= 0) return;
+      [steps[stepIndex - 1], steps[stepIndex]] = [steps[stepIndex], steps[stepIndex - 1]];
+      renderDetail();
+      renderStepEditor(stepIndex - 1);
+      refreshYamlPreview();
+    });
+    downBtn.addEventListener("click", () => {
+      if (stepIndex >= steps.length - 1) return;
+      [steps[stepIndex + 1], steps[stepIndex]] = [steps[stepIndex], steps[stepIndex + 1]];
+      renderDetail();
+      renderStepEditor(stepIndex + 1);
+      refreshYamlPreview();
+    });
+    delBtn.addEventListener("click", () => {
+      steps.splice(stepIndex, 1);
+      renderDetail();
+      refreshYamlPreview();
+    });
+  }
+
+  function renderDetail() {
+    clear(detailPane);
+    clear(editorPane);
+    clear(yamlPane);
+
+    if (!currentModel || !currentModel.wizard) {
+      detailPane.appendChild(el("div", { class: "hint", text: "Select a wizard." }));
+      return;
+    }
+
+    const wiz = currentModel.wizard;
+
+    detailPane.appendChild(el("div", { class: "subTitle", text: "Wizard" }));
+    const nameIn = el("input", { class: "input", value: String(wiz.name || "") });
+    const descIn = el("textarea", { class: "textarea", text: String(wiz.description || "") });
+
+    const mkRow = (label, inputEl) =>
+      el("div", { class: "formRow" }, [el("div", { class: "formLabel", text: label }), inputEl]);
+
+    detailPane.appendChild(mkRow("Display name", nameIn));
+    detailPane.appendChild(mkRow("Description", descIn));
+
+    nameIn.addEventListener("input", () => { wiz.name = nameIn.value; refreshYamlPreview(); });
+    descIn.addEventListener("input", () => { wiz.description = descIn.value; refreshYamlPreview(); });
+
+    const stepsBox = el("div", { class: "stepsBox" });
+    stepsBox.appendChild(el("div", { class: "subTitle", text: `Steps (${(wiz.steps || []).length})` }));
+
+    const addBtn = el("button", { class: "btn", text: "Add step" });
+    addBtn.addEventListener("click", () => {
+      wiz.steps = wiz.steps || [];
+      wiz.steps.push({ id: `step_${wiz.steps.length + 1}`, type: "text", prompt: "" });
+      renderDetail();
+      refreshYamlPreview();
+    });
+    stepsBox.appendChild(addBtn);
+
+    (wiz.steps || []).forEach((s, idx) => {
+      const label = `${s.id || ("step_" + (idx + 1))} : ${s.type || "unknown"}`;
+      const row = el("div", { class: "stepRow", text: label });
+      row.addEventListener("click", () => renderStepEditor(idx));
+      stepsBox.appendChild(row);
+    });
+
+    detailPane.appendChild(stepsBox);
+
+    const saveBar = el("div", { class: "toolbar" });
+    const saveBtn = el("button", { class: "btnPrimary", text: "Save" });
+    const delBtn = el("button", { class: "btnDanger", text: "Delete wizard" });
+    saveBar.appendChild(saveBtn);
+    saveBar.appendChild(delBtn);
+    detailPane.appendChild(saveBar);
+
+    saveBtn.addEventListener("click", async () => {
+      if (!currentName) return;
+      try {
+        await API.sendJson("PUT", `/api/wizards/${encodeURIComponent(currentName)}`, { model: currentModel });
+        notify(`Saved wizard: ${currentName}`);
+        await loadList();
+      } catch (e) {
+        notify(`Save failed: ${String(e)}`);
       }
-      await loadList();
-    } catch(e){ notify(String(e)); }
-  });
-  });
+    });
 
-  delBtn.addEventListener("click", async ()=>{
-    if (!currentName) { notify("Select a wizard first."); return; }
-    if (!confirm(`Delete wizard '${currentName}'?`)) return;
-    try{
-      const path = (content.delete_path_tmpl||"/api/wizards/{name}").replace("{name}", encodeURIComponent(currentName));
-      await API.sendJson("DELETE", path, undefined);
-      currentName = null;
-      textarea.value = "";
+    delBtn.addEventListener("click", async () => {
+      if (!currentName) return;
+      try {
+        await API.sendJson("DELETE", `/api/wizards/${encodeURIComponent(currentName)}`);
+        notify(`Deleted wizard: ${currentName}`);
+        currentName = null;
+        currentModel = null;
+        await loadList();
+        renderDetail();
+      } catch (e) {
+        notify(`Delete failed: ${String(e)}`);
+      }
+    });
+
+    refreshYamlPreview();
+  }
+
+  async function loadDetail(name) {
+    currentName = name;
+    try {
+      const w = await API.getJson(`/api/wizards/${encodeURIComponent(name)}`);
+      currentModel = w.model || null;
+      if (!currentModel) currentModel = { wizard: { name: name, description: "", steps: [] } };
+      renderDetail();
+    } catch (e) {
+      currentModel = null;
+      clear(detailPane);
+      detailPane.appendChild(el("div", { class: "error", text: String(e) }));
+    }
+  }
+
+  async function loadList() {
+    clear(listPane);
+    listPane.appendChild(el("div", { class: "hint", text: "Loading..." }));
+    const r = await API.getJson("/api/wizards");
+    const items = r.items || [];
+    clear(listPane);
+
+    items.forEach((w) => {
+      const wizName = (w && (w.name || w.filename || w.id || w.title)) || "";
+      const count = (w && (w.step_count != null ? w.step_count : "?")) ?? "?";
+      const row = el("div", { class: "wizardItem", text: `${wizName} (${count})` });
+      row.addEventListener("click", () => loadDetail(wizName));
+      listPane.appendChild(row);
+    });
+  }
+
+  header.children[0].addEventListener("click", () => loadList());
+  header.children[1].addEventListener("click", async () => {
+    const name = prompt("New wizard name (filename without .yaml):");
+    if (!name) return;
+    const yaml = "wizard:\n  name: \"" + name + "\"\n  description: \"\"\n  steps:\n    - id: step_1\n      type: text\n      prompt: \"\"\n";
+    try {
+      await API.sendJson("POST", "/api/wizards", { name: name, yaml: yaml });
       await loadList();
-    } catch(e){ notify(String(e)); }
+      await loadDetail(name);
+    } catch (e) {
+      notify(`Create failed: ${String(e)}`);
+    }
   });
 
   await loadList();
-  return wrap;
+  renderDetail();  return root;
 }
 
 async function renderContent(content, notify) {
@@ -494,38 +635,51 @@ async function renderContent(content, notify) {
   }
 
   async function renderLayout(layout, notify) {
-    if (!layout || layout.type !== "grid") {
-      return el("div", { class: "hint", text: "Unsupported layout." });
-    }
-    const cols = layout.cols || 12;
-    const gap = layout.gap || 12;
-    const grid = el("div", { class: "grid" });
-    grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
-    grid.style.gap = `${gap}px`;
+  if (!layout || layout.type !== "grid") {
+    return el("div", { class: "hint", text: "Unsupported layout." });
+  }
+  const cols = layout.cols || 12;
+  const gap = layout.gap || 12;
+  const grid = el("div", { class: "grid" });
+  grid.style.gridTemplateColumns = `repeat(${cols}, 1fr)`;
+  grid.style.gap = `${gap}px`;
 
-    for (const node of (layout.children || [])) {
-      if (node.type === "card") {
-        const colSpan = node.colSpan || cols;
-        const card = el("div", { class: "card" });
-        card.style.gridColumn = `span ${colSpan}`;
-        card.appendChild(el("div", { class: "cardTitle", text: node.title || "" }));
-        const body = el("div", { class: "cardBody" }, [el("div", { class: "hint", text: "Loading..." })]);
-        card.appendChild(body);
-        grid.appendChild(card);
+  const children = Array.isArray(layout.children) ? layout.children : [];
+  for (const node of children) {
+    const colSpan = node.colSpan || cols;
 
-        try {
-          clear(body);
-          body.appendChild(await renderContent(node.content || {}, notify));
-        } catch (e) {
-          clear(body);
-          body.appendChild(el("div", { class: "error", text: String(e) }));
-        }
-      }
+    const card = el("div", { class: "card" });
+    card.style.gridColumn = `span ${colSpan}`;
+
+    // Always render a title row (even if empty) to keep card padding/borders consistent.
+    const titleText = (node.type === "card")
+      ? (node.title || "")
+      : (node.title || node.type || "");
+    card.appendChild(el("div", { class: "cardTitle", text: titleText }));
+
+    const body = el("div", { class: "cardBody" }, [
+      el("div", { class: "hint", text: "Loading..." }),
+    ]);
+    card.appendChild(body);
+    grid.appendChild(card);
+
+    try {
+      clear(body);
+      const contentObj = (node.type === "card") ? (node.content || {}) : node;
+      body.appendChild(await renderContent(contentObj, notify));
+    } catch (e) {
+      clear(body);
+      body.appendChild(el("div", { class: "error", text: String(e) }));
     }
-    return grid;
   }
 
-  async function loadNav() {
+  if (!children.length) {
+    grid.appendChild(el("div", { class: "hint", text: "No layout children." }));
+  }
+  return grid;
+}
+
+async function loadNav() {
     try {
       const nav = await API.getJson("/api/ui/nav");
       return Array.isArray(nav.items) ? nav.items : [];
@@ -607,7 +761,7 @@ async function renderContent(content, notify) {
       content.appendChild(await renderLayout(page.layout, notify));
     }
 
-    window.addEventListener("popstate", () => renderRoute());
+    window.addEventListener("popstate", () => { void renderRoute(); });
     await renderRoute();
   }
 

@@ -75,6 +75,8 @@ def main() -> int:
 
     # UI pages (SPA paths) + API endpoints used by the UI
     paths = [
+        "/ui/assets/app.js",
+        "/ui/assets/app.css",
         "/",
         "/dashboard",
         "/plugins",

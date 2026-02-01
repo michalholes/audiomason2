@@ -16,7 +16,7 @@ def mount_ui_static(app: FastAPI) -> None:
 
     @app.get("/")
     def ui_root() -> FileResponse:
-        return FileResponse(str(index))
+        return FileResponse(str(index), headers={"Cache-Control": "no-store"})
 
     # SPA fallback for any non-API path.
     @app.get("/{full_path:path}")
@@ -24,4 +24,4 @@ def mount_ui_static(app: FastAPI) -> None:
         if full_path.startswith("api/") or full_path.startswith("ui/"):
             # Let FastAPI 404 for missing API/assets
             raise HTTPException(status_code=404)
-        return FileResponse(str(index))
+        return FileResponse(str(index), headers={"Cache-Control": "no-store"})
