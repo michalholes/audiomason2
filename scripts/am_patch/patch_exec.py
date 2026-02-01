@@ -219,16 +219,24 @@ def _infer_strip_depth(repo: Path, paths: list[str]) -> int | None:
 
 
 def _rewrite_patch_paths(patch_text: str, *, strip: int) -> tuple[str, list[str]]:
+    # Rewrite patch header paths deterministically and consistently.
+    # For git-style patches, git apply expects:
+    #   diff --git a/P b/P
+    #   --- a/P (or /dev/null)
+    #   +++ b/P (or /dev/null)
+    # This function enforces that consistency while applying strip depth.
     rewritten_touched: list[str] = []
     out_lines: list[str] = []
     for line in patch_text.splitlines(True):
-        # Keep diff headers consistent with rewritten ---/+++ paths.
         if line.startswith("diff --git "):
             parts = line.rstrip("\n").split()
             # Expected: diff --git a/PATH b/PATH
             if len(parts) >= 4:
                 a_norm = _normalize_patch_path(parts[2])
                 b_norm = _normalize_patch_path(parts[3])
+                if a_norm in ("/dev/null", "") or b_norm in ("/dev/null", ""):
+                    out_lines.append(line)
+                    continue
                 a_parts = _split_abs_like(a_norm)
                 b_parts = _split_abs_like(b_norm)
                 a_rel = "/".join(a_parts[strip:]) if strip < len(a_parts) else "/".join(a_parts)
@@ -237,6 +245,9 @@ def _rewrite_patch_paths(patch_text: str, *, strip: int) -> tuple[str, list[str]
                     a_rel = "/dev/null"
                 if b_rel.startswith("/") or ".." in b_rel.split("/"):
                     b_rel = "/dev/null"
+                if a_rel == "/dev/null" or b_rel == "/dev/null":
+                    out_lines.append(line)
+                    continue
                 out_lines.append("diff --git a/" + a_rel + " b/" + b_rel + "\n")
                 continue
         if line.startswith("--- ") or line.startswith("+++ "):
@@ -250,8 +261,13 @@ def _rewrite_patch_paths(patch_text: str, *, strip: int) -> tuple[str, list[str]
             parts = _split_abs_like(norm)
             rel = "/".join(parts[strip:]) if strip < len(parts) else "/".join(parts)
             if rel.startswith("/") or ".." in rel.split("/"):
-                rel = "/dev/null"
-            out_lines.append(prefix + rel + "\n")
+                out_lines.append(prefix + "/dev/null\n")
+                continue
+            # Keep git-style a/ and b/ prefixes so headers stay consistent.
+            if prefix == "--- ":
+                out_lines.append(prefix + "a/" + rel + "\n")
+            else:
+                out_lines.append(prefix + "b/" + rel + "\n")
             rewritten_touched.append(rel)
             continue
         out_lines.append(line)
