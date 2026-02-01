@@ -227,7 +227,8 @@ This is independent of scope logic and does not affect patch execution, gates, o
 
 ## 7.4 Success archive (`patched_success.zip`)
 
-On SUCCESS, the runner creates `patched_success.zip` as a clean `git archive HEAD` snapshot of the final live repository state.
+On SUCCESS (in `workspace`, `--finalize-live`, and `--finalize-workspace` modes; excluding `--test-mode`),
+the runner creates `patched_success.zip` as a clean `git archive HEAD` snapshot of the final live repository state.
 It contains only git-tracked files (as if fetched from the remote) and does not include logs, workspaces, caches, or patch inputs.
 
 Unified patch mode (`--unified-patch`):

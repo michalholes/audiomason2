@@ -230,6 +230,7 @@ If the audit step fails:
 
 ## patched_success.zip (SUCCESS: clean repo snapshot)
 
-On SUCCESS, the runner creates `patched_success.zip` as `git archive HEAD` of the final live repo state.
+On SUCCESS (in `workspace`, `finalize`, and `finalize_workspace` modes; excluding `--test-mode`), the runner
+creates `patched_success.zip` as `git archive HEAD` of the final live repo state.
 It contains only git-tracked files and does not include logs, workspaces, caches, or patch inputs.
 
