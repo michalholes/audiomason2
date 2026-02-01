@@ -891,7 +891,9 @@ def main(argv: list[str]) -> int:
         # - on failure: patched.zip (as before)
         # - on success: patched_success.zip
         try:
-            if cli.mode == "workspace" and (not policy.test_mode):
+            if cli.mode in ("workspace", "finalize", "finalize_workspace") and (
+                not policy.test_mode
+            ):
                 issue_id = cli.issue_id or "unknown"
 
                 archived_path: Path | None = used_patch_for_zip
