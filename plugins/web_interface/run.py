@@ -1,45 +1,39 @@
 from __future__ import annotations
 
 import argparse
-import os
 import sys
 from pathlib import Path
-import importlib.util
-import compileall
 
 
-def _load_web_interface_plugin():
-    """Load WebInterfacePlugin from plugin.py without relying on package imports."""
-    here = Path(__file__).resolve().parent
-    plugin_py = here / "plugin.py"
-    spec = importlib.util.spec_from_file_location("web_interface_plugin", plugin_py)
-    if spec is None or spec.loader is None:
-        raise RuntimeError(f"failed to load spec for {plugin_py}")
-    module = importlib.util.module_from_spec(spec)
-    sys.modules["web_interface_plugin"] = module
-    spec.loader.exec_module(module)
-    return module.WebInterfacePlugin
+def _ensure_repo_root_on_syspath() -> None:
+    # When executed as: python3 plugins/web_interface/run.py
+    # sys.path[0] is plugins/web_interface, so top-level "plugins" is not importable.
+    repo_root = Path(__file__).resolve().parents[2]
+    repo_root_str = str(repo_root)
+    if repo_root_str not in sys.path:
+        sys.path.insert(0, repo_root_str)
 
 
-def _parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="AudioMason web_interface (standalone)")
-    p.add_argument("--host", default=os.environ.get("WEB_INTERFACE_HOST", "0.0.0.0"))
-    p.add_argument("--port", type=int, default=int(os.environ.get("WEB_INTERFACE_PORT", "8081")))
-    return p.parse_args()
+def main(argv: list[str] | None = None) -> int:
+    p = argparse.ArgumentParser()
+    p.add_argument("--host", default="0.0.0.0")
+    p.add_argument("--port", type=int, default=8081)
+    args = p.parse_args(argv)
 
+    _ensure_repo_root_on_syspath()
 
-def main() -> int:
-    here = Path(__file__).resolve().parent
+    # Fast-fail on syntax errors in plugin package
+    import compileall
 
-    # Fast fail on syntax errors before starting the server.
-    if not compileall.compile_file(str(here / "plugin.py"), quiet=1):
-        raise SystemExit("web_interface: plugin.py failed to compile (syntax error)")
+    ok = compileall.compile_dir("plugins/web_interface", quiet=1)
+    if not ok:
+        return 2
 
-    WebInterfacePlugin = _load_web_interface_plugin()
-    args = _parse_args()
+    from plugins.web_interface.core import WebInterfacePlugin
+
     WebInterfacePlugin().run(host=str(args.host), port=int(args.port))
     return 0
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    raise SystemExit(main(sys.argv[1:]))

@@ -1,0 +1,49 @@
+from __future__ import annotations
+
+from pathlib import Path
+from typing import Any
+
+import uvicorn
+from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
+
+from .api.am_config import mount_am_config
+from .api.logs import mount_logs
+from .api.plugins_mgmt import mount_plugins_mgmt
+from .api.stage import mount_stage
+from .api.ui_schema import mount_ui_schema
+from .api.wizards import mount_wizards
+from .ui_static import mount_ui_static
+from .util.status import build_status
+
+
+class WebInterfacePlugin:
+    """Standalone web interface plugin (no dependency on other AM plugins)."""
+
+    def create_app(self) -> FastAPI:
+        app = FastAPI(title="AudioMason Web Interface")
+
+        # API first (avoid catch-all swallowing /api/*)
+        mount_am_config(app)
+        mount_ui_schema(app)
+        mount_plugins_mgmt(app)
+        mount_stage(app)
+        mount_wizards(app)
+        mount_logs(app)
+
+        @app.get("/api/health")
+        def api_health() -> dict[str, Any]:
+            return {"ok": True}
+
+        @app.get("/api/status")
+        def api_status() -> dict[str, Any]:
+            return build_status()
+
+        # UI static + SPA fallback last
+        mount_ui_static(app)
+
+        return app
+
+    def run(self, *, host: str = "0.0.0.0", port: int = 8081) -> None:
+        app = self.create_app()
+        uvicorn.run(app, host=host, port=port, log_level="info")
