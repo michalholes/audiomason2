@@ -328,6 +328,7 @@ def main(argv: list[str]) -> int:
 
     lock = FileLock(paths.lock_path)
     exit_code: int = 0
+    patch_script: Path | None = None
     used_patch_for_zip: Path | None = None
     files_for_fail_zip: list[str] = []
     failed_patch_blobs_for_zip: list[tuple[str, bytes]] = []
