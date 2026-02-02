@@ -461,7 +461,7 @@ class WizardEngine:
         if self.config_resolver and not hasattr(context, "output_dir"):
             try:
                 outbox_dir, source = self.config_resolver.resolve("outbox_dir")
-                setattr(context, "output_dir", outbox_dir)
+                context.output_dir = outbox_dir
                 self._debug(f"Set output_dir from config: {outbox_dir} (from {source})")
             except Exception as e:
                 self._debug(f"Could not set output_dir from config: {e}")

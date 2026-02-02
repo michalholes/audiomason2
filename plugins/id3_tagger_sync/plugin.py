@@ -119,10 +119,10 @@ class ID3TaggerSync:
             # Set tags
             if audio.tags is None:
                 audio.add_tags()
-            
+
             # Now audio.tags should not be None, but mypy needs explicit check
             assert audio.tags is not None
-            
+
             if title:
                 audio.tags["TIT2"] = TIT2(encoding=3, text=title)
                 self._log_debug(f"Title: {title}")
@@ -184,10 +184,10 @@ class ID3TaggerSync:
         # APIC frame for cover art
         if audio.tags is None:
             audio.add_tags()
-        
+
         # Now audio.tags should not be None
         assert audio.tags is not None
-        
+
         audio.tags["APIC"] = APIC(
             encoding=3,
             mime=mime,

@@ -1,3 +1,4 @@
+import contextlib
 import os
 import shutil
 import subprocess
@@ -30,10 +31,8 @@ def _cleanup(repo_root: Path) -> None:
     shutil.rmtree(patches_dir / "workspaces" / f"issue_{ISSUE}", ignore_errors=True)
 
     # bundle
-    try:
+    with contextlib.suppress(FileNotFoundError):
         (patches_dir / f"issue_{ISSUE}.zip").unlink()
-    except FileNotFoundError:
-        pass
 
     # successful / unsuccessful (delete only issue_666* artifacts)
     for d in ("successful", "unsuccessful"):

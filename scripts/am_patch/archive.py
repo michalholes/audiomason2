@@ -90,9 +90,9 @@ def make_failure_zip(
 
         for name, data in patch_blobs:
             arc = f"patches/{Path(name).name}"
-            if arcname in seen_patch:
+            if arc in seen_patch:
                 continue
-            seen_patch.add(arcname)
+            seen_patch.add(arc)
             z.writestr(arc, data)
 
         for patch_path in patch_paths:

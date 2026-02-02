@@ -19,7 +19,10 @@ from audiomason.core.errors import AudioMasonError
 try:
     from .workflow_reader import WorkflowConfig, WorkflowStep
 except ImportError:
-    from workflow_reader import WorkflowConfig, WorkflowStep  # type: ignore[import-not-found,no-redef]
+    from workflow_reader import (  # type: ignore[import-not-found,no-redef]
+        WorkflowConfig,
+        WorkflowStep,
+    )
 
 
 class WizardError(AudioMasonError):
@@ -240,7 +243,9 @@ class BasicWizardSync:
 
         return None
 
-    def _execute_processing_step(self, step: WorkflowStep, context: ProcessingContext) -> ProcessingContext:
+    def _execute_processing_step(
+        self, step: WorkflowStep, context: ProcessingContext
+    ) -> ProcessingContext:
         """Execute single processing step.
 
         Args:
@@ -260,7 +265,7 @@ class BasicWizardSync:
             raise WizardError(f"Step {step.id} has no plugin specified")
         if step.method is None:
             raise WizardError(f"Step {step.id} has no method specified")
-        
+
         plugin = self._get_plugin(step.plugin)
         method = getattr(plugin, step.method, None)
 

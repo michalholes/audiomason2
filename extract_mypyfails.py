@@ -68,7 +68,12 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("log", type=Path, help="Path to mypy log file (text).")
     ap.add_argument("--repo", type=Path, default=Path.cwd(), help="Repo root (default: cwd).")
-    ap.add_argument("--out", type=Path, default=Path("patches/mypyfails"), help="Output dir (default: patches/mypyfails).")
+    ap.add_argument(
+        "--out",
+        type=Path,
+        default=Path("patches/mypyfails"),
+        help="Output dir (default: patches/mypyfails).",
+    )
     args = ap.parse_args()
 
     log_path: Path = args.log
@@ -115,7 +120,10 @@ def main() -> int:
 
     # Write list file
     list_file = out_dir / "_mypy_files.txt"
-    list_file.write_text("\n".join(str(p) for p in copied) + ("\n" if copied else ""), encoding="utf-8")
+    content = "\n".join(str(p) for p in copied)
+    if copied:
+        content += "\n"
+    list_file.write_text(content, encoding="utf-8")
 
     print(f"Repo root: {repo_root}")
     print(f"Log:       {log_path}")

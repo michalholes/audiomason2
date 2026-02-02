@@ -13,7 +13,7 @@ from typing import Annotated, Any
 try:
     import uvicorn
     from fastapi import FastAPI, File, Form, Request, UploadFile, WebSocket, WebSocketDisconnect
-    from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
+    from fastapi.responses import HTMLResponse, JSONResponse
     from fastapi.staticfiles import StaticFiles
     from fastapi.templating import Jinja2Templates
 
