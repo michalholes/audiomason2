@@ -749,6 +749,7 @@ class ConfigScreen:
         self.dialogs = Dialogs(screen, theme)
 
         self.config_file = Path.home() / ".config" / "audiomason" / "config.yaml"
+        self.current_config: dict[str, Any] = {}
         self._load_config()
 
     def _load_config(self) -> None:

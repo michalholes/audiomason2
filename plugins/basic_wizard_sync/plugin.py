@@ -19,10 +19,7 @@ from audiomason.core.errors import AudioMasonError
 try:
     from .workflow_reader import WorkflowConfig, WorkflowStep
 except ImportError:
-    try:
-        from basic_wizard_sync.workflow_reader import WorkflowConfig, WorkflowStep
-    except ImportError:
-        from workflow_reader import WorkflowConfig, WorkflowStep  # type: ignore[import-not-found]
+    from workflow_reader import WorkflowConfig, WorkflowStep  # type: ignore[import-not-found]
 
 
 class WizardError(AudioMasonError):
@@ -219,29 +216,31 @@ class BasicWizardSync:
             self._log_debug(f"Skipping {step.id} (set in config: {value})")
             return value
 
+        # Check condition
+        if not self.workflow.evaluate_condition(step.condition, self.eval_context):
+            self._log_verbose(f"Skipping {step.id} (condition not met)")
+            return None
+
+        # Extract hint if configured
+        hint = None
+        if step.hint_from and step.hint_from in self.answers:
+            source_value = self.answers[step.hint_from]
+            hint = self.workflow.extract_hint(step, source_value)
+
         # Execute based on step type
         if step.type == "yes_no":
-            default_no = step.default != "yes"
-            return self._prompt_yes_no(step.prompt, default_no)
+            default_no = step.default != "yes" if step.default else True
+            result = self._prompt_yes_no(step.prompt, default_no)
+            return result
 
         elif step.type == "input":
-            # Extract hint if configured
-            hint = step.default or ""
-
-            if step.hint_from == "source_name" and step.hint_pattern:
-                hint = self.workflow.extract_hint(step, source_name)
-
-            return self._prompt(step.prompt, hint)
-
-        elif step.type == "menu":
-            # Menu handled separately
-            return None
+            default_val = hint or step.default or ""
+            result = self._prompt(step.prompt, default_val)
+            return result
 
         return None
 
-    def _execute_processing_step(
-        self, step: WorkflowStep, context: ProcessingContext
-    ) -> ProcessingContext:
+    def _execute_processing_step(self, step: WorkflowStep, context: ProcessingContext) -> ProcessingContext:
         """Execute single processing step.
 
         Args:
