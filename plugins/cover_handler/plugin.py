@@ -53,9 +53,8 @@ class CoverHandlerPlugin:
             elif context.cover_choice == CoverChoice.FILE:
                 cover_path = self.find_file_cover(context.source.parent)
 
-            elif context.cover_choice == CoverChoice.URL:
-                if context.cover_url:
-                    cover_path = await self.download_cover(context.cover_url, context.stage_dir)
+            elif context.cover_choice == CoverChoice.URL and context.cover_url:
+                cover_path = await self.download_cover(context.cover_url, context.stage_dir)
 
             if cover_path and cover_path.exists():
                 # Convert to JPEG if needed

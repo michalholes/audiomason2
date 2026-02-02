@@ -8,7 +8,7 @@ from __future__ import annotations
 import uuid
 import zipfile
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
 try:
     import uvicorn
@@ -62,7 +62,8 @@ class WebServerPlugin:
         """
         if not HAS_FASTAPI:
             raise ImportError(
-                "FastAPI not installed. Install with: pip install fastapi uvicorn python-multipart websockets jinja2"
+                "FastAPI not installed. Install with: "
+                "pip install fastapi uvicorn python-multipart websockets jinja2"
             )
 
         self.config = config or {}
@@ -369,7 +370,10 @@ class WebServerPlugin:
 
             return JSONResponse(
                 {
-                    "message": "Configuration saved to ~/.config/audiomason/config.yaml\n\n⚠️ IMPORTANT: Restart the web server for changes to take effect.",
+                    "message": (
+                        "Configuration saved to ~/.config/audiomason/config.yaml\n\n"
+                        "⚠️ IMPORTANT: Restart the web server for changes to take effect."
+                    ),
                     "path": str(config_path),
                     "restart_required": True,
                     "config": updated,
@@ -436,7 +440,10 @@ class WebServerPlugin:
 
             return JSONResponse(
                 {
-                    "message": f"Plugin '{name}' enabled\n\n⚠️ Restart the web server for changes to take effect.",
+                    "message": (
+                        f"Plugin '{name}' enabled\n\n"
+                        "⚠️ Restart the web server for changes to take effect."
+                    ),
                     "restart_required": True,
                 }
             )
@@ -490,7 +497,10 @@ class WebServerPlugin:
 
             return JSONResponse(
                 {
-                    "message": f"Plugin '{name}' disabled\n\n⚠️ Restart the web server for changes to take effect.",
+                    "message": (
+                        f"Plugin '{name}' disabled\n\n"
+                        "⚠️ Restart the web server for changes to take effect."
+                    ),
                     "restart_required": True,
                 }
             )
@@ -517,15 +527,15 @@ class WebServerPlugin:
 
     async def save_plugin_config(self, name: str, request: Request) -> JSONResponse:
         """Save plugin configuration."""
-        data = await request.json()
+        await request.json()  # Consume request body
 
         # TODO: Save plugin config to config file
         return JSONResponse({"message": f"Config for '{name}' saved"})
 
     async def install_plugin(
         self,
-        files: list[UploadFile] = File(None),
-        url: str = Form(None),
+        files: Annotated[list[UploadFile] | None, File()] = None,
+        url: Annotated[str | None, Form()] = None,
     ) -> JSONResponse:
         """Install plugin from ZIP or URL."""
         if files:
@@ -582,7 +592,7 @@ class WebServerPlugin:
 
     async def run_wizard(self, name: str, request: Request) -> JSONResponse:
         """Run wizard with provided inputs."""
-        data = await request.json()
+        await request.json()  # Consume request body
 
         # TODO: Integrate with WizardEngine when implemented
         return JSONResponse({"message": f"Wizard '{name}' started", "job_id": str(uuid.uuid4())})
@@ -986,8 +996,10 @@ class WebServerPlugin:
                 )
 
                 if self.verbosity >= VerbosityLevel.DEBUG:
+                    wizard_name = wizard.get('name', yaml_file.stem)
                     print(
-                        f"[DEBUG]   ✓ Added wizard '{wizard.get('name', yaml_file.stem)}' with {len(steps)} steps"
+                        f"[DEBUG]   ✓ Added wizard '{wizard_name}' "
+                        f"with {len(steps)} steps"
                     )
             except Exception as e:
                 if self.verbosity >= VerbosityLevel.DEBUG:

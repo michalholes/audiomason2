@@ -90,12 +90,10 @@ def set_disabled_plugins(text: str, disabled: list[str]) -> str:
     lines = text.splitlines()
     out: list[str] = []
     i = 0
-    removed = False
     while i < len(lines):
         ln = lines[i]
         if re.match(r"^\s*plugins\s*:\s*$", ln):
             # skip existing plugins block
-            removed = True
             i += 1
             while i < len(lines) and not re.match(r"^\S", lines[i]):
                 i += 1

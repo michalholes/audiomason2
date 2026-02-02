@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import json
 import urllib.parse
 import urllib.request
@@ -129,10 +130,8 @@ class MetadataSync:
             # Extract year
             published_date = volume_info.get("publishedDate")
             if published_date:
-                try:
+                with contextlib.suppress(ValueError, IndexError):
                     metadata.year = int(published_date[:4])
-                except (ValueError, IndexError):
-                    pass
 
             # Extract ISBN
             for identifier in volume_info.get("industryIdentifiers", []):

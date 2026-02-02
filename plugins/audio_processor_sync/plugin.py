@@ -251,10 +251,10 @@ class AudioProcessorSync:
             # Run FFmpeg
             if self.verbosity >= 3:
                 # Show FFmpeg output in debug mode
-                result = subprocess.run(cmd, check=True, text=True)
+                subprocess.run(cmd, check=True, text=True)
             else:
                 # Suppress FFmpeg output
-                result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+                subprocess.run(cmd, capture_output=True, text=True, check=True)
 
             if not output_file.exists():
                 raise AudioProcessingError("Output file not created")

@@ -160,17 +160,14 @@ class BasicWizardSync:
             User input or default
         """
         if self.verbosity >= 1 and self.workflow.should_show_messages(self.verbosity, "prompts"):
-            if default:
-                prompt_text = f"{question} [{default}]: "
-            else:
-                prompt_text = f"{question}: "
+            prompt_text = f"{question} [{default}]: " if default else f"{question}: "
 
             try:
                 answer = input(prompt_text).strip()
                 return answer if answer else default
             except (EOFError, KeyboardInterrupt):
                 print()
-                raise WizardError("User interrupted")
+                raise WizardError("User interrupted") from None from None
         else:
             # Non-interactive mode - use default
             return default
@@ -186,10 +183,7 @@ class BasicWizardSync:
             True for yes, False for no
         """
         if self.verbosity >= 1 and self.workflow.should_show_messages(self.verbosity, "prompts"):
-            if default_no:
-                prompt_text = f"{question} (y/N): "
-            else:
-                prompt_text = f"{question} (Y/n): "
+            prompt_text = f"{question} (y/N): " if default_no else f"{question} (Y/n): "
 
             try:
                 answer = input(prompt_text).strip().lower()
@@ -201,7 +195,7 @@ class BasicWizardSync:
 
             except (EOFError, KeyboardInterrupt):
                 print()
-                raise WizardError("User interrupted")
+                raise WizardError("User interrupted") from None
         else:
             # Non-interactive mode - use default
             return not default_no
@@ -377,7 +371,7 @@ class BasicWizardSync:
                     else:
                         raise WizardError("Invalid selection")
             except (ValueError, IndexError):
-                raise WizardError("Invalid input")
+                raise WizardError("Invalid input") from None
             except (EOFError, KeyboardInterrupt):
                 self._log_info("\n\n[Interrupted by user]")
                 return None

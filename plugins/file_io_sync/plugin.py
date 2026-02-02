@@ -120,7 +120,8 @@ class FileIOSync:
                         files_in_root.append(subitem)
 
                 self._log_debug(
-                    f"Directory {item.name}: {len(subdirs_with_audio)} subdirs with audio, {len(files_in_root)} audio files in root"
+                    f"Directory {item.name}: {len(subdirs_with_audio)} subdirs with audio, "
+                    f"{len(files_in_root)} audio files in root"
                 )
 
                 # If has subdirectories with audio -> autor/kniha structure
@@ -348,11 +349,10 @@ class FileIOSync:
             exported_files.append(dest_file)
 
         # Copy cover if exists
-        if hasattr(context, "cover_path") and context.cover_path:
-            if context.cover_path.exists():
-                cover_dest = output_path / "cover.jpg"
-                shutil.copy2(context.cover_path, cover_dest)
-                self._log_debug(f"Copied cover: {author_clean}/{title_clean}/cover.jpg")
+        if hasattr(context, "cover_path") and context.cover_path and context.cover_path.exists():
+            cover_dest = output_path / "cover.jpg"
+            shutil.copy2(context.cover_path, cover_dest)
+            self._log_debug(f"Copied cover: {author_clean}/{title_clean}/cover.jpg")
 
         context.output_path = output_path
         context.exported_files = exported_files

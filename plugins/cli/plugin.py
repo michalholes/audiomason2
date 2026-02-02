@@ -10,6 +10,7 @@ Features:
 
 from __future__ import annotations
 
+import contextlib
 import sys
 import time
 import uuid
@@ -242,6 +243,7 @@ class CLIPlugin:
         """
         # Parse arguments
         files, cli_args = self._parse_args(args)
+        self.cli_args = cli_args  # Store for processing phase
 
         if not files:
             self._error("No input file(s) specified")
@@ -461,7 +463,7 @@ class CLIPlugin:
                     self._verbose(f"  ⚠ {plugin_name}: {e}")
 
         # Load pipeline
-        pipeline_name = cli_args.get("pipeline", "standard")
+        pipeline_name = self.cli_args.get("pipeline", "standard")
         pipeline_path = Path(__file__).parent.parent.parent / "pipelines" / f"{pipeline_name}.yaml"
 
         if not pipeline_path.exists():
@@ -825,10 +827,8 @@ class CLIPlugin:
         for plugin in ["audio_processor", "file_io", "id3_tagger", "cover_handler"]:
             plugin_dir = plugins_dir / plugin
             if plugin_dir.exists():
-                try:
+                with contextlib.suppress(Exception):
                     loader.load_plugin(plugin_dir, validate=False)
-                except Exception:
-                    pass
 
         engine = WizardEngine(loader, verbosity=self.verbosity, config_resolver=config_resolver)
 
@@ -862,10 +862,7 @@ class CLIPlugin:
                 required = options.get("required", False)
                 default = options.get("default")
 
-                if default:
-                    prompt_text = f"{prompt} [{default}]: "
-                else:
-                    prompt_text = f"{prompt}: "
+                prompt_text = f"{prompt} [{default}]: " if default else f"{prompt}: "
 
                 while True:
                     value = input(prompt_text).strip()

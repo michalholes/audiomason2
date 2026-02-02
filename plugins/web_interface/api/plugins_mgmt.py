@@ -3,7 +3,7 @@ from __future__ import annotations
 import io
 import zipfile
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 
@@ -81,7 +81,7 @@ def mount_plugins_mgmt(app: FastAPI) -> None:
         return {"ok": True}
 
     @app.post("/api/plugins/upload")
-    async def upload_plugin(file: UploadFile = File(...)) -> dict[str, Any]:
+    async def upload_plugin(file: Annotated[UploadFile, File()]) -> dict[str, Any]:
         if not file.filename or not file.filename.lower().endswith(".zip"):
             raise HTTPException(status_code=400, detail="expected .zip")
         data = await file.read()

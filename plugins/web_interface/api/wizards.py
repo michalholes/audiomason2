@@ -196,5 +196,5 @@ def mount_wizards(app: FastAPI) -> None:
         try:
             yaml_text = _serialize_wizard_model(model)
         except Exception as e:
-            raise HTTPException(status_code=400, detail=str(e))
+            raise HTTPException(status_code=400, detail=str(e)) from e
         return {"yaml": yaml_text}

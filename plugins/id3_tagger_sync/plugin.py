@@ -134,10 +134,7 @@ class ID3TaggerSync:
                 self._log_debug(f"Year: {year}")
 
             if track_number:
-                if total_tracks:
-                    track_text = f"{track_number}/{total_tracks}"
-                else:
-                    track_text = str(track_number)
+                track_text = f"{track_number}/{total_tracks}" if total_tracks else str(track_number)
                 audio.tags["TRCK"] = TRCK(encoding=3, text=track_text)
                 self._log_debug(f"Track: {track_text}")
 
@@ -220,7 +217,7 @@ class ID3TaggerSync:
         self._log_verbose(f"Artist: {artist}, Album: {album}")
 
         for idx, mp3_file in enumerate(sorted(files), 1):
-            if not mp3_file.suffix.lower() == ".mp3":
+            if mp3_file.suffix.lower() != ".mp3":
                 self._log_debug(f"Skipping non-MP3: {mp3_file.name}")
                 continue
 

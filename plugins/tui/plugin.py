@@ -254,7 +254,8 @@ class Menu:
 
             logger = get_logger("tui.menu")
             logger.debug(
-                f"Key pressed: {key} (UP={curses.KEY_UP}={curses.KEY_UP}, DOWN={curses.KEY_DOWN}={curses.KEY_DOWN})"
+                f"Key pressed: {key} "
+                f"(UP={curses.KEY_UP}, DOWN={curses.KEY_DOWN})"
             )
 
             if key == curses.KEY_UP:
@@ -268,7 +269,7 @@ class Menu:
             else:
                 ch = chr(key) if 32 <= key <= 126 else None
                 if ch:
-                    for idx, item in enumerate(visible_items):
+                    for item in visible_items:
                         if item.key == ch:
                             return item.action
 
@@ -862,7 +863,11 @@ class ConfigScreen:
                     folder_list = "\n".join(f"  - {f}" for f in folders)
                     msg = f"Current watch folders:\n\n{folder_list}\n\nAdd or remove?"
                 else:
-                    msg = "No watch folders configured.\n\nThese are directories that daemon monitors\nfor new audiobook files."
+                    msg = (
+                        "No watch folders configured.\n\n"
+                        "These are directories that daemon monitors\n"
+                        "for new audiobook files."
+                    )
 
                 self.dialogs.message("Watch Folders", msg)
 
@@ -1012,7 +1017,8 @@ class PluginsScreen:
             plugin_name = action[7:]
             self.dialogs.message(
                 "Plugin Info",
-                f"Plugin: {plugin_name}\n\nFeature coming soon:\n- Enable/Disable\n- Configure\n- Delete",
+                f"Plugin: {plugin_name}\n\n"
+                "Feature coming soon:\n- Enable/Disable\n- Configure\n- Delete",
             )
 
         return action
@@ -1086,7 +1092,8 @@ class DaemonScreen:
         if action == "start":
             self.dialogs.message(
                 "Daemon Mode",
-                "Exit TUI and run:\n\n  audiomason daemon\n\nIt will run in the foreground.\nPress Ctrl+C to stop.",
+                "Exit TUI and run:\n\n  audiomason daemon\n\n"
+                "It will run in the foreground.\nPress Ctrl+C to stop.",
             )
         elif action == "stop":
             self.dialogs.message(
@@ -1156,9 +1163,8 @@ class LogsScreen:
                 self.dialogs.message("No Logs", f"Log directory not found:\n{log_dir}")
 
         elif action == "clear":
-            if self.dialogs.confirm("Delete all log files?", default=False):
-                if log_dir.exists():
-                    count = 0
+            if self.dialogs.confirm("Delete all log files?", default=False) and log_dir.exists():
+                count = 0
                     for log_file in log_dir.glob("*.log"):
                         log_file.unlink()
                         count += 1

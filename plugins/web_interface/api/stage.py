@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 
@@ -43,8 +43,8 @@ def mount_stage(app: FastAPI) -> None:
 
     @app.post("/api/stage/upload")
     async def upload_stage(
-        files: list[UploadFile] = File(...),
-        relpaths: list[str] | None = Form(default=None),
+        files: Annotated[list[UploadFile], File()],
+        relpaths: Annotated[list[str] | None, Form()] = None,
     ) -> dict[str, Any]:
         d = _stage_dir()
         if relpaths is None:
@@ -53,7 +53,7 @@ def mount_stage(app: FastAPI) -> None:
             raise HTTPException(status_code=400, detail="relpaths length mismatch")
 
         saved = 0
-        for up, rel in zip(files, relpaths):
+        for up, rel in zip(files, relpaths, strict=True):
             rel = rel.lstrip("/").replace("..", "_")
             out = (d / rel).resolve()
             if d not in out.parents and out != d:

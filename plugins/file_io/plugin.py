@@ -229,7 +229,7 @@ class FileIOPlugin:
                 with rarfile.RarFile(source, "r") as rar_ref:
                     rar_ref.extractall(extract_dir)
             except ImportError:
-                raise FileError("RAR support not available. Install with: pip install rarfile")
+                raise FileError("RAR support not available. Install with: pip install rarfile") from None
         elif suffix == ".7z":
             try:
                 import py7zr
@@ -237,7 +237,7 @@ class FileIOPlugin:
                 with py7zr.SevenZipFile(source, "r") as sz_ref:
                     sz_ref.extractall(extract_dir)
             except ImportError:
-                raise FileError("7Z support not available. Install with: pip install py7zr")
+                raise FileError("7Z support not available. Install with: pip install py7zr") from None
         else:
             raise FileError(f"Unsupported archive format: {suffix}")
 

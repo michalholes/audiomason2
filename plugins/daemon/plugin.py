@@ -7,6 +7,7 @@ import signal
 import time
 import uuid
 from pathlib import Path
+from typing import Any
 
 from audiomason.core import (
     PipelineExecutor,
@@ -196,11 +197,10 @@ class DaemonPlugin:
             if self.on_success == "move_to_output":
                 # Already moved by pipeline
                 pass
-            elif self.on_success == "delete":
-                if file_path.exists():
-                    file_path.unlink()
-                    if self.verbosity >= VerbosityLevel.NORMAL:
-                        print("   🗑️  Deleted source file")
+            elif self.on_success == "delete" and file_path.exists():
+                file_path.unlink()
+                if self.verbosity >= VerbosityLevel.NORMAL:
+                    print("   🗑️  Deleted source file")
 
     def _handle_signal(self, signum: int, frame: Any) -> None:
         """Handle shutdown signal.
