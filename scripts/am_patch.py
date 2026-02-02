@@ -631,7 +631,7 @@ def main(argv: list[str]) -> int:
             git_ops.require_branch(logger, repo_root, policy.default_branch)
 
         base_sha = git_ops.head_sha(logger, repo_root)
-        files_current = [] if getattr(policy, "unified_patch", False) else load_files(patch_script)
+        files_current = [] if unified_mode else load_files(patch_script)
 
         logger.section("DECLARED FILES")
         for _p in files_current:
@@ -1017,7 +1017,7 @@ def main(argv: list[str]) -> int:
                         not patch_applied_successfully
                         and archived_path is not None
                         and archived_path.exists()
-                        and not getattr(policy, "unified_patch", False)
+                        and not unified_mode
                     ):
                         include_patch_paths.append(archived_path)
 
