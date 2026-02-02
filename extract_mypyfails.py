@@ -14,12 +14,10 @@ Assumptions:
 from __future__ import annotations
 
 import argparse
-import os
 import re
 import shutil
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable
-
 
 MYPY_ERROR_RE = re.compile(
     r"""^
