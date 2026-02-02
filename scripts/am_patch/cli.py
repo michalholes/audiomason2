@@ -53,6 +53,7 @@ class CliArgs:
     run_all_tests: bool | None
     allow_no_op: bool | None
 
+    compile_check: bool | None
     unified_patch: bool | None
     patch_strip: int | None
     skip_up_to_date: bool | None
@@ -413,6 +414,7 @@ def parse_args(argv: list[str]) -> CliArgs:
     )
     p.add_argument("--keep-workspace", dest="keep_workspace", action="store_true", default=None)
     p.add_argument("--test-mode", dest="test_mode", action="store_true", default=None)
+    p.add_argument("--no-compile-check", dest="compile_check", action="store_false", default=None)
     p.add_argument(
         "--success-archive-name",
         dest="success_archive_name",
@@ -516,6 +518,7 @@ def parse_args(argv: list[str]) -> CliArgs:
             message=None,
             run_all_tests=ns.run_all_tests,
             allow_no_op=ns.allow_no_op,
+            compile_check=getattr(ns, "compile_check", None),
             unified_patch=getattr(ns, "unified_patch", None),
             patch_strip=getattr(ns, "patch_strip", None),
             skip_up_to_date=ns.skip_up_to_date,
@@ -588,6 +591,7 @@ def parse_args(argv: list[str]) -> CliArgs:
         message=message,
         run_all_tests=ns.run_all_tests,
         allow_no_op=ns.allow_no_op,
+        compile_check=getattr(ns, "compile_check", None),
         unified_patch=getattr(ns, "unified_patch", None),
         patch_strip=getattr(ns, "patch_strip", None),
         skip_up_to_date=ns.skip_up_to_date,

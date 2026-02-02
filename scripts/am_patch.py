@@ -115,7 +115,7 @@ def _run_post_success_audit(logger: Logger, repo_root: Path, policy: Policy) -> 
 
 
 from am_patch.archive import archive_patch, make_failure_zip
-from am_patch.gates import run_gates
+from am_patch.gates import run_compile_check, run_gates
 from am_patch.promote import promote_files
 from am_patch.state import load_state, save_state, update_union
 
@@ -281,6 +281,7 @@ def main(argv: list[str]) -> int:
             "patch_jail_unshare_net": getattr(cli, "patch_jail_unshare_net", None),
             "ruff_format": getattr(cli, "ruff_format", None),
             "pytest_use_venv": getattr(cli, "pytest_use_venv", None),
+            "compile_check": getattr(cli, "compile_check", None),
             "post_success_audit": getattr(cli, "post_success_audit", None),
             "test_mode": getattr(cli, "test_mode", None),
             "unified_patch": getattr(cli, "unified_patch", None),
@@ -375,6 +376,12 @@ def main(argv: list[str]) -> int:
                 )
 
             # Gates in workspace first.
+            # Gate: compile all Python sources to catch syntax errors early.
+            if getattr(policy, "compile_check", True):
+                ok = run_compile_check(logger, cwd=ws.repo, repo_root=repo_root)
+                if not ok:
+                    raise RunnerError("GATE", "COMPILE", "python -m compileall failed")
+
             run_gates(
                 logger,
                 cwd=ws.repo,

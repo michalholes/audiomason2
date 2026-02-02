@@ -50,6 +50,7 @@ class Policy:
     enforce_allowed_files: bool = True
 
     run_all_tests: bool = True
+    compile_check: bool = True
     ruff_autofix: bool = True
     ruff_autofix_legalize_outside: bool = True
 
@@ -254,6 +255,8 @@ def build_policy(defaults: Policy, cfg: dict[str, Any]) -> Policy:
 
     p.run_all_tests = _as_bool(cfg, "run_all_tests", p.run_all_tests)
     _mark_cfg(p, cfg, "run_all_tests")
+    p.compile_check = _as_bool(cfg, "compile_check", p.compile_check)
+    _mark_cfg(p, cfg, "compile_check")
     p.ruff_autofix = _as_bool(cfg, "ruff_autofix", p.ruff_autofix)
     _mark_cfg(p, cfg, "ruff_autofix")
     p.ruff_autofix_legalize_outside = _as_bool(

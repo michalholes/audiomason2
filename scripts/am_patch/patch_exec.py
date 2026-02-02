@@ -352,7 +352,8 @@ def run_unified_patch_bundle(
                 data = z.read(n)
                 if getattr(policy, "ascii_only_patch", False):
                     _ascii_check_bytes(data, label=f"{src.name}:{n}")
-                patch_entries.append((pn.name, data))
+                safe_name = pn.as_posix().replace("/", "__")
+                patch_entries.append((safe_name, data))
 
     applied_ok = 0
     applied_fail = 0

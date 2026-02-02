@@ -119,6 +119,15 @@ def run_mypy(logger: Logger, cwd: Path, *, repo_root: Path, targets: list[str]) 
     return r.returncode == 0
 
 
+def run_compile_check(logger: Logger, cwd: Path, *, repo_root: Path) -> bool:
+    """Compile all Python sources to catch syntax errors early."""
+    logger.section("GATE: COMPILE")
+    py = sys.executable
+    logger.line(f"compile_python={py}")
+    r = logger.run_logged([py, "-m", "compileall", "-q", "."], cwd=cwd)
+    return r.returncode == 0
+
+
 def _norm_gate_name(s: str) -> str:
     return str(s).strip().lower()
 

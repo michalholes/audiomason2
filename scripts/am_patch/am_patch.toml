@@ -24,6 +24,7 @@ no_op_fail = true
 #order = []
 #order = ["pytest"]
 order = ["ruff", "pytest", "mypy"]
+compile_check = true
 ruff_autofix = true
 ruff_format = true
 pytest_use_venv = true
