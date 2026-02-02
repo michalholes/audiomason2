@@ -959,16 +959,12 @@ def main(argv: list[str]) -> int:
 
                         for c in uniq:
                             if c.exists():
-                                archived_path = archive_patch(
-                                    logger, c, paths.unsuccessful_dir
-                                )
+                                archived_path = archive_patch(logger, c, paths.unsuccessful_dir)
                                 break
 
                         if archived_path is None:
                             logger.section("ARCHIVE PATCH")
-                            logger.line(
-                                f"no patch script found to archive; tried: {uniq}"
-                            )
+                            logger.line(f"no patch script found to archive; tried: {uniq}")
 
                 # Post-success audit (if enabled by workflow). If audit fails, treat as failure and
                 # produce diagnostics archive instead of success archive.

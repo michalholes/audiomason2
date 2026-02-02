@@ -92,6 +92,8 @@ class CliArgs:
     test_mode: bool | None
 
     success_archive_name: str | None = None
+
+
 def _fmt_short_help() -> str:
     return f"""am_patch.py (RUNNER_VERSION={RUNNER_VERSION})
 

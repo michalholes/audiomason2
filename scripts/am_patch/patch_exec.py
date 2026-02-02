@@ -132,7 +132,6 @@ def run_patch(
         raise RunnerError("PATCH", "INTERNAL", f"patch script failed (rc={r.returncode})")
 
 
-
 @dataclass(frozen=True)
 class UnifiedPatchFailure:
     name: str

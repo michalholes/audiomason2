@@ -27,7 +27,7 @@ order = ["ruff", "pytest", "mypy"]
 ruff_autofix = true
 ruff_format = true
 pytest_use_venv = true
-gates_skip_ruff = true
+gates_skip_ruff = false
 gates_skip_mypy = true
 
 [promotion]
