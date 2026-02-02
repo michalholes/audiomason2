@@ -1,50 +1,64 @@
+import shutil
 import subprocess
 import sys
 import zipfile
 from pathlib import Path
-import shutil
-
 
 ISSUE = "666"
 
 
+def _ensure_patches_layout(repo_root: Path) -> Path:
+    """
+    In CI the whole patches/ tree is not present (and is typically gitignored),
+    so the test must create the minimal layout it needs under repo_root/patches/.
+    """
+    patches_dir = repo_root / "patches"
+    (patches_dir / "workspaces").mkdir(parents=True, exist_ok=True)
+    (patches_dir / "logs").mkdir(parents=True, exist_ok=True)
+    (patches_dir / "successful").mkdir(parents=True, exist_ok=True)
+    (patches_dir / "unsuccessful").mkdir(parents=True, exist_ok=True)
+    return patches_dir
+
+
 def _cleanup(repo_root: Path) -> None:
+    patches_dir = repo_root / "patches"
+
     # workspace
-    shutil.rmtree(repo_root / "patches" / "workspaces" / f"issue_{ISSUE}", ignore_errors=True)
+    shutil.rmtree(patches_dir / "workspaces" / f"issue_{ISSUE}", ignore_errors=True)
 
     # bundle
     try:
-        (repo_root / "patches" / f"issue_{ISSUE}.zip").unlink()
+        (patches_dir / f"issue_{ISSUE}.zip").unlink()
     except FileNotFoundError:
         pass
 
-    # successful / unsuccessful
+    # successful / unsuccessful (delete only issue_666* artifacts)
     for d in ("successful", "unsuccessful"):
-        base = repo_root / "patches" / d
+        base = patches_dir / d
         if base.exists():
             for p in base.glob(f"**/*issue_{ISSUE}*"):
                 if p.is_file():
                     p.unlink()
 
-    # logs
-    logs = repo_root / "patches" / "logs"
+    # logs (delete only am_patch_issue_666* logs)
+    logs = patches_dir / "logs"
     if logs.exists():
         for p in logs.glob(f"am_patch_issue_{ISSUE}*"):
             if p.is_file():
                 p.unlink()
 
 
-def test_am_patch_smoke_issue_666():
+def test_am_patch_smoke_issue_666() -> None:
     repo_root = Path(__file__).resolve().parents[2]
     runner = repo_root / "scripts" / "am_patch.py"
+    assert runner.exists(), "scripts/am_patch.py not found"
 
-    assert runner.exists(), "am_patch.py not found"
-
-    # PRE-CLEAN (avoid false positive / negative)
+    # Ensure patches/ exists in CI and locally, then pre-clean to avoid false results.
+    patches_dir = _ensure_patches_layout(repo_root)
     _cleanup(repo_root)
 
-    # Create unified patch bundle in patches/
-    bundle = repo_root / "patches" / f"issue_{ISSUE}.zip"
+    # Create unified patch bundle exactly at patches/issue_666.zip
+    bundle = patches_dir / f"issue_{ISSUE}.zip"
 
     patch_text = "\n".join(
         [
@@ -62,7 +76,7 @@ def test_am_patch_smoke_issue_666():
     with zipfile.ZipFile(bundle, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("issue_666a.patch", patch_text)
 
-    # Run runner EXACTLY as required
+    # Run runner EXACTLY as required (no skips; gates must run).
     cmd = [
         sys.executable,
         str(runner),
@@ -79,12 +93,7 @@ def test_am_patch_smoke_issue_666():
         capture_output=True,
     )
 
-    assert res.returncode == 0, (
-        "Runner failed\n"
-        f"STDOUT:\n{res.stdout}\n\n"
-        f"STDERR:\n{res.stderr}"
-    )
+    assert res.returncode == 0, f"Runner failed\nSTDOUT:\n{res.stdout}\n\nSTDERR:\n{res.stderr}"
 
-    # POST-CLEAN
+    # Post-clean: remove any leftovers the runner might have produced in these dirs.
     _cleanup(repo_root)
-
