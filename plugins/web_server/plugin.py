@@ -20,19 +20,6 @@ try:
     HAS_FASTAPI = True
 except ImportError:
     HAS_FASTAPI = False
-    FastAPI = None
-    File = None
-    Form = None
-    UploadFile = None
-    WebSocket = None
-    WebSocketDisconnect = None
-    HTMLResponse = None
-    JSONResponse = None
-    RedirectResponse = None
-    StaticFiles = None
-    Jinja2Templates = None
-    uvicorn = None
-    Request = None
 
 from audiomason.core import (
     ConfigResolver,
@@ -333,7 +320,7 @@ class WebServerPlugin:
                 print(f"[DEBUG]   Config path: {config_path}")
 
             # Load existing config or start fresh
-            existing = {}
+            existing: dict[str, Any] = {}
             if config_path.exists():
                 import yaml
 
@@ -343,7 +330,7 @@ class WebServerPlugin:
                     print(f"[DEBUG]   Loaded existing config with {len(existing)} keys")
 
             # Update with new values (nested merge)
-            def merge_dict(base: dict, updates: dict) -> dict:
+            def merge_dict(base: dict[str, Any], updates: dict[str, Any]) -> dict[str, Any]:
                 """Recursively merge dictionaries."""
                 result = base.copy()
                 for key, value in updates.items():
@@ -410,7 +397,7 @@ class WebServerPlugin:
 
             import yaml
 
-            config = {}
+            config: dict[str, Any] = {}
             if config_path.exists():
                 with open(config_path) as f:
                     config = yaml.safe_load(f) or {}
@@ -467,7 +454,7 @@ class WebServerPlugin:
 
             import yaml
 
-            config = {}
+            config: dict[str, Any] = {}
             if config_path.exists():
                 with open(config_path) as f:
                     config = yaml.safe_load(f) or {}
@@ -540,11 +527,15 @@ class WebServerPlugin:
         """Install plugin from ZIP or URL."""
         if files:
             # Install from uploaded ZIP
-            for file in files:
-                if not file.filename.endswith(".zip"):
+            for item in files:
+                if not isinstance(item, UploadFile):
+                    continue
+                file = item
+                if not file.filename or not file.filename.endswith(".zip"):
                     continue
 
                 # Save ZIP
+                # file.filename is guarded above
                 zip_path = self.upload_dir / file.filename
                 with open(zip_path, "wb") as f:
                     content = await file.read()
@@ -683,6 +674,7 @@ class WebServerPlugin:
             # Parse multipart form data
             form = await request.form()
             files = form.getlist("files")
+            # Starlette FormData returns list[Any]; narrow to UploadFile.
 
             if self.verbosity >= VerbosityLevel.DEBUG:
                 print("[DEBUG] Upload request received")
@@ -696,9 +688,12 @@ class WebServerPlugin:
             uploaded = []
             errors = []
 
-            for file in files:
+            for item in files:
+                if not isinstance(item, UploadFile):
+                    continue
+                file = item
                 try:
-                    if not hasattr(file, "filename") or not file.filename:
+                    if not file.filename:
                         if self.verbosity >= VerbosityLevel.DEBUG:
                             print("[DEBUG]   Skipping invalid file object")
                         continue
@@ -717,7 +712,8 @@ class WebServerPlugin:
                         print(f"[DEBUG]     Saved {len(content)} bytes to {file_path}")
 
                     # If ZIP, extract it
-                    if file.filename.endswith(".zip"):
+                    if file.filename and file.filename.endswith(".zip"):
+                        assert file.filename is not None
                         extract_dir = self.upload_dir / file.filename.replace(".zip", "")
                         extract_dir.mkdir(exist_ok=True)
 
@@ -731,7 +727,7 @@ class WebServerPlugin:
                         file_path.unlink()
 
                         # Find audio files in extracted directory
-                        audio_files = []
+                        audio_files: list[Path] = []
                         for ext in ["*.mp3", "*.m4a", "*.m4b", "*.opus"]:
                             audio_files.extend(extract_dir.glob(f"**/{ext}"))
 

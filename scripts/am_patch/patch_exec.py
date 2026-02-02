@@ -256,15 +256,15 @@ def _rewrite_patch_paths(patch_text: str, *, strip: int) -> tuple[str, list[str]
                 continue
             parts = _split_abs_like(norm)
             rel_str = "/".join(parts[strip:]) if strip < len(parts) else "/".join(parts)
-            if rel.startswith("/") or ".." in rel.split("/"):
+            if rel_str.startswith("/") or ".." in rel_str.split("/"):
                 out_lines.append(prefix + "/dev/null\n")
                 continue
             # Keep git-style a/ and b/ prefixes so headers stay consistent.
             if prefix == "--- ":
-                out_lines.append(prefix + "a/" + rel + "\n")
+                out_lines.append(prefix + "a/" + rel_str + "\n")
             else:
-                out_lines.append(prefix + "b/" + rel + "\n")
-            rewritten_touched.append(rel)
+                out_lines.append(prefix + "b/" + rel_str + "\n")
+            rewritten_touched.append(rel_str)
             continue
         out_lines.append(line)
     uniq: list[str] = []

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -64,7 +65,7 @@ def _serialize_wizard_model(model: dict[str, Any]) -> str:
     try:
         from ..util.yamlutil import safe_dump_yaml
     except Exception:
-        safe_dump_yaml = None
+        safe_dump_yaml: Callable[[Any], str | None] | None = None
 
     if safe_dump_yaml is not None:
         dumped = safe_dump_yaml(out)
