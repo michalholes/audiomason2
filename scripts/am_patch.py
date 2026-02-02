@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 import shutil
 import sys
+from contextlib import suppress
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -1080,10 +1081,8 @@ def main(argv: list[str]) -> int:
                 except Exception:
                     pass
 
-        try:
+        with suppress(Exception):
             lock.release()
-        except Exception:
-            pass
         logger.close()
 
 

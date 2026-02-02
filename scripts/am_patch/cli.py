@@ -280,7 +280,8 @@ TOOLING INTEGRATION
 
 UNIFIED PATCH INPUT
   -u, --unified-patch
-      Force unified patch mode (.patch or .zip bundle). Without -u, auto-detect: .patch/.zip => unified; .py => patch script.
+      Force unified patch mode (.patch or .zip bundle). Without -u, auto-detect:
+      .patch/.zip => unified; .py => patch script.
 
   -p N, --patch-strip N
       Strip N leading path components when applying unified patches (like patch -pN).
