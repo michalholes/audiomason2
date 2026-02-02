@@ -62,14 +62,16 @@ def _serialize_wizard_model(model: dict[str, Any]) -> str:
 
     # Prefer project dumper if available
     try:
-        from ..util.yamlutil import safe_dump_yaml  # type: ignore
+        from ..util.yamlutil import safe_dump_yaml
     except Exception:
-        safe_dump_yaml = None  # type: ignore
+        safe_dump_yaml = None
 
     if safe_dump_yaml is not None:
-        return safe_dump_yaml(out)
+        dumped = safe_dump_yaml(out)
+        if dumped is not None:
+            return dumped
 
-    import yaml  # type: ignore
+    import yaml
 
     return yaml.safe_dump(out, sort_keys=False, allow_unicode=True)
 
@@ -177,6 +179,8 @@ def mount_wizards(app: FastAPI) -> None:
     @app.put("/api/wizards/{name}")
     def put_wizard(name: str, body: WizardPut) -> dict[str, Any]:
         p = _wizard_path(name)
+        if body.yaml is None:
+            raise HTTPException(status_code=400, detail="missing 'yaml'")
         p.write_text(body.yaml, encoding="utf-8")
         return {"ok": True, "name": p.stem}
 

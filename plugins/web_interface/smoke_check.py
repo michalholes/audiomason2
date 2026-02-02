@@ -37,7 +37,7 @@ def run_smoke(base_url: str, timeout_s: float, paths: Iterable[str]) -> dict:
     for p in paths:
         url = base_url.rstrip("/") + p
         t0 = time.time()
-        item = {"path": p, "url": url}
+        item: dict[str, object] = {"path": p, "url": url}
         try:
             status, headers, body = _fetch(url, timeout_s=timeout_s)
             item["status"] = status

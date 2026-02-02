@@ -5,7 +5,7 @@ from typing import Any
 
 def safe_load_yaml(text: str) -> Any:
     try:
-        import yaml  # type: ignore
+        import yaml
     except Exception:
         return None
     try:
@@ -16,7 +16,7 @@ def safe_load_yaml(text: str) -> Any:
 
 def safe_dump_yaml(obj: Any) -> str | None:
     try:
-        import yaml  # type: ignore
+        import yaml
     except Exception:
         return None
     try:

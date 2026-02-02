@@ -70,8 +70,8 @@ def make_failure_zip(
     # De-dup, keep deterministic order.
     seen: set[str] = set()
     files: list[str] = []
-    for p in include_repo_files:
-        rp = p.strip().lstrip("/")
+    for rel_str in include_repo_files:
+        rp = rel_str.strip().lstrip("/")
         if not rp or rp in seen:
             continue
         seen.add(rp)
@@ -90,19 +90,19 @@ def make_failure_zip(
 
         for name, data in patch_blobs:
             arc = f"patches/{Path(name).name}"
-            if arc in seen_patch:
+            if arcname in seen_patch:
                 continue
-            seen_patch.add(arc)
+            seen_patch.add(arcname)
             z.writestr(arc, data)
 
-        for p in patch_paths:
-            if not p.exists():
+        for patch_path in patch_paths:
+            if not patch_path.exists():
                 continue
-            arc: str = f"patches/{p.name}"
-            if arc in seen_patch:
+            arcname: str = f"patches/{patch_path.name}"
+            if arcname in seen_patch:
                 continue
-            seen_patch.add(arc)
-            z.write(p, arcname=arc)
+            seen_patch.add(arcname)
+            z.write(patch_path, arcname=arcname)
 
         for rel in files:
             src = (workspace_repo / rel).resolve()

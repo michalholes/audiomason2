@@ -794,6 +794,8 @@ def main(argv: list[str]) -> int:
             repo_root=repo_root,
             run_all=policy.run_all_tests,
             compile_check=policy.compile_check,
+            compile_targets=policy.compile_targets,
+            compile_exclude=policy.compile_exclude,
             allow_fail=policy.gates_allow_fail,
             skip_ruff=policy.gates_skip_ruff,
             skip_pytest=policy.gates_skip_pytest,

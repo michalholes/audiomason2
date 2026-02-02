@@ -255,7 +255,7 @@ def _rewrite_patch_paths(patch_text: str, *, strip: int) -> tuple[str, list[str]
                 out_lines.append(prefix + "/dev/null\n")
                 continue
             parts = _split_abs_like(norm)
-            rel = "/".join(parts[strip:]) if strip < len(parts) else "/".join(parts)
+            rel_str = "/".join(parts[strip:]) if strip < len(parts) else "/".join(parts)
             if rel.startswith("/") or ".." in rel.split("/"):
                 out_lines.append(prefix + "/dev/null\n")
                 continue
@@ -289,10 +289,10 @@ def _resolve_touched_best_effort(
     for p in repo.rglob("*"):
         if p.is_file():
             try:
-                rel = p.relative_to(repo)
+                rel_path = p.relative_to(repo)
             except Exception:
                 continue
-            all_files.append(str(rel))
+            all_files.append(str(rel_path))
 
     for raw in raw_paths:
         n = _normalize_patch_path(raw)
@@ -300,19 +300,19 @@ def _resolve_touched_best_effort(
             continue
         parts = _split_abs_like(n)
         if strip is not None:
-            rel = "/".join(parts[strip:]) if strip < len(parts) else "/".join(parts)
-            if rel and rel not in seen:
-                seen.add(rel)  # type: ignore[arg-type]
-                out.append(rel)  # type: ignore[arg-type]
+            rel_str = "/".join(parts[strip:]) if strip < len(parts) else "/".join(parts)
+            if rel_str and rel_str not in seen:
+                seen.add(rel_str)
+                out.append(rel_str)
             continue
 
         tail = "/".join(parts[-min(len(parts), 6) :])
         cands = [f for f in all_files if f.endswith("/" + tail) or f == tail]
         if len(cands) == 1:
-            rel = cands[0]
-            if rel not in seen:
-                seen.add(rel)  # type: ignore[arg-type]
-                out.append(rel)  # type: ignore[arg-type]
+            rel_str = cands[0]
+            if rel_str not in seen:
+                seen.add(rel_str)
+                out.append(rel_str)
     out.sort()
     return out
 
