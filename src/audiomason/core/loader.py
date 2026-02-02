@@ -67,7 +67,7 @@ class PluginLoader:
         Returns:
             List of plugin directories
         """
-        plugin_dirs = []
+        plugin_dirs: list[Path] = []
 
         # Scan directories
         for base_dir in [

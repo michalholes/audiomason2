@@ -98,7 +98,7 @@ def make_failure_zip(
         for p in patch_paths:
             if not p.exists():
                 continue
-            arc = f"patches/{p.name}"
+            arc: str = f"patches/{p.name}"
             if arc in seen_patch:
                 continue
             seen_patch.add(arc)

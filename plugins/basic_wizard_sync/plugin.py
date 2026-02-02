@@ -58,10 +58,10 @@ class BasicWizardSync:
         self.output_dir = Path(output).expanduser().resolve()
 
         # Plugin instances (loaded lazily)
-        self._plugins = {}
+        self._plugins: dict[str, Any] = {}
 
         # Answers from preflight
-        self.answers = {}
+        self.answers: dict[str, Any] = {}
 
         # Context for condition evaluation
         self.eval_context = {"answers": self.answers, "config": self.config}
@@ -292,7 +292,7 @@ class BasicWizardSync:
             raise WizardError("No sources found in inbox")
 
         # Group sources by author
-        authors = {}
+        authors: dict[str, list] = {}
         standalone_sources = []
 
         for source in all_sources:

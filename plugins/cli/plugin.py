@@ -427,7 +427,7 @@ class CLIPlugin:
                     ctx.cover_url = cli_args["cover_url"]
 
             # Processing options
-            ctx.bitrate = cli_args.get("bitrate", "128k")  # type: ignore[attr-defined]
+            ctx.bitrate = cli_args.get("bitrate", "128k")  # type: ignore[attr-defined]  # type: ignore[attr-defined]
             ctx.loudnorm = cli_args.get("loudnorm", False)
             ctx.split_chapters = cli_args.get("split_chapters", False)
 

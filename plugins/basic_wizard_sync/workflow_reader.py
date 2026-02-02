@@ -210,7 +210,7 @@ class WorkflowConfig:
             Value at path or None
         """
         parts = path.split(".")
-        current = context
+        current: Any = context
 
         for part in parts:
             if isinstance(current, dict):

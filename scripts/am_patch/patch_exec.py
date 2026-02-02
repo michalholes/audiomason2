@@ -302,8 +302,8 @@ def _resolve_touched_best_effort(
         if strip is not None:
             rel = "/".join(parts[strip:]) if strip < len(parts) else "/".join(parts)
             if rel and rel not in seen:
-                seen.add(rel)
-                out.append(rel)
+                seen.add(rel)  # type: ignore[arg-type]
+                out.append(rel)  # type: ignore[arg-type]
             continue
 
         tail = "/".join(parts[-min(len(parts), 6) :])
@@ -311,8 +311,8 @@ def _resolve_touched_best_effort(
         if len(cands) == 1:
             rel = cands[0]
             if rel not in seen:
-                seen.add(rel)
-                out.append(rel)
+                seen.add(rel)  # type: ignore[arg-type]
+                out.append(rel)  # type: ignore[arg-type]
     out.sort()
     return out
 
@@ -369,7 +369,7 @@ def run_unified_patch_bundle(
         logger.section("UNIFIED PATCH (attempt)")
         logger.line(f"patch_name={name}")
         if strip_cfg is not None:
-            strip = int(strip_cfg)
+            strip: int | None = int(strip_cfg)
             logger.line(f"patch_strip={strip} (config)")
         else:
             strip = _infer_strip_depth(workspace_repo, raw_paths)

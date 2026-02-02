@@ -4,6 +4,7 @@
 import argparse
 import sys
 from pathlib import Path
+from typing import Any
 
 
 def _configure_import_paths() -> None:
@@ -66,7 +67,7 @@ def main():
         verbosity = 3
 
     # Build CLI args dict
-    cli_args = {"verbosity": verbosity}
+    cli_args: dict[str, Any] = {"verbosity": verbosity}
 
     if args.inbox_dir:
         cli_args["inbox_dir"] = str(args.inbox_dir)
