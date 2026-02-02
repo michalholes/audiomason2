@@ -229,11 +229,12 @@ class Menu:
         visible_items = [item for item in items if item.visible]
         selected = 0
 
-        # CRITICAL: Ensure keypad is enabled for arrow keys
-        self.screen.keypad(True)
-
         while True:
             self.screen.clear()
+
+            # CRITICAL: Enable keypad AFTER clear (clear resets it!)
+            self.screen.keypad(True)
+
             h, w = self.screen.getmaxyx()
 
             box_height = len(visible_items) + 4
@@ -269,7 +270,7 @@ class Menu:
             else:
                 ch = chr(key) if 32 <= key <= 126 else None
                 if ch:
-                    for item in visible_items:
+                    for _, item in enumerate(visible_items):
                         if item.key == ch:
                             return item.action
 
@@ -326,10 +327,12 @@ class Dialogs:
         box_x = (w - box_w) // 2
 
         win = curses.newwin(box_h, box_w, box_y, box_x)
-        win.keypad(True)
 
         while True:
             win.clear()
+
+            # CRITICAL: Enable keypad AFTER clear
+            win.keypad(True)
 
             win.attron(self.theme.get_color_pair(Theme.PAIR_MENU))
             win.box()
@@ -412,15 +415,15 @@ class Dialogs:
 
         win = curses.newwin(box_h, box_w, box_y, box_x)
 
-        # CRITICAL: Enable keypad for arrow keys in dialog
-        win.keypad(True)
-
         selected = 0
         if default and default in choices:
             selected = choices.index(default)
 
         while True:
             win.clear()
+
+            # CRITICAL: Enable keypad AFTER clear
+            win.keypad(True)
 
             win.attron(self.theme.get_color_pair(Theme.PAIR_MENU))
             win.box()
@@ -642,7 +645,7 @@ class WizardsScreen:
                         key=str(i + 1),
                         label=f"{name} ({steps} steps)",
                         desc=desc[:50],
-                        action=f"run:{wizard_file.stem}",
+                        action=f"manage:{wizard_file.stem}",
                         visible=True,
                     )
                 )
@@ -667,14 +670,79 @@ class WizardsScreen:
             footer="<Select>                                             <Back>",
         )
 
-        if action.startswith("run:"):
-            wizard_name = action[4:]
-            if self.dialogs.confirm(f"Run wizard '{wizard_name}'?", default=True):
-                self.dialogs.message(
-                    "Running Wizard", f"Exit TUI and run:\n\n  audiomason wizard {wizard_name}"
-                )
+        if action.startswith("manage:"):
+            wizard_name = action[7:]
+            self._manage_wizard(wizard_name, wizards_dir)
+            return "wizards"  # Refresh screen
 
         return action
+
+    def _manage_wizard(self, wizard_name: str, wizards_dir: Path) -> None:
+        """Manage a specific wizard."""
+        wizard_file = wizards_dir / f"{wizard_name}.yaml"
+
+        # Show management menu
+        items = [
+            MenuItem("1", "Run", "Execute this wizard", "run", True),
+            MenuItem("2", "Edit", "Edit wizard YAML", "edit", True),
+            MenuItem("3", "View", "View wizard details", "view", True),
+            MenuItem("4", "Delete", "Remove this wizard", "delete", True),
+            MenuItem("0", "Back", "Return to wizards list", "back", True),
+        ]
+
+        action = self.menu.show(
+            title=f"Manage: {wizard_name}",
+            items=items,
+            footer="<Select>                                             <Back>",
+        )
+
+        if action == "run":
+            if self.dialogs.confirm(f"Run wizard '{wizard_name}'?", default=True):
+                self.dialogs.message(
+                    "Running Wizard",
+                    f"Exit TUI and run:\n\n  audiomason wizard {wizard_name}"
+                )
+
+        elif action == "edit":
+            self.dialogs.message(
+                "Edit Wizard",
+                f"Open in editor:\n\n  nano {wizard_file}\n\n"
+                f"Or use your preferred editor:\n"
+                f"  vim {wizard_file}\n"
+                f"  code {wizard_file}"
+            )
+
+        elif action == "view":
+            try:
+                with open(wizard_file) as f:
+                    wizard_data = yaml.safe_load(f)
+
+                wizard = wizard_data.get("wizard", {})
+                name = wizard.get("name", wizard_name)
+                desc = wizard.get("description", "N/A")
+                steps = wizard.get("steps", [])
+
+                info = f"Name: {name}\n"
+                info += f"Description: {desc}\n"
+                info += f"Steps: {len(steps) if isinstance(steps, list) else 0}\n"
+                info += f"File: {wizard_file}"
+
+                self.dialogs.message("Wizard Info", info)
+            except Exception as e:
+                self.dialogs.message("Error", f"Failed to read wizard:\n{e}")
+
+        if action == "delete" and self.dialogs.confirm(
+            f"DELETE wizard '{wizard_name}'?\n\nThis cannot be undone!",
+            default=False
+        ):
+            try:
+                wizard_file.unlink()
+                self.dialogs.message(
+                    "Wizard Deleted",
+                    f"Wizard '{wizard_name}' has been removed."
+                )
+            except Exception as e:
+                self.dialogs.message("Error", f"Failed to delete wizard:\n{e}")
 
 
 class ConfigScreen:
@@ -999,9 +1067,17 @@ class PluginsScreen:
 
         items = []
         for i, plugin_dir in enumerate(sorted(plugin_dirs)):
+            # Check if plugin is enabled (check config or default to enabled)
+            enabled = self._is_plugin_enabled(plugin_dir.name)
+            status = "+ Enabled" if enabled else "- Disabled"
+
             items.append(
                 MenuItem(
-                    str(i + 1), plugin_dir.name, "Installed", f"plugin:{plugin_dir.name}", True
+                    str(i + 1),
+                    f"{plugin_dir.name} ({status})",
+                    "Click to manage",
+                    f"plugin:{plugin_dir.name}",
+                    True
                 )
             )
 
@@ -1015,13 +1091,92 @@ class PluginsScreen:
 
         if action.startswith("plugin:"):
             plugin_name = action[7:]
-            self.dialogs.message(
-                "Plugin Info",
-                f"Plugin: {plugin_name}\n\n"
-                "Feature coming soon:\n- Enable/Disable\n- Configure\n- Delete",
-            )
+            self._manage_plugin(plugin_name)
+            return "plugins"  # Refresh screen
 
         return action
+
+    def _is_plugin_enabled(self, plugin_name: str) -> bool:
+        """Check if plugin is enabled."""
+        # For now, all plugins are enabled (TODO: read from config)
+        return True
+
+    def _manage_plugin(self, plugin_name: str) -> None:
+        """Manage a specific plugin."""
+        enabled = self._is_plugin_enabled(plugin_name)
+
+        # Show management menu
+        items = []
+
+        if enabled:
+            items.append(MenuItem("1", "Disable", "Disable this plugin", "disable", True))
+        else:
+            items.append(MenuItem("2", "Enable", "Enable this plugin", "enable", True))
+
+        items.append(MenuItem("3", "Configure", "Edit plugin configuration", "configure", True))
+        items.append(MenuItem("4", "View Info", "View plugin details", "info", True))
+        items.append(MenuItem("5", "Delete", "Remove this plugin", "delete", True))
+        items.append(MenuItem("0", "Back", "Return to plugins list", "back", True))
+
+        action = self.menu.show(
+            title=f"Manage: {plugin_name}",
+            items=items,
+            footer="<Select>                                             <Back>",
+        )
+
+        if action == "disable":
+            if self.dialogs.confirm(f"Disable plugin '{plugin_name}'?", default=False):
+                self.dialogs.message("Plugin Disabled",
+                    f"Plugin '{plugin_name}' has been disabled.\n\n"
+                    "Note: Config system not yet implemented.\n"
+                    "Plugin will remain active until restart.")
+
+        elif action == "enable":
+            if self.dialogs.confirm(f"Enable plugin '{plugin_name}'?", default=True):
+                self.dialogs.message("Plugin Enabled",
+                    f"Plugin '{plugin_name}' has been enabled.\n\n"
+                    "Plugin will be loaded on next restart.")
+
+        elif action == "configure":
+            self.dialogs.message("Configure Plugin",
+                f"Configuration editor coming soon.\n\n"
+                f"For now, edit manually:\n"
+                f"~/.config/audiomason/plugins/{plugin_name}.yaml")
+
+        elif action == "info":
+            plugin_dir = Path(__file__).parent.parent / plugin_name
+            manifest_path = plugin_dir / "plugin.yaml"
+
+            if manifest_path.exists():
+                try:
+                    import yaml
+                    with open(manifest_path) as f:
+                        manifest = yaml.safe_load(f)
+
+                    info = f"Plugin: {manifest.get('name', plugin_name)}\n"
+                    info += f"Version: {manifest.get('version', 'unknown')}\n"
+                    info += f"Description: {manifest.get('description', 'N/A')}\n"
+                    info += f"Author: {manifest.get('author', 'unknown')}\n"
+
+                    self.dialogs.message("Plugin Info", info)
+                except Exception as e:
+                    self.dialogs.message("Error", f"Failed to read plugin info:\n{e}")
+            else:
+                self.dialogs.message("Error", f"Plugin manifest not found:\n{manifest_path}")
+
+        if action == "delete" and self.dialogs.confirm(
+            f"DELETE plugin '{plugin_name}'?\n\nThis cannot be undone!",
+            default=False
+        ):
+            plugin_dir = Path(__file__).parent.parent / plugin_name
+            try:
+                import shutil
+                shutil.rmtree(plugin_dir)
+                self.dialogs.message("Plugin Deleted",
+                    f"Plugin '{plugin_name}' has been removed.\n\n"
+                    "Restart AudioMason to complete removal.")
+            except Exception as e:
+                self.dialogs.message("Error", f"Failed to delete plugin:\n{e}")
 
 
 class WebScreen:
@@ -1093,7 +1248,8 @@ class DaemonScreen:
             self.dialogs.message(
                 "Daemon Mode",
                 "Exit TUI and run:\n\n  audiomason daemon\n\n"
-                "It will run in the foreground.\nPress Ctrl+C to stop.",
+                "It will run in the foreground.\n"
+                "Press Ctrl+C to stop.",
             )
         elif action == "stop":
             self.dialogs.message(
@@ -1162,8 +1318,10 @@ class LogsScreen:
             else:
                 self.dialogs.message("No Logs", f"Log directory not found:\n{log_dir}")
 
-        elif action == "clear":
-            if self.dialogs.confirm("Delete all log files?", default=False) and log_dir.exists():
+        if action == "clear" and self.dialogs.confirm(
+            "Delete all log files?", default=False
+        ):
+            if log_dir.exists():
                 count = 0
                 for log_file in log_dir.glob("*.log"):
                     log_file.unlink()
@@ -1225,8 +1383,22 @@ class TUIPlugin:
         self.config = config or {}
         self.logger = get_logger(__name__)
 
+        # Handle verbosity - accept both enum and int
         if "verbosity" in self.config:
-            set_verbosity(self.config["verbosity"])
+            verbosity = self.config["verbosity"]
+            # Convert enum to int if needed
+            if hasattr(verbosity, "value"):
+                # It's an enum
+                verbosity_int = verbosity.value
+            elif isinstance(verbosity, int):
+                # Already int
+                verbosity_int = verbosity
+            else:
+                # String or other - try to convert
+                verbosity_int = int(verbosity) if str(verbosity).isdigit() else 1
+
+            set_verbosity(verbosity_int)
+            self.config["verbosity"] = verbosity_int  # Store as int for later use
 
         self.screen = None
         self.theme = None
