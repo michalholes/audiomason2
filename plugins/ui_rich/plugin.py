@@ -52,7 +52,6 @@ class RichUIPlugin:
             self._Panel = Panel
         except ImportError:
             self.has_rich = False
-            self.console: Console | None = None
 
     def print_header(self, text: str) -> None:
         """Print header with formatting.

@@ -257,6 +257,11 @@ class BasicWizardSync:
             return context
 
         # Get plugin and method
+        if step.plugin is None:
+            raise WizardError(f"Step {step.id} has no plugin specified")
+        if step.method is None:
+            raise WizardError(f"Step {step.id} has no method specified")
+        
         plugin = self._get_plugin(step.plugin)
         method = getattr(plugin, step.method, None)
 

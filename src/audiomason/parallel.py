@@ -71,9 +71,9 @@ class ParallelProcessor:
         # Process with progress tracking
         results = []
 
-        for i, task in enumerate(asyncio.as_completed(tasks)):
+        for i, future in enumerate(asyncio.as_completed(tasks)):
             try:
-                result = await task
+                result = await future
                 results.append(result)
 
                 if progress_callback:

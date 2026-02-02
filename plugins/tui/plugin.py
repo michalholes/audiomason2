@@ -849,13 +849,13 @@ class ConfigScreen:
         elif key == "loudnorm":
             current = self.current_config.get("loudnorm", False)
             result = self.dialogs.confirm("Enable loudness normalization?", default=current)
-            self.current_config["loudnorm"] = str(result) if result is not None else None
+            self.current_config["loudnorm"] = result
             self._save_config()
 
         elif key == "split_chapters":
             current = self.current_config.get("split_chapters", False)
             result = self.dialogs.confirm("Enable chapter splitting?", default=current)
-            self.current_config["split_chapters"] = str(result) if result is not None else None
+            self.current_config["split_chapters"] = result
             self._save_config()
 
         elif key in ("input_dir", "output_dir"):
@@ -1479,56 +1479,56 @@ class TUIPlugin:
                         self.current_screen = "about"
 
                 elif self.current_screen == "wizards":
-                    screen = WizardsScreen(self.screen, self.theme, self.config)
-                    action = screen.show()
+                    wizards_screen = WizardsScreen(self.screen, self.theme, self.config)
+                    action = wizards_screen.show()
                     if action == "back":
                         self.current_screen = (
                             self.screen_stack.pop() if self.screen_stack else "main"
                         )
 
                 elif self.current_screen == "config":
-                    screen = ConfigScreen(self.screen, self.theme, self.config)
-                    action = screen.show()
+                    config_screen = ConfigScreen(self.screen, self.theme, self.config)
+                    action = config_screen.show()
                     if action == "back":
                         self.current_screen = (
                             self.screen_stack.pop() if self.screen_stack else "main"
                         )
 
                 elif self.current_screen == "plugins":
-                    screen = PluginsScreen(self.screen, self.theme, self.config)
-                    action = screen.show()
+                    plugins_screen = PluginsScreen(self.screen, self.theme, self.config)
+                    action = plugins_screen.show()
                     if action == "back":
                         self.current_screen = (
                             self.screen_stack.pop() if self.screen_stack else "main"
                         )
 
                 elif self.current_screen == "web":
-                    screen = WebScreen(self.screen, self.theme, self.config)
-                    action = screen.show()
+                    web_screen = WebScreen(self.screen, self.theme, self.config)
+                    action = web_screen.show()
                     if action == "back":
                         self.current_screen = (
                             self.screen_stack.pop() if self.screen_stack else "main"
                         )
 
                 elif self.current_screen == "daemon":
-                    screen = DaemonScreen(self.screen, self.theme, self.config)
-                    action = screen.show()
+                    daemon_screen = DaemonScreen(self.screen, self.theme, self.config)
+                    action = daemon_screen.show()
                     if action == "back":
                         self.current_screen = (
                             self.screen_stack.pop() if self.screen_stack else "main"
                         )
 
                 elif self.current_screen == "logs":
-                    screen = LogsScreen(self.screen, self.theme, self.config)
-                    action = screen.show()
+                    logs_screen = LogsScreen(self.screen, self.theme, self.config)
+                    action = logs_screen.show()
                     if action == "back":
                         self.current_screen = (
                             self.screen_stack.pop() if self.screen_stack else "main"
                         )
 
                 elif self.current_screen == "about":
-                    screen = AboutScreen(self.screen, self.theme, self.config)
-                    action = screen.show()
+                    about_screen = AboutScreen(self.screen, self.theme, self.config)
+                    action = about_screen.show()
                     self.current_screen = self.screen_stack.pop() if self.screen_stack else "main"
 
                 else:
