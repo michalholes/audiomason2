@@ -4,6 +4,14 @@ This manual describes how *you* use the new runner day-to-day so that runs are d
 
 ## Concepts (minimal)
 
+
+### Gates and COMPILE
+- After the patch is applied, the runner executes gates.
+- New gate: COMPILE runs `python -m compileall -q .` in the workspace repo root to catch syntax errors early.
+- Default: enabled.
+- Config key: `compile_check = true|false`.
+- CLI: `--no-compile-check` disables it for the run.
+
 ## Help
 
 - `am_patch.py --help` shows a short, workflow-focused help.
@@ -104,7 +112,11 @@ Short-help options (have short aliases):
 - `-a` / `--allow-undeclared-paths` : allow touching files outside FILES
 - `-t` / `--allow-untouched-files` : allow declared-but-untouched FILES
 - `-l` / `--rerun-latest` : rerun latest archived patch (auto-select from patches/successful and patches/unsuccessful)
-- `-u` / `--unified-patch` : force unified patch mode (.patch/.zip). Without `-u`, runner auto-detects: `.patch`/`.zip` => unified; `.py` => patch script.
+- `-u` / `--unified-patch` : force unified patch mode.
+  - Auto-detect without `-u`:
+    - input `*.patch` => unified mode
+    - input `*.py` => patch script mode
+    - input `*.zip` => scan zip recursively; if any `*.patch` entries exist, unified mode is used and **all** `*.patch` entries are applied (deterministic lexicographic order by zip path). If the zip also contains `*.py`, those are ignored when at least one `*.patch` exists.
 - `-r` / `--run-all-gates` : run all gates (not only those affected by files in scope)
 - `-g` / `--allow-gates-fail` : allow gates to fail (continue)
 - `-c` / `--show-config` : print the effective config/policy and exit
@@ -114,6 +126,7 @@ Long-only options (no short alias):
 
 - `--finalize-workspace ISSUE_ID` : finalize an existing workspace (gates in workspace, promote changes to live, gates in live, then commit/push)
 - `--require-push-success` : fail the run if push fails (overrides allow_push_fail)
+- `--no-compile-check` : disable the COMPILE gate (`python -m compileall`) for this run.
 - `--disable-promotion` : run gates, but do not commit or push (applies to patch mode and finalize modes)
 - `--keep-workspace` : keep workspace on success (finalize-workspace and patch workspace mode)
 - `--allow-live-changed` / `--overwrite-live` / `--overwrite-workspace` : control live-changed resolution during workspace promotion
