@@ -28,8 +28,8 @@ compile_check = true
 ruff_autofix = true
 ruff_format = true
 pytest_use_venv = true
-gates_skip_ruff = true
-gates_skip_mypy = true
+gates_skip_ruff = false
+gates_skip_mypy = false
 
 [promotion]
 mode = "copy_files"
@@ -54,7 +54,7 @@ rollback_workspace_on_fail = true
 compile_exclude = ["patches"]
 ruff_targets = ["src", "plugins", "scripts", "tests"]
 pytest_targets = ["tests"]
-mypy_targets = ["src", "scripts"]
+mypy_targets = ["src", "plugins", "scripts"]
 
 [audit]
 # If true, fail fast when new audit domains are added without updating audit/audit_rubric.yaml
