@@ -19,7 +19,7 @@ from audiomason.core.errors import AudioMasonError
 try:
     from .workflow_reader import WorkflowConfig, WorkflowStep
 except ImportError:
-    from workflow_reader import WorkflowConfig, WorkflowStep  # type: ignore[import-not-found]
+    from workflow_reader import WorkflowConfig, WorkflowStep  # type: ignore[import-not-found,no-redef]
 
 
 class WizardError(AudioMasonError):
@@ -230,13 +230,13 @@ class BasicWizardSync:
         # Execute based on step type
         if step.type == "yes_no":
             default_no = step.default != "yes" if step.default else True
-            result = self._prompt_yes_no(step.prompt, default_no)
-            return result
+            yn_result = self._prompt_yes_no(step.prompt, default_no)
+            return yn_result
 
         elif step.type == "input":
             default_val = hint or step.default or ""
-            result = self._prompt(step.prompt, default_val)
-            return result
+            input_result = self._prompt(step.prompt, default_val)
+            return input_result
 
         return None
 

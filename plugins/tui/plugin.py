@@ -849,14 +849,14 @@ class ConfigScreen:
 
         elif key == "loudnorm":
             current = self.current_config.get("loudnorm", False)
-            result = self.dialogs.confirm("Enable loudness normalization?", default=current)
-            self.current_config["loudnorm"] = result
+            confirm_result = self.dialogs.confirm("Enable loudness normalization?", default=current)
+            self.current_config["loudnorm"] = confirm_result
             self._save_config()
 
         elif key == "split_chapters":
             current = self.current_config.get("split_chapters", False)
-            result = self.dialogs.confirm("Enable chapter splitting?", default=current)
-            self.current_config["split_chapters"] = result
+            confirm_result = self.dialogs.confirm("Enable chapter splitting?", default=current)
+            self.current_config["split_chapters"] = confirm_result
             self._save_config()
 
         elif key in ("input_dir", "output_dir"):
