@@ -80,10 +80,15 @@ def test_am_patch_smoke_issue_666() -> None:
     cmd = [
         sys.executable,
         str(runner),
+        # "--test-mode",
+        "-g",
+        # "--skip-mypy",
         ISSUE,
         "test",
         str(bundle),
         "--test-mode",
+        # "--skip-ruff",
+        # "--skip-mypy",
     ]
 
     res = subprocess.run(
