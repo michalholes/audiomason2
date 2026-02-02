@@ -5,6 +5,7 @@ import argparse
 import sys
 from pathlib import Path
 
+
 def _configure_import_paths() -> None:
     # Add src and plugins to path for direct execution from repo root.
     src_path = Path(__file__).parent / "src"
