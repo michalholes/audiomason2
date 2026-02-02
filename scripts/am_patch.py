@@ -150,8 +150,32 @@ def _select_latest_issue_patch(*, patch_dir: Path, issue_id: str, hint_name: str
     dirs = [patch_dir, patch_dir / "successful", patch_dir / "unsuccessful"]
 
     def iter_files(d: Path) -> list[Path]:
+        """Return candidate archived patch inputs for -l.
+
+        Supported inputs:
+        - *.py   (patch script)
+        - *.patch (unified diff)
+        - *.zip  (bundle containing at least one *.patch entry)
+        """
+        import zipfile
+
         try:
-            return [p for p in d.iterdir() if p.is_file() and p.suffix == ".py"]
+            out: list[Path] = []
+            for p in d.iterdir():
+                if not p.is_file():
+                    continue
+                if p.suffix in (".py", ".patch"):
+                    out.append(p)
+                    continue
+                if p.suffix == ".zip":
+                    try:
+                        with zipfile.ZipFile(p, "r") as z:
+                            if any(n.endswith(".patch") for n in z.namelist()):
+                                out.append(p)
+                    except zipfile.BadZipFile:
+                        # Ignore invalid zip files in archive dirs (deterministic: not candidates).
+                        continue
+            return out
         except FileNotFoundError:
             return []
 
