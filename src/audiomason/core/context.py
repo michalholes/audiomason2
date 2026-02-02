@@ -197,3 +197,8 @@ class ProcessingContext:
         if self.start_time and self.end_time:
             return self.end_time - self.start_time
         return None
+
+    publisher: str | None = None
+    description: str | None = None
+
+    output_dir: Path | None = None  # Final output directory
