@@ -996,11 +996,8 @@ class WebServerPlugin:
                 )
 
                 if self.verbosity >= VerbosityLevel.DEBUG:
-                    wizard_name = wizard.get('name', yaml_file.stem)
-                    print(
-                        f"[DEBUG]   ✓ Added wizard '{wizard_name}' "
-                        f"with {len(steps)} steps"
-                    )
+                    wizard_name = wizard.get("name", yaml_file.stem)
+                    print(f"[DEBUG]   ✓ Added wizard '{wizard_name}' with {len(steps)} steps")
             except Exception as e:
                 if self.verbosity >= VerbosityLevel.DEBUG:
                     print(f"[DEBUG] ✗ Failed to parse {yaml_file.stem}: {e}")

@@ -254,10 +254,7 @@ class Menu:
             from audiomason.core.logging import get_logger
 
             logger = get_logger("tui.menu")
-            logger.debug(
-                f"Key pressed: {key} "
-                f"(UP={curses.KEY_UP}, DOWN={curses.KEY_DOWN})"
-            )
+            logger.debug(f"Key pressed: {key} (UP={curses.KEY_UP}, DOWN={curses.KEY_DOWN})")
 
             if key == curses.KEY_UP:
                 selected = (selected - 1) % len(visible_items)
@@ -699,8 +696,7 @@ class WizardsScreen:
         if action == "run":
             if self.dialogs.confirm(f"Run wizard '{wizard_name}'?", default=True):
                 self.dialogs.message(
-                    "Running Wizard",
-                    f"Exit TUI and run:\n\n  audiomason wizard {wizard_name}"
+                    "Running Wizard", f"Exit TUI and run:\n\n  audiomason wizard {wizard_name}"
                 )
 
         elif action == "edit":
@@ -709,7 +705,7 @@ class WizardsScreen:
                 f"Open in editor:\n\n  nano {wizard_file}\n\n"
                 f"Or use your preferred editor:\n"
                 f"  vim {wizard_file}\n"
-                f"  code {wizard_file}"
+                f"  code {wizard_file}",
             )
 
         elif action == "view":
@@ -732,15 +728,11 @@ class WizardsScreen:
                 self.dialogs.message("Error", f"Failed to read wizard:\n{e}")
 
         if action == "delete" and self.dialogs.confirm(
-            f"DELETE wizard '{wizard_name}'?\n\nThis cannot be undone!",
-            default=False
+            f"DELETE wizard '{wizard_name}'?\n\nThis cannot be undone!", default=False
         ):
             try:
                 wizard_file.unlink()
-                self.dialogs.message(
-                    "Wizard Deleted",
-                    f"Wizard '{wizard_name}' has been removed."
-                )
+                self.dialogs.message("Wizard Deleted", f"Wizard '{wizard_name}' has been removed.")
             except Exception as e:
                 self.dialogs.message("Error", f"Failed to delete wizard:\n{e}")
 
@@ -1077,7 +1069,7 @@ class PluginsScreen:
                     f"{plugin_dir.name} ({status})",
                     "Click to manage",
                     f"plugin:{plugin_dir.name}",
-                    True
+                    True,
                 )
             )
 
@@ -1126,22 +1118,28 @@ class PluginsScreen:
 
         if action == "disable":
             if self.dialogs.confirm(f"Disable plugin '{plugin_name}'?", default=False):
-                self.dialogs.message("Plugin Disabled",
+                self.dialogs.message(
+                    "Plugin Disabled",
                     f"Plugin '{plugin_name}' has been disabled.\n\n"
                     "Note: Config system not yet implemented.\n"
-                    "Plugin will remain active until restart.")
+                    "Plugin will remain active until restart.",
+                )
 
         elif action == "enable":
             if self.dialogs.confirm(f"Enable plugin '{plugin_name}'?", default=True):
-                self.dialogs.message("Plugin Enabled",
+                self.dialogs.message(
+                    "Plugin Enabled",
                     f"Plugin '{plugin_name}' has been enabled.\n\n"
-                    "Plugin will be loaded on next restart.")
+                    "Plugin will be loaded on next restart.",
+                )
 
         elif action == "configure":
-            self.dialogs.message("Configure Plugin",
+            self.dialogs.message(
+                "Configure Plugin",
                 f"Configuration editor coming soon.\n\n"
                 f"For now, edit manually:\n"
-                f"~/.config/audiomason/plugins/{plugin_name}.yaml")
+                f"~/.config/audiomason/plugins/{plugin_name}.yaml",
+            )
 
         elif action == "info":
             plugin_dir = Path(__file__).parent.parent / plugin_name
@@ -1150,6 +1148,7 @@ class PluginsScreen:
             if manifest_path.exists():
                 try:
                     import yaml
+
                     with open(manifest_path) as f:
                         manifest = yaml.safe_load(f)
 
@@ -1165,16 +1164,18 @@ class PluginsScreen:
                 self.dialogs.message("Error", f"Plugin manifest not found:\n{manifest_path}")
 
         if action == "delete" and self.dialogs.confirm(
-            f"DELETE plugin '{plugin_name}'?\n\nThis cannot be undone!",
-            default=False
+            f"DELETE plugin '{plugin_name}'?\n\nThis cannot be undone!", default=False
         ):
             plugin_dir = Path(__file__).parent.parent / plugin_name
             try:
                 import shutil
+
                 shutil.rmtree(plugin_dir)
-                self.dialogs.message("Plugin Deleted",
+                self.dialogs.message(
+                    "Plugin Deleted",
                     f"Plugin '{plugin_name}' has been removed.\n\n"
-                    "Restart AudioMason to complete removal.")
+                    "Restart AudioMason to complete removal.",
+                )
             except Exception as e:
                 self.dialogs.message("Error", f"Failed to delete plugin:\n{e}")
 
@@ -1318,9 +1319,7 @@ class LogsScreen:
             else:
                 self.dialogs.message("No Logs", f"Log directory not found:\n{log_dir}")
 
-        if action == "clear" and self.dialogs.confirm(
-            "Delete all log files?", default=False
-        ):
+        if action == "clear" and self.dialogs.confirm("Delete all log files?", default=False):
             if log_dir.exists():
                 count = 0
                 for log_file in log_dir.glob("*.log"):
