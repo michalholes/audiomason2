@@ -50,6 +50,8 @@ live_repo_guard = true
 live_repo_guard_scope = "patch"
 rollback_workspace_on_fail = true
 
+# compile_targets = ["."]
+compile_exclude = ["patches"]
 ruff_targets = ["src", "plugins", "scripts", "tests"]
 pytest_targets = ["tests"]
 mypy_targets = ["src", "scripts"]

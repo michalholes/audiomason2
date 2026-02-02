@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import re
 import sys
 from pathlib import Path
 
@@ -25,6 +26,26 @@ def _venv_python(repo_root: Path) -> Path:
 
 def _cmd_py(module: str, *, python: str) -> list[str]:
     return [python, "-m", module]
+
+
+def _norm_exclude_paths(exclude: list[str]) -> list[str]:
+    out: list[str] = []
+    for x in exclude:
+        s = str(x).strip().replace("\\\\", "/")
+        if s.startswith("./"):
+            s = s[2:]
+        s = s.strip("/")
+        if s and s not in out:
+            out.append(s)
+    return out
+
+
+def _compile_exclude_regex(exclude: list[str]) -> str | None:
+    ex = _norm_exclude_paths(exclude)
+    if not ex:
+        return None
+    parts = "|".join(re.escape(p) for p in ex)
+    return rf"(^|/)({parts})(/|$)"
 
 
 def _select_python_for_gate(
@@ -119,12 +140,29 @@ def run_mypy(logger: Logger, cwd: Path, *, repo_root: Path, targets: list[str]) 
     return r.returncode == 0
 
 
-def run_compile_check(logger: Logger, cwd: Path, *, repo_root: Path) -> bool:
-    """Compile all Python sources to catch syntax errors early."""
+def run_compile_check(
+    logger: Logger,
+    cwd: Path,
+    *,
+    repo_root: Path,
+    targets: list[str],
+    exclude: list[str],
+) -> bool:
+    """Compile Python sources to catch syntax errors early."""
     logger.section("GATE: compile")
     py = sys.executable
     logger.line(f"compile_python={py}")
-    r = logger.run_logged([py, "-m", "compileall", "-q", "."], cwd=cwd)
+    targets = _norm_targets(targets, ["."])
+    exclude = _norm_exclude_paths(exclude)
+    logger.line(f"compile_targets={targets}")
+    logger.line(f"compile_exclude={exclude}")
+    cmd: list[str] = [py, "-m", "compileall", "-q"]
+    rx = _compile_exclude_regex(exclude)
+    if rx:
+        logger.line(f"compile_exclude_regex={rx}")
+        cmd += ["-x", rx]
+    cmd += targets
+    r = logger.run_logged(cmd, cwd=cwd)
     return r.returncode == 0
 
 
@@ -151,6 +189,8 @@ def run_gates(
     repo_root: Path,
     run_all: bool,
     compile_check: bool,
+    compile_targets: list[str],
+    compile_exclude: list[str],
     allow_fail: bool,
     skip_ruff: bool,
     skip_pytest: bool,
@@ -177,7 +217,13 @@ def run_gates(
                 skipped.append("compile")
                 logger.line("gate_compile=SKIP (disabled_by_policy)")
                 return True
-            return run_compile_check(logger, cwd=cwd, repo_root=repo_root)
+            return run_compile_check(
+                logger,
+                cwd=cwd,
+                repo_root=repo_root,
+                targets=compile_targets,
+                exclude=compile_exclude,
+            )
 
         if name == "ruff":
             if skip_ruff:

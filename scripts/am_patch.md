@@ -7,10 +7,15 @@ This manual describes how *you* use the new runner day-to-day so that runs are d
 
 ### Gates and COMPILE
 - After the patch is applied, the runner executes gates.
-- New gate: COMPILE runs `python -m compileall -q .` in the workspace repo root to catch syntax errors early.
+- Gate: COMPILE runs `python -m compileall -q` in the workspace repo root to catch syntax errors early.
 - Default: enabled.
-- Config key: `compile_check = true|false`.
-- CLI: `--no-compile-check` disables it for the run.
+- Config keys:
+  - `compile_check = true|false`
+  - `compile_targets = ["...", ...]` (default: `["."]`)
+  - `compile_exclude = ["...", ...]` (default: `[]`)
+- CLI:
+  - `--no-compile-check` disables it for the run.
+  - `--override compile_targets=...` and `--override compile_exclude=...` use the same list format as `ruff_targets`.
 
 ## Help
 

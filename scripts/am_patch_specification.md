@@ -181,9 +181,16 @@ Semantics:
 
 ### 6.1.1 COMPILE gate
 - Purpose: fail fast on syntax errors after patch application.
-- Implementation: runs `python -m compileall -q .` in the workspace repo root.
-- Config: `compile_check = true|false` (default: true).
-- CLI override: `--no-compile-check` disables this gate for the run.
+- Implementation: runs `python -m compileall -q` in the workspace repo root.
+  - Targets: `compile_targets` (default: `["."]`).
+  - Exclude: `compile_exclude` (default: `[]`) is compiled into a `compileall -x <regex>` directory filter.
+- Config:
+  - `compile_check = true|false` (default: true)
+  - `compile_targets = ["...", ...]` (default: `["."]`)
+  - `compile_exclude = ["...", ...]` (default: `[]`)
+- CLI override:
+  - `--no-compile-check` disables this gate for the run.
+  - `--override compile_targets=...` and `--override compile_exclude=...` follow the same list format as `ruff_targets`.
 - Failure behavior is identical to other gates: the run fails with `GATE:COMPILE`, `patched.zip` is produced, and `patched_success.zip` is not.
 
 ### 6.2 Enforcement

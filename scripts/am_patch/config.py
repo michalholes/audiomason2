@@ -51,6 +51,8 @@ class Policy:
 
     run_all_tests: bool = True
     compile_check: bool = True
+    compile_targets: list[str] = field(default_factory=lambda: ["."])
+    compile_exclude: list[str] = field(default_factory=list)
     ruff_autofix: bool = True
     ruff_autofix_legalize_outside: bool = True
 
@@ -277,6 +279,11 @@ def build_policy(defaults: Policy, cfg: dict[str, Any]) -> Policy:
 
     p.gates_order = _as_list_str(cfg, "gates_order", p.gates_order)
     _mark_cfg(p, cfg, "gates_order")
+
+    p.compile_targets = _as_list_str(cfg, "compile_targets", p.compile_targets)
+    _mark_cfg(p, cfg, "compile_targets")
+    p.compile_exclude = _as_list_str(cfg, "compile_exclude", p.compile_exclude)
+    _mark_cfg(p, cfg, "compile_exclude")
 
     p.ruff_targets = _as_list_str(cfg, "ruff_targets", p.ruff_targets)
     _mark_cfg(p, cfg, "ruff_targets")
