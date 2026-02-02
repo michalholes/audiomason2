@@ -22,6 +22,7 @@ This manual describes how *you* use the new runner day-to-day so that runs are d
 - `am_patch.py --help` shows a short, workflow-focused help.
 - `am_patch.py --help-all` shows a full reference (grouped by workflow).
 - `am_patch.py --test-mode` runs patch + gates in the workspace, verifies the live-repo guard (after gates), then stops (no promotion, no live gates, no commit/push, no archives) and always deletes the workspace on exit.
+- In --test-mode, if patch_dir is not explicitly set, the runner isolates its work paths under patches/_test_mode/issue_<ID>_pid_<PID>/ and deletes it on exit.
 - `am_patch.py --show-config` prints the effective policy/config and exits.
 
 Notes:

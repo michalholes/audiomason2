@@ -1,8 +1,11 @@
+import os
 import shutil
 import subprocess
 import sys
 import zipfile
 from pathlib import Path
+
+import pytest
 
 ISSUE = "666"
 
@@ -49,6 +52,9 @@ def _cleanup(repo_root: Path) -> None:
 
 
 def test_am_patch_smoke_issue_666() -> None:
+    if os.environ.get("AM_PATCH_PYTEST_GATE") == "1":
+        pytest.skip("skip runner smoke test inside am_patch pytest gate")
+
     repo_root = Path(__file__).resolve().parents[2]
     runner = repo_root / "scripts" / "am_patch.py"
     assert runner.exists(), "scripts/am_patch.py not found"

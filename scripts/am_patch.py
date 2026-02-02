@@ -347,8 +347,20 @@ def main(argv: list[str]) -> int:
         raise SystemExit("test-mode is supported only in workspace mode")
 
     repo_root = Path(policy.repo_root) if policy.repo_root else _resolve_repo_root()
-    patch_dir = Path(policy.patch_dir) if policy.patch_dir else (repo_root / "patches")
-    paths = default_paths(repo_root=repo_root, patch_dir=patch_dir)
+    patch_root = Path(policy.patch_dir) if policy.patch_dir else (repo_root / "patches")
+    isolated_work_patch_dir: Path | None = None
+    patch_dir = patch_root
+    if (
+        policy.test_mode
+        and getattr(policy, "test_mode_isolate_patch_dir", True)
+        and policy.patch_dir is None
+        and cli.issue_id is not None
+    ):
+        isolated_work_patch_dir = (
+            patch_root / "_test_mode" / f"issue_{cli.issue_id}_pid_{os.getpid()}"
+        )
+        patch_dir = isolated_work_patch_dir
+    paths = default_paths(repo_root=repo_root, patch_dir=patch_root)
     ensure_dirs(paths)
 
     log_path = new_log_file(paths.logs_dir, cli.issue_id)
@@ -372,6 +384,8 @@ def main(argv: list[str]) -> int:
         logger.line(f"RUNNER_VERSION={RUNNER_VERSION}")
         logger.line(f"repo_root={repo_root}")
         logger.line(f"patch_dir={patch_dir}")
+        if patch_dir != patch_root:
+            logger.line(f"patch_root={patch_root}")
         logger.line(f"config_path={config_path} used={used_cfg}")
         logger.line(f"log_path={log_path}")
         logger.line(f"symlink_path={paths.symlink_path} -> logs/{log_path.name}")
@@ -572,7 +586,7 @@ def main(argv: list[str]) -> int:
         if getattr(cli, "load_latest_patch", None):
             hint_name = Path(cli.patch_script).name if cli.patch_script else None
             patch_script = _select_latest_issue_patch(
-                patch_dir=patch_dir, issue_id=issue_id, hint_name=hint_name
+                patch_dir=patch_root, issue_id=issue_id, hint_name=hint_name
             )
         elif cli.patch_script:
             raw = Path(cli.patch_script)
@@ -583,8 +597,8 @@ def main(argv: list[str]) -> int:
                 #  - a path relative to CWD (e.g. patches/issue_999.py), OR
                 #  - a bare filename resolved under patch_dir (e.g. issue_999.py).
                 cand_cwd = (Path.cwd() / raw).resolve()
-                cand_patchdir = (patch_dir / raw).resolve()
-                if cand_cwd.exists() and _is_under(cand_cwd, patch_dir):
+                cand_patchdir = (patch_root / raw).resolve()
+                if cand_cwd.exists() and _is_under(cand_cwd, patch_root):
                     patch_script = cand_cwd
                 elif cand_patchdir.exists():
                     patch_script = cand_patchdir
@@ -596,19 +610,19 @@ def main(argv: list[str]) -> int:
                     )
         else:
             try:
-                patch_script = choose_default_patch_input(patch_dir, issue_id)
+                patch_script = choose_default_patch_input(patch_root, issue_id)
             except PatchSelectError as e:
                 raise RunnerError("PREFLIGHT", "MANIFEST", str(e)) from e
 
         if not patch_script.exists():
             raise RunnerError("PREFLIGHT", "MANIFEST", f"patch script not found: {patch_script}")
 
-        # Enforce patch script location: must be under patch_dir.
-        if not _is_under(patch_script, patch_dir):
+        # Enforce patch script location: must be under patch_root.
+        if not _is_under(patch_script, patch_root):
             raise RunnerError(
                 "PREFLIGHT",
                 "PATCH_PATH",
-                f"patch script must be under {patch_dir} (got {patch_script})",
+                f"patch script must be under {patch_root} (got {patch_script})",
             )
         try:
             unified_mode = decide_unified_mode(
@@ -1118,6 +1132,10 @@ def main(argv: list[str]) -> int:
         with suppress(Exception):
             lock.release()
         logger.close()
+
+        if policy.test_mode and isolated_work_patch_dir is not None:
+            with suppress(Exception):
+                shutil.rmtree(isolated_work_patch_dir, ignore_errors=True)
 
 
 if __name__ == "__main__":

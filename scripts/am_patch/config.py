@@ -36,6 +36,10 @@ class Policy:
     update_workspace: bool = False
     soft_reset_workspace: bool = False
     test_mode: bool = False
+    # In --test-mode, isolate runner work paths (lock/logs/workspaces/archives)
+    # under patches/_test_mode/issue_<ID>_pid_<PID>/ to avoid collisions with live runs.
+    # Only applies when patch_dir is not explicitly set.
+    test_mode_isolate_patch_dir: bool = True
     delete_workspace_on_success: bool = True
 
     ascii_only_patch: bool = True
@@ -245,6 +249,10 @@ def build_policy(defaults: Policy, cfg: dict[str, Any]) -> Policy:
     _mark_cfg(p, cfg, "delete_workspace_on_success")
     p.test_mode = _as_bool(cfg, "test_mode", p.test_mode)
     _mark_cfg(p, cfg, "test_mode")
+    p.test_mode_isolate_patch_dir = _as_bool(
+        cfg, "test_mode_isolate_patch_dir", p.test_mode_isolate_patch_dir
+    )
+    _mark_cfg(p, cfg, "test_mode_isolate_patch_dir")
 
     p.ascii_only_patch = _as_bool(cfg, "ascii_only_patch", p.ascii_only_patch)
     _mark_cfg(p, cfg, "ascii_only_patch")

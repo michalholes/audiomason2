@@ -118,11 +118,11 @@ def run_pytest(
     logger.line(f"pytest_use_venv={pytest_use_venv}")
     logger.line(f"sys_executable={sys.executable}")
     logger.line(f"pytest_python={py}")
-    env = None
+    env = dict(os.environ)
+    env["AM_PATCH_PYTEST_GATE"] = "1"
     if pytest_use_venv:
         # Ensure subprocesses spawned by tests can resolve `audiomason`.
         # This is done by prefixing PATH with the venv bin dir.
-        env = dict(os.environ)
         venv_root = repo_root / ".venv"
         venv_bin = venv_root / "bin"
         old_path = env.get("PATH", "")
