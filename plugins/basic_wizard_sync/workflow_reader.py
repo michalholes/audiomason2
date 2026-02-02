@@ -186,13 +186,13 @@ class WorkflowConfig:
                 value = self._get_nested_value(left, context)
 
                 # Convert right side
-                right_value: str | bool = right2
+                right_value2: str | bool = right2
                 if right2.lower() == "true":
-                    right_value = True
+                    right_value2 = True
                 elif right2.lower() == "false":
-                    right_value = False
+                    right_value2 = False
 
-                return value != right_value
+                return value != right_value2
 
         except Exception:
             return True

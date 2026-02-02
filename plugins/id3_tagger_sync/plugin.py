@@ -117,6 +117,9 @@ class ID3TaggerSync:
                 audio.add_tags()
 
             # Set tags
+            if audio.tags is None:
+                audio.add_tags()
+            
             if title:
                 audio.tags["TIT2"] = TIT2(encoding=3, text=title)
                 self._log_debug(f"Title: {title}")
@@ -176,6 +179,9 @@ class ID3TaggerSync:
             cover_data = f.read()
 
         # APIC frame for cover art
+        if audio.tags is None:
+            audio.add_tags()
+        
         audio.tags["APIC"] = APIC(
             encoding=3,
             mime=mime,

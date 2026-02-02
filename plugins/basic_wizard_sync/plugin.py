@@ -17,9 +17,12 @@ from audiomason.core.errors import AudioMasonError
 
 # Import workflow reader
 try:
-    from basic_wizard_sync.workflow_reader import WorkflowConfig, WorkflowStep
+    from .workflow_reader import WorkflowConfig, WorkflowStep
 except ImportError:
-    from workflow_reader import WorkflowConfig, WorkflowStep
+    try:
+        from basic_wizard_sync.workflow_reader import WorkflowConfig, WorkflowStep
+    except ImportError:
+        from workflow_reader import WorkflowConfig, WorkflowStep  # type: ignore[import-not-found]
 
 
 class WizardError(AudioMasonError):
@@ -453,4 +456,7 @@ class BasicWizardSync:
         Returns:
             Updated context
         """
-        return self.run_workflow()
+        result = self.run_workflow()
+        if result is None:
+            raise WizardError("Workflow returned None")
+        return result

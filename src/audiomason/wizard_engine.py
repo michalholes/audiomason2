@@ -187,7 +187,7 @@ class WizardEngine:
         # Use default value from preflight if specified
         if step.get("default_from") == "preflight":
             field = step.get("id")
-            if hasattr(context, field):
+            if field is not None and isinstance(field, str) and hasattr(context, field):
                 default = getattr(context, field)
 
         # Use inbox_dir from config as default for source_path
@@ -327,7 +327,10 @@ class WizardEngine:
         if_false = step.get("if_false", [])
 
         # Evaluate condition
-        result = self._evaluate_condition(condition, context)
+        if condition is not None and isinstance(condition, str):
+            result = self._evaluate_condition(condition, context)
+        else:
+            result = False
 
         # Execute appropriate branch
         steps_to_execute = if_true if result else if_false
@@ -458,7 +461,7 @@ class WizardEngine:
         if self.config_resolver and not hasattr(context, "output_dir"):
             try:
                 outbox_dir, source = self.config_resolver.resolve("outbox_dir")
-                context.output_dir = outbox_dir
+                setattr(context, "output_dir", outbox_dir)
                 self._debug(f"Set output_dir from config: {outbox_dir} (from {source})")
             except Exception as e:
                 self._debug(f"Could not set output_dir from config: {e}")
@@ -482,7 +485,7 @@ class WizardEngine:
                 self._error(f"Step '{step_id}' failed: {result.error}")
                 error_msg = f"Wizard failed at step '{step_id}': {result.error}"
                 context.state = State.ERROR
-                context.add_error(error_msg)
+                context.add_error(Exception(error_msg))
 
                 # Check if step has on_error handler
                 on_error = step.get("on_error", "stop")

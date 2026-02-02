@@ -134,16 +134,17 @@ class CoverHandlerSync:
             audio = MP3(str(mp3_file), ID3=ID3)
 
             # Look for APIC frame (cover art)
-            for tag in audio.tags.values():
-                if isinstance(tag, APIC):
-                    self._log_verbose(f"Found embedded cover: {tag.desc}")
+            if audio.tags is not None:
+                for tag in audio.tags.values():
+                    if isinstance(tag, APIC):
+                        self._log_verbose(f"Found embedded cover: {tag.desc}")
 
-                    # Write cover data to file
-                    with open(output_path, "wb") as f:
-                        f.write(tag.data)
+                        # Write cover data to file
+                        with open(output_path, "wb") as f:
+                            f.write(tag.data)
 
-                    self._log_info(f"Extracted cover to: {output_path.name}")
-                    return output_path
+                        self._log_info(f"Extracted cover to: {output_path.name}")
+                        return output_path
 
             self._log_debug("No embedded cover found")
             return None

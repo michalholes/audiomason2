@@ -48,7 +48,7 @@ def get_disabled_plugins(text: str) -> list[str]:
         return [x.strip().strip("'\"") for x in inner.split(",") if x.strip()]
     # Fallback: parse block list
     lines = text.splitlines()
-    disabled: list[str] = []
+    disabled_list: list[str] = []
     in_plugins = False
     in_disabled = False
     for ln in lines:
@@ -65,12 +65,12 @@ def get_disabled_plugins(text: str) -> list[str]:
         if in_disabled:
             m2 = re.match(r"^\s*-\s*(.+?)\s*$", ln)
             if m2:
-                disabled.append(m2.group(1).strip().strip("'\""))
+                disabled_list.append(m2.group(1).strip().strip("'\""))
             else:
                 # end of list
                 if ln.strip() and not ln.strip().startswith("#"):
                     in_disabled = False
-    return disabled
+    return disabled_list
 
 
 def set_disabled_plugins(text: str, disabled: list[str]) -> str:

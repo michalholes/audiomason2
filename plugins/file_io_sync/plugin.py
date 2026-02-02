@@ -355,7 +355,7 @@ class FileIOSync:
             self._log_debug(f"Copied cover: {author_clean}/{title_clean}/cover.jpg")
 
         context.output_path = output_path
-        context.exported_files = exported_files
+        context.converted_files = exported_files
 
         self._log_info(f"Exported {len(exported_files)} file(s)")
         return context

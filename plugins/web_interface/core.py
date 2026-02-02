@@ -43,7 +43,7 @@ class WebInterfacePlugin:
 
     def run(self, host: str, port: int) -> None:
         try:
-            import uvicorn  # type: ignore
+            import uvicorn
         except ModuleNotFoundError as e:
             raise RuntimeError(
                 "Missing dependency: uvicorn. Install in venv: pip install uvicorn"

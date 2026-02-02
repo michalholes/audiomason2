@@ -42,7 +42,7 @@ class RichUIPlugin:
             from rich.table import Table
 
             self.has_rich = True
-            self.console = Console()
+            self.console: Console | None = Console()
             self._Progress = Progress
             self._SpinnerColumn = SpinnerColumn
             self._BarColumn = BarColumn
@@ -52,7 +52,7 @@ class RichUIPlugin:
             self._Panel = Panel
         except ImportError:
             self.has_rich = False
-            self.console = None
+            self.console: Console | None = None
 
     def print_header(self, text: str) -> None:
         """Print header with formatting.

@@ -61,10 +61,11 @@ class ParallelProcessor:
         Returns:
             List of completed contexts
         """
-        # Create tasks
-        tasks = []
+        # Create tasks (coroutines)
+        tasks: list[asyncio.Task[ProcessingContext]] = []
         for context in contexts:
-            task = self.process_book(context, pipeline_path)
+            task_coro = self.process_book(context, pipeline_path)
+            task = asyncio.create_task(task_coro)
             tasks.append(task)
 
         # Process with progress tracking

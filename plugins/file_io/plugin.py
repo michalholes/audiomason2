@@ -224,7 +224,7 @@ class FileIOPlugin:
                 zip_ref.extractall(extract_dir)
         elif suffix == ".rar":
             try:
-                import rarfile
+                import rarfile  # type: ignore[import-not-found]
 
                 with rarfile.RarFile(source, "r") as rar_ref:
                     rar_ref.extractall(extract_dir)
@@ -234,7 +234,7 @@ class FileIOPlugin:
                 ) from None
         elif suffix == ".7z":
             try:
-                import py7zr
+                import py7zr  # type: ignore[import-not-found]
 
                 with py7zr.SevenZipFile(source, "r") as sz_ref:
                     sz_ref.extractall(extract_dir)

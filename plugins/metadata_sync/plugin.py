@@ -184,7 +184,7 @@ class MetadataSync:
             params["author"] = author
         if title:
             params["title"] = title
-        params["limit"] = 1
+        params["limit"] = "1"
 
         url = f"{self.OPENLIBRARY_API}?{urllib.parse.urlencode(params)}"
         self._log_debug(f"URL: {url}")
@@ -296,13 +296,13 @@ class MetadataSync:
                 context.year = metadata.year
 
             if metadata.publisher:
-                context.publisher = metadata.publisher
+                setattr(context, "publisher", metadata.publisher)
 
             if metadata.isbn:
                 context.isbn = metadata.isbn
 
             if metadata.description:
-                context.description = metadata.description
+                setattr(context, "description", metadata.description)
 
             if metadata.cover_url:
                 context.cover_url = metadata.cover_url

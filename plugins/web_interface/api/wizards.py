@@ -65,10 +65,12 @@ def _serialize_wizard_model(model: dict[str, Any]) -> str:
     try:
         from ..util.yamlutil import safe_dump_yaml
     except Exception:
-        safe_dump_yaml: Callable[[Any], str | None] | None = None
+        safe_dump_yaml_fn: Callable[[Any], str | None] | None = None
+    else:
+        safe_dump_yaml_fn = safe_dump_yaml
 
-    if safe_dump_yaml is not None:
-        dumped = safe_dump_yaml(out)
+    if safe_dump_yaml_fn is not None:
+        dumped = safe_dump_yaml_fn(out)
         if dumped is not None:
             return dumped
 

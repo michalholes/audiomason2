@@ -849,13 +849,13 @@ class ConfigScreen:
         elif key == "loudnorm":
             current = self.current_config.get("loudnorm", False)
             result = self.dialogs.confirm("Enable loudness normalization?", default=current)
-            self.current_config["loudnorm"] = result
+            self.current_config["loudnorm"] = str(result) if result is not None else None
             self._save_config()
 
         elif key == "split_chapters":
             current = self.current_config.get("split_chapters", False)
             result = self.dialogs.confirm("Enable chapter splitting?", default=current)
-            self.current_config["split_chapters"] = result
+            self.current_config["split_chapters"] = str(result) if result is not None else None
             self._save_config()
 
         elif key in ("input_dir", "output_dir"):
@@ -1399,10 +1399,10 @@ class TUIPlugin:
             set_verbosity(verbosity_int)
             self.config["verbosity"] = verbosity_int  # Store as int for later use
 
-        self.screen = None
-        self.theme = None
+        self.screen: Any = None
+        self.theme: Theme | None = None
         self.current_screen = "main"
-        self.screen_stack = []
+        self.screen_stack: list[str] = []
 
     async def run(self) -> None:
         """Run TUI - main entry point."""

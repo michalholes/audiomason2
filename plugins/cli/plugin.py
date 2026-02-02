@@ -923,7 +923,7 @@ class CLIPlugin:
 
             # Import and run
             sys.path.insert(0, str(tui_dir))
-            from plugin import TUIPlugin
+            from plugin import TUIPlugin  # type: ignore[import-not-found]
 
             # Pass verbosity level to TUI
             tui = TUIPlugin(config={"verbosity": self.verbosity})
