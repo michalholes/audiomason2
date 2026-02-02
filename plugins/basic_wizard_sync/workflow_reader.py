@@ -170,28 +170,29 @@ class WorkflowConfig:
                 value = self._get_nested_value(left, context)
 
                 # Convert right side
-                right: str | bool = right_str
+                right_value: str | bool = right_str
                 if right_str.lower() == "true":
-                    right = True
+                    right_value = True
                 elif right_str.lower() == "false":
-                    right = False
+                    right_value = False
 
-                return value == right
+                return value == right_value
 
             elif " != " in condition:
-                left, right_str = condition.split(" != ", 1)
+                left, right2 = condition.split(" != ", 1)
                 left = left.strip()
-                right_str = right_str.strip().strip("\"'")
+                right2 = right2.strip().strip("\"'")
 
                 value = self._get_nested_value(left, context)
 
-                right: str | bool = right_str
-                if right_str.lower() == "true":
-                    right = True
-                elif right_str.lower() == "false":
-                    right = False
+                # Convert right side
+                right_value: str | bool = right2
+                if right2.lower() == "true":
+                    right_value = True
+                elif right2.lower() == "false":
+                    right_value = False
 
-                return value != right
+                return value != right_value
 
         except Exception:
             return True
@@ -209,7 +210,7 @@ class WorkflowConfig:
             Value at path or None
         """
         parts = path.split(".")
-        current: Any = context
+        current = context
 
         for part in parts:
             if isinstance(current, dict):
