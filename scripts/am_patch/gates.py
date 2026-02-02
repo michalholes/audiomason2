@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -96,7 +97,17 @@ def run_pytest(
     logger.line(f"pytest_use_venv={pytest_use_venv}")
     logger.line(f"sys_executable={sys.executable}")
     logger.line(f"pytest_python={py}")
-    r = logger.run_logged(_cmd_py("pytest", python=py) + ["-q", *targets], cwd=cwd)
+    env = None
+    if pytest_use_venv:
+        # Ensure subprocesses spawned by tests can resolve `audiomason`.
+        # This is done by prefixing PATH with the venv bin dir.
+        env = dict(os.environ)
+        venv_root = repo_root / ".venv"
+        venv_bin = venv_root / "bin"
+        old_path = env.get("PATH", "")
+        env["PATH"] = f"{venv_bin}:{old_path}" if old_path else str(venv_bin)
+        env["VIRTUAL_ENV"] = str(venv_root)
+    r = logger.run_logged(_cmd_py("pytest", python=py) + ["-q", *targets], cwd=cwd, env=env)
     return r.returncode == 0
 
 

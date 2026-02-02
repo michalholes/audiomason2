@@ -3,12 +3,12 @@
 
 AUTHORITATIVE – AudioMason2  
 Status: active  
-Version: v2.23
+Version: v2.25
 This manual defines what a chat must produce so that the user can run the patch successfully and close the issue.
 
 ## Absolute rules
 
-1. The patch must be in a .patch format intended to be run by `scripts/am_patch.py`.
+1. The patch must be in a .patch format intended to be run by `scripts/am_patch.py -u`.
 2. The patch script path MUST be under the repo patches directory (default: `/home/pi/audiomason2/patches/`). Bare filenames are resolved under `patches/`.
 3. The patch MUST be served in .zip file
 
@@ -60,8 +60,8 @@ The runner is the authority.
 
 ## Patch authoring checklist (before sending)
 
-1. Ensure the patch changes at least one file.
-2. Ensure patch can be applied and patched files can compile and are consistent with formatting/linting expectations.
+1. You MUST ensure the patch changes at least one file.
+2. You MUST ensure patch can be applied and patched files can compile and are consistent with formatting/linting expectations. You MUST provide verifiable evidence of applyin this rule. If evidence is not provided, the patch is considered non-compliant and may be rejected without execution.
 3. Avoid adding new dependencies.
 4. Send out patch only as downloadable file. Only if user declare he cannot download it, send it as inline command (cat..)
 
