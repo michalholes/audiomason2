@@ -87,7 +87,7 @@ def test_am_patch_smoke_issue_666() -> None:
         str(runner),
         # "--test-mode",
         # "-g",
-        "--skip-pytest",
+        # "--skip-pytest",
         ISSUE,
         "test",
         str(bundle),
