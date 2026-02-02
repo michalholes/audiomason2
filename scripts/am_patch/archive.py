@@ -61,7 +61,8 @@ def make_failure_zip(
     Contract:
     - Always includes the primary log under logs/<name>.
     - Includes only a subset of repo files from the workspace (changed/touched union).
-    - Includes patch inputs only when requested (e.g. patch not applied, or individual failed .patch files).
+    - Includes patch inputs only when requested (e.g. patch not applied, or
+      individual failed .patch files).
     """
     logger.section("PATCHED.ZIP")
     zip_path.parent.mkdir(parents=True, exist_ok=True)

@@ -112,7 +112,7 @@ class ConfigResolver:
         result = {}
 
         # Get all possible keys
-        all_keys = set()
+        all_keys: set[str] = set()
         all_keys.update(self.cli_args.keys())
         all_keys.update(self._get_user_config().keys())
         all_keys.update(self._get_system_config().keys())
@@ -188,7 +188,7 @@ class ConfigResolver:
             _get_nested(data, 'logging.level') -> 'debug'
         """
         parts = key.split(".")
-        current = data
+        current: Any = data
 
         for part in parts:
             if not isinstance(current, dict):

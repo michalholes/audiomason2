@@ -269,14 +269,14 @@ class BasicWizardSync:
         except Exception as e:
             raise WizardError(f"Step {step.id} failed: {e}") from e
 
-    def run_workflow(self, source_path: Path | None = None) -> ProcessingContext:
+    def run_workflow(self, source_path: Path | None = None) -> ProcessingContext | None:
         """Run complete wizard workflow.
 
         Args:
             source_path: Optional specific source to process
 
         Returns:
-            Processing context with results
+            Processing context with results, or None if interrupted
         """
         self._log_debug("=== Starting Workflow ===")
         self._log_info(f"Workflow: {self.workflow.name}")

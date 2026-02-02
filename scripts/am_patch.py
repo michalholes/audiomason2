@@ -710,7 +710,8 @@ def main(argv: list[str]) -> int:
             # Snapshot dirty paths immediately after patch (before gates).
             dirty_after_patch = list(after)
 
-            # For patched.zip on failure: include changed files plus all touched targets (including failed patches).
+            # For patched.zip on failure: include changed files plus all touched targets
+            # (including failed patches).
             files_for_fail_zip = sorted(set(touched) | set(touched_for_zip))
             failed_patch_blobs_for_zip = list(failed_patch_blobs)
             patch_applied_successfully = patch_applied_any
@@ -1035,7 +1036,8 @@ def main(argv: list[str]) -> int:
                         include_patch_blobs=include_patch_blobs,
                         include_patch_paths=include_patch_paths,
                     )
-                # Deferred rollback after diagnostics archive (keeps workspace available for zip creation).
+                # Deferred rollback after diagnostics archive.
+                # Keeps workspace available for zip creation.
                 if (
                     exit_code != 0
                     and rollback_ws_for_posthook is not None

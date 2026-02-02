@@ -969,9 +969,8 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     # Determine deterministic timestamp from inputs.
     ts_candidates: list[str] = []
-    if junit:
-        if junit.get("suite_timestamp"):
-            ts_candidates.append(str(junit.get("suite_timestamp")))
+    if junit and junit.get("suite_timestamp"):
+        ts_candidates.append(str(junit.get("suite_timestamp")))
     for p in sorted(runtime_files, key=lambda x: x.name):
         try:
             data = _read_yaml(p)

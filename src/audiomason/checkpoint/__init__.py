@@ -7,7 +7,6 @@ after interruption (Ctrl+C, crash, reboot).
 from __future__ import annotations
 
 import json
-import pickle
 from pathlib import Path
 from typing import Any
 

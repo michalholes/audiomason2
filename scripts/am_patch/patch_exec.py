@@ -4,6 +4,7 @@ import hashlib
 import os
 import shutil
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 from .errors import RunnerError
@@ -130,8 +131,6 @@ def run_patch(
     if r.returncode != 0:
         raise RunnerError("PATCH", "INTERNAL", f"patch script failed (rc={r.returncode})")
 
-
-from dataclasses import dataclass
 
 
 @dataclass(frozen=True)
@@ -302,10 +301,7 @@ def _resolve_touched_best_effort(
             continue
         parts = _split_abs_like(n)
         if strip is not None:
-            if strip < len(parts):
-                rel = "/".join(parts[strip:])
-            else:
-                rel = "/".join(parts)
+            rel = "/".join(parts[strip:]) if strip < len(parts) else "/".join(parts)
             if rel and rel not in seen:
                 seen.add(rel)
                 out.append(rel)

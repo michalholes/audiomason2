@@ -24,7 +24,7 @@ class Logger:
         log_path.parent.mkdir(parents=True, exist_ok=True)
         symlink_path.parent.mkdir(parents=True, exist_ok=True)
 
-        self._fp = open(log_path, "w", encoding="utf-8", errors="replace")
+        self._fp = open(log_path, "w", encoding="utf-8", errors="replace")  # noqa: SIM115
 
         try:
             if symlink_path.exists() or symlink_path.is_symlink():
@@ -90,8 +90,5 @@ class Logger:
 
 def new_log_file(logs_dir: Path, issue_id: str | None) -> Path:
     ts = time.strftime("%Y%m%d_%H%M%S")
-    if issue_id:
-        name = f"am_patch_issue_{issue_id}_{ts}.log"
-    else:
-        name = f"am_patch_finalize_{ts}.log"
+    name = f"am_patch_issue_{issue_id}_{ts}.log" if issue_id else f"am_patch_finalize_{ts}.log"
     return logs_dir / name

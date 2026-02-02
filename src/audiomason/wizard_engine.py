@@ -118,7 +118,7 @@ class WizardEngine:
                 self._debug(f"Loading wizard from: {path}")
                 wizard_def = yaml.safe_load(f)
         except yaml.YAMLError as e:
-            raise WizardError(f"Invalid YAML: {e}")
+            raise WizardError(f"Invalid YAML: {e}") from e
 
         self._verbose(f"Wizard loaded: {wizard_def.get('wizard', {}).get('name', 'Unknown')}")
         # Validate structure
@@ -206,10 +206,7 @@ class WizardEngine:
             value = self.user_input_handler(prompt, options)
         else:
             # Fallback to console input
-            if default:
-                prompt_text = f"{prompt} [{default}]: "
-            else:
-                prompt_text = f"{prompt}: "
+            prompt_text = f"{prompt} [{default}]: " if default else f"{prompt}: "
 
             value = input(prompt_text).strip()
             if not value and default:
@@ -264,10 +261,7 @@ class WizardEngine:
             # Parse choice
             if choice_input.isdigit():
                 idx = int(choice_input) - 1
-                if 0 <= idx < len(choices):
-                    value = choices[idx]
-                else:
-                    value = default
+                value = choices[idx] if 0 <= idx < len(choices) else default
             else:
                 value = choice_input if choice_input in choices else default
 

@@ -26,10 +26,7 @@ _BLESSED_GATE_OUTPUTS = ("audit/results/pytest_junit.xml",)
 
 def is_blessed_gate_output(p: str) -> bool:
     np = _normalize_path(p)
-    for item in _BLESSED_GATE_OUTPUTS:
-        if np == _normalize_path(item):
-            return True
-    return False
+    return any(np == _normalize_path(item) for item in _BLESSED_GATE_OUTPUTS)
 
 
 def blessed_gate_outputs_in(paths: list[str]) -> list[str]:
@@ -66,10 +63,7 @@ def is_runner_workfile(p: str) -> bool:
             return True
     if "/__pycache__/" in np:
         return True
-    for suf in _RUNNER_WORKFILE_SUFFIXES:
-        if np.endswith(suf):
-            return True
-    return False
+    return any(np.endswith(suf) for suf in _RUNNER_WORKFILE_SUFFIXES)
 
 
 def _normalize_path(p: str) -> str:

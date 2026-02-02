@@ -379,7 +379,7 @@ def apply_cli_overrides(p: Policy, mapping: dict[str, object | None]) -> None:
 
 def policy_for_log(p: Policy) -> str:
     # Stable key order for audit logs.
-    keys = sorted([k for k in p.__dict__.keys() if k != "_src"])
+    keys = sorted([k for k in p.__dict__ if k != "_src"])
     lines: list[str] = []
     for k in keys:
         v = getattr(p, k)

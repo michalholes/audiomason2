@@ -45,7 +45,7 @@ def test_integration():
         example_plugin_dir = plugins_dir / "example_plugin"
         print(f"\n🔌 Loading plugin from: {example_plugin_dir}")
 
-        plugin = loader.load_plugin(example_plugin_dir, validate=False)
+        loader.load_plugin(example_plugin_dir, validate=False)
         print(f"✅ Plugin loaded: {loader.list_plugins()}")
 
         # ═══════════════════════════════════════════

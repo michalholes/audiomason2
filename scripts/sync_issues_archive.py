@@ -399,14 +399,16 @@ def main(
     closed_md = render_archive("Closed Issues", closed_issues)
     all_yaml = build_all_issues_yaml(repo, issues, _run)
 
-    if OUT_OPEN.exists() and OUT_CLOSED.exists() and OUT_ALL.exists():
-        if (
-            read_text(OUT_OPEN) == open_md
-            and read_text(OUT_CLOSED) == closed_md
-            and read_text(OUT_ALL) == all_yaml
-        ):
-            print("No changes.")
-            return 0
+    if (
+        OUT_OPEN.exists()
+        and OUT_CLOSED.exists()
+        and OUT_ALL.exists()
+        and read_text(OUT_OPEN) == open_md
+        and read_text(OUT_CLOSED) == closed_md
+        and read_text(OUT_ALL) == all_yaml
+    ):
+        print("No changes.")
+        return 0
 
     if args.dry_run:
         print("DRY RUN: changes detected")

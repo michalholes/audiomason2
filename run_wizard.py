@@ -5,19 +5,23 @@ import argparse
 import sys
 from pathlib import Path
 
-# Add src to path
-src_path = Path(__file__).parent / "src"
-sys.path.insert(0, str(src_path))
+def _configure_import_paths() -> None:
+    # Add src and plugins to path for direct execution from repo root.
+    src_path = Path(__file__).parent / "src"
+    sys.path.insert(0, str(src_path))
 
-# Add plugins to path
-plugins_path = Path(__file__).parent / "plugins"
-sys.path.insert(0, str(plugins_path))
+    plugins_path = Path(__file__).parent / "plugins"
+    sys.path.insert(0, str(plugins_path))
 
-from audiomason.core.config import ConfigResolver
+
 
 
 def main():
     """Run basic wizard."""
+    _configure_import_paths()
+
+    from audiomason.core.config import ConfigResolver
+
     parser = argparse.ArgumentParser(description="AudioMason Basic Wizard")
 
     # Verbosity

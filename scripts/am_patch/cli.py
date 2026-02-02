@@ -132,7 +132,8 @@ Options:
       Allow no-op patches (override default FAIL).
 
   -u, --unified-patch
-      Force unified patch mode (.patch or .zip bundle). Without -u, auto-detect: .patch/.zip => unified; .py => patch script.
+      Force unified patch mode (.patch or .zip bundle). Without -u, auto-detect:
+      .patch/.zip => unified; .py => patch script.
 
 """
 

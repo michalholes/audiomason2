@@ -80,15 +80,15 @@ class CLIPlugin:
             # Port flag - nested under 'web'
             elif arg == "--port" and i + 1 < len(args):
                 if "web" not in cli_args:
-                    cli_args["web"] = {}
-                cli_args["web"]["port"] = int(args[i + 1])
+                    cli_args["web"] = {}  # type: ignore[assignment]
+                cli_args["web"]["port"] = int(args[i + 1])  # type: ignore[index]
                 i += 1  # Skip next arg
 
             # Bitrate flag - nested under 'audio'
             elif arg == "--bitrate" and i + 1 < len(args):
                 if "audio" not in cli_args:
-                    cli_args["audio"] = {}
-                cli_args["audio"]["bitrate"] = args[i + 1]
+                    cli_args["audio"] = {}  # type: ignore[assignment]
+                cli_args["audio"]["bitrate"] = args[i + 1]  # type: ignore[index]
                 i += 1
 
             # Output directory
@@ -104,22 +104,22 @@ class CLIPlugin:
             # Loudnorm flag - nested under 'audio'
             elif arg == "--loudnorm":
                 if "audio" not in cli_args:
-                    cli_args["audio"] = {}
-                cli_args["audio"]["loudnorm"] = True
+                    cli_args["audio"] = {}  # type: ignore[assignment]
+                cli_args["audio"]["loudnorm"] = True  # type: ignore[index]
             elif arg == "--no-loudnorm":
                 if "audio" not in cli_args:
-                    cli_args["audio"] = {}
-                cli_args["audio"]["loudnorm"] = False
+                    cli_args["audio"] = {}  # type: ignore[assignment]
+                cli_args["audio"]["loudnorm"] = False  # type: ignore[index]
 
             # Split chapters - nested under 'audio'
             elif arg == "--split-chapters":
                 if "audio" not in cli_args:
-                    cli_args["audio"] = {}
-                cli_args["audio"]["split_chapters"] = True
+                    cli_args["audio"] = {}  # type: ignore[assignment]
+                cli_args["audio"]["split_chapters"] = True  # type: ignore[index]
             elif arg == "--no-split-chapters":
                 if "audio" not in cli_args:
-                    cli_args["audio"] = {}
-                cli_args["audio"]["split_chapters"] = False
+                    cli_args["audio"] = {}  # type: ignore[assignment]
+                cli_args["audio"]["split_chapters"] = False  # type: ignore[index]
 
             i += 1
 
@@ -427,7 +427,7 @@ class CLIPlugin:
                     ctx.cover_url = cli_args["cover_url"]
 
             # Processing options
-            ctx.bitrate = cli_args.get("bitrate", "128k")
+            ctx.bitrate = cli_args.get("bitrate", "128k")  # type: ignore[attr-defined]
             ctx.loudnorm = cli_args.get("loudnorm", False)
             ctx.split_chapters = cli_args.get("split_chapters", False)
 
@@ -513,7 +513,7 @@ class CLIPlugin:
             (files, options) tuple
         """
         files = []
-        options = {}
+        options: dict[str, Any] = {}
         i = 0
 
         while i < len(args):

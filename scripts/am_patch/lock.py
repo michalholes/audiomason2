@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import contextlib
 from dataclasses import dataclass
 from pathlib import Path
 from types import ModuleType
@@ -36,10 +37,8 @@ class FileLock:
             return
         try:
             if fcntl is not None:
-                try:
+                with contextlib.suppress(Exception):
                     fcntl.flock(self._fd, fcntl.LOCK_UN)
-                except Exception:
-                    pass
         finally:
             os.close(self._fd)
             self._fd = None

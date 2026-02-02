@@ -162,9 +162,9 @@ def main():
         spec.loader.exec_module(cli_module)
 
         # Get the CLIPlugin class
-        CLIPlugin = cli_module.CLIPlugin
+        cli_plugin_cls = cli_module.CLIPlugin
 
-        cli = CLIPlugin()
+        cli = cli_plugin_cls()
         asyncio.run(cli.run())
 
     except ImportError as e:

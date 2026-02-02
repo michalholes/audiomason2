@@ -315,14 +315,13 @@ class PluginLoader:
                             validation_errors.append(
                                 f"Import error: module '{alias.name}' not available"
                             )
-                elif isinstance(node, ast.ImportFrom):
-                    if node.module:
-                        try:
-                            __import__(node.module.split(".")[0])
-                        except ImportError:
-                            validation_errors.append(
-                                f"Import error: module '{node.module}' not available"
-                            )
+                elif isinstance(node, ast.ImportFrom) and node.module:
+                    try:
+                        __import__(node.module.split(".")[0])
+                    except ImportError:
+                        validation_errors.append(
+                            f"Import error: module '{node.module}' not available"
+                        )
         except Exception as e:
             validation_errors.append(f"Import validation failed: {e}")
 

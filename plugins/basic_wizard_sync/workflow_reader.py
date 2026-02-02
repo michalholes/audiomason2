@@ -162,31 +162,33 @@ class WorkflowConfig:
         try:
             # Parse condition
             if " == " in condition:
-                left, right = condition.split(" == ", 1)
+                left, right_str = condition.split(" == ", 1)
                 left = left.strip()
-                right = right.strip().strip("\"'")
+                right_str = right_str.strip().strip("\"'")
 
                 # Evaluate left side
                 value = self._get_nested_value(left, context)
 
                 # Convert right side
-                if right.lower() == "true":
+                right: str | bool = right_str
+                if right_str.lower() == "true":
                     right = True
-                elif right.lower() == "false":
+                elif right_str.lower() == "false":
                     right = False
 
                 return value == right
 
             elif " != " in condition:
-                left, right = condition.split(" != ", 1)
+                left, right_str = condition.split(" != ", 1)
                 left = left.strip()
-                right = right.strip().strip("\"'")
+                right_str = right_str.strip().strip("\"'")
 
                 value = self._get_nested_value(left, context)
 
-                if right.lower() == "true":
+                right: str | bool = right_str
+                if right_str.lower() == "true":
                     right = True
-                elif right.lower() == "false":
+                elif right_str.lower() == "false":
                     right = False
 
                 return value != right
@@ -207,7 +209,7 @@ class WorkflowConfig:
             Value at path or None
         """
         parts = path.split(".")
-        current = context
+        current: Any = context
 
         for part in parts:
             if isinstance(current, dict):

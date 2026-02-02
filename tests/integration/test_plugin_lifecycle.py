@@ -293,7 +293,7 @@ class ImportPlugin:
     def __init__(self):
         self.json_module = json
         self.pathlib_module = pathlib
-    
+
     def test_method(self) -> dict[str, Any]:
         return {"status": "ok"}
 """

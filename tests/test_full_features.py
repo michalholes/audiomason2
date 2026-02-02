@@ -103,7 +103,7 @@ def test_metadata_plugins():
     if spec and spec.loader:
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
-        google = module.GoogleBooksPlugin()
+        module.GoogleBooksPlugin()
         print("✓ Google Books plugin loads")
 
     # OpenLibrary
@@ -112,7 +112,7 @@ def test_metadata_plugins():
     if spec and spec.loader:
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
-        openlibrary = module.OpenLibraryPlugin()
+        module.OpenLibraryPlugin()
         print("✓ OpenLibrary plugin loads")
 
     print()
@@ -131,17 +131,17 @@ def test_enhanced_cli():
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
 
-        CLIPlugin = module.CLIPlugin
-        VerbosityLevel = module.VerbosityLevel
+        cli_plugin_cls = module.CLIPlugin
+        verbosity_level_cls = module.VerbosityLevel
 
-        cli = CLIPlugin()
+        cli = cli_plugin_cls()
         print("✓ Enhanced CLI plugin loads")
 
         # Test verbosity levels
-        assert VerbosityLevel.QUIET == 0
-        assert VerbosityLevel.NORMAL == 1
-        assert VerbosityLevel.VERBOSE == 2
-        assert VerbosityLevel.DEBUG == 3
+        assert verbosity_level_cls.QUIET == 0
+        assert verbosity_level_cls.NORMAL == 1
+        assert verbosity_level_cls.VERBOSE == 2
+        assert verbosity_level_cls.DEBUG == 3
         print("✓ Verbosity levels defined")
 
         # Test parsing

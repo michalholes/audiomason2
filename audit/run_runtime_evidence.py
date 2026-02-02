@@ -76,13 +76,11 @@ def _git_commit_and_optional_push(repo: Path, out_path: Path, *, message: str, p
 def _expects_audit_protocol(cmd: str) -> bool:
     # Commands that MUST emit machine-readable audit output.
     s = cmd
-    if " --selftest" in s:
-        return True
-    if " -m audiomason plugins" in s and (" --list" in s or " --validate" in s):
-        return True
-    if " -m audiomason audit" in s and " --list-domains" in s:
-        return True
-    return False
+    return (
+        (" --selftest" in s)
+        or (" -m audiomason plugins" in s and (" --list" in s or " --validate" in s))
+        or (" -m audiomason audit" in s and " --list-domains" in s)
+    )
 
 
 def _load_yaml(path: Path) -> Any:
