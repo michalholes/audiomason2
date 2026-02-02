@@ -167,7 +167,7 @@ class BasicWizardSync:
                 return answer if answer else default
             except (EOFError, KeyboardInterrupt):
                 print()
-                raise WizardError("User interrupted") from None from None
+                raise WizardError("User interrupted") from None
         else:
             # Non-interactive mode - use default
             return default

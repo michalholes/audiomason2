@@ -1165,12 +1165,12 @@ class LogsScreen:
         elif action == "clear":
             if self.dialogs.confirm("Delete all log files?", default=False) and log_dir.exists():
                 count = 0
-                    for log_file in log_dir.glob("*.log"):
-                        log_file.unlink()
-                        count += 1
-                    self.dialogs.message("Logs Cleared", f"Deleted {count} log file(s)")
-                else:
-                    self.dialogs.message("No Logs", "No log files to delete")
+                for log_file in log_dir.glob("*.log"):
+                    log_file.unlink()
+                    count += 1
+                self.dialogs.message("Logs Cleared", f"Deleted {count} log file(s)")
+            else:
+                self.dialogs.message("No Logs", "No log files to delete")
 
         return action
 
