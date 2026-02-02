@@ -115,7 +115,7 @@ def _run_post_success_audit(logger: Logger, repo_root: Path, policy: Policy) -> 
 
 
 from am_patch.archive import archive_patch, make_failure_zip
-from am_patch.gates import run_compile_check, run_gates
+from am_patch.gates import run_gates
 from am_patch.promote import promote_files
 from am_patch.state import load_state, save_state, update_union
 
@@ -376,17 +376,13 @@ def main(argv: list[str]) -> int:
                 )
 
             # Gates in workspace first.
-            # Gate: compile all Python sources to catch syntax errors early.
-            if getattr(policy, "compile_check", True):
-                ok = run_compile_check(logger, cwd=ws.repo, repo_root=repo_root)
-                if not ok:
-                    raise RunnerError("GATE", "COMPILE", "python -m compileall failed")
 
             run_gates(
                 logger,
                 cwd=ws.repo,
                 repo_root=repo_root,
                 run_all=policy.run_all_tests,
+                compile_check=policy.compile_check,
                 allow_fail=policy.gates_allow_fail,
                 skip_ruff=policy.gates_skip_ruff,
                 skip_pytest=policy.gates_skip_pytest,
@@ -425,6 +421,7 @@ def main(argv: list[str]) -> int:
                 cwd=repo_root,
                 repo_root=repo_root,
                 run_all=policy.run_all_tests,
+                compile_check=policy.compile_check,
                 allow_fail=policy.gates_allow_fail,
                 skip_ruff=policy.gates_skip_ruff,
                 skip_pytest=policy.gates_skip_pytest,
@@ -495,6 +492,7 @@ def main(argv: list[str]) -> int:
                 cwd=repo_root,
                 repo_root=repo_root,
                 run_all=policy.run_all_tests,
+                compile_check=policy.compile_check,
                 allow_fail=policy.gates_allow_fail,
                 skip_ruff=policy.gates_skip_ruff,
                 skip_pytest=policy.gates_skip_pytest,
@@ -765,6 +763,7 @@ def main(argv: list[str]) -> int:
             cwd=ws.repo,
             repo_root=repo_root,
             run_all=policy.run_all_tests,
+            compile_check=policy.compile_check,
             allow_fail=policy.gates_allow_fail,
             skip_ruff=policy.gates_skip_ruff,
             skip_pytest=policy.gates_skip_pytest,

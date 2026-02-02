@@ -61,7 +61,7 @@ class Policy:
     gates_skip_ruff: bool = False
     gates_skip_pytest: bool = False
     gates_skip_mypy: bool = False
-    gates_order: list[str] = field(default_factory=lambda: ["ruff", "pytest", "mypy"])
+    gates_order: list[str] = field(default_factory=lambda: ["compile", "ruff", "pytest", "mypy"])
 
     ruff_targets: list[str] = field(default_factory=lambda: ["src", "tests"])
     pytest_targets: list[str] = field(default_factory=lambda: ["tests"])

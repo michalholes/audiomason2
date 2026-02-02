@@ -121,7 +121,7 @@ def run_mypy(logger: Logger, cwd: Path, *, repo_root: Path, targets: list[str]) 
 
 def run_compile_check(logger: Logger, cwd: Path, *, repo_root: Path) -> bool:
     """Compile all Python sources to catch syntax errors early."""
-    logger.section("GATE: COMPILE")
+    logger.section("GATE: compile")
     py = sys.executable
     logger.line(f"compile_python={py}")
     r = logger.run_logged([py, "-m", "compileall", "-q", "."], cwd=cwd)
@@ -135,7 +135,7 @@ def _norm_gate_name(s: str) -> str:
 def _norm_gates_order(order: list[str] | None) -> list[str]:
     if not order:
         return []
-    allowed = {"ruff", "pytest", "mypy"}
+    allowed = {"compile", "ruff", "pytest", "mypy"}
     out: list[str] = []
     for item in order:
         name = _norm_gate_name(item)
@@ -150,6 +150,7 @@ def run_gates(
     *,
     repo_root: Path,
     run_all: bool,
+    compile_check: bool,
     allow_fail: bool,
     skip_ruff: bool,
     skip_pytest: bool,
@@ -171,6 +172,13 @@ def run_gates(
         return
 
     def _run_gate(name: str) -> bool:
+        if name == "compile":
+            if not compile_check:
+                skipped.append("compile")
+                logger.line("gate_compile=SKIP (disabled_by_policy)")
+                return True
+            return run_compile_check(logger, cwd=cwd, repo_root=repo_root)
+
         if name == "ruff":
             if skip_ruff:
                 skipped.append("ruff")
@@ -207,7 +215,7 @@ def run_gates(
 
         return True
 
-    for gate in ("ruff", "pytest", "mypy"):
+    for gate in ("compile", "ruff", "pytest", "mypy"):
         if gate not in order:
             skipped.append(gate)
             logger.line(f"gate_{gate}=SKIP (not in gates_order)")
