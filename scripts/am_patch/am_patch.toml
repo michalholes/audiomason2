@@ -1,3 +1,6 @@
+verbosity = "normal" #debug | verbose | normal | quiet
+
+
 [paths]
 # repo_root = "/home/pi/audiomason2"
 # patch_dir = "/home/pi/audiomason2/patches"
