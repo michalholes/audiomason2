@@ -46,13 +46,18 @@ def _load_config(repo_root: Path, config_path: Path) -> dict:
     return tomllib.loads(p.read_text(encoding="utf-8"))
 
 
-def _make_cfg(repo_root: Path, config_path: Path) -> SuiteCfg:
+def _make_cfg(repo_root: Path, config_path: Path, cli_runner_verbosity: Optional[str]) -> SuiteCfg:
     raw = _load_config(repo_root, config_path)
     suite = raw.get("suite", {})
     lock = raw.get("lock", {})
 
     issue_id = str(suite.get("issue_id", "666"))
     runner_cmd = [str(x) for x in suite.get("runner_cmd", ["python3", "scripts/am_patch.py"])]
+    runner_verbosity = cli_runner_verbosity if cli_runner_verbosity is not None else str(suite.get("runner_verbosity", "quiet"))
+    runner_verbosity = runner_verbosity.strip()
+    if runner_verbosity:
+        runner_cmd = runner_cmd + [f"--verbosity={runner_verbosity}"]
+
 
     patches_dir = repo_root / str(suite.get("patches_dir", "patches"))
     logs_dir = repo_root / str(suite.get("logs_dir", "patches/badguys_logs"))
@@ -118,9 +123,15 @@ def run_test_adaptive(test, ctx: Ctx) -> bool:
 
 
 def main(argv: list[str]) -> int:
-    ap = argparse.ArgumentParser(prog="python3 badguys/run_suite.py")
+    ap = argparse.ArgumentParser(prog="python3 badguys.py")
     ap.add_argument("--config", default="badguys/config.toml", help="Config path (repo-relative)")
     ap.add_argument("--commit-limit", type=int, default=None, help="Override commit_limit from config")
+    ap.add_argument(
+        "--runner-verbosity",
+        default=None,
+        choices=["debug", "verbose", "normal", "quiet"],
+        help="Override runner verbosity (passed as --verbosity=<mode>)",
+    )
     ap.add_argument("--include", action="append", default=[], help="Run only named tests (repeatable)")
     ap.add_argument("--exclude", action="append", default=[], help="Skip named tests (repeatable)")
     ap.add_argument("--list-tests", action="store_true", help="List discovered tests and exit")
@@ -129,7 +140,7 @@ def main(argv: list[str]) -> int:
     repo_root = Path(__file__).resolve().parents[1]
     _ensure_repo_root_in_syspath(repo_root)
 
-    cfg = _make_cfg(repo_root, Path(args.config))
+    cfg = _make_cfg(repo_root, Path(args.config), args.runner_verbosity)
     run_id = time.strftime("%Y%m%d_%H%M%S")
 
     from badguys.tests import discover_tests
