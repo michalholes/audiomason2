@@ -3,7 +3,7 @@
 
 AUTHORITATIVE – AudioMason2  
 Status: active  
-Version: v2.30
+Version: v2.31
 This manual defines what a chat must produce so that the user can run the patch successfully and close the issue.
 
 ## Absolute rules
@@ -72,7 +72,7 @@ The runner is the authority.
 1. You MUST ensure the patch changes at least one file.
 2. You MUST ensure patch can be applied and patched files can compile and are consistent with formatting/linting expectations. You MUST provide verifiable evidence of applying this rule. If evidence is not provided, the patch is considered non-compliant and may be rejected without execution.
 3. Avoid adding new dependencies.
-4. Send out patch only as downloadable file. Only if user declare he cannot download it, send it as inline command (cat..)
+4. Send out patch only as downloadable file. Only if user declare he cannot download it, send it as inline command (cat..). In that case, runner can accept raw .patch filea, so provide in code box command with path to raw patch.
 5. The patch content MUST look like a unified diff (e.g. contains `diff --git` and `---`/`+++`/`@@` hunks). If the output contains Python code intended to perform edits, it is non-compliant.
 
 ---
