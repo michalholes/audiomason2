@@ -6,10 +6,22 @@ from pathlib import Path
 from badguys.tests._util import append_log, now_stamp, run_cmd, write_text
 
 
+def _read_text_from_head(repo_root: Path, rel_path: str) -> str | None:
+    cp = run_cmd(["git", "show", f"HEAD:{rel_path}"], cwd=repo_root)
+    if cp.returncode != 0:
+        return None
+
+    out = cp.stdout
+    if out is None:
+        return ""
+    if isinstance(out, bytes):
+        return out.decode("utf-8", errors="replace")
+    return str(out)
+
+
 def _make_patch(repo_root: Path, path: Path, marker_rel: str, stamp: str) -> None:
-    marker_path = repo_root / marker_rel
-    if marker_path.exists():
-        old_text = marker_path.read_text(encoding="utf-8")
+    old_text = _read_text_from_head(repo_root, marker_rel)
+    if old_text is not None:
         if old_text and not old_text.endswith("\n"):
             old_text = old_text + "\n"
         old_lines = old_text.splitlines(keepends=True)
