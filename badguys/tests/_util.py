@@ -7,7 +7,7 @@ import sys
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Sequence
+from typing import Optional, Sequence
 
 
 def now_stamp() -> str:
@@ -87,13 +87,51 @@ def _lock_path(repo_root: Path) -> Path:
     return repo_root / "patches" / "badguys.lock"
 
 
-def acquire_lock(repo_root: Path) -> None:
-    lock_path = _lock_path(repo_root)
+def _parse_lock_started(lock_path: Path) -> Optional[int]:
+    try:
+        txt = lock_path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return None
+    for line in txt.splitlines():
+        if line.startswith("started="):
+            try:
+                return int(line.split("=", 1)[1].strip())
+            except ValueError:
+                return None
+    return None
+
+
+def acquire_lock(
+    repo_root: Path,
+    *,
+    path: Optional[Path] = None,
+    ttl_seconds: int = 3600,
+    on_conflict: str = "fail",
+) -> None:
+    lock_path = path if path is not None else _lock_path(repo_root)
+    lock_path = lock_path if lock_path.is_absolute() else (repo_root / lock_path)
     lock_path.parent.mkdir(parents=True, exist_ok=True)
+
     try:
         fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
     except FileExistsError as e:
-        raise SystemExit(f"FAIL: lock exists: {lock_path}") from e
+        if on_conflict != "steal":
+            raise SystemExit(f"FAIL: lock exists: {lock_path}") from e
+
+        started = _parse_lock_started(lock_path)
+        now = int(time.time())
+        stale = started is not None and (now - started) > int(ttl_seconds)
+        if not stale:
+            raise SystemExit(f"FAIL: lock exists (not stale): {lock_path}") from e
+
+        try:
+            lock_path.unlink()
+        except FileNotFoundError:
+            pass
+
+        # retry once
+        fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
+
     try:
         content = f"pid={os.getpid()}\nstarted={int(time.time())}\n"
         os.write(fd, content.encode("utf-8"))
@@ -101,8 +139,9 @@ def acquire_lock(repo_root: Path) -> None:
         os.close(fd)
 
 
-def release_lock(repo_root: Path) -> None:
-    lock_path = _lock_path(repo_root)
+def release_lock(repo_root: Path, *, path: Optional[Path] = None) -> None:
+    lock_path = path if path is not None else _lock_path(repo_root)
+    lock_path = lock_path if lock_path.is_absolute() else (repo_root / lock_path)
     try:
         lock_path.unlink()
     except FileNotFoundError:
