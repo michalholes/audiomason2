@@ -1,0 +1,32 @@
+[suite]
+# Default issue id used by tests that need it.
+issue_id = "666"
+
+# Runner command argv.
+runner_cmd = ["python3", "scripts/am_patch.py"]
+
+# Repo-relative directories.
+patches_dir = "patches"
+logs_dir = "patches/badguys_logs"
+
+# Repo-relative pattern for the central log.
+central_log_pattern = "patches/badguys_{run_id}.log"
+
+# Maximum number of tests in one run that are allowed to perform a real commit+push.
+commit_limit = 1
+
+[lock]
+path = "patches/badguys.lock"
+ttl_seconds = 3600
+# on_conflict: "fail" or "steal" (steal only if lock is stale by ttl_seconds)
+on_conflict = "fail"
+
+[guard]
+require_guard_test = true
+guard_test_name = "test_000_test_mode_smoke"
+abort_on_guard_fail = true
+
+[filters]
+# Optional default include/exclude patterns.
+include = []
+exclude = []
