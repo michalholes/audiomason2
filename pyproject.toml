@@ -47,6 +47,7 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.mypy]
+mypy_path = "src"
 exclude = ["patches/", "badguys/", "tests/", "venv/", "__pycache__/"]
 python_version = "3.11"
 strict = false
@@ -71,7 +72,7 @@ ignore_missing_imports = true
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-src = ["src", "tests"]
+src = ["src", "tests", "scripts", "plugins"]
 exclude = ["patches", "badguys", "audit"]
 
 [tool.ruff.lint]
