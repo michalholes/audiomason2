@@ -47,7 +47,7 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.mypy]
-exclude = ["patches/", "tests/", "venv/", "__pycache__/"]
+exclude = ["patches/", "badguys/", "tests/", "venv/", "__pycache__/"]
 python_version = "3.11"
 strict = false
 warn_return_any = false
@@ -71,6 +71,8 @@ ignore_missing_imports = true
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+src = ["src", "tests"]
+exclude = ["patches", "badguys", "audit"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP", "B", "SIM"]

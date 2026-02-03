@@ -1,0 +1,205 @@
+[suite]
+issue_id = 666
+runner = "python3 scripts/am_patch.py"
+patch_dst = "patches/badguys_suite"
+master_log = "patches/badguys_suite.log"
+
+# Default workspace policy for steps.
+[workspace]
+clean_before = true
+clean_after = true
+
+# CLI-only smoke tests
+[[step]]
+name = "cli_help_short"
+kind = "shell"
+cmd = "python3 scripts/am_patch.py -h | grep -E \"help|usage\""
+expect = { ok = true }
+
+[[step]]
+name = "cli_help_all"
+kind = "shell"
+cmd = "python3 scripts/am_patch.py -H | grep -F -- \"--finalize-live\""
+expect = { ok = true }
+
+[[step]]
+name = "cli_show_config"
+kind = "shell"
+cmd = "python3 scripts/am_patch.py -c | grep -E \"config_path=|policy\""
+expect = { ok = true }
+
+# Ensure fresh start
+[[step]]
+name = "workspace_clean_start"
+kind = "shell"
+cmd = "rm -rf patches/workspaces/issue_666 || true"
+expect = { ok = true }
+
+# no-op without -n -> SCOPE:NOOP
+[[step]]
+name = "noop_fails"
+kind = "patch"
+script = "tests/noop/00_noop_fails.py"
+runner_flags = ["--disable-promotion"]
+expect = { ok = false, stage = "SCOPE", category = "NOOP" }
+
+# -n allows NOOP at scope level, but promotion still fails with PROMOTION:NOOP
+[[step]]
+name = "allow_noop_with_-n"
+kind = "patch"
+script = "tests/noop/01_noop_allowed_with_n.py"
+runner_flags = ["--disable-promotion", "-n", "-t"]
+expect = { ok = true }
+
+# Declared-but-untouched files
+
+# Seed baseline for declared-but-untouched tests (keep workspace)
+[[step]]
+name = "untouched_seed_baseline"
+kind = "patch"
+script = "tests/baseline/00_seed_untouched_baseline.py"
+runner_flags = ["--disable-promotion"]
+expect = { ok = true }
+workspace = { clean_before = true, clean_after = false }
+
+[[step]]
+name = "untouched_files_fail_without_-t"
+kind = "patch"
+script = "tests/untouched/00_two_declared_touch_one.py"
+runner_flags = ["--disable-promotion"]
+expect = { ok = false, stage = "SCOPE", category = "SCOPE" }
+workspace = { clean_before = false, clean_after = false }
+
+[[step]]
+name = "untouched_files_pass_with_-t"
+kind = "patch"
+script = "tests/untouched/00_two_declared_touch_one.py"
+runner_flags = ["--disable-promotion", "-t"]
+expect = { ok = true }
+workspace = { clean_before = false, clean_after = true }
+
+# Undeclared paths touched
+[[step]]
+name = "undeclared_seed_baseline"
+kind = "patch"
+script = "tests/baseline/00_seed_undeclared_baseline.py"
+runner_flags = ["--disable-promotion"]
+expect = { ok = true }
+workspace = { clean_before = true, clean_after = false }
+
+[[step]]
+name = "undeclared_paths_fail_without_-a"
+kind = "patch"
+script = "tests/undeclared/00_touch_undeclared_path.py"
+runner_flags = ["--disable-promotion"]
+expect = { ok = false }
+
+[[step]]
+name = "undeclared_paths_pass_with_-a"
+kind = "patch"
+script = "tests/undeclared/00_touch_undeclared_path.py"
+runner_flags = ["--disable-promotion", "-a"]
+expect = { ok = true }
+
+# Patch path must be under patches/
+[[step]]
+name = "patch_path_rejects_external"
+kind = "reject"
+script = "tests/preflight/00_external_location_should_be_rejected.py"
+runner_flags = ["--disable-promotion"]
+expect = { ok = false, stage = "PREFLIGHT", category = "PATCH_PATH" }
+
+# Branch enforcement (non-main)
+[[step]]
+name = "branch_create_tmp"
+kind = "shell"
+cmd = "git checkout -b badguys/tmp-branch-666"
+expect = { ok = true }
+
+[[step]]
+name = "run_patch_on_non_main_should_fail"
+kind = "patch"
+script = "tests/git/00_simple_change.py"
+runner_flags = ["--disable-promotion"]
+expect = { ok = false, stage = "PREFLIGHT", category = "GIT" }
+
+[[step]]
+name = "allow_non_main_with_--allow-non-main"
+kind = "patch"
+script = "tests/git/00_simple_change.py"
+runner_flags = ["--disable-promotion", "--allow-non-main"]
+expect = { ok = true }
+
+[[step]]
+name = "return_to_main"
+kind = "shell"
+cmd = "git checkout main && git branch -D badguys/tmp-branch-666"
+expect = { ok = true }
+
+# Dirty workspace and soft reset (keep workspace between these two steps)
+[[step]]
+name = "make_workspace_dirty_fail_scope"
+kind = "patch"
+script = "tests/workspace/00_make_workspace_dirty_fail_scope.py"
+runner_flags = ["--disable-promotion", "--no-rollback-workspace-on-fail"]
+expect = { ok = false, stage = "SCOPE", category = "SCOPE" }
+workspace = { clean_before = true, clean_after = false }
+
+[[step]]
+name = "soft_reset_workspace_then_pass"
+kind = "patch"
+script = "tests/workspace/01_after_soft_reset_should_be_clean.py"
+runner_flags = ["--disable-promotion", "--soft-reset-workspace"]
+expect = { ok = true }
+workspace = { clean_before = false, clean_after = true }
+
+# -l rerun-latest (seed deterministic latest failure first)
+[[step]]
+name = "seed_latest_failure"
+kind = "patch"
+script = "tests/rerun_latest/00_seed_latest_failure.py"
+runner_flags = ["--disable-promotion"]
+expect = { ok = false, stage = "SCOPE", category = "NOOP" }
+
+[[step]]
+name = "rerun_latest_with_-l"
+kind = "shell"
+cmd = "python3 scripts/am_patch.py --disable-promotion -l 666 \"badguys:rerun-latest\""
+expect = { ok = true }
+
+# Finalize tests (sandboxed local origin+clone)
+[[step]]
+name = "finalize_setup_sandbox"
+kind = "shell"
+cmd = "python3 badguys/tools/finalize_sandbox.py setup"
+expect = { ok = true }
+
+[[step]]
+name = "finalize_live_disable_promotion_smoke"
+kind = "shell"
+cmd = "python3 badguys/tools/finalize_sandbox.py finalize_live --disable-promotion"
+expect = { ok = true }
+
+[[step]]
+name = "finalize_live_real_commit_push"
+kind = "shell"
+cmd = "python3 badguys/tools/finalize_sandbox.py finalize_live"
+expect = { ok = true }
+
+[[step]]
+name = "finalize_live_allow_gates_fail"
+kind = "shell"
+cmd = "python3 badguys/tools/finalize_sandbox.py finalize_live --allow-gates-fail"
+expect = { ok = true }
+
+[[step]]
+name = "finalize_workspace_smoke_disable_promotion"
+kind = "shell"
+cmd = "python3 badguys/tools/finalize_sandbox.py teardown || true; python3 badguys/tools/finalize_sandbox.py setup; python3 badguys/tools/finalize_sandbox.py finalize_workspace --disable-promotion"
+expect = { ok = true }
+
+[[step]]
+name = "finalize_sandbox_teardown"
+kind = "shell"
+cmd = "python3 badguys/tools/finalize_sandbox.py teardown"
+expect = { ok = true }
