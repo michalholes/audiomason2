@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import re
 import sys
+from collections.abc import Callable
 from pathlib import Path
 
 from .errors import RunnerError
@@ -202,6 +203,7 @@ def run_gates(
     mypy_targets: list[str],
     gates_order: list[str] | None,
     pytest_use_venv: bool,
+    progress: Callable[[str], None] | None = None,
 ) -> None:
     failures: list[str] = []
     skipped: list[str] = []
@@ -267,7 +269,12 @@ def run_gates(
             logger.line(f"gate_{gate}=SKIP (not in gates_order)")
 
     for gate in order:
+        stage = f"GATE_{gate.upper()}"
+        if progress is not None:
+            progress(f"DO:{stage}")
         ok = _run_gate(gate)
+        if progress is not None:
+            progress(f"OK:{stage}" if ok else f"FAIL:{stage}")
         if not ok:
             failures.append(gate)
             if not run_all:

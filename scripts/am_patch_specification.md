@@ -37,6 +37,37 @@ am_patch RUNNER_VERSION=4.1.43
 
 ---
 
+
+## 1.1 Verbosity and status output
+
+Runner supports 4 verbosity modes for screen output:
+
+- debug: maximum screen output + status bar
+- verbose: current (legacy) behavior + status bar
+- normal: only DO/OK/FAIL lines for executed steps + status bar
+- quiet: no progress output and no status bar; only final summary
+
+CLI:
+- `--verbosity {debug,verbose,normal,quiet}` (default: `verbose`)
+
+Status indicator:
+- TTY: single-line overwrite on stderr: `STATUS: <STAGE>  ELAPSED: <mm:ss>`
+- non-TTY: periodic heartbeat on stderr: `HEARTBEAT: <STAGE> elapsed=<mm:ss>`
+- disabled in `quiet`
+
+Final summary (always printed at the end):
+- SUCCESS:
+  - `RESULT: SUCCESS`
+  - `COMMIT: <sha>` or `(none)`
+  - `PUSH: OK|FAIL|UNKNOWN` (when commit/push is enabled)
+  - `LOG: <path>`
+- FAIL:
+  - `RESULT: FAIL`
+  - `STAGE: <stage-id>`
+  - `REASON: <one line>`
+  - `LOG: <path>`
+
+
 ## 2. Modes of Operation
 
 ### 2.1 Workspace mode (default)

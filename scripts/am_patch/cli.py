@@ -50,6 +50,8 @@ class CliArgs:
     patch_script: str | None
     message: str | None
 
+    verbosity: str | None
+
     run_all_tests: bool | None
     allow_no_op: bool | None
 
@@ -109,6 +111,9 @@ Options:
       Print effective configuration and policy sources (defaults, config file,
       CLI overrides) and exit.
 
+  --verbosity {{debug, verbose, normal, quiet}}
+      Control screen output amount. [default: verbose]
+
   -a, --allow-undeclared-paths
       Allow patch scripts to touch files outside declared FILES (override default FAIL).
 
@@ -161,6 +166,10 @@ CORE / INFO
 
   --version
       Print runner version and exit.
+
+  --verbosity {{debug, verbose, normal, quiet}}
+      Control screen output amount.
+      [default: verbose]
 
 WORKFLOW / MODES
   --finalize-live MESSAGE (-f)
@@ -422,6 +431,13 @@ def parse_args(argv: list[str]) -> CliArgs:
         help="Success archive zip name template (placeholders: {repo}, {branch}).",
     )
 
+    p.add_argument(
+        "--verbosity",
+        dest="verbosity",
+        choices=["debug", "verbose", "normal", "quiet"],
+        default=None,
+    )
+
     p.add_argument("--skip-ruff", dest="skip_ruff", action="store_true", default=None)
     p.add_argument("--skip-pytest", dest="skip_pytest", action="store_true", default=None)
     p.add_argument("--skip-mypy", dest="skip_mypy", action="store_true", default=None)
@@ -516,6 +532,7 @@ def parse_args(argv: list[str]) -> CliArgs:
             issue_id=None,
             patch_script=None,
             message=None,
+            verbosity=ns.verbosity,
             run_all_tests=ns.run_all_tests,
             allow_no_op=ns.allow_no_op,
             compile_check=getattr(ns, "compile_check", None),
@@ -589,6 +606,7 @@ def parse_args(argv: list[str]) -> CliArgs:
         issue_id=issue_id,
         patch_script=patch_script,
         message=message,
+        verbosity=ns.verbosity,
         run_all_tests=ns.run_all_tests,
         allow_no_op=ns.allow_no_op,
         compile_check=getattr(ns, "compile_check", None),

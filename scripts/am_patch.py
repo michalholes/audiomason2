@@ -35,7 +35,13 @@ if str(_SCRIPTS_DIR) not in sys.path:
 from am_patch import git_ops
 from am_patch.audit_rubric_check import check_audit_rubric_coverage
 from am_patch.cli import parse_args
-from am_patch.config import Policy, apply_cli_overrides, build_policy, load_config, policy_for_log
+from am_patch.config import (
+    Policy,
+    apply_cli_overrides,
+    build_policy,
+    load_config,
+    policy_for_log,
+)
 from am_patch.errors import RunnerError, fingerprint
 from am_patch.lock import FileLock
 from am_patch.log import Logger, new_log_file
@@ -44,6 +50,7 @@ from am_patch.patch_exec import precheck_patch_script, run_patch, run_unified_pa
 from am_patch.patch_select import PatchSelectError, choose_default_patch_input, decide_unified_mode
 from am_patch.paths import default_paths, ensure_dirs
 from am_patch.scope import blessed_gate_outputs_in, changed_paths, enforce_scope_delta
+from am_patch.status import StatusReporter
 from am_patch.version import RUNNER_VERSION
 from am_patch.workspace import (
     create_checkpoint,
@@ -275,6 +282,7 @@ def main(argv: list[str]) -> int:
         policy,
         {
             "run_all_tests": cli.run_all_tests,
+            "verbosity": getattr(cli, "verbosity", None),
             "allow_no_op": cli.allow_no_op,
             "skip_up_to_date": cli.skip_up_to_date,
             "allow_non_main": cli.allow_non_main,
@@ -364,7 +372,43 @@ def main(argv: list[str]) -> int:
     ensure_dirs(paths)
 
     log_path = new_log_file(paths.logs_dir, cli.issue_id)
-    logger = Logger(log_path=log_path, symlink_path=paths.symlink_path, tee_to_screen=True)
+    verbosity = getattr(policy, "verbosity", "verbose")
+    tee_to_screen = verbosity in ("verbose", "debug")
+    logger = Logger(log_path=log_path, symlink_path=paths.symlink_path, tee_to_screen=tee_to_screen)
+
+    status = StatusReporter(enabled=verbosity in ("normal", "verbose", "debug"))
+    status.start()
+
+    def _screen_line(line: str) -> None:
+        sys.stdout.write(line + "\n")
+        sys.stdout.flush()
+
+    def _stage_do(stage: str) -> None:
+        status.set_stage(stage)
+        if verbosity == "normal":
+            _screen_line(f"DO: {stage}")
+
+    def _stage_ok(stage: str) -> None:
+        if verbosity == "normal":
+            _screen_line(f"OK: {stage}")
+
+    def _stage_fail(stage: str) -> None:
+        if verbosity == "normal":
+            _screen_line(f"FAIL: {stage}")
+
+    def _gate_progress(token: str) -> None:
+        kind, _, stage = token.partition(":")
+        if not stage:
+            return
+        status.set_stage(stage)
+        if verbosity != "normal":
+            return
+        if kind in ("DO", "OK", "FAIL"):
+            _screen_line(f"{kind}: {stage}")
+
+    if verbosity == "normal":
+        _screen_line(f"RUN: issue={cli.issue_id or 'unknown'} mode={cli.mode} verbosity=normal")
+        _screen_line(f"LOG: {log_path}")
 
     lock = FileLock(paths.lock_path)
     exit_code: int = 0
@@ -379,6 +423,9 @@ def main(argv: list[str]) -> int:
     delete_workspace_after_archive: bool = False
     ws_for_posthook = None
     push_ok_for_posthook: bool | None = None
+    final_commit_sha: str | None = None
+    final_fail_stage: str | None = None
+    final_fail_reason: str | None = None
     try:
         logger.section("AM_PATCH START")
         logger.line(f"RUNNER_VERSION={RUNNER_VERSION}")
@@ -434,6 +481,7 @@ def main(argv: list[str]) -> int:
                 mypy_targets=policy.mypy_targets,
                 gates_order=policy.gates_order,
                 pytest_use_venv=policy.pytest_use_venv,
+                progress=_gate_progress,
             )
 
             changed_all = changed_paths(logger, ws.repo)
@@ -475,6 +523,7 @@ def main(argv: list[str]) -> int:
                 mypy_targets=policy.mypy_targets,
                 gates_order=policy.gates_order,
                 pytest_use_venv=policy.pytest_use_venv,
+                progress=_gate_progress,
             )
 
             sha: str | None = None
@@ -487,6 +536,7 @@ def main(argv: list[str]) -> int:
                     policy.default_branch,
                     allow_fail=policy.allow_push_fail,
                 )
+                final_commit_sha = sha
 
             logger.section("SUCCESS")
             if policy.commit_and_push:
@@ -548,6 +598,7 @@ def main(argv: list[str]) -> int:
                 mypy_targets=policy.mypy_targets,
                 gates_order=policy.gates_order,
                 pytest_use_venv=policy.pytest_use_venv,
+                progress=_gate_progress,
             )
             sha: str | None = None
             push_ok: bool | None = None
@@ -559,6 +610,7 @@ def main(argv: list[str]) -> int:
                     policy.default_branch,
                     allow_fail=policy.allow_push_fail,
                 )
+                final_commit_sha = sha
 
             logger.section("SUCCESS")
             if policy.commit_and_push:
@@ -722,6 +774,8 @@ def main(argv: list[str]) -> int:
             failed_patch_blobs: list[tuple[str, bytes]] = []
             patch_applied_any = False
 
+            _stage_do("PATCH_APPLY")
+
             if unified_mode:
                 res = run_unified_patch_bundle(
                     logger,
@@ -757,6 +811,8 @@ def main(argv: list[str]) -> int:
                 allow_declared_untouched=policy.allow_declared_untouched,
             )
 
+            _stage_ok("PATCH_APPLY")
+
             # Snapshot dirty paths immediately after patch (before gates).
             dirty_after_patch = list(after)
 
@@ -767,6 +823,7 @@ def main(argv: list[str]) -> int:
             patch_applied_successfully = patch_applied_any
 
         except Exception:
+            _stage_fail("PATCH_APPLY")
             # Defer rollback until after diagnostics archive is created.
             rollback_ckpt_for_posthook = ckpt
             rollback_ws_for_posthook = ws
@@ -821,6 +878,7 @@ def main(argv: list[str]) -> int:
             mypy_targets=policy.mypy_targets,
             gates_order=policy.gates_order,
             pytest_use_venv=policy.pytest_use_venv,
+            progress=_gate_progress,
         )
 
         # Live repo guard: optionally also after gates.
@@ -914,6 +972,7 @@ def main(argv: list[str]) -> int:
                 (ws.message or f"Issue {issue_id}: apply patch"),
                 stage_all=False,
             )
+            final_commit_sha = sha
             push_ok = git_ops.push(
                 logger, repo_root, policy.default_branch, allow_fail=policy.allow_push_fail
             )
@@ -948,6 +1007,33 @@ def main(argv: list[str]) -> int:
         logger.section("FAILURE")
         logger.line(str(e))
         logger.line(fingerprint(e))
+
+        # Contract: map internal error to stable STAGE/REASON for final summary.
+        final_fail_stage = str(e.stage)
+        final_fail_reason = str(e.message)
+        if e.stage == "GATES":
+            msg = str(e.message)
+            gate = None
+            if "gate failed:" in msg:
+                gate = msg.split("gate failed:", 1)[1].strip().split()[0]
+            elif "gates failed:" in msg:
+                gate = msg.split("gates failed:", 1)[1].strip().split(",")[0].strip()
+            if gate:
+                final_fail_stage = f"GATE_{gate.upper()}"
+                final_fail_reason = f"{gate} failed"
+            else:
+                final_fail_stage = "GATES"
+                final_fail_reason = "gates failed"
+        elif e.stage == "PATCH":
+            final_fail_stage = "PATCH_APPLY"
+            final_fail_reason = "patch apply failed"
+        elif e.stage == "PREFLIGHT":
+            final_fail_stage = "PREFLIGHT"
+            final_fail_reason = "invalid inputs"
+        elif e.stage in ("PROMOTION", "SCOPE"):
+            final_fail_stage = "PROMOTE" if e.stage == "PROMOTION" else "SCOPE"
+            final_fail_reason = "promotion failed" if e.stage == "PROMOTION" else "scope failed"
+
         return 1
     finally:
         # Posthook: always create an archive after a workspace-mode run.
@@ -1133,8 +1219,37 @@ def main(argv: list[str]) -> int:
                     pass
 
         with suppress(Exception):
+            status.stop()
+        with suppress(Exception):
             lock.release()
         logger.close()
+
+        # Final on-screen summary (contract).
+        try:
+            if exit_code == 0:
+                sys.stdout.write("RESULT: SUCCESS\n")
+                if final_commit_sha:
+                    sys.stdout.write(f"COMMIT: {final_commit_sha}\n")
+                else:
+                    sys.stdout.write("COMMIT: (none)\n")
+                if policy.commit_and_push:
+                    if push_ok_for_posthook is True:
+                        sys.stdout.write("PUSH: OK\n")
+                    elif push_ok_for_posthook is False:
+                        sys.stdout.write("PUSH: FAIL\n")
+                    else:
+                        sys.stdout.write("PUSH: UNKNOWN\n")
+                sys.stdout.write(f"LOG: {log_path}\n")
+            else:
+                sys.stdout.write("RESULT: FAIL\n")
+                stage = final_fail_stage or "INTERNAL"
+                reason = final_fail_reason or "unexpected error"
+                sys.stdout.write(f"STAGE: {stage}\n")
+                sys.stdout.write(f"REASON: {reason}\n")
+                sys.stdout.write(f"LOG: {log_path}\n")
+            sys.stdout.flush()
+        except Exception:
+            pass
 
         if policy.test_mode and isolated_work_patch_dir is not None:
             with suppress(Exception):

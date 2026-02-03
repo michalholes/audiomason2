@@ -29,6 +29,36 @@ Notes:
 - Only options listed in short help have short aliases. All other options are long-only.
 
 
+## Verbosity a status vystup
+
+Runner podporuje 4 verbosity rezimy pre obrazovkovy vystup:
+
+- debug: maximalne informacie na obrazovke + status bar
+- verbose: dnesne spravanie (plny vypis na obrazovke) + status bar
+- normal: iba informacia o tom, co sa vykona/vykonalo (DO/OK/FAIL) + status bar
+- quiet: ziadny priebezny vystup; bez status baru; iba finalny sumar
+
+CLI:
+- `--verbosity {debug,verbose,normal,quiet}` (default: `verbose`)
+
+Status indikator:
+- v TTY: jeden prepisovany riadok na stderr: `STATUS: <STAGE>  ELAPSED: <mm:ss>`
+- v non-TTY: periodicky riadok: `HEARTBEAT: <STAGE> elapsed=<mm:ss>`
+- v `quiet` sa status indikator nepouziva
+
+Finalny sumar (na konci kazdeho behu):
+- SUCCESS:
+  - `RESULT: SUCCESS`
+  - `COMMIT: <sha>` (alebo `(none)` ak commit/push nebezi)
+  - `PUSH: OK|FAIL|UNKNOWN` (ak commit/push bezi)
+  - `LOG: <path>`
+- FAIL:
+  - `RESULT: FAIL`
+  - `STAGE: <stage-id>`
+  - `REASON: <jedna veta>`
+  - `LOG: <path>`
+
+
 - **Workspace mode (default)**: runner creates/uses an issue workspace, runs patch + gates there, then promotes results to the live repo.
 - **Finalize mode (-f)**: runner works directly on the live repo (no workspace). Use only when you intentionally want a direct/live operation.
 - **Finalize-workspace mode (--finalize-workspace)**: runner finalizes an existing issue workspace (gates in workspace, promote to live, gates in live, commit+push). Commit message is read from workspace `meta.json`.

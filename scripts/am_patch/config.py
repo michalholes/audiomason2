@@ -44,6 +44,9 @@ class Policy:
 
     ascii_only_patch: bool = True
 
+    # Screen output verbosity (default: verbose = today's behavior)
+    verbosity: str = "verbose"
+
     # Unified patch input (.patch / .zip)
     unified_patch: bool = False
     unified_patch_continue: bool = True
@@ -256,6 +259,15 @@ def build_policy(defaults: Policy, cfg: dict[str, Any]) -> Policy:
 
     p.ascii_only_patch = _as_bool(cfg, "ascii_only_patch", p.ascii_only_patch)
     _mark_cfg(p, cfg, "ascii_only_patch")
+    p.verbosity = str(cfg.get("verbosity", p.verbosity))
+    _mark_cfg(p, cfg, "verbosity")
+    if p.verbosity not in ("debug", "verbose", "normal", "quiet"):
+        raise RunnerError(
+            "CONFIG",
+            "INVALID_VERBOSITY",
+            f"invalid verbosity={p.verbosity!r}; allowed: debug|verbose|normal|quiet",
+        )
+
     p.no_op_fail = _as_bool(cfg, "no_op_fail", p.no_op_fail)
     _mark_cfg(p, cfg, "no_op_fail")
     p.allow_no_op = _as_bool(cfg, "allow_no_op", p.allow_no_op)
