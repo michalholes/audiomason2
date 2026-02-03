@@ -272,6 +272,11 @@ Unified patch mode (`--unified-patch`):
 ### 8.1 Commit
 - Commit failure stops runner.
 - Repository remains dirty.
+- Staging rules:
+  - In `--finalize-live` (aka `-f`) mode, the runner stages the entire live working tree before commit.
+  - In `workspace` and `--finalize-workspace` modes, the runner commits only the paths it has promoted
+    (those paths are staged explicitly during promotion). Any unrelated dirty changes in the live
+    working tree remain uncommitted and continue to appear as dirty after the run.
 
 ### 8.2 Push
 - Push failure may be allowed by policy.

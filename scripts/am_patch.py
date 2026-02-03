@@ -480,7 +480,7 @@ def main(argv: list[str]) -> int:
             sha: str | None = None
             push_ok: bool | None = None
             if policy.commit_and_push:
-                sha = git_ops.commit(logger, repo_root, str(ws.message))
+                sha = git_ops.commit(logger, repo_root, str(ws.message), stage_all=False)
                 push_ok = git_ops.push(
                     logger,
                     repo_root,
@@ -909,7 +909,10 @@ def main(argv: list[str]) -> int:
         push_ok: bool | None = None
         if policy.commit_and_push:
             sha = git_ops.commit(
-                logger, repo_root, (ws.message or f"Issue {issue_id}: apply patch")
+                logger,
+                repo_root,
+                (ws.message or f"Issue {issue_id}: apply patch"),
+                stage_all=False,
             )
             push_ok = git_ops.push(
                 logger, repo_root, policy.default_branch, allow_fail=policy.allow_push_fail

@@ -56,15 +56,24 @@ def file_diff_since(logger: Logger, repo: Path, base_sha: str, paths: list[str])
     return [line.strip() for line in (r.stdout or "").splitlines() if line.strip()]
 
 
-def commit(logger: Logger, repo: Path, message: str) -> str:
-    r1 = logger.run_logged(["git", "status", "--porcelain"], cwd=repo)
-    if r1.returncode != 0:
-        raise RunnerError("PROMOTION", "GIT", "git status failed")
-    if not (r1.stdout or "").strip():
-        raise RunnerError("PROMOTION", "NOOP", "no changes to commit")
-    r2 = logger.run_logged(["git", "add", "-A"], cwd=repo)
-    if r2.returncode != 0:
-        raise RunnerError("PROMOTION", "GIT", "git add failed")
+def commit(logger: Logger, repo: Path, message: str, *, stage_all: bool = True) -> str:
+    if stage_all:
+        r1 = logger.run_logged(["git", "status", "--porcelain"], cwd=repo)
+        if r1.returncode != 0:
+            raise RunnerError("PROMOTION", "GIT", "git status failed")
+        if not (r1.stdout or "").strip():
+            raise RunnerError("PROMOTION", "NOOP", "no changes to commit")
+        r2 = logger.run_logged(["git", "add", "-A"], cwd=repo)
+        if r2.returncode != 0:
+            raise RunnerError("PROMOTION", "GIT", "git add failed")
+    else:
+        # Commit only what is already staged (promotion stages files explicitly).
+        r_cached = logger.run_logged(["git", "diff", "--cached", "--name-only"], cwd=repo)
+        if r_cached.returncode != 0:
+            raise RunnerError("PROMOTION", "GIT", "git diff --cached failed")
+        if not (r_cached.stdout or "").strip():
+            raise RunnerError("PROMOTION", "NOOP", "no staged changes to commit")
+
     r3 = logger.run_logged(["git", "commit", "-m", message], cwd=repo)
     if r3.returncode != 0:
         raise RunnerError("PROMOTION", "GIT", "git commit failed")
