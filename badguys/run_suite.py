@@ -25,7 +25,8 @@ class SuiteCfg:
     lock_path: Path
     lock_ttl_seconds: int
     lock_on_conflict: str
-    suite_verbosity: str
+    console_verbosity: str
+    log_verbosity: str
 
     def central_log_path(self, run_id: str) -> Path:
         rel = self.central_log_pattern.format(run_id=run_id)
@@ -38,7 +39,8 @@ class Ctx:
     run_id: str
     central_log: Path
     cfg: SuiteCfg
-    suite_verbosity: str
+    console_verbosity: str
+    log_verbosity: str
 
     def step_log_path(self, test_name: str) -> Path:
         # Per-test log name must be stable (no timestamp in filename).
@@ -64,7 +66,8 @@ def _make_cfg(
     repo_root: Path,
     config_path: Path,
     cli_runner_verbosity: Optional[str],
-    cli_suite_verbosity: Optional[str],
+    cli_console_verbosity: Optional[str],
+    cli_log_verbosity: Optional[str],
 ) -> SuiteCfg:
     raw = _load_config(repo_root, config_path)
     suite = raw.get("suite", {})
@@ -78,10 +81,15 @@ def _make_cfg(
     if runner_verbosity:
         runner_cmd = runner_cmd + [f"--verbosity={runner_verbosity}"]
 
-    # Badguys suite verbosity (controls console output; logs are always complete)
-    suite_verbosity = _resolve_value(cli_suite_verbosity, suite.get("verbosity"), "normal").strip()
-    if suite_verbosity not in {"debug", "verbose", "normal", "quiet"}:
-        raise SystemExit(f"FAIL: invalid suite verbosity: {suite_verbosity!r}")
+    # BadGuys console verbosity (short flags override this).
+    console_verbosity = _resolve_value(cli_console_verbosity, suite.get("console_verbosity"), "normal").strip()
+    if console_verbosity not in {"debug", "verbose", "normal", "quiet"}:
+        raise SystemExit(f"FAIL: invalid BadGuys console verbosity: {console_verbosity!r}")
+
+    # BadGuys log verbosity (controls central + per-test logs).
+    log_verbosity = _resolve_value(cli_log_verbosity, suite.get("log_verbosity"), "normal").strip()
+    if log_verbosity not in {"debug", "verbose", "normal", "quiet"}:
+        raise SystemExit(f"FAIL: invalid BadGuys log verbosity: {log_verbosity!r}")
 
     patches_dir = repo_root / str(suite.get("patches_dir", "patches"))
     logs_dir = repo_root / str(suite.get("logs_dir", "patches/badguys_logs"))
@@ -101,8 +109,17 @@ def _make_cfg(
         lock_path=lock_path,
         lock_ttl_seconds=lock_ttl_seconds,
         lock_on_conflict=lock_on_conflict,
-        suite_verbosity=suite_verbosity,
+        console_verbosity=console_verbosity,
+        log_verbosity=log_verbosity,
     )
+
+
+_VERBOSITY_ORDER = {"quiet": 0, "normal": 1, "verbose": 2, "debug": 3}
+
+
+def _want(verbosity: str, level: str) -> bool:
+    """Return True if an event at 'level' should be emitted under 'verbosity'."""
+    return _VERBOSITY_ORDER[verbosity] >= _VERBOSITY_ORDER[level]
 
 
 def _ensure_repo_root_in_syspath(repo_root: Path) -> None:
@@ -121,32 +138,32 @@ def _init_logs(cfg: SuiteCfg, run_id: str) -> Path:
 
     central = cfg.central_log_path(run_id)
     central.parent.mkdir(parents=True, exist_ok=True)
-    central.write_text(f"badguys run_id={run_id}\n", encoding="utf-8")
+    central.write_text(f"BadGuys run_id={run_id}\n", encoding="utf-8")
     return central
 
 
-def _log_to_files(ctx: Ctx, *, test_name: Optional[str], text: str) -> None:
-    # Always append to central log.
-    ctx.central_log.parent.mkdir(parents=True, exist_ok=True)
-    with ctx.central_log.open("a", encoding="utf-8") as f:
-        f.write(text)
-
-    # Also append to per-test log if a test is active.
-    if test_name is not None:
-        p = ctx.step_log_path(test_name)
-        p.parent.mkdir(parents=True, exist_ok=True)
-        with p.open("a", encoding="utf-8") as f:
+def _emit(ctx: Ctx, *, level: str, test_name: Optional[str], text: str) -> None:
+    """Emit a single formatted line to central log, per-test log, and/or console."""
+    if _want(ctx.log_verbosity, level):
+        ctx.central_log.parent.mkdir(parents=True, exist_ok=True)
+        with ctx.central_log.open("a", encoding="utf-8") as f:
             f.write(text)
 
-    # Console mirroring based on suite verbosity.
-    if ctx.suite_verbosity in {"verbose", "debug"}:
+        if test_name is not None:
+            p = ctx.step_log_path(test_name)
+            p.parent.mkdir(parents=True, exist_ok=True)
+            with p.open("a", encoding="utf-8") as f:
+                f.write(text)
+
+    if _want(ctx.console_verbosity, level):
         sys.stdout.write(text)
         sys.stdout.flush()
 
 
 def _log_banner(ctx: Ctx, test_name: str, title: str) -> None:
-    _log_to_files(
+    _emit(
         ctx,
+        level="verbose",
         test_name=test_name,
         text=(
             "\n" + "=" * 78 + "\n" + f"{test_name}: {title}\n" + "=" * 78 + "\n"
@@ -154,16 +171,24 @@ def _log_banner(ctx: Ctx, test_name: str, title: str) -> None:
     )
 
 
-def _cleanup_issue_artifacts(repo_root: Path, issue_id: str) -> None:
+def _action(ctx: Ctx, *, test_name: Optional[str], kind: str, phase: str, msg: str) -> None:
+    _emit(ctx, level="verbose", test_name=test_name, text=f"{kind} {phase}: {msg}\n")
+
+
+def _cleanup_issue_artifacts(ctx: Ctx, *, issue_id: str, test_name: Optional[str]) -> None:
     # Contract: after EACH test, the engine must delete:
     # - patches/workspaces/issue_666/
     # - all logs in patches/logs
     # - patches/successful/issue_666*
     # - patches/unsuccessful/issue_666*
+    repo_root = ctx.repo_root
     ws = repo_root / "patches" / "workspaces" / f"issue_{issue_id}"
+    _action(ctx, test_name=test_name, kind="CLEANUP", phase="DO", msg=f"rm -rf {ws}")
     shutil.rmtree(ws, ignore_errors=True)
+    _action(ctx, test_name=test_name, kind="CLEANUP", phase="OK", msg=f"rm -rf {ws}")
 
     logs_dir = repo_root / "patches" / "logs"
+    _action(ctx, test_name=test_name, kind="CLEANUP", phase="DO", msg=f"clear {logs_dir}/*")
     if logs_dir.exists():
         for p in logs_dir.glob("*"):
             if p.is_dir():
@@ -174,10 +199,13 @@ def _cleanup_issue_artifacts(repo_root: Path, issue_id: str) -> None:
                 except FileNotFoundError:
                     pass
 
+    _action(ctx, test_name=test_name, kind="CLEANUP", phase="OK", msg=f"clear {logs_dir}/*")
+
     for pat in (
         str(repo_root / "patches" / "successful" / f"issue_{issue_id}*"),
         str(repo_root / "patches" / "unsuccessful" / f"issue_{issue_id}*"),
     ):
+        _action(ctx, test_name=test_name, kind="CLEANUP", phase="DO", msg=f"rm {pat}")
         for path_str in glob.glob(pat):
             p = Path(path_str)
             if p.is_dir():
@@ -187,6 +215,7 @@ def _cleanup_issue_artifacts(repo_root: Path, issue_id: str) -> None:
                     p.unlink()
                 except FileNotFoundError:
                     pass
+        _action(ctx, test_name=test_name, kind="CLEANUP", phase="OK", msg=f"rm {pat}")
 
 
 def _run_test_plan(test, ctx: Ctx) -> bool:
@@ -195,7 +224,6 @@ def _run_test_plan(test, ctx: Ctx) -> bool:
         ExpectPathExists,
         FuncStep,
         Plan,
-        _format_completed_process,
         _run_cmd,
     )
 
@@ -206,17 +234,31 @@ def _run_test_plan(test, ctx: Ctx) -> bool:
 
     ok = True
 
+    _emit(ctx, level="verbose", test_name=name, text=f"TEST BEGIN {name}\n")
+
     for step in plan_obj.steps:
         if isinstance(step, CmdStep):
             argv = step.argv
             cwd = step.cwd if step.cwd is not None else ctx.repo_root
             _log_banner(ctx, name, "cmd")
             cp = _run_cmd(argv, cwd=cwd)
-            _log_to_files(ctx, test_name=name, text=_format_completed_process(cp))
+
+            # CMD summary is always at least "$ ..." and "rc=..." in verbose+.
+            if _want(ctx.log_verbosity, "verbose") or _want(ctx.console_verbosity, "verbose"):
+                args = cp.args if isinstance(cp.args, list) else [str(cp.args)]
+                _emit(ctx, level="verbose", test_name=name, text="$ " + " ".join(str(a) for a in args) + "\n")
+                _emit(ctx, level="verbose", test_name=name, text=f"rc={cp.returncode}\n")
+
+            # In verbose/debug, include stdout/stderr.
+            if cp.stdout:
+                _emit(ctx, level="verbose", test_name=name, text=cp.stdout.rstrip("\n") + "\n")
+            if cp.stderr:
+                _emit(ctx, level="verbose", test_name=name, text=cp.stderr.rstrip("\n") + "\n")
             if cp.returncode != step.expect_rc:
                 ok = False
-                _log_to_files(
+                _emit(
                     ctx,
+                    level="verbose",
                     test_name=name,
                     text=f"FAIL: returncode={cp.returncode} expected={step.expect_rc}\n",
                 )
@@ -224,21 +266,23 @@ def _run_test_plan(test, ctx: Ctx) -> bool:
             _log_banner(ctx, name, "expect_path_exists")
             if not step.path.exists():
                 ok = False
-                _log_to_files(ctx, test_name=name, text=f"FAIL: missing path: {step.path}\n")
+                _emit(ctx, level="verbose", test_name=name, text=f"FAIL: missing path: {step.path}\n")
             else:
-                _log_to_files(ctx, test_name=name, text=f"OK: path exists: {step.path}\n")
+                _emit(ctx, level="verbose", test_name=name, text=f"OK: path exists: {step.path}\n")
         elif isinstance(step, FuncStep):
             _log_banner(ctx, name, f"func: {step.name}")
             try:
+                _action(ctx, test_name=name, kind="ACTION", phase="DO", msg=step.name)
                 step.fn()
-                _log_to_files(ctx, test_name=name, text="OK: func step completed\n")
+                _action(ctx, test_name=name, kind="ACTION", phase="OK", msg=step.name)
             except Exception:
                 ok = False
                 tb = traceback.format_exc()
-                _log_to_files(ctx, test_name=name, text="FAIL: func step raised\n" + tb + "\n")
+                _action(ctx, test_name=name, kind="ACTION", phase="FAIL", msg=step.name)
+                _emit(ctx, level="verbose", test_name=name, text="FAIL: func step raised\n" + tb + "\n")
         else:
             ok = False
-            _log_to_files(ctx, test_name=name, text=f"FAIL: unknown step type: {type(step).__name__}\n")
+            _emit(ctx, level="verbose", test_name=name, text=f"FAIL: unknown step type: {type(step).__name__}\n")
 
     # Cleanup any per-test temp files provided by the plan.
     for p in plan_obj.cleanup_paths:
@@ -250,6 +294,7 @@ def _run_test_plan(test, ctx: Ctx) -> bool:
         except FileNotFoundError:
             pass
 
+    _emit(ctx, level="verbose", test_name=name, text=f"TEST END {name} {'PASS' if ok else 'FAIL'}\n")
     return ok
 
 
@@ -263,11 +308,16 @@ def main(argv: list[str]) -> int:
         choices=["debug", "verbose", "normal", "quiet"],
         help="Override runner verbosity (passed as --verbosity=<mode>)",
     )
+    vg = ap.add_mutually_exclusive_group()
+    vg.add_argument("-q", dest="console_verbosity", action="store_const", const="quiet")
+    vg.add_argument("-n", dest="console_verbosity", action="store_const", const="normal")
+    vg.add_argument("-v", dest="console_verbosity", action="store_const", const="verbose")
+    vg.add_argument("-d", dest="console_verbosity", action="store_const", const="debug")
     ap.add_argument(
-        "--verbosity",
+        "--log-verbosity",
         default=None,
         choices=["debug", "verbose", "normal", "quiet"],
-        help="Badguys suite verbosity (CLI overrides cfg; cfg overrides defaults)",
+        help="BadGuys log verbosity (central + per-test logs)",
     )
     ap.add_argument("--include", action="append", default=[], help="Run only named tests (repeatable)")
     ap.add_argument("--exclude", action="append", default=[], help="Skip named tests (repeatable)")
@@ -277,11 +327,11 @@ def main(argv: list[str]) -> int:
     repo_root = Path(__file__).resolve().parents[1]
     _ensure_repo_root_in_syspath(repo_root)
 
-    cfg = _make_cfg(repo_root, Path(args.config), args.runner_verbosity, args.verbosity)
+    cfg = _make_cfg(repo_root, Path(args.config), args.runner_verbosity, args.console_verbosity, args.log_verbosity)
     run_id = time.strftime("%Y%m%d_%H%M%S")
 
     from badguys.tests import discover_tests
-    from badguys._util import acquire_lock, fail_commit_limit, print_result, release_lock
+    from badguys._util import acquire_lock, fail_commit_limit, format_result_line, release_lock
 
     acquire_lock(
         repo_root,
@@ -289,9 +339,6 @@ def main(argv: list[str]) -> int:
         ttl_seconds=cfg.lock_ttl_seconds,
         on_conflict=cfg.lock_on_conflict,
     )
-
-    if cfg.suite_verbosity == "quiet":
-        print(f"badguys: running tests (count=unknown) ...")
 
     try:
         central_log = _init_logs(cfg, run_id)
@@ -315,15 +362,20 @@ def main(argv: list[str]) -> int:
             run_id=run_id,
             central_log=central_log,
             cfg=cfg,
-            suite_verbosity=cfg.suite_verbosity,
+            console_verbosity=cfg.console_verbosity,
+            log_verbosity=cfg.log_verbosity,
         )
-        if ctx.suite_verbosity == "debug":
-            _log_to_files(
+        _emit(ctx, level="quiet", test_name=None, text="BadGuys start\n")
+
+        if ctx.console_verbosity == "debug" or ctx.log_verbosity == "debug":
+            _emit(
                 ctx,
+                level="debug",
                 test_name=None,
                 text=(
                     f"debug: config_path={args.config}\n"
-                    f"debug: suite_verbosity={cfg.suite_verbosity}\n"
+                    f"debug: console_verbosity={cfg.console_verbosity}\n"
+                    f"debug: log_verbosity={cfg.log_verbosity}\n"
                     f"debug: runner_cmd={' '.join(cfg.runner_cmd)}\n"
                     f"debug: issue_id={cfg.issue_id}\n"
                 ),
@@ -337,24 +389,28 @@ def main(argv: list[str]) -> int:
         ok_all = True
         for idx, t in enumerate(tests):
             # Enforce deterministic isolation contract.
-            _cleanup_issue_artifacts(repo_root, cfg.issue_id)
+            _cleanup_issue_artifacts(ctx, issue_id=cfg.issue_id, test_name=getattr(t, "name", None))
 
             ok = False
             try:
                 ok = _run_test_plan(t, ctx)
             finally:
-                _cleanup_issue_artifacts(repo_root, cfg.issue_id)
+                _cleanup_issue_artifacts(ctx, issue_id=cfg.issue_id, test_name=getattr(t, "name", None))
 
-            if ctx.suite_verbosity == "normal":
-                print_result(t.name, ok)
+            if ctx.console_verbosity in {"normal", "verbose", "debug"} or ctx.log_verbosity in {"normal", "verbose", "debug"}:
+                _emit(ctx, level="normal", test_name=t.name, text=format_result_line(t.name, ok))
             if not ok:
                 ok_all = False
                 if idx == 0 and bool(getattr(tests, "abort_on_guard_fail", False)):
                     break
 
-        if ctx.suite_verbosity == "quiet":
-            status = "OK" if ok_all else "FAIL"
-            print(f"badguys: suite result: {status}")
+        # Summary for quiet and normal+.
+        passed = 0
+        failed = 0
+        # We don't keep per-test state here; compute from ok_all only.
+        # Summary is minimal by contract.
+        status = "OK" if ok_all else "FAIL"
+        _emit(ctx, level="quiet", test_name=None, text=f"BadGuys summary: {status}\n")
 
         return 0 if ok_all else 1
     finally:

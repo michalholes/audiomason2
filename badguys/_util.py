@@ -177,9 +177,28 @@ def release_lock(repo_root: Path, *, path: Optional[Path] = None) -> None:
         pass
 
 
+def format_result_line(test_name: str, ok: bool) -> str:
+    # Pytest-like status words.
+    status = "PASSED" if ok else "FAILED"
+
+    # Color scheme aligned with pytest defaults:
+    # - PASSED: green
+    # - FAILED: red
+    if os.environ.get("NO_COLOR"):
+        colored = status
+    else:
+        if ok:
+            colored = f"\x1b[32m{status}\x1b[0m"
+        else:
+            colored = f"\x1b[31m{status}\x1b[0m"
+
+    return f"{test_name} ... {colored}\n"
+
+
 def print_result(test_name: str, ok: bool) -> None:
-    status = "OK" if ok else "FAIL"
-    print(f"badguys::{test_name} ... {status}")
+    # Convenience wrapper used by some callers.
+    sys.stdout.write(format_result_line(test_name, ok))
+    sys.stdout.flush()
 
 
 def fail_commit_limit(central_log: Path, commit_limit: int, commit_tests: Sequence[object]) -> None:

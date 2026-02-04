@@ -9,6 +9,14 @@ runner_cmd = ["python3", "scripts/am_patch.py"]
 # Allowed: "debug", "verbose", "normal", "quiet".
 runner_verbosity = "verbose"
 
+# BadGuys console verbosity (short flags -q/-n/-v/-d override this).
+# Allowed: "debug", "verbose", "normal", "quiet".
+console_verbosity = "normal"
+
+# BadGuys log verbosity (controls central + per-test logs).
+# Allowed: "debug", "verbose", "normal", "quiet".
+log_verbosity = "normal"
+
 # Repo-relative directories.
 patches_dir = "patches"
 logs_dir = "patches/badguys_logs"
