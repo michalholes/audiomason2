@@ -15,7 +15,7 @@ console_verbosity = "normal"
 
 # BadGuys log verbosity (controls central + per-test logs).
 # Allowed: "debug", "verbose", "normal", "quiet".
-log_verbosity = "normal"
+log_verbosity = "debug"
 
 # Repo-relative directories.
 patches_dir = "patches"
