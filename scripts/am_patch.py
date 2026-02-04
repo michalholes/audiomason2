@@ -444,7 +444,46 @@ def main(argv: list[str]) -> int:
         logger.line(f"gate_badguys=DO ({reason})")
         stage = "GATE_BADGUYS"
         _gate_progress(f"DO:{stage}")
-        ok = run_badguys(logger, cwd=cwd, repo_root=repo_root)
+        # When running badguys from the live repo root (repo_root), badguys will
+        # spawn nested am_patch runs. Those nested runs must not fight with this
+        # parent runner's lock. Also, in workspace mode, we must test the patched
+        # runner (workspace repo) instead of the live tree.
+        #
+        # Strategy:
+        # - If badguys are invoked in a workspace repo (cwd != repo_root), run them
+        #   directly there (they will naturally test the patched runner).
+        # - If badguys are invoked in the live repo root (cwd == repo_root), clone
+        #   the live repo into an isolated workspace subdir and run badguys there.
+        #   This tests the current live state while avoiding lock conflicts.
+        run_cwd = cwd
+        isolated_repo: Path | None = None
+        if cwd.resolve() == repo_root.resolve():
+            tag = f"{cli.mode}_{cli.issue_id or 'noissue'}"
+            isolated_repo = paths.workspaces_dir / "_badguys_gate" / tag
+            # Deterministic: always recreate.
+            if isolated_repo.exists():
+                shutil.rmtree(isolated_repo)
+            isolated_repo.parent.mkdir(parents=True, exist_ok=True)
+            logger.line(f"gate_badguys_repo=CLONE {repo_root} -> {isolated_repo}")
+            r = logger.run_logged(
+                ["git", "clone", "--no-hardlinks", str(repo_root), str(isolated_repo)],
+                cwd=paths.workspaces_dir,
+            )
+            if r.returncode != 0:
+                raise RunnerError("GATES", "GATES", "badguys clone failed")
+            run_cwd = isolated_repo
+        else:
+            logger.line(f"gate_badguys_repo=CWD {cwd}")
+
+        ok = False
+        try:
+            ok = run_badguys(logger, cwd=run_cwd, repo_root=repo_root)
+        finally:
+            if isolated_repo is not None:
+                if ok:
+                    shutil.rmtree(isolated_repo, ignore_errors=True)
+                else:
+                    logger.line(f"gate_badguys_repo_kept={isolated_repo}")
         _gate_progress(f"OK:{stage}" if ok else f"FAIL:{stage}")
         if not ok:
             raise RunnerError("GATES", "GATES", "gate failed: badguys")
