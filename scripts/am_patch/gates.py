@@ -25,6 +25,14 @@ def _venv_python(repo_root: Path) -> Path:
     return repo_root / ".venv" / "bin" / "python"
 
 
+def _infer_venv_root(python_exe: str) -> Path | None:
+    p = Path(python_exe)
+    # Detect the common layout: <repo>/.venv/bin/python
+    if p.name == "python" and p.parent.name == "bin" and p.parent.parent.name == ".venv":
+        return p.parent.parent
+    return None
+
+
 def _cmd_py(module: str, *, python: str) -> list[str]:
     return [python, "-m", module]
 
@@ -103,15 +111,29 @@ def run_pytest(
 ) -> bool:
     targets = _norm_targets(targets, ["tests"])
 
-    # IMPORTANT: pytest may need dependencies that exist only inside repo_root/.venv.
-    # When pytest_use_venv=true, always use repo_root/.venv/bin/python explicitly.
+    # IMPORTANT: pytest may need dependencies that exist only inside a venv.
+    # Preferred: use repo_root/.venv/bin/python when it exists.
+    # Fallback: if the workspace/clone repo has no .venv, but this runner itself is
+    # already executing from a venv (sys.executable), use sys.executable.
+    venv_root: Path | None = None
     if pytest_use_venv:
         vpy = _venv_python(repo_root)
-        if not vpy.exists():
-            raise RunnerError(
-                "GATES", "PYTEST_VENV", f"pytest_use_venv=true but venv python not found: {vpy}"
-            )
-        py = str(vpy)
+        if vpy.exists():
+            py = str(vpy)
+            venv_root = repo_root / ".venv"
+        else:
+            venv_root = _infer_venv_root(sys.executable)
+            if venv_root is None or not Path(sys.executable).exists():
+                msg = (
+                    f"pytest_use_venv=true but venv python not found: {vpy} "
+                    "(and no usable venv in sys.executable)"
+                )
+                raise RunnerError(
+                    "GATES",
+                    "PYTEST_VENV",
+                    msg,
+                )
+            py = sys.executable
     else:
         py = sys.executable
 
@@ -121,10 +143,9 @@ def run_pytest(
     logger.line(f"pytest_python={py}")
     env = dict(os.environ)
     env["AM_PATCH_PYTEST_GATE"] = "1"
-    if pytest_use_venv:
+    if pytest_use_venv and venv_root is not None:
         # Ensure subprocesses spawned by tests can resolve `audiomason`.
         # This is done by prefixing PATH with the venv bin dir.
-        venv_root = repo_root / ".venv"
         venv_bin = venv_root / "bin"
         old_path = env.get("PATH", "")
         env["PATH"] = f"{venv_bin}:{old_path}" if old_path else str(venv_bin)
@@ -143,6 +164,16 @@ def run_badguys(
     logger.line(f"badguys_python={sys.executable}")
     env = dict(os.environ)
     env["AM_PATCH_BADGUYS_GATE"] = "1"
+    # Ensure BadGuys uses the same Python as the runner for nested am_patch invocations.
+    env["AM_PATCH_BADGUYS_RUNNER_PYTHON"] = sys.executable
+    # If we are running from a venv, propagate PATH/VIRTUAL_ENV so nested processes
+    # can find the same toolchain even inside workspace/clone repos.
+    venv_root = _infer_venv_root(sys.executable)
+    if venv_root is not None:
+        venv_bin = venv_root / "bin"
+        old_path = env.get("PATH", "")
+        env["PATH"] = f"{venv_bin}:{old_path}" if old_path else str(venv_bin)
+        env["VIRTUAL_ENV"] = str(venv_root)
     cmd = [sys.executable, "-u", "badguys/badguys.py", "-q"]
     r = logger.run_logged(cmd, cwd=cwd, env=env)
     return r.returncode == 0

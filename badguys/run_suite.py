@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import glob
 import shutil
 import subprocess
@@ -76,6 +77,15 @@ def _make_cfg(
 
     issue_id = str(suite.get("issue_id", "666"))
     runner_cmd = [str(x) for x in suite.get("runner_cmd", ["python3", "scripts/am_patch.py"])]
+
+    # When BadGuys is invoked as an am_patch gate, the runner may be executing inside a
+    # venv that is not present inside a workspace/clone repo. Allow am_patch to override
+    # the Python executable used for nested runner invocations.
+    env_py = os.environ.get("AM_PATCH_BADGUYS_RUNNER_PYTHON")
+    if env_py and runner_cmd:
+        head = str(runner_cmd[0])
+        if head in {"python", "python3", "/usr/bin/python3", "/usr/bin/python"} or head.endswith("/python3") or head.endswith("/python"):
+            runner_cmd[0] = str(env_py)
 
     # Runner verbosity (passed through to am_patch via --verbosity=<mode>)
     runner_verbosity = _resolve_value(cli_runner_verbosity, suite.get("runner_verbosity"), "quiet").strip()
