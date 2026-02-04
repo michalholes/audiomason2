@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import glob
 import shutil
+import subprocess
 import sys
 import time
 import traceback
@@ -160,6 +161,66 @@ def _emit(ctx: Ctx, *, level: str, test_name: Optional[str], text: str) -> None:
         sys.stdout.flush()
 
 
+
+
+def _want_heartbeat(ctx: Ctx) -> bool:
+    # Heartbeat is console-only and must be disabled in quiet.
+    return ctx.console_verbosity in {"normal", "verbose", "debug"}
+
+
+def _emit_heartbeat(ctx: Ctx, *, test_name: str, started: float, last_msg: Optional[str]) -> str:
+    elapsed = int(time.monotonic() - started)
+    mm, ss = divmod(elapsed, 60)
+    msg = f"STATUS: BadGuys {test_name}  ELAPSED: {mm:02d}:{ss:02d}"
+    out = msg
+    # Overwrite in TTY, otherwise emit standalone heartbeat lines.
+    if sys.stderr.isatty():
+        pad = ""
+        if last_msg is not None and len(last_msg) > len(msg):
+            pad = " " * (len(last_msg) - len(msg))
+        sys.stderr.write("\r" + msg + pad)
+        sys.stderr.flush()
+    else:
+        sys.stderr.write("HEARTBEAT: " + msg + "\n")
+        sys.stderr.flush()
+    return out
+
+
+def _clear_heartbeat(ctx: Ctx, last_msg: Optional[str]) -> None:
+    if not sys.stderr.isatty():
+        return
+    if last_msg is None:
+        return
+    sys.stderr.write("\r" + (" " * len(last_msg)) + "\r")
+    sys.stderr.flush()
+
+
+def _run_cmd_with_heartbeat(ctx: Ctx, *, test_name: str, argv: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
+    started = time.monotonic()
+    last_msg: Optional[str] = None
+    hb_interval = 5.0
+
+    proc = subprocess.Popen(
+        argv,
+        cwd=str(cwd),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        while True:
+            try:
+                stdout, stderr = proc.communicate(timeout=hb_interval)
+                rc = proc.returncode
+                break
+            except subprocess.TimeoutExpired:
+                if _want_heartbeat(ctx):
+                    last_msg = _emit_heartbeat(ctx, test_name=test_name, started=started, last_msg=last_msg)
+                continue
+    finally:
+        _clear_heartbeat(ctx, last_msg)
+
+    return subprocess.CompletedProcess(args=argv, returncode=int(rc), stdout=stdout, stderr=stderr)
 def _log_banner(ctx: Ctx, test_name: str, title: str) -> None:
     _emit(
         ctx,
@@ -224,7 +285,6 @@ def _run_test_plan(test, ctx: Ctx) -> bool:
         ExpectPathExists,
         FuncStep,
         Plan,
-        _run_cmd,
     )
 
     name = getattr(test, "name", "(unknown)")
@@ -241,7 +301,7 @@ def _run_test_plan(test, ctx: Ctx) -> bool:
             argv = step.argv
             cwd = step.cwd if step.cwd is not None else ctx.repo_root
             _log_banner(ctx, name, "cmd")
-            cp = _run_cmd(argv, cwd=cwd)
+            cp = _run_cmd_with_heartbeat(ctx, test_name=name, argv=list(argv), cwd=cwd)
 
             # CMD summary is always at least "$ ..." and "rc=..." in verbose+.
             if _want(ctx.log_verbosity, "verbose") or _want(ctx.console_verbosity, "verbose"):
