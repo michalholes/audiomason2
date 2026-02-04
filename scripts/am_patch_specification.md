@@ -238,7 +238,8 @@ Semantics:
 
 ### 6.1.2 BADGUYS gate (runner-only)
 - Purpose: protect the runner itself by running the badguys suite when the runner is modified.
-- Command: `badguys/badguys.py -q`
+- Default command argv: `["badguys/badguys.py", "-q"]`
+- Execution: the runner invokes: `python -u <argv...>` (no shell).
 - Success criteria: exit code == 0
 - Controls (precedence: CLI > config > defaults):
   - `gate_badguys_runner = "auto" | "on" | "off"` (default: `"auto"`)
@@ -248,7 +249,18 @@ Semantics:
       - `scripts/am_patch*.md` (runner docs)
     - `on`: always run
     - `off`: never run
-  - CLI: `--gate-badguys-runner {auto,on,off}`
+  - `gate_badguys_command = list[str] | str` (default: `["badguys/badguys.py", "-q"]`)
+    - If a string is used (cfg or CLI), it is parsed using shell-like splitting (shlex).
+    - The value must be non-empty and is treated as argv without the python prefix.
+  - `gate_badguys_cwd = "auto" | "workspace" | "clone" | "live"` (default: `"auto"`)
+    - `workspace`: run in the current workspace repo (tests the patched runner).
+    - `clone`: if invoked from live repo, clone live repo into an isolated workspace dir and run there.
+    - `live`: run in live repo root (debug; may conflict with runner lock when nested am_patch is spawned).
+    - `auto`: if invoked from a workspace repo, use it; otherwise use clone to avoid lock conflicts.
+  - CLI:
+    - `--gate-badguys-runner {auto,on,off}`
+    - `--gate-badguys-command "badguys/badguys.py -q"`
+    - `--gate-badguys-cwd {auto,workspace,clone,live}`
 
 Execution points:
 - workspace mode: after workspace gates, and again after promotion (before commit/push) if the runner was touched

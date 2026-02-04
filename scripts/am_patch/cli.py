@@ -79,6 +79,8 @@ class CliArgs:
 
     gate_badguys_runner: str | None
 
+    gate_badguys_command: str | None
+    gate_badguys_cwd: str | None
     overrides: list[str] | None
     require_push_success: bool | None
     allow_outside_files: bool | None
@@ -508,6 +510,23 @@ def parse_args(argv: list[str]) -> CliArgs:
     )
 
     p.add_argument(
+        "--gate-badguys-command",
+        dest="gate_badguys_command",
+        default=None,
+        help=(
+            "BADGUYS gate command (argv string; parsed like shell). "
+            "Default: 'badguys/badguys.py -q'."
+        ),
+    )
+    p.add_argument(
+        "--gate-badguys-cwd",
+        dest="gate_badguys_cwd",
+        choices=["auto", "workspace", "clone", "live"],
+        default=None,
+        help="Where to run BADGUYS gate: auto|workspace|clone|live.",
+    )
+
+    p.add_argument(
         "--post-success-audit",
         dest="post_success_audit",
         action=argparse.BooleanOptionalAction,
@@ -572,6 +591,8 @@ def parse_args(argv: list[str]) -> CliArgs:
             ruff_format=ns.ruff_format,
             pytest_use_venv=ns.pytest_use_venv,
             gate_badguys_runner=getattr(ns, "gate_badguys_runner", None),
+            gate_badguys_command=getattr(ns, "gate_badguys_command", None),
+            gate_badguys_cwd=getattr(ns, "gate_badguys_cwd", None),
             overrides=ns.overrides,
             require_push_success=ns.require_push_success,
             allow_outside_files=ns.allow_outside_files,
@@ -647,6 +668,8 @@ def parse_args(argv: list[str]) -> CliArgs:
         ruff_format=ns.ruff_format,
         pytest_use_venv=ns.pytest_use_venv,
         gate_badguys_runner=ns.gate_badguys_runner,
+        gate_badguys_command=getattr(ns, "gate_badguys_command", None),
+        gate_badguys_cwd=getattr(ns, "gate_badguys_cwd", None),
         overrides=ns.overrides,
         require_push_success=ns.require_push_success,
         allow_outside_files=ns.allow_outside_files,

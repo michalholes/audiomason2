@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import shlex
 import shutil
 import sys
 from contextlib import suppress
@@ -455,29 +456,50 @@ def main(argv: list[str]) -> int:
         # - If badguys are invoked in the live repo root (cwd == repo_root), clone
         #   the live repo into an isolated workspace subdir and run badguys there.
         #   This tests the current live state while avoiding lock conflicts.
+        # badguys command/cwd are controllable via cfg and CLI.
+        raw_cmd = getattr(policy, "gate_badguys_command", None)
+        command: list[str]
+        if raw_cmd is None:
+            command = ["badguys/badguys.py", "-q"]
+        elif isinstance(raw_cmd, str):
+            command = shlex.split(raw_cmd)
+        else:
+            command = [str(x) for x in raw_cmd]
+        if not command:
+            command = ["badguys/badguys.py", "-q"]
+
+        cwd_mode = str(getattr(policy, "gate_badguys_cwd", "auto") or "auto").strip().lower()
+        if cwd_mode not in ("auto", "workspace", "clone", "live"):
+            cwd_mode = "auto"
+        logger.line(f"gate_badguys_cwd={cwd_mode}")
+
         run_cwd = cwd
         isolated_repo: Path | None = None
-        if cwd.resolve() == repo_root.resolve():
+        if cwd_mode == "clone" or (cwd_mode == "auto" and cwd.resolve() == repo_root.resolve()):
             tag = f"{cli.mode}_{cli.issue_id or 'noissue'}"
             isolated_repo = paths.workspaces_dir / "_badguys_gate" / tag
             # Deterministic: always recreate.
             if isolated_repo.exists():
                 shutil.rmtree(isolated_repo)
             isolated_repo.parent.mkdir(parents=True, exist_ok=True)
-            logger.line(f"gate_badguys_repo=CLONE {repo_root} -> {isolated_repo}")
+            src_repo = repo_root if cwd.resolve() == repo_root.resolve() else cwd
+            logger.line(f"gate_badguys_repo=CLONE {src_repo} -> {isolated_repo}")
             r = logger.run_logged(
-                ["git", "clone", "--no-hardlinks", str(repo_root), str(isolated_repo)],
+                ["git", "clone", "--no-hardlinks", str(src_repo), str(isolated_repo)],
                 cwd=paths.workspaces_dir,
             )
             if r.returncode != 0:
                 raise RunnerError("GATES", "GATES", "badguys clone failed")
             run_cwd = isolated_repo
+        elif cwd_mode == "live":
+            run_cwd = repo_root
+            logger.line(f"gate_badguys_repo=LIVE {repo_root}")
         else:
             logger.line(f"gate_badguys_repo=CWD {cwd}")
 
         ok = False
         try:
-            ok = run_badguys(logger, cwd=run_cwd, repo_root=repo_root)
+            ok = run_badguys(logger, cwd=run_cwd, repo_root=repo_root, command=command)
         finally:
             if isolated_repo is not None:
                 if ok:

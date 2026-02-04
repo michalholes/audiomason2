@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import shlex
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -78,6 +79,11 @@ class Policy:
     # - off: never run
     gate_badguys_runner: str = "auto"
 
+    # BADGUYS gate command (argv without python prefix). Default: badguys/badguys.py -q
+    gate_badguys_command: list[str] = field(default_factory=lambda: ["badguys/badguys.py", "-q"])
+
+    # Where to run the BADGUYS gate. auto|workspace|clone|live
+    gate_badguys_cwd: str = "auto"
     ruff_targets: list[str] = field(default_factory=lambda: ["src", "tests"])
     pytest_targets: list[str] = field(default_factory=lambda: ["tests"])
     mypy_targets: list[str] = field(default_factory=lambda: ["src"])
@@ -314,6 +320,38 @@ def build_policy(defaults: Policy, cfg: dict[str, Any]) -> Policy:
             "INVALID",
             f"invalid gate_badguys_runner={p.gate_badguys_runner!r}; allowed: auto|on|off",
         )
+
+    # gate_badguys_command: argv list without python prefix
+    if "gate_badguys_command" in cfg:
+        raw_cmd = cfg["gate_badguys_command"]
+        if isinstance(raw_cmd, str):
+            cmd_list = shlex.split(raw_cmd)
+        elif isinstance(raw_cmd, list) and all(isinstance(x, str) for x in raw_cmd):
+            cmd_list = raw_cmd
+        else:
+            raise RunnerError(
+                "CONFIG",
+                "INVALID",
+                "gate_badguys_command must be a string or list[str]",
+            )
+        if not cmd_list:
+            raise RunnerError("CONFIG", "INVALID", "gate_badguys_command must be non-empty")
+        p.gate_badguys_command = cmd_list
+        _mark_cfg(p, cfg, "gate_badguys_command")
+
+    # gate_badguys_cwd: auto|workspace|clone|live
+    if "gate_badguys_cwd" in cfg:
+        p.gate_badguys_cwd = str(cfg["gate_badguys_cwd"]).strip().lower()
+        _mark_cfg(p, cfg, "gate_badguys_cwd")
+        if p.gate_badguys_cwd not in ("auto", "workspace", "clone", "live"):
+            raise RunnerError(
+                "CONFIG",
+                "INVALID",
+                (
+                    f"invalid gate_badguys_cwd={p.gate_badguys_cwd!r}; "
+                    "allowed: auto|workspace|clone|live"
+                ),
+            )
 
     p.compile_targets = _as_list_str(cfg, "compile_targets", p.compile_targets)
     _mark_cfg(p, cfg, "compile_targets")

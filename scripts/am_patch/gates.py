@@ -159,6 +159,7 @@ def run_badguys(
     cwd: Path,
     *,
     repo_root: Path,
+    command: list[str],
 ) -> bool:
     logger.section("GATE: BADGUYS")
     logger.line(f"badguys_python={sys.executable}")
@@ -174,7 +175,8 @@ def run_badguys(
         old_path = env.get("PATH", "")
         env["PATH"] = f"{venv_bin}:{old_path}" if old_path else str(venv_bin)
         env["VIRTUAL_ENV"] = str(venv_root)
-    cmd = [sys.executable, "-u", "badguys/badguys.py", "-q"]
+    logger.line(f"badguys_cmd={command}")
+    cmd = [sys.executable, "-u", *command]
     r = logger.run_logged(cmd, cwd=cwd, env=env)
     return r.returncode == 0
 

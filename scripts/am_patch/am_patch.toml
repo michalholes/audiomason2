@@ -34,6 +34,8 @@ pytest_use_venv = true
 gates_skip_ruff = false
 gates_skip_mypy = false
 gate_badguys_runner = "auto"
+gate_badguys_command = ["badguys/badguys.py", "-q"]
+gate_badguys_cwd = "auto"
 
 [promotion]
 mode = "copy_files"
