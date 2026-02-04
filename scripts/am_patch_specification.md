@@ -236,6 +236,25 @@ Semantics:
   - `--override compile_targets=...` and `--override compile_exclude=...` follow the same list format as `ruff_targets`.
 - Failure behavior is identical to other gates: the run fails with `GATE:COMPILE`, `patched.zip` is produced, and `patched_success.zip` is not.
 
+### 6.1.2 BADGUYS gate (runner-only)
+- Purpose: protect the runner itself by running the badguys suite when the runner is modified.
+- Command: `badguys/badguys.py -q`
+- Success criteria: exit code == 0
+- Controls (precedence: CLI > config > defaults):
+  - `gate_badguys_runner = "auto" | "on" | "off"` (default: `"auto"`)
+    - `auto`: run only when the current run touches runner files:
+      - `scripts/am_patch.py`
+      - `scripts/am_patch/**`
+      - `scripts/am_patch*.md` (runner docs)
+    - `on`: always run
+    - `off`: never run
+  - CLI: `--gate-badguys-runner {auto,on,off}`
+
+Execution points:
+- workspace mode: after workspace gates, and again after promotion (before commit/push) if the runner was touched
+- finalize-workspace: after workspace gates and after live gates
+- finalize: after live gates
+
 ### 6.2 Enforcement
 - Without `-g`: any failing gate stops progression.
 - With `-g`: failures are logged but execution continues.

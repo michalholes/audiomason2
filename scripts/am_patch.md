@@ -296,3 +296,6 @@ creates a git-archive success zip in `patches/`. The filename is configurable vi
 `success_archive_name` / `--success-archive-name` (default `{repo}-{branch}.zip`, e.g. `audiomason2-main.zip`).
 It contains only git-tracked files and does not include logs, workspaces, caches, or patch inputs.
 
+
+
+- --gate-badguys-runner {auto,on,off}: runner-only badguys gate (default auto)

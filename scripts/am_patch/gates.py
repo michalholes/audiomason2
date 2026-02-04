@@ -133,6 +133,21 @@ def run_pytest(
     return r.returncode == 0
 
 
+def run_badguys(
+    logger: Logger,
+    cwd: Path,
+    *,
+    repo_root: Path,
+) -> bool:
+    logger.section("GATE: BADGUYS")
+    logger.line(f"badguys_python={sys.executable}")
+    env = dict(os.environ)
+    env["AM_PATCH_BADGUYS_GATE"] = "1"
+    cmd = [sys.executable, "-u", "badguys/badguys.py", "-q"]
+    r = logger.run_logged(cmd, cwd=cwd, env=env)
+    return r.returncode == 0
+
+
 def run_mypy(logger: Logger, cwd: Path, *, repo_root: Path, targets: list[str]) -> bool:
     targets = _norm_targets(targets, ["src"])
     py = _select_python_for_gate(repo_root=repo_root, gate="mypy", pytest_use_venv=False)

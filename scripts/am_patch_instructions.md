@@ -62,6 +62,10 @@ Notes:
   - pytest passes,
   - mypy passes.
 
+Runner-only gate:
+- When patching the runner (scripts/am_patch.py, scripts/am_patch/**), an extra gate may run: badguys/badguys.py -q.
+- Control via config/CLI: gate_badguys_runner=auto|on|off; CLI: --gate-badguys-runner {auto,on,off}.
+
 The chat must not claim success without evidence.
 The runner is the authority.
 

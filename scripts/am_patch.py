@@ -33,6 +33,7 @@ if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 
 from am_patch import git_ops
+from am_patch.archive import archive_patch, make_failure_zip
 from am_patch.audit_rubric_check import check_audit_rubric_coverage
 from am_patch.cli import parse_args
 from am_patch.config import (
@@ -43,13 +44,16 @@ from am_patch.config import (
     policy_for_log,
 )
 from am_patch.errors import RunnerError, fingerprint
+from am_patch.gates import run_badguys, run_gates
 from am_patch.lock import FileLock
 from am_patch.log import Logger, new_log_file
 from am_patch.manifest import load_files
 from am_patch.patch_exec import precheck_patch_script, run_patch, run_unified_patch_bundle
 from am_patch.patch_select import PatchSelectError, choose_default_patch_input, decide_unified_mode
 from am_patch.paths import default_paths, ensure_dirs
+from am_patch.promote import promote_files
 from am_patch.scope import blessed_gate_outputs_in, changed_paths, enforce_scope_delta
+from am_patch.state import load_state, save_state, update_union
 from am_patch.status import StatusReporter
 from am_patch.version import RUNNER_VERSION
 from am_patch.workspace import (
@@ -119,12 +123,6 @@ def _run_post_success_audit(logger: Logger, repo_root: Path, policy: Policy) -> 
     r = logger.run_logged([sys.executable, "-u", "audit/audit_report.py"], cwd=repo_root)
     if r.returncode != 0:
         raise RunnerError("AUDIT", "AUDIT_REPORT_FAILED", "audit/audit_report.py failed")
-
-
-from am_patch.archive import archive_patch, make_failure_zip
-from am_patch.gates import run_gates
-from am_patch.promote import promote_files
-from am_patch.state import load_state, save_state, update_union
 
 
 def _resolve_repo_root() -> Path:
@@ -406,6 +404,51 @@ def main(argv: list[str]) -> int:
         if kind in ("DO", "OK", "FAIL"):
             _screen_line(f"{kind}: {stage}")
 
+    def _is_runner_path(rel: str) -> bool:
+        p = (rel or "").strip().replace("\\", "/").lstrip("/")
+        if not p:
+            return False
+        return (
+            p == "scripts/am_patch.py"
+            or p.startswith("scripts/am_patch/")
+            or p
+            in (
+                "scripts/am_patch.md",
+                "scripts/am_patch_specification.md",
+                "scripts/am_patch_instructions.md",
+            )
+        )
+
+    def _runner_touched(paths: list[str]) -> bool:
+        return any(_is_runner_path(p) for p in paths)
+
+    def _maybe_run_badguys(
+        *,
+        cwd: Path,
+        decision_paths: list[str],
+    ) -> None:
+        mode = str(getattr(policy, "gate_badguys_runner", "auto") or "auto").strip().lower()
+        if mode not in ("auto", "on", "off"):
+            mode = "auto"
+
+        if mode == "off":
+            logger.line("gate_badguys=SKIP (disabled_by_policy)")
+            return
+
+        if mode == "auto" and not _runner_touched(decision_paths):
+            logger.line("gate_badguys=SKIP (runner_not_touched)")
+            return
+
+        # mode == "on" OR (auto and runner_touched)
+        reason = "forced_on" if mode == "on" else "runner_touched"
+        logger.line(f"gate_badguys=DO ({reason})")
+        stage = "GATE_BADGUYS"
+        _gate_progress(f"DO:{stage}")
+        ok = run_badguys(logger, cwd=cwd, repo_root=repo_root)
+        _gate_progress(f"OK:{stage}" if ok else f"FAIL:{stage}")
+        if not ok:
+            raise RunnerError("GATES", "GATES", "gate failed: badguys")
+
     if verbosity == "normal":
         _screen_line(f"RUN: issue={cli.issue_id or 'unknown'} mode={cli.mode} verbosity=normal")
         _screen_line(f"LOG: {log_path}")
@@ -463,6 +506,8 @@ def main(argv: list[str]) -> int:
 
             # Gates in workspace first.
 
+            decision_paths_ws = changed_paths(logger, ws.repo)
+
             run_gates(
                 logger,
                 cwd=ws.repo,
@@ -485,6 +530,8 @@ def main(argv: list[str]) -> int:
                 progress=_gate_progress,
             )
 
+            _maybe_run_badguys(cwd=ws.repo, decision_paths=decision_paths_ws)
+
             changed_all = changed_paths(logger, ws.repo)
             promote_list, ignored = _fs_junk_ignore_partition(changed_all)
             logger.section("PROMOTION PLAN")
@@ -505,6 +552,7 @@ def main(argv: list[str]) -> int:
             )
 
             # Gates in live repo.
+            decision_paths_live = list(promote_list)
             run_gates(
                 logger,
                 cwd=repo_root,
@@ -526,6 +574,10 @@ def main(argv: list[str]) -> int:
                 pytest_use_venv=policy.pytest_use_venv,
                 progress=_gate_progress,
             )
+
+            sha: str | None = None
+
+            _maybe_run_badguys(cwd=repo_root, decision_paths=decision_paths_live)
 
             sha: str | None = None
             push_ok: bool | None = None
@@ -580,6 +632,8 @@ def main(argv: list[str]) -> int:
             if policy.enforce_main_branch and not policy.allow_non_main:
                 git_ops.require_branch(logger, repo_root, policy.default_branch)
 
+            decision_paths_finalize = changed_paths(logger, repo_root)
+
             run_gates(
                 logger,
                 cwd=repo_root,
@@ -601,7 +655,11 @@ def main(argv: list[str]) -> int:
                 pytest_use_venv=policy.pytest_use_venv,
                 progress=_gate_progress,
             )
+
+            _maybe_run_badguys(cwd=repo_root, decision_paths=decision_paths_finalize)
+
             sha: str | None = None
+
             push_ok: bool | None = None
             if policy.commit_and_push:
                 sha = git_ops.commit(logger, repo_root, cli.message or "finalize")
@@ -882,6 +940,8 @@ def main(argv: list[str]) -> int:
             progress=_gate_progress,
         )
 
+        _maybe_run_badguys(cwd=ws.repo, decision_paths=touched)
+
         # Live repo guard: optionally also after gates.
         if (
             policy.live_repo_guard
@@ -963,6 +1023,10 @@ def main(argv: list[str]) -> int:
             and (not policy.update_workspace),
             live_changed_resolution=policy.live_changed_resolution,
         )
+
+        sha = ""
+        decision_paths_post_promote = list(to_promote)
+        _maybe_run_badguys(cwd=repo_root, decision_paths=decision_paths_post_promote)
 
         sha = ""
         push_ok: bool | None = None

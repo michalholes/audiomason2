@@ -72,6 +72,12 @@ class Policy:
     gates_skip_mypy: bool = False
     gates_order: list[str] = field(default_factory=lambda: ["compile", "ruff", "pytest", "mypy"])
 
+    # NEW: extra runner-only gate: badguys (default auto)
+    # - auto: run only when patch touches runner files
+    # - on: always run
+    # - off: never run
+    gate_badguys_runner: str = "auto"
+
     ruff_targets: list[str] = field(default_factory=lambda: ["src", "tests"])
     pytest_targets: list[str] = field(default_factory=lambda: ["tests"])
     mypy_targets: list[str] = field(default_factory=lambda: ["src"])
@@ -299,6 +305,15 @@ def build_policy(defaults: Policy, cfg: dict[str, Any]) -> Policy:
 
     p.gates_order = _as_list_str(cfg, "gates_order", p.gates_order)
     _mark_cfg(p, cfg, "gates_order")
+
+    p.gate_badguys_runner = str(cfg.get("gate_badguys_runner", p.gate_badguys_runner))
+    _mark_cfg(p, cfg, "gate_badguys_runner")
+    if p.gate_badguys_runner not in ("auto", "on", "off"):
+        raise RunnerError(
+            "CONFIG",
+            "INVALID",
+            f"invalid gate_badguys_runner={p.gate_badguys_runner!r}; allowed: auto|on|off",
+        )
 
     p.compile_targets = _as_list_str(cfg, "compile_targets", p.compile_targets)
     _mark_cfg(p, cfg, "compile_targets")
