@@ -1,7 +1,7 @@
 # AM Patch Runner 
 # Patch Authoring Manual
 
-AUTHORITATIVE – AudioMason2  
+AUTHORITATIVE - AudioMason2  
 Status: active  
 Version: v2.31
 This manual defines what a chat must produce so that the user can run the patch successfully and close the issue.
@@ -81,7 +81,7 @@ The runner is the authority.
 
 ---
 
-## “Issue can be closed” rule
+## "Issue can be closed" rule
 
 An issue can be closed only if:
 - the runner returns SUCCESS, and

@@ -29,44 +29,39 @@ Notes:
 - Only options listed in short help have short aliases. All other options are long-only.
 
 
-## Verbosity a status vystup
+## Verbosity and status output
 
-Runner podporuje 4 verbosity rezimy pre obrazovkovy vystup:
 
-- debug: maximalne informacie na obrazovke + status bar
-- verbose: dnesne spravanie (plny vypis na obrazovke) + status bar
-- normal: iba informacia o tom, co sa vykona/vykonalo (DO/OK/FAIL) + status bar
-- quiet: ziadny priebezny vystup; bez status baru; iba finalny sumar
 
-Pravidlo dedenia (kontrakt):
-- Verbosity rezimy su kumulativne. Kazdy vyssi rezim MUSI obsahovat vsetky garantovane vystupy nizsieho rezimu
-  a MOZE pridat dalsie detaily.
+The runner supports 4 verbosity modes for console output:
 
-CLI:
-- `--verbosity {debug,verbose,normal,quiet}` (default: `verbose`)
+- debug: maximum information printed to the console + status bar
+- verbose: current behavior (full console output) + status bar
+- normal: only information about what is being executed / was executed (DO/OK/FAIL) + status bar
+- quiet: no incremental output; no status bar; final summary only
 
-Status indikator:
-- v TTY: jeden prepisovany riadok na stderr: `STATUS: <STAGE>  ELAPSED: <mm:ss>`
-- v non-TTY: periodicky riadok: `HEARTBEAT: <STAGE> elapsed=<mm:ss>`
-- v `quiet` sa status indikator nepouziva
+Inheritance rule (contract):
 
-Finalny sumar (na konci kazdeho behu):
-- SUCCESS:
-  - `RESULT: SUCCESS`
-  - `FILES:` blok (iba ked `PUSH: OK`), striktne vo formate:
+- Verbosity modes are cumulative.
+  Each higher mode MUST include all guaranteed outputs of the lower mode.
+
+Final summary (at the end of each run):
+
+- FILES block (only when PUSH: OK), strictly in the following format:
+
 
     FILES:
 
     A path1
     M path2
     D path3
-  - `COMMIT: <sha>` (alebo `(none)` ak commit/push nebezi)
-  - `PUSH: OK|FAIL|UNKNOWN` (ak commit/push bezi)
+  - `COMMIT: <sha>` (or `(none)` if commit/push dont runs)
+  - `PUSH: OK|FAIL|UNKNOWN` (if commit/push is running)
   - `LOG: <path>`
 - FAIL:
   - `RESULT: FAIL`
   - `STAGE: <stage-id>`
-  - `REASON: <jedna veta>`
+  - `REASON: <one path>`
   - `LOG: <path>`
 
 

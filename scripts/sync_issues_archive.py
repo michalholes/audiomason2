@@ -85,8 +85,8 @@ def load_issues(repo: str, _run: Callable[[list[str]], str]) -> list[dict[str, A
 
 def _names(items: list[dict[str, Any]] | None) -> str:
     if not items:
-        return "—"
-    return ", ".join(i.get("name", "") for i in items if i.get("name")) or "—"
+        return "--"
+    return ", ".join(i.get("name", "") for i in items if i.get("name")) or "--"
 
 
 def split_and_sort(
@@ -105,12 +105,12 @@ def render_issue(i: dict[str, Any]) -> str:
     state = i.get("state") or ""
     labels = _names(i.get("labels"))
     assignees = _names(i.get("assignees"))
-    milestone = (i.get("milestone") or {}).get("title") if i.get("milestone") else "—"
+    milestone = (i.get("milestone") or {}).get("title") if i.get("milestone") else "--"
     created = i.get("createdAt") or ""
     updated = i.get("updatedAt") or ""
     body = i.get("body") or ""
     lines: list[str] = []
-    lines.append(f"## #{num} – {title}")
+    lines.append(f"## #{num} - {title}")
     lines.append(f"- State: **{state}**")
     lines.append(f"- Labels: {labels}")
     lines.append(f"- Assignees: {assignees}")

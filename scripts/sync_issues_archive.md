@@ -49,7 +49,7 @@ Only these files may be modified:
 - `docs/issues/closed_issues.md`
 - `docs/issues/all_issues.yaml`
 
-No timestamps such as “generated at” are ever included.
+No timestamps such as "generated at" are ever included.
 
 ### all_issues.yaml
 
@@ -124,9 +124,9 @@ python3 /home/pi/audiomason2/scripts/sync_issues_archive.py --allow-dirty
 
 ## Git Behavior
 
-- Dirty working tree → **FAIL-FAST**
-- No diff → **no commit**
-- Diff → write → commit → push
+- Dirty working tree -> **FAIL-FAST**
+- No diff -> **no commit**
+- Diff -> write -> commit -> push
 
 Commit message (fixed):
 
