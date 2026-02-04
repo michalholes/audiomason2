@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from badguys._util import Plan
 from badguys.tests import discover_tests
 
 
@@ -22,7 +23,7 @@ def run(ctx):
     assert guard in names, f"FAIL: guard missing: {guard}"
     assert names[0] == guard, f"FAIL: guard not first: got {names[0]!r}"
     assert target not in names, f"FAIL: exclude_single still included target: {target}"
-    return []
+    return Plan(steps=[])
 
 
 TEST = {

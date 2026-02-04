@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from badguys._util import Plan
 from badguys.tests import discover_tests
 
 
@@ -20,7 +21,7 @@ def run(ctx):
 
     names = [t.name for t in tests]
     assert names == [guard, target], f"FAIL: include_single expected {[guard, target]!r}, got {names!r}"
-    return []
+    return Plan(steps=[])
 
 
 TEST = {
