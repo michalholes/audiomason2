@@ -7,7 +7,7 @@ runner_cmd = ["python3", "scripts/am_patch.py"]
 
 # Runner verbosity passed as --verbosity=<mode>.
 # Allowed: "debug", "verbose", "normal", "quiet".
-runner_verbosity = "quiet"
+runner_verbosity = "verbose"
 
 # Repo-relative directories.
 patches_dir = "patches"

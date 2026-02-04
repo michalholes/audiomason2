@@ -6,7 +6,9 @@ from pathlib import Path
 
 
 def main(argv: list[str]) -> int:
-    repo_root = Path(__file__).resolve().parent
+    # Allow running from repo root with: python3 badguys/badguys.py ...
+    # Ensure repo root (parent of badguys/) is on sys.path.
+    repo_root = Path(__file__).resolve().parents[1]
     s = str(repo_root)
     if sys.path and sys.path[0] == s:
         pass

@@ -85,6 +85,7 @@ def test_am_patch_smoke_issue_666() -> None:
     cmd = [
         sys.executable,
         str(runner),
+        "--verbosity=quiet",
         # "--test-mode",
         # "-g",
         # "--skip-pytest",
@@ -94,6 +95,7 @@ def test_am_patch_smoke_issue_666() -> None:
         "--test-mode",
         # "--skip-ruff",
         # "--skip-mypy",
+        # "--verbosity quiet",
     ]
 
     res = subprocess.run(

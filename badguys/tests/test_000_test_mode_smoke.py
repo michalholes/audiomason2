@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from badguys.tests._util import append_log, run_cmd, write_git_add_file_patch
+from badguys._util import CmdStep, Plan, write_git_add_file_patch
 
 
 def _make_patch(path: Path) -> None:
@@ -11,27 +11,23 @@ def _make_patch(path: Path) -> None:
     write_git_add_file_patch(path, rel, "badguys test-mode smoke")
 
 
-def run(ctx) -> bool:
-    step_log = ctx.step_log_path("test_000_test_mode_smoke")
+def run(ctx) -> Plan:
     patch_dir = ctx.cfg.patches_dir
     patch_dir.mkdir(parents=True, exist_ok=True)
     patch_path = patch_dir / f"issue_{ctx.cfg.issue_id}__badguys_test_mode_smoke.patch"
-    try:
-        _make_patch(patch_path)
-        argv = ctx.cfg.runner_cmd + [
-            "--test-mode",
-            ctx.cfg.issue_id,
-            "badguys: test-mode smoke",
-            str(patch_path),
-        ]
-        cp = run_cmd(argv, cwd=ctx.repo_root)
-        append_log(step_log, cp)
-        return cp.returncode == 0
-    finally:
-        try:
-            patch_path.unlink()
-        except FileNotFoundError:
-            pass
+
+    _make_patch(patch_path)
+    argv = ctx.cfg.runner_cmd + [
+        "--test-mode",
+        ctx.cfg.issue_id,
+        "badguys: test-mode smoke",
+        str(patch_path),
+    ]
+
+    return Plan(
+        steps=[CmdStep(argv=argv, cwd=ctx.repo_root, expect_rc=0)],
+        cleanup_paths=[patch_path],
+    )
 
 
 TEST = {

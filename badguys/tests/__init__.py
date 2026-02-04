@@ -21,7 +21,7 @@ class TestDef:
     name: str
     makes_commit: bool
     is_guard: bool
-    run: Callable[..., bool]
+    run: Callable[..., object]
 
 
 class TestList(List[TestDef]):

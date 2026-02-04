@@ -5,9 +5,10 @@ import shutil
 import subprocess
 import sys
 import time
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Sequence
+from typing import Callable, Optional, Sequence, Union
 
 
 def now_stamp() -> str:
@@ -19,23 +20,51 @@ def write_text(path: Path, text: str) -> None:
     path.write_text(text, encoding="utf-8")
 
 
-def run_cmd(argv: Sequence[str], cwd: Path) -> subprocess.CompletedProcess[str]:
+def _run_cmd(argv: Sequence[str], cwd: Path) -> subprocess.CompletedProcess[str]:
     return subprocess.run(list(argv), cwd=str(cwd), capture_output=True, text=True)
 
 
-def append_log(log_path: Path, cp: subprocess.CompletedProcess[str]) -> None:
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    with log_path.open("a", encoding="utf-8") as f:
-        args = cp.args if isinstance(cp.args, list) else [str(cp.args)]
-        f.write("$ " + " ".join(str(a) for a in args) + "\n")
-        if cp.stdout:
-            f.write(cp.stdout)
-            if not cp.stdout.endswith("\n"):
-                f.write("\n")
-        if cp.stderr:
-            f.write(cp.stderr)
-            if not cp.stderr.endswith("\n"):
-                f.write("\n")
+def _format_completed_process(cp: subprocess.CompletedProcess[str]) -> str:
+    args = cp.args if isinstance(cp.args, list) else [str(cp.args)]
+    out = ["$ " + " ".join(str(a) for a in args)]
+    if cp.stdout:
+        out.append(cp.stdout.rstrip("\n"))
+    if cp.stderr:
+        out.append(cp.stderr.rstrip("\n"))
+    return "\n".join(out) + "\n"
+
+
+@dataclass(frozen=True)
+class CmdStep:
+    argv: list[str]
+    cwd: Optional[Path] = None
+    expect_rc: int = 0
+
+
+@dataclass(frozen=True)
+class FuncStep:
+    """A controlled side-effect step executed by the engine.
+
+    Tests may need to prepare workspace artifacts between runner invocations.
+    The engine executes this callable and logs start/end and any exception.
+    """
+
+    name: str
+    fn: Callable[[], None]
+
+
+@dataclass(frozen=True)
+class ExpectPathExists:
+    path: Path
+
+
+Step = Union[CmdStep, FuncStep, ExpectPathExists]
+
+
+@dataclass
+class Plan:
+    steps: list[Step]
+    cleanup_paths: list[Path] = field(default_factory=list)
 
 
 def write_git_add_file_patch(patch_path: Path, rel_path: str, text: str) -> None:
@@ -146,18 +175,6 @@ def release_lock(repo_root: Path, *, path: Optional[Path] = None) -> None:
         lock_path.unlink()
     except FileNotFoundError:
         pass
-
-
-def init_logs(repo_root: Path, run_id: str) -> Path:
-    logs_dir = repo_root / "patches" / "badguys_logs"
-    if logs_dir.exists():
-        shutil.rmtree(logs_dir)
-    logs_dir.mkdir(parents=True, exist_ok=True)
-
-    central = repo_root / "patches" / f"badguys_{run_id}.log"
-    central.parent.mkdir(parents=True, exist_ok=True)
-    central.write_text(f"badguys run_id={run_id}\n", encoding="utf-8")
-    return central
 
 
 def print_result(test_name: str, ok: bool) -> None:
