@@ -4,7 +4,7 @@ from badguys._util import FuncStep, Plan, write_text
 
 
 def run(ctx) -> Plan:
-    cfg_path = ctx.repo_root / "patches" / "badguys_test_025_config.toml"
+    cfg_path = ctx.repo_root / "patches" / "badguys_test_021_config.toml"
 
     def _write_cfg() -> None:
         write_text(
