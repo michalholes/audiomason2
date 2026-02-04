@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import re
+import subprocess
 import zipfile
 from pathlib import Path
 
-from badguys._util import CmdStep, ExpectPathExists, FuncStep, Plan, now_stamp, write_git_add_file_patch, write_text
+from badguys._util import ExpectPathExists, FuncStep, Plan, now_stamp, write_git_add_file_patch, write_text
 
 
 def _write_git_replace_second_line_patch(rel_path: str, old_line: str, new_line: str) -> str:
@@ -56,6 +58,15 @@ def run(ctx) -> Plan:
         str(seed_patch),
     ]
 
+    def _run_cmd_capture(argv: list[str]) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(argv, cwd=str(ctx.repo_root), capture_output=True, text=True)
+
+    def _assert_run1_fails() -> None:
+        cp = _run_cmd_capture(argv1)
+        if cp.returncode == 0:
+            combined = (cp.stdout or "") + "\n" + (cp.stderr or "")
+            raise AssertionError("RUN #1 unexpectedly succeeded (rc=0). Output:\n" + combined)
+
     def _prepare_between_runs() -> None:
         # Prepare commit marker inside the workspace tree.
         ws_marker.parent.mkdir(parents=True, exist_ok=True)
@@ -82,12 +93,25 @@ def run(ctx) -> Plan:
         "-l",
     ]
 
+    def _assert_run2_success() -> None:
+        cp = _run_cmd_capture(argv2)
+        combined = (cp.stdout or "") + "\n" + (cp.stderr or "")
+        if cp.returncode != 0:
+            raise AssertionError(f"RUN #2 failed: rc={cp.returncode}. Output:\n" + combined)
+        if "RESULT: SUCCESS" not in combined:
+            raise AssertionError("RUN #2 missing success marker: 'RESULT: SUCCESS'. Output:\n" + combined)
+        m = re.search(r"^COMMIT:\s*([0-9a-f]{40})\b", combined, flags=re.MULTILINE)
+        if not m:
+            raise AssertionError("RUN #2 missing/invalid commit SHA line (expected 'COMMIT: <40-hex>'). Output:\n" + combined)
+        if "PUSH: OK" not in combined:
+            raise AssertionError("RUN #2 missing push marker: 'PUSH: OK'. Output:\n" + combined)
+
     return Plan(
         steps=[
-            CmdStep(argv=argv1, cwd=ctx.repo_root, expect_rc=0),
+            FuncStep(name="run #1 (seed): must fail (rc!=0)", fn=_assert_run1_fails),
             ExpectPathExists(path=ws_repo),
             FuncStep(name="prepare workspace marker + latest bundle", fn=_prepare_between_runs),
-            CmdStep(argv=argv2, cwd=ctx.repo_root, expect_rc=0),
+            FuncStep(name="run #2 (apply latest): must succeed + emit SUCCESS/COMMIT/PUSH", fn=_assert_run2_success),
         ],
         cleanup_paths=[seed_patch, inner_patch_path, bundle_path],
     )
