@@ -38,6 +38,10 @@ Runner podporuje 4 verbosity rezimy pre obrazovkovy vystup:
 - normal: iba informacia o tom, co sa vykona/vykonalo (DO/OK/FAIL) + status bar
 - quiet: ziadny priebezny vystup; bez status baru; iba finalny sumar
 
+Pravidlo dedenia (kontrakt):
+- Verbosity rezimy su kumulativne. Kazdy vyssi rezim MUSI obsahovat vsetky garantovane vystupy nizsieho rezimu
+  a MOZE pridat dalsie detaily.
+
 CLI:
 - `--verbosity {debug,verbose,normal,quiet}` (default: `verbose`)
 
@@ -49,6 +53,13 @@ Status indikator:
 Finalny sumar (na konci kazdeho behu):
 - SUCCESS:
   - `RESULT: SUCCESS`
+  - `FILES:` blok (iba ked `PUSH: OK`), striktne vo formate:
+
+    FILES:
+
+    A path1
+    M path2
+    D path3
   - `COMMIT: <sha>` (alebo `(none)` ak commit/push nebezi)
   - `PUSH: OK|FAIL|UNKNOWN` (ak commit/push bezi)
   - `LOG: <path>`

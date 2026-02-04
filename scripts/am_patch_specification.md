@@ -47,6 +47,10 @@ Runner supports 4 verbosity modes for screen output:
 - normal: only DO/OK/FAIL lines for executed steps + status bar
 - quiet: no progress output and no status bar; only final summary
 
+Verbosity inheritance (contract):
+- Verbosity modes are cumulative. Each higher mode MUST include all guaranteed outputs of the next lower mode,
+  and MAY add additional detail.
+
 CLI:
 - `--verbosity {debug,verbose,normal,quiet}` (default: `verbose`)
 
@@ -58,6 +62,14 @@ Status indicator:
 Final summary (always printed at the end):
 - SUCCESS:
   - `RESULT: SUCCESS`
+  - `FILES:` block (only when `PUSH: OK`), formatted strictly:
+
+    FILES:
+
+    A path1
+    M path2
+    D path3
+
   - `COMMIT: <sha>` or `(none)`
   - `PUSH: OK|FAIL|UNKNOWN` (when commit/push is enabled)
   - `LOG: <path>`

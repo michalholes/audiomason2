@@ -111,3 +111,67 @@ def git_archive(logger: Logger, repo: Path, out_zip: Path, treeish: str = "HEAD"
     )
     if r.returncode != 0:
         raise RunnerError("ARCHIVE", "GIT", f"git archive failed (rc={r.returncode})")
+
+
+def commit_changed_files_name_status(
+    logger: Logger, repo: Path, commit_sha: str
+) -> list[tuple[str, str]]:
+    """Return commit file changes as (status, path).
+
+    The returned status is normalized to one of: A, M, D.
+
+    Notes:
+    - Renames are represented as (D, old_path) then (A, new_path).
+    - Copies are represented as (A, new_path).
+    """
+    r = logger.run_logged(
+        ["git", "show", "--name-status", "--pretty=format:", commit_sha],
+        cwd=repo,
+    )
+    if r.returncode != 0:
+        raise RunnerError("PROMOTION", "GIT", f"git show name-status failed (rc={r.returncode})")
+
+    out: list[tuple[str, str]] = []
+    for raw in (r.stdout or "").splitlines():
+        line = raw.strip("\n")
+        if not line.strip():
+            continue
+
+        # Typical formats:
+        #   M\tpath
+        #   A\tpath
+        #   D\tpath
+        #   R100\told\tnew
+        #   C100\told\tnew
+        parts = line.split("\t")
+        if not parts:
+            continue
+        status = parts[0].strip()
+        if not status:
+            continue
+
+        if status in {"A", "M", "D"}:
+            if len(parts) >= 2 and parts[1].strip():
+                out.append((status, parts[1].strip()))
+            continue
+
+        if status.startswith("R") and len(parts) >= 3:
+            old = (parts[1] or "").strip()
+            new = (parts[2] or "").strip()
+            if old:
+                out.append(("D", old))
+            if new:
+                out.append(("A", new))
+            continue
+
+        if status.startswith("C") and len(parts) >= 3:
+            new = (parts[2] or "").strip()
+            if new:
+                out.append(("A", new))
+            continue
+
+        # Fall back: treat unknown multi-field status as modify of last path if any.
+        if len(parts) >= 2 and parts[-1].strip():
+            out.append(("M", parts[-1].strip()))
+
+    return out

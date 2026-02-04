@@ -424,6 +424,7 @@ def main(argv: list[str]) -> int:
     ws_for_posthook = None
     push_ok_for_posthook: bool | None = None
     final_commit_sha: str | None = None
+    final_pushed_files: list[str] | None = None
     final_fail_stage: str | None = None
     final_fail_reason: str | None = None
     try:
@@ -977,6 +978,14 @@ def main(argv: list[str]) -> int:
                 logger, repo_root, policy.default_branch, allow_fail=policy.allow_push_fail
             )
 
+            if push_ok is True and sha:
+                try:
+                    ns = git_ops.commit_changed_files_name_status(logger, repo_root, sha)
+                    final_pushed_files = [f"{st} {p}" for (st, p) in ns]
+                except Exception:
+                    # Best-effort only; never override SUCCESS contract.
+                    final_pushed_files = None
+
         push_ok_for_posthook = push_ok
 
         used_patch_for_zip = archive_patch(logger, patch_script, paths.successful_dir)
@@ -1228,6 +1237,10 @@ def main(argv: list[str]) -> int:
         try:
             if exit_code == 0:
                 sys.stdout.write("RESULT: SUCCESS\n")
+                if push_ok_for_posthook is True and final_pushed_files is not None:
+                    sys.stdout.write("FILES:\n\n")
+                    for line in final_pushed_files:
+                        sys.stdout.write(f"{line}\n")
                 if final_commit_sha:
                     sys.stdout.write(f"COMMIT: {final_commit_sha}\n")
                 else:
