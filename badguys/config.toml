@@ -19,7 +19,7 @@ log_verbosity = "debug"
 
 # Repo-relative directories.
 patches_dir = "patches"
-logs_dir = "patches/badguys_logs"
+logs_dir = "badguys/per_run_logs"
 
 # Repo-relative pattern for the central log.
 central_log_pattern = "patches/badguys_{run_id}.log"
