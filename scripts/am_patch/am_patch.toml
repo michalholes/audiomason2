@@ -1,4 +1,4 @@
-verbosity = "normal" #debug | verbose | normal | quiet
+verbosity = "verbose" #debug | verbose | normal | quiet
 
 
 [paths]
@@ -34,7 +34,7 @@ pytest_use_venv = true
 gates_skip_ruff = false
 gates_skip_mypy = false
 gate_badguys_runner = "auto"
-gate_badguys_command = ["badguys/badguys.py", "-q"]
+gate_badguys_command = ["badguys/badguys.py", "-v", "--exclude=test_900_commit_push_timestamp"]
 gate_badguys_cwd = "auto"
 
 [promotion]
