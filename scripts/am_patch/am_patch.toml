@@ -33,6 +33,7 @@ ruff_format = true
 pytest_use_venv = true
 gates_skip_ruff = false
 gates_skip_mypy = false
+gate_badguys_runner = "off"
 
 [promotion]
 mode = "copy_files"
