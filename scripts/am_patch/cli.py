@@ -141,7 +141,7 @@ Options:
   -f, --finalize-live MESSAGE
       Finalize live repo using MESSAGE as commit message. Put all flags before -f/--finalize-live.
 
-  --finalize-workspace ISSUE_ID
+  -w, --finalize-workspace ISSUE_ID
       Finalize existing workspace for ISSUE_ID; commit message is read from workspace meta.json.
 
   -o, --allow-no-op
@@ -184,7 +184,7 @@ WORKFLOW / MODES
       Finalize live repository using MESSAGE as commit message.
       Enables finalize mode and performs promotion, commit, and push.
 
-  --finalize-workspace ISSUE_ID
+  -w, --finalize-workspace ISSUE_ID
       Finalize an existing workspace for ISSUE_ID, including promotion, gates, commit, and push.
       Commit message is read from workspace meta.json.
 

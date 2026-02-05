@@ -4,7 +4,7 @@
 
 This document reflects the **current, implemented behavior** of the AM Patch Runner
 after introduction of:
-- `--finalize-workspace`
+- `-w` / `--finalize-workspace`
 - blessed gate outputs
 - workspace cleanup semantics parity
 
@@ -17,7 +17,7 @@ This document is **authoritative** for current runner behavior.
 ### 0.1 Universal controllability
 Every runner behavior is controllable via:
 - CLI flags **or**
-- `-o KEY=VALUE` overrides,
+- `--override KEY=VALUE` overrides,
 with precedence: **CLI > config > defaults**.
 
 ### 0.2 Determinism over convenience
@@ -54,7 +54,7 @@ Verbosity inheritance (contract):
   and MAY add additional detail.
 
 CLI:
-- `--verbosity {debug,verbose,normal,quiet}` (default: `verbose`)
+- `-q`/`-v`/`-n`/`-d` / `--verbosity {debug,verbose,normal,quiet}` (default: `verbose`)
 
 Status indicator:
 - TTY: single-line overwrite on stderr: `STATUS: <STAGE>  ELAPSED: <mm:ss>`
@@ -157,7 +157,7 @@ Rules:
 Effects:
 - Patch mode: gates run, but the runner does not commit or push.
 - `--finalize-live`: gates run, but the runner does not commit or push.
-- `--finalize-workspace`: workspace promotion still occurs and gates run in both workspace and live repo, but the runner does not commit or push. In this case, the workspace is preserved to avoid losing the easiest re-run path while the live repo has uncommitted changes.
+- `-w` / `--finalize-workspace`: workspace promotion still occurs and gates run in both workspace and live repo, but the runner does not commit or push. In this case, the workspace is preserved to avoid losing the easiest re-run path while the live repo has uncommitted changes.
 
 This toggle affects only commit/push behavior. It does not change patch execution, gates, or workspace promotion semantics.
 
@@ -307,7 +307,7 @@ Controls (precedence: CLI > config > defaults):
 Default behavior:
 - `live_changed_resolution = "fail"` and `fail_if_live_files_changed = true` => promotion FAILS with `LIVE_CHANGED`.
 
-This behavior applies to workspace promotion and `--finalize-workspace`.
+This behavior applies to workspace promotion and `-w` / `--finalize-workspace`.
 
 ### 7.3 Archive hygiene (`patched.zip`)
 
@@ -324,7 +324,7 @@ This is independent of scope logic and does not affect patch execution, gates, o
 
 ## 7.4 Success archive (git-archive zip)
 
-On SUCCESS (in `workspace`, `--finalize-live`, and `--finalize-workspace` modes; excluding `--test-mode`),
+On SUCCESS (in `workspace`, `--finalize-live`, and `-w` / `--finalize-workspace` modes; excluding `--test-mode`),
 the runner creates a clean git-archive success zip named by `success_archive_name` (default `{repo}-{branch}.zip`, e.g. `audiomason2-main.zip`) as a clean `git archive HEAD` snapshot of the final live repository state.
 It contains only git-tracked files (as if fetched from the remote) and does not include logs, workspaces, caches, or patch inputs.
 
@@ -350,7 +350,7 @@ Unified patch mode (`--unified-patch`):
 - Repository remains dirty.
 - Staging rules:
   - In `--finalize-live` (aka `-f`) mode, the runner stages the entire live working tree before commit.
-  - In `workspace` and `--finalize-workspace` modes, the runner commits only the paths it has promoted
+  - In `workspace` and `-w` / `--finalize-workspace` modes, the runner commits only the paths it has promoted
     (those paths are staged explicitly during promotion). Any unrelated dirty changes in the live
     working tree remain uncommitted and continue to appear as dirty after the run.
 
@@ -410,7 +410,7 @@ an additional **AUDIT** step:
 - Working directory: live repository root.
 - Purpose: display the current audit status reflecting the just-pushed changes.
 - Scope:
-  - In `workspace` mode and `--finalize-workspace`, it runs **after** workspace deletion (when enabled).
+  - In `workspace` mode and `-w` / `--finalize-workspace`, it runs **after** workspace deletion (when enabled).
   - In `--finalize-live`, there is no workspace; it runs after `SUCCESS`.
   - It never reads or mutates the workspace.
 

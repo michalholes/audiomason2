@@ -71,14 +71,14 @@ Final summary (at the end of each run):
 
 ## What "SUCCESS" means
 
-If the runner reports **SUCCESS** (without `-n`):
+If the runner reports **SUCCESS** (without `-o`):
 - at least one real change happened,
 - no file outside `FILES` was touched,
 - ruff/pytest/mypy all passed,
 - promotion committed and the log reports push status (e.g. `push=OK`),
 - closing the issue is justified.
 
-If you used `-n` (allow no-op), SUCCESS does **not** imply a code change.
+If you used `-o` (allow no-op), SUCCESS does **not** imply a code change.
 
 ---
 
@@ -141,7 +141,7 @@ The log contains:
 
 ### 4) Close the issue
 Only close an issue when:
-- runner returned SUCCESS **without** `-n`, and
+- runner returned SUCCESS **without** `-o`, and
 - the success log shows a commit SHA and push succeeded.
 
 ---
@@ -150,7 +150,7 @@ Only close an issue when:
 
 Short-help options (have short aliases):
 
-- `-n` / `--allow-no-op` : allow no-op (otherwise no-op fails)
+- `-o` / `--allow-no-op` : allow no-op (otherwise no-op fails)
 - `-a` / `--allow-undeclared-paths` : allow touching files outside FILES
 - `-t` / `--allow-untouched-files` : allow declared-but-untouched FILES
 - `-l` / `--rerun-latest` : rerun latest archived patch (auto-select from patches/successful and patches/unsuccessful)
@@ -166,7 +166,7 @@ Short-help options (have short aliases):
 
 Long-only options (no short alias):
 
-- `--finalize-workspace ISSUE_ID` : finalize an existing workspace (gates in workspace, promote changes to live, gates in live, then commit/push)
+- `-w` / `--finalize-workspace ISSUE_ID` : finalize an existing workspace (gates in workspace, promote changes to live, gates in live, then commit/push)
 - `--require-push-success` : fail the run if push fails (overrides allow_push_fail)
 - `--no-compile-check` : disable the COMPILE gate (`python -m compileall`) for this run.
 - `--disable-promotion` : run gates, but do not commit or push (applies to patch mode and finalize modes)
@@ -221,7 +221,7 @@ Meaning: the patch produced no real change.
 
 Fix:
 - if the intent was to change code: patch is wrong; regenerate/fix it.
-- if you intentionally want a dry/no-op run: rerun with `-n`.
+- if you intentionally want a dry/no-op run: rerun with `-o`.
 
 ---
 
