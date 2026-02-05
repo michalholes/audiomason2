@@ -97,6 +97,13 @@ def discover_tests(*, repo_root: Path, config_path: Path, cli_commit_limit: Opti
 
     all_tests = list(tests)
 
+    # include/exclude conflict check
+    if include and exclude:
+        overlap = sorted(set(include).intersection(exclude))
+        if overlap:
+            joined = ", ".join(overlap)
+            raise SystemExit(f"FAIL: include/exclude conflict: {joined}")
+
     # include filter
     if include:
         keep = set(include)
