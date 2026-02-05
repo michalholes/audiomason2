@@ -244,7 +244,7 @@ BadGuys provides two cleanup layers:
 
 1) Engine cleanup between tests (hard isolation):
    - patches/workspaces/issue_<issue_id>/
-   - patches/logs/*
+   - patches/logs/issue_<issue_id>*
    - patches/successful/issue_<issue_id>*
    - patches/unsuccessful/issue_<issue_id>*
 
