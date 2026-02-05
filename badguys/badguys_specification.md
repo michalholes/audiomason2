@@ -69,6 +69,10 @@ BadGuys MUST support the following CLI options and semantics:
   - overrides [suite].log_verbosity from config for this run
   - controls what is written to the central log and per-test logs
 
+- --per-run-logs-post-run {delete_all,keep_all,delete_successful}
+  - overrides [suite].per_run_logs_post_run from config for this run
+  - controls what happens to per-test logs in logs_dir after the suite run completes
+
 - --include NAME (repeatable)
   - add NAME to the include filter set for this run
 
@@ -84,7 +88,7 @@ Exit codes:
 
 ### 3.4 Resolution precedence (normative)
 
-For all scalar settings (runner_verbosity, console_verbosity, log_verbosity, commit_limit):
+For all scalar settings (runner_verbosity, console_verbosity, log_verbosity, per_run_logs_post_run, commit_limit):
 1) CLI explicit override MUST win
 2) config value is next
 3) default is last
@@ -136,6 +140,14 @@ Unknown keys MAY exist but MUST NOT change behavior unless explicitly defined by
   - repo-relative directory for per-test logs
   - default if missing: "patches/badguys_logs"
   - NOTE (normative): the engine MUST delete this directory at the start of each suite run, then recreate it
+
+- per_run_logs_post_run (string)
+  - one of: delete_all, keep_all, delete_successful
+  - default if missing: "keep_all"
+  - controls what happens to per-test logs in logs_dir after the suite run completes
+  - delete_all: delete logs_dir entirely
+  - keep_all: keep all per-test logs
+  - delete_successful: delete per-test log files for tests that PASSED; keep logs for failed or unexecuted tests
 
 - central_log_pattern (string)
   - repo-relative path pattern (format string)

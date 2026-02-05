@@ -29,6 +29,7 @@ class SuiteCfg:
     lock_on_conflict: str
     console_verbosity: str
     log_verbosity: str
+    per_run_logs_post_run: str
 
     def central_log_path(self, run_id: str) -> Path:
         rel = self.central_log_pattern.format(run_id=run_id)
@@ -70,6 +71,7 @@ def _make_cfg(
     cli_runner_verbosity: Optional[str],
     cli_console_verbosity: Optional[str],
     cli_log_verbosity: Optional[str],
+    cli_per_run_logs_post_run: Optional[str],
 ) -> SuiteCfg:
     raw = _load_config(repo_root, config_path)
     suite = raw.get("suite", {})
@@ -102,6 +104,16 @@ def _make_cfg(
     if log_verbosity not in {"debug", "verbose", "normal", "quiet"}:
         raise SystemExit(f"FAIL: invalid BadGuys log verbosity: {log_verbosity!r}")
 
+    per_run_logs_post_run = _resolve_value(
+        cli_per_run_logs_post_run,
+        suite.get("per_run_logs_post_run"),
+        "keep_all",
+    ).strip()
+    if per_run_logs_post_run not in {"delete_all", "keep_all", "delete_successful"}:
+        raise SystemExit(
+            f"FAIL: invalid per_run_logs_post_run: {per_run_logs_post_run!r} (expected delete_all|keep_all|delete_successful)"
+        )
+
     patches_dir = repo_root / str(suite.get("patches_dir", "patches"))
     logs_dir = repo_root / str(suite.get("logs_dir", "patches/badguys_logs"))
     central_log_pattern = str(suite.get("central_log_pattern", "patches/badguys_{run_id}.log"))
@@ -122,6 +134,7 @@ def _make_cfg(
         lock_on_conflict=lock_on_conflict,
         console_verbosity=console_verbosity,
         log_verbosity=log_verbosity,
+        per_run_logs_post_run=per_run_logs_post_run,
     )
 
 
@@ -151,6 +164,26 @@ def _init_logs(cfg: SuiteCfg, run_id: str) -> Path:
     central.parent.mkdir(parents=True, exist_ok=True)
     central.write_text(f"BadGuys run_id={run_id}\n", encoding="utf-8")
     return central
+
+
+def _post_run_cleanup_logs(cfg: SuiteCfg, per_test_ok: dict[str, bool]) -> None:
+    mode = cfg.per_run_logs_post_run
+    logs_dir = cfg.logs_dir
+    if mode == "keep_all":
+        return
+    if mode == "delete_all":
+        if logs_dir.exists():
+            shutil.rmtree(logs_dir)
+        return
+    # delete_successful
+    for test_name, ok in per_test_ok.items():
+        if not ok:
+            continue
+        p = logs_dir / f"{test_name}.log"
+        try:
+            p.unlink()
+        except FileNotFoundError:
+            pass
 
 
 def _emit(ctx: Ctx, *, level: str, test_name: Optional[str], text: str) -> None:
@@ -421,6 +454,12 @@ def main(argv: list[str]) -> int:
         choices=["debug", "verbose", "normal", "quiet"],
         help="BadGuys log verbosity (central + per-test logs)",
     )
+    ap.add_argument(
+        "--per-run-logs-post-run",
+        default=None,
+        choices=["delete_all", "keep_all", "delete_successful"],
+        help="Post-run per-test log cleanup policy",
+    )
     ap.add_argument("--include", action="append", default=[], help="Run only named tests (repeatable)")
     ap.add_argument("--exclude", action="append", default=[], help="Skip named tests (repeatable)")
     ap.add_argument("--list-tests", action="store_true", help="List discovered tests and exit")
@@ -429,7 +468,14 @@ def main(argv: list[str]) -> int:
     repo_root = Path(__file__).resolve().parents[1]
     _ensure_repo_root_in_syspath(repo_root)
 
-    cfg = _make_cfg(repo_root, Path(args.config), args.runner_verbosity, args.console_verbosity, args.log_verbosity)
+    cfg = _make_cfg(
+        repo_root,
+        Path(args.config),
+        args.runner_verbosity,
+        args.console_verbosity,
+        args.log_verbosity,
+        args.per_run_logs_post_run,
+    )
     run_id = time.strftime("%Y%m%d_%H%M%S")
 
     from badguys.discovery import discover_tests
@@ -480,6 +526,7 @@ def main(argv: list[str]) -> int:
                     f"debug: log_verbosity={cfg.log_verbosity}\n"
                     f"debug: runner_cmd={' '.join(cfg.runner_cmd)}\n"
                     f"debug: issue_id={cfg.issue_id}\n"
+                    f"debug: per_run_logs_post_run={cfg.per_run_logs_post_run}\n"
                 ),
             )
 
@@ -490,6 +537,7 @@ def main(argv: list[str]) -> int:
 
         ok_all = True
         interrupted = False
+        per_test_ok: dict[str, bool] = {}
         for idx, t in enumerate(tests):
             try:
                 # Enforce deterministic isolation contract.
@@ -501,6 +549,8 @@ def main(argv: list[str]) -> int:
                 finally:
                     _cleanup_issue_artifacts(ctx, issue_id=cfg.issue_id, test_name=getattr(t, "name", None))
     
+                per_test_ok[t.name] = bool(ok)
+
                 if ctx.console_verbosity in {"normal", "verbose", "debug"} or ctx.log_verbosity in {"normal", "verbose", "debug"}:
                     _emit(ctx, level="normal", test_name=t.name, text=format_result_line(t.name, ok))
                 if not ok:
@@ -520,6 +570,8 @@ def main(argv: list[str]) -> int:
         # Summary is minimal by contract.
         status = "OK" if ok_all else "FAIL"
         _emit(ctx, level="quiet", test_name=None, text=f"BadGuys summary: {status}\n")
+
+        _post_run_cleanup_logs(cfg, per_test_ok)
 
         if interrupted:
             return 130
