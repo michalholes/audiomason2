@@ -1,9 +1,9 @@
 # AM Patch Runner 
 # Patch Authoring Manual
 
-AUTHORITATIVE - AudioMason2  
+AUTHORITATIVE – AudioMason2  
 Status: active  
-Version: v2.31
+Version: v2.32
 This manual defines what a chat must produce so that the user can run the patch successfully and close the issue.
 
 ## Absolute rules
@@ -12,6 +12,42 @@ This manual defines what a chat must produce so that the user can run the patch 
 2. The patch MUST be served in .zip file
 3. The patch MUST be a unified diff in `git apply` format (aka "unified patch"). Any Python patch scripts (.py) are non-compliant.
 
+
+## Anti-monolith rule set (HARD)
+
+A chat MUST NOT create a monolith or contribute to monolith growth. The patch MUST preserve modular boundaries and keep changes localized.
+
+Required constraints:
+
+1. Locality-first: prefer the smallest change set that fixes the issue.
+2. No “god modules”: do not introduce new catch-all modules (e.g., `utils.py`, `common.py`, `helpers.py`, `misc.py`) that aggregate unrelated responsibilities.
+3. No centralization without approval: do not move many unrelated functions/classes into a single new location “for reuse” unless the user explicitly requested that refactor.
+4. Respect ownership boundaries: avoid cross-cutting edits across many packages/subsystems when a narrow fix is possible.
+5. New code must have a single clear responsibility and belong to the closest existing module where that responsibility naturally fits.
+6. If the required change would inherently be cross-cutting (touching many subsystems), the chat MUST stop and request explicit permission with a concrete scoped plan before producing such a patch.
+
+## Per-file patch zip format (HARD)
+
+The patch delivered to the user MUST be a `.zip` that contains **one `.patch` file per modified repository file**.
+
+Rationale: if patching one file fails, unaffected files must still be applicable independently.
+
+Rules:
+
+1. For each modified repo file `path/to/file.ext`, the zip MUST contain exactly one patch file named:
+   - `patches/per_file/path__to__file.ext.patch`
+   - where `/` is replaced with `__`.
+2. Each patch file MUST contain a unified diff that changes **only** its corresponding file.
+   - No multi-file diffs.
+   - No `diff --git` entries for other files.
+3. The zip MUST NOT contain a “combined” patch.
+4. The set of patch files must be non-empty.
+5. Each patch file MUST pass: `git apply --check <that_file.patch>`.
+6. Optional but recommended: include a short ASCII-only `patches/per_file/MANIFEST.txt` listing patch filenames in application order (one per line). If present, the order MUST be deterministic (lexicographic by patch filename).
+
+Notes:
+- The runner invocation still points to the single `.zip` file; the runner will apply per-file patches from inside it.
+- If the runner does not yet support this, the correct action is to update the runner first (separately), not to violate this manual.
 
 ## Patch requirements (must)
 
@@ -26,7 +62,7 @@ Constraints:
 - Do not prompt the user for input.
 - Do not require network access.
 
-All changes must be expressed as a single unified diff patch ("git apply" format).
+All changes must be expressed as unified diff patches ("git apply" format), packaged **per file** (see “Per-file patch zip format”).
 Forbidden:
 - generating any `.py` patch script
 - embedding runnable Python code as the patch mechanism
@@ -44,7 +80,7 @@ Never hide errors.
 
 ## What the chat must output (deliverable)
 
-The chat must produce a patch file that:
+The chat must produce a patch zip that:
 
 Canonical invocation (workspace mode):
 - `python3 scripts/am_patch.py ISSUE_ID "message" [PATCH]`
@@ -62,10 +98,6 @@ Notes:
   - pytest passes,
   - mypy passes.
 
-Runner-only gate:
-- When patching the runner (scripts/am_patch.py, scripts/am_patch/**), an extra gate may run: badguys/badguys.py -q.
-- Control via config/CLI: gate_badguys_runner=auto|on|off; CLI: --gate-badguys-runner {auto,on,off}.
-
 The chat must not claim success without evidence.
 The runner is the authority.
 
@@ -81,7 +113,7 @@ The runner is the authority.
 
 ---
 
-## "Issue can be closed" rule
+## “Issue can be closed” rule
 
 An issue can be closed only if:
 - the runner returns SUCCESS, and

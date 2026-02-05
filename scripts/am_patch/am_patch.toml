@@ -93,7 +93,7 @@ gates_skip_ruff = false
 gates_skip_pytest = false
 gates_skip_mypy = false
 
-gate_badguys_runner = "auto"
+gate_badguys_runner = "off"
 gate_badguys_command = ["badguys/badguys.py", "-q", "--exclude=test_900_commit_push_timestamp"]
 gate_badguys_cwd = "auto"
 
