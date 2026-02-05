@@ -299,7 +299,25 @@ def _run_test_plan(test, ctx: Ctx) -> bool:
     )
 
     name = getattr(test, "name", "(unknown)")
-    plan_obj = test.run(ctx)
+    try:
+        plan_obj = test.run(ctx)
+    except SystemExit as e:
+        # Treat SystemExit from a test as a deterministic test FAIL, not a suite crash.
+        _emit(ctx, level="verbose", test_name=name, text=f"FAIL: {e}\n")
+        _emit(ctx, level="verbose", test_name=name, text=f"TEST END {name} FAIL\n")
+        return False
+    except Exception:
+        # Treat unexpected exceptions from a test as FAIL. Only include traceback in debug.
+        ok = False
+        if _want(ctx.log_verbosity, "debug") or _want(ctx.console_verbosity, "debug"):
+            tb = traceback.format_exc()
+            _emit(ctx, level="verbose", test_name=name, text="FAIL: test raised\n" + tb + "\n")
+        else:
+            exc = traceback.format_exc().strip().splitlines()[-1]
+            _emit(ctx, level="verbose", test_name=name, text=f"FAIL: {exc}\n")
+        _emit(ctx, level="verbose", test_name=name, text=f"TEST END {name} FAIL\n")
+        return False
+
     if not isinstance(plan_obj, Plan):
         raise SystemExit(f"FAIL: test {name} returned invalid plan type: {type(plan_obj).__name__}")
 
