@@ -115,7 +115,7 @@ Options:
       Print effective configuration and policy sources (defaults, config file,
       CLI overrides) and exit.
 
-  --verbosity {{debug, verbose, normal, quiet}}
+  -q, -v, -n, -d, --verbosity {{debug, verbose, normal, quiet}}
       Control screen output amount. [default: verbose]
 
   -a, --allow-undeclared-paths
@@ -144,7 +144,7 @@ Options:
   --finalize-workspace ISSUE_ID
       Finalize existing workspace for ISSUE_ID; commit message is read from workspace meta.json.
 
-  -n, --allow-no-op
+  -o, --allow-no-op
       Allow no-op patches (override default FAIL).
 
   -u, --unified-patch
@@ -175,7 +175,7 @@ CORE / INFO
   --version
       Print runner version and exit.
 
-  --verbosity {{debug, verbose, normal, quiet}}
+  -q, -v, -n, -d, --verbosity {{debug, verbose, normal, quiet}}
       Control screen output amount.
       [default: verbose]
 
@@ -395,7 +395,7 @@ def parse_args(argv: list[str]) -> CliArgs:
     p.add_argument(
         "-g", "--allow-gates-fail", dest="allow_gates_fail", action="store_true", default=None
     )
-    p.add_argument("-n", "--allow-no-op", dest="allow_no_op", action="store_true", default=None)
+    p.add_argument("-o", "--allow-no-op", dest="allow_no_op", action="store_true", default=None)
     p.add_argument("-u", "--unified-patch", dest="unified_patch", action="store_true", default=None)
     p.add_argument("-p", "--patch-strip", dest="patch_strip", metavar="N", type=int, default=None)
     p.add_argument("-c", "--show-config", dest="show_config", action="store_true", default=False)
@@ -403,7 +403,11 @@ def parse_args(argv: list[str]) -> CliArgs:
         "-f", "--finalize-live", dest="finalize_message", metavar="MESSAGE", default=None
     )
     p.add_argument(
-        "--finalize-workspace", dest="finalize_workspace_issue_id", metavar="ISSUE_ID", default=None
+        "-w",
+        "--finalize-workspace",
+        dest="finalize_workspace_issue_id",
+        metavar="ISSUE_ID",
+        default=None,
     )
 
     # Full-only options (long-only; no short aliases).
@@ -445,7 +449,12 @@ def parse_args(argv: list[str]) -> CliArgs:
         help="Success archive zip name template (placeholders: {repo}, {branch}).",
     )
 
-    p.add_argument(
+    vg = p.add_mutually_exclusive_group()
+    vg.add_argument("-q", dest="verbosity", action="store_const", const="quiet", default=None)
+    vg.add_argument("-v", dest="verbosity", action="store_const", const="verbose", default=None)
+    vg.add_argument("-n", dest="verbosity", action="store_const", const="normal", default=None)
+    vg.add_argument("-d", dest="verbosity", action="store_const", const="debug", default=None)
+    vg.add_argument(
         "--verbosity",
         dest="verbosity",
         choices=["debug", "verbose", "normal", "quiet"],
