@@ -249,7 +249,7 @@ def _action(ctx: Ctx, *, test_name: Optional[str], kind: str, phase: str, msg: s
 def _cleanup_issue_artifacts(ctx: Ctx, *, issue_id: str, test_name: Optional[str]) -> None:
     # Contract: after EACH test, the engine must delete:
     # - patches/workspaces/issue_666/
-    # - all logs in patches/logs
+    # - patches/logs/issue_666*
     # - patches/successful/issue_666*
     # - patches/unsuccessful/issue_666*
     repo_root = ctx.repo_root
@@ -259,9 +259,10 @@ def _cleanup_issue_artifacts(ctx: Ctx, *, issue_id: str, test_name: Optional[str
     _action(ctx, test_name=test_name, kind="CLEANUP", phase="OK", msg=f"rm -rf {ws}")
 
     logs_dir = repo_root / "patches" / "logs"
-    _action(ctx, test_name=test_name, kind="CLEANUP", phase="DO", msg=f"clear {logs_dir}/*")
+    issue_logs_pat = f"issue_{issue_id}*"
+    _action(ctx, test_name=test_name, kind="CLEANUP", phase="DO", msg=f"rm {logs_dir}/{issue_logs_pat}")
     if logs_dir.exists():
-        for p in logs_dir.glob("*"):
+        for p in logs_dir.glob(issue_logs_pat):
             if p.is_dir():
                 shutil.rmtree(p, ignore_errors=True)
             else:
@@ -270,7 +271,7 @@ def _cleanup_issue_artifacts(ctx: Ctx, *, issue_id: str, test_name: Optional[str
                 except FileNotFoundError:
                     pass
 
-    _action(ctx, test_name=test_name, kind="CLEANUP", phase="OK", msg=f"clear {logs_dir}/*")
+    _action(ctx, test_name=test_name, kind="CLEANUP", phase="OK", msg=f"rm {logs_dir}/{issue_logs_pat}")
 
     for pat in (
         str(repo_root / "patches" / "successful" / f"issue_{issue_id}*"),
