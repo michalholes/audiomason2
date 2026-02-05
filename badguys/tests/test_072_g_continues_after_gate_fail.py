@@ -1,30 +1,37 @@
-
 from __future__ import annotations
 
 from pathlib import Path
 
-from badguys._util import CmdStep, FuncStep, Plan, assert_file_contains, write_patch_script
+from badguys._util import (
+    CmdStep,
+    FuncStep,
+    Plan,
+    assert_file_contains,
+    write_git_add_file_patch,
+    write_zip,
+)
 
 
 def run(ctx) -> Plan:
     patch_dir = ctx.cfg.patches_dir
     patch_dir.mkdir(parents=True, exist_ok=True)
 
-    patch_path = patch_dir / f"issue_{ctx.cfg.issue_id}__bg_gates_continue.py"
+    inner_patch_path = patch_dir / "bg_072_src_test_py.patch"
+    zip_path = patch_dir / f"issue_{ctx.cfg.issue_id}__bg_gates_continue.zip"
 
-    body = """
-# Produce a ruff violation in scripts/ (line too long), but keep valid syntax for compile.
-p = REPO / 'scripts' / 'badguys_batch1_ruff_fail.py'
-p.write_text("x = '%s'" % ("a"*200) + "\n", encoding="utf-8")
-"""
-    write_patch_script(patch_path, files=["scripts/badguys_batch1_ruff_fail.py"], body=body)
+    # Add a file under src/ so that compile/ruff/mypy gates see it.
+    # Intentionally invalid syntax so the compile gate fails.
+    write_git_add_file_patch(inner_patch_path, "src/test.py", "oops = )\n")
+
+    patch_bytes = inner_patch_path.read_bytes()
+    write_zip(zip_path, entries=[("inner.patch", patch_bytes)])
 
     argv = ctx.cfg.runner_cmd + [
         "-g",
         "--test-mode",
         ctx.cfg.issue_id,
-        "badguys: -g continues after ruff fail",
-        str(patch_path),
+        "badguys: -g continues after gate fail (compile)",
+        str(zip_path),
     ]
 
     def _assert() -> None:
@@ -33,20 +40,29 @@ p.write_text("x = '%s'" % ("a"*200) + "\n", encoding="utf-8")
         runner_log: Path | None = None
         for line in text.splitlines():
             if line.startswith("LOG: "):
-                runner_log = Path(line[len("LOG: "):].strip())
+                runner_log = Path(line[len("LOG: ") :].strip())
                 break
         if runner_log is None:
             raise AssertionError("missing LOG: <runner_log_path> line in per-run log")
-        assert_file_contains(runner_log, "GATE: RUFF")
-        assert_file_contains(runner_log, "GATE: PYTEST")
-        assert_file_contains(runner_log, "GATE: MYPY")
+
+        # Gate fail must be *allowed* under -g, and the runner must still succeed overall.
+        assert_file_contains(runner_log, "GATE: compile")
+        assert_file_contains(runner_log, "gates_failed_allowed=true")
+        assert_file_contains(runner_log, "gates_failed=compile")
+        assert_file_contains(runner_log, "SUCCESS")
+        assert_file_contains(runner_log, "commit_sha=")
+        assert_file_contains(runner_log, "push=")
+
+        # Confirm the compile failure reason is what we injected.
+        assert_file_contains(runner_log, "src/test.py")
+        assert_file_contains(runner_log, "SyntaxError")
 
     return Plan(
         steps=[
-            CmdStep(argv=argv, cwd=ctx.repo_root, expect_rc=1),
+            CmdStep(argv=argv, cwd=ctx.repo_root, expect_rc=0),
             FuncStep(name="assert_gates_continued", fn=_assert),
         ],
-        cleanup_paths=[patch_path],
+        cleanup_paths=[inner_patch_path, zip_path],
     )
 
 
