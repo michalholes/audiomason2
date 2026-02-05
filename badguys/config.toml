@@ -20,7 +20,7 @@ log_verbosity = "debug"
 # Post-run per-test log cleanup policy.
 # Allowed: "delete_all", "keep_all", "delete_successful".
 # Note: logs_dir is still deleted and recreated at the start of each run.
-per_run_logs_post_run = "keep_all"
+per_run_logs_post_run = "delete_successful"
 
 # Repo-relative directories.
 patches_dir = "patches"
