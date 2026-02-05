@@ -996,15 +996,25 @@ def main(argv: list[str]) -> int:
         logger.section("ISSUE STATE (after)")
         logger.line(f"allowed_union={sorted(st.allowed_union)}")
 
+        defer_patch_apply_failure = False
         if primary_fail_stage is not None:
             if secondary_failures:
                 logger.section("SECONDARY FAILURES (summary)")
                 for stg, msg in secondary_failures:
                     logger.line(f"{stg}: {msg}")
-            # Defer rollback until after diagnostics archive is created.
-            rollback_ckpt_for_posthook = ckpt
-            rollback_ws_for_posthook = ws
-            raise RunnerError("PATCH", "PATCH_APPLY", primary_fail_reason or "patch apply failed")
+
+            if not patch_applied_any:
+                # Nothing was applied; fail immediately.
+                # Defer rollback until after diagnostics archive is created.
+                rollback_ckpt_for_posthook = ckpt
+                rollback_ws_for_posthook = ws
+                raise RunnerError(
+                    "PATCH", "PATCH_APPLY", primary_fail_reason or "patch apply failed"
+                )
+
+            # Partial apply: keep going so gates can run for diagnostics, but the run
+            # must still end as FAIL with PATCH_APPLY as the primary reason.
+            defer_patch_apply_failure = True
 
         # Gates in workspace (NO rollback)
         run_gates(
@@ -1084,6 +1094,14 @@ def main(argv: list[str]) -> int:
                     st = update_union(st, legalized)
                     save_state(ws.root, st)
                     logger.line(f"legalized_ruff_autofix_files={legalized}")
+        if defer_patch_apply_failure:
+            # Ensure failure archive includes any gate-induced changes.
+            files_for_fail_zip = sorted(set(files_for_fail_zip) | set(dirty_all))
+            # Defer rollback until after diagnostics archive is created.
+            rollback_ckpt_for_posthook = ckpt
+            rollback_ws_for_posthook = ws
+            raise RunnerError("PATCH", "PATCH_APPLY", primary_fail_reason or "patch apply failed")
+
         allowed_union = set(st.allowed_union)
         dirty_allowed = [p for p in dirty_all if p in allowed_union]
         dirty_blessed = blessed_gate_outputs_in(dirty_all)
