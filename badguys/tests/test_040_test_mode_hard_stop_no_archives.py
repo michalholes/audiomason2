@@ -27,12 +27,18 @@ def run(ctx) -> Plan:
     ws_dir = ctx.cfg.patches_dir / "workspaces" / f"issue_{ctx.cfg.issue_id}"
     fail_zip = ctx.cfg.patches_dir / "patched.zip"
 
+    def _preclean() -> None:
+        if fail_zip.exists():
+            fail_zip.unlink()
+
+
     def _assert() -> None:
         assert_path_missing(ws_dir)
         assert_path_missing(fail_zip)
 
     return Plan(
         steps=[
+            FuncStep(name="preclean_patched_zip", fn=_preclean),
             CmdStep(argv=argv, cwd=ctx.repo_root, expect_rc=0),
             FuncStep(name="assert_no_workspace_no_archives", fn=_assert),
         ],
