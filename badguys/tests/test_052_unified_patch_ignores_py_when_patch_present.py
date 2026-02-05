@@ -26,6 +26,7 @@ def run(ctx) -> Plan:
     write_zip(zip_path, [("x.patch", p.read_bytes()), ("evil.py", py_bytes)])
 
     argv = ctx.cfg.runner_cmd + [
+        "--test-mode",
         ctx.cfg.issue_id,
         "badguys: unified ignores py",
         str(zip_path),

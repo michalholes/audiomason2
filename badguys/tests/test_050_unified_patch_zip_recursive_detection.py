@@ -18,6 +18,7 @@ def run(ctx) -> Plan:
     write_zip(zip_path, [(inner_patch_name, inner_patch_path.read_bytes())])
 
     argv = ctx.cfg.runner_cmd + [
+        "--test-mode",
         ctx.cfg.issue_id,
         "badguys: unified zip recursive",
         str(zip_path),

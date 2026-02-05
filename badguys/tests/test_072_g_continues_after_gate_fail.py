@@ -15,7 +15,7 @@ def run(ctx) -> Plan:
     body = """
 # Produce a ruff violation in scripts/ (line too long), but keep valid syntax for compile.
 p = REPO / 'scripts' / 'badguys_batch1_ruff_fail.py'
-p.write_text('x = \'%s\'\\n' % ('a'*200), encoding='utf-8')
+p.write_text("x = '%s'" % ("a"*200) + "\n", encoding="utf-8")
 """
     write_patch_script(patch_path, files=["scripts/badguys_batch1_ruff_fail.py"], body=body)
 
@@ -28,10 +28,18 @@ p.write_text('x = \'%s\'\\n' % ('a'*200), encoding='utf-8')
     ]
 
     def _assert() -> None:
-        log_path = ctx.step_log_path("test_072_g_continues_after_gate_fail")
-        assert_file_contains(log_path, "GATE: RUFF")
-        assert_file_contains(log_path, "GATE: PYTEST")
-        assert_file_contains(log_path, "GATE: MYPY")
+        per_run_log = ctx.step_log_path("test_072_g_continues_after_gate_fail")
+        text = per_run_log.read_text(encoding="utf-8", errors="replace")
+        runner_log: Path | None = None
+        for line in text.splitlines():
+            if line.startswith("LOG: "):
+                runner_log = Path(line[len("LOG: "):].strip())
+                break
+        if runner_log is None:
+            raise AssertionError("missing LOG: <runner_log_path> line in per-run log")
+        assert_file_contains(runner_log, "GATE: RUFF")
+        assert_file_contains(runner_log, "GATE: PYTEST")
+        assert_file_contains(runner_log, "GATE: MYPY")
 
     return Plan(
         steps=[

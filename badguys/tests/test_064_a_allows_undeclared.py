@@ -24,6 +24,7 @@ def run(ctx) -> Plan:
     )
 
     argv = ctx.cfg.runner_cmd + [
+        "--test-mode",
         "-a",
         ctx.cfg.issue_id,
         "badguys: -a allows undeclared",

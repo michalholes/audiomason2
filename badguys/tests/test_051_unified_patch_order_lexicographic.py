@@ -28,6 +28,7 @@ def run(ctx) -> Plan:
     )
 
     argv = ctx.cfg.runner_cmd + [
+        "--test-mode",
         ctx.cfg.issue_id,
         "badguys: unified zip order",
         str(zip_path),
