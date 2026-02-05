@@ -531,6 +531,9 @@ def main(argv: list[str]) -> int:
     final_pushed_files: list[str] | None = None
     final_fail_stage: str | None = None
     final_fail_reason: str | None = None
+    primary_fail_stage: str | None = None
+    primary_fail_reason: str | None = None
+    secondary_failures: list[tuple[str, str]] = []
     try:
         logger.section("AM_PATCH START")
         logger.line(f"RUNNER_VERSION={RUNNER_VERSION}")
@@ -908,6 +911,10 @@ def main(argv: list[str]) -> int:
                 touched_for_zip = list(res.touched_files)
                 failed_patch_blobs = [(f.name, f.data) for f in res.failures]
 
+                if res.failures:
+                    primary_fail_stage = "PATCH"
+                    primary_fail_reason = "patch apply failed"
+
                 # For patched.zip on failure: always include touched targets and failed patch blobs.
                 # This must be available even if scope enforcement fails later.
                 files_for_fail_zip = sorted(set(touched_for_zip) | set(files_current))
@@ -919,19 +926,30 @@ def main(argv: list[str]) -> int:
                 patch_applied_any = True
 
             after = changed_paths(logger, ws.repo)
-            touched = enforce_scope_delta(
-                logger,
-                files_current=files_current,
-                before=before,
-                after=after,
-                no_op_fail=policy.no_op_fail,
-                allow_no_op=policy.allow_no_op,
-                allow_outside_files=policy.allow_outside_files,
-                declared_untouched_fail=policy.declared_untouched_fail,
-                allow_declared_untouched=policy.allow_declared_untouched,
-            )
+            touched: list[str] = []
+            try:
+                touched = enforce_scope_delta(
+                    logger,
+                    files_current=files_current,
+                    before=before,
+                    after=after,
+                    no_op_fail=policy.no_op_fail,
+                    allow_no_op=policy.allow_no_op,
+                    allow_outside_files=policy.allow_outside_files,
+                    declared_untouched_fail=policy.declared_untouched_fail,
+                    allow_declared_untouched=policy.allow_declared_untouched,
+                )
+            except RunnerError as _scope_e:
+                if primary_fail_stage is None:
+                    raise
+                logger.section("SECONDARY FAILURE")
+                logger.line(str(_scope_e))
+                secondary_failures.append((str(_scope_e.stage), str(_scope_e.message)))
 
-            _stage_ok("PATCH_APPLY")
+            if primary_fail_stage is None:
+                _stage_ok("PATCH_APPLY")
+            else:
+                _stage_fail("PATCH_APPLY")
 
             # Snapshot dirty paths immediately after patch (before gates).
             dirty_after_patch = list(after)
@@ -977,6 +995,16 @@ def main(argv: list[str]) -> int:
         save_state(ws.root, st)
         logger.section("ISSUE STATE (after)")
         logger.line(f"allowed_union={sorted(st.allowed_union)}")
+
+        if primary_fail_stage is not None:
+            if secondary_failures:
+                logger.section("SECONDARY FAILURES (summary)")
+                for stg, msg in secondary_failures:
+                    logger.line(f"{stg}: {msg}")
+            # Defer rollback until after diagnostics archive is created.
+            rollback_ckpt_for_posthook = ckpt
+            rollback_ws_for_posthook = ws
+            raise RunnerError("PATCH", "PATCH_APPLY", primary_fail_reason or "patch apply failed")
 
         # Gates in workspace (NO rollback)
         run_gates(

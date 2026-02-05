@@ -81,6 +81,10 @@ Final summary (always printed at the end):
   - `REASON: <one line>`
   - `LOG: <path>`
 
+Priority rule (normative):
+- If patch application fails (e.g., `git apply` fails in unified patch mode), the final FAIL summary MUST report `STAGE: PATCH_APPLY`.
+- Any later problems discovered in subsequent steps (e.g., scope enforcement) MAY be logged as secondary failures but MUST NOT override the primary PATCH_APPLY failure.
+
 
 ## 2. Modes of Operation
 
