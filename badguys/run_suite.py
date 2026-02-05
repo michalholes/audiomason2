@@ -227,6 +227,19 @@ def _run_cmd_with_heartbeat(ctx: Ctx, *, test_name: str, argv: list[str], cwd: P
                 if _want_heartbeat(ctx):
                     last_msg = _emit_heartbeat(ctx, test_name=test_name, started=started, last_msg=last_msg)
                 continue
+            except KeyboardInterrupt:
+                # Ensure the child process does not leak when the user aborts the suite.
+                try:
+                    if proc.poll() is None:
+                        proc.terminate()
+                        try:
+                            proc.wait(timeout=2.0)
+                        except subprocess.TimeoutExpired:
+                            proc.kill()
+                except Exception:
+                    # Best-effort cleanup; the interrupt should still propagate.
+                    pass
+                raise
     finally:
         _clear_heartbeat(ctx, last_msg)
 
@@ -476,23 +489,30 @@ def main(argv: list[str]) -> int:
             fail_commit_limit(central_log, commit_limit, commit_tests)
 
         ok_all = True
+        interrupted = False
         for idx, t in enumerate(tests):
-            # Enforce deterministic isolation contract.
-            _cleanup_issue_artifacts(ctx, issue_id=cfg.issue_id, test_name=getattr(t, "name", None))
-
-            ok = False
             try:
-                ok = _run_test_plan(t, ctx)
-            finally:
+                # Enforce deterministic isolation contract.
                 _cleanup_issue_artifacts(ctx, issue_id=cfg.issue_id, test_name=getattr(t, "name", None))
-
-            if ctx.console_verbosity in {"normal", "verbose", "debug"} or ctx.log_verbosity in {"normal", "verbose", "debug"}:
-                _emit(ctx, level="normal", test_name=t.name, text=format_result_line(t.name, ok))
-            if not ok:
+    
+                ok = False
+                try:
+                    ok = _run_test_plan(t, ctx)
+                finally:
+                    _cleanup_issue_artifacts(ctx, issue_id=cfg.issue_id, test_name=getattr(t, "name", None))
+    
+                if ctx.console_verbosity in {"normal", "verbose", "debug"} or ctx.log_verbosity in {"normal", "verbose", "debug"}:
+                    _emit(ctx, level="normal", test_name=t.name, text=format_result_line(t.name, ok))
+                if not ok:
+                    ok_all = False
+                    if idx == 0 and bool(getattr(tests, "abort_on_guard_fail", False)):
+                        break
+    
+            except KeyboardInterrupt:
+                interrupted = True
                 ok_all = False
-                if idx == 0 and bool(getattr(tests, "abort_on_guard_fail", False)):
-                    break
-
+                _emit(ctx, level="quiet", test_name=None, text="BadGuys interrupted (Ctrl+C)\n")
+                break
         # Summary for quiet and normal+.
         passed = 0
         failed = 0
@@ -501,6 +521,8 @@ def main(argv: list[str]) -> int:
         status = "OK" if ok_all else "FAIL"
         _emit(ctx, level="quiet", test_name=None, text=f"BadGuys summary: {status}\n")
 
+        if interrupted:
+            return 130
         return 0 if ok_all else 1
     finally:
         release_lock(repo_root)
