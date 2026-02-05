@@ -300,6 +300,21 @@ BadGuys has three distinct verbosity controls:
   - MUST print per-test result lines as tests complete
   - heartbeat MUST be enabled for long-running command execution (see 8.4)
 
+#### Summary line (normative)
+
+- console_verbosity=quiet:
+  - MUST print exactly one final summary line:
+    - "BadGuys summary: OK" or "BadGuys summary: FAIL"
+  - MUST NOT include passed/failed counts
+
+- console_verbosity in {normal, verbose, debug}:
+  - MUST print a final summary line that includes counts:
+    - "BadGuys summary: OK passed=<N> failed=<M>" or
+    - "BadGuys summary: FAIL passed=<N> failed=<M>"
+  - passed MUST equal the number of executed tests that PASSED
+  - failed MUST equal the number of executed tests that FAILED
+  - tests that did not execute (e.g. interrupted run) MUST NOT be counted as failed
+
 ### 8.4 Heartbeat (normative)
 
 - Heartbeat MUST be emitted only when console_verbosity in {normal, verbose, debug}.

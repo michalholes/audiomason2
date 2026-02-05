@@ -563,13 +563,15 @@ def main(argv: list[str]) -> int:
                 ok_all = False
                 _emit(ctx, level="quiet", test_name=None, text="BadGuys interrupted (Ctrl+C)\n")
                 break
-        # Summary for quiet and normal+.
-        passed = 0
-        failed = 0
-        # We don't keep per-test state here; compute from ok_all only.
-        # Summary is minimal by contract.
+        # Summary is minimal by contract in quiet, and includes counts in normal+.
         status = "OK" if ok_all else "FAIL"
-        _emit(ctx, level="quiet", test_name=None, text=f"BadGuys summary: {status}\n")
+        passed = sum(1 for ok in per_test_ok.values() if ok)
+        failed = sum(1 for ok in per_test_ok.values() if not ok)
+        if ctx.console_verbosity == "quiet":
+            summary = f"BadGuys summary: {status}\n"
+        else:
+            summary = f"BadGuys summary: {status} passed={passed} failed={failed}\n"
+        _emit(ctx, level="quiet", test_name=None, text=summary)
 
         _post_run_cleanup_logs(cfg, per_test_ok)
 
