@@ -223,3 +223,93 @@ def fail_commit_limit(central_log: Path, commit_limit: int, commit_tests: Sequen
         print(f" - {n}", file=sys.stderr)
     print("Fix: increase --commit-limit OR use --exclude/--include.", file=sys.stderr)
     raise SystemExit(1)
+
+# --- Additional helpers for new tests (Batch 1) ---
+
+import fnmatch
+import zipfile
+
+
+def assert_path_missing(path: Path) -> None:
+    if path.exists():
+        raise AssertionError(f"expected path to be missing: {path}")
+
+
+def assert_file_contains(path: Path, needle: str) -> None:
+    data = path.read_text(encoding="utf-8", errors="replace")
+    if needle not in data:
+        raise AssertionError(f"expected file to contain {needle!r}: {path}")
+
+
+def assert_file_not_contains(path: Path, needle: str) -> None:
+    data = path.read_text(encoding="utf-8", errors="replace")
+    if needle in data:
+        raise AssertionError(f"expected file to NOT contain {needle!r}: {path}")
+
+
+def list_zip_entries(zip_path: Path) -> list[str]:
+    with zipfile.ZipFile(zip_path, "r") as zf:
+        return sorted(zf.namelist())
+
+
+def assert_zip_no_entries_matching(zip_path: Path, patterns: list[str]) -> None:
+    entries = list_zip_entries(zip_path)
+    bad: list[str] = []
+    for e in entries:
+        for pat in patterns:
+            if fnmatch.fnmatch(e, pat):
+                bad.append(e)
+                break
+    if bad:
+        raise AssertionError(f"zip contains forbidden entries: {bad}")
+
+
+def write_git_modify_file_patch(patch_path: Path, rel_path: str, old: str, new: str) -> None:
+    """Write a minimal git-apply patch that replaces the entire file content."""
+    if not old.endswith("\n"):
+        old = old + "\n"
+    if not new.endswith("\n"):
+        new = new + "\n"
+    old_lines = old.splitlines(True)
+    new_lines = new.splitlines(True)
+    body = "".join(["-" + ln for ln in old_lines] + ["+" + ln for ln in new_lines])
+    content = (
+        f"diff --git a/{rel_path} b/{rel_path}\n"
+        f"index 2222222..3333333 100644\n"
+        f"--- a/{rel_path}\n"
+        f"+++ b/{rel_path}\n"
+        f"@@ -1,{len(old_lines)} +1,{len(new_lines)} @@\n"
+        f"{body}"
+    )
+    write_text(patch_path, content)
+
+
+def write_git_noop_patch(patch_path: Path, rel_path: str) -> None:
+    """A patch that declares a file but makes no effective changes (for NOOP enforcement)."""
+    content = (
+        f"diff --git a/{rel_path} b/{rel_path}\n"
+        f"index 1111111..1111111 100644\n"
+        f"--- a/{rel_path}\n"
+        f"+++ b/{rel_path}\n"
+    )
+    write_text(patch_path, content)
+
+
+def write_patch_script(path: Path, *, files: list[str], body: str) -> None:
+    """Write a runner python patch script with top-level FILES list."""
+    files_list = "[" + ", ".join([repr(f) for f in files]) + "]"
+    text = (
+        "from __future__ import annotations\n\n"
+        f"FILES = {files_list}\n\n"
+        "from pathlib import Path\n\n"
+        "REPO = Path(__file__).resolve().parents[1]\n\n"
+        f"{body.strip()}\n"
+    )
+    write_text(path, text)
+
+
+def write_zip(zip_path: Path, entries: list[tuple[str, bytes]]) -> None:
+    zip_path.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for name, data in entries:
+            zf.writestr(name, data)

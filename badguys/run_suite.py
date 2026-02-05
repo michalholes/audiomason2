@@ -400,7 +400,7 @@ def main(argv: list[str]) -> int:
     cfg = _make_cfg(repo_root, Path(args.config), args.runner_verbosity, args.console_verbosity, args.log_verbosity)
     run_id = time.strftime("%Y%m%d_%H%M%S")
 
-    from badguys.tests import discover_tests
+    from badguys.discovery import discover_tests
     from badguys._util import acquire_lock, fail_commit_limit, format_result_line, release_lock
 
     acquire_lock(
