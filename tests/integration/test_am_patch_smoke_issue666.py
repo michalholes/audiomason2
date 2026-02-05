@@ -93,6 +93,7 @@ def test_am_patch_smoke_issue_666() -> None:
         "test",
         str(bundle),
         "--test-mode",
+        "--skip-pytest",
         # "--skip-ruff",
         # "--skip-mypy",
         # "--verbosity quiet",

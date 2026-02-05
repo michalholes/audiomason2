@@ -11,7 +11,7 @@ runner_verbosity = "verbose"
 
 # BadGuys console verbosity (short flags -q/-n/-v/-d override this).
 # Allowed: "debug", "verbose", "normal", "quiet".
-console_verbosity = "normal"
+console_verbosity = "debug"
 
 # BadGuys log verbosity (controls central + per-test logs).
 # Allowed: "debug", "verbose", "normal", "quiet".
