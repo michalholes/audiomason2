@@ -95,6 +95,8 @@ def discover_tests(*, repo_root: Path, config_path: Path, cli_commit_limit: Opti
         if t is not None:
             tests.append(t)
 
+    all_tests = list(tests)
+
     # include filter
     if include:
         keep = set(include)
@@ -107,9 +109,15 @@ def discover_tests(*, repo_root: Path, config_path: Path, cli_commit_limit: Opti
 
     # ensure guard first if required
     if policy.require_guard_test:
-        names = [t.name for t in tests]
-        if policy.guard_test_name not in names:
-            raise SystemExit(f"FAIL: guard test not found: {policy.guard_test_name}")
+        if policy.guard_test_name in set(exclude):
+            raise SystemExit(f"FAIL: guard test excluded but required: {policy.guard_test_name}")
+
+        if policy.guard_test_name not in {t.name for t in tests}:
+            injected = next((t for t in all_tests if t.name == policy.guard_test_name), None)
+            if injected is None:
+                raise SystemExit(f"FAIL: guard test not found: {policy.guard_test_name}")
+            tests = [injected] + tests
+
         guard = [t for t in tests if t.name == policy.guard_test_name]
         rest = [t for t in tests if t.name != policy.guard_test_name]
         tests = guard + rest
