@@ -18,7 +18,7 @@ def run(ctx) -> Plan:
 
     return Plan(
         steps=[
-            CmdStep(argv=argv, cwd=ctx.repo_root, expect_rc=1),
+            CmdStep(argv=argv, cwd=ctx.repo_root, expect_rc=2),
             FuncStep(name="assert_no_traceback", fn=_assert),
         ],
     )
