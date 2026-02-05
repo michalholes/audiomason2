@@ -15,7 +15,7 @@ def run(ctx) -> Plan:
     body = """
 # Produce a ruff violation in scripts/ (line too long), but keep valid syntax for compile.
 p = REPO / 'scripts' / 'badguys_batch1_ruff_fail.py'
-p.write_text('x = \'%s\'\n' % ('a'*200), encoding='utf-8')
+p.write_text('x = \'%s\'\\n' % ('a'*200), encoding='utf-8')
 """
     write_patch_script(patch_path, files=["scripts/badguys_batch1_ruff_fail.py"], body=body)
 

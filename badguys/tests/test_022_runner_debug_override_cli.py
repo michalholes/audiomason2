@@ -39,7 +39,7 @@ exclude = []
     def _assert_cfg() -> None:
         from badguys.run_suite import _make_cfg
 
-        cfg = _make_cfg(ctx.repo_root, cfg_path.relative_to(ctx.repo_root), "debug", None, None)
+        cfg = _make_cfg(ctx.repo_root, cfg_path.relative_to(ctx.repo_root), "debug", None, None, None)
         joined = " ".join(cfg.runner_cmd)
         assert "--verbosity=debug" in joined, f"FAIL: expected --verbosity=debug in runner_cmd, got: {joined}"
         assert "--verbosity=quiet" not in joined, f"FAIL: cli override did not replace quiet, got: {joined}"

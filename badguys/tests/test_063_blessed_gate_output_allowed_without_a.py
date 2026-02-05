@@ -14,11 +14,11 @@ def run(ctx) -> Plan:
 
     body = """
 (REPO / 'docs/badguys_batch1/blessed_driver.txt').parent.mkdir(parents=True, exist_ok=True)
-(REPO / 'docs/badguys_batch1/blessed_driver.txt').write_text('ok\n', encoding='utf-8')
+(REPO / 'docs/badguys_batch1/blessed_driver.txt').write_text('ok\\n', encoding='utf-8')
 
 j = REPO / 'audit' / 'results' / 'pytest_junit.xml'
 j.parent.mkdir(parents=True, exist_ok=True)
-j.write_text('<testsuite/>\n', encoding='utf-8')
+j.write_text('<testsuite/>\\n', encoding='utf-8')
 """
     write_patch_script(
         patch_path,

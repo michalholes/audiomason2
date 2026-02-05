@@ -22,8 +22,8 @@ def run(ctx):
     except SystemExit as e:
         msg = str(e)
         assert "FAIL:" in msg, f"FAIL: expected FAIL message, got: {msg!r}"
-        assert "guard test not found" in msg, f"FAIL: expected guard-not-found, got: {msg!r}"
-        assert guard in msg, f"FAIL: expected guard name in message, got: {msg!r}"
+        assert "include/exclude conflict" in msg, f"FAIL: expected include/exclude conflict, got: {msg!r}"
+        assert target in msg, f"FAIL: expected target name in message, got: {msg!r}"
         return Plan(steps=[])
 
     raise AssertionError("FAIL: expected deterministic SystemExit on include/exclude conflict")

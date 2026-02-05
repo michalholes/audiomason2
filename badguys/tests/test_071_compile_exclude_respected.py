@@ -30,11 +30,12 @@ def run(ctx) -> Plan:
     def _assert() -> None:
         log_path = ctx.step_log_path("test_071_compile_exclude_respected")
         assert_file_contains(log_path, "GATE: compile")
+        assert_file_contains(log_path, "GATE: RUFF")
         assert_file_contains(log_path, "compile_exclude=['scripts/badguys_batch1_excluded']")
 
     return Plan(
         steps=[
-            CmdStep(argv=argv, cwd=ctx.repo_root, expect_rc=0),
+            CmdStep(argv=argv, cwd=ctx.repo_root, expect_rc=1),
             FuncStep(name="assert_compile_exclude_logged", fn=_assert),
         ],
         cleanup_paths=[patch_path],

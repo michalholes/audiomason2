@@ -14,8 +14,8 @@ def run(ctx) -> Plan:
 
     body = """
 (REPO / 'docs/badguys_batch1/a_declared.txt').parent.mkdir(parents=True, exist_ok=True)
-(REPO / 'docs/badguys_batch1/a_declared.txt').write_text('declared\n', encoding='utf-8')
-(REPO / 'docs/badguys_batch1/a_undeclared.txt').write_text('undeclared\n', encoding='utf-8')
+(REPO / 'docs/badguys_batch1/a_declared.txt').write_text('declared\\n', encoding='utf-8')
+(REPO / 'docs/badguys_batch1/a_undeclared.txt').write_text('undeclared\\n', encoding='utf-8')
 """
     write_patch_script(
         patch_path,
