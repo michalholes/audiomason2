@@ -50,6 +50,9 @@ class CliArgs:
     patch_script: str | None
     message: str | None
 
+    # Config discovery (CLI only; no cfg key)
+    config_path: str | None
+
     verbosity: str | None
 
     run_all_tests: bool | None
@@ -115,6 +118,10 @@ Options:
       Print effective configuration and policy sources (defaults, config file,
       CLI overrides) and exit.
 
+  --config PATH
+      Use PATH as config file (CLI only; not a config key).
+      [default: scripts/am_patch/am_patch.toml]
+
   -q, -v, -n, -d, --verbosity {{debug, verbose, normal, quiet}}
       Control screen output amount. [default: verbose]
 
@@ -171,6 +178,11 @@ CORE / INFO
   --show-config (-c)
       Print effective configuration and policy sources (defaults, config file,
       CLI overrides) and exit.
+
+  --config PATH
+      Use PATH as config file (CLI only; not a config key).
+      Relative paths are resolved against repo root.
+      [default: scripts/am_patch/am_patch.toml]
 
   --version
       Print runner version and exit.
@@ -411,6 +423,7 @@ def parse_args(argv: list[str]) -> CliArgs:
     )
 
     # Full-only options (long-only; no short aliases).
+    p.add_argument("--config", dest="config_path", metavar="PATH", default=None)
     p.add_argument(
         "--override", dest="overrides", action="append", default=None, metavar="KEY=VALUE"
     )
@@ -580,6 +593,7 @@ def parse_args(argv: list[str]) -> CliArgs:
             issue_id=None,
             patch_script=None,
             message=None,
+            config_path=ns.config_path,
             verbosity=ns.verbosity,
             run_all_tests=ns.run_all_tests,
             allow_no_op=ns.allow_no_op,
@@ -657,6 +671,7 @@ def parse_args(argv: list[str]) -> CliArgs:
         issue_id=issue_id,
         patch_script=patch_script,
         message=message,
+        config_path=ns.config_path,
         verbosity=ns.verbosity,
         run_all_tests=ns.run_all_tests,
         allow_no_op=ns.allow_no_op,

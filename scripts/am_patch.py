@@ -43,6 +43,7 @@ from am_patch.config import (
     build_policy,
     load_config,
     policy_for_log,
+    resolve_config_path,
 )
 from am_patch.errors import RunnerError, fingerprint
 from am_patch.gates import run_badguys, run_gates
@@ -273,7 +274,7 @@ def main(argv: list[str]) -> int:
     cli = parse_args(argv)
 
     defaults = Policy()
-    config_path = Path(__file__).resolve().parent / "am_patch" / "am_patch.toml"
+    config_path = resolve_config_path(cli.config_path, _REPO_ROOT, Path(__file__).resolve().parent)
     cfg, used_cfg = load_config(config_path)
     policy = build_policy(defaults, cfg)
 
