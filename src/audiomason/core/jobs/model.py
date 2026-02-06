@@ -1,17 +1,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from enum import Enum
+from enum import StrEnum
 from typing import Any
 
 
-class JobType(str, Enum):
+class JobType(StrEnum):
     PROCESS = "process"
     WIZARD = "wizard"
     DAEMON = "daemon"
 
 
-class JobState(str, Enum):
+class JobState(StrEnum):
     PENDING = "pending"
     RUNNING = "running"
     SUCCEEDED = "succeeded"
