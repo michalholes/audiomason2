@@ -34,6 +34,7 @@ from audiomason.core.errors import (
 )
 from audiomason.core.events import EventBus, get_event_bus
 from audiomason.core.interfaces import IUI, IEnricher, IProcessor, IProvider, IStorage
+from audiomason.core.jobs import Job, JobService, JobState, JobStore, JobType
 from audiomason.core.loader import PluginLoader, PluginManifest
 from audiomason.core.logging import (
     VerbosityLevel,
@@ -98,6 +99,12 @@ __all__ = [
     "get_verbosity",
     "set_log_file",
     "set_colors",
+    # Jobs
+    "Job",
+    "JobType",
+    "JobState",
+    "JobStore",
+    "JobService",
 ]
 
 
