@@ -150,15 +150,15 @@ audit_rubric_guard = false
 
 
 # --- Phase 2: runner layout/path settings (defaults shown) ---
-# patch_dir_name = "patches"
-# patch_layout_logs_dir = "logs"
-# patch_layout_workspaces_dir = "workspaces"
-# patch_layout_successful_dir = "successful"
-# patch_layout_unsuccessful_dir = "unsuccessful"
-# lockfile_name = "am_patch.lock"
-# current_log_symlink_name = "am_patch.log"
-# current_log_symlink_enabled = true
-# log_ts_format = "%Y%m%d_%H%M%S"
+patch_dir_name = "patches"
+patch_layout_logs_dir = "logs"
+patch_layout_workspaces_dir = "workspaces"
+patch_layout_successful_dir = "successful"
+patch_layout_unsuccessful_dir = "unsuccessful"
+lockfile_name = "am_patch.lock"
+current_log_symlink_name = "am_patch.log"
+current_log_symlink_enabled = true
+log_ts_format = "%Y%m%d_%H%M%S"
 # log_template_issue = "am_patch_issue_{issue}_{ts}.log"
 # log_template_finalize = "am_patch_finalize_{ts}.log"
 # failure_zip_name = "patched.zip"
@@ -176,4 +176,4 @@ audit_rubric_guard = false
 # scope_ignore_suffixes = [".pyc"]
 # scope_ignore_contains = ["/__pycache__/"]
 # venv_bootstrap_mode = "auto"  # auto|always|never
-# venv_bootstrap_python = ".venv/bin/python"
+venv_bootstrap_python = ".venv/bin/python"
