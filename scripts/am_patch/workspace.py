@@ -48,10 +48,18 @@ def _write_meta(meta_path: Path, meta: dict[str, Any]) -> None:
     meta_path.write_text(json.dumps(meta, indent=2, sort_keys=True), encoding="utf-8")
 
 
-def open_existing_workspace(logger: Logger, workspaces_dir: Path, issue_id: str) -> Workspace:
-    ws_root = workspaces_dir / f"issue_{issue_id}"
-    repo_dir = ws_root / "repo"
-    meta_path = ws_root / "meta.json"
+def open_existing_workspace(
+    logger: Logger,
+    workspaces_dir: Path,
+    issue_id: str,
+    *,
+    issue_dir_template: str = "issue_{issue}",
+    repo_dir_name: str = "repo",
+    meta_filename: str = "meta.json",
+) -> Workspace:
+    ws_root = workspaces_dir / issue_dir_template.format(issue=issue_id)
+    repo_dir = ws_root / repo_dir_name
+    meta_path = ws_root / meta_filename
     if not repo_dir.exists():
         raise RunnerError("PREFLIGHT", "WORKSPACE", f"workspace not found: {repo_dir}")
     meta = _read_meta(meta_path)
@@ -78,20 +86,28 @@ def ensure_workspace(
     update: bool,
     soft_reset: bool,
     message: str | None,
+    *,
+    issue_dir_template: str = "issue_{issue}",
+    repo_dir_name: str = "repo",
+    meta_filename: str = "meta.json",
+    history_logs_dir: str = "logs",
+    history_oldlogs_dir: str = "oldlogs",
+    history_patches_dir: str = "patches",
+    history_oldpatches_dir: str = "oldpatches",
 ) -> Workspace:
-    ws_root = workspaces_dir / f"issue_{issue_id}"
-    repo_dir = ws_root / "repo"
-    meta_path = ws_root / "meta.json"
+    ws_root = workspaces_dir / issue_dir_template.format(issue=issue_id)
+    repo_dir = ws_root / repo_dir_name
+    meta_path = ws_root / meta_filename
 
     # Per-issue history (kept until workspace deletion on successful runs).
     # - logs/: current run log only
     # - oldlogs/: prior run logs
     # - patches/: current run patch script only
     # - oldpatches/: prior run patch scripts
-    (ws_root / "logs").mkdir(parents=True, exist_ok=True)
-    (ws_root / "oldlogs").mkdir(parents=True, exist_ok=True)
-    (ws_root / "patches").mkdir(parents=True, exist_ok=True)
-    (ws_root / "oldpatches").mkdir(parents=True, exist_ok=True)
+    (ws_root / history_logs_dir).mkdir(parents=True, exist_ok=True)
+    (ws_root / history_oldlogs_dir).mkdir(parents=True, exist_ok=True)
+    (ws_root / history_patches_dir).mkdir(parents=True, exist_ok=True)
+    (ws_root / history_oldpatches_dir).mkdir(parents=True, exist_ok=True)
 
     meta = _read_meta(meta_path)
     attempt = int(meta.get("attempt", 0)) + 1

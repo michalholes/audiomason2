@@ -16,23 +16,37 @@ class RunResult:
 
 
 class Logger:
-    def __init__(self, log_path: Path, symlink_path: Path, tee_to_screen: bool = True) -> None:
+    def __init__(
+        self,
+        log_path: Path,
+        symlink_path: Path,
+        tee_to_screen: bool = True,
+        *,
+        symlink_enabled: bool = True,
+        symlink_target_rel: Path | None = None,
+    ) -> None:
         self.log_path = log_path
         self.symlink_path = symlink_path
         self.tee_to_screen = tee_to_screen
+        self.symlink_enabled = symlink_enabled
+        self.symlink_target_rel = symlink_target_rel
 
         log_path.parent.mkdir(parents=True, exist_ok=True)
         symlink_path.parent.mkdir(parents=True, exist_ok=True)
 
         self._fp = open(log_path, "w", encoding="utf-8", errors="replace")  # noqa: SIM115
 
-        try:
-            if symlink_path.exists() or symlink_path.is_symlink():
-                symlink_path.unlink()
-            target_rel = Path("logs") / log_path.name
-            symlink_path.symlink_to(target_rel)
-        except Exception:
-            pass
+        if self.symlink_enabled:
+            try:
+                if symlink_path.exists() or symlink_path.is_symlink():
+                    symlink_path.unlink()
+                target_rel = self.symlink_target_rel
+                if target_rel is None:
+                    # Default: patches/<logs_dir_name>/<logname> relative to patch_dir.
+                    target_rel = Path("logs") / log_path.name
+                symlink_path.symlink_to(target_rel)
+            except Exception:
+                pass
 
     def close(self) -> None:
         try:
@@ -88,7 +102,17 @@ class Logger:
         return RunResult(argv=argv, returncode=p.returncode, stdout=p.stdout, stderr=p.stderr)
 
 
-def new_log_file(logs_dir: Path, issue_id: str | None) -> Path:
-    ts = time.strftime("%Y%m%d_%H%M%S")
-    name = f"am_patch_issue_{issue_id}_{ts}.log" if issue_id else f"am_patch_finalize_{ts}.log"
+def new_log_file(
+    logs_dir: Path,
+    issue_id: str | None,
+    *,
+    ts_format: str = "%Y%m%d_%H%M%S",
+    issue_template: str = "am_patch_issue_{issue}_{ts}.log",
+    finalize_template: str = "am_patch_finalize_{ts}.log",
+) -> Path:
+    ts = time.strftime(ts_format)
+    if issue_id:
+        name = issue_template.format(issue=issue_id, ts=ts)
+    else:
+        name = finalize_template.format(ts=ts)
     return logs_dir / name

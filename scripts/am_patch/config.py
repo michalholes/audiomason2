@@ -41,6 +41,65 @@ class Policy:
 
     repo_root: str | None = None
     patch_dir: str | None = None
+    # When patch_dir is not explicitly set, patch_dir_name determines the default
+    # directory under repo_root used for runner artifacts.
+    patch_dir_name: str = "patches"
+
+    # Layout names under patch_dir.
+    patch_layout_logs_dir: str = "logs"
+    patch_layout_workspaces_dir: str = "workspaces"
+    patch_layout_successful_dir: str = "successful"
+    patch_layout_unsuccessful_dir: str = "unsuccessful"
+
+    # Lock and "current log" symlink names under patch_dir.
+    lockfile_name: str = "am_patch.lock"
+    current_log_symlink_name: str = "am_patch.log"
+    current_log_symlink_enabled: bool = True
+
+    # Log filename templates (placeholders: {issue}, {ts}) and timestamp format.
+    log_ts_format: str = "%Y%m%d_%H%M%S"
+    log_template_issue: str = "am_patch_issue_{issue}_{ts}.log"
+    log_template_finalize: str = "am_patch_finalize_{ts}.log"
+
+    # Failure diagnostics zip naming and internal directory structure.
+    failure_zip_name: str = "patched.zip"
+    failure_zip_log_dir: str = "logs"
+    failure_zip_patch_dir: str = "patches"
+
+    # Workspace on-disk layout.
+    workspace_issue_dir_template: str = "issue_{issue}"
+    workspace_repo_dir_name: str = "repo"
+    workspace_meta_filename: str = "meta.json"
+
+    # Per-workspace history directories.
+    workspace_history_logs_dir: str = "logs"
+    workspace_history_oldlogs_dir: str = "oldlogs"
+    workspace_history_patches_dir: str = "patches"
+    workspace_history_oldpatches_dir: str = "oldpatches"
+
+    # Scope exemptions.
+    blessed_gate_outputs: list[str] = field(
+        default_factory=lambda: ["audit/results/pytest_junit.xml"]
+    )
+    scope_ignore_prefixes: list[str] = field(
+        default_factory=lambda: [
+            ".am_patch/",
+            ".pytest_cache/",
+            ".mypy_cache/",
+            ".ruff_cache/",
+            "__pycache__/",
+        ]
+    )
+    scope_ignore_suffixes: list[str] = field(default_factory=lambda: [".pyc"])
+    scope_ignore_contains: list[str] = field(default_factory=lambda: ["/__pycache__/"])
+
+    # Venv bootstrap (entrypoint re-exec) behavior.
+    # - auto: re-exec only when current interpreter is outside repo/.venv
+    # - always: always re-exec into venv python (unless already there)
+    # - never: disable bootstrap
+    venv_bootstrap_mode: str = "auto"  # auto|always|never
+    venv_bootstrap_python: str = ".venv/bin/python"
+
     default_branch: str = "main"
 
     # Success archive name template for git-archive success zip.
@@ -175,6 +234,17 @@ def _as_list_str(d: dict[str, Any], k: str, default: list[str]) -> list[str]:
     return list(default)
 
 
+def _validate_basename(v: str, *, field: str) -> str:
+    s = str(v).strip()
+    if not s:
+        raise RunnerError("CONFIG", "INVALID", f"{field} must be non-empty")
+    if "/" in s or "\\" in s:
+        raise RunnerError(
+            "CONFIG", "INVALID", f"{field} must be a basename (no path separators): {s!r}"
+        )
+    return s
+
+
 def _parse_override_kv(s: str) -> tuple[str, object]:
     if "=" not in s:
         raise ValueError("override must be KEY=VALUE")
@@ -193,6 +263,40 @@ def _parse_override_kv(s: str) -> tuple[str, object]:
     if re.fullmatch(r"-?\d+", v):
         return k, int(v)
     return k, v
+
+
+def _coerce_override_value(cur: object, raw: object) -> object:
+    # Preserve type of existing policy field where possible.
+    if isinstance(cur, bool):
+        if isinstance(raw, bool):
+            return raw
+        if isinstance(raw, str):
+            s = raw.strip().lower()
+            if s in ("1", "true", "yes", "on"):
+                return True
+            if s in ("0", "false", "no", "off"):
+                return False
+        raise RunnerError("CONFIG", "INVALID", f"invalid boolean override: {raw!r}")
+
+    if isinstance(cur, int):
+        if isinstance(raw, int):
+            return raw
+        if isinstance(raw, str):
+            try:
+                return int(raw.strip())
+            except Exception as e:
+                raise RunnerError("CONFIG", "INVALID", f"invalid integer override: {raw!r}") from e
+        raise RunnerError("CONFIG", "INVALID", f"invalid integer override: {raw!r}")
+
+    if isinstance(cur, list):
+        if isinstance(raw, list):
+            return raw
+        if isinstance(raw, str):
+            parts = [p for p in (x.strip() for x in raw.split(",")) if p]
+            return parts
+        raise RunnerError("CONFIG", "INVALID", f"invalid list override: {raw!r}")
+
+    return raw
 
 
 def _flatten_sections(cfg: dict[str, object]) -> dict[str, object]:
@@ -261,6 +365,89 @@ def build_policy(defaults: Policy, cfg: dict[str, Any]) -> Policy:
     _mark_cfg(p, cfg, "repo_root")
     p.patch_dir = _as_str(cfg, "patch_dir", p.patch_dir)
     _mark_cfg(p, cfg, "patch_dir")
+    p.patch_dir_name = str(cfg.get("patch_dir_name", p.patch_dir_name))
+    _mark_cfg(p, cfg, "patch_dir_name")
+
+    p.patch_layout_logs_dir = str(cfg.get("patch_layout_logs_dir", p.patch_layout_logs_dir))
+    _mark_cfg(p, cfg, "patch_layout_logs_dir")
+    p.patch_layout_workspaces_dir = str(
+        cfg.get("patch_layout_workspaces_dir", p.patch_layout_workspaces_dir)
+    )
+    _mark_cfg(p, cfg, "patch_layout_workspaces_dir")
+    p.patch_layout_successful_dir = str(
+        cfg.get("patch_layout_successful_dir", p.patch_layout_successful_dir)
+    )
+    _mark_cfg(p, cfg, "patch_layout_successful_dir")
+    p.patch_layout_unsuccessful_dir = str(
+        cfg.get("patch_layout_unsuccessful_dir", p.patch_layout_unsuccessful_dir)
+    )
+    _mark_cfg(p, cfg, "patch_layout_unsuccessful_dir")
+
+    p.lockfile_name = str(cfg.get("lockfile_name", p.lockfile_name))
+    _mark_cfg(p, cfg, "lockfile_name")
+    p.current_log_symlink_name = str(
+        cfg.get("current_log_symlink_name", p.current_log_symlink_name)
+    )
+    _mark_cfg(p, cfg, "current_log_symlink_name")
+    p.current_log_symlink_enabled = _as_bool(
+        cfg, "current_log_symlink_enabled", p.current_log_symlink_enabled
+    )
+    _mark_cfg(p, cfg, "current_log_symlink_enabled")
+
+    p.log_ts_format = str(cfg.get("log_ts_format", p.log_ts_format))
+    _mark_cfg(p, cfg, "log_ts_format")
+    p.log_template_issue = str(cfg.get("log_template_issue", p.log_template_issue))
+    _mark_cfg(p, cfg, "log_template_issue")
+    p.log_template_finalize = str(cfg.get("log_template_finalize", p.log_template_finalize))
+    _mark_cfg(p, cfg, "log_template_finalize")
+
+    p.failure_zip_name = str(cfg.get("failure_zip_name", p.failure_zip_name))
+    _mark_cfg(p, cfg, "failure_zip_name")
+    p.failure_zip_log_dir = str(cfg.get("failure_zip_log_dir", p.failure_zip_log_dir))
+    _mark_cfg(p, cfg, "failure_zip_log_dir")
+    p.failure_zip_patch_dir = str(cfg.get("failure_zip_patch_dir", p.failure_zip_patch_dir))
+    _mark_cfg(p, cfg, "failure_zip_patch_dir")
+
+    p.workspace_issue_dir_template = str(
+        cfg.get("workspace_issue_dir_template", p.workspace_issue_dir_template)
+    )
+    _mark_cfg(p, cfg, "workspace_issue_dir_template")
+    p.workspace_repo_dir_name = str(cfg.get("workspace_repo_dir_name", p.workspace_repo_dir_name))
+    _mark_cfg(p, cfg, "workspace_repo_dir_name")
+    p.workspace_meta_filename = str(cfg.get("workspace_meta_filename", p.workspace_meta_filename))
+    _mark_cfg(p, cfg, "workspace_meta_filename")
+
+    p.workspace_history_logs_dir = str(
+        cfg.get("workspace_history_logs_dir", p.workspace_history_logs_dir)
+    )
+    _mark_cfg(p, cfg, "workspace_history_logs_dir")
+    p.workspace_history_oldlogs_dir = str(
+        cfg.get("workspace_history_oldlogs_dir", p.workspace_history_oldlogs_dir)
+    )
+    _mark_cfg(p, cfg, "workspace_history_oldlogs_dir")
+    p.workspace_history_patches_dir = str(
+        cfg.get("workspace_history_patches_dir", p.workspace_history_patches_dir)
+    )
+    _mark_cfg(p, cfg, "workspace_history_patches_dir")
+    p.workspace_history_oldpatches_dir = str(
+        cfg.get("workspace_history_oldpatches_dir", p.workspace_history_oldpatches_dir)
+    )
+    _mark_cfg(p, cfg, "workspace_history_oldpatches_dir")
+
+    p.blessed_gate_outputs = _as_list_str(cfg, "blessed_gate_outputs", p.blessed_gate_outputs)
+    _mark_cfg(p, cfg, "blessed_gate_outputs")
+    p.scope_ignore_prefixes = _as_list_str(cfg, "scope_ignore_prefixes", p.scope_ignore_prefixes)
+    _mark_cfg(p, cfg, "scope_ignore_prefixes")
+    p.scope_ignore_suffixes = _as_list_str(cfg, "scope_ignore_suffixes", p.scope_ignore_suffixes)
+    _mark_cfg(p, cfg, "scope_ignore_suffixes")
+    p.scope_ignore_contains = _as_list_str(cfg, "scope_ignore_contains", p.scope_ignore_contains)
+    _mark_cfg(p, cfg, "scope_ignore_contains")
+
+    p.venv_bootstrap_mode = str(cfg.get("venv_bootstrap_mode", p.venv_bootstrap_mode))
+    _mark_cfg(p, cfg, "venv_bootstrap_mode")
+    p.venv_bootstrap_python = str(cfg.get("venv_bootstrap_python", p.venv_bootstrap_python))
+    _mark_cfg(p, cfg, "venv_bootstrap_python")
+
     p.default_branch = str(cfg.get("default_branch", p.default_branch))
     _mark_cfg(p, cfg, "default_branch")
     p.success_archive_name = str(cfg.get("success_archive_name", p.success_archive_name))
@@ -296,6 +483,71 @@ def build_policy(defaults: Policy, cfg: dict[str, Any]) -> Policy:
             "INVALID_VERBOSITY",
             f"invalid verbosity={p.verbosity!r}; allowed: debug|verbose|normal|quiet",
         )
+
+    # Phase 2: hardcoded layout/settings must be configurable (cfg + CLI overrides).
+    p.patch_dir_name = _validate_basename(p.patch_dir_name, field="patch_dir_name")
+    p.patch_layout_logs_dir = _validate_basename(
+        p.patch_layout_logs_dir, field="patch_layout_logs_dir"
+    )
+    p.patch_layout_workspaces_dir = _validate_basename(
+        p.patch_layout_workspaces_dir, field="patch_layout_workspaces_dir"
+    )
+    p.patch_layout_successful_dir = _validate_basename(
+        p.patch_layout_successful_dir, field="patch_layout_successful_dir"
+    )
+    p.patch_layout_unsuccessful_dir = _validate_basename(
+        p.patch_layout_unsuccessful_dir, field="patch_layout_unsuccessful_dir"
+    )
+    p.lockfile_name = _validate_basename(p.lockfile_name, field="lockfile_name")
+    p.current_log_symlink_name = _validate_basename(
+        p.current_log_symlink_name, field="current_log_symlink_name"
+    )
+    p.failure_zip_name = _validate_basename(p.failure_zip_name, field="failure_zip_name")
+
+    p.failure_zip_log_dir = _validate_basename(p.failure_zip_log_dir, field="failure_zip_log_dir")
+    p.failure_zip_patch_dir = _validate_basename(
+        p.failure_zip_patch_dir, field="failure_zip_patch_dir"
+    )
+
+    p.workspace_issue_dir_template = str(p.workspace_issue_dir_template).strip() or "issue_{issue}"
+    p.workspace_repo_dir_name = _validate_basename(
+        p.workspace_repo_dir_name, field="workspace_repo_dir_name"
+    )
+    p.workspace_meta_filename = _validate_basename(
+        p.workspace_meta_filename, field="workspace_meta_filename"
+    )
+
+    p.workspace_history_logs_dir = _validate_basename(
+        p.workspace_history_logs_dir, field="workspace_history_logs_dir"
+    )
+    p.workspace_history_oldlogs_dir = _validate_basename(
+        p.workspace_history_oldlogs_dir, field="workspace_history_oldlogs_dir"
+    )
+    p.workspace_history_patches_dir = _validate_basename(
+        p.workspace_history_patches_dir, field="workspace_history_patches_dir"
+    )
+    p.workspace_history_oldpatches_dir = _validate_basename(
+        p.workspace_history_oldpatches_dir, field="workspace_history_oldpatches_dir"
+    )
+
+    if "{ts}" not in p.log_template_issue or "{issue}" not in p.log_template_issue:
+        raise RunnerError(
+            "CONFIG",
+            "INVALID",
+            "log_template_issue must contain {issue} and {ts}",
+        )
+    if "{ts}" not in p.log_template_finalize:
+        raise RunnerError("CONFIG", "INVALID", "log_template_finalize must contain {ts}")
+
+    if p.venv_bootstrap_mode not in ("auto", "always", "never"):
+        raise RunnerError(
+            "CONFIG",
+            "INVALID",
+            f"invalid venv_bootstrap_mode={p.venv_bootstrap_mode!r}; allowed: auto|always|never",
+        )
+    # venv_bootstrap_python may be relative to repo root; validate non-empty only.
+    if not str(p.venv_bootstrap_python).strip():
+        raise RunnerError("CONFIG", "INVALID", "venv_bootstrap_python must be non-empty")
 
     p.no_op_fail = _as_bool(cfg, "no_op_fail", p.no_op_fail)
     _mark_cfg(p, cfg, "no_op_fail")
@@ -472,9 +724,19 @@ def apply_cli_overrides(p: Policy, mapping: dict[str, object | None]) -> None:
         if not item:
             continue
         k, v = _parse_override_kv(str(item))
-        if hasattr(p, k):
-            setattr(p, k, v)
-            p._src[k] = "cli"
+        if not hasattr(p, k):
+            continue
+        cur = getattr(p, k)
+        coerced = _coerce_override_value(cur, v)
+        if isinstance(cur, list):
+            # Append semantics for list fields.
+            if isinstance(coerced, list):
+                cur.extend(coerced)
+            else:
+                raise RunnerError("CONFIG", "INVALID", f"invalid list override: {coerced!r}")
+        else:
+            setattr(p, k, coerced)
+        p._src[k] = "cli"
 
 
 def policy_for_log(p: Policy) -> str:

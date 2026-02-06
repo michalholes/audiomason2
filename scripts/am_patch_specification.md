@@ -20,7 +20,55 @@ Every runner behavior is controllable via:
 - `--override KEY=VALUE` overrides,
 with precedence: **CLI > config > defaults**.
 
-### 0.2 Determinism over convenience
+#
+### Phase 2: hardcoded settings must be configurable
+
+The runner must not hardcode operational paths, filenames, workspace layout, or scope exemptions.
+Every such setting must be configurable via:
+
+1) config file key (am_patch.toml), and
+2) CLI override (either a dedicated flag or --override KEY=VALUE).
+
+The config file path itself is CLI-only and must not be a config key.
+
+The following keys are normative (defaults shown):
+
+- patch_dir_name = "patches"
+- patch_layout_logs_dir = "logs"
+- patch_layout_workspaces_dir = "workspaces"
+- patch_layout_successful_dir = "successful"
+- patch_layout_unsuccessful_dir = "unsuccessful"
+- lockfile_name = "am_patch.lock"
+- current_log_symlink_name = "am_patch.log"
+- current_log_symlink_enabled = true
+- log_ts_format = "%Y%m%d_%H%M%S"
+- log_template_issue = "am_patch_issue_{issue}_{ts}.log"
+- log_template_finalize = "am_patch_finalize_{ts}.log"
+- failure_zip_name = "patched.zip"
+- failure_zip_log_dir = "logs"
+- failure_zip_patch_dir = "patches"
+- workspace_issue_dir_template = "issue_{issue}"
+- workspace_repo_dir_name = "repo"
+- workspace_meta_filename = "meta.json"
+- workspace_history_logs_dir = "logs"
+- workspace_history_oldlogs_dir = "oldlogs"
+- workspace_history_patches_dir = "patches"
+- workspace_history_oldpatches_dir = "oldpatches"
+- blessed_gate_outputs = ["audit/results/pytest_junit.xml"]
+- scope_ignore_prefixes = [".am_patch/", ".pytest_cache/", ".mypy_cache/", ".ruff_cache/", "__pycache__/"]
+- scope_ignore_suffixes = [".pyc"]
+- scope_ignore_contains = ["/__pycache__/"]
+- venv_bootstrap_mode = "auto"  (allowed: auto|always|never)
+- venv_bootstrap_python = ".venv/bin/python"
+
+These keys affect concrete behavior:
+- filesystem locations (patch dir layout and workspace layout),
+- log naming and the optional current-log symlink,
+- the name and internal structure of the failure diagnostics zip,
+- which changed paths are ignored for scope enforcement and promotion hygiene,
+- early venv interpreter bootstrap behavior.
+
+## 0.2 Determinism over convenience
 The runner never guesses, never implicitly expands scope, and never mutates state
 without explicit authorization.
 

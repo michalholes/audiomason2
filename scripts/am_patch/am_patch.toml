@@ -147,3 +147,33 @@ mypy_targets = ["src", "plugins", "scripts"]
 post_success_audit = false
 audit_rubric_guard = false
 
+
+
+# --- Phase 2: runner layout/path settings (defaults shown) ---
+# patch_dir_name = "patches"
+# patch_layout_logs_dir = "logs"
+# patch_layout_workspaces_dir = "workspaces"
+# patch_layout_successful_dir = "successful"
+# patch_layout_unsuccessful_dir = "unsuccessful"
+# lockfile_name = "am_patch.lock"
+# current_log_symlink_name = "am_patch.log"
+# current_log_symlink_enabled = true
+# log_ts_format = "%Y%m%d_%H%M%S"
+# log_template_issue = "am_patch_issue_{issue}_{ts}.log"
+# log_template_finalize = "am_patch_finalize_{ts}.log"
+# failure_zip_name = "patched.zip"
+# failure_zip_log_dir = "logs"
+# failure_zip_patch_dir = "patches"
+# workspace_issue_dir_template = "issue_{issue}"
+# workspace_repo_dir_name = "repo"
+# workspace_meta_filename = "meta.json"
+# workspace_history_logs_dir = "logs"
+# workspace_history_oldlogs_dir = "oldlogs"
+# workspace_history_patches_dir = "patches"
+# workspace_history_oldpatches_dir = "oldpatches"
+# blessed_gate_outputs = ["audit/results/pytest_junit.xml"]
+# scope_ignore_prefixes = [".am_patch/", ".pytest_cache/", ".mypy_cache/", ".ruff_cache/", "__pycache__/"]
+# scope_ignore_suffixes = [".pyc"]
+# scope_ignore_contains = ["/__pycache__/"]
+# venv_bootstrap_mode = "auto"  # auto|always|never
+# venv_bootstrap_python = ".venv/bin/python"

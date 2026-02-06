@@ -10,11 +10,85 @@ from contextlib import suppress
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
-_VENV_PY = _REPO_ROOT / ".venv" / "bin" / "python"
 
-if os.environ.get("AM_PATCH_VENV_BOOTSTRAPPED") != "1":
-    if not _VENV_PY.exists():
-        print(f"[am_patch_v2] ERROR: venv python not found: {_VENV_PY}", file=sys.stderr)
+
+def _bootstrap_read_cfg(cfg_path: Path) -> dict[str, object]:
+    try:
+        import tomllib
+
+        data = tomllib.loads(cfg_path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            return {}
+        return data
+    except Exception:
+        return {}
+
+
+def _bootstrap_get_arg(argv: list[str], name: str) -> str | None:
+    try:
+        i = argv.index(name)
+    except ValueError:
+        return None
+    if i + 1 >= len(argv):
+        return None
+    return argv[i + 1]
+
+
+def _bootstrap_venv_policy(argv: list[str]) -> tuple[str, str]:
+    # Defaults match Policy defaults.
+    mode = "auto"
+    py_rel = ".venv/bin/python"
+
+    # CLI-only config selection for bootstrap.
+    cfg_arg = _bootstrap_get_arg(argv, "--config")
+    cfg_path = Path(cfg_arg) if cfg_arg else (_REPO_ROOT / "scripts" / "am_patch" / "am_patch.toml")
+    if cfg_path and not cfg_path.is_absolute():
+        cfg_path = _REPO_ROOT / cfg_path
+
+    cfg = _bootstrap_read_cfg(cfg_path)
+    flat: dict[str, object] = {}
+    if isinstance(cfg, dict):
+        # Flatten top-level sections into a single mapping (same convention as runner
+        # config loader).
+        for k, v in cfg.items():
+            if isinstance(v, dict):
+                for kk, vv in v.items():
+                    flat[str(kk)] = vv
+            else:
+                flat[str(k)] = v
+
+    if isinstance(flat.get("venv_bootstrap_mode"), str):
+        mode = str(flat["venv_bootstrap_mode"]).strip()
+    if isinstance(flat.get("venv_bootstrap_python"), str):
+        py_rel = str(flat["venv_bootstrap_python"]).strip() or py_rel
+
+    # CLI overrides for bootstrap only (do not require importing runner modules).
+    cli_mode = _bootstrap_get_arg(argv, "--venv-bootstrap-mode")
+    if cli_mode:
+        mode = cli_mode.strip()
+    cli_py = _bootstrap_get_arg(argv, "--venv-bootstrap-python")
+    if cli_py:
+        py_rel = cli_py.strip() or py_rel
+
+    return mode, py_rel
+
+
+def _maybe_bootstrap_venv(argv: list[str]) -> None:
+    if os.environ.get("AM_PATCH_VENV_BOOTSTRAPPED") == "1":
+        return
+
+    mode, py_rel = _bootstrap_venv_policy(argv)
+    if mode not in ("auto", "always", "never"):
+        # Invalid bootstrap mode: keep legacy behavior to avoid hard failure before config parse.
+        mode = "auto"
+    if mode == "never":
+        return
+
+    venv_py = Path(py_rel)
+    venv_py = venv_py if venv_py.is_absolute() else (_REPO_ROOT / venv_py)
+
+    if not venv_py.exists():
+        print(f"[am_patch_v2] ERROR: venv python not found: {venv_py}", file=sys.stderr)
         print(
             "[am_patch_v2] Hint: create venv at repo/.venv and install dev deps "
             "(ruff/pytest/mypy).",
@@ -23,11 +97,12 @@ if os.environ.get("AM_PATCH_VENV_BOOTSTRAPPED") != "1":
         raise SystemExit(2)
 
     cur = Path(sys.executable).resolve()
-    # If current interpreter is not under repo/.venv, switch to it.
-    if ".venv" not in str(cur):
+    if mode == "always" or ".venv" not in str(cur):
         os.environ["AM_PATCH_VENV_BOOTSTRAPPED"] = "1"
-        os.execv(str(_VENV_PY), [str(_VENV_PY), *sys.argv])
+        os.execv(str(venv_py), [str(venv_py), *argv])
 
+
+_maybe_bootstrap_venv(sys.argv)
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _SCRIPTS_DIR = _REPO_ROOT / "scripts"
 if str(_SCRIPTS_DIR) not in sys.path:
@@ -68,16 +143,17 @@ from am_patch.workspace import (
 )
 
 
-def _fs_junk_ignore_partition(paths: list[str]) -> tuple[list[str], list[str]]:
+def _fs_junk_ignore_partition(
+    paths: list[str],
+    *,
+    ignore_prefixes: tuple[str, ...] | list[str],
+    ignore_suffixes: tuple[str, ...] | list[str],
+    ignore_contains: tuple[str, ...] | list[str],
+) -> tuple[list[str], list[str]]:
     """Partition paths into (kept, ignored) for workspace->live promotion hygiene."""
-    prefixes = (
-        ".am_patch/",
-        ".pytest_cache/",
-        ".mypy_cache/",
-        ".ruff_cache/",
-        "__pycache__/",
-    )
-    suffixes = (".pyc",)
+    prefixes = tuple(ignore_prefixes)
+    suffixes = tuple(ignore_suffixes)
+    contains = tuple(ignore_contains)
     kept: list[str] = []
     ignored: list[str] = []
     for p in paths:
@@ -89,7 +165,7 @@ def _fs_junk_ignore_partition(paths: list[str]) -> tuple[list[str], list[str]]:
             if pp == pre.rstrip("/") or pp.startswith(pre):
                 is_ignored = True
                 break
-        if not is_ignored and "/__pycache__/" in pp:
+        if not is_ignored and any(c in pp for c in contains):
             is_ignored = True
         if not is_ignored:
             for suf in suffixes:
@@ -223,11 +299,18 @@ def _select_latest_issue_patch(*, patch_dir: Path, issue_id: str, hint_name: str
     return cands[0]
 
 
-def _workspace_history_dirs(ws_root: Path) -> tuple[Path, Path, Path, Path]:
-    logs_dir = ws_root / "logs"
-    oldlogs_dir = ws_root / "oldlogs"
-    patches_dir = ws_root / "patches"
-    oldpatches_dir = ws_root / "oldpatches"
+def _workspace_history_dirs(
+    ws_root: Path,
+    *,
+    history_logs_dir: str = "logs",
+    history_oldlogs_dir: str = "oldlogs",
+    history_patches_dir: str = "patches",
+    history_oldpatches_dir: str = "oldpatches",
+) -> tuple[Path, Path, Path, Path]:
+    logs_dir = ws_root / history_logs_dir
+    oldlogs_dir = ws_root / history_oldlogs_dir
+    patches_dir = ws_root / history_patches_dir
+    oldpatches_dir = ws_root / history_oldpatches_dir
     for d in [logs_dir, oldlogs_dir, patches_dir, oldpatches_dir]:
         d.mkdir(parents=True, exist_ok=True)
     return logs_dir, oldlogs_dir, patches_dir, oldpatches_dir
@@ -244,8 +327,22 @@ def _rotate_current_dir(cur_dir: Path, old_dir: Path, prev_attempt: int) -> None
         p.replace(old_dir / new_name)
 
 
-def _workspace_store_current_patch(ws, patch_script: Path) -> None:
-    logs_dir, oldlogs_dir, patches_dir, oldpatches_dir = _workspace_history_dirs(ws.root)
+def _workspace_store_current_patch(
+    ws,
+    patch_script: Path,
+    *,
+    history_logs_dir: str,
+    history_oldlogs_dir: str,
+    history_patches_dir: str,
+    history_oldpatches_dir: str,
+) -> None:
+    logs_dir, oldlogs_dir, patches_dir, oldpatches_dir = _workspace_history_dirs(
+        ws.root,
+        history_logs_dir=history_logs_dir,
+        history_oldlogs_dir=history_oldlogs_dir,
+        history_patches_dir=history_patches_dir,
+        history_oldpatches_dir=history_oldpatches_dir,
+    )
     _ = logs_dir
     _ = oldlogs_dir
 
@@ -257,8 +354,22 @@ def _workspace_store_current_patch(ws, patch_script: Path) -> None:
     shutil.copy2(patch_script, dst)
 
 
-def _workspace_store_current_log(ws, log_path: Path) -> None:
-    logs_dir, oldlogs_dir, patches_dir, oldpatches_dir = _workspace_history_dirs(ws.root)
+def _workspace_store_current_log(
+    ws,
+    log_path: Path,
+    *,
+    history_logs_dir: str,
+    history_oldlogs_dir: str,
+    history_patches_dir: str,
+    history_oldpatches_dir: str,
+) -> None:
+    logs_dir, oldlogs_dir, patches_dir, oldpatches_dir = _workspace_history_dirs(
+        ws.root,
+        history_logs_dir=history_logs_dir,
+        history_oldlogs_dir=history_oldlogs_dir,
+        history_patches_dir=history_patches_dir,
+        history_oldpatches_dir=history_oldpatches_dir,
+    )
     _ = patches_dir
     _ = oldpatches_dir
 
@@ -355,7 +466,7 @@ def main(argv: list[str]) -> int:
         raise SystemExit("test-mode is supported only in workspace mode")
 
     repo_root = Path(policy.repo_root) if policy.repo_root else _resolve_repo_root()
-    patch_root = Path(policy.patch_dir) if policy.patch_dir else (repo_root / "patches")
+    patch_root = Path(policy.patch_dir) if policy.patch_dir else (repo_root / policy.patch_dir_name)
     isolated_work_patch_dir: Path | None = None
     patch_dir = patch_root
     if (
@@ -368,13 +479,34 @@ def main(argv: list[str]) -> int:
             patch_root / "_test_mode" / f"issue_{cli.issue_id}_pid_{os.getpid()}"
         )
         patch_dir = isolated_work_patch_dir
-    paths = default_paths(repo_root=repo_root, patch_dir=patch_root)
+    paths = default_paths(
+        repo_root=repo_root,
+        patch_dir=patch_root,
+        logs_dir_name=policy.patch_layout_logs_dir,
+        workspaces_dir_name=policy.patch_layout_workspaces_dir,
+        successful_dir_name=policy.patch_layout_successful_dir,
+        unsuccessful_dir_name=policy.patch_layout_unsuccessful_dir,
+        lockfile_name=policy.lockfile_name,
+        current_log_symlink_name=policy.current_log_symlink_name,
+    )
     ensure_dirs(paths)
 
-    log_path = new_log_file(paths.logs_dir, cli.issue_id)
+    log_path = new_log_file(
+        paths.logs_dir,
+        issue_id=cli.issue_id,
+        ts_format=policy.log_ts_format,
+        issue_template=policy.log_template_issue,
+        finalize_template=policy.log_template_finalize,
+    )
     verbosity = getattr(policy, "verbosity", "verbose")
     tee_to_screen = verbosity in ("verbose", "debug")
-    logger = Logger(log_path=log_path, symlink_path=paths.symlink_path, tee_to_screen=tee_to_screen)
+    logger = Logger(
+        log_path=log_path,
+        symlink_path=paths.symlink_path,
+        tee_to_screen=tee_to_screen,
+        symlink_enabled=policy.current_log_symlink_enabled,
+        symlink_target_rel=Path(policy.patch_layout_logs_dir) / log_path.name,
+    )
 
     status = StatusReporter(enabled=verbosity in ("normal", "verbose", "debug"))
     status.start()
@@ -556,7 +688,14 @@ def main(argv: list[str]) -> int:
             issue_id = cli.issue_id
             assert issue_id is not None
 
-            ws = open_existing_workspace(logger, paths.workspaces_dir, issue_id)
+            ws = open_existing_workspace(
+                logger,
+                paths.workspaces_dir,
+                issue_id,
+                issue_dir_template=policy.workspace_issue_dir_template,
+                repo_dir_name=policy.workspace_repo_dir_name,
+                meta_filename=policy.workspace_meta_filename,
+            )
             logger.section("FINALIZE WORKSPACE")
             logger.line(f"workspace_root={ws.root}")
             logger.line(f"workspace_repo={ws.repo}")
@@ -598,7 +737,12 @@ def main(argv: list[str]) -> int:
             _maybe_run_badguys(cwd=ws.repo, decision_paths=decision_paths_ws)
 
             changed_all = changed_paths(logger, ws.repo)
-            promote_list, ignored = _fs_junk_ignore_partition(changed_all)
+            promote_list, ignored = _fs_junk_ignore_partition(
+                changed_all,
+                ignore_prefixes=policy.scope_ignore_prefixes,
+                ignore_suffixes=policy.scope_ignore_suffixes,
+                ignore_contains=policy.scope_ignore_contains,
+            )
             logger.section("PROMOTION PLAN")
             logger.line(f"changed_all={changed_all}")
             logger.line(f"ignored_paths={ignored}")
@@ -864,9 +1008,23 @@ def main(argv: list[str]) -> int:
             update=policy.update_workspace,
             soft_reset=policy.soft_reset_workspace,
             message=cli.message,
+            issue_dir_template=policy.workspace_issue_dir_template,
+            repo_dir_name=policy.workspace_repo_dir_name,
+            meta_filename=policy.workspace_meta_filename,
+            history_logs_dir=policy.workspace_history_logs_dir,
+            history_oldlogs_dir=policy.workspace_history_oldlogs_dir,
+            history_patches_dir=policy.workspace_history_patches_dir,
+            history_oldpatches_dir=policy.workspace_history_oldpatches_dir,
         )
         ws_for_posthook = ws
-        _workspace_store_current_patch(ws, patch_script)
+        _workspace_store_current_patch(
+            ws,
+            patch_script,
+            history_logs_dir=policy.workspace_history_logs_dir,
+            history_oldlogs_dir=policy.workspace_history_oldlogs_dir,
+            history_patches_dir=policy.workspace_history_patches_dir,
+            history_oldpatches_dir=policy.workspace_history_oldpatches_dir,
+        )
         logger.section("WORKSPACE META")
         logger.line(f"workspace_root={ws.root}")
         logger.line(f"workspace_repo={ws.repo}")
@@ -939,6 +1097,10 @@ def main(argv: list[str]) -> int:
                     allow_outside_files=policy.allow_outside_files,
                     declared_untouched_fail=policy.declared_untouched_fail,
                     allow_declared_untouched=policy.allow_declared_untouched,
+                    blessed_outputs=policy.blessed_gate_outputs,
+                    ignore_prefixes=policy.scope_ignore_prefixes,
+                    ignore_suffixes=policy.scope_ignore_suffixes,
+                    ignore_contains=policy.scope_ignore_contains,
                 )
             except RunnerError as _scope_e:
                 if primary_fail_stage is None:
@@ -1105,7 +1267,9 @@ def main(argv: list[str]) -> int:
 
         allowed_union = set(st.allowed_union)
         dirty_allowed = [p for p in dirty_all if p in allowed_union]
-        dirty_blessed = blessed_gate_outputs_in(dirty_all)
+        dirty_blessed = blessed_gate_outputs_in(
+            dirty_all, blessed_outputs=policy.blessed_gate_outputs
+        )
         # Promote allowed_union paths + blessed gate outputs (without requiring -a).
         to_promote: list[str] = []
         seen_tp: set[str] = set()
@@ -1322,7 +1486,7 @@ def main(argv: list[str]) -> int:
                     git_ops.git_archive(logger, repo_root, zip_path, treeish="HEAD")
                 else:
                     # Failure: create diagnostics archive with log + subset of repo files.
-                    zip_path = paths.patch_dir / "patched.zip"
+                    zip_path = paths.patch_dir / policy.failure_zip_name
 
                     include_patch_paths: list[Path] = []
                     include_patch_blobs: list[tuple[str, bytes]] = []
@@ -1354,6 +1518,8 @@ def main(argv: list[str]) -> int:
                         include_repo_files=files_for_fail_zip,
                         include_patch_blobs=include_patch_blobs,
                         include_patch_paths=include_patch_paths,
+                        log_dir_name=policy.failure_zip_log_dir,
+                        patch_dir_name=policy.failure_zip_patch_dir,
                     )
                 # Deferred rollback after diagnostics archive.
                 # Keeps workspace available for zip creation.

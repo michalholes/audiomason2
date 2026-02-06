@@ -34,7 +34,9 @@ class AppendOverride(argparse.Action):
         if ov is None:
             ov = []
             namespace.overrides = ov
-        if values is None:
+        if values is None or (
+            not isinstance(values, str) and isinstance(values, Sequence) and len(values) == 0
+        ):
             v = self._const_value if self._const_value is not None else "true"
         elif isinstance(values, str):
             v = values
@@ -354,6 +356,36 @@ ADVANCED CONFIG / OVERRIDES
 NOTES
   Short options exist only for options listed in short help. All other options are long-form only.
 
+
+PHASE 2: PATH/LAYOUT OVERRIDES (CFG + CLI)
+  --patch-dir-name NAME
+  --patch-layout-logs-dir NAME
+  --patch-layout-workspaces-dir NAME
+  --patch-layout-successful-dir NAME
+  --patch-layout-unsuccessful-dir NAME
+  --lockfile-name NAME
+  --current-log-symlink-name NAME
+  --current-log-symlink / --no-current-log-symlink
+  --log-ts-format STRFTIME
+  --log-template-issue TEMPLATE
+  --log-template-finalize TEMPLATE
+  --failure-zip-name NAME
+  --failure-zip-log-dir NAME
+  --failure-zip-patch-dir NAME
+  --workspace-issue-dir-template TEMPLATE
+  --workspace-repo-dir-name NAME
+  --workspace-meta-filename NAME
+  --workspace-history-logs-dir NAME
+  --workspace-history-oldlogs-dir NAME
+  --workspace-history-patches-dir NAME
+  --workspace-history-oldpatches-dir NAME
+  --blessed-gate-output PATH (repeatable)
+  --scope-ignore-prefix STR (repeatable)
+  --scope-ignore-suffix STR (repeatable)
+  --scope-ignore-contains STR (repeatable)
+  --venv-bootstrap-mode {{auto, always, never}}
+  --venv-bootstrap-python PATH
+
 """
 
 
@@ -426,6 +458,176 @@ def parse_args(argv: list[str]) -> CliArgs:
     p.add_argument("--config", dest="config_path", metavar="PATH", default=None)
     p.add_argument(
         "--override", dest="overrides", action="append", default=None, metavar="KEY=VALUE"
+    )
+
+    # Phase 2: hardcoded settings must be controllable via dedicated CLI flags (plus cfg keys).
+    # These flags append KEY=VALUE into overrides to keep precedence and show-config output uniform.
+
+    p.add_argument(
+        "--patch-dir-name", action=AppendOverride, key="patch_dir_name", dest="overrides"
+    )
+    p.add_argument(
+        "--patch-layout-logs-dir",
+        action=AppendOverride,
+        key="patch_layout_logs_dir",
+        dest="overrides",
+    )
+    p.add_argument(
+        "--patch-layout-workspaces-dir",
+        action=AppendOverride,
+        key="patch_layout_workspaces_dir",
+        dest="overrides",
+    )
+    p.add_argument(
+        "--patch-layout-successful-dir",
+        action=AppendOverride,
+        key="patch_layout_successful_dir",
+        dest="overrides",
+    )
+    p.add_argument(
+        "--patch-layout-unsuccessful-dir",
+        action=AppendOverride,
+        key="patch_layout_unsuccessful_dir",
+        dest="overrides",
+    )
+    p.add_argument("--lockfile-name", action=AppendOverride, key="lockfile_name", dest="overrides")
+    p.add_argument(
+        "--current-log-symlink-name",
+        action=AppendOverride,
+        key="current_log_symlink_name",
+        dest="overrides",
+    )
+    p.add_argument(
+        "--no-current-log-symlink",
+        action=AppendOverride,
+        key="current_log_symlink_enabled",
+        const_value="false",
+        dest="overrides",
+        nargs=0,
+    )
+    p.add_argument(
+        "--current-log-symlink",
+        action=AppendOverride,
+        key="current_log_symlink_enabled",
+        const_value="true",
+        dest="overrides",
+        nargs=0,
+    )
+
+    p.add_argument("--log-ts-format", action=AppendOverride, key="log_ts_format", dest="overrides")
+    p.add_argument(
+        "--log-template-issue",
+        action=AppendOverride,
+        key="log_template_issue",
+        dest="overrides",
+    )
+    p.add_argument(
+        "--log-template-finalize",
+        action=AppendOverride,
+        key="log_template_finalize",
+        dest="overrides",
+    )
+
+    p.add_argument(
+        "--failure-zip-name", action=AppendOverride, key="failure_zip_name", dest="overrides"
+    )
+    p.add_argument(
+        "--failure-zip-log-dir",
+        action=AppendOverride,
+        key="failure_zip_log_dir",
+        dest="overrides",
+    )
+    p.add_argument(
+        "--failure-zip-patch-dir",
+        action=AppendOverride,
+        key="failure_zip_patch_dir",
+        dest="overrides",
+    )
+
+    p.add_argument(
+        "--workspace-issue-dir-template",
+        action=AppendOverride,
+        key="workspace_issue_dir_template",
+        dest="overrides",
+    )
+    p.add_argument(
+        "--workspace-repo-dir-name",
+        action=AppendOverride,
+        key="workspace_repo_dir_name",
+        dest="overrides",
+    )
+    p.add_argument(
+        "--workspace-meta-filename",
+        action=AppendOverride,
+        key="workspace_meta_filename",
+        dest="overrides",
+    )
+
+    p.add_argument(
+        "--workspace-history-logs-dir",
+        action=AppendOverride,
+        key="workspace_history_logs_dir",
+        dest="overrides",
+    )
+    p.add_argument(
+        "--workspace-history-oldlogs-dir",
+        action=AppendOverride,
+        key="workspace_history_oldlogs_dir",
+        dest="overrides",
+    )
+    p.add_argument(
+        "--workspace-history-patches-dir",
+        action=AppendOverride,
+        key="workspace_history_patches_dir",
+        dest="overrides",
+    )
+    p.add_argument(
+        "--workspace-history-oldpatches-dir",
+        action=AppendOverride,
+        key="workspace_history_oldpatches_dir",
+        dest="overrides",
+    )
+
+    p.add_argument(
+        "--blessed-gate-output",
+        action=AppendOverride,
+        key="blessed_gate_outputs",
+        dest="overrides",
+        help="Append a blessed gate output path (repeatable).",
+    )
+    p.add_argument(
+        "--scope-ignore-prefix",
+        action=AppendOverride,
+        key="scope_ignore_prefixes",
+        dest="overrides",
+        help="Append a scope ignore prefix (repeatable).",
+    )
+    p.add_argument(
+        "--scope-ignore-suffix",
+        action=AppendOverride,
+        key="scope_ignore_suffixes",
+        dest="overrides",
+        help="Append a scope ignore suffix (repeatable).",
+    )
+    p.add_argument(
+        "--scope-ignore-contains",
+        action=AppendOverride,
+        key="scope_ignore_contains",
+        dest="overrides",
+        help="Append a scope ignore substring (repeatable).",
+    )
+
+    p.add_argument(
+        "--venv-bootstrap-mode",
+        action=AppendOverride,
+        key="venv_bootstrap_mode",
+        dest="overrides",
+    )
+    p.add_argument(
+        "--venv-bootstrap-python",
+        action=AppendOverride,
+        key="venv_bootstrap_python",
+        dest="overrides",
     )
     p.add_argument(
         "--require-push-success", dest="require_push_success", action="store_true", default=None

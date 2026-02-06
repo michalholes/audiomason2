@@ -55,16 +55,18 @@ def make_failure_zip(
     include_repo_files: list[str],
     include_patch_blobs: list[tuple[str, bytes]] | None = None,
     include_patch_paths: list[Path] | None = None,
+    log_dir_name: str = "logs",
+    patch_dir_name: str = "patches",
 ) -> None:
     """Create patched.zip for failure/diagnostics.
 
     Contract:
-    - Always includes the primary log under logs/<name>.
+    - Always includes the primary log under <log_dir_name>/<name>.
     - Includes only a subset of repo files from the workspace (changed/touched union).
     - Includes patch inputs only when requested (e.g. patch not applied, or
       individual failed .patch files).
     """
-    logger.section("PATCHED.ZIP")
+    logger.section("FAILURE ZIP")
     zip_path.parent.mkdir(parents=True, exist_ok=True)
 
     # De-dup, keep deterministic order.
@@ -86,10 +88,10 @@ def make_failure_zip(
 
     with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as z:
         if log_path.exists():
-            z.write(log_path, arcname=f"logs/{log_path.name}")
+            z.write(log_path, arcname=f"{log_dir_name}/{log_path.name}")
 
         for name, data in patch_blobs:
-            arc = f"patches/{Path(name).name}"
+            arc = f"{patch_dir_name}/{Path(name).name}"
             if arc in seen_patch:
                 continue
             seen_patch.add(arc)
@@ -98,7 +100,7 @@ def make_failure_zip(
         for patch_path in patch_paths:
             if not patch_path.exists():
                 continue
-            arcname: str = f"patches/{patch_path.name}"
+            arcname: str = f"{patch_dir_name}/{patch_path.name}"
             if arcname in seen_patch:
                 continue
             seen_patch.add(arcname)
@@ -113,4 +115,4 @@ def make_failure_zip(
             if src.is_file():
                 z.write(src, arcname=rel)
 
-    logger.line(f"created patched.zip: {zip_path}")
+    logger.line(f"created failure zip: {zip_path}")

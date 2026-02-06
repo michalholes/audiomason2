@@ -27,13 +27,23 @@ def ensure_dirs(paths: Paths) -> None:
         d.mkdir(parents=True, exist_ok=True)
 
 
-def default_paths(repo_root: Path, patch_dir: Path) -> Paths:
-    logs_dir = patch_dir / "logs"
-    workspaces_dir = patch_dir / "workspaces"
-    successful_dir = patch_dir / "successful"
-    unsuccessful_dir = patch_dir / "unsuccessful"
-    lock_path = patch_dir / "am_patch.lock"
-    symlink_path = patch_dir / "am_patch.log"
+def default_paths(
+    repo_root: Path,
+    patch_dir: Path,
+    *,
+    logs_dir_name: str = "logs",
+    workspaces_dir_name: str = "workspaces",
+    successful_dir_name: str = "successful",
+    unsuccessful_dir_name: str = "unsuccessful",
+    lockfile_name: str = "am_patch.lock",
+    current_log_symlink_name: str = "am_patch.log",
+) -> Paths:
+    logs_dir = patch_dir / logs_dir_name
+    workspaces_dir = patch_dir / workspaces_dir_name
+    successful_dir = patch_dir / successful_dir_name
+    unsuccessful_dir = patch_dir / unsuccessful_dir_name
+    lock_path = patch_dir / lockfile_name
+    symlink_path = patch_dir / current_log_symlink_name
     return Paths(
         repo_root=repo_root,
         patch_dir=patch_dir,
