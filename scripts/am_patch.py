@@ -1095,6 +1095,7 @@ def main(argv: list[str]) -> int:
                     no_op_fail=policy.no_op_fail,
                     allow_no_op=policy.allow_no_op,
                     allow_outside_files=policy.allow_outside_files,
+                    allowed_union=st.allowed_union,
                     declared_untouched_fail=policy.declared_untouched_fail,
                     allow_declared_untouched=policy.allow_declared_untouched,
                     blessed_outputs=policy.blessed_gate_outputs,

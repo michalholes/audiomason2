@@ -236,6 +236,17 @@ Default:
 
 All are overrideable.
 
+When reusing an issue workspace across multiple runs, the runner maintains a per-issue cumulative
+allowlist ("allowed union") of paths that were previously legalized for this ISSUE_ID.
+
+Scope enforcement MUST allow touched paths that are either:
+- declared by the current patch (FILES), or
+- present in the per-issue allowed union, or
+- blessed gate outputs.
+
+This ensures repeated patching within the same ISSUE_ID does not require `-a` solely due to
+prior legalized changes in the reused workspace.
+
 ### 4.3 Blessed gate outputs
 Some files are explicitly allowlisted as **gateproduced audit artifacts**.
 

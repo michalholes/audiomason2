@@ -141,6 +141,7 @@ def enforce_scope_delta(
     no_op_fail: bool,
     allow_no_op: bool,
     allow_outside_files: bool = False,
+    allowed_union: list[str] | set[str] | None = None,
     declared_untouched_fail: bool = True,
     allow_declared_untouched: bool = False,
     blessed_outputs: tuple[str, ...] | list[str] = DEFAULT_BLESSED_GATE_OUTPUTS,
@@ -149,6 +150,7 @@ def enforce_scope_delta(
     ignore_contains: tuple[str, ...] | list[str] = DEFAULT_RUNNER_WORKFILE_CONTAINS,
 ) -> list[str]:
     declared = {str(_normalize_path(p)) for p in files_current}
+    allowed = {str(_normalize_path(p)) for p in (allowed_union or [])}
 
     # Touched paths are the currently-changed paths after patch execution.
     # (Do NOT compute a delta vs. 'before': a dirty workspace would otherwise mask real edits.)
@@ -169,7 +171,9 @@ def enforce_scope_delta(
             p
             for p in touched
             if (
-                p not in declared and not is_blessed_gate_output(p, blessed_outputs=blessed_outputs)
+                p not in declared
+                and p not in allowed
+                and not is_blessed_gate_output(p, blessed_outputs=blessed_outputs)
             )
         ]
         if outside and not allow_outside_files:
