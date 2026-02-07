@@ -646,7 +646,10 @@ class CLIPlugin:
             print(f"[DEBUG] Successfully loaded {len(loaded)} plugins: {loaded}")
 
         # Get web_server plugin
-        web_plugin = loader.get_plugin("web_server")
+        web_plugin = loader.get_plugin("web_interface")
+        # Backward-compatibility fallback (older name)
+        if not web_plugin:
+            web_plugin = loader.get_plugin("web_server")
         if not web_plugin:
             self._error("X Web server plugin not found")
             return
