@@ -70,7 +70,7 @@ order = ["compile", "ruff", "pytest", "mypy"]
 gates_order = ["compile", "ruff", "pytest", "mypy"]
 
 # Canonical (supported by runner; missing in your file)
-run_all_tests = false
+run_all_tests = true
 
 compile_check = true
 
