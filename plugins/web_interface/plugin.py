@@ -38,4 +38,4 @@ class WebInterfacePlugin:
                 port = 8080
             host = str(self.config.get("host", host))
 
-        _CoreWebInterface().run(host=host, port=port)
+        await _CoreWebInterface().serve(host=host, port=port)

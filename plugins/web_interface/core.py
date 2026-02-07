@@ -44,6 +44,7 @@ class WebInterfacePlugin:
         return app
 
     def run(self, host: str, port: int) -> None:
+        """Run the web server in a standalone (non-async) context."""
         try:
             import uvicorn
         except ModuleNotFoundError as e:
@@ -52,3 +53,16 @@ class WebInterfacePlugin:
             ) from e
         app = self.create_app()
         uvicorn.run(app, host=host, port=port, log_level="info")
+
+    async def serve(self, host: str, port: int) -> None:
+        """Serve the web server inside an existing asyncio event loop."""
+        try:
+            import uvicorn
+        except ModuleNotFoundError as e:
+            raise RuntimeError(
+                "Missing dependency: uvicorn. Install in venv: pip install uvicorn"
+            ) from e
+        app = self.create_app()
+        config = uvicorn.Config(app, host=host, port=port, log_level="info")
+        server = uvicorn.Server(config)
+        await server.serve()
