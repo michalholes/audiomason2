@@ -31,9 +31,11 @@ from audiomason.core import (
     guess_title_from_path,
     guess_year_from_path,
 )
+from audiomason.core.config_service import ConfigService
 from audiomason.core.jobs.model import JobState
 from audiomason.core.orchestration import Orchestrator
 from audiomason.core.orchestration_models import ProcessRequest
+from audiomason.core.plugin_registry import PluginRegistry
 
 
 class VerbosityLevel:
@@ -292,7 +294,9 @@ class CLIPlugin:
         """
         self._verbose("Loading plugins...")
         plugins_dir = Path(__file__).parent.parent
-        loader = PluginLoader(builtin_plugins_dir=plugins_dir)
+        cfg = ConfigService()
+        reg = PluginRegistry(cfg)
+        loader = PluginLoader(builtin_plugins_dir=plugins_dir, registry=reg)
 
         required_plugins = ["audio_processor", "file_io", "id3_tagger", "cover_handler"]
         for plugin_name in required_plugins:
@@ -609,7 +613,9 @@ class CLIPlugin:
 
         # Load web server plugin
         plugins_dir = Path(__file__).parent.parent
-        loader = PluginLoader(builtin_plugins_dir=plugins_dir)
+        cfg = ConfigService()
+        reg = PluginRegistry(cfg)
+        loader = PluginLoader(builtin_plugins_dir=plugins_dir, registry=reg)
 
         if self.verbosity >= VerbosityLevel.DEBUG:
             print(f"[DEBUG] Plugins directory: {plugins_dir}")
@@ -671,7 +677,9 @@ class CLIPlugin:
         self._info("")
 
         plugins_dir = Path(__file__).parent.parent
-        loader = PluginLoader(builtin_plugins_dir=plugins_dir)
+        cfg = ConfigService()
+        reg = PluginRegistry(cfg)
+        loader = PluginLoader(builtin_plugins_dir=plugins_dir, registry=reg)
 
         daemon_plugin_dir = plugins_dir / "daemon"
         if not daemon_plugin_dir.exists():
@@ -789,7 +797,9 @@ class CLIPlugin:
 
         # Create wizard engine
         plugins_dir = Path(__file__).parent.parent
-        loader = PluginLoader(builtin_plugins_dir=plugins_dir)
+        cfg = ConfigService()
+        reg = PluginRegistry(cfg)
+        loader = PluginLoader(builtin_plugins_dir=plugins_dir, registry=reg)
 
         # Create config resolver
         cli_args = self._parse_cli_args()

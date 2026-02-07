@@ -6,9 +6,12 @@ import importlib.util
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import yaml
+
+if TYPE_CHECKING:
+    from audiomason.core.plugin_registry import PluginRegistry
 
 from audiomason.core.errors import PluginError, PluginNotFoundError, PluginValidationError
 
@@ -45,6 +48,8 @@ class PluginLoader:
         builtin_plugins_dir: Path | None = None,
         user_plugins_dir: Path | None = None,
         system_plugins_dir: Path | None = None,
+        *,
+        registry: PluginRegistry | None = None,
     ) -> None:
         """Initialize plugin loader.
 
@@ -56,6 +61,8 @@ class PluginLoader:
         self.builtin_plugins_dir = builtin_plugins_dir
         self.user_plugins_dir = user_plugins_dir or Path.home() / ".audiomason/plugins"
         self.system_plugins_dir = system_plugins_dir or Path("/etc/audiomason/plugins")
+
+        self._registry = registry
 
         # Loaded plugins
         self._plugins: dict[str, Any] = {}
@@ -95,6 +102,10 @@ class PluginLoader:
         """
         # Load manifest
         manifest = self._load_manifest(plugin_dir)
+
+        # Registry enforcement
+        if self._registry is not None and not self._registry.is_enabled(manifest.name):
+            raise PluginError(f"Plugin is disabled: {manifest.name}")
 
         # Validate if requested
         if validate and manifest.test_level != "none":

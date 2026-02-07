@@ -38,12 +38,13 @@ class PluginRegistry:
             return []
         return [str(x) for x in disabled]
 
+    def is_enabled(self, plugin_id: str) -> bool:
+        disabled = set(self._get_disabled())
+        return plugin_id not in disabled
+
     def list_states(self, plugin_ids: list[str]) -> list[PluginState]:
         disabled = set(self._get_disabled())
-        out: list[PluginState] = []
-        for pid in plugin_ids:
-            out.append(PluginState(plugin_id=pid, enabled=pid not in disabled))
-        return out
+        return [PluginState(plugin_id=pid, enabled=pid not in disabled) for pid in plugin_ids]
 
     def set_enabled(self, plugin_id: str, enabled: bool) -> None:
         disabled = self._get_disabled()
@@ -52,5 +53,4 @@ class PluginRegistry:
         else:
             if plugin_id not in disabled:
                 disabled.append(plugin_id)
-        # Write back via ConfigService.
         self._config.set_value("plugins.disabled", disabled)

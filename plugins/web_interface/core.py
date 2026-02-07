@@ -5,6 +5,7 @@ from typing import Any
 from fastapi import FastAPI
 
 from .api.am_config import mount_am_config
+from .api.jobs import mount_jobs
 from .api.logs import mount_logs
 from .api.plugins_mgmt import mount_plugins_mgmt
 from .api.stage import mount_stage
@@ -27,6 +28,7 @@ class WebInterfacePlugin:
         mount_stage(app)
         mount_wizards(app)
         mount_logs(app)
+        mount_jobs(app)
 
         @app.get("/api/health")
         def api_health() -> dict[str, Any]:

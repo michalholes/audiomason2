@@ -15,8 +15,10 @@ from audiomason.core import (
     ProcessingContext,
     State,
 )
+from audiomason.core.config_service import ConfigService
 from audiomason.core.orchestration import Orchestrator
 from audiomason.core.orchestration_models import ProcessRequest
+from audiomason.core.plugin_registry import PluginRegistry
 
 
 class VerbosityLevel:
@@ -68,7 +70,9 @@ class DaemonPlugin:
 
         # Load plugins and pipeline
         plugins_dir = Path(__file__).parent.parent
-        loader = PluginLoader(builtin_plugins_dir=plugins_dir)
+        loader = PluginLoader(
+            builtin_plugins_dir=plugins_dir, registry=PluginRegistry(ConfigService())
+        )
 
         # Load required plugins
         for plugin_name in ["audio_processor", "file_io"]:
