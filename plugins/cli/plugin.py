@@ -10,6 +10,7 @@ Features:
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import sys
 import time
@@ -32,6 +33,9 @@ from audiomason.core import (
     guess_title_from_path,
     guess_year_from_path,
 )
+from audiomason.core.jobs.model import JobState
+from audiomason.core.orchestration import Orchestrator
+from audiomason.core.orchestration_models import ProcessRequest
 
 
 class VerbosityLevel:
@@ -279,7 +283,56 @@ class CLIPlugin:
         self._info("Phase 2: Processing...")
         self._info("")
 
-        await self._processing_phase(contexts)
+        # Phase 2 is executed via the core orchestrator.
+        await self._processing_phase_orchestrated(contexts)
+
+    async def _processing_phase_orchestrated(self, contexts: list[ProcessingContext]) -> None:
+        """Process via the core orchestrator (Phase 2).
+
+        Args:
+            contexts: Processing contexts
+        """
+        self._verbose("Loading plugins...")
+        plugins_dir = Path(__file__).parent.parent
+        loader = PluginLoader(builtin_plugins_dir=plugins_dir)
+
+        required_plugins = ["audio_processor", "file_io", "id3_tagger", "cover_handler"]
+        for plugin_name in required_plugins:
+            plugin_dir = plugins_dir / plugin_name
+            if not plugin_dir.exists():
+                continue
+            try:
+                loader.load_plugin(plugin_dir, validate=False)
+                self._debug(f"  loaded {plugin_name}")
+            except Exception as e:  # pragma: no cover
+                self._verbose(f"  {plugin_name}: {e}")
+
+        pipeline_name = self.cli_args.get("pipeline", "standard")
+        pipeline_path = Path(__file__).parent.parent.parent / "pipelines" / f"{pipeline_name}.yaml"
+        if not pipeline_path.exists():
+            self._error(f"Pipeline not found: {pipeline_path}")
+            return
+
+        orch = Orchestrator()
+        job_id = orch.start_process(
+            ProcessRequest(contexts=contexts, pipeline_path=pipeline_path, plugin_loader=loader)
+        )
+
+        offset = 0
+        while True:
+            job = orch.get_job(job_id)
+            chunk, offset = orch.read_log(job_id, offset=offset)
+            if chunk:
+                for line in chunk.splitlines():
+                    self._info(line)
+
+            if job.state in (JobState.SUCCEEDED, JobState.FAILED, JobState.CANCELLED):
+                break
+
+            await asyncio.sleep(0.2)
+
+        if job.state == JobState.FAILED and job.error:
+            self._error(job.error)
 
     async def _preflight_phase(self, files: list[Path]) -> dict[Path, PreflightResult]:
         """Run preflight detection.
