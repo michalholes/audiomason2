@@ -16,6 +16,7 @@ import yaml
 
 from audiomason.core import PluginLoader, ProcessingContext, State
 from audiomason.core.errors import AudioMasonError
+from audiomason.core.phase import PhaseContractError
 
 
 class VerbosityLevel:
@@ -166,6 +167,8 @@ class WizardEngine:
                 return self._execute_set_value(step, context)
             else:
                 return StepResult(success=False, error=f"Unknown step type: {step_type}")
+        except PhaseContractError:
+            raise
         except Exception as e:
             return StepResult(success=False, error=f"Step '{step_id}' failed: {str(e)}")
 
@@ -201,16 +204,17 @@ class WizardEngine:
 
         # Get user input
         self._verbose(f"Prompting user: {prompt}")
-        if self.user_input_handler:
-            options = {"required": required, "default": default, "validate": validate}
-            value = self.user_input_handler(prompt, options)
-        else:
-            # Fallback to console input
-            prompt_text = f"{prompt} [{default}]: " if default else f"{prompt}: "
+        if not self.user_input_handler:
+            return StepResult(success=False, error="user_input_handler is required for input steps")
 
-            value = input(prompt_text).strip()
-            if not value and default:
-                value = default
+        options = {
+            "required": required,
+            "default": default,
+            "validate": validate,
+            "step_id": step.get("id"),
+            "key": step.get("id"),
+        }
+        value = self.user_input_handler(prompt, options)
 
         # Validate required
         if required and not value:
@@ -245,25 +249,19 @@ class WizardEngine:
             return StepResult(success=False, error="No choices provided")
 
         # Get user choice
-        if self.user_input_handler:
-            options = {"choices": choices, "default": default, "type": "choice"}
-            value = self.user_input_handler(prompt, options)
-        else:
-            # Fallback to console
-            if self.verbosity >= VerbosityLevel.NORMAL:
-                print(f"\n{prompt}")
-                for i, choice in enumerate(choices, 1):
-                    marker = " (default)" if choice == default else ""
-                    print(f"  {i}. {choice}{marker}")
+        if not self.user_input_handler:
+            return StepResult(
+                success=False, error="user_input_handler is required for choice steps"
+            )
 
-            choice_input = input("Select: ").strip()
-
-            # Parse choice
-            if choice_input.isdigit():
-                idx = int(choice_input) - 1
-                value = choices[idx] if 0 <= idx < len(choices) else default
-            else:
-                value = choice_input if choice_input in choices else default
+        options = {
+            "choices": choices,
+            "default": default,
+            "type": "choice",
+            "step_id": step.get("id"),
+            "key": step.get("id"),
+        }
+        value = self.user_input_handler(prompt, options)
 
         # Store in context
         field = step.get("id")

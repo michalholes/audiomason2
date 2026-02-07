@@ -21,6 +21,25 @@ def _write_empty_pipeline(path: Path) -> None:
     )
 
 
+def _write_simple_wizard(path: Path) -> None:
+    path.write_text(
+        """wizard:
+  name: simple
+  steps:
+    - id: name
+      type: input
+      prompt: Name
+      required: true
+""",
+        encoding="utf-8",
+    )
+
+
+class _DummyLoader:
+    def get_plugin(self, name: str):  # pragma: no cover
+        return None
+
+
 def test_orchestrator_start_process_succeeds(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -48,14 +67,27 @@ def test_orchestrator_start_process_succeeds(
     assert "succeeded" in log
 
 
-def test_orchestrator_start_wizard_fails_phase2(
+def test_orchestrator_start_wizard_succeeds_with_payload(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
 
+    wizard_path = tmp_path / "wizards" / "simple.yaml"
+    wizard_path.parent.mkdir(parents=True, exist_ok=True)
+    _write_simple_wizard(wizard_path)
+
     orchestrator = Orchestrator()
-    job_id = orchestrator.start_wizard(WizardRequest(wizard_id="w1", payload={}))
+    job_id = orchestrator.start_wizard(
+        WizardRequest(
+            wizard_id="w1",
+            wizard_path=wizard_path,
+            plugin_loader=_DummyLoader(),
+            payload={"name": "Alice"},
+        )
+    )
 
     job = orchestrator.get_job(job_id)
-    assert job.state == JobState.FAILED
-    assert job.error is not None
+    assert job.state == JobState.SUCCEEDED
+
+    log, _ = orchestrator.read_log(job_id)
+    assert "succeeded" in log

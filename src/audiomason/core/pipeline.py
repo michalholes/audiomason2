@@ -7,6 +7,7 @@ as a DAG (Directed Acyclic Graph) with async and parallel support.
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -60,13 +61,19 @@ class PipelineExecutor:
               parallel: true
     """
 
-    def __init__(self, plugin_loader: Any) -> None:
+    def __init__(self, plugin_loader: Any, log_fn: Callable[[str], None] | None = None) -> None:
         """Initialize pipeline executor.
 
         Args:
             plugin_loader: Plugin loader instance
+            log_fn: Optional logger callback for step events
         """
         self.plugin_loader = plugin_loader
+        self._log_fn = log_fn
+
+    def _log(self, msg: str) -> None:
+        if self._log_fn is not None:
+            self._log_fn(msg)
 
     async def execute(self, pipeline: Pipeline, context: ProcessingContext) -> ProcessingContext:
         """Execute pipeline.
@@ -255,6 +262,8 @@ class PipelineExecutor:
         Raises:
             PipelineError: If step fails
         """
+        self._log(f"step start: {step.id}")
+
         try:
             # Mark step as current
             context.current_step = step.id
@@ -278,7 +287,10 @@ class PipelineExecutor:
             # Mark step complete
             context.mark_step_complete(step.id)
 
+            self._log(f"step done: {step.id}")
+
             return context
 
         except Exception as e:
+            self._log(f"step failed: {step.id}: {e}")
             raise PipelineError(f"Step '{step.id}' failed: {e}") from e

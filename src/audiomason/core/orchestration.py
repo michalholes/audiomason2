@@ -12,12 +12,14 @@ from __future__ import annotations
 
 import asyncio
 from datetime import UTC, datetime
+from typing import Any
 
 from audiomason.core.jobs.api import JobService
 from audiomason.core.jobs.model import Job, JobState, JobType
 from audiomason.core.orchestration_models import ProcessRequest, WizardRequest
 from audiomason.core.phase import PhaseGuard
 from audiomason.core.pipeline import PipelineExecutor
+from audiomason.wizard_engine import WizardEngine
 
 
 def _utcnow_iso() -> str:
@@ -64,17 +66,27 @@ class Orchestrator:
         return job.job_id
 
     def start_wizard(self, request: WizardRequest) -> str:
-        job = self._jobs.create_job(JobType.WIZARD, meta={"wizard_id": request.wizard_id})
+        job = self._jobs.create_job(
+            JobType.WIZARD,
+            meta={
+                "wizard_id": request.wizard_id,
+                "wizard_path": str(request.wizard_path),
+            },
+        )
+
         job.transition(JobState.RUNNING)
         job.started_at = _utcnow_iso()
         self._jobs.store.save_job(job)
 
-        self._jobs.append_log_line(job.job_id, "wizard execution not implemented in phase 2")
+        self._jobs.append_log_line(job.job_id, "started")
 
-        job.transition(JobState.FAILED)
-        job.error = "wizard execution not implemented in phase 2"
-        job.finished_at = _utcnow_iso()
-        self._jobs.store.save_job(job)
+        try:
+            loop = asyncio.get_running_loop()
+        except RuntimeError:
+            asyncio.run(self._run_wizard_job(job.job_id, request))
+        else:
+            loop.create_task(self._run_wizard_job(job.job_id, request))
+
         return job.job_id
 
     def cancel(self, job_id: str) -> None:
@@ -106,7 +118,9 @@ class Orchestrator:
     async def _run_process_job_impl(self, job_id: str, request: ProcessRequest) -> None:
         contexts = request.contexts
         total = max(1, len(contexts))
-        executor = PipelineExecutor(request.plugin_loader)
+        executor = PipelineExecutor(
+            request.plugin_loader, log_fn=lambda line: self._jobs.append_log_line(job_id, line)
+        )
 
         for i, ctx in enumerate(contexts, 1):
             job = self._jobs.get_job(job_id)
@@ -123,6 +137,47 @@ class Orchestrator:
             job = self._jobs.get_job(job_id)
             job.progress = float(i) / float(total)
             self._jobs.store.save_job(job)
+
+        job = self._jobs.get_job(job_id)
+        job.progress = 1.0
+        job.transition(JobState.SUCCEEDED)
+        job.finished_at = _utcnow_iso()
+        self._jobs.store.save_job(job)
+        self._jobs.append_log_line(job_id, "succeeded")
+
+    async def _run_wizard_job(self, job_id: str, request: WizardRequest) -> None:
+        with PhaseGuard.processing():
+            try:
+                await self._run_wizard_job_impl(job_id, request)
+            except Exception as e:
+                job = self._jobs.get_job(job_id)
+                job.transition(JobState.FAILED)
+                job.error = str(e)
+                job.finished_at = _utcnow_iso()
+                self._jobs.store.save_job(job)
+                self._jobs.append_log_line(job_id, f"failed: {e}")
+
+    async def _run_wizard_job_impl(self, job_id: str, request: WizardRequest) -> None:
+        self._jobs.append_log_line(job_id, f"wizard: {request.wizard_id}")
+
+        def _payload_input(prompt: str, options: dict[str, Any]) -> str:
+            step_id = options.get("step_id")
+            if isinstance(step_id, str) and step_id in request.payload:
+                value = request.payload[step_id]
+                return "" if value is None else str(value)
+
+            key = options.get("key")
+            if isinstance(key, str) and key in request.payload:
+                value = request.payload[key]
+                return "" if value is None else str(value)
+
+            raise RuntimeError(f"missing wizard input for step: {step_id or key}")
+
+        engine = WizardEngine(loader=request.plugin_loader, verbosity=request.verbosity)
+        engine.set_input_handler(_payload_input)
+
+        wizard_def = engine.load_yaml(request.wizard_path)
+        engine.run_wizard(wizard_def)
 
         job = self._jobs.get_job(job_id)
         job.progress = 1.0

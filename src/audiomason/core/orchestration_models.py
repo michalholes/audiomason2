@@ -23,4 +23,7 @@ class ProcessRequest:
 @dataclass(frozen=True)
 class WizardRequest:
     wizard_id: str
+    wizard_path: Path
+    plugin_loader: Any
     payload: dict[str, Any]
+    verbosity: int = 1
