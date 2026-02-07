@@ -13,7 +13,6 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import sys
-import time
 import uuid
 from pathlib import Path
 from typing import Any
@@ -21,7 +20,6 @@ from typing import Any
 from audiomason.core import (
     ConfigResolver,
     CoverChoice,
-    PipelineExecutor,
     PluginLoader,
     PreflightResult,
     ProcessingContext,
@@ -491,70 +489,6 @@ class CLIPlugin:
         self._info("")
 
         return contexts
-
-    async def _processing_phase(self, contexts: list[ProcessingContext]) -> None:
-        """Process all contexts.
-
-        Args:
-            contexts: Processing contexts
-        """
-        # Load plugins
-        self._verbose("Loading plugins...")
-        plugins_dir = Path(__file__).parent.parent
-        loader = PluginLoader(builtin_plugins_dir=plugins_dir)
-
-        # Load required plugins
-        required_plugins = ["audio_processor", "file_io", "id3_tagger", "cover_handler"]
-
-        for plugin_name in required_plugins:
-            plugin_dir = plugins_dir / plugin_name
-            if plugin_dir.exists():
-                try:
-                    loader.load_plugin(plugin_dir, validate=False)
-                    self._debug(f"  OK {plugin_name}")
-                except Exception as e:
-                    self._verbose(f"  [WARN] {plugin_name}: {e}")
-
-        # Load pipeline
-        pipeline_name = self.cli_args.get("pipeline", "standard")
-        pipeline_path = Path(__file__).parent.parent.parent / "pipelines" / f"{pipeline_name}.yaml"
-
-        if not pipeline_path.exists():
-            self._error(f"Pipeline not found: {pipeline_path}")
-            return
-
-        executor = PipelineExecutor(loader)
-
-        # Process each file
-        for i, ctx in enumerate(contexts, 1):
-            self._info(f"[{i}/{len(contexts)}] Processing: {ctx.source.name}")
-
-            start_time = time.time()
-            ctx.start_time = start_time
-
-            try:
-                result = await executor.execute_from_yaml(pipeline_path, ctx)
-
-                end_time = time.time()
-                result.end_time = end_time
-                duration = end_time - start_time
-
-                self._info(f"  OK Complete ({duration:.1f}s)")
-
-                if result.output_path:
-                    self._info(f"  \U0001f4c1 Output: {result.output_path}")
-
-                # Warnings in verbose mode
-                if self.verbosity >= VerbosityLevel.VERBOSE and result.warnings:
-                    for warning in result.warnings:
-                        self._verbose(f"  [WARN]\ufe0f  {warning}")
-
-            except Exception as e:
-                self._error(f"  X Error: {e}")
-                if hasattr(e, "suggestion"):
-                    self._info(f"  \U0001f4a1 {e.suggestion}")
-
-            self._info("")
 
     def _parse_args(self, args: list[str]) -> tuple[list[Path], dict[str, Any]]:
         """Parse command-line arguments.

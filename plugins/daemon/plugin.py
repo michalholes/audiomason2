@@ -10,11 +10,13 @@ from pathlib import Path
 from typing import Any
 
 from audiomason.core import (
-    PipelineExecutor,
+    JobState,
     PluginLoader,
     ProcessingContext,
     State,
 )
+from audiomason.core.orchestration import Orchestrator
+from audiomason.core.orchestration_models import ProcessRequest
 
 
 class VerbosityLevel:
@@ -75,23 +77,24 @@ class DaemonPlugin:
                 loader.load_plugin(plugin_dir, validate=False)
 
         pipeline_path = plugins_dir.parent / "pipelines" / "minimal.yaml"
-        executor = PipelineExecutor(loader)
+        orch = Orchestrator()
 
         # Main watch loop
         while self.running:
             try:
-                await self._check_folders(executor, pipeline_path)
+                await self._check_folders(orch, loader, pipeline_path)
                 await asyncio.sleep(self.interval)
             except Exception as e:
                 if self.verbosity >= VerbosityLevel.NORMAL:
                     print(f"Error in daemon loop: {e}")
                 await asyncio.sleep(self.interval)
 
-    async def _check_folders(self, executor: PipelineExecutor, pipeline_path: Path) -> None:
+    async def _check_folders(
+        self, orch: Orchestrator, loader: PluginLoader, pipeline_path: Path
+    ) -> None:
         """Check watch folders for new files.
 
         Args:
-            executor: Pipeline executor
             pipeline_path: Pipeline YAML path
         """
         for folder in self.watch_folders:
@@ -113,7 +116,7 @@ class DaemonPlugin:
                     print(f"\U0001f4c1 Found new file: {file_path.name}")
 
                 try:
-                    await self._process_file(file_path, executor, pipeline_path)
+                    await self._process_file(file_path, orch, loader, pipeline_path)
                     self.processed_files.add(file_path)
                 except Exception as e:
                     print(f"   X Error: {e}")
@@ -130,7 +133,7 @@ class DaemonPlugin:
                     print(f"\U0001f4c1 Found new file: {file_path.name}")
 
                 try:
-                    await self._process_file(file_path, executor, pipeline_path)
+                    await self._process_file(file_path, orch, loader, pipeline_path)
                     self.processed_files.add(file_path)
                 except Exception as e:
                     print(f"   X Error: {e}")
@@ -153,13 +156,12 @@ class DaemonPlugin:
             return False
 
     async def _process_file(
-        self, file_path: Path, executor: PipelineExecutor, pipeline_path: Path
+        self, file_path: Path, orch: Orchestrator, loader: PluginLoader, pipeline_path: Path
     ) -> None:
         """Process single file.
 
         Args:
             file_path: File to process
-            executor: Pipeline executor
             pipeline_path: Pipeline YAML path
         """
         # Create context with defaults
@@ -174,25 +176,43 @@ class DaemonPlugin:
         if self.verbosity >= VerbosityLevel.NORMAL:
             print("   \u26a1 Processing...")
 
-        # Process
-        result = await executor.execute_from_yaml(pipeline_path, context)
+        # Process via core orchestration (jobs)
+        job_id = orch.start_process(
+            ProcessRequest(contexts=[context], pipeline_path=pipeline_path, plugin_loader=loader)
+        )
 
-        if result.has_errors:
-            print("   X Failed with errors")
+        offset = 0
+        while True:
+            job = orch.get_job(job_id)
+            chunk, offset = orch.read_log(job_id, offset=offset)
+            if chunk and self.verbosity >= VerbosityLevel.VERBOSE:
+                for line in chunk.splitlines():
+                    print(f"   {line}")
+
+            if job.state in (JobState.SUCCEEDED, JobState.FAILED, JobState.CANCELLED):
+                break
+
+            await asyncio.sleep(0.2)
+
+        if job.state != JobState.SUCCEEDED:
+            print("   X Failed")
+
+            if job.error and self.verbosity >= VerbosityLevel.NORMAL:
+                print(f"   Error: {job.error}")
 
             if self.on_error == "move_to_error":
                 error_dir = file_path.parent / "error"
                 error_dir.mkdir(exist_ok=True)
                 file_path.rename(error_dir / file_path.name)
                 if self.verbosity >= VerbosityLevel.NORMAL:
-                    print(f"   \U0001f4c1 Moved to: {error_dir}")
+                    print(f"   Moved to: {error_dir}")
             elif self.on_error == "delete":
                 file_path.unlink()
                 if self.verbosity >= VerbosityLevel.NORMAL:
-                    print("   \U0001f5d1\ufe0f  Deleted source file")
+                    print("   Deleted source file")
         else:
             if self.verbosity >= VerbosityLevel.NORMAL:
-                print("   OK Success!")
+                print("   OK Success")
 
             if self.on_success == "move_to_output":
                 # Already moved by pipeline
@@ -200,7 +220,7 @@ class DaemonPlugin:
             elif self.on_success == "delete" and file_path.exists():
                 file_path.unlink()
                 if self.verbosity >= VerbosityLevel.NORMAL:
-                    print("   \U0001f5d1\ufe0f  Deleted source file")
+                    print("   Deleted source file")
 
     def _handle_signal(self, signum: int, frame: Any) -> None:
         """Handle shutdown signal.
