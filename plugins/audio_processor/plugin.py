@@ -24,8 +24,8 @@ class AudioProcessorPlugin:
     """Audio processor plugin.
 
     Handles:
-    - M4A → MP3 conversion
-    - Opus → MP3 conversion
+    - M4A -> MP3 conversion
+    - Opus -> MP3 conversion
     - Chapter detection
     - Chapter splitting
     - Loudness normalization

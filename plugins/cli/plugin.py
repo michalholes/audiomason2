@@ -256,19 +256,19 @@ class CLIPlugin:
 
         # Verbosity is already set globally in run()
 
-        self._info(f"🎧 AudioMason v2 - Processing {len(files)} file(s)")
+        self._info(f"[AUDIO] AudioMason v2 - Processing {len(files)} file(s)")
         self._info("")
 
-        # ═══════════════════════════════════════════
+        # ===========================================
         #  PHASE 0: PREFLIGHT
-        # ═══════════════════════════════════════════
+        # ===========================================
 
         self._verbose("Phase 0: Preflight detection...")
         preflight_results = await self._preflight_phase(files)
 
-        # ═══════════════════════════════════════════
+        # ===========================================
         #  PHASE 1: USER INPUT
-        # ═══════════════════════════════════════════
+        # ===========================================
 
         self._verbose("Phase 1: Collecting metadata...")
         contexts = await self._input_phase(files, preflight_results, cli_args)
@@ -276,9 +276,9 @@ class CLIPlugin:
         if not contexts:
             return
 
-        # ═══════════════════════════════════════════
+        # ===========================================
         #  PHASE 2: PROCESSING
-        # ═══════════════════════════════════════════
+        # ===========================================
 
         self._info("Phase 2: Processing...")
         self._info("")
@@ -409,7 +409,7 @@ class CLIPlugin:
             else:
                 # Prompt for author
                 default = author_guess if author_guess != "unknown" else None
-                prompt_text = f"📚 Author for {len(group_files)} file(s)"
+                prompt_text = f"\U0001f4da Author for {len(group_files)} file(s)"
                 if default:
                     prompt_text += f" [{default}]"
                 prompt_text += ": "
@@ -446,7 +446,7 @@ class CLIPlugin:
                 ctx.title = cli_args["title"]
             else:
                 default = preflight.guessed_title
-                prompt_text = f"📖 Title for {file.name}"
+                prompt_text = f"\U0001f4d6 Title for {file.name}"
                 if default:
                     prompt_text += f" [{default}]"
                 prompt_text += ": "
@@ -511,9 +511,9 @@ class CLIPlugin:
             if plugin_dir.exists():
                 try:
                     loader.load_plugin(plugin_dir, validate=False)
-                    self._debug(f"  ✓ {plugin_name}")
+                    self._debug(f"  OK {plugin_name}")
                 except Exception as e:
-                    self._verbose(f"  ⚠ {plugin_name}: {e}")
+                    self._verbose(f"  [WARN] {plugin_name}: {e}")
 
         # Load pipeline
         pipeline_name = self.cli_args.get("pipeline", "standard")
@@ -539,20 +539,20 @@ class CLIPlugin:
                 result.end_time = end_time
                 duration = end_time - start_time
 
-                self._info(f"  ✅ Complete ({duration:.1f}s)")
+                self._info(f"  OK Complete ({duration:.1f}s)")
 
                 if result.output_path:
-                    self._info(f"  📁 Output: {result.output_path}")
+                    self._info(f"  \U0001f4c1 Output: {result.output_path}")
 
                 # Warnings in verbose mode
                 if self.verbosity >= VerbosityLevel.VERBOSE and result.warnings:
                     for warning in result.warnings:
-                        self._verbose(f"  ⚠️  {warning}")
+                        self._verbose(f"  [WARN]\ufe0f  {warning}")
 
             except Exception as e:
-                self._error(f"  ❌ Error: {e}")
+                self._error(f"  X Error: {e}")
                 if hasattr(e, "suggestion"):
-                    self._info(f"  💡 {e.suggestion}")
+                    self._info(f"  \U0001f4a1 {e.suggestion}")
 
             self._info("")
 
@@ -670,7 +670,7 @@ class CLIPlugin:
                 print(f"[DEBUG] Failed to resolve web.port: {e}, using default 8080")
             self._debug("Using default port 8080")
 
-        self._info(f"🌐 Starting web server on port {port}...")
+        self._info(f"\U0001f310 Starting web server on port {port}...")
         self._info("")
 
         # Load web server plugin
@@ -695,10 +695,10 @@ class CLIPlugin:
                     print(f"[DEBUG]   Loading: {plugin_dir.name}...")
                 loader.load_plugin(plugin_dir, validate=False)
                 if self.verbosity >= VerbosityLevel.DEBUG:
-                    print("[DEBUG]     ✓ Loaded")
+                    print("[DEBUG]     OK Loaded")
             except Exception as e:
                 if self.verbosity >= VerbosityLevel.DEBUG:
-                    print(f"[DEBUG]     ✗ Failed: {e}")
+                    print(f"[DEBUG]     X Failed: {e}")
 
         if self.verbosity >= VerbosityLevel.DEBUG:
             loaded = loader.list_plugins()
@@ -707,7 +707,7 @@ class CLIPlugin:
         # Get web_server plugin
         web_plugin = loader.get_plugin("web_server")
         if not web_plugin:
-            self._error("❌ Web server plugin not found")
+            self._error("X Web server plugin not found")
             return
 
         try:
@@ -724,7 +724,7 @@ class CLIPlugin:
 
             await web_plugin.run()
         except Exception as e:
-            self._error(f"❌ Error starting web server: {e}")
+            self._error(f"X Error starting web server: {e}")
             if self.verbosity >= VerbosityLevel.DEBUG:
                 import traceback
 
@@ -733,7 +733,7 @@ class CLIPlugin:
     async def _daemon_command(self) -> None:
         """Start daemon mode."""
         self._debug(f"Starting daemon mode with verbosity: {self.verbosity}")
-        self._info("🔄 Starting daemon mode...")
+        self._info("\U0001f504 Starting daemon mode...")
         self._info("")
 
         plugins_dir = Path(__file__).parent.parent
@@ -741,7 +741,7 @@ class CLIPlugin:
 
         daemon_plugin_dir = plugins_dir / "daemon"
         if not daemon_plugin_dir.exists():
-            self._error("❌ Daemon plugin not found")
+            self._error("X Daemon plugin not found")
             return
 
         try:
@@ -750,7 +750,7 @@ class CLIPlugin:
             daemon_plugin.verbosity = self.verbosity
             await daemon_plugin.run()
         except Exception as e:
-            self._error(f"❌ Error starting daemon: {e}")
+            self._error(f"X Error starting daemon: {e}")
             if self.verbosity >= VerbosityLevel.DEBUG:
                 import traceback
 
@@ -805,7 +805,7 @@ class CLIPlugin:
 
         # List wizards if no args
         if not args:
-            print("🧙 Available Wizards:")
+            print("\U0001f9d9 Available Wizards:")
             print()
 
             if not wizards_dir.exists():
@@ -850,7 +850,7 @@ class CLIPlugin:
             print(f"Available wizards: {', '.join([f.stem for f in wizards_dir.glob('*.yaml')])}")
             return
 
-        print(f"🧙 Running wizard: {wizard_name}")
+        print(f"\U0001f9d9 Running wizard: {wizard_name}")
         print()
 
         # Create wizard engine
@@ -944,7 +944,7 @@ class CLIPlugin:
             context = engine.run_wizard_from_file(wizard_file)
 
             print()
-            print("✅ Wizard completed successfully!")
+            print("OK Wizard completed successfully!")
             print()
             print(f"  Author: {context.author}")
             print(f"  Title: {context.title}")

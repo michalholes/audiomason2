@@ -24,7 +24,8 @@ class TextUtilsPlugin:
         """Remove diacritics (accents) from text.
 
         Example:
-            "Příliš žluťoučký kůň" → "Prilis zlutoucky kun"
+            "Příliš žluťoučký kůň"
+                -> "Prilis zlutoucky kun"
 
         Args:
             text: Input text with diacritics
@@ -50,8 +51,10 @@ class TextUtilsPlugin:
         """Create filesystem-safe slug from text.
 
         Example:
-            "George Orwell - 1984" → "george-orwell-1984"
-            "Příliš žluťoučký kůň" → "prilis-zlutoucky-kun"
+            "George Orwell - 1984"
+                -> "george-orwell-1984"
+            "Příliš žluťoučký kůň"
+                -> "prilis-zlutoucky-kun"
 
         Args:
             text: Input text

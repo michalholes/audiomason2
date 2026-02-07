@@ -6,7 +6,7 @@ from audiomason.core.loader import PluginLoader
 
 
 class TestPluginLifecycle:
-    """Test plugin lifecycle: discovery → validation → loading → running."""
+    """Test plugin lifecycle: discovery -> validation -> loading -> running."""
 
     def test_plugin_discovery_phase(self, tmp_path):
         """Test plugin discovery phase."""

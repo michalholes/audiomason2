@@ -15,7 +15,7 @@ Rules:
 
 ---
 
-## BATCH 1 — CORE SAFETY & CONTRACT BASICS (A + B + C + D)
+## BATCH 1 - CORE SAFETY & CONTRACT BASICS (A + B + C + D)
 
 ### Scope
 Foundational correctness and safety.
@@ -53,7 +53,7 @@ This batch prevents the most expensive classes of bugs.
 
 ---
 
-## BATCH 2 — PROMOTION & GIT SEMANTICS (E + F)
+## BATCH 2 - PROMOTION & GIT SEMANTICS (E + F)
 
 ### Scope
 Correctness of promotion, live conflict handling, and commit semantics.
@@ -76,7 +76,7 @@ Correctness of promotion, live conflict handling, and commit semantics.
 
 ---
 
-## BATCH 3 — ARCHIVES, HYGIENE & ARTIFACTS (G)
+## BATCH 3 - ARCHIVES, HYGIENE & ARTIFACTS (G)
 
 ### Scope
 Correct creation and cleanliness of runner-produced artifacts.
@@ -95,7 +95,7 @@ Correct creation and cleanliness of runner-produced artifacts.
 
 ---
 
-## BATCH 4 — BADGUYS GATE (RUNNER SELF-PROTECTION) (H)
+## BATCH 4 - BADGUYS GATE (RUNNER SELF-PROTECTION) (H)
 
 ### Scope
 Ensuring the runner correctly invokes BadGuys to protect itself.
@@ -116,7 +116,7 @@ Ensuring the runner correctly invokes BadGuys to protect itself.
 
 ---
 
-## BATCH 5 — LOGGING & VERBOSITY CONTRACT (I)
+## BATCH 5 - LOGGING & VERBOSITY CONTRACT (I)
 
 ### Scope
 User-facing correctness and observability guarantees.
@@ -134,7 +134,7 @@ User-facing correctness and observability guarantees.
 
 ---
 
-## BATCH 6 — POST-SUCCESS AUDIT (J)
+## BATCH 6 - POST-SUCCESS AUDIT (J)
 
 ### Scope
 Correct execution and failure semantics of the audit step.

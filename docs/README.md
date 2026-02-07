@@ -1,30 +1,30 @@
-# 🎧 AudioMason v2
+# [AUDIO] AudioMason v2
 
 **Ultra-modular audiobook processing framework**
 
-## 🎯 Status: Alpha Development
+## [GOAL] Status: Alpha Development
 
 This is AudioMason v2 - a complete rewrite with plugin-first architecture.
 
-### ✅ Implemented (Core)
+### OK Implemented (Core)
 
 - **Context System** - ProcessingContext with all data flow
 - **5 Generic Interfaces** - IProcessor, IProvider, IUI, IStorage, IEnricher
 - **Config Resolver** - 4-level priority (CLI > ENV > CONFIG > DEFAULT)
 - **Plugin Loader** - Discovery and loading from multiple sources
 - **Event Bus** - Pub/sub for plugin communication
-- **Pipeline Executor** - YAML → DAG → async execution
+- **Pipeline Executor** - YAML -> DAG -> async execution
 - **Detection Utilities** - Preflight helpers (guess author, title, etc.)
 - **Error Handling** - Friendly error messages
 
-### 🔄 In Progress
+### [REFRESH] In Progress
 
 - Essential plugins (audio, metadata, covers, I/O)
 - CLI UI plugin
 - Pipeline YAML definitions
 - Documentation
 
-### ❌ Not Yet Implemented
+### X Not Yet Implemented
 
 - Full plugin validation (mypy, pytest, ruff)
 - Daemon mode
@@ -35,7 +35,7 @@ This is AudioMason v2 - a complete rewrite with plugin-first architecture.
 
 ---
 
-## 📋 Requirements
+## [LIST] Requirements
 
 - Python 3.11+
 - FFmpeg (for audio processing)
@@ -44,7 +44,7 @@ This is AudioMason v2 - a complete rewrite with plugin-first architecture.
 
 ---
 
-## 🚀 Installation (Raspberry Pi)
+## [ROCKET] Installation (Raspberry Pi)
 
 ### 1. Clone/Transfer Project
 
@@ -76,56 +76,56 @@ pip3 install -e .
 
 ---
 
-## 📁 Project Structure
+## ? Project Structure
 
 ```
 audiomason-v2-implementation/
-├── src/audiomason/
-│   └── core/               # Ultra-minimal core (~800 lines)
-│       ├── __init__.py
-│       ├── context.py      # ProcessingContext
-│       ├── interfaces.py   # 5 Protocol definitions
-│       ├── config.py       # ConfigResolver
-│       ├── errors.py       # Error classes
-│       ├── loader.py       # PluginLoader
-│       ├── events.py       # EventBus
-│       ├── pipeline.py     # PipelineExecutor
-│       └── detection.py    # Preflight utilities
-│
-├── tests/                  # Tests
-├── pipelines/              # Pipeline YAML definitions
-├── docs/                   # Documentation
-└── pyproject.toml          # Project config
++-- src/audiomason/
+|   +-- core/               # Ultra-minimal core (~800 lines)
+|       +-- __init__.py
+|       +-- context.py      # ProcessingContext
+|       +-- interfaces.py   # 5 Protocol definitions
+|       +-- config.py       # ConfigResolver
+|       +-- errors.py       # Error classes
+|       +-- loader.py       # PluginLoader
+|       +-- events.py       # EventBus
+|       +-- pipeline.py     # PipelineExecutor
+|       +-- detection.py    # Preflight utilities
+|
++-- tests/                  # Tests
++-- pipelines/              # Pipeline YAML definitions
++-- docs/                   # Documentation
++-- pyproject.toml          # Project config
 ```
 
 ---
 
-## 🧪 Testing Core
+## [TEST] Testing Core
 
 ```bash
 # Simple config test
 python3 tests/simple_test_config.py
 
 # Should output:
-# ✓ CLI has highest priority
-# ✓ User config overrides system config
-# ✓ Defaults work when nothing else provides value
-# ✓ Nested keys with dot notation work
-# ✅ All tests passed!
+# OK CLI has highest priority
+# OK User config overrides system config
+# OK Defaults work when nothing else provides value
+# OK Nested keys with dot notation work
+# OK All tests passed!
 ```
 
 ---
 
-## 📖 Architecture
+## [DOC] Architecture
 
 ### Core Principles
 
 1. **Ultra-minimal core** (~800 lines) - just infrastructure
 2. **Everything else is a plugin** - even CLI, audio processing
 3. **Generic interfaces** - maximum flexibility
-4. **Declarative pipelines** - YAML → DAG → execution
+4. **Declarative pipelines** - YAML -> DAG -> execution
 5. **4-level config** - CLI > ENV > CONFIG > DEFAULT
-6. **3-phase execution** - Preflight → Input → Processing
+6. **3-phase execution** - Preflight -> Input -> Processing
 
 ### Interfaces
 
@@ -154,14 +154,14 @@ class IEnricher(Protocol):
 
 ---
 
-## 🔌 Plugin System
+## [PLUG] Plugin System
 
 ### Plugin Structure
 
 ```
 my_plugin/
-├── plugin.yaml         # Manifest
-└── plugin.py           # Implementation
++-- plugin.yaml         # Manifest
++-- plugin.py           # Implementation
 ```
 
 ### Plugin Manifest Example
@@ -203,7 +203,7 @@ class MyPlugin(IProcessor):
 
 ---
 
-## ⚙️ Configuration
+## [GEAR]? Configuration
 
 ### Config Priority
 
@@ -244,7 +244,7 @@ logging:
 
 ---
 
-## 🎬 Usage (Once Implemented)
+## ? Usage (Once Implemented)
 
 ### Basic Processing
 
@@ -277,14 +277,14 @@ audiomason process book.m4a --debug
 
 ---
 
-## 📚 Documentation
+## ? Documentation
 
 - [Requirements Document](AUDIOMASON_V2_FINAL_REQUIREMENTS.md) - Complete specification
 - [AM1 vs AM2 Comparison](porovnanie_am1_am2.md) - What changed
 
 ---
 
-## 🐛 Known Issues
+## ? Known Issues
 
 1. Plugin validation not implemented (mypy/pytest/ruff checks)
 2. No plugins implemented yet
@@ -296,14 +296,14 @@ audiomason process book.m4a --debug
 
 ---
 
-## 🚧 Next Steps
+## ? Next Steps
 
 ### Immediate (Critical)
 
-1. ✅ Core infrastructure (DONE)
-2. 🔄 Audio processing plugin
-3. 🔄 CLI UI plugin
-4. 🔄 Pipeline YAML definitions
+1. OK Core infrastructure (DONE)
+2. [REFRESH] Audio processing plugin
+3. [REFRESH] CLI UI plugin
+4. [REFRESH] Pipeline YAML definitions
 
 ### Short-term
 
@@ -323,22 +323,22 @@ audiomason process book.m4a --debug
 
 ---
 
-## 🤝 Contributing
+## [SHAKE] Contributing
 
 This is alpha software. Everything is subject to change.
 
 ---
 
-## 📄 License
+## ? License
 
 MIT
 
 ---
 
-## 👤 Author
+## ? Author
 
-Michal Holeš <michal@holes.sk>
+Michal Holes <michal@holes.sk>
 
 ---
 
-**Status:** Core complete, plugins in progress 🚀
+**Status:** Core complete, plugins in progress [ROCKET]

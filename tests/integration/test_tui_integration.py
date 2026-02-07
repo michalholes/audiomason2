@@ -182,10 +182,10 @@ class TestTUIBugFixes:
         """Test that daemon config has descriptions - FIX #7."""
         # The bug was that daemon config had no descriptions/tooltips
 
-        # Fixed in FÁZA 1:
+        # Fixed in F\u00c1ZA 1:
         # - daemon/plugin.yaml now has descriptions for all fields
 
-        # Fixed in FÁZA 2:
+        # Fixed in F\u00c1ZA 2:
         # - ConfigScreen._edit_daemon_settings() shows clear prompts
         # - Each field has explanation in dialog
 
@@ -204,7 +204,7 @@ class TestTUIBugFixes:
 
     def test_bug_9_no_text_concatenation(self):
         """Test that text is not concatenated - FIX #9."""
-        # The bug was text like "× normalization" appearing
+        # The bug was text like "\u00d7 normalization" appearing
 
         # In new implementation:
         # - MenuItem has separate label and desc fields

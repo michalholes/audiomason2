@@ -1,31 +1,31 @@
-# 🌐 AudioMason v2 - Web Server
+# [WEB] AudioMason v2 - Web Server
 
 **Complete Web UI + REST API**
 
 ---
 
-## ✅ **Features**
+## OK **Features**
 
-### **Web UI** 🎨
-- ✅ Beautiful responsive interface
-- ✅ Dashboard with real-time stats
-- ✅ File upload (drag & drop)
-- ✅ Job queue monitoring
-- ✅ Configuration editor
-- ✅ Checkpoint management
-- ✅ Live progress updates (WebSocket)
+### **Web UI** ?
+- OK Beautiful responsive interface
+- OK Dashboard with real-time stats
+- OK File upload (drag & drop)
+- OK Job queue monitoring
+- OK Configuration editor
+- OK Checkpoint management
+- OK Live progress updates (WebSocket)
 
-### **REST API** 🔌
-- ✅ Full AudioMason control via HTTP
-- ✅ File upload endpoint
-- ✅ Job management
-- ✅ Configuration API
-- ✅ Checkpoint API
-- ✅ WebSocket for real-time updates
+### **REST API** [PLUG]
+- OK Full AudioMason control via HTTP
+- OK File upload endpoint
+- OK Job management
+- OK Configuration API
+- OK Checkpoint API
+- OK WebSocket for real-time updates
 
 ---
 
-## 🚀 **Quick Start**
+## [ROCKET] **Quick Start**
 
 ### **1. Install Dependencies**
 
@@ -54,9 +54,9 @@ http://localhost:8080
 
 ---
 
-## 📖 **Web UI Guide**
+## [DOC] **Web UI Guide**
 
-### **Dashboard Tab** 📊
+### **Dashboard Tab** [STATS]
 
 Shows:
 - Active jobs count
@@ -65,7 +65,7 @@ Shows:
 - System status
 - Recent activity
 
-### **Process Books Tab** 🎵
+### **Process Books Tab** [MUSIC]
 
 1. **Upload file:** Click to select M4A/Opus/MP3
 2. **Fill metadata:** Author, Title, Year
@@ -78,20 +78,20 @@ Shows:
 
 **Auto-fill:** Filename is parsed for author/title!
 
-### **Queue Tab** 📋
+### **Queue Tab** [LIST]
 
 - View all active jobs
 - Real-time progress bars
 - Job status (processing/done/error)
 - Current step display
 
-### **Config Tab** ⚙️
+### **Config Tab** [GEAR]?
 
 - View all configuration
 - See config source (cli/env/config/default)
 - Edit values (coming soon)
 
-### **Checkpoints Tab** 💾
+### **Checkpoints Tab** ?
 
 - List all saved checkpoints
 - Resume interrupted processing
@@ -99,7 +99,7 @@ Shows:
 
 ---
 
-## 🔌 **REST API**
+## [PLUG] **REST API**
 
 Base URL: `http://localhost:8080/api`
 
@@ -277,7 +277,7 @@ Resume from checkpoint.
 
 ---
 
-## 🔌 **WebSocket**
+## [PLUG] **WebSocket**
 
 URL: `ws://localhost:8080/ws`
 
@@ -320,7 +320,7 @@ ws.onmessage = (event) => {
 
 ---
 
-## ⚙️ **Configuration**
+## [GEAR]? **Configuration**
 
 ### **Config File** (`~/.config/audiomason/config.yaml`):
 
@@ -351,11 +351,11 @@ export AUDIOMASON_WEB_UPLOAD_DIR="/var/tmp/uploads"
 
 ---
 
-## 🔒 **Security**
+## ? **Security**
 
 ### **Current Status:**
 
-⚠️ **No authentication** - suitable for local use only!
+[WARN]? **No authentication** - suitable for local use only!
 
 ### **Production Recommendations:**
 
@@ -387,7 +387,7 @@ server {
 
 ---
 
-## 🐳 **Docker**
+## ? **Docker**
 
 ### **Dockerfile:**
 
@@ -424,7 +424,7 @@ docker run -p 8080:8080 -v ~/Audiobooks:/output audiomason-web
 
 ---
 
-## 📱 **API Clients**
+## [PHONE] **API Clients**
 
 ### **Python Client Example:**
 
@@ -489,7 +489,7 @@ console.log('Job ID:', processData.job_id);
 
 ---
 
-## 🚀 **Advanced Usage**
+## [ROCKET] **Advanced Usage**
 
 ### **Multiple Users:**
 
@@ -540,7 +540,7 @@ sudo systemctl start audiomason-web
 
 ---
 
-## 📊 **API Documentation**
+## [STATS] **API Documentation**
 
 Full interactive API docs available at:
 
@@ -549,7 +549,7 @@ Full interactive API docs available at:
 
 ---
 
-## 🎯 **Use Cases**
+## [GOAL] **Use Cases**
 
 ### **1. Home Media Server**
 
@@ -573,7 +573,7 @@ Use as backend for custom mobile app.
 
 ---
 
-## 🐛 **Troubleshooting**
+## ? **Troubleshooting**
 
 ### **Port already in use:**
 
@@ -605,7 +605,7 @@ chmod 777 /tmp/audiomason/uploads
 
 ---
 
-## 📝 **Notes**
+## [NOTE] **Notes**
 
 - **File size limit:** 500MB default (configurable)
 - **Concurrent uploads:** Unlimited
@@ -614,18 +614,18 @@ chmod 777 /tmp/audiomason/uploads
 
 ---
 
-## ✅ **Status**
+## OK **Status**
 
-**Web Server:** ✅ COMPLETE
+**Web Server:** OK COMPLETE
 
 **Features Implemented:**
-- ✅ REST API (all endpoints)
-- ✅ Web UI (complete interface)
-- ✅ File upload
-- ✅ Job management
-- ✅ Real-time updates (WebSocket)
-- ✅ Configuration API
-- ✅ Checkpoint management
-- ✅ API documentation (auto-generated)
+- OK REST API (all endpoints)
+- OK Web UI (complete interface)
+- OK File upload
+- OK Job management
+- OK Real-time updates (WebSocket)
+- OK Configuration API
+- OK Checkpoint management
+- OK API documentation (auto-generated)
 
-**Ready for Production!** 🚀
+**Ready for Production!** [ROCKET]

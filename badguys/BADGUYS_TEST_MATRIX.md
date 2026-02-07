@@ -7,7 +7,7 @@ Contract:
 - If the runner violates the specification, **at least one test in this matrix MUST fail**.
 - Any runner change that modifies behavior MUST update this matrix and the corresponding test(s).
 
-All “Spec refs” below refer to the runner functional specification.
+All "Spec refs" below refer to the runner functional specification.
 
 ---
 
@@ -17,7 +17,7 @@ All “Spec refs” below refer to the runner functional specification.
 Protects: In `--test-mode`, after workspace gates and live-repo guard check, the runner performs a hard STOP (no promotion/live gates/commit+push/archives/patched.zip).
 
 Spec refs:
-- §2.4 Test mode (`--test-mode`): hard STOP (no promotion/live gates/commit+push/patch archives/patched.zip)
+- ?2.4 Test mode (`--test-mode`): hard STOP (no promotion/live gates/commit+push/patch archives/patched.zip)
 
 Expected evidence:
 - exit code = 0
@@ -31,7 +31,7 @@ Expected evidence:
 Protects: Workspace deletion occurs on exit ALWAYS (SUCCESS or FAILURE) in test-mode.
 
 Spec refs:
-- §2.4 Test mode: workspace deleted ALWAYS (SUCCESS or FAILURE); `-k` ignored; `delete_workspace_on_success` does not apply
+- ?2.4 Test mode: workspace deleted ALWAYS (SUCCESS or FAILURE); `-k` ignored; `delete_workspace_on_success` does not apply
 
 Expected evidence:
 - exit code != 0
@@ -47,7 +47,7 @@ Expected evidence:
 Protects: `.zip` is treated as unified patch if it contains one or more `*.patch` entries anywhere recursively.
 
 Spec refs:
-- §7.4 Success archive → Unified patch mode: auto-detection rules for `.zip` (recursive scan; unified mode when 1+ `*.patch` exists)
+- ?7.4 Success archive -> Unified patch mode: auto-detection rules for `.zip` (recursive scan; unified mode when 1+ `*.patch` exists)
 
 ---
 
@@ -55,7 +55,7 @@ Spec refs:
 Protects: Multiple `*.patch` entries discovered in a zip are applied in deterministic lexicographic order by zip-internal relative path.
 
 Spec refs:
-- §7.4 Success archive → Unified patch mode: apply `*.patch` entries in deterministic order (lexicographic by zip-internal relative path)
+- ?7.4 Success archive -> Unified patch mode: apply `*.patch` entries in deterministic order (lexicographic by zip-internal relative path)
 
 ---
 
@@ -63,7 +63,7 @@ Spec refs:
 Protects: If a zip contains at least one `*.patch`, any `*.py` files inside the zip are ignored.
 
 Spec refs:
-- §7.4 Success archive → Unified patch mode: ignore `*.py` when at least one `*.patch` entry exists
+- ?7.4 Success archive -> Unified patch mode: ignore `*.py` when at least one `*.patch` entry exists
 
 ---
 
@@ -73,7 +73,7 @@ Spec refs:
 Protects: Touching undeclared files FAILs by default (scope enforcement).
 
 Spec refs:
-- §4.2 Scope enforcement: touching undeclared files FAIL (default)
+- ?4.2 Scope enforcement: touching undeclared files FAIL (default)
 
 ---
 
@@ -81,7 +81,7 @@ Spec refs:
 Protects: Declaring but not touching files FAILs by default.
 
 Spec refs:
-- §4.2 Scope enforcement: declaring but not touching FAIL (default)
+- ?4.2 Scope enforcement: declaring but not touching FAIL (default)
 
 ---
 
@@ -89,7 +89,7 @@ Spec refs:
 Protects: Noop patch FAILs by default.
 
 Spec refs:
-- §4.2 Scope enforcement: noop patch FAIL (default)
+- ?4.2 Scope enforcement: noop patch FAIL (default)
 
 ---
 
@@ -97,8 +97,8 @@ Spec refs:
 Protects: Blessed gate outputs do not trigger scope violations and do not require `-a`.
 
 Spec refs:
-- §4.3 Blessed gate outputs: allowlist includes `audit/results/pytest_junit.xml`; do not trigger scope violations; do not require `-a`
-- §5 `-a`: `-a` is not required for blessed gate outputs
+- ?4.3 Blessed gate outputs: allowlist includes `audit/results/pytest_junit.xml`; do not trigger scope violations; do not require `-a`
+- ?5 `-a`: `-a` is not required for blessed gate outputs
 
 ---
 
@@ -106,18 +106,18 @@ Spec refs:
 Protects: `-a` is a strong override that legalizes touching undeclared files and expands promotion scope accordingly.
 
 Spec refs:
-- §5 `-a` (Allow outside files): semantics and intent
-- §7.1 Promotion set includes additional files when `-a` is active
+- ?5 `-a` (Allow outside files): semantics and intent
+- ?7.1 Promotion set includes additional files when `-a` is active
 
 ---
 
 ## D. GATES
 
 ### D1. test_070_gate_order_is_compile_ruff_pytest_mypy
-Protects: Default gate order is COMPILE → Ruff → Pytest → Mypy.
+Protects: Default gate order is COMPILE -> Ruff -> Pytest -> Mypy.
 
 Spec refs:
-- §6.1 Execution: default gate order
+- ?6.1 Execution: default gate order
 
 ---
 
@@ -125,7 +125,7 @@ Spec refs:
 Protects: COMPILE gate implementation and `compile_exclude` behavior via `compileall -x <regex>`, including CLI overrides.
 
 Spec refs:
-- §6.1.1 COMPILE gate: `python -m compileall -q`; targets; exclude compiled into `compileall -x <regex>`; CLI overrides
+- ?6.1.1 COMPILE gate: `python -m compileall -q`; targets; exclude compiled into `compileall -x <regex>`; CLI overrides
 
 ---
 
@@ -133,7 +133,7 @@ Spec refs:
 Protects: `-g` causes failures to be logged but execution continues; behavior is uniform across workspace/live/finalizeworkspace.
 
 Spec refs:
-- §6.2 Enforcement: without `-g` stop; with `-g` continue; uniform across modes
+- ?6.2 Enforcement: without `-g` stop; with `-g` continue; uniform across modes
 
 ---
 
@@ -143,7 +143,7 @@ Spec refs:
 Protects: Default live-changed resolution fails promotion with `LIVE_CHANGED` when live repo changed since `base_sha`.
 
 Spec refs:
-- §7.2 Live-changed resolution: default `live_changed_resolution="fail"` ⇒ FAIL with `LIVE_CHANGED` (applies to workspace promotion and `--finalize-workspace`)
+- ?7.2 Live-changed resolution: default `live_changed_resolution="fail"` => FAIL with `LIVE_CHANGED` (applies to workspace promotion and `--finalize-workspace`)
 
 ---
 
@@ -151,7 +151,7 @@ Spec refs:
 Protects: `--overwrite-live` (and legacy alias `--allow-live-changed`) overwrites live with workspace version for conflicting files.
 
 Spec refs:
-- §7.2 Live-changed resolution: `--overwrite-live` and `--allow-live-changed` alias
+- ?7.2 Live-changed resolution: `--overwrite-live` and `--allow-live-changed` alias
 
 ---
 
@@ -159,7 +159,7 @@ Spec refs:
 Protects: `--overwrite-workspace` keeps live version and skips promoting conflicting files.
 
 Spec refs:
-- §7.2 Live-changed resolution: `--overwrite-workspace` and config `live_changed_resolution="overwrite_workspace"`
+- ?7.2 Live-changed resolution: `--overwrite-workspace` and config `live_changed_resolution="overwrite_workspace"`
 
 ---
 
@@ -169,7 +169,7 @@ Spec refs:
 Protects: In `--finalize-live` (`-f`) mode, the runner stages the entire live working tree before commit.
 
 Spec refs:
-- §8.1 Commit: staging rules for `--finalize-live`
+- ?8.1 Commit: staging rules for `--finalize-live`
 
 ---
 
@@ -177,7 +177,7 @@ Spec refs:
 Protects: In `workspace` and `--finalize-workspace`, the runner commits only promoted paths; unrelated dirty changes remain uncommitted.
 
 Spec refs:
-- §8.1 Commit: staging rules for `workspace` and `--finalize-workspace`
+- ?8.1 Commit: staging rules for `workspace` and `--finalize-workspace`
 
 ---
 
@@ -187,7 +187,7 @@ Spec refs:
 Protects: `patched.zip` excludes repo internals and runtime caches (`.git/`, venvs, caches, `__pycache__`, `*.pyc`).
 
 Spec refs:
-- §7.3 Archive hygiene (`patched.zip`)
+- ?7.3 Archive hygiene (`patched.zip`)
 
 ---
 
@@ -195,7 +195,7 @@ Spec refs:
 Protects: On SUCCESS (workspace / finalize-live / finalize-workspace), excluding test-mode, the runner creates a git-archive success zip named by `success_archive_name`.
 
 Spec refs:
-- §7.4 Success archive (git-archive zip): created on SUCCESS (excluding `--test-mode`), contains only git-tracked files
+- ?7.4 Success archive (git-archive zip): created on SUCCESS (excluding `--test-mode`), contains only git-tracked files
 
 ---
 
@@ -205,7 +205,7 @@ Spec refs:
 Protects: `gate_badguys_runner=auto` triggers only when the run touches runner files.
 
 Spec refs:
-- §6.1.2 BADGUYS gate: `gate_badguys_runner` and auto runner-touch paths
+- ?6.1.2 BADGUYS gate: `gate_badguys_runner` and auto runner-touch paths
 
 ---
 
@@ -213,7 +213,7 @@ Spec refs:
 Protects: `gate_badguys_command` may be a string and must be parsed using shlex; value must be non-empty.
 
 Spec refs:
-- §6.1.2 BADGUYS gate: `gate_badguys_command` list[str] | str; shlex parsing; non-empty
+- ?6.1.2 BADGUYS gate: `gate_badguys_command` list[str] | str; shlex parsing; non-empty
 
 ---
 
@@ -221,7 +221,7 @@ Spec refs:
 Protects: `gate_badguys_cwd=auto` uses workspace if invoked from a workspace repo; otherwise uses clone to avoid lock conflicts.
 
 Spec refs:
-- §6.1.2 BADGUYS gate: `gate_badguys_cwd` and auto selection rules
+- ?6.1.2 BADGUYS gate: `gate_badguys_cwd` and auto selection rules
 
 ---
 
@@ -229,7 +229,7 @@ Spec refs:
 Protects: BadGuys runs at the specified execution points per mode.
 
 Spec refs:
-- §6.1.2 BADGUYS gate: execution points (workspace; finalize-workspace; finalize)
+- ?6.1.2 BADGUYS gate: execution points (workspace; finalize-workspace; finalize)
 
 ---
 
@@ -239,7 +239,7 @@ Spec refs:
 Protects: Final summary format; FILES block appears only when `PUSH: OK`.
 
 Spec refs:
-- §1.1 Verbosity and status output: final summary; FILES block only when PUSH OK; strict FILES format
+- ?1.1 Verbosity and status output: final summary; FILES block only when PUSH OK; strict FILES format
 
 ---
 
@@ -247,7 +247,7 @@ Spec refs:
 Protects: Quiet mode prints no progress output and no status bar; only final summary.
 
 Spec refs:
-- §1.1 Verbosity and status output: quiet mode contract; status indicator disabled in quiet
+- ?1.1 Verbosity and status output: quiet mode contract; status indicator disabled in quiet
 
 ---
 
@@ -257,7 +257,7 @@ Spec refs:
 Protects: After SUCCESS with commit+push completed successfully, the runner executes audit command; audit failure causes stage `AUDIT` without rollback.
 
 Spec refs:
-- §13 Post-success Audit Step: command, working dir, ordering rules, failure semantics
+- ?13 Post-success Audit Step: command, working dir, ordering rules, failure semantics
 
 ---
 

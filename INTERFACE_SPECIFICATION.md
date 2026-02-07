@@ -1,6 +1,6 @@
 # AudioMason 2 Sync - Interface Specifications
 
-Kompletná technická špecifikácia všetkých rozhraní a kontraktov.
+Kompletna technicka specifikacia vsetkych rozhrani a kontraktov.
 
 ---
 
@@ -10,8 +10,8 @@ Kompletná technická špecifikácia všetkých rozhraní a kontraktov.
 
 ```
 plugins/<plugin_name>/
-├── plugin.yaml          # Plugin metadata
-└── plugin.py            # Plugin implementation
++-- plugin.yaml          # Plugin metadata
++-- plugin.py            # Plugin implementation
 ```
 
 ### 1.2 plugin.yaml Specification
@@ -48,7 +48,7 @@ dependencies:            # Python package dependencies
 name: file_io_sync
 version: 1.0.0
 description: Synchronous file I/O operations
-author: Michal Holeš
+author: Michal Holes
 entrypoint: plugin:FileIOSync
 interfaces:
   - IProcessor
@@ -105,7 +105,7 @@ class PluginName:
 
 ### 1.4 Plugin Methods (Callable from Workflow)
 
-Pluginy môžu mať ľubovoľné metódy, ktoré sú volateľné z workflow:
+Pluginy mozu mat lubovolne metody, ktore su volatelne z workflow:
 
 ```python
 class MyPlugin:
@@ -213,7 +213,7 @@ Preflight steps collect user input before processing.
 **Behavior:**
 - Prompts user with (y/N) or (Y/n) based on default
 - Stores boolean in `answers[id]`
-- If `skip_if_set: true` and value in config → skip prompt, use config value
+- If `skip_if_set: true` and value in config -> skip prompt, use config value
 
 **Example:**
 ```yaml
@@ -243,12 +243,12 @@ Preflight steps collect user input before processing.
 **Behavior:**
 - Prompts user for text input
 - Shows default in brackets: `Prompt [default]: `
-- If `required: true` and empty → error
-- If `hint_from` and `hint_pattern` → extract hint from specified source
+- If `required: true` and empty -> error
+- If `hint_from` and `hint_pattern` -> extract hint from specified source
 
 **Hint Extraction:**
-- `hint_from: "source_name"` → uses current source name
-- `hint_pattern` → regex with capture group (1)
+- `hint_from: "source_name"` -> uses current source name
+- `hint_pattern` -> regex with capture group (1)
 - Example: `"^([^-]+)"` extracts text before first dash
 
 **Example:**
@@ -262,7 +262,7 @@ Preflight steps collect user input before processing.
   hint_pattern: "^([^-]+)"
 ```
 
-For source `"George Orwell - 1984"` → hint = `"George Orwell"`
+For source `"George Orwell - 1984"` -> hint = `"George Orwell"`
 
 ---
 
@@ -383,9 +383,9 @@ condition: "answers.author != 'Unknown'"
 ```
 
 **Evaluation:**
-- If condition is missing or empty → always execute
-- If condition evaluates to false → skip step
-- If condition syntax invalid → execute (fail-open)
+- If condition is missing or empty -> always execute
+- If condition evaluates to false -> skip step
+- If condition syntax invalid -> execute (fail-open)
 
 **NOT Supported:**
 - Complex logic: `and`, `or`, `not`
@@ -513,7 +513,7 @@ export AUDIOMASON_SPLIT_CHAPTERS=false
 **Naming Convention:**
 - Prefix: `AUDIOMASON_`
 - Key: UPPERCASE, underscores replace dots
-- Example: `logging.level` → `AUDIOMASON_LOGGING_LEVEL`
+- Example: `logging.level` -> `AUDIOMASON_LOGGING_LEVEL`
 
 **Value Parsing:**
 - Strings: Used as-is
@@ -584,9 +584,9 @@ python run_wizard.py --bitrate 320k
 ```
 
 **Resolution:**
-- `bitrate`: CLI wins → `320k`
-- `loudnorm`: ENV wins → `true`
-- `verbosity`: Default → `1` (not set anywhere)
+- `bitrate`: CLI wins -> `320k`
+- `loudnorm`: ENV wins -> `true`
+- `verbosity`: Default -> `1` (not set anywhere)
 
 ---
 
@@ -838,12 +838,12 @@ def my_method(self, context: ProcessingContext):
 **Discovery:**
 ```
 plugins/
-├── plugin_name_1/
-│   ├── plugin.yaml
-│   └── plugin.py
-├── plugin_name_2/
-│   ├── plugin.yaml
-│   └── plugin.py
++-- plugin_name_1/
+|   +-- plugin.yaml
+|   +-- plugin.py
++-- plugin_name_2/
+|   +-- plugin.yaml
+|   +-- plugin.py
 ```
 
 **Loading Process:**
@@ -995,7 +995,7 @@ def execute_processing_step(step: WorkflowStep, context: ProcessingContext) -> P
 
 **Verbosity:**
 - Must be integer 0-3
-- CLI flags override: `--quiet` → 0, `--verbose` → 2, `--debug` → 3
+- CLI flags override: `--quiet` -> 0, `--verbose` -> 2, `--debug` -> 3
 
 ---
 

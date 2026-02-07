@@ -8,7 +8,7 @@ It defines *what each test must do and prove*, not *how it is coded*.
 
 ---
 
-## BATCH 1 — CORE SAFETY & CONTRACT BASICS (A + B + C + D)
+## BATCH 1 - CORE SAFETY & CONTRACT BASICS (A + B + C + D)
 
 ### Purpose
 Prevent the most expensive and dangerous classes of runner bugs:
@@ -234,7 +234,7 @@ Required evidence:
 
 ---
 
-## BATCH 2 — PROMOTION & GIT SEMANTICS (E + F)
+## BATCH 2 - PROMOTION & GIT SEMANTICS (E + F)
 
 ### Purpose
 Guarantee correctness when interacting with the live repository and git.
@@ -321,7 +321,7 @@ Required evidence:
 
 ---
 
-## BATCH 3 — ARCHIVES & HYGIENE (G)
+## BATCH 3 - ARCHIVES & HYGIENE (G)
 
 ### G1. test_100_patched_zip_hygiene
 Intent:
@@ -348,7 +348,7 @@ Required evidence:
 
 ---
 
-## BATCH 4 — BADGUYS GATE (H)
+## BATCH 4 - BADGUYS GATE (H)
 
 ### H1. test_110_badguys_gate_auto_triggers_only_on_runner_touch
 Intent:
@@ -392,7 +392,7 @@ Required evidence:
 
 ---
 
-## BATCH 5 — LOGGING & VERBOSITY (I)
+## BATCH 5 - LOGGING & VERBOSITY (I)
 
 ### I1. test_120_final_summary_success_format_and_files_block_only_on_push_ok
 Intent:
@@ -413,7 +413,7 @@ Required evidence:
 
 ---
 
-## BATCH 6 — POST-SUCCESS AUDIT (J)
+## BATCH 6 - POST-SUCCESS AUDIT (J)
 
 ### J1. test_130_audit_runs_after_success_with_push
 Intent:

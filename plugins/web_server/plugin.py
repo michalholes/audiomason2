@@ -193,7 +193,7 @@ class WebServerPlugin:
         self._resolve_config()
 
         if self.verbosity >= VerbosityLevel.NORMAL:
-            print("🌐 AudioMason Web Server")
+            print("\U0001f310 AudioMason Web Server")
             print()
             print(f"   Host: {self.host}")
             print(f"   Port: {self.port}")
@@ -223,9 +223,9 @@ class WebServerPlugin:
         server = uvicorn.Server(config)
         await server.serve()
 
-    # ═══════════════════════════════════════════
+    # ===========================================
     #  HTML PAGES
-    # ═══════════════════════════════════════════
+    # ===========================================
 
     async def index(self, request: Request) -> HTMLResponse:
         """Serve homepage/dashboard."""
@@ -289,9 +289,9 @@ class WebServerPlugin:
             },
         )
 
-    # ═══════════════════════════════════════════
+    # ===========================================
     #  API ENDPOINTS - STATUS & CONFIG
-    # ═══════════════════════════════════════════
+    # ===========================================
 
     async def get_status(self) -> JSONResponse:
         """Get system status."""
@@ -352,14 +352,14 @@ class WebServerPlugin:
                 yaml.dump(updated, f, default_flow_style=False, allow_unicode=True)
 
             if self.verbosity >= VerbosityLevel.DEBUG:
-                print(f"[DEBUG]   ✓ Saved to {config_path}")
+                print(f"[DEBUG]   OK Saved to {config_path}")
                 print("[DEBUG]   NOTE: Web server needs restart to apply changes")
 
             return JSONResponse(
                 {
                     "message": (
                         "Configuration saved to ~/.config/audiomason/config.yaml\n\n"
-                        "⚠️ IMPORTANT: Restart the web server for changes to take effect."
+                        "[WARN]\ufe0f IMPORTANT: Restart the web server for changes to take effect."
                     ),
                     "path": str(config_path),
                     "restart_required": True,
@@ -376,9 +376,9 @@ class WebServerPlugin:
                 {"error": f"Failed to save configuration: {str(e)}"}, status_code=500
             )
 
-    # ═══════════════════════════════════════════
+    # ===========================================
     #  API ENDPOINTS - PLUGINS
-    # ═══════════════════════════════════════════
+    # ===========================================
 
     async def list_plugins_api(self) -> JSONResponse:
         """List all plugins (API)."""
@@ -423,13 +423,13 @@ class WebServerPlugin:
                 yaml.dump(config, f, default_flow_style=False, allow_unicode=True)
 
             if self.verbosity >= VerbosityLevel.DEBUG:
-                print("[DEBUG]   ✓ Config saved, restart required")
+                print("[DEBUG]   OK Config saved, restart required")
 
             return JSONResponse(
                 {
                     "message": (
                         f"Plugin '{name}' enabled\n\n"
-                        "⚠️ Restart the web server for changes to take effect."
+                        "[WARN]\ufe0f Restart the web server for changes to take effect."
                     ),
                     "restart_required": True,
                 }
@@ -480,13 +480,13 @@ class WebServerPlugin:
                 yaml.dump(config, f, default_flow_style=False, allow_unicode=True)
 
             if self.verbosity >= VerbosityLevel.DEBUG:
-                print("[DEBUG]   ✓ Config saved, restart required")
+                print("[DEBUG]   OK Config saved, restart required")
 
             return JSONResponse(
                 {
                     "message": (
                         f"Plugin '{name}' disabled\n\n"
-                        "⚠️ Restart the web server for changes to take effect."
+                        "[WARN]\ufe0f Restart the web server for changes to take effect."
                     ),
                     "restart_required": True,
                 }
@@ -557,9 +557,9 @@ class WebServerPlugin:
 
         return JSONResponse({"error": "No file or URL provided"}, status_code=400)
 
-    # ═══════════════════════════════════════════
+    # ===========================================
     #  API ENDPOINTS - WIZARDS
-    # ═══════════════════════════════════════════
+    # ===========================================
 
     async def list_wizards_api(self) -> JSONResponse:
         """List all wizards (API)."""
@@ -637,9 +637,9 @@ class WebServerPlugin:
 
         return JSONResponse({"message": f"Wizard '{name}' deleted"})
 
-    # ═══════════════════════════════════════════
+    # ===========================================
     #  API ENDPOINTS - JOBS
-    # ═══════════════════════════════════════════
+    # ===========================================
 
     async def list_jobs(self) -> JSONResponse:
         """List all processing jobs."""
@@ -739,7 +739,7 @@ class WebServerPlugin:
                         uploaded.append(str(file_path))
 
                     if self.verbosity >= VerbosityLevel.DEBUG:
-                        print("[DEBUG]     ✓ Success")
+                        print("[DEBUG]     OK Success")
 
                 except Exception as e:
                     error_msg = (
@@ -747,7 +747,7 @@ class WebServerPlugin:
                     )
                     errors.append(error_msg)
                     if self.verbosity >= VerbosityLevel.DEBUG:
-                        print(f"[DEBUG]     ✗ ERROR: {error_msg}")
+                        print(f"[DEBUG]     X ERROR: {error_msg}")
                         import traceback
 
                         traceback.print_exc()
@@ -823,9 +823,9 @@ class WebServerPlugin:
 
         return JSONResponse({"message": "Job cancelled"})
 
-    # ═══════════════════════════════════════════
+    # ===========================================
     #  API ENDPOINTS - CHECKPOINTS
-    # ═══════════════════════════════════════════
+    # ===========================================
 
     async def list_checkpoints(self) -> JSONResponse:
         """List available checkpoints."""
@@ -837,9 +837,9 @@ class WebServerPlugin:
         # TODO: Implement checkpoint resume
         return JSONResponse({"message": f"Resumed checkpoint {checkpoint_id}"})
 
-    # ═══════════════════════════════════════════
+    # ===========================================
     #  WEBSOCKET
-    # ═══════════════════════════════════════════
+    # ===========================================
 
     async def websocket_endpoint(self, websocket: WebSocket) -> None:
         """WebSocket endpoint for real-time updates."""
@@ -853,9 +853,9 @@ class WebServerPlugin:
         except WebSocketDisconnect:
             self.websocket_clients.remove(websocket)
 
-    # ═══════════════════════════════════════════
+    # ===========================================
     #  HELPER METHODS
-    # ═══════════════════════════════════════════
+    # ===========================================
 
     async def _get_system_status(self) -> dict[str, Any]:
         """Get system status."""
@@ -993,10 +993,10 @@ class WebServerPlugin:
 
                 if self.verbosity >= VerbosityLevel.DEBUG:
                     wizard_name = wizard.get("name", yaml_file.stem)
-                    print(f"[DEBUG]   ✓ Added wizard '{wizard_name}' with {len(steps)} steps")
+                    print(f"[DEBUG]   OK Added wizard '{wizard_name}' with {len(steps)} steps")
             except Exception as e:
                 if self.verbosity >= VerbosityLevel.DEBUG:
-                    print(f"[DEBUG] ✗ Failed to parse {yaml_file.stem}: {e}")
+                    print(f"[DEBUG] X Failed to parse {yaml_file.stem}: {e}")
                     import traceback
 
                     traceback.print_exc()

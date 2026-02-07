@@ -9,7 +9,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 def test_text_utils():
     """Test text utilities plugin."""
-    print("🧪 Test: Text Utilities")
+    print("[TEST] Test: Text Utilities")
     print("-" * 50)
 
     sys.path.insert(0, str(Path(__file__).parent.parent / "plugins/text_utils"))
@@ -18,29 +18,32 @@ def test_text_utils():
     utils = TextUtilsPlugin()
 
     # Test strip_diacritics
-    assert utils.strip_diacritics("Příliš žluťoučký kůň") == "Prilis zlutoucky kun"
-    print("✓ strip_diacritics works")
+    assert (
+        utils.strip_diacritics("P\u0159\u00edli\u0161 \u017elu\u0165ou\u010dk\u00fd k\u016f\u0148")
+        == "Prilis zlutoucky kun"
+    )
+    print("OK strip_diacritics works")
 
     # Test slug
     assert utils.slug("George Orwell - 1984") == "george-orwell-1984"
-    assert utils.slug("Příliš žluťoučký") == "prilis-zlutoucky"
-    print("✓ slug works")
+    assert utils.slug("P\u0159\u00edli\u0161 \u017elu\u0165ou\u010dk\u00fd") == "prilis-zlutoucky"
+    print("OK slug works")
 
     # Test clean_text
     assert utils.clean_text("  hello   world  ") == "hello world"
-    print("✓ clean_text works")
+    print("OK clean_text works")
 
     # Test sanitize_filename
     result = utils.sanitize_filename('Bad/File\\Name:Test"')
     assert "_" in result  # Should have replaced invalid chars
-    print("✓ sanitize_filename works")
+    print("OK sanitize_filename works")
 
     print()
 
 
 def test_id3_tagger():
     """Test ID3 tagger plugin."""
-    print("🧪 Test: ID3 Tagger")
+    print("[TEST] Test: ID3 Tagger")
     print("-" * 50)
 
     # Direct import from file
@@ -53,19 +56,19 @@ def test_id3_tagger():
         spec.loader.exec_module(module)
 
         tagger = module.ID3TaggerPlugin()
-        print("✓ ID3 tagger plugin loads")
+        print("OK ID3 tagger plugin loads")
 
         # Test that it has the expected methods
         assert hasattr(tagger, "process")
         assert hasattr(tagger, "read_tags")
-        print("✓ Has required methods")
+        print("OK Has required methods")
 
     print()
 
 
 def test_cover_handler():
     """Test cover handler plugin."""
-    print("🧪 Test: Cover Handler")
+    print("[TEST] Test: Cover Handler")
     print("-" * 50)
 
     import importlib.util
@@ -77,7 +80,7 @@ def test_cover_handler():
         spec.loader.exec_module(module)
 
         handler = module.CoverHandlerPlugin()
-        print("✓ Cover handler plugin loads")
+        print("OK Cover handler plugin loads")
 
         # Test that it has the expected methods
         assert hasattr(handler, "process")
@@ -85,14 +88,14 @@ def test_cover_handler():
         assert hasattr(handler, "download_cover")
         assert hasattr(handler, "convert_to_jpeg")
         assert hasattr(handler, "embed_cover")
-        print("✓ Has all required methods")
+        print("OK Has all required methods")
 
     print()
 
 
 def test_metadata_plugins():
     """Test metadata plugins."""
-    print("🧪 Test: Metadata Plugins")
+    print("[TEST] Test: Metadata Plugins")
     print("-" * 50)
 
     import importlib.util
@@ -104,7 +107,7 @@ def test_metadata_plugins():
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         module.GoogleBooksPlugin()
-        print("✓ Google Books plugin loads")
+        print("OK Google Books plugin loads")
 
     # OpenLibrary
     plugin_file = Path(__file__).parent.parent / "plugins/metadata_openlibrary/plugin.py"
@@ -113,14 +116,14 @@ def test_metadata_plugins():
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         module.OpenLibraryPlugin()
-        print("✓ OpenLibrary plugin loads")
+        print("OK OpenLibrary plugin loads")
 
     print()
 
 
 def test_enhanced_cli():
     """Test enhanced CLI."""
-    print("🧪 Test: Enhanced CLI")
+    print("[TEST] Test: Enhanced CLI")
     print("-" * 50)
 
     import importlib.util
@@ -135,14 +138,14 @@ def test_enhanced_cli():
         verbosity_level_cls = module.VerbosityLevel
 
         cli = cli_plugin_cls()
-        print("✓ Enhanced CLI plugin loads")
+        print("OK Enhanced CLI plugin loads")
 
         # Test verbosity levels
         assert verbosity_level_cls.QUIET == 0
         assert verbosity_level_cls.NORMAL == 1
         assert verbosity_level_cls.VERBOSE == 2
         assert verbosity_level_cls.DEBUG == 3
-        print("✓ Verbosity levels defined")
+        print("OK Verbosity levels defined")
 
         # Test parsing
         files, opts = cli._parse_args(
@@ -158,14 +161,14 @@ def test_enhanced_cli():
         assert opts.get("author") == "Test"
         assert opts.get("verbose") is True
         assert opts.get("loudnorm") is True
-        print("✓ Argument parsing works")
+        print("OK Argument parsing works")
 
     print()
 
 
 def test_plugin_loading():
     """Test that all new plugins load."""
-    print("🧪 Test: Plugin Loading")
+    print("[TEST] Test: Plugin Loading")
     print("-" * 50)
 
     from audiomason.core import PluginLoader
@@ -186,20 +189,20 @@ def test_plugin_loading():
         if plugin_dir.exists():
             try:
                 loader.load_plugin(plugin_dir, validate=False)
-                print(f"✓ {name}")
+                print(f"OK {name}")
             except Exception as e:
-                print(f"✗ {name}: {e}")
+                print(f"X {name}: {e}")
                 raise
 
     loaded = loader.list_plugins()
-    print(f"\n✓ Loaded {len(loaded)} plugins")
+    print(f"\nOK Loaded {len(loaded)} plugins")
 
     print()
 
 
 def test_standard_pipeline():
     """Test standard pipeline YAML."""
-    print("🧪 Test: Standard Pipeline")
+    print("[TEST] Test: Standard Pipeline")
     print("-" * 50)
 
     from audiomason.core import PipelineExecutor, PluginLoader
@@ -207,7 +210,7 @@ def test_standard_pipeline():
     pipeline_path = Path(__file__).parent.parent / "pipelines" / "standard.yaml"
 
     if not pipeline_path.exists():
-        print(f"✗ Pipeline not found: {pipeline_path}")
+        print(f"X Pipeline not found: {pipeline_path}")
         return
 
     plugins_dir = Path(__file__).parent.parent / "plugins"
@@ -216,16 +219,16 @@ def test_standard_pipeline():
 
     try:
         pipeline = executor.load_pipeline(pipeline_path)
-        print(f"✓ Pipeline loaded: {pipeline.name}")
-        print(f"✓ Steps: {len(pipeline.steps)}")
+        print(f"OK Pipeline loaded: {pipeline.name}")
+        print(f"OK Steps: {len(pipeline.steps)}")
         for step in pipeline.steps:
             print(f"  - {step.id} ({step.plugin})")
 
         print()
-        print("✓ Standard pipeline is valid")
+        print("OK Standard pipeline is valid")
 
     except Exception as e:
-        print(f"✗ Pipeline loading failed: {e}")
+        print(f"X Pipeline loading failed: {e}")
         raise
 
     print()
@@ -249,23 +252,23 @@ def main():
         test_standard_pipeline()
 
         print("=" * 70)
-        print("✅ ALL TESTS PASSED")
+        print("OK ALL TESTS PASSED")
         print("=" * 70)
         print()
-        print("🎉 All features implemented and working!")
+        print("\U0001f389 All features implemented and working!")
         print()
         print("New features:")
-        print("  ✓ Text utilities (diacritics, slug, sanitize)")
-        print("  ✓ ID3 tag writing")
-        print("  ✓ Cover handling (extract, download, embed)")
-        print("  ✓ Metadata providers (Google Books, OpenLibrary)")
-        print("  ✓ Enhanced CLI (preflight, verbosity, batch)")
-        print("  ✓ Standard pipeline (with tags + covers)")
+        print("  OK Text utilities (diacritics, slug, sanitize)")
+        print("  OK ID3 tag writing")
+        print("  OK Cover handling (extract, download, embed)")
+        print("  OK Metadata providers (Google Books, OpenLibrary)")
+        print("  OK Enhanced CLI (preflight, verbosity, batch)")
+        print("  OK Standard pipeline (with tags + covers)")
         print()
 
     except Exception as e:
         print()
-        print(f"❌ Test failed: {e}")
+        print(f"X Test failed: {e}")
         import traceback
 
         traceback.print_exc()

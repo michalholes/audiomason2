@@ -1,16 +1,16 @@
-# 🚀 AudioMason v2 - Quick Start Guide
+# [ROCKET] AudioMason v2 - Quick Start Guide
 
-## ✅ MVP is READY!
+## OK MVP is READY!
 
 AudioMason v2 MVP is now complete with:
-- ✅ Audio conversion (M4A/Opus → MP3)
-- ✅ Chapter detection and splitting
-- ✅ Command-line interface
-- ✅ Complete pipeline system
+- OK Audio conversion (M4A/Opus -> MP3)
+- OK Chapter detection and splitting
+- OK Command-line interface
+- OK Complete pipeline system
 
 ---
 
-## 📦 Installation on Raspberry Pi
+## [PKG] Installation on Raspberry Pi
 
 ### 1. Transfer Project
 
@@ -41,7 +41,7 @@ chmod +x audiomason
 
 ---
 
-## 🎯 Usage
+## [GOAL] Usage
 
 ### Basic Usage
 
@@ -91,30 +91,30 @@ done
 
 ---
 
-## 📊 Example Session
+## [STATS] Example Session
 
 ```
 $ ./audiomason process my_book.m4a
 
-🎧 AudioMason v2 - Processing: my_book.m4a
+[AUDIO] AudioMason v2 - Processing: my_book.m4a
 
-📚 Author: George Orwell
-📖 Title: 1984
+? Author: George Orwell
+[DOC] Title: 1984
 
    Author: George Orwell
    Title: 1984
 
-🔌 Loading plugins...
-   ✓ audio_processor
-   ✓ file_io
+[PLUG] Loading plugins...
+   OK audio_processor
+   OK file_io
 
-⚡ Executing pipeline...
+? Executing pipeline...
 
-✅ Processing complete!
+OK Processing complete!
 
-📁 Output: /home/pi/Audiobooks/output/George Orwell - 1984
+? Output: /home/pi/Audiobooks/output/George Orwell - 1984
 
-⚠️  Warnings:
+[WARN]?  Warnings:
    - Imported to: /tmp/audiomason/stage/book_abc12345
    - M4A file: 15 chapter(s) detected
    - Split into 15 files
@@ -123,7 +123,7 @@ $ ./audiomason process my_book.m4a
 
 ---
 
-## 🔧 Configuration
+## ? Configuration
 
 ### Change Output Directory
 
@@ -154,7 +154,7 @@ export AUDIOMASON_LOUDNORM=true
 
 ---
 
-## 🧪 Testing
+## [TEST] Testing
 
 ### Test 1: Help
 
@@ -174,7 +174,7 @@ export AUDIOMASON_LOUDNORM=true
 
 ```bash
 python3 tests/test_mvp.py
-# Should output: ✅ ALL TESTS PASSED
+# Should output: OK ALL TESTS PASSED
 ```
 
 ### Test 4: Real File
@@ -189,25 +189,25 @@ ls ~/Audiobooks/output/Test\ Author\ -\ Test\ Book/
 
 ---
 
-## 📁 Output Structure
+## ? Output Structure
 
 ```
 ~/Audiobooks/output/
-└── George Orwell - 1984/
-    ├── 01.mp3    # Chapter 1
-    ├── 02.mp3    # Chapter 2
-    ├── 03.mp3    # Chapter 3
-    └── ...
++-- George Orwell - 1984/
+    +-- 01.mp3    # Chapter 1
+    +-- 02.mp3    # Chapter 2
+    +-- 03.mp3    # Chapter 3
+    +-- ...
 
 # Or if not splitting chapters:
 ~/Audiobooks/output/
-└── George Orwell - 1984/
-    └── 1984.mp3  # Single file
++-- George Orwell - 1984/
+    +-- 1984.mp3  # Single file
 ```
 
 ---
 
-## 🐛 Troubleshooting
+## ? Troubleshooting
 
 ### "FFmpeg not found"
 
@@ -244,12 +244,12 @@ cd ~/audiomason-v2-implementation
 
 ---
 
-## 🎯 What Works
+## [GOAL] What Works
 
-### ✅ Fully Implemented
+### OK Fully Implemented
 
-- M4A → MP3 conversion
-- Opus → MP3 conversion
+- M4A -> MP3 conversion
+- Opus -> MP3 conversion
 - Chapter detection (M4A)
 - Chapter splitting
 - Loudness normalization
@@ -259,7 +259,7 @@ cd ~/audiomason-v2-implementation
 - Pipeline execution
 - File organization
 
-### 🚧 Not Yet Implemented
+### ? Not Yet Implemented
 
 - Metadata fetching (Google Books, OpenLibrary)
 - Cover extraction/download
@@ -273,7 +273,7 @@ cd ~/audiomason-v2-implementation
 
 ---
 
-## 📖 Common Workflows
+## [DOC] Common Workflows
 
 ### Workflow 1: Simple Conversion
 
@@ -303,7 +303,7 @@ done
 
 ---
 
-## 🚀 Next Steps
+## [ROCKET] Next Steps
 
 After testing MVP, you can:
 
@@ -317,7 +317,7 @@ After testing MVP, you can:
 
 ---
 
-## 💡 Tips
+## ? Tips
 
 - **Start simple**: Test with one book first
 - **Check FFmpeg**: Make sure it's installed and working
@@ -327,13 +327,13 @@ After testing MVP, you can:
 
 ---
 
-## 📞 Support
+## ? Support
 
 If MVP works:
-- ✅ Core is solid
-- ✅ Plugins are working
-- ✅ Pipeline is executing
-- ✅ You can start processing real books!
+- OK Core is solid
+- OK Plugins are working
+- OK Pipeline is executing
+- OK You can start processing real books!
 
 If something fails:
 1. Check FFmpeg is installed
@@ -343,4 +343,4 @@ If something fails:
 
 ---
 
-**Status:** MVP Complete ✅ | Ready for Real Testing 🚀
+**Status:** MVP Complete OK | Ready for Real Testing [ROCKET]

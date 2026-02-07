@@ -1,7 +1,7 @@
 
-# AudioMason2 – Project Specification (Authoritative)
+# AudioMason2 - Project Specification (Authoritative)
 
-Author: Michal Holeš  
+Author: Michal Holes  
 Status: **AUTHORITATIVE / BINDING**  
 Applies to: AudioMason2 core, plugins, tooling, UI, tests, documentation  
 Language: **English (mandatory for all repository content)**
@@ -15,10 +15,10 @@ This document is the **authoritative specification** for the AudioMason2 (AM2) p
 Its role is to:
 
 - define **what AudioMason2 is and must be**,
-- establish **non‑negotiable architectural and behavioral rules**,
+- establish **non?negotiable architectural and behavioral rules**,
 - act as a **binding contract** for all future development,
-- prevent architectural drift, monolith growth, and ad‑hoc fixes,
-- ensure long‑term maintainability, testability, and extensibility.
+- prevent architectural drift, monolith growth, and ad?hoc fixes,
+- ensure long?term maintainability, testability, and extensibility.
 
 Any implementation, patch, refactor, or feature **must comply with this specification**.
 
@@ -28,23 +28,23 @@ If a change contradicts this document, the change is **invalid** unless the spec
 
 ## 2. Core Vision
 
-AudioMason2 is a **general‑purpose, plugin‑driven, asynchronous media processing platform** with a strong focus on:
+AudioMason2 is a **general?purpose, plugin?driven, asynchronous media processing platform** with a strong focus on:
 
 - audiobooks (primary use case),
 - deterministic behavior,
-- user‑controlled workflows,
+- user?controlled workflows,
 - extensibility through plugins,
 - multiple user interfaces (CLI, Web, Daemon),
-- long‑term evolvability without rewrites.
+- long?term evolvability without rewrites.
 
 AM2 is not a collection of scripts.  
 AM2 is an **engine + ecosystem**.
 
 ---
 
-## 3. Fundamental Principles (Non‑Negotiable)
+## 3. Fundamental Principles (Non?Negotiable)
 
-### 3.1 Ultra‑Minimal Core
+### 3.1 Ultra?Minimal Core
 
 - Core contains **infrastructure only**, never business logic.
 - Core must remain small, readable, and stable.
@@ -65,7 +65,7 @@ Everything else is a plugin.
 
 ---
 
-### 3.2 Plugin‑First Architecture
+### 3.2 Plugin?First Architecture
 
 - Plugins are the primary extension mechanism.
 - Core depends on **interfaces**, never concrete implementations.
@@ -80,14 +80,14 @@ No feature may be added directly to core if it can exist as a plugin.
 
 - Same inputs + same config = same outputs.
 - No hidden state.
-- No time‑dependent logic unless explicitly modeled.
+- No time?dependent logic unless explicitly modeled.
 - All behavior must be observable via logs and job state.
 
 ---
 
 ### 3.4 Asynchronous by Design
 
-- Long‑running operations must be asynchronous.
+- Long?running operations must be asynchronous.
 - UI must never block on processing.
 - Progress and logs must be observable while work is running.
 
@@ -97,23 +97,23 @@ Synchronous shortcuts are forbidden except for trivial operations.
 
 ## 4. Execution Model (Strict Contract)
 
-### 4.1 Three‑Phase Model
+### 4.1 Three?Phase Model
 
 All processing follows **exactly** these phases:
 
-1. **PHASE 0 – Preflight**
+1. **PHASE 0 - Preflight**
    - Detection only
-   - Read‑only
+   - Read?only
    - No side effects
    - No user interaction
 
-2. **PHASE 1 – User Input**
+2. **PHASE 1 - User Input**
    - Interactive
-   - UI‑controlled (CLI/Web)
+   - UI?controlled (CLI/Web)
    - All decisions are collected here
 
-3. **PHASE 2 – Processing**
-   - **STRICTLY NON‑INTERACTIVE**
+3. **PHASE 2 - Processing**
+   - **STRICTLY NON?INTERACTIVE**
    - Async background execution
    - No prompts, no questions, no UI calls
 
@@ -152,7 +152,7 @@ Each job has at minimum:
 - unique job_id
 - type (process, wizard, daemon, etc.)
 - state (PENDING, RUNNING, SUCCEEDED, FAILED, CANCELLED)
-- progress (0.0–1.0)
+- progress (0.0-1.0)
 - timestamps
 - bound log stream
 
@@ -215,7 +215,7 @@ Multiple parallel plugin state mechanisms are forbidden.
 ### 7.3 Plugin Installation Rules
 
 - Runtime mutation of repository plugins is forbidden.
-- User‑installed plugins live in user plugin directories only.
+- User?installed plugins live in user plugin directories only.
 - Installation mechanism must be abstracted.
 
 ---
@@ -250,7 +250,7 @@ The web UI must be replaceable without touching core logic.
 
 ## 10. Logging & Observability
 
-- Logging is job‑centric.
+- Logging is job?centric.
 - All logs are attributable to a job_id.
 - Verbosity levels must be respected globally.
 
@@ -332,12 +332,12 @@ Skipping the plan phase is a violation of project rules.
 
 ## 13. Change Management Rules
 
-- No “quick fixes”.
+- No "quick fixes".
 - No silent behavior changes.
 - No architectural shortcuts.
 
 If a rule blocks progress:
-→ update the specification first.
+-> update the specification first.
 
 ---
 
@@ -356,7 +356,7 @@ If something conflicts with this specification, the specification wins.
 
 ## 15. Closing Statement
 
-AudioMason2 is a long‑term project.
+AudioMason2 is a long?term project.
 
 This specification exists to ensure that:
 - progress is sustainable,

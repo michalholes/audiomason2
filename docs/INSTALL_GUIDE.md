@@ -1,22 +1,22 @@
-# 📦 AudioMason v2 - Installation Guide for Raspberry Pi
+# [PKG] AudioMason v2 - Installation Guide for Raspberry Pi
 
-## 🎯 What You Have
+## [GOAL] What You Have
 
 You have the **CORE** of AudioMason v2:
-- ✅ Ultra-minimal core (~800 lines)
-- ✅ Plugin system (loader, events, pipeline)
-- ✅ Config resolver (4-level priority)
-- ✅ Detection utilities
-- ✅ Example plugin
-- ✅ Integration tests
+- OK Ultra-minimal core (~800 lines)
+- OK Plugin system (loader, events, pipeline)
+- OK Config resolver (4-level priority)
+- OK Detection utilities
+- OK Example plugin
+- OK Integration tests
 
-**Status:** Core is complete and tested ✅
+**Status:** Core is complete and tested OK
 
 **Missing:** Actual functional plugins (audio processing, CLI, etc.)
 
 ---
 
-## 🚀 Installation Steps
+## [ROCKET] Installation Steps
 
 ### 1. Transfer Project to Raspberry Pi
 
@@ -61,7 +61,7 @@ pip3 install -e .
 
 ---
 
-## 🧪 Verify Installation
+## [TEST] Verify Installation
 
 ### Test 1: Config System
 
@@ -72,11 +72,11 @@ python3 tests/simple_test_config.py
 
 **Expected output:**
 ```
-✓ CLI has highest priority
-✓ User config overrides system config
-✓ Defaults work when nothing else provides value
-✓ Nested keys with dot notation work
-✅ All tests passed!
+OK CLI has highest priority
+OK User config overrides system config
+OK Defaults work when nothing else provides value
+OK Nested keys with dot notation work
+OK All tests passed!
 ```
 
 ### Test 2: Integration (Core + Plugin + Pipeline)
@@ -87,72 +87,72 @@ python3 tests/test_integration.py
 
 **Expected output:**
 ```
-🧪 Integration Test: Core + Plugin + Pipeline
+[TEST] Integration Test: Core + Plugin + Pipeline
 
-📁 Created test file: /tmp/.../test_book.m4a
-🔌 Loading plugin from: .../example_plugin
-✅ Plugin loaded: ['example_plugin']
-📦 Created context:
+? Created test file: /tmp/.../test_book.m4a
+[PLUG] Loading plugin from: .../example_plugin
+OK Plugin loaded: ['example_plugin']
+[PKG] Created context:
    ID: ...
    Source: test_book.m4a
    Author: Test Author
    Title: Test Book
-🔄 Created pipeline:
+[REFRESH] Created pipeline:
    Name: test_pipeline
    Steps: 1
    Step 1: example_step (plugin: example_plugin)
-⚡ Executing pipeline...
-✅ Pipeline completed!
-📊 Results:
+? Executing pipeline...
+OK Pipeline completed!
+[STATS] Results:
    State: processing
    Completed steps: ['example_step']
    Warnings: ['ExamplePlugin: Hello from plugin!']
    Timings: {'example_plugin': 0.1}
-🎉 All assertions passed!
+? All assertions passed!
 
 ==================================================
-✅ INTEGRATION TEST PASSED
+OK INTEGRATION TEST PASSED
 ==================================================
 ```
 
 ---
 
-## 📁 What's in the Project
+## ? What's in the Project
 
 ```
 audiomason-v2-implementation/
-│
-├── src/audiomason/core/          # Core system (COMPLETE ✅)
-│   ├── __init__.py               # Exports
-│   ├── context.py                # ProcessingContext
-│   ├── interfaces.py             # 5 Protocols
-│   ├── config.py                 # ConfigResolver
-│   ├── errors.py                 # Error classes
-│   ├── loader.py                 # PluginLoader
-│   ├── events.py                 # EventBus
-│   ├── pipeline.py               # PipelineExecutor
-│   └── detection.py              # Preflight utilities
-│
-├── plugins/                       # Plugins
-│   └── example_plugin/           # Example (WORKING ✅)
-│       ├── plugin.yaml
-│       └── plugin.py
-│
-├── tests/                         # Tests (PASSING ✅)
-│   ├── simple_test_config.py
-│   └── test_integration.py
-│
-├── docs/                          # Documentation
-├── pipelines/                     # Pipeline YAMLs (empty)
-│
-├── pyproject.toml                 # Project config
-├── README.md                      # Main README
-└── INSTALL_GUIDE.md              # This file
+|
++-- src/audiomason/core/          # Core system (COMPLETE OK)
+|   +-- __init__.py               # Exports
+|   +-- context.py                # ProcessingContext
+|   +-- interfaces.py             # 5 Protocols
+|   +-- config.py                 # ConfigResolver
+|   +-- errors.py                 # Error classes
+|   +-- loader.py                 # PluginLoader
+|   +-- events.py                 # EventBus
+|   +-- pipeline.py               # PipelineExecutor
+|   +-- detection.py              # Preflight utilities
+|
++-- plugins/                       # Plugins
+|   +-- example_plugin/           # Example (WORKING OK)
+|       +-- plugin.yaml
+|       +-- plugin.py
+|
++-- tests/                         # Tests (PASSING OK)
+|   +-- simple_test_config.py
+|   +-- test_integration.py
+|
++-- docs/                          # Documentation
++-- pipelines/                     # Pipeline YAMLs (empty)
+|
++-- pyproject.toml                 # Project config
++-- README.md                      # Main README
++-- INSTALL_GUIDE.md              # This file
 ```
 
 ---
 
-## ⚙️ Configuration
+## [GEAR]? Configuration
 
 ### Create User Config
 
@@ -180,7 +180,7 @@ logging:
 
 ---
 
-## 🔧 Troubleshooting
+## ? Troubleshooting
 
 ### Problem: "No module named 'yaml'"
 
@@ -214,15 +214,15 @@ ls -la ~/audiomason-v2-implementation/src/audiomason/core/
 
 ---
 
-## 📋 What's Next?
+## [LIST] What's Next?
 
 The core is complete, but to actually process audiobooks, we need to implement:
 
 ### Critical Plugins (Must Have)
 
 1. **Audio Processing Plugin**
-   - Convert M4A → MP3
-   - Convert Opus → MP3
+   - Convert M4A -> MP3
+   - Convert Opus -> MP3
    - Split by chapters
    - Normalize volume
 
@@ -256,7 +256,7 @@ Create YAML pipelines in `pipelines/`:
 
 ---
 
-## 🚀 Quick Start (Once Plugins Are Ready)
+## [ROCKET] Quick Start (Once Plugins Are Ready)
 
 ```bash
 # Process single book
@@ -271,7 +271,7 @@ audiomason process book.m4a --bitrate 320k --loudnorm --verbose
 
 ---
 
-## 🐛 Known Limitations
+## ? Known Limitations
 
 1. **No CLI yet** - Can't run `audiomason` command
 2. **No audio processing** - Can't actually convert files
@@ -279,11 +279,11 @@ audiomason process book.m4a --bitrate 320k --loudnorm --verbose
 4. **No cover handling** - Can't extract/download covers
 5. **Detection utilities are placeholders** - Don't actually detect anything
 
-**But:** The infrastructure is solid and ready for plugins! 🎉
+**But:** The infrastructure is solid and ready for plugins! ?
 
 ---
 
-## 📞 Support
+## ? Support
 
 If tests pass, the core is working correctly!
 
@@ -295,7 +295,7 @@ If you encounter issues:
 
 ---
 
-## 📄 Files to Read
+## ? Files to Read
 
 1. `README.md` - Project overview
 2. `AUDIOMASON_V2_FINAL_REQUIREMENTS.md` - Complete specification
@@ -303,4 +303,4 @@ If you encounter issues:
 
 ---
 
-**Status:** Core Ready ✅ | Plugins In Progress 🚧 | CLI Coming Soon 🔜
+**Status:** Core Ready OK | Plugins In Progress ? | CLI Coming Soon ?

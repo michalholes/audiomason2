@@ -1,10 +1,10 @@
-# 🚀 AudioMason v2 - Web UI Quick Start
+# [ROCKET] AudioMason v2 - Web UI Quick Start
 
 **Quick reference for using the new Web UI features**
 
 ---
 
-## 🌐 Starting the Web Server
+## [WEB] Starting the Web Server
 
 ```bash
 # Navigate to project directory
@@ -21,24 +21,24 @@ python -m plugins.web_server.plugin
 
 ---
 
-## 📋 Available Tabs
+## [LIST] Available Tabs
 
 | Icon | Tab | Description |
 |------|-----|-------------|
-| 📊 | Dashboard | System status and recent activity |
-| 🎵 | Process Books | Upload and process audiobooks |
-| 📋 | Queue | View active and completed jobs |
-| 🧩 | **Plugins** | **Manage plugins (NEW!)** |
-| 🧙 | **Wizards** | **Manage wizards (NEW!)** |
-| ⚙️ | Config | System configuration (ENHANCED!) |
-| 💾 | Checkpoints | Resume interrupted processing |
+| [STATS] | Dashboard | System status and recent activity |
+| [MUSIC] | Process Books | Upload and process audiobooks |
+| [LIST] | Queue | View active and completed jobs |
+| [PUZZLE] | **Plugins** | **Manage plugins (NEW!)** |
+| [WIZARD] | **Wizards** | **Manage wizards (NEW!)** |
+| [GEAR]? | Config | System configuration (ENHANCED!) |
+| ? | Checkpoints | Resume interrupted processing |
 
 ---
 
-## 🧩 Plugin Management
+## [PUZZLE] Plugin Management
 
 ### View Plugins
-1. Click **🧩 Plugins** tab
+1. Click **[PUZZLE] Plugins** tab
 2. See all installed plugins with:
    - Name and version
    - Description
@@ -49,13 +49,13 @@ python -m plugins.web_server.plugin
 ### Install Plugin
 
 #### From ZIP:
-1. Click **📦 Install Plugin**
+1. Click **[PKG] Install Plugin**
 2. Select **Upload ZIP**
 3. Choose `.zip` file
 4. Click **Install**
 
 #### From URL:
-1. Click **📦 Install Plugin**
+1. Click **[PKG] Install Plugin**
 2. Select **From URL**
 3. Enter plugin URL (e.g., `https://example.com/plugin.zip`)
 4. Click **Install**
@@ -65,21 +65,21 @@ python -m plugins.web_server.plugin
 - Green = enabled, Gray = disabled
 
 ### Configure Plugin
-1. Click **⚙️ Configure** button (if available)
+1. Click **[GEAR]? Configure** button (if available)
 2. Edit settings in modal
 3. Click **Save**
 
 ### Delete Plugin
-1. Click **🗑️ Delete** button
+1. Click **?? Delete** button
 2. Confirm deletion
 3. Plugin will be removed
 
 ---
 
-## 🧙 Wizard Management
+## [WIZARD] Wizard Management
 
 ### View Wizards
-1. Click **🧙 Wizards** tab
+1. Click **[WIZARD] Wizards** tab
 2. See all wizards with:
    - Name
    - Description
@@ -87,7 +87,7 @@ python -m plugins.web_server.plugin
    - Filename
 
 ### Create Wizard
-1. Click **✨ Create Wizard**
+1. Click **? Create Wizard**
 2. Enter wizard name
 3. Add description
 4. Write YAML definition:
@@ -104,23 +104,23 @@ python -m plugins.web_server.plugin
 5. Click **Create**
 
 ### Run Wizard
-- Click **▶️ Run** button
+- Click **?? Run** button
 - (Note: Wizard engine not yet implemented)
 
 ### Edit Wizard
-- Click **✏️ Edit** button
+- Click **?? Edit** button
 - (Note: Visual editor not yet implemented)
 
 ### Delete Wizard
-1. Click **🗑️ Delete** button
+1. Click **?? Delete** button
 2. Confirm deletion
 
 ---
 
-## ⚙️ Configuration Management
+## [GEAR]? Configuration Management
 
 ### View Configuration
-1. Click **⚙️ Config** tab
+1. Click **[GEAR]? Config** tab
 2. See all settings organized by category:
    - **Output Directory** - Where processed files go
    - **Default Bitrate** - Audio quality (96k - 320k)
@@ -134,39 +134,39 @@ python -m plugins.web_server.plugin
 #### Text Fields:
 - Click in field
 - Type new value
-- Changes not saved until you click **💾 Save**
+- Changes not saved until you click **? Save**
 
 #### Dropdowns:
 - Click dropdown
 - Select option
-- Changes not saved until you click **💾 Save**
+- Changes not saved until you click **? Save**
 
 #### Checkboxes:
 - Click checkbox to toggle
-- Changes not saved until you click **💾 Save**
+- Changes not saved until you click **? Save**
 
 #### Numbers:
 - Click in field
 - Enter number
 - Use arrows to increment/decrement
-- Changes not saved until you click **💾 Save**
+- Changes not saved until you click **? Save**
 
 ### Save Changes
 1. Make your edits
-2. Click **💾 Save** button
+2. Click **? Save** button
 3. Wait for success message
 
 ### Reset to Defaults
-1. Click **⚠️ Reset to Defaults**
+1. Click **[WARN]? Reset to Defaults**
 2. Confirm action
 3. All settings restored to defaults
 
 ### Refresh Configuration
-- Click **🔄 Refresh** to reload current values
+- Click **[REFRESH] Refresh** to reload current values
 
 ---
 
-## 🎨 UI Features
+## ? UI Features
 
 ### Alerts
 - **Green** - Success (e.g., "Plugin installed")
@@ -191,7 +191,7 @@ python -m plugins.web_server.plugin
 
 ---
 
-## 🔌 API Endpoints
+## [PLUG] API Endpoints
 
 ### For Plugin Developers
 
@@ -284,7 +284,7 @@ POST /api/config/reset
 
 ---
 
-## 🛠️ Troubleshooting
+## ?? Troubleshooting
 
 ### Plugin Won't Install
 - Check ZIP structure (must contain `plugin.yaml`)
@@ -309,7 +309,7 @@ POST /api/config/reset
 
 ---
 
-## 💡 Tips & Tricks
+## ? Tips & Tricks
 
 ### Plugin Development
 1. Create plugin in separate directory
@@ -337,7 +337,7 @@ POST /api/config/reset
 
 ---
 
-## 📞 Support
+## ? Support
 
 ### Documentation
 - Full docs: `/docs/` directory

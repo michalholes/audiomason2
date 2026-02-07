@@ -1,37 +1,37 @@
-# 🚀 AudioMason v2 - Advanced Features
+# [ROCKET] AudioMason v2 - Advanced Features
 
-**Status:** ✅ **IMPLEMENTED**  
+**Status:** OK **IMPLEMENTED**  
 **Version:** 2.0.0-alpha-advanced
 
 ---
 
-## 🎯 **Nové Advanced Features**
+## [GOAL] **Nove Advanced Features**
 
-Všetky požadované pokročilé funkcie sú implementované!
+Vsetky pozadovane pokrocile funkcie su implementovane!
 
 ---
 
-## 1. 🎨 **UI Improvements - Rich Library**
+## 1. ? **UI Improvements - Rich Library**
 
 ### **Rich UI Plugin** (`plugins/ui_rich`)
 
-Vylepšené vizuálne výstupy s podporou Rich library.
+Vylepsene vizualne vystupy s podporou Rich library.
 
 **Features:**
-- ✅ Farebný výstup
-- ✅ Progress bars
-- ✅ Formátované tabuľky
-- ✅ Panely a sekcie
-- ✅ Fallback pre systémy bez Rich
+- OK Farebny vystup
+- OK Progress bars
+- OK Formatovane tabulky
+- OK Panely a sekcie
+- OK Fallback pre systemy bez Rich
 
-**Použitie:**
+**Pouzitie:**
 
 ```python
 from plugins.ui_rich.plugin import get_ui
 
 ui = get_ui()
 
-# Farebné výstupy
+# Farebne vystupy
 ui.print_success("Processing complete!")
 ui.print_error("File not found")
 ui.print_warning("Cover missing")
@@ -45,7 +45,7 @@ if progress:
         for i in range(100):
             progress.update(task, advance=1)
 
-# Tabuľky
+# Tabulky
 ui.print_table(
     "Results",
     headers=["Book", "Status", "Time"],
@@ -67,20 +67,20 @@ ui:
 
 ---
 
-## 2. 💾 **Checkpoint/Resume Support**
+## 2. ? **Checkpoint/Resume Support**
 
 ### **Checkpoint System** (`src/audiomason/checkpoint`)
 
 Ukladanie a obnova stavu spracovania.
 
 **Features:**
-- ✅ Save processing state to disk
-- ✅ Resume after interruption (Ctrl+C, crash)
-- ✅ List available checkpoints
-- ✅ Cleanup old checkpoints
-- ✅ JSON-based storage
+- OK Save processing state to disk
+- OK Resume after interruption (Ctrl+C, crash)
+- OK List available checkpoints
+- OK Cleanup old checkpoints
+- OK JSON-based storage
 
-**Použitie:**
+**Pouzitie:**
 
 ```python
 from audiomason.checkpoint import CheckpointManager
@@ -122,24 +122,24 @@ deleted = manager.cleanup_old_checkpoints(days=7)
 **Checkpoint Location:**
 ```
 ~/.audiomason/checkpoints/
-├── abc123.json    # Checkpoint 1
-├── def456.json    # Checkpoint 2
-└── ...
++-- abc123.json    # Checkpoint 1
++-- def456.json    # Checkpoint 2
++-- ...
 ```
 
 ---
 
-## 3. 🔄 **Parallel Book Processing**
+## 3. [REFRESH] **Parallel Book Processing**
 
 ### **Parallel Processor** (`src/audiomason/parallel.py`)
 
-Spracovanie viacerých kníh naraz.
+Spracovanie viacerych knih naraz.
 
 **Features:**
-- ✅ Concurrent processing (configurable limit)
-- ✅ Resource management (semaphore)
-- ✅ Progress tracking
-- ✅ Error isolation (one failure doesn't stop others)
+- OK Concurrent processing (configurable limit)
+- OK Resource management (semaphore)
+- OK Progress tracking
+- OK Error isolation (one failure doesn't stop others)
 
 **Classes:**
 
@@ -211,21 +211,21 @@ parallel:
 
 ---
 
-## 4. 👁️ **Daemon Mode (Watch Folder)**
+## 4. ?? **Daemon Mode (Watch Folder)**
 
 ### **Daemon Plugin** (`plugins/daemon`)
 
-Automatické spracovanie nových súborov v sledovaných priečinkoch.
+Automaticke spracovanie novych suborov v sledovanych priecinkoch.
 
 **Features:**
-- ✅ Watch multiple folders
-- ✅ Auto-process new files
-- ✅ File stability check (wait for complete upload)
-- ✅ Configurable actions (move/keep/delete)
-- ✅ Graceful shutdown (Ctrl+C)
-- ✅ Background service ready
+- OK Watch multiple folders
+- OK Auto-process new files
+- OK File stability check (wait for complete upload)
+- OK Configurable actions (move/keep/delete)
+- OK Graceful shutdown (Ctrl+C)
+- OK Background service ready
 
-**Použitie:**
+**Pouzitie:**
 
 ```bash
 # Start daemon
@@ -290,34 +290,34 @@ sudo systemctl status audiomason-daemon
 
 ---
 
-## 5. 🧪 **Comprehensive Test Suite**
+## 5. [TEST] **Comprehensive Test Suite**
 
 ### **Pytest Tests** (`tests/`)
 
-Kompletná sada testov s vysokým pokrytím.
+Kompletna sada testov s vysokym pokrytim.
 
 **Test Structure:**
 
 ```
 tests/
-├── conftest.py              # Fixtures
-├── pytest.ini               # Configuration
-├── run_tests.py            # Test runner
-│
-├── unit/                   # Unit tests
-│   ├── test_context.py     # ProcessingContext tests
-│   ├── test_config.py      # ConfigResolver tests
-│   └── test_detection.py   # Detection utilities tests
-│
-├── integration/            # Integration tests
-│   ├── test_checkpoint.py  # Checkpoint system tests
-│   ├── test_pipeline.py    # Pipeline execution tests
-│   └── test_parallel.py    # Parallel processing tests
-│
-└── plugins/                # Plugin tests
-    ├── test_audio.py       # Audio processor tests
-    ├── test_metadata.py    # Metadata plugins tests
-    └── test_covers.py      # Cover handler tests
++-- conftest.py              # Fixtures
++-- pytest.ini               # Configuration
++-- run_tests.py            # Test runner
+|
++-- unit/                   # Unit tests
+|   +-- test_context.py     # ProcessingContext tests
+|   +-- test_config.py      # ConfigResolver tests
+|   +-- test_detection.py   # Detection utilities tests
+|
++-- integration/            # Integration tests
+|   +-- test_checkpoint.py  # Checkpoint system tests
+|   +-- test_pipeline.py    # Pipeline execution tests
+|   +-- test_parallel.py    # Parallel processing tests
+|
++-- plugins/                # Plugin tests
+    +-- test_audio.py       # Audio processor tests
+    +-- test_metadata.py    # Metadata plugins tests
+    +-- test_covers.py      # Cover handler tests
 ```
 
 **Running Tests:**
@@ -373,20 +373,20 @@ def test_something(temp_audio_file, sample_context, plugin_loader):
 
 ---
 
-## 📊 **Implementation Stats**
+## [STATS] **Implementation Stats**
 
 | Feature | Lines | Status |
 |---------|-------|--------|
-| **Rich UI Plugin** | 200 | ✅ Complete |
-| **Checkpoint System** | 250 | ✅ Complete |
-| **Parallel Processing** | 180 | ✅ Complete |
-| **Daemon Mode** | 200 | ✅ Complete |
-| **Test Suite** | 500+ | ✅ Complete |
-| **TOTAL NEW CODE** | **1,330+** | **✅ DONE** |
+| **Rich UI Plugin** | 200 | OK Complete |
+| **Checkpoint System** | 250 | OK Complete |
+| **Parallel Processing** | 180 | OK Complete |
+| **Daemon Mode** | 200 | OK Complete |
+| **Test Suite** | 500+ | OK Complete |
+| **TOTAL NEW CODE** | **1,330+** | **OK DONE** |
 
 ---
 
-## 🎯 **Usage Examples**
+## [GOAL] **Usage Examples**
 
 ### **Example 1: Batch with Progress**
 
@@ -399,7 +399,7 @@ processor = ParallelProcessor(executor, max_concurrent=3)
 
 # Show progress
 def progress_callback(current, total, result):
-    ui.print_success(f"✓ {result.title} complete ({current}/{total})")
+    ui.print_success(f"OK {result.title} complete ({current}/{total})")
 
 results = await processor.process_batch(
     contexts=contexts,
@@ -428,9 +428,9 @@ Checkpoints:
   abc123: Book Title (75% complete)
 
 $ ./audiomason resume abc123
-🔄 Resuming from checkpoint...
-⚡ Continuing from step: tags
-✅ Processing complete!
+[REFRESH] Resuming from checkpoint...
+? Continuing from step: tags
+OK Processing complete!
 ```
 
 ### **Example 3: Daemon with Rich Output**
@@ -447,25 +447,25 @@ daemon:
 ```bash
 $ ./audiomason daemon
 
-🔄 AudioMason Daemon Mode
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[REFRESH] AudioMason Daemon Mode
+--------------------------------------------
 Watch folders: 1
-  • /inbox
+  * /inbox
 Check interval: 30s
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+--------------------------------------------
 
-📁 Found new file: book1.m4a
-   ⚡ Processing... ━━━━━━━━━━━━━━━━━━ 100%
-   ✅ Success!
+? Found new file: book1.m4a
+   ? Processing... ------------------ 100%
+   OK Success!
 
-📁 Found new file: book2.m4a
-   ⚡ Processing... ━━━━━━━━━━━━━━━━━━ 100%
-   ✅ Success!
+? Found new file: book2.m4a
+   ? Processing... ------------------ 100%
+   OK Success!
 ```
 
 ---
 
-## ⚙️ **Configuration**
+## [GEAR]? **Configuration**
 
 ### **Complete Config Example:**
 
@@ -508,7 +508,7 @@ logging:
 
 ---
 
-## 📦 **Installation**
+## [PKG] **Installation**
 
 ### **Required Dependencies:**
 
@@ -539,19 +539,19 @@ pip install -e ".[dev]"  # Development tools
 
 ---
 
-## 🚀 **Next Steps**
+## [ROCKET] **Next Steps**
 
 All advanced features are implemented! You can now:
 
-1. ✅ **Use Rich UI** - Beautiful progress bars and colors
-2. ✅ **Resume processing** - After interruption or crash
-3. ✅ **Process in parallel** - Multiple books at once
-4. ✅ **Run as daemon** - Auto-process new files
-5. ✅ **Run tests** - Comprehensive test suite
+1. OK **Use Rich UI** - Beautiful progress bars and colors
+2. OK **Resume processing** - After interruption or crash
+3. OK **Process in parallel** - Multiple books at once
+4. OK **Run as daemon** - Auto-process new files
+5. OK **Run tests** - Comprehensive test suite
 
 ---
 
-## 📝 **Notes**
+## [NOTE] **Notes**
 
 ### **Rich Library**
 
@@ -581,8 +581,8 @@ All advanced features are implemented! You can now:
 
 ---
 
-**Status:** ✅ ALL ADVANCED FEATURES IMPLEMENTED!
+**Status:** OK ALL ADVANCED FEATURES IMPLEMENTED!
 
 **Total New Code:** ~1,330+ lines
 
-**Ready for Production!** 🎉
+**Ready for Production!** ?

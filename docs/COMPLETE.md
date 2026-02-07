@@ -1,48 +1,48 @@
-# 🎉 AudioMason v2 - COMPLETE!
+# ? AudioMason v2 - COMPLETE!
 
-**Dátum:** 2026-01-30  
-**Status:** ✅ **FULLY IMPLEMENTED**  
+**Datum:** 2026-01-30  
+**Status:** OK **FULLY IMPLEMENTED**  
 **Verzia:** 2.0.0-alpha-complete
 
 ---
 
-## 🏆 VŠETKO HOTOVÉ!
+## ? VSETKO HOTOVE!
 
-AudioMason v2 je **kompletne implementovaný** so všetkými funkciami z AM1 a viac!
+AudioMason v2 je **kompletne implementovany** so vsetkymi funkciami z AM1 a viac!
 
 ---
 
-## ✅ ČO JE IMPLEMENTOVANÉ
+## OK CO JE IMPLEMENTOVANE
 
-### 🧠 **Core System** (9 modulov, 1,511 riadkov)
+### ? **Core System** (9 modulov, 1,511 riadkov)
 
-- ✅ ProcessingContext - data flow
-- ✅ 5 Generic Interfaces (IProcessor, IProvider, IUI, IStorage, IEnricher)
-- ✅ ConfigResolver - 4-level priority (CLI > ENV > CONFIG > DEFAULT)
-- ✅ PluginLoader - discovery, loading, validation
-- ✅ EventBus - pub/sub communication
-- ✅ PipelineExecutor - YAML → DAG → async execution
-- ✅ Detection utilities - preflight helpers
-- ✅ Error handling - friendly messages
+- OK ProcessingContext - data flow
+- OK 5 Generic Interfaces (IProcessor, IProvider, IUI, IStorage, IEnricher)
+- OK ConfigResolver - 4-level priority (CLI > ENV > CONFIG > DEFAULT)
+- OK PluginLoader - discovery, loading, validation
+- OK EventBus - pub/sub communication
+- OK PipelineExecutor - YAML -> DAG -> async execution
+- OK Detection utilities - preflight helpers
+- OK Error handling - friendly messages
 
-### 🔌 **Plugins** (9 pluginov, 2,022 riadkov)
+### [PLUG] **Plugins** (9 pluginov, 2,022 riadkov)
 
-#### 1. **audio_processor** (305 riadkov) ✅
-- M4A → MP3 conversion
-- Opus → MP3 conversion
+#### 1. **audio_processor** (305 riadkov) OK
+- M4A -> MP3 conversion
+- Opus -> MP3 conversion
 - Chapter detection (ffprobe)
 - Chapter splitting
 - Loudness normalization
 - Custom bitrate
 
-#### 2. **file_io** (144 riadkov) ✅
+#### 2. **file_io** (144 riadkov) OK
 - Import to staging
 - Export to output
 - Directory organization (Author - Title/)
 - Filename sanitization
 - Cleanup
 
-#### 3. **cli** (458 riadkov) ✅
+#### 3. **cli** (458 riadkov) OK
 - Command-line interface
 - Preflight detection
 - Smart batch grouping
@@ -54,26 +54,26 @@ AudioMason v2 je **kompletne implementovaný** so všetkými funkciami z AM1 a v
 - User-friendly prompts
 - Progress display
 
-#### 4. **text_utils** (219 riadkov) ✅
+#### 4. **text_utils** (219 riadkov) OK
 - strip_diacritics() - remove accents
 - slug() - filesystem-safe names
 - clean_text() - normalize text
 - All functions from AM1 util.py
 
-#### 5. **metadata_googlebooks** (197 riadkov) ✅
+#### 5. **metadata_googlebooks** (197 riadkov) OK
 - Google Books API integration
 - Search by title + author
 - Search by ISBN
 - Fetch book metadata
 - Rate limiting
 
-#### 6. **metadata_openlibrary** (131 riadkov) ✅
+#### 6. **metadata_openlibrary** (131 riadkov) OK
 - OpenLibrary API integration
 - Search books
 - Fetch metadata
 - ISBN lookup
 
-#### 7. **id3_tagger** (177 riadkov) ✅
+#### 7. **id3_tagger** (177 riadkov) OK
 - Write ID3v2.4 tags to MP3
 - All metadata fields:
   - Title, Artist, Album
@@ -81,7 +81,7 @@ AudioMason v2 je **kompletne implementovaný** so všetkými funkciami z AM1 a v
   - Track number
 - Uses mutagen library
 
-#### 8. **cover_handler** (358 riadkov) ✅
+#### 8. **cover_handler** (358 riadkov) OK
 - Extract cover from M4A/MP3
 - Download cover from URL
 - Convert image formats (JPG, PNG, WEBP)
@@ -89,73 +89,73 @@ AudioMason v2 je **kompletne implementovaný** so všetkými funkciami z AM1 a v
 - Embed cover in MP3
 - Fallback strategies
 
-#### 9. **example_plugin** (33 riadkov) ✅
+#### 9. **example_plugin** (33 riadkov) OK
 - Demo plugin
 - Shows how to create plugins
 
 ---
 
-## 🔄 **Pipelines** (2 pipelines)
+## [REFRESH] **Pipelines** (2 pipelines)
 
-### **minimal.yaml** ✅
+### **minimal.yaml** OK
 ```
-import → convert → export
+import -> convert -> export
 ```
 Basic conversion only.
 
-### **standard.yaml** ✅
+### **standard.yaml** OK
 ```
-import → convert → [cover + tags] → export
+import -> convert -> [cover + tags] -> export
 ```
 Full workflow with metadata and covers.
 
 ---
 
-## 🧪 **Tests** (5 test suites, všetky PASS)
+## [TEST] **Tests** (5 test suites, vsetky PASS)
 
-1. ✅ **simple_test_config.py** - Config system
-2. ✅ **test_integration.py** - Core + Plugin + Pipeline
-3. ✅ **test_mvp.py** - MVP functionality
-4. ✅ **test_config.py** - Pytest config tests
-5. ✅ **test_complete.py** - All plugins test
+1. OK **simple_test_config.py** - Config system
+2. OK **test_integration.py** - Core + Plugin + Pipeline
+3. OK **test_mvp.py** - MVP functionality
+4. OK **test_config.py** - Pytest config tests
+5. OK **test_complete.py** - All plugins test
 
-**Výsledok:**
+**Vysledok:**
 ```
-✅ 9/9 plugins loaded successfully
-✅ 2/2 pipelines valid
-✅ ALL TESTS PASS
+OK 9/9 plugins loaded successfully
+OK 2/2 pipelines valid
+OK ALL TESTS PASS
 ```
 
 ---
 
-## 📊 **Štatistiky**
+## [STATS] **Statistiky**
 
-| Kategória | Počet | Riadky | Status |
+| Kategoria | Pocet | Riadky | Status |
 |-----------|-------|--------|--------|
-| **Core moduly** | 9 | 1,511 | ✅ Complete |
-| **Pluginy** | 9 | 2,022 | ✅ Complete |
-| **Pipelines** | 2 | 50 | ✅ Complete |
-| **Testy** | 5 | 620 | ✅ All Pass |
-| **Dokumentácia** | 8 | 3,500+ | ✅ Complete |
-| **TOTAL** | **33** | **~7,700** | **✅ COMPLETE** |
+| **Core moduly** | 9 | 1,511 | OK Complete |
+| **Pluginy** | 9 | 2,022 | OK Complete |
+| **Pipelines** | 2 | 50 | OK Complete |
+| **Testy** | 5 | 620 | OK All Pass |
+| **Dokumentacia** | 8 | 3,500+ | OK Complete |
+| **TOTAL** | **33** | **~7,700** | **OK COMPLETE** |
 
 ---
 
-## 🚀 **Použitie**
+## [ROCKET] **Pouzitie**
 
-### **Základné použitie:**
+### **Zakladne pouzitie:**
 
 ```bash
-# Jednoduchá konverzia
+# Jednoducha konverzia
 ./audiomason process book.m4a
 
-# System sa opýta na:
+# System sa opyta na:
 # - Author
 # - Title
 # - Cover source (embedded/file/url/skip)
 ```
 
-### **S metadátami:**
+### **S metadatami:**
 
 ```bash
 ./audiomason process book.m4a \
@@ -164,7 +164,7 @@ Full workflow with metadata and covers.
   --year 1949
 ```
 
-### **Plná verzia:**
+### **Plna verzia:**
 
 ```bash
 ./audiomason process book.m4a \
@@ -201,11 +201,11 @@ done
 
 ---
 
-## 🎯 **Features z AM1**
+## [GOAL] **Features z AM1**
 
-Všetky funkcie z AudioMason v1 sú implementované:
+Vsetky funkcie z AudioMason v1 su implementovane:
 
-### ✅ Audio Processing (audio.py)
+### OK Audio Processing (audio.py)
 - [x] ffprobe_json()
 - [x] m4a_chapters()
 - [x] opus_to_mp3_single()
@@ -214,7 +214,7 @@ Všetky funkcie z AudioMason v1 sú implementované:
 - [x] convert_opus_in_place()
 - [x] convert_m4a_in_place()
 
-### ✅ Cover Handling (covers.py)
+### OK Cover Handling (covers.py)
 - [x] extract_embedded_cover_from_mp3()
 - [x] convert_image_to_jpg()
 - [x] download_url()
@@ -223,7 +223,7 @@ Všetky funkcie z AudioMason v1 sú implementované:
 - [x] extract_cover_from_m4a()
 - [x] choose_cover()
 
-### ✅ Utilities (util.py)
+### OK Utilities (util.py)
 - [x] strip_diacritics()
 - [x] clean_text()
 - [x] slug()
@@ -231,24 +231,24 @@ Všetky funkcie z AudioMason v1 sú implementované:
 - [x] unique_path()
 - [x] prompt()
 
-### ✅ Metadata (googlebooks.py, openlibrary.py)
+### OK Metadata (googlebooks.py, openlibrary.py)
 - [x] Google Books API
 - [x] OpenLibrary API
 - [x] ISBN lookup
 - [x] Metadata enrichment
 
-### ✅ CLI (cli.py)
+### OK CLI (cli.py)
 - [x] Argument parsing
 - [x] Config handling
 - [x] Command dispatch
 - [x] User prompts
 
-### ✅ Pipeline (pipeline_steps.py)
+### OK Pipeline (pipeline_steps.py)
 - [x] Step ordering
 - [x] Dependency resolution
 - [x] Async execution
 
-### ✅ Preflight (preflight_*.py)
+### OK Preflight (preflight_*.py)
 - [x] Detection system
 - [x] Intelligent questions
 - [x] Cover choice logic
@@ -256,11 +256,11 @@ Všetky funkcie z AudioMason v1 sú implementované:
 
 ---
 
-## 🆕 **Nové Features (nie v AM1)**
+## ? **Nove Features (nie v AM1)**
 
 ### **1. Plugin System**
-- Modulárna architektúra
-- Ľahko rozšíriteľné
+- Modularna architektura
+- Lahko rozsiritelne
 - Hot-loadable plugins
 - Plugin marketplace ready
 
@@ -289,24 +289,24 @@ Všetky funkcie z AudioMason v1 sú implementované:
 
 ---
 
-## 📖 **Dokumentácia**
+## [DOC] **Dokumentacia**
 
-Kompletná dokumentácia v 8 súboroch:
+Kompletna dokumentacia v 8 suboroch:
 
-1. **COMPLETE.md** ⭐ - Tento súbor
-2. **QUICKSTART.md** ⭐ - Rýchly start
-3. **DELIVERY.md** - Dodací list
+1. **COMPLETE.md** ? - Tento subor
+2. **QUICKSTART.md** ? - Rychly start
+3. **DELIVERY.md** - Dodaci list
 4. **MVP_COMPLETE.md** - MVP status
-5. **INSTALL_GUIDE.md** - Inštalácia
-6. **README.md** - Prehľad
-7. **STATUS.md** - Aktuálny stav
-8. **AUDIOMASON_V2_FINAL_REQUIREMENTS.md** - Špecifikácia
+5. **INSTALL_GUIDE.md** - Instalacia
+6. **README.md** - Prehlad
+7. **STATUS.md** - Aktualny stav
+8. **AUDIOMASON_V2_FINAL_REQUIREMENTS.md** - Specifikacia
 
 ---
 
-## ⚙️ **Konfigurácia**
+## [GEAR]? **Konfiguracia**
 
-### **Config súbor** (`~/.config/audiomason/config.yaml`):
+### **Config subor** (`~/.config/audiomason/config.yaml`):
 
 ```yaml
 # Paths
@@ -350,7 +350,7 @@ export AUDIOMASON_PIPELINE=standard
 
 ---
 
-## 🔧 **Inštalácia na Raspberry Pi**
+## ? **Instalacia na Raspberry Pi**
 
 ### **1. Transfer projektu:**
 
@@ -378,7 +378,7 @@ chmod +x audiomason
 
 ```bash
 python3 tests/test_complete.py
-# Should output: ✅ ALL TESTS PASSED
+# Should output: OK ALL TESTS PASSED
 ```
 
 ### **5. Process first book:**
@@ -389,75 +389,75 @@ python3 tests/test_complete.py
 
 ---
 
-## 🎯 **Príklad Session**
+## [GOAL] **Priklad Session**
 
 ```
 $ ./audiomason process "Orwell - 1984.m4a" --verbose
 
-🎧 AudioMason v2 - Processing: Orwell - 1984.m4a
+[AUDIO] AudioMason v2 - Processing: Orwell - 1984.m4a
 
-🔍 Preflight detection:
-   ✓ Author detected: George Orwell
-   ✓ Title detected: 1984
-   ✓ Format: M4A
-   ✓ Chapters: 15 detected
-   ✓ Embedded cover: Found
+? Preflight detection:
+   OK Author detected: George Orwell
+   OK Title detected: 1984
+   OK Format: M4A
+   OK Chapters: 15 detected
+   OK Embedded cover: Found
 
-📚 Author [George Orwell]: ⏎
-📖 Title [1984]: ⏎
-📅 Year: 1949
-🖼️  Cover [embedded/file/url/skip] [embedded]: ⏎
+? Author [George Orwell]: ?
+[DOC] Title [1984]: ?
+? Year: 1949
+??  Cover [embedded/file/url/skip] [embedded]: ?
 
    Author: George Orwell
    Title: 1984
    Year: 1949
    Cover: embedded
 
-🔌 Loading plugins...
-   ✓ audio_processor
-   ✓ file_io
-   ✓ cover_handler
-   ✓ id3_tagger
+[PLUG] Loading plugins...
+   OK audio_processor
+   OK file_io
+   OK cover_handler
+   OK id3_tagger
 
-⚡ Executing pipeline: standard
+? Executing pipeline: standard
 
 [import] Importing to staging...
-   → /tmp/audiomason/stage/book_abc12345/
+   -> /tmp/audiomason/stage/book_abc12345/
 
-[convert] Converting M4A → MP3...
-   → Detected 15 chapters
-   → Splitting by chapters...
-   → Chapter 1/15... ✓
-   → Chapter 2/15... ✓
+[convert] Converting M4A -> MP3...
+   -> Detected 15 chapters
+   -> Splitting by chapters...
+   -> Chapter 1/15... OK
+   -> Chapter 2/15... OK
    ...
-   → Chapter 15/15... ✓
+   -> Chapter 15/15... OK
 
 [cover] Handling cover...
-   → Extracting embedded cover...
-   → Cover saved: 1400x1400 JPEG
+   -> Extracting embedded cover...
+   -> Cover saved: 1400x1400 JPEG
 
 [tags] Writing ID3 tags...
-   → Title: 1984
-   → Artist: George Orwell
-   → Album: 1984
-   → Year: 1949
-   → Cover: embedded
+   -> Title: 1984
+   -> Artist: George Orwell
+   -> Album: 1984
+   -> Year: 1949
+   -> Cover: embedded
 
 [export] Exporting to output...
-   → ~/Audiobooks/output/George Orwell - 1984/
+   -> ~/Audiobooks/output/George Orwell - 1984/
 
-✅ Processing complete!
+OK Processing complete!
 
-📁 Output: ~/Audiobooks/output/George Orwell - 1984/
-   • 01.mp3
-   • 02.mp3
+? Output: ~/Audiobooks/output/George Orwell - 1984/
+   * 01.mp3
+   * 02.mp3
    ...
-   • 15.mp3
-   • cover.jpg
+   * 15.mp3
+   * cover.jpg
 
-⏱️  Total time: 2m 34s
+??  Total time: 2m 34s
 
-📊 Statistics:
+[STATS] Statistics:
    Input:  524 MB (M4A)
    Output: 156 MB (MP3 @ 128k)
    Ratio:  70% reduction
@@ -465,7 +465,7 @@ $ ./audiomason process "Orwell - 1984.m4a" --verbose
 
 ---
 
-## 🐛 **Troubleshooting**
+## ? **Troubleshooting**
 
 ### **"FFmpeg not found"**
 
@@ -483,8 +483,8 @@ sudo apt-get install python3-mutagen
 
 ### **"Google Books API error"**
 
-API funguje bez API key, ale má rate limit.
-Pre production použitie pridaj API key do configu.
+API funguje bez API key, ale ma rate limit.
+Pre production pouzitie pridaj API key do configu.
 
 ### **Tests fail**
 
@@ -502,9 +502,9 @@ python3 tests/test_complete.py
 
 ---
 
-## 🚀 **Next Steps (Post-v2.0)**
+## [ROCKET] **Next Steps (Post-v2.0)**
 
-Ak chceš ešte viac:
+Ak chces este viac:
 
 ### **Phase 1: UI Improvements**
 - [ ] Rich progress bars
@@ -529,34 +529,34 @@ Ak chceš ešte viac:
 
 ---
 
-## 🏆 **Achievement Unlocked!**
+## ? **Achievement Unlocked!**
 
 ### **From Zero to Hero:**
 
-**Začiatok (včera):**
-- ❌ Len requirements dokument
-- ❌ Žiadny kód
+**Zaciatok (vcera):**
+- X Len requirements dokument
+- X Ziadny kod
 
 **Teraz:**
-- ✅ **7,700+ riadkov kódu**
-- ✅ **9 funkčných pluginov**
-- ✅ **Všetky AM1 funkcie**
-- ✅ **Nová plugin architektúra**
-- ✅ **Kompletná dokumentácia**
-- ✅ **Všetky testy prechádzajú**
-- ✅ **Production ready!**
+- OK **7,700+ riadkov kodu**
+- OK **9 funkcnych pluginov**
+- OK **Vsetky AM1 funkcie**
+- OK **Nova plugin architektura**
+- OK **Kompletna dokumentacia**
+- OK **Vsetky testy prechadzaju**
+- OK **Production ready!**
 
 ---
 
-## 📞 **Support**
+## ? **Support**
 
-### **Ak všetko funguje:**
+### **Ak vsetko funguje:**
 
-🎉 **Gratulujeme! Máš plne funkčný AudioMason v2!**
+? **Gratulujeme! Mas plne funkcny AudioMason v2!**
 
-Začni spracovávať svoje audiobooks!
+Zacni spracovavat svoje audiobooks!
 
-### **Ak niečo nefunguje:**
+### **Ak nieco nefunguje:**
 
 1. Check dependencies (ffmpeg, mutagen, yaml)
 2. Run test suite: `python3 tests/test_complete.py`
@@ -565,24 +565,24 @@ Začni spracovávať svoje audiobooks!
 
 ---
 
-## 🎉 **ZÁVER**
+## ? **ZAVER**
 
-**AudioMason v2 je KOMPLETNÝ!**
+**AudioMason v2 je KOMPLETNY!**
 
-- ✅ Všetky funkcie z AM1
-- ✅ Plus nová modulárna architektúra
-- ✅ Plus pokročilé features
-- ✅ Production-ready
-- ✅ Plne testovaný
-- ✅ Kompletne zdokumentovaný
+- OK Vsetky funkcie z AM1
+- OK Plus nova modularna architektura
+- OK Plus pokrocile features
+- OK Production-ready
+- OK Plne testovany
+- OK Kompletne zdokumentovany
 
-**Ready to process audiobooks! 🎧📚**
+**Ready to process audiobooks! [AUDIO]?**
 
 ---
 
-**Vytvorené:** 2026-01-30  
+**Vytvorene:** 2026-01-30  
 **Autor:** Claude (AI Assistant)  
-**Pre:** Michal Holeš <michal@holes.sk>  
-**Status:** ✅ **COMPLETE & READY FOR PRODUCTION**
+**Pre:** Michal Holes <michal@holes.sk>  
+**Status:** OK **COMPLETE & READY FOR PRODUCTION**
 
-**Enjoy! 🎉🎉🎉**
+**Enjoy! ???**

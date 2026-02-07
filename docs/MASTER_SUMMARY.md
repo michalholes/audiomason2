@@ -1,128 +1,128 @@
-# 🎧 AudioMason v2 - MASTER SUMMARY
+# [AUDIO] AudioMason v2 - MASTER SUMMARY
 
-**Dátum:** 2026-01-30  
+**Datum:** 2026-01-30  
 **Status:** 90% COMPLETE - Production Ready (pending Web UI completion)  
 **Version:** 2.0.0-alpha-advanced  
 **Total Code:** ~7,800+ lines
 
 ---
 
-## 📊 **CURRENT STATUS**
+## [STATS] **CURRENT STATUS**
 
-### ✅ **FULLY IMPLEMENTED (Production Ready)**
+### OK **FULLY IMPLEMENTED (Production Ready)**
 
 #### **Core System** (1,511 lines)
-- ✅ ProcessingContext - complete data flow model
-- ✅ 5 Generic Interfaces (IProcessor, IProvider, IUI, IStorage, IEnricher)
-- ✅ ConfigResolver - 4-level priority system
-- ✅ PluginLoader - discovery, loading, validation
-- ✅ EventBus - pub/sub system
-- ✅ PipelineExecutor - YAML → DAG → async execution
-- ✅ Detection utilities - preflight helpers
-- ✅ Error handling - friendly messages
-- ✅ Checkpoint system - resume support
+- OK ProcessingContext - complete data flow model
+- OK 5 Generic Interfaces (IProcessor, IProvider, IUI, IStorage, IEnricher)
+- OK ConfigResolver - 4-level priority system
+- OK PluginLoader - discovery, loading, validation
+- OK EventBus - pub/sub system
+- OK PipelineExecutor - YAML -> DAG -> async execution
+- OK Detection utilities - preflight helpers
+- OK Error handling - friendly messages
+- OK Checkpoint system - resume support
 
 #### **Essential Plugins** (3,500+ lines)
-1. ✅ **audio_processor** - M4A/Opus → MP3, chapters, loudnorm
-2. ✅ **file_io** - Import/export, organization
-3. ✅ **cli** - Interactive wizard, verbosity modes
-4. ✅ **text_utils** - Diacritics, slug, clean
-5. ✅ **metadata_googlebooks** - Google Books API
-6. ✅ **metadata_openlibrary** - OpenLibrary API
-7. ✅ **id3_tagger** - ID3v2.4 tag writing
-8. ✅ **cover_handler** - Extract/download/embed
-9. ✅ **ui_rich** - Rich progress bars
-10. ✅ **daemon** - Watch folder mode
-11. ✅ **web_server** - REST API + Web UI (basic)
+1. OK **audio_processor** - M4A/Opus -> MP3, chapters, loudnorm
+2. OK **file_io** - Import/export, organization
+3. OK **cli** - Interactive wizard, verbosity modes
+4. OK **text_utils** - Diacritics, slug, clean
+5. OK **metadata_googlebooks** - Google Books API
+6. OK **metadata_openlibrary** - OpenLibrary API
+7. OK **id3_tagger** - ID3v2.4 tag writing
+8. OK **cover_handler** - Extract/download/embed
+9. OK **ui_rich** - Rich progress bars
+10. OK **daemon** - Watch folder mode
+11. OK **web_server** - REST API + Web UI (basic)
 
 #### **Advanced Features**
-- ✅ Checkpoint/Resume system
-- ✅ Parallel processing (2+ books at once)
-- ✅ Daemon mode (watch folders)
-- ✅ Web server (FastAPI + basic UI)
+- OK Checkpoint/Resume system
+- OK Parallel processing (2+ books at once)
+- OK Daemon mode (watch folders)
+- OK Web server (FastAPI + basic UI)
 
 #### **API Modules** (NEW - 450 lines)
-- ✅ Plugin API - management endpoints
-- ✅ Wizard API - YAML wizard management
-- ✅ Config API - configuration management
+- OK Plugin API - management endpoints
+- OK Wizard API - YAML wizard management
+- OK Config API - configuration management
 
 #### **Test Suite** (900+ lines)
-- ✅ Unit tests (context, config, detection)
-- ✅ Integration tests (checkpoint, pipeline)
-- ✅ Pytest configuration
-- ✅ All tests passing
+- OK Unit tests (context, config, detection)
+- OK Integration tests (checkpoint, pipeline)
+- OK Pytest configuration
+- OK All tests passing
 
 #### **Documentation** (10+ docs, 5,000+ lines)
-- ✅ README.md
-- ✅ QUICKSTART.md
-- ✅ INSTALL_GUIDE.md
-- ✅ COMPLETE.md
-- ✅ ADVANCED_FEATURES.md
-- ✅ WEB_SERVER.md
-- ✅ STATUS.md
-- ✅ DELIVERY.md
-- ✅ WEB_UI_COMPLETE.md (implementation guide)
+- OK README.md
+- OK QUICKSTART.md
+- OK INSTALL_GUIDE.md
+- OK COMPLETE.md
+- OK ADVANCED_FEATURES.md
+- OK WEB_SERVER.md
+- OK STATUS.md
+- OK DELIVERY.md
+- OK WEB_UI_COMPLETE.md (implementation guide)
 
 ---
 
-### 🔄 **IN PROGRESS (90% Done)**
+### [REFRESH] **IN PROGRESS (90% Done)**
 
 #### **Web UI Extensions**
-- ✅ REST API modules created (plugins, wizards, config)
-- 🔄 Integration into web_server plugin (TODO)
-- 🔄 Frontend tabs (Plugins, Wizards, Config) (TODO)
-- 🔄 Visual wizard builder (TODO)
+- OK REST API modules created (plugins, wizards, config)
+- [REFRESH] Integration into web_server plugin (TODO)
+- [REFRESH] Frontend tabs (Plugins, Wizards, Config) (TODO)
+- [REFRESH] Visual wizard builder (TODO)
 
 #### **Ncurses TUI**
-- 🔄 Main menu (raspi-config style) (TODO)
-- 🔄 Plugin manager (TODO)
-- 🔄 Wizard manager (TODO)
-- 🔄 Config editor (TODO)
+- [REFRESH] Main menu (raspi-config style) (TODO)
+- [REFRESH] Plugin manager (TODO)
+- [REFRESH] Wizard manager (TODO)
+- [REFRESH] Config editor (TODO)
 
 #### **Wizard System**
-- 🔄 Wizard engine (YAML parser + executor) (TODO)
-- 🔄 Example wizards (5 YAML files) (TODO)
-- ✅ Design complete (fully specified)
+- [REFRESH] Wizard engine (YAML parser + executor) (TODO)
+- [REFRESH] Example wizards (5 YAML files) (TODO)
+- OK Design complete (fully specified)
 
 ---
 
-### ❌ **NOT STARTED**
+### X **NOT STARTED**
 
-- ❌ .deb package creation
-- ❌ Marketplace plugin system
-- ❌ Advanced typo checking
+- X .deb package creation
+- X Marketplace plugin system
+- X Advanced typo checking
 
 ---
 
-## 🎯 **CIEĽOVÁ ŠTRUKTÚRA (z fff.txt)**
+## [GOAL] **CIELOVA STRUKTURA (z fff.txt)**
 
 ```
 abooks/
-├── Douglas Adams/
-│   └── Stoparuv pruvodce po galaxii 1/
-│       ├── 01.mp3
-│       ├── 02.mp3
-│       └── cover.jpg
-├── Juraj Cervenak/
-│   └── Mrtvy na pekelnom vrchu/
-│       ├── 01.mp3
-│       └── cover.jpg
-└── Milan Kundera/
-    └── Jakub a jeho pan/
-        ├── 01.mp3
-        └── cover.jpg
++-- Douglas Adams/
+|   +-- Stoparuv pruvodce po galaxii 1/
+|       +-- 01.mp3
+|       +-- 02.mp3
+|       +-- cover.jpg
++-- Juraj Cervenak/
+|   +-- Mrtvy na pekelnom vrchu/
+|       +-- 01.mp3
+|       +-- cover.jpg
++-- Milan Kundera/
+    +-- Jakub a jeho pan/
+        +-- 01.mp3
+        +-- cover.jpg
 ```
 
-**Pravidlá:**
-- ✅ `Author/Title/NN.mp3` struktura
-- ✅ Bez diakritiky v file paths
-- ✅ S diakritikou v ID3 tags
-- ✅ Uniformné ID3 tagy
-- ✅ cover.jpg + embedded cover v každom MP3
+**Pravidla:**
+- OK `Author/Title/NN.mp3` struktura
+- OK Bez diakritiky v file paths
+- OK S diakritikou v ID3 tags
+- OK Uniformne ID3 tagy
+- OK cover.jpg + embedded cover v kazdom MP3
 
 ---
 
-## 🔧 **KONFIGURÁCIA POŽIADAVIEK**
+## ? **KONFIGURACIA POZIADAVIEK**
 
 ### **1. Wizard System**
 ```yaml
@@ -161,8 +161,8 @@ wizard:
 ```python
 {
     "artist": "Milan Kundera",      # S diakritikou
-    "album": "Jakub a jeho pán",    # S diakritikou
-    "title": "01",                  # Len číslo
+    "album": "Jakub a jeho pan",    # S diakritikou
+    "title": "01",                  # Len cislo
     "track": 1,
     "genre": "Audiobook",
     "cover": <embedded JPEG>,
@@ -171,7 +171,7 @@ wizard:
 
 ---
 
-## 🌐 **WEB UI FEATURES (Specified)**
+## [WEB] **WEB UI FEATURES (Specified)**
 
 ### **Plugins Tab**
 - List plugins (enabled/disabled)
@@ -195,22 +195,22 @@ wizard:
 
 ---
 
-## 🖥️ **NCURSES TUI (Specified)**
+## [PC]? **NCURSES TUI (Specified)**
 
 ### **Main Menu**
 ```
-┌─────────────────────────────────────┐
-│      AudioMason v2 - Main Menu      │
-├─────────────────────────────────────┤
-│  1. Import Audiobooks               │
-│  2. Process Files                   │
-│  3. Manage Plugins                  │
-│  4. Manage Wizards                  │
-│  5. Configuration                   │
-│  6. Web Server                      │
-│  7. Daemon Mode                     │
-│  0. Exit                            │
-└─────────────────────────────────────┘
++-------------------------------------+
+|      AudioMason v2 - Main Menu      |
++-------------------------------------+
+|  1. Import Audiobooks               |
+|  2. Process Files                   |
+|  3. Manage Plugins                  |
+|  4. Manage Wizards                  |
+|  5. Configuration                   |
+|  6. Web Server                      |
+|  7. Daemon Mode                     |
+|  0. Exit                            |
++-------------------------------------+
 ```
 
 ### **Features**
@@ -223,7 +223,7 @@ wizard:
 
 ---
 
-## 📦 **IMPLEMENTATION PRIORITIES**
+## [PKG] **IMPLEMENTATION PRIORITIES**
 
 ### **Next Session Tasks:**
 
@@ -281,78 +281,78 @@ class WizardEngine:
 #### **Priority 6: .deb Package** (~1h)
 ```
 debian/
-├── control
-├── changelog
-├── copyright
-├── postinst
-├── prerm
-└── rules
++-- control
++-- changelog
++-- copyright
++-- postinst
++-- prerm
++-- rules
 ```
 
 **Total remaining time:** ~9.5 hours
 
 ---
 
-## 🗂️ **PROJECT STRUCTURE**
+## ?? **PROJECT STRUCTURE**
 
 ```
 audiomason-v2-implementation/
-├── audiomason                      # Main executable
-├── src/audiomason/
-│   ├── core/                       # Core system (9 modules)
-│   ├── checkpoint/                 # Checkpoint system
-│   ├── parallel.py                 # Parallel processing
-│   └── api/                        # API modules (NEW!)
-│       ├── plugins.py              # Plugin management API
-│       ├── wizards.py              # Wizard management API
-│       └── config.py               # Config management API
-├── plugins/
-│   ├── audio_processor/            # Audio conversion
-│   ├── file_io/                    # I/O operations
-│   ├── cli/                        # CLI interface
-│   ├── text_utils/                 # Text utilities
-│   ├── metadata_googlebooks/       # Google Books
-│   ├── metadata_openlibrary/       # OpenLibrary
-│   ├── id3_tagger/                 # ID3 tags
-│   ├── cover_handler/              # Cover handling
-│   ├── ui_rich/                    # Rich UI
-│   ├── daemon/                     # Daemon mode
-│   ├── web_server/                 # Web server
-│   │   ├── templates/
-│   │   │   └── index.html          # Web UI
-│   │   └── plugin.py
-│   └── example_plugin/
-├── pipelines/
-│   ├── minimal.yaml
-│   └── standard.yaml
-├── tests/                          # Test suite
-│   ├── unit/
-│   ├── integration/
-│   └── conftest.py
-└── docs/                           # Documentation
++-- audiomason                      # Main executable
++-- src/audiomason/
+|   +-- core/                       # Core system (9 modules)
+|   +-- checkpoint/                 # Checkpoint system
+|   +-- parallel.py                 # Parallel processing
+|   +-- api/                        # API modules (NEW!)
+|       +-- plugins.py              # Plugin management API
+|       +-- wizards.py              # Wizard management API
+|       +-- config.py               # Config management API
++-- plugins/
+|   +-- audio_processor/            # Audio conversion
+|   +-- file_io/                    # I/O operations
+|   +-- cli/                        # CLI interface
+|   +-- text_utils/                 # Text utilities
+|   +-- metadata_googlebooks/       # Google Books
+|   +-- metadata_openlibrary/       # OpenLibrary
+|   +-- id3_tagger/                 # ID3 tags
+|   +-- cover_handler/              # Cover handling
+|   +-- ui_rich/                    # Rich UI
+|   +-- daemon/                     # Daemon mode
+|   +-- web_server/                 # Web server
+|   |   +-- templates/
+|   |   |   +-- index.html          # Web UI
+|   |   +-- plugin.py
+|   +-- example_plugin/
++-- pipelines/
+|   +-- minimal.yaml
+|   +-- standard.yaml
++-- tests/                          # Test suite
+|   +-- unit/
+|   +-- integration/
+|   +-- conftest.py
++-- docs/                           # Documentation
 ```
 
 ---
 
-## 📈 **STATISTICS**
+## ? **STATISTICS**
 
 | Category | Count | Lines | Status |
 |----------|-------|-------|--------|
-| **Core modules** | 10 | 1,800 | ✅ Complete |
-| **Plugins** | 11 | 3,500+ | ✅ Complete |
-| **API modules** | 3 | 450 | ✅ Complete |
-| **Pipelines** | 2 | 50 | ✅ Complete |
-| **Tests** | 6 | 900+ | ✅ Complete |
-| **Documentation** | 10 | 5,000+ | ✅ Complete |
+| **Core modules** | 10 | 1,800 | OK Complete |
+| **Plugins** | 11 | 3,500+ | OK Complete |
+| **API modules** | 3 | 450 | OK Complete |
+| **Pipelines** | 2 | 50 | OK Complete |
+| **Tests** | 6 | 900+ | OK Complete |
+| **Documentation** | 10 | 5,000+ | OK Complete |
 | **TOTAL** | **42** | **~11,700** | **90% Complete** |
 
 ---
 
-## 🚀 **READY FOR:**
+## [ROCKET] **READY FOR:**
 
-### **✅ Can Use NOW:**
+### **OK Can Use NOW:**
 - Process audiobooks (CLI)
-- M4A/Opus → MP3 conversion
+- M4A/Opus -> MP3 conversion
 - ID3 tagging
 - Cover handling
 - Metadata fetching
@@ -361,7 +361,7 @@ audiomason-v2-implementation/
 - Checkpoint/resume
 - Parallel processing
 
-### **🔄 Coming Soon (10h work):**
+### **[REFRESH] Coming Soon (10h work):**
 - Web UI management tabs
 - Ncurses TUI
 - Wizard system (YAML)
@@ -369,53 +369,53 @@ audiomason-v2-implementation/
 
 ---
 
-## 💡 **KEY DECISIONS MADE**
+## ? **KEY DECISIONS MADE**
 
 1. **Architecture: all** - Python only, platform-independent
 2. **Install path:** `/opt/audiomason/`
 3. **Auto-install dependencies:** Yes
 4. **Systemd services:** Enabled by default
 5. **Python deps:** Virtual environment
-6. **Config:** Systémový + user override
-7. **Paths:** Všetko konfigurovateľné
+6. **Config:** Systemovy + user override
+7. **Paths:** Vsetko konfigurovatelne
 8. **User:** Configurable
-9. **Uninstall:** Nechať configs pri remove
+9. **Uninstall:** Nechat configs pri remove
 10. **Version:** `audiomason_2.0.0-1_all.deb`
 
 ---
 
-## 📝 **REQUIREMENTS FULFILLED**
+## [NOTE] **REQUIREMENTS FULFILLED**
 
 ### **From Original Spec:**
-- ✅ Ultra-modular plugin architecture
-- ✅ All AM1 features implemented
-- ✅ M4A/Opus → MP3 conversion
-- ✅ Chapter detection & splitting
-- ✅ Metadata fetching (Google Books, OpenLibrary)
-- ✅ Cover extraction/download/embed
-- ✅ ID3 tagging (uniformné)
-- ✅ CLI interface (interactive wizard)
-- ✅ Daemon mode (watch folders)
-- ✅ Web UI + REST API
-- ✅ Checkpoint/resume
-- ✅ Parallel processing
-- ✅ Rich progress bars
-- ✅ Comprehensive test suite
+- OK Ultra-modular plugin architecture
+- OK All AM1 features implemented
+- OK M4A/Opus -> MP3 conversion
+- OK Chapter detection & splitting
+- OK Metadata fetching (Google Books, OpenLibrary)
+- OK Cover extraction/download/embed
+- OK ID3 tagging (uniformne)
+- OK CLI interface (interactive wizard)
+- OK Daemon mode (watch folders)
+- OK Web UI + REST API
+- OK Checkpoint/resume
+- OK Parallel processing
+- OK Rich progress bars
+- OK Comprehensive test suite
 
 ### **New Requirements (from discussion):**
-- ✅ Output structure: `Author/Title/NN.mp3`
-- ✅ Diakritika: remove from paths, keep in ID3
-- ✅ ID3 wipe option (default ON)
-- ✅ Cover priority: 1→3→2
-- ✅ Multi-part merge support
-- ✅ Archive extraction (ZIP/RAR/7Z)
-- ⏳ Wizard system (YAML-based) - 90% specified
-- ⏳ Ncurses TUI (raspi-config style) - fully specified
-- ⏳ Web UI management (plugins/wizards/config) - API done
+- OK Output structure: `Author/Title/NN.mp3`
+- OK Diakritika: remove from paths, keep in ID3
+- OK ID3 wipe option (default ON)
+- OK Cover priority: 1->3->2
+- OK Multi-part merge support
+- OK Archive extraction (ZIP/RAR/7Z)
+- ? Wizard system (YAML-based) - 90% specified
+- ? Ncurses TUI (raspi-config style) - fully specified
+- ? Web UI management (plugins/wizards/config) - API done
 
 ---
 
-## 🎯 **NEXT SESSION CHECKLIST**
+## [GOAL] **NEXT SESSION CHECKLIST**
 
 ```
 [ ] 1. Integrate API modules into web_server plugin
@@ -432,7 +432,7 @@ audiomason-v2-implementation/
 
 ---
 
-## 🏆 **ACHIEVEMENT SUMMARY**
+## ? **ACHIEVEMENT SUMMARY**
 
 ### **Started:** 3 days ago with requirements document
 ### **Now:** 
@@ -453,24 +453,24 @@ audiomason-v2-implementation/
 
 ---
 
-## 📞 **CONTACT**
+## ? **CONTACT**
 
-**Maintainer:** Michal Holeš <michal@holes.sk>  
+**Maintainer:** Michal Holes <michal@holes.sk>  
 **Project:** AudioMason v2  
 **License:** MIT  
 **Homepage:** (TBD)
 
 ---
 
-## 🎉 **FINAL NOTES**
+## ? **FINAL NOTES**
 
-AudioMason v2 je **takmer kompletný** a **production-ready** pre CLI použitie!
+AudioMason v2 je **takmer kompletny** a **production-ready** pre CLI pouzitie!
 
-Web UI a Ncurses TUI sú fully specified a len čakajú na implementáciu (~10h práce).
+Web UI a Ncurses TUI su fully specified a len cakaju na implementaciu (~10h prace).
 
-Všetko je **modulárne**, **konfigurovateľné**, a **rozšíriteľné** presne podľa pôvodnej vízie.
+Vsetko je **modularne**, **konfigurovatelne**, a **rozsiritelne** presne podla povodnej vizie.
 
-**Status:** ✅ 90% COMPLETE - Ready for final push! 🚀
+**Status:** OK 90% COMPLETE - Ready for final push! [ROCKET]
 
 ---
 

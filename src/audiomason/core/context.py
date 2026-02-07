@@ -81,16 +81,16 @@ class ProcessingContext:
     7. Errors
     """
 
-    # ═══════════════════════════════════════════
+    # ===========================================
     #  IDENTIFICATION
-    # ═══════════════════════════════════════════
+    # ===========================================
 
     id: str  # Unique context ID
     source: Path  # Input file path
 
-    # ═══════════════════════════════════════════
+    # ===========================================
     #  USER DECISIONS (ALL from PHASE 1)
-    # ═══════════════════════════════════════════
+    # ===========================================
 
     # Required metadata
     author: str | None = None
@@ -114,31 +114,31 @@ class ProcessingContext:
     loudnorm: bool = False
     target_bitrate: str = "128k"
 
-    # ═══════════════════════════════════════════
+    # ===========================================
     #  PREFLIGHT RESULTS
-    # ═══════════════════════════════════════════
+    # ===========================================
 
     preflight: PreflightResult | None = None
 
-    # ═══════════════════════════════════════════
+    # ===========================================
     #  PROCESSING STATE (PHASE 2)
-    # ═══════════════════════════════════════════
+    # ===========================================
 
     state: State = State.INIT
     current_step: str | None = None
     progress: float = 0.0  # 0.0 - 1.0
     completed_steps: list[str] = field(default_factory=list)
 
-    # ═══════════════════════════════════════════
+    # ===========================================
     #  WORKING PATHS
-    # ═══════════════════════════════════════════
+    # ===========================================
 
     stage_dir: Path | None = None  # Temporary working directory
     output_path: Path | None = None  # Final output location
 
-    # ═══════════════════════════════════════════
+    # ===========================================
     #  RESULTS
-    # ═══════════════════════════════════════════
+    # ===========================================
 
     # Generated files
     converted_files: list[Path] = field(default_factory=list)
@@ -147,24 +147,24 @@ class ProcessingContext:
     # Metadata
     final_metadata: dict[str, Any] = field(default_factory=dict)
 
-    # ═══════════════════════════════════════════
+    # ===========================================
     #  PROFILING
-    # ═══════════════════════════════════════════
+    # ===========================================
 
     timings: dict[str, float] = field(default_factory=dict)  # step_name -> seconds
     start_time: float | None = None
     end_time: float | None = None
 
-    # ═══════════════════════════════════════════
+    # ===========================================
     #  ERROR HANDLING
-    # ═══════════════════════════════════════════
+    # ===========================================
 
     errors: list[Exception] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
 
-    # ═══════════════════════════════════════════
+    # ===========================================
     #  PERSISTENCE (for resume)
-    # ═══════════════════════════════════════════
+    # ===========================================
 
     checkpoint_path: Path | None = None
     can_resume: bool = True

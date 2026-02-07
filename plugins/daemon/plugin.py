@@ -48,11 +48,11 @@ class DaemonPlugin:
     async def run(self) -> None:
         """Run daemon - main entry point."""
         if self.verbosity >= VerbosityLevel.NORMAL:
-            print("🔄 AudioMason Daemon Mode")
+            print("\U0001f504 AudioMason Daemon Mode")
             print()
             print(f"Watch folders: {len(self.watch_folders)}")
             for folder in self.watch_folders:
-                print(f"  • {folder}")
+                print(f"  * {folder}")
             print(f"Check interval: {self.interval}s")
             print()
             print("Press Ctrl+C to stop")
@@ -110,13 +110,13 @@ class DaemonPlugin:
                     continue
 
                 if self.verbosity >= VerbosityLevel.NORMAL:
-                    print(f"📁 Found new file: {file_path.name}")
+                    print(f"\U0001f4c1 Found new file: {file_path.name}")
 
                 try:
                     await self._process_file(file_path, executor, pipeline_path)
                     self.processed_files.add(file_path)
                 except Exception as e:
-                    print(f"   ❌ Error: {e}")
+                    print(f"   X Error: {e}")
 
             # Also check for Opus files
             for file_path in folder_path.glob("*.opus"):
@@ -127,13 +127,13 @@ class DaemonPlugin:
                     continue
 
                 if self.verbosity >= VerbosityLevel.NORMAL:
-                    print(f"📁 Found new file: {file_path.name}")
+                    print(f"\U0001f4c1 Found new file: {file_path.name}")
 
                 try:
                     await self._process_file(file_path, executor, pipeline_path)
                     self.processed_files.add(file_path)
                 except Exception as e:
-                    print(f"   ❌ Error: {e}")
+                    print(f"   X Error: {e}")
 
     def _is_file_stable(self, file_path: Path, threshold: float = 5.0) -> bool:
         """Check if file is stable (not being written).
@@ -172,27 +172,27 @@ class DaemonPlugin:
         )
 
         if self.verbosity >= VerbosityLevel.NORMAL:
-            print("   ⚡ Processing...")
+            print("   \u26a1 Processing...")
 
         # Process
         result = await executor.execute_from_yaml(pipeline_path, context)
 
         if result.has_errors:
-            print("   ❌ Failed with errors")
+            print("   X Failed with errors")
 
             if self.on_error == "move_to_error":
                 error_dir = file_path.parent / "error"
                 error_dir.mkdir(exist_ok=True)
                 file_path.rename(error_dir / file_path.name)
                 if self.verbosity >= VerbosityLevel.NORMAL:
-                    print(f"   📁 Moved to: {error_dir}")
+                    print(f"   \U0001f4c1 Moved to: {error_dir}")
             elif self.on_error == "delete":
                 file_path.unlink()
                 if self.verbosity >= VerbosityLevel.NORMAL:
-                    print("   🗑️  Deleted source file")
+                    print("   \U0001f5d1\ufe0f  Deleted source file")
         else:
             if self.verbosity >= VerbosityLevel.NORMAL:
-                print("   ✅ Success!")
+                print("   OK Success!")
 
             if self.on_success == "move_to_output":
                 # Already moved by pipeline
@@ -200,7 +200,7 @@ class DaemonPlugin:
             elif self.on_success == "delete" and file_path.exists():
                 file_path.unlink()
                 if self.verbosity >= VerbosityLevel.NORMAL:
-                    print("   🗑️  Deleted source file")
+                    print("   \U0001f5d1\ufe0f  Deleted source file")
 
     def _handle_signal(self, signum: int, frame: Any) -> None:
         """Handle shutdown signal.
@@ -211,5 +211,5 @@ class DaemonPlugin:
         """
         if self.verbosity >= VerbosityLevel.NORMAL:
             print()
-            print("🛑 Shutting down daemon...")
+            print("\U0001f6d1 Shutting down daemon...")
         self.running = False

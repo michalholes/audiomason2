@@ -48,12 +48,12 @@ class TestAllPluginsLoadable:
                 failed_plugins.append((plugin_name, str(e)))
 
         # Report results
-        print(f"\n✅ Loaded plugins ({len(loaded_plugins)}):")
+        print(f"\nOK Loaded plugins ({len(loaded_plugins)}):")
         for name in sorted(loaded_plugins):
             print(f"  - {name}")
 
         if failed_plugins:
-            print(f"\n❌ Failed plugins ({len(failed_plugins)}):")
+            print(f"\nX Failed plugins ({len(failed_plugins)}):")
             for name, error in failed_plugins:
                 print(f"  - {name}: {error}")
 

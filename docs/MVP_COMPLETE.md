@@ -1,22 +1,22 @@
-# 🎉 AudioMason v2 MVP - COMPLETE!
+# ? AudioMason v2 MVP - COMPLETE!
 
 **Date:** 2026-01-29  
-**Status:** ✅ MVP READY FOR REAL-WORLD TESTING  
+**Status:** OK MVP READY FOR REAL-WORLD TESTING  
 **Version:** 2.0.0-alpha-mvp
 
 ---
 
-## 🎯 MISSION ACCOMPLISHED!
+## [GOAL] MISSION ACCOMPLISHED!
 
-AudioMason v2 MVP je **kompletný a funkčný**!
+AudioMason v2 MVP je **kompletny a funkcny**!
 
-Môžeš teraz **skutočne spracovávať audiobooks** na Raspberry Pi! 🚀
+Mozes teraz **skutocne spracovavat audiobooks** na Raspberry Pi! [ROCKET]
 
 ---
 
-## ✅ ČO FUNGUJE (OTESTOVANÉ)
+## OK CO FUNGUJE (OTESTOVANE)
 
-### 1. Core System (✅ 100%)
+### 1. Core System (OK 100%)
 - Context management
 - Plugin loading
 - Config resolver (4-level priority)
@@ -24,95 +24,95 @@ Môžeš teraz **skutočne spracovávať audiobooks** na Raspberry Pi! 🚀
 - Event bus
 - Error handling
 
-### 2. Audio Processing (✅ 100%)
-- ✅ M4A → MP3 conversion
-- ✅ Opus → MP3 conversion
-- ✅ Chapter detection
-- ✅ Chapter splitting (M4A)
-- ✅ Loudness normalization
-- ✅ Custom bitrate
+### 2. Audio Processing (OK 100%)
+- OK M4A -> MP3 conversion
+- OK Opus -> MP3 conversion
+- OK Chapter detection
+- OK Chapter splitting (M4A)
+- OK Loudness normalization
+- OK Custom bitrate
 
-### 3. File Management (✅ 100%)
-- ✅ Import to staging area
-- ✅ Export to organized output
-- ✅ Automatic cleanup
-- ✅ Filename sanitization
-- ✅ Directory structure: `Author - Title/`
+### 3. File Management (OK 100%)
+- OK Import to staging area
+- OK Export to organized output
+- OK Automatic cleanup
+- OK Filename sanitization
+- OK Directory structure: `Author - Title/`
 
-### 4. CLI Interface (✅ 100%)
-- ✅ `audiomason process <file>`
-- ✅ Manual metadata input
-- ✅ Command-line options
-- ✅ User-friendly output
-- ✅ Help and version commands
+### 4. CLI Interface (OK 100%)
+- OK `audiomason process <file>`
+- OK Manual metadata input
+- OK Command-line options
+- OK User-friendly output
+- OK Help and version commands
 
-### 5. Pipeline (✅ 100%)
-- ✅ Minimal pipeline YAML
-- ✅ import → convert → export
-- ✅ Async execution
-- ✅ Step chaining
+### 5. Pipeline (OK 100%)
+- OK Minimal pipeline YAML
+- OK import -> convert -> export
+- OK Async execution
+- OK Step chaining
 
 ---
 
-## 📦 ČO SI STIAHOL
+## [PKG] CO SI STIAHOL
 
 ```
 audiomason-v2-implementation/
-├── audiomason                    # ✅ Main executable
-│
-├── src/audiomason/core/          # ✅ Core (~1500 lines)
-│   ├── __init__.py
-│   ├── context.py
-│   ├── interfaces.py
-│   ├── config.py
-│   ├── errors.py
-│   ├── loader.py
-│   ├── events.py
-│   ├── pipeline.py
-│   └── detection.py
-│
-├── plugins/                       # ✅ Plugins (~1200 lines)
-│   ├── audio_processor/          # Audio conversion
-│   │   ├── plugin.yaml
-│   │   └── plugin.py
-│   ├── file_io/                  # I/O operations
-│   │   ├── plugin.yaml
-│   │   └── plugin.py
-│   ├── cli/                      # CLI interface
-│   │   ├── plugin.yaml
-│   │   └── plugin.py
-│   └── example_plugin/           # Example
-│       ├── plugin.yaml
-│       └── plugin.py
-│
-├── pipelines/                    # ✅ Pipeline definitions
-│   └── minimal.yaml              # Working pipeline
-│
-├── tests/                        # ✅ All tests passing
-│   ├── simple_test_config.py    # ✅ PASS
-│   ├── test_integration.py      # ✅ PASS
-│   ├── test_mvp.py              # ✅ PASS
-│   └── test_config.py
-│
-├── docs/
-│   ├── AUDIOMASON_V2_FINAL_REQUIREMENTS.md
-│   └── porovnanie_am1_am2.md
-│
-├── README.md                     # Main docs
-├── QUICKSTART.md                 # ⭐ START HERE!
-├── INSTALL_GUIDE.md              # Installation
-├── STATUS.md                     # Current status
-├── MVP_COMPLETE.md               # This file
-└── pyproject.toml
++-- audiomason                    # OK Main executable
+|
++-- src/audiomason/core/          # OK Core (~1500 lines)
+|   +-- __init__.py
+|   +-- context.py
+|   +-- interfaces.py
+|   +-- config.py
+|   +-- errors.py
+|   +-- loader.py
+|   +-- events.py
+|   +-- pipeline.py
+|   +-- detection.py
+|
++-- plugins/                       # OK Plugins (~1200 lines)
+|   +-- audio_processor/          # Audio conversion
+|   |   +-- plugin.yaml
+|   |   +-- plugin.py
+|   +-- file_io/                  # I/O operations
+|   |   +-- plugin.yaml
+|   |   +-- plugin.py
+|   +-- cli/                      # CLI interface
+|   |   +-- plugin.yaml
+|   |   +-- plugin.py
+|   +-- example_plugin/           # Example
+|       +-- plugin.yaml
+|       +-- plugin.py
+|
++-- pipelines/                    # OK Pipeline definitions
+|   +-- minimal.yaml              # Working pipeline
+|
++-- tests/                        # OK All tests passing
+|   +-- simple_test_config.py    # OK PASS
+|   +-- test_integration.py      # OK PASS
+|   +-- test_mvp.py              # OK PASS
+|   +-- test_config.py
+|
++-- docs/
+|   +-- AUDIOMASON_V2_FINAL_REQUIREMENTS.md
+|   +-- porovnanie_am1_am2.md
+|
++-- README.md                     # Main docs
++-- QUICKSTART.md                 # ? START HERE!
++-- INSTALL_GUIDE.md              # Installation
++-- STATUS.md                     # Current status
++-- MVP_COMPLETE.md               # This file
++-- pyproject.toml
 ```
 
 **Total:** ~3,400 lines of Python code
 
 ---
 
-## 🚀 ZAČNI TAKTO:
+## [ROCKET] ZACNI TAKTO:
 
-### 1. Prečítaj si QUICKSTART.md
+### 1. Precitaj si QUICKSTART.md
 
 ```bash
 # Na Raspberry Pi
@@ -120,7 +120,7 @@ cd ~/audiomason-v2-implementation
 cat QUICKSTART.md
 ```
 
-### 2. Nainštaluj FFmpeg
+### 2. Nainstaluj FFmpeg
 
 ```bash
 sudo apt-get update
@@ -134,7 +134,7 @@ ffmpeg -version
 chmod +x audiomason
 ```
 
-### 4. Vyskúšaj prvú knihu
+### 4. Vyskusaj prvu knihu
 
 ```bash
 ./audiomason process book.m4a
@@ -142,69 +142,69 @@ chmod +x audiomason
 
 ---
 
-## 📊 PRÍKLAD POUŽITIA
+## [STATS] PRIKLAD POUZITIA
 
 ```
 $ ./audiomason process my_audiobook.m4a
 
-🎧 AudioMason v2 - Processing: my_audiobook.m4a
+[AUDIO] AudioMason v2 - Processing: my_audiobook.m4a
 
-📚 Author: George Orwell
-📖 Title: 1984
+? Author: George Orwell
+[DOC] Title: 1984
 
    Author: George Orwell
    Title: 1984
 
-🔌 Loading plugins...
-   ✓ audio_processor
-   ✓ file_io
+[PLUG] Loading plugins...
+   OK audio_processor
+   OK file_io
 
-⚡ Executing pipeline...
+? Executing pipeline...
 
-✅ Processing complete!
+OK Processing complete!
 
-📁 Output: /home/pi/Audiobooks/output/George Orwell - 1984
+? Output: /home/pi/Audiobooks/output/George Orwell - 1984
 
-⚠️  Warnings:
+[WARN]?  Warnings:
    - Imported to: /tmp/audiomason/stage/book_abc12345
    - M4A file: 15 chapter(s) detected
    - Split into 15 files
    - Exported 15 file(s) to: /home/pi/Audiobooks/output/George Orwell - 1984
 ```
 
-**Výsledok:**
+**Vysledok:**
 ```
 ~/Audiobooks/output/George Orwell - 1984/
-├── 01.mp3  # Chapter 1
-├── 02.mp3  # Chapter 2
-├── 03.mp3  # Chapter 3
-├── ...
-└── 15.mp3  # Chapter 15
++-- 01.mp3  # Chapter 1
++-- 02.mp3  # Chapter 2
++-- 03.mp3  # Chapter 3
++-- ...
++-- 15.mp3  # Chapter 15
 ```
 
 ---
 
-## 🎯 ČO MÔŽEŠ ROBIŤ
+## [GOAL] CO MOZES ROBIT
 
-### Základné použitie
+### Zakladne pouzitie
 
 ```bash
-# Jednoduchá konverzia
+# Jednoducha konverzia
 ./audiomason process book.m4a
 
-# S metadátami
+# S metadatami
 ./audiomason process book.m4a --author "Author" --title "Title"
 
-# Vysoká kvalita
+# Vysoka kvalita
 ./audiomason process book.m4a --bitrate 320k
 
-# Normalizácia hlasitosti
+# Normalizacia hlasitosti
 ./audiomason process book.m4a --loudnorm
 
-# Rozdeliť podľa kapitol
+# Rozdelit podla kapitol
 ./audiomason process book.m4a --split-chapters
 
-# Všetko naraz
+# Vsetko naraz
 ./audiomason process book.m4a \
   --author "George Orwell" \
   --title "1984" \
@@ -216,7 +216,7 @@ $ ./audiomason process my_audiobook.m4a
 ### Batch processing
 
 ```bash
-# Spracuj všetky M4A súbory
+# Spracuj vsetky M4A subory
 for file in *.m4a; do
   ./audiomason process "$file" --bitrate 320k --loudnorm
 done
@@ -224,29 +224,29 @@ done
 
 ---
 
-## 🧪 TESTY
+## [TEST] TESTY
 
-Všetky tri test suites prechádzajú:
+Vsetky tri test suites prechadzaju:
 
 ```bash
 # Test 1: Config system
 python3 tests/simple_test_config.py
-# ✅ PASS
+# OK PASS
 
 # Test 2: Core integration  
 python3 tests/test_integration.py
-# ✅ PASS
+# OK PASS
 
 # Test 3: MVP functionality
 python3 tests/test_mvp.py
-# ✅ PASS - All 4 tests
+# OK PASS - All 4 tests
 ```
 
 ---
 
-## ⚙️ KONFIGURÁCIA
+## [GEAR]? KONFIGURACIA
 
-### Zmena output adresára
+### Zmena output adresara
 
 Vytvor `~/.config/audiomason/config.yaml`:
 
@@ -270,7 +270,7 @@ export AUDIOMASON_BITRATE=320k
 
 ---
 
-## 🚧 ČO EŠTE CHÝBA (Budúce verzie)
+## ? CO ESTE CHYBA (Buduce verzie)
 
 ### Short-term (Nice to have)
 
@@ -296,65 +296,65 @@ export AUDIOMASON_BITRATE=320k
 
 ---
 
-## 📈 ŠTATISTIKY
+## ? STATISTIKY
 
 | Component | Lines of Code | Status |
 |-----------|---------------|--------|
-| Core | ~1,511 | ✅ Complete |
-| Audio Plugin | ~310 | ✅ Complete |
-| I/O Plugin | ~140 | ✅ Complete |
-| CLI Plugin | ~210 | ✅ Complete |
-| Tests | ~420 | ✅ Passing |
-| **TOTAL** | **~3,400** | **✅ MVP READY** |
+| Core | ~1,511 | OK Complete |
+| Audio Plugin | ~310 | OK Complete |
+| I/O Plugin | ~140 | OK Complete |
+| CLI Plugin | ~210 | OK Complete |
+| Tests | ~420 | OK Passing |
+| **TOTAL** | **~3,400** | **OK MVP READY** |
 
 ---
 
-## 🎉 MILESTONE ACHIEVED!
+## ? MILESTONE ACHIEVED!
 
 ### Pred 4 hodinami:
-- ❌ Žiadny funkčný kód
-- ❌ Nemohol si nič spracovať
-- ❌ Len requirements dokument
+- X Ziadny funkcny kod
+- X Nemohol si nic spracovat
+- X Len requirements dokument
 
 ### Teraz:
-- ✅ Kompletný core system
-- ✅ Funkčné audio processing
-- ✅ CLI interface
-- ✅ End-to-end workflow
-- ✅ **Môžeš spracovávať reálne audiobooks!**
+- OK Kompletny core system
+- OK Funkcne audio processing
+- OK CLI interface
+- OK End-to-end workflow
+- OK **Mozes spracovavat realne audiobooks!**
 
 ---
 
-## 🚀 ČO ĎALEJ?
+## [ROCKET] CO DALEJ?
 
-### Okamžite:
+### Okamzite:
 
-1. ✅ Transfer na Raspberry Pi
-2. ✅ Install FFmpeg
-3. ✅ Test s reálnym M4A súborom
-4. ✅ Spracuj svoju prvú knihu!
+1. OK Transfer na Raspberry Pi
+2. OK Install FFmpeg
+3. OK Test s realnym M4A suborom
+4. OK Spracuj svoju prvu knihu!
 
-### Po otestovaní:
+### Po otestovani:
 
-Ak všetko funguje, môžeš:
-1. Spracovať celú knižnicu
-2. Prispôsobiť config
-3. Pridať nové funkcie (metadata, covers)
-4. Vylepšiť UX (progress bars, colors)
+Ak vsetko funguje, mozes:
+1. Spracovat celu kniznicu
+2. Prisposobit config
+3. Pridat nove funkcie (metadata, covers)
+4. Vylepsit UX (progress bars, colors)
 
 ---
 
-## 💡 TIPY
+## ? TIPY
 
-### Pre najlepší výsledok:
+### Pre najlepsi vysledok:
 
-- **Začni s jednou knihou** - otestuj workflow
-- **Použi --loudnorm** - konzistentná hlasitosť
-- **Zvýš bitrate pre audiofily** - `--bitrate 320k`
-- **Split chapters ak máš M4A** - `--split-chapters`
-- **Organizuj podľa autora** - automatické!
+- **Zacni s jednou knihou** - otestuj workflow
+- **Pouzi --loudnorm** - konzistentna hlasitost
+- **Zvys bitrate pre audiofily** - `--bitrate 320k`
+- **Split chapters ak mas M4A** - `--split-chapters`
+- **Organizuj podla autora** - automaticke!
 
-### Ak niečo nefunguje:
+### Ak nieco nefunguje:
 
 1. Check FFmpeg: `ffmpeg -version`
 2. Check file exists: `ls -lh book.m4a`
@@ -364,54 +364,54 @@ Ak všetko funguje, môžeš:
 
 ---
 
-## 🏆 SUCCESS CRITERIA
+## ? SUCCESS CRITERIA
 
-Pre MVP success, potrebuješ:
+Pre MVP success, potrebujes:
 
-- [x] Nainštalovaný FFmpeg
+- [x] Nainstalovany FFmpeg
 - [x] Executable audiomason
-- [x] Reálny M4A súbor na test
-- [x] Výstupný adresár existuje
+- [x] Realny M4A subor na test
+- [x] Vystupny adresar existuje
 
-**Ak máš toto všetko → MVP bude fungovať!** ✅
+**Ak mas toto vsetko -> MVP bude fungovat!** OK
 
 ---
 
-## 📞 FINAL NOTES
+## ? FINAL NOTES
 
 ### Toto je MVP!
 
-- Nie je to dokonalé
-- Nie je tam všetko z AM1
-- Ale **FUNGUJE TO** a môžeš spracovávať knihy!
+- Nie je to dokonale
+- Nie je tam vsetko z AM1
+- Ale **FUNGUJE TO** a mozes spracovavat knihy!
 
-### Účel MVP:
+### Ucel MVP:
 
-- ✅ Overiť architektúru
-- ✅ Otestovať core systém
-- ✅ Umožniť reálne použitie
-- ✅ Poskytnúť základ pre ďalší vývoj
+- OK Overit architekturu
+- OK Otestovat core system
+- OK Umoznit realne pouzitie
+- OK Poskytnut zaklad pre dalsi vyvoj
 
 ### Ak MVP funguje:
 
-- ✅ Core je solid
-- ✅ Plugin systém je dobrý
-- ✅ Pipeline funguje
-- ✅ Môžeš začať pridávať features!
+- OK Core je solid
+- OK Plugin system je dobry
+- OK Pipeline funguje
+- OK Mozes zacat pridavat features!
 
 ---
 
-## 🎯 ZÁVER
+## [GOAL] ZAVER
 
-**AudioMason v2 MVP je HOTOVÝ a FUNKČNÝ!** 🎉
+**AudioMason v2 MVP je HOTOVY a FUNKCNY!** ?
 
-Teraz je čas **otestovať to na Raspberry Pi s reálnymi súbormi!**
+Teraz je cas **otestovat to na Raspberry Pi s realnymi subormi!**
 
 ---
 
-**Vytvorené:** 2026-01-29  
+**Vytvorene:** 2026-01-29  
 **Autor:** Claude (AI Assistant)  
-**Pre:** Michal Holeš <michal@holes.sk>  
-**Status:** ✅ MVP COMPLETE - READY FOR TESTING
+**Pre:** Michal Holes <michal@holes.sk>  
+**Status:** OK MVP COMPLETE - READY FOR TESTING
 
-**Enjoy your audiobooks! 📚🎧**
+**Enjoy your audiobooks! ?[AUDIO]**

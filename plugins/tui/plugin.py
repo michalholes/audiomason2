@@ -170,7 +170,7 @@ class Menu:
 
         # Draw menu area (gray background)
         self.screen.attron(self.theme.get_color_pair(Theme.PAIR_MENU))
-        self.screen.addstr(y + 1, x, "─" * width)
+        self.screen.addstr(y + 1, x, "-" * width)
 
         for i in range(2, height - 1):
             self.screen.addstr(y + i, x, " " * width)
@@ -441,7 +441,7 @@ class Dialogs:
                 else:
                     win.addstr(y, 4, choice[: box_w - 8])
 
-            win.addstr(box_h - 2, 2, "↑↓: Select | Enter: Confirm | Esc: Cancel")
+            win.addstr(box_h - 2, 2, "\u2191\u2193: Select | Enter: Confirm | Esc: Cancel")
 
             win.refresh()
 
@@ -1352,7 +1352,7 @@ class AboutScreen:
 
 Ultra-modular audiobook processing system
 
-Author: Michal Holeš
+Author: Michal Hole\u0161
 License: MIT
 Homepage: https://github.com/michalholes/audiomason2
 

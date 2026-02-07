@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Complete test suite - všetky pluginy."""
+"""Complete test suite - v\u0161etky pluginy."""
 
 import sys
 from pathlib import Path
@@ -32,8 +32,8 @@ def test_all_plugins():
         "example_plugin",
     ]
 
-    print(f"📁 Plugin directory: {plugins_dir}")
-    print(f"🎯 Expected plugins: {len(expected)}")
+    print(f"\U0001f4c1 Plugin directory: {plugins_dir}")
+    print(f"\U0001f3af Expected plugins: {len(expected)}")
     print()
 
     loaded = []
@@ -43,44 +43,44 @@ def test_all_plugins():
         plugin_dir = plugins_dir / plugin_name
 
         if not plugin_dir.exists():
-            print(f"❌ {plugin_name:25s} - Directory not found")
+            print(f"X {plugin_name:25s} - Directory not found")
             failed.append(plugin_name)
             continue
 
         try:
             loader.load_plugin(plugin_dir, validate=False)
-            print(f"✅ {plugin_name:25s} - Loaded successfully")
+            print(f"OK {plugin_name:25s} - Loaded successfully")
             loaded.append(plugin_name)
         except Exception as e:
-            print(f"❌ {plugin_name:25s} - Failed: {e}")
+            print(f"X {plugin_name:25s} - Failed: {e}")
             failed.append(plugin_name)
 
     print()
     print("=" * 70)
-    print("📊 RESULTS:")
-    print(f"   ✅ Loaded:  {len(loaded)}/{len(expected)}")
-    print(f"   ❌ Failed:  {len(failed)}/{len(expected)}")
+    print("\U0001f4ca RESULTS:")
+    print(f"   OK Loaded:  {len(loaded)}/{len(expected)}")
+    print(f"   X Failed:  {len(failed)}/{len(expected)}")
     print()
 
     if loaded:
-        print("✅ Successfully loaded plugins:")
+        print("OK Successfully loaded plugins:")
         for name in loaded:
-            print(f"   • {name}")
+            print(f"   * {name}")
         print()
 
     if failed:
-        print("❌ Failed plugins:")
+        print("X Failed plugins:")
         for name in failed:
-            print(f"   • {name}")
+            print(f"   * {name}")
         print()
 
     print("=" * 70)
 
     if len(loaded) == len(expected):
-        print("🎉 ALL PLUGINS LOADED SUCCESSFULLY!")
+        print("\U0001f389 ALL PLUGINS LOADED SUCCESSFULLY!")
         return True
     else:
-        print(f"⚠️  {len(failed)} plugins failed to load")
+        print(f"[WARN]\ufe0f  {len(failed)} plugins failed to load")
         return False
 
 
@@ -141,19 +141,19 @@ def test_pipelines():
         pipeline_path = pipelines_dir / pipeline_name
 
         if not pipeline_path.exists():
-            print(f"❌ {pipeline_name:20s} - Not found")
+            print(f"X {pipeline_name:20s} - Not found")
             continue
 
         try:
             pipeline = executor.load_pipeline(pipeline_path)
-            print(f"✅ {pipeline_name:20s} - {pipeline.name} ({len(pipeline.steps)} steps)")
+            print(f"OK {pipeline_name:20s} - {pipeline.name} ({len(pipeline.steps)} steps)")
 
             for step in pipeline.steps:
                 parallel = " (parallel)" if step.parallel else ""
-                print(f"   {step.id:15s} → {step.plugin}{parallel}")
+                print(f"   {step.id:15s} -> {step.plugin}{parallel}")
 
         except Exception as e:
-            print(f"❌ {pipeline_name:20s} - Failed: {e}")
+            print(f"X {pipeline_name:20s} - Failed: {e}")
 
     print()
 
@@ -174,16 +174,16 @@ def main():
 
         print("=" * 70)
         if plugins_ok:
-            print("✅ COMPLETE TEST SUITE PASSED")
+            print("OK COMPLETE TEST SUITE PASSED")
         else:
-            print("⚠️  SOME TESTS FAILED")
+            print("[WARN]\ufe0f  SOME TESTS FAILED")
         print("=" * 70)
         print()
 
         return 0 if plugins_ok else 1
 
     except Exception as e:
-        print(f"\n❌ Test suite failed: {e}")
+        print(f"\nX Test suite failed: {e}")
         import traceback
 
         traceback.print_exc()

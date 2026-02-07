@@ -1,4 +1,4 @@
-# 🎧 AudioMason v2
+# [AUDIO] AudioMason v2
 
 **Ultra-Modular Audiobook Processing Framework**
 
@@ -8,7 +8,7 @@
 
 ---
 
-## 🚀 Quick Start
+## [ROCKET] Quick Start
 
 ```bash
 # Install dependencies
@@ -26,22 +26,22 @@ pip install -e ".[all]"
 
 ---
 
-## ✨ Features
+## ? Features
 
-- ✅ **Audio Conversion** - M4A/Opus → MP3
-- ✅ **Chapter Detection** - Automatic splitting
-- ✅ **Metadata Fetching** - Google Books, OpenLibrary
-- ✅ **Cover Handling** - Extract/download/embed
-- ✅ **ID3 Tagging** - Uniform tags
-- ✅ **CLI Interface** - Interactive wizard
-- ✅ **Web UI** - REST API + management interface
-- ✅ **Daemon Mode** - Watch folders, auto-process
-- ✅ **Checkpoint/Resume** - Resume after interruption
-- ✅ **Parallel Processing** - Multiple books at once
+- OK **Audio Conversion** - M4A/Opus -> MP3
+- OK **Chapter Detection** - Automatic splitting
+- OK **Metadata Fetching** - Google Books, OpenLibrary
+- OK **Cover Handling** - Extract/download/embed
+- OK **ID3 Tagging** - Uniform tags
+- OK **CLI Interface** - Interactive wizard
+- OK **Web UI** - REST API + management interface
+- OK **Daemon Mode** - Watch folders, auto-process
+- OK **Checkpoint/Resume** - Resume after interruption
+- OK **Parallel Processing** - Multiple books at once
 
 ---
 
-## 📦 Installation
+## [PKG] Installation
 
 ### Prerequisites
 
@@ -63,7 +63,7 @@ pip install -e ".[all]"
 
 ---
 
-## 📖 Documentation
+## [DOC] Documentation
 
 - **[QUICKSTART.md](docs/QUICKSTART.md)** - Quick start guide
 - **[COMPLETE.md](docs/COMPLETE.md)** - Complete feature list
@@ -73,7 +73,7 @@ pip install -e ".[all]"
 
 ---
 
-## 🎯 Usage Examples
+## [GOAL] Usage Examples
 
 ### Basic Processing
 
@@ -109,27 +109,27 @@ pip install -e ".[all]"
 
 ---
 
-## 🏗️ Architecture
+## [BUILD]? Architecture
 
 ```
 audiomason2/
-├── src/audiomason/       # Core system
-│   ├── core/            # Core modules
-│   ├── api/             # REST API
-│   └── checkpoint/      # Resume support
-├── plugins/             # Plugin system
-│   ├── audio_processor/
-│   ├── cli/
-│   ├── web_server/
-│   └── ...
-├── pipelines/           # Processing pipelines
-├── tests/              # Test suite
-└── docs/               # Documentation
++-- src/audiomason/       # Core system
+|   +-- core/            # Core modules
+|   +-- api/             # REST API
+|   +-- checkpoint/      # Resume support
++-- plugins/             # Plugin system
+|   +-- audio_processor/
+|   +-- cli/
+|   +-- web_server/
+|   +-- ...
++-- pipelines/           # Processing pipelines
++-- tests/              # Test suite
++-- docs/               # Documentation
 ```
 
 ---
 
-## 🔌 Plugin System
+## [PLUG] Plugin System
 
 AudioMason v2 is **ultra-modular**. Everything is a plugin:
 
@@ -144,7 +144,7 @@ interfaces:
 
 ---
 
-## 🌐 Web Interface
+## [WEB] Web Interface
 
 Start web server:
 
@@ -153,16 +153,16 @@ Start web server:
 ```
 
 Features:
-- 📊 Dashboard
-- 🎵 Process books (upload + configure)
-- 📋 Job queue
-- ⚙️ Configuration
-- 🔌 Plugin management
-- 📝 Wizard builder
+- [STATS] Dashboard
+- [MUSIC] Process books (upload + configure)
+- [LIST] Job queue
+- [GEAR]? Configuration
+- [PLUG] Plugin management
+- [NOTE] Wizard builder
 
 ---
 
-## 🧪 Testing
+## [TEST] Testing
 
 ```bash
 # Run all tests
@@ -174,44 +174,44 @@ pytest --cov=src/audiomason
 
 ---
 
-## 📊 Status
+## [STATS] Status
 
 | Component | Status |
 |-----------|--------|
-| Core System | ✅ Complete |
-| Essential Plugins | ✅ Complete |
-| CLI Interface | ✅ Complete |
-| Web API | ✅ Complete |
-| Web UI (basic) | ✅ Complete |
-| Web UI (advanced) | 🔄 90% |
-| Ncurses TUI | 🔄 Planned |
-| Wizard System | 🔄 90% |
+| Core System | OK Complete |
+| Essential Plugins | OK Complete |
+| CLI Interface | OK Complete |
+| Web API | OK Complete |
+| Web UI (basic) | OK Complete |
+| Web UI (advanced) | [REFRESH] 90% |
+| Ncurses TUI | [REFRESH] Planned |
+| Wizard System | [REFRESH] 90% |
 
 **Overall: 90% Complete**
 
 ---
 
-## 🤝 Contributing
+## [SHAKE] Contributing
 
 Contributions welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) first.
 
 ---
 
-## 📝 License
+## [NOTE] License
 
 MIT License - see [LICENSE](LICENSE) file.
 
 ---
 
-## 👤 Author
+## ? Author
 
-**Michal Holeš**
+**Michal Holes**
 - Email: michal@holes.sk
 - GitHub: [@michalholes](https://github.com/michalholes)
 
 ---
 
-## 🙏 Acknowledgments
+## [THANKS] Acknowledgments
 
 Built with:
 - [FastAPI](https://fastapi.tiangolo.com/)
@@ -221,4 +221,4 @@ Built with:
 
 ---
 
-**AudioMason v2 - Transform your audiobook chaos into organized bliss!** 🎧✨
+**AudioMason v2 - Transform your audiobook chaos into organized bliss!** [AUDIO]?

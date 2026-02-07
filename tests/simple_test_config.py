@@ -35,7 +35,7 @@ def test_priority_order():
         bitrate, source = resolver.resolve("bitrate")
         assert bitrate == "320k", f"Expected '320k', got '{bitrate}'"
         assert source == "cli", f"Expected 'cli', got '{source}'"
-        print("✓ CLI has highest priority")
+        print("OK CLI has highest priority")
 
         # Test 2: User config overrides system
         resolver = ConfigResolver(
@@ -47,30 +47,30 @@ def test_priority_order():
         bitrate, source = resolver.resolve("bitrate")
         assert bitrate == "128k", f"Expected '128k', got '{bitrate}'"
         assert source == "user_config", f"Expected 'user_config', got '{source}'"
-        print("✓ User config overrides system config")
+        print("OK User config overrides system config")
 
         # Test 3: Defaults work
         loudnorm, source = resolver.resolve("split_chapters")  # Not in any config
         assert source == "default", f"Expected 'default', got '{source}'"
-        print("✓ Defaults work when nothing else provides value")
+        print("OK Defaults work when nothing else provides value")
 
         # Test 4: Nested keys
         resolver = ConfigResolver(cli_args={"logging": {"level": "debug"}})
         level, source = resolver.resolve("logging.level")
         assert level == "debug", f"Expected 'debug', got '{level}'"
-        print("✓ Nested keys with dot notation work")
+        print("OK Nested keys with dot notation work")
 
-    print("\n✅ All tests passed!")
+    print("\nOK All tests passed!")
 
 
 if __name__ == "__main__":
     try:
         test_priority_order()
     except AssertionError as e:
-        print(f"\n❌ Test failed: {e}")
+        print(f"\nX Test failed: {e}")
         sys.exit(1)
     except Exception as e:
-        print(f"\n❌ Unexpected error: {e}")
+        print(f"\nX Unexpected error: {e}")
         import traceback
 
         traceback.print_exc()

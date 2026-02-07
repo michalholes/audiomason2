@@ -430,7 +430,7 @@ class BasicWizardSync:
 
                 # Mark complete
                 context.state = State.DONE
-                self._log_info(f"\n✓ Source processed: {source_info.name}")
+                self._log_info(f"\nOK Source processed: {source_info.name}")
 
             except KeyboardInterrupt:
                 self._log_info("\n\n[Interrupted by user]")

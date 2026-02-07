@@ -1,20 +1,20 @@
-# 🖥️ AudioMason v2 - Terminal UI (TUI) Documentation
+# [PC]? AudioMason v2 - Terminal UI (TUI) Documentation
 
 **Date:** 2026-01-30  
-**Status:** ✅ COMPLETE  
+**Status:** OK COMPLETE  
 **Version:** 2.0.0
 
 ---
 
-## 📋 Overview
+## [LIST] Overview
 
 The Terminal User Interface (TUI) provides a raspi-config style menu system for managing AudioMason through an intuitive ncurses interface.
 
 ---
 
-## ✨ Features
+## ? Features
 
-### 📱 Main Menu
+### [PHONE] Main Menu
 - Import Audiobooks
 - Run Wizard
 - Manage Plugins
@@ -23,32 +23,32 @@ The Terminal User Interface (TUI) provides a raspi-config style menu system for 
 - Daemon Mode
 - Exit
 
-### 🧩 Plugin Management
+### [PUZZLE] Plugin Management
 - **List all plugins** - View installed plugins
 - **Enable/Disable toggle** - Space to toggle
 - **Delete plugins** - Remove unwanted plugins
-- **View status** - ✓ enabled, ✗ disabled
+- **View status** - OK enabled, X disabled
 
-### 🧙 Wizard Management
+### [WIZARD] Wizard Management
 - **List all wizards** - See available workflows
 - **Run wizards** - Launch wizard in terminal
 - **Delete wizards** - Remove custom wizards
 - **View descriptions** - See what each wizard does
 
-### ⚙️ Configuration Editor
+### [GEAR]? Configuration Editor
 - **View all settings** - Browse all config options
 - **Edit values** - Inline editing with type awareness
 - **Reset to defaults** - Restore factory settings
 - **Save changes** - Persist modifications
 
-### 📥 Process/Import
+### [IN] Process/Import
 - **Run wizard** - Quick access to wizard menu
 - **CLI instructions** - Help for manual processing
 - **Web UI launcher** - Start web interface
 
 ---
 
-## 🚀 Quick Start
+## [ROCKET] Quick Start
 
 ### Launch TUI
 ```bash
@@ -57,8 +57,8 @@ audiomason tui
 
 ### Navigation
 ```
-⌨️  Keyboard Shortcuts:
-  ↑↓ arrows  - Navigate menu
+??  Keyboard Shortcuts:
+  ^v arrows  - Navigate menu
   Enter      - Select/Edit item
   Space      - Toggle (in plugin menu)
   D          - Delete item
@@ -71,87 +71,87 @@ audiomason tui
 
 ---
 
-## 📸 Interface Preview
+## [PHOTO] Interface Preview
 
 ### Main Menu
 ```
-┌────────────────────────────────────────┐
-│     AudioMason v2 - Main Menu          │
-├────────────────────────────────────────┤
-│                                        │
-│    1. Import Audiobooks                │
-│    2. Run Wizard                       │
-│    3. Manage Plugins              →    │
-│    4. Configuration               →    │
-│    5. Web Server                       │
-│    6. Daemon Mode                      │
-│    0. Exit                             │
-│                                        │
-├────────────────────────────────────────┤
-│  Use ↑↓ arrows, Enter to choose       │
-└────────────────────────────────────────┘
++----------------------------------------+
+|     AudioMason v2 - Main Menu          |
++----------------------------------------+
+|                                        |
+|    1. Import Audiobooks                |
+|    2. Run Wizard                       |
+|    3. Manage Plugins              ->    |
+|    4. Configuration               ->    |
+|    5. Web Server                       |
+|    6. Daemon Mode                      |
+|    0. Exit                             |
+|                                        |
++----------------------------------------+
+|  Use ^v arrows, Enter to choose       |
++----------------------------------------+
 ```
 
 ### Plugin Management
 ```
-┌────────────────────────────────────────┐
-│       Plugin Management                │
-├────────────────────────────────────────┤
-│                                        │
-│  ✓ audio_processor                     │
-│  ✓ file_io                             │
-│  ✓ id3_tagger                          │
-│  ✓ cover_handler                       │
-│  ✗ example_plugin                      │
-│  ✓ metadata_googlebooks                │
-│  ✓ metadata_openlibrary                │
-│                                        │
-├────────────────────────────────────────┤
-│  Space: Enable/Disable | D: Delete     │
-└────────────────────────────────────────┘
++----------------------------------------+
+|       Plugin Management                |
++----------------------------------------+
+|                                        |
+|  OK audio_processor                     |
+|  OK file_io                             |
+|  OK id3_tagger                          |
+|  OK cover_handler                       |
+|  X example_plugin                      |
+|  OK metadata_googlebooks                |
+|  OK metadata_openlibrary                |
+|                                        |
++----------------------------------------+
+|  Space: Enable/Disable | D: Delete     |
++----------------------------------------+
 ```
 
 ### Wizard Management
 ```
-┌────────────────────────────────────────┐
-│       Wizard Management                │
-├────────────────────────────────────────┤
-│                                        │
-│  quick_import (7 steps)                │
-│    Fast single book import             │
-│                                        │
-│  batch_import (6 steps)                │
-│  complete_import (10 steps)            │
-│  merge_multipart (9 steps)             │
-│  advanced (25 steps)                   │
-│                                        │
-├────────────────────────────────────────┤
-│  Enter: Run | D: Delete | C: Create   │
-└────────────────────────────────────────┘
++----------------------------------------+
+|       Wizard Management                |
++----------------------------------------+
+|                                        |
+|  quick_import (7 steps)                |
+|    Fast single book import             |
+|                                        |
+|  batch_import (6 steps)                |
+|  complete_import (10 steps)            |
+|  merge_multipart (9 steps)             |
+|  advanced (25 steps)                   |
+|                                        |
++----------------------------------------+
+|  Enter: Run | D: Delete | C: Create   |
++----------------------------------------+
 ```
 
 ### Configuration Editor
 ```
-┌────────────────────────────────────────┐
-│         Configuration                  │
-├────────────────────────────────────────┤
-│                                        │
-│  output_dir: /AudioMason/output        │
-│    Default output directory            │
-│                                        │
-│  target_bitrate: 192k                  │
-│  loudnorm: ✓                           │
-│  split_chapters: ✗                     │
-│  cover_priority: book_level            │
-│                                        │
-├────────────────────────────────────────┤
-│  Enter: Edit | R: Reset | S: Save     │
-└────────────────────────────────────────┘
++----------------------------------------+
+|         Configuration                  |
++----------------------------------------+
+|                                        |
+|  output_dir: /AudioMason/output        |
+|    Default output directory            |
+|                                        |
+|  target_bitrate: 192k                  |
+|  loudnorm: OK                           |
+|  split_chapters: X                     |
+|  cover_priority: book_level            |
+|                                        |
++----------------------------------------+
+|  Enter: Edit | R: Reset | S: Save     |
++----------------------------------------+
 ```
 
 ---
 
-## 🎯 Use Cases
+## [GOAL] Use Cases
 
 ### 1. Quick Plugin Check
 ```bash
@@ -166,7 +166,7 @@ audiomason tui
 ```bash
 audiomason tui
 # Press 2 (Run Wizard)
-# Select wizard with ↑↓
+# Select wizard with ^v
 # Press Enter to run
 # Follow wizard prompts
 # Returns to TUI when done
@@ -176,7 +176,7 @@ audiomason tui
 ```bash
 audiomason tui
 # Press 4 (Configuration)
-# Select setting with ↑↓
+# Select setting with ^v
 # Press Enter to edit
 # Change value
 # Press S to save
@@ -193,24 +193,24 @@ audiomason tui
 
 ---
 
-## 🛠️ Technical Details
+## ?? Technical Details
 
 ### Architecture
 ```
 TUIPlugin
-├── _main_loop()           # Main event loop
-├── _show_main_menu()      # Main menu display
-├── _show_plugins_menu()   # Plugin management
-├── _show_wizards_menu()   # Wizard management
-├── _show_config_menu()    # Config editor
-├── _show_process_menu()   # Import menu
-└── Helper methods:
-    ├── _draw_box()        # Draw bordered boxes
-    ├── _show_message()    # Message dialogs
-    ├── _show_error()      # Error dialogs
-    ├── _confirm()         # Yes/No confirmation
-    ├── _edit_config_value() # Value editor
-    └── _run_wizard()      # Wizard launcher
++-- _main_loop()           # Main event loop
++-- _show_main_menu()      # Main menu display
++-- _show_plugins_menu()   # Plugin management
++-- _show_wizards_menu()   # Wizard management
++-- _show_config_menu()    # Config editor
++-- _show_process_menu()   # Import menu
++-- Helper methods:
+    +-- _draw_box()        # Draw bordered boxes
+    +-- _show_message()    # Message dialogs
+    +-- _show_error()      # Error dialogs
+    +-- _confirm()         # Yes/No confirmation
+    +-- _edit_config_value() # Value editor
+    +-- _run_wizard()      # Wizard launcher
 ```
 
 ### Dependencies
@@ -229,7 +229,7 @@ curses.init_pair(4, RED, BLACK)     # Error/Disabled
 
 ---
 
-## 🎨 Customization
+## ? Customization
 
 ### Changing Colors
 Edit `plugin.py`:
@@ -271,7 +271,7 @@ def _show_custom_dialog(self):
 
 ---
 
-## 🐛 Troubleshooting
+## ? Troubleshooting
 
 ### Problem: TUI crashes on start
 **Solution:**
@@ -329,27 +329,27 @@ audiomason help | grep tui
 
 ---
 
-## 📊 Feature Comparison
+## [STATS] Feature Comparison
 
 | Feature | TUI | Web UI | CLI |
 |---------|-----|--------|-----|
-| Plugin Management | ✓ | ✓ | ✗ |
-| Wizard Management | ✓ | ✓ | ✓ |
-| Config Editor | ✓ | ✓ | ✗ |
-| Process Files | ↗ | ✓ | ✓ |
-| Install Plugins | ↗ | ✓ | ✗ |
-| Create Wizards | ↗ | ✓ | ✗ |
-| Remote Access | ✗ | ✓ | SSH |
-| Terminal Only | ✓ | ✗ | ✓ |
+| Plugin Management | OK | OK | X |
+| Wizard Management | OK | OK | OK |
+| Config Editor | OK | OK | X |
+| Process Files | ? | OK | OK |
+| Install Plugins | ? | OK | X |
+| Create Wizards | ? | OK | X |
+| Remote Access | X | OK | SSH |
+| Terminal Only | OK | X | OK |
 
 **Legend:**
-- ✓ Fully supported
-- ↗ Links to other interface
-- ✗ Not supported
+- OK Fully supported
+- ? Links to other interface
+- X Not supported
 
 ---
 
-## 🎓 Best Practices
+## ? Best Practices
 
 ### 1. **Use TUI for Quick Management**
 - Check plugin status
@@ -384,7 +384,7 @@ audiomason process *.m4a --bitrate 192k
 
 ---
 
-## 🚀 Advanced Usage
+## [ROCKET] Advanced Usage
 
 ### Scripted TUI Launch
 ```bash
@@ -417,7 +417,7 @@ audiomason tui
 
 ---
 
-## 📈 Performance
+## ? Performance
 
 ### Memory Usage
 - Base: ~2 MB
@@ -436,7 +436,7 @@ audiomason tui
 
 ---
 
-## 🔒 Security
+## ? Security
 
 ### Safe Operations
 - Read-only by default
@@ -452,7 +452,7 @@ audiomason tui
 
 ---
 
-## 🎯 Roadmap
+## [GOAL] Roadmap
 
 ### Future Features
 - [ ] Search in menus
@@ -464,11 +464,11 @@ audiomason tui
 - [ ] Mouse support
 - [ ] Themes
 - [ ] Plugin installation from TUI
-- [ ] Wizard creation wizard 😄
+- [ ] Wizard creation wizard ?
 
 ---
 
-## 📞 Support
+## ? Support
 
 ### Getting Help
 1. Press `h` in TUI for help (coming soon)
@@ -491,7 +491,7 @@ audiomason tui --debug 2> tui-debug.log
 
 ---
 
-## 💡 Tips & Tricks
+## ? Tips & Tricks
 
 ### 1. **Quick Navigation**
 - Use number keys for direct selection
@@ -526,20 +526,20 @@ export AUDIOMASON_TUI_THEME="dark"
 
 ---
 
-## 📝 Changelog
+## [NOTE] Changelog
 
 ### v2.0.0 (2026-01-30)
-- ✅ Initial release
-- ✅ Plugin management
-- ✅ Wizard management
-- ✅ Config editor
-- ✅ Process menu
-- ✅ Keyboard navigation
-- ✅ Dialogs and confirmations
+- OK Initial release
+- OK Plugin management
+- OK Wizard management
+- OK Config editor
+- OK Process menu
+- OK Keyboard navigation
+- OK Dialogs and confirmations
 
 ---
 
-## 🏆 Credits
+## ? Credits
 
 **Inspired by:**
 - raspi-config
@@ -550,20 +550,20 @@ export AUDIOMASON_TUI_THEME="dark"
 **Built with:**
 - Python curses
 - AudioMason v2 API
-- Love for terminals ❤️
+- Love for terminals ??
 
 ---
 
 **Created:** 2026-01-30  
 **Author:** AudioMason Team  
-**Status:** Production Ready ✅
+**Status:** Production Ready OK
 
 ---
 
-## 🚀 Get Started Now!
+## [ROCKET] Get Started Now!
 
 ```bash
 audiomason tui
 ```
 
-**Enjoy the most efficient way to manage AudioMason!** 🎉
+**Enjoy the most efficient way to manage AudioMason!** ?

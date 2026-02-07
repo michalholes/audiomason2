@@ -1,18 +1,18 @@
-# 🧙 AudioMason v2 - Wizard Engine Documentation
+# [WIZARD] AudioMason v2 - Wizard Engine Documentation
 
 **Date:** 2026-01-30  
-**Status:** ✅ COMPLETE  
+**Status:** OK COMPLETE  
 **Version:** 2.0.0
 
 ---
 
-## 📋 Overview
+## [LIST] Overview
 
 The Wizard Engine is a flexible, YAML-based workflow system that guides users through audiobook processing with step-by-step interactive prompts.
 
 ---
 
-## ✨ Features
+## ? Features
 
 - **YAML-based workflows** - Easy to create and modify
 - **Interactive prompts** - User-friendly CLI interface
@@ -24,7 +24,7 @@ The Wizard Engine is a flexible, YAML-based workflow system that guides users th
 
 ---
 
-## 🚀 Quick Start
+## [ROCKET] Quick Start
 
 ### List Available Wizards
 ```bash
@@ -38,9 +38,9 @@ audiomason wizard quick_import
 
 ---
 
-## 📦 Included Wizards
+## [PKG] Included Wizards
 
-### 1. **quick_import.yaml** ⚡
+### 1. **quick_import.yaml** ?
 **Description:** Fast single audiobook import with minimal questions
 
 **Steps:**
@@ -56,7 +56,7 @@ audiomason wizard quick_import
 
 ---
 
-### 2. **batch_import.yaml** 📚
+### 2. **batch_import.yaml** ?
 **Description:** Process multiple audiobooks at once from a folder
 
 **Steps:**
@@ -71,7 +71,7 @@ audiomason wizard quick_import
 
 ---
 
-### 3. **complete_import.yaml** 🎯
+### 3. **complete_import.yaml** [GOAL]
 **Description:** Full audiobook import with metadata fetching and cover download
 
 **Steps:**
@@ -88,7 +88,7 @@ audiomason wizard quick_import
 
 ---
 
-### 4. **merge_multipart.yaml** 🔗
+### 4. **merge_multipart.yaml** ?
 **Description:** Merge multiple parts of a single audiobook
 
 **Steps:**
@@ -105,7 +105,7 @@ audiomason wizard quick_import
 
 ---
 
-### 5. **advanced.yaml** 🔧
+### 5. **advanced.yaml** ?
 **Description:** Full-featured import with all options
 
 **Sections:**
@@ -121,7 +121,7 @@ audiomason wizard quick_import
 
 ---
 
-## 🛠️ Creating Custom Wizards
+## ?? Creating Custom Wizards
 
 ### Basic Structure
 
@@ -157,7 +157,7 @@ wizard:
 
 ---
 
-## 📖 Step Types
+## [DOC] Step Types
 
 ### 1. **input** - Text Input
 ```yaml
@@ -254,7 +254,7 @@ wizard:
 
 ---
 
-## 🎨 Advanced Features
+## ? Advanced Features
 
 ### Variable Substitution
 ```yaml
@@ -297,7 +297,7 @@ engine.set_input_handler(my_handler)
 
 ---
 
-## 🔧 Programmatic Usage
+## ? Programmatic Usage
 
 ### Python API
 
@@ -337,7 +337,7 @@ result = engine.run_wizard(wizard_def, context)
 
 ---
 
-## 🐛 Error Handling
+## ? Error Handling
 
 ### Step-level Error Handling
 ```yaml
@@ -361,40 +361,40 @@ cleanup:
 
 ---
 
-## 📊 Wizard Engine Architecture
+## [STATS] Wizard Engine Architecture
 
 ```
-┌─────────────────────────────────────────┐
-│         WizardEngine                    │
-│  ┌────────────────────────────────┐    │
-│  │  load_yaml()                   │    │
-│  │  ├─ Parse YAML                 │    │
-│  │  ├─ Validate structure         │    │
-│  │  └─ Return wizard_def          │    │
-│  └────────────────────────────────┘    │
-│                                         │
-│  ┌────────────────────────────────┐    │
-│  │  run_wizard()                  │    │
-│  │  ├─ Loop through steps         │    │
-│  │  ├─ Call execute_step()        │    │
-│  │  ├─ Update context             │    │
-│  │  └─ Handle errors              │    │
-│  └────────────────────────────────┘    │
-│                                         │
-│  ┌────────────────────────────────┐    │
-│  │  execute_step()                │    │
-│  │  ├─ input → _execute_input     │    │
-│  │  ├─ choice → _execute_choice   │    │
-│  │  ├─ plugin_call → _execute...  │    │
-│  │  ├─ condition → _execute...    │    │
-│  │  └─ set_value → _execute...    │    │
-│  └────────────────────────────────┘    │
-└─────────────────────────────────────────┘
++-----------------------------------------+
+|         WizardEngine                    |
+|  +--------------------------------+    |
+|  |  load_yaml()                   |    |
+|  |  +- Parse YAML                 |    |
+|  |  +- Validate structure         |    |
+|  |  +- Return wizard_def          |    |
+|  +--------------------------------+    |
+|                                         |
+|  +--------------------------------+    |
+|  |  run_wizard()                  |    |
+|  |  +- Loop through steps         |    |
+|  |  +- Call execute_step()        |    |
+|  |  +- Update context             |    |
+|  |  +- Handle errors              |    |
+|  +--------------------------------+    |
+|                                         |
+|  +--------------------------------+    |
+|  |  execute_step()                |    |
+|  |  +- input -> _execute_input     |    |
+|  |  +- choice -> _execute_choice   |    |
+|  |  +- plugin_call -> _execute...  |    |
+|  |  +- condition -> _execute...    |    |
+|  |  +- set_value -> _execute...    |    |
+|  +--------------------------------+    |
++-----------------------------------------+
 ```
 
 ---
 
-## 📝 Best Practices
+## [NOTE] Best Practices
 
 ### 1. **Start Simple**
 - Begin with quick_import.yaml as template
@@ -418,12 +418,12 @@ cleanup:
 
 ### 5. **Group Related Steps**
 - Use comments to separate sections
-- Logical flow: source → metadata → processing → output
+- Logical flow: source -> metadata -> processing -> output
 - Makes wizards easier to maintain
 
 ---
 
-## 🔍 Debugging
+## ? Debugging
 
 ### Verbose Mode
 ```bash
@@ -452,7 +452,7 @@ print(f"Error: {result.error}")
 
 ---
 
-## 📈 Performance Tips
+## ? Performance Tips
 
 ### 1. **Parallel Processing**
 - Use batch_import for multiple books
@@ -471,7 +471,7 @@ print(f"Error: {result.error}")
 
 ---
 
-## 🎯 Use Cases
+## [GOAL] Use Cases
 
 ### Personal Library Organization
 ```bash
@@ -507,7 +507,7 @@ audiomason wizard complete_import
 
 ---
 
-## 📞 Support
+## ? Support
 
 ### Common Issues
 
@@ -538,7 +538,7 @@ audiomason wizard quick_import -d
 
 ---
 
-## 🚀 Next Steps
+## [ROCKET] Next Steps
 
 1. **Try the included wizards**
    ```bash
@@ -562,4 +562,4 @@ audiomason wizard quick_import -d
 
 **Created:** 2026-01-30  
 **Author:** AudioMason Team  
-**Status:** Production Ready ✅
+**Status:** Production Ready OK
