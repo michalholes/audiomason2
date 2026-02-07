@@ -17,15 +17,17 @@ def ui_overrides_path() -> Path:
 
 
 def plugins_root(repo_root: Path) -> Path:
+    # Built-in plugins live in the repository. This path is read-only for the web UI.
     return repo_root / "plugins"
 
 
 def stage_dir_from_config(inbox_dir: str | None, repo_root: Path) -> Path:
+    # Stage dir must never default into the repository.
     if os.environ.get("WEB_INTERFACE_STAGE_DIR"):
         return Path(os.environ["WEB_INTERFACE_STAGE_DIR"])
     if inbox_dir:
         return Path(inbox_dir) / "stage"
-    return repo_root / "stage"
+    return Path(os.path.expanduser("~/.audiomason/stage"))
 
 
 def log_path_default() -> Path | None:

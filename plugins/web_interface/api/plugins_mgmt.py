@@ -7,15 +7,12 @@ from typing import Annotated, Any
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 
+from audiomason.core.config_service import ConfigService
+from audiomason.core.loader import PluginLoader
+from audiomason.core.plugin_registry import PluginRegistry
+
 from ..util.fs import find_repo_root
-from ..util.paths import plugins_root
 from ..util.yamlutil import safe_load_yaml
-from ._am_cfg import (
-    get_disabled_plugins,
-    read_am_config_text,
-    set_disabled_plugins,
-    write_am_config_text,
-)
 
 
 def _read_plugin_meta(path: Path) -> dict[str, Any]:
@@ -32,49 +29,68 @@ def _read_plugin_meta(path: Path) -> dict[str, Any]:
     return meta
 
 
+def _user_plugins_root() -> Path:
+    return Path.home() / ".audiomason/plugins"
+
+
 def mount_plugins_mgmt(app: FastAPI) -> None:
     @app.get("/api/plugins")
     def list_plugins() -> dict[str, Any]:
         repo = find_repo_root()
-        root = plugins_root(repo)
-        disabled = set(get_disabled_plugins(read_am_config_text()))
+        cfg = ConfigService()
+        reg = PluginRegistry(cfg)
+
+        loader = PluginLoader(
+            builtin_plugins_dir=repo / "plugins", user_plugins_dir=_user_plugins_root()
+        )
+        dirs = loader.discover()
+
+        plugin_ids: list[str] = []
         items: list[dict[str, Any]] = []
-        for p in sorted(root.iterdir()):
-            if not p.is_dir():
+        for d in sorted(dirs):
+            if not d.is_dir():
                 continue
-            meta = _read_plugin_meta(p)
-            name = str(meta.get("name") or p.name)
-            meta["name"] = name
-            meta["enabled"] = name not in disabled
+            meta = _read_plugin_meta(d)
+            pid = str(meta.get("name") or d.name)
+            meta["name"] = pid
+            plugin_ids.append(pid)
+            if str(d).startswith(str(_user_plugins_root())):
+                meta["source"] = "user"
+            else:
+                meta["source"] = "builtin"
             items.append(meta)
+
+        states = {s.plugin_id: s.enabled for s in reg.list_states(plugin_ids)}
+        for it in items:
+            pid = str(it.get("name"))
+            it["enabled"] = bool(states.get(pid, True))
+
         return {"items": items}
 
     @app.post("/api/plugins/{name}/enable")
     def enable_plugin(name: str) -> dict[str, Any]:
-        txt = read_am_config_text()
-        disabled = [x for x in get_disabled_plugins(txt) if x != name]
-        write_am_config_text(set_disabled_plugins(txt, disabled))
+        cfg = ConfigService()
+        reg = PluginRegistry(cfg)
+        reg.set_enabled(name, True)
         return {"ok": True}
 
     @app.post("/api/plugins/{name}/disable")
     def disable_plugin(name: str) -> dict[str, Any]:
-        txt = read_am_config_text()
-        disabled = get_disabled_plugins(txt)
-        if name not in disabled:
-            disabled.append(name)
-        write_am_config_text(set_disabled_plugins(txt, disabled))
+        cfg = ConfigService()
+        reg = PluginRegistry(cfg)
+        reg.set_enabled(name, False)
         return {"ok": True}
 
     @app.delete("/api/plugins/{name}")
     def delete_plugin(name: str) -> dict[str, Any]:
-        repo = find_repo_root()
-        root = plugins_root(repo)
-        target = root / name
+        # Only allow deleting user-installed plugins.
+        root = _user_plugins_root()
+        target = (root / name).resolve()
+        if root not in target.parents and target != root:
+            raise HTTPException(status_code=400, detail="invalid path")
         if not target.exists() or not target.is_dir():
             raise HTTPException(status_code=404, detail="plugin not found")
-        # refuse to delete web_interface itself
-        if name == "web_interface":
-            raise HTTPException(status_code=400, detail="refuse to delete web_interface")
+
         import shutil
 
         shutil.rmtree(target)
@@ -85,24 +101,28 @@ def mount_plugins_mgmt(app: FastAPI) -> None:
         if not file.filename or not file.filename.lower().endswith(".zip"):
             raise HTTPException(status_code=400, detail="expected .zip")
         data = await file.read()
-        repo = find_repo_root()
-        root = plugins_root(repo)
+        root = _user_plugins_root()
         root.mkdir(parents=True, exist_ok=True)
+
         with zipfile.ZipFile(io.BytesIO(data)) as z:
-            # require zip to contain plugins/<name>/...
             names = [n for n in z.namelist() if n and not n.endswith("/")]
             top = set(n.split("/")[0] for n in names)
-            if "plugins" in top:
-                # strip optional leading folder
-                for n in names:
-                    if not n.startswith("plugins/"):
-                        continue
-                    rel = n[len("plugins/") :]
-                    if not rel:
-                        continue
-                    out = root / rel
-                    out.parent.mkdir(parents=True, exist_ok=True)
-                    out.write_bytes(z.read(n))
-            else:
-                raise HTTPException(status_code=400, detail="zip must contain plugins/<name>/...")
+
+            # Accept either plugins/<name>/... or <name>/...
+            strip = "plugins/" if "plugins" in top else ""
+
+            for n in names:
+                if strip and not n.startswith(strip):
+                    continue
+                rel = n[len(strip) :] if strip else n
+                rel = rel.lstrip("/")
+
+                # Prevent path traversal.
+                rel = rel.replace("..", "_")
+                out = (root / rel).resolve()
+                if root not in out.parents and out != root:
+                    raise HTTPException(status_code=400, detail="invalid path")
+                out.parent.mkdir(parents=True, exist_ok=True)
+                out.write_bytes(z.read(n))
+
         return {"ok": True}

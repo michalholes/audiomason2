@@ -5,16 +5,18 @@ from typing import Annotated, Any
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 
-from ..util.fs import find_repo_root
-from ..util.paths import stage_dir_from_config
-from ._am_cfg import get_inbox_dir, read_am_config_text
+from audiomason.core.config_service import ConfigService
 
 
 def _stage_dir() -> Path:
-    repo = find_repo_root()
-    txt = read_am_config_text()
-    inbox = get_inbox_dir(txt)
-    d = stage_dir_from_config(inbox, repo)
+    svc = ConfigService()
+    cfg = svc.get_config()
+    inbox_dir = cfg.get("inbox_dir")
+    if isinstance(inbox_dir, str) and inbox_dir.strip():
+        base = Path(inbox_dir)
+        d = base / "stage"
+    else:
+        d = Path.home() / ".audiomason/stage"
     d.mkdir(parents=True, exist_ok=True)
     return d
 

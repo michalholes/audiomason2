@@ -5,24 +5,31 @@ from typing import Any
 from fastapi import FastAPI
 from pydantic import BaseModel
 
-from ..util.paths import am_config_path
+from audiomason.core.config_service import ConfigService
 
 
-class PutConfig(BaseModel):
-    yaml: str
+class SetConfigValue(BaseModel):
+    key_path: str
+    value: Any
 
 
 def mount_am_config(app: FastAPI) -> None:
+    """Config endpoints.
+
+    Web UI must not edit raw YAML configuration text.
+    """
+
+    svc = ConfigService()
+
     @app.get("/api/am/config")
     def get_am_config() -> dict[str, Any]:
-        path = am_config_path()
-        if not path.exists():
-            return {"path": str(path), "yaml": ""}
-        return {"path": str(path), "yaml": path.read_text(encoding="utf-8")}
+        return {
+            "path": str(svc.user_config_path),
+            "config": svc.get_config(),
+            "effective_snapshot": svc.get_effective_config_snapshot(),
+        }
 
-    @app.put("/api/am/config")
-    def put_am_config(body: PutConfig) -> dict[str, Any]:
-        path = am_config_path()
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(body.yaml, encoding="utf-8")
-        return {"ok": True, "path": str(path)}
+    @app.post("/api/am/config/set")
+    def set_am_config_value(body: SetConfigValue) -> dict[str, Any]:
+        svc.set_value(body.key_path, body.value)
+        return {"ok": True}
