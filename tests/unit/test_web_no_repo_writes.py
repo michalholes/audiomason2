@@ -11,7 +11,6 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import pytest
-
 from plugins.web_interface.core import WebInterfacePlugin
 
 
