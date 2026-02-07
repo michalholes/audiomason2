@@ -13,10 +13,10 @@ import builtins
 import contextlib
 from collections.abc import Callable, Iterator
 from contextvars import ContextVar
-from enum import Enum
+from enum import StrEnum
 
 
-class Phase(str, Enum):
+class Phase(StrEnum):
     UI_INPUT = "ui_input"
     PROCESSING = "processing"
 
