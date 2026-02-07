@@ -24,7 +24,7 @@ class TextUtilsPlugin:
         """Remove diacritics (accents) from text.
 
         Example:
-            "Příliš žluťoučký kůň"
+            "Prilis zlutoucky kun"
                 -> "Prilis zlutoucky kun"
 
         Args:
@@ -53,7 +53,7 @@ class TextUtilsPlugin:
         Example:
             "George Orwell - 1984"
                 -> "george-orwell-1984"
-            "Příliš žluťoučký kůň"
+            "Prilis zlutoucky kun"
                 -> "prilis-zlutoucky-kun"
 
         Args:
@@ -162,8 +162,8 @@ class TextUtilsPlugin:
     def normalize_whitespace(text: str) -> str:
         """Normalize whitespace in text.
 
-        - Multiple spaces → single space
-        - Tabs → spaces
+        - Multiple spaces -> single space
+        - Tabs -> spaces
         - Newlines preserved but cleaned
 
         Args:
