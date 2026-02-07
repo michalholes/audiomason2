@@ -1,5 +1,6 @@
 
 # AUDIOMASON2_PROJECT_CONTRACT.md
+Version: 1.1
 
 Status: AUTHORITATIVE / IMMUTABLE BASE CONTRACT  
 Applies to: Entire AudioMason2 project (core, plugins, UI, tests, tooling, docs)  
