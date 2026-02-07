@@ -17,6 +17,9 @@ dependencies = [
     "mutagen>=1.47.0",
 ]
 
+
+
+
 [project.optional-dependencies]
 dev = [
     "fastapi>=0.104.0",
@@ -98,4 +101,13 @@ omit = ["*/tests/*", "*/__pycache__/*"]
 precision = 2
 show_missing = true
 skip_covered = false
+
+
+[tool.setuptools]
+package-dir = {"" = "."}
+
+[tool.setuptools.packages.find]
+where = ["src", "."]
+include = ["audiomason*", "plugins*"]
+exclude = ["tests*", "scripts*", "patches*", "docs*", "badguys*"]
 
