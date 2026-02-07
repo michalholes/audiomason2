@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import sys
+import types
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -255,7 +256,25 @@ class PluginLoader:
             # like 'plugin:SomePlugin', which would otherwise overwrite each other and
             # pollute global import state.
             plugin_key = plugin_dir.name.replace("-", "_").replace(".", "_")
-            unique_module_name = f"audiomason._plugins.{plugin_key}.{module_name}"
+
+            # Dynamically load plugin modules under an isolated namespace to avoid
+            # collisions (multiple plugins can legitimately use entrypoints like
+            # 'plugin:SomePlugin') and to provide a stable package context for
+            # relative imports inside the plugin.
+            root_pkg = "audiomason_plugins"
+            plugin_pkg = f"{root_pkg}.{plugin_key}"
+            unique_module_name = f"{plugin_pkg}.{module_name}"
+
+            def _ensure_package(name: str, path: Path | None = None) -> None:
+                if name in sys.modules:
+                    return
+                pkg = types.ModuleType(name)
+                pkg.__path__ = [] if path is None else [str(path)]
+                sys.modules[name] = pkg
+
+            _ensure_package(root_pkg)
+            _ensure_package(plugin_pkg, plugin_dir)
+
             spec = importlib.util.spec_from_file_location(unique_module_name, module_file)
             if spec is None or spec.loader is None:
                 raise PluginError(f"Failed to load module spec: {module_file}")
