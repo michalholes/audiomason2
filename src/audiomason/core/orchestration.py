@@ -11,13 +11,17 @@ This module is UI-agnostic: CLI and the future web interface can both call it.
 from __future__ import annotations
 
 import asyncio
+import json
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
+from audiomason.checkpoint import CheckpointManager
+from audiomason.core.context import ProcessingContext
 from audiomason.core.jobs.api import JobService
 from audiomason.core.jobs.model import Job, JobState, JobType
 from audiomason.core.orchestration_models import ProcessRequest, WizardRequest
-from audiomason.core.phase import PhaseGuard
+from audiomason.core.phase import PhaseContractError, PhaseGuard
 from audiomason.core.pipeline import PipelineExecutor
 from audiomason.wizard_engine import WizardEngine
 
@@ -44,7 +48,13 @@ class Orchestrator:
         job = self._jobs.create_job(
             JobType.PROCESS,
             meta={
-                "pipeline": str(request.pipeline_path),
+                "pipeline_path": str(request.pipeline_path),
+                "sources_json": json.dumps(
+                    [str(ctx.source) for ctx in request.contexts],
+                    ensure_ascii=True,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                ),
             },
         )
 
@@ -71,6 +81,9 @@ class Orchestrator:
             meta={
                 "wizard_id": request.wizard_id,
                 "wizard_path": str(request.wizard_path),
+                "payload_json": json.dumps(
+                    request.payload, ensure_ascii=True, separators=(",", ":"), sort_keys=True
+                ),
             },
         )
 
@@ -88,6 +101,85 @@ class Orchestrator:
             loop.create_task(self._run_wizard_job(job.job_id, request))
 
         return job.job_id
+
+    def run_job(self, job_id: str, *, plugin_loader: Any, verbosity: int = 1) -> None:
+        """Run an existing PENDING job.
+
+        UI layers may create jobs first (PENDING) and then request execution.
+        This method owns the job state transitions and request construction.
+
+        Args:
+            job_id: Existing job id in PENDING state.
+            plugin_loader: Plugin loader instance.
+            verbosity: Verbosity level for wizard execution.
+        """
+        job = self._jobs.get_job(job_id)
+        if job.state != JobState.PENDING:
+            raise RuntimeError("job is not pending")
+
+        if job.type == JobType.PROCESS:
+            pipeline_path = job.meta.get("pipeline_path")
+            sources_json = job.meta.get("sources_json", "[]")
+            if not isinstance(pipeline_path, str) or not pipeline_path:
+                raise RuntimeError("missing pipeline_path")
+            try:
+                sources = json.loads(sources_json)
+            except Exception:
+                sources = []
+            if not isinstance(sources, list):
+                sources = []
+            contexts: list[ProcessingContext] = []
+            for i, s in enumerate(sources, 1):
+                contexts.append(ProcessingContext(id=f"ctx_{i}", source=Path(str(s))))
+            process_request = ProcessRequest(
+                contexts=contexts, pipeline_path=Path(pipeline_path), plugin_loader=plugin_loader
+            )
+
+            job.transition(JobState.RUNNING)
+            job.started_at = _utcnow_iso()
+            self._jobs.store.save_job(job)
+            self._jobs.append_log_line(job.job_id, "started")
+
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                asyncio.run(self._run_process_job(job.job_id, process_request))
+            else:
+                loop.create_task(self._run_process_job(job.job_id, process_request))
+            return
+
+        if job.type == JobType.WIZARD:
+            wizard_id = job.meta.get("wizard_id", "")
+            wizard_path = job.meta.get("wizard_path", "")
+            payload_json = job.meta.get("payload_json", "{}")
+            try:
+                data = json.loads(payload_json)
+            except Exception:
+                data = {}
+            if not isinstance(data, dict):
+                data = {}
+            wizard_request = WizardRequest(
+                wizard_id=str(wizard_id),
+                wizard_path=Path(str(wizard_path)),
+                plugin_loader=plugin_loader,
+                payload=data,
+                verbosity=verbosity,
+            )
+
+            job.transition(JobState.RUNNING)
+            job.started_at = _utcnow_iso()
+            self._jobs.store.save_job(job)
+            self._jobs.append_log_line(job.job_id, "started")
+
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                asyncio.run(self._run_wizard_job(job.job_id, wizard_request))
+            else:
+                loop.create_task(self._run_wizard_job(job.job_id, wizard_request))
+            return
+
+        raise RuntimeError(f"unsupported job type: {job.type}")
 
     def cancel(self, job_id: str) -> None:
         self._jobs.cancel_job(job_id)
@@ -107,6 +199,13 @@ class Orchestrator:
         with PhaseGuard.processing():
             try:
                 await self._run_process_job_impl(job_id, request)
+            except PhaseContractError as e:
+                job = self._jobs.get_job(job_id)
+                job.transition(JobState.FAILED)
+                job.error = str(e)
+                job.finished_at = _utcnow_iso()
+                self._jobs.store.save_job(job)
+                self._jobs.append_log_line(job_id, f"failed: {e}")
             except Exception as e:
                 job = self._jobs.get_job(job_id)
                 job.transition(JobState.FAILED)
@@ -149,6 +248,22 @@ class Orchestrator:
         with PhaseGuard.processing():
             try:
                 await self._run_wizard_job_impl(job_id, request)
+            except PhaseContractError as e:
+                ck = CheckpointManager()
+                try:
+                    p = ck.save_job_failure_checkpoint(
+                        job_id, kind="wizard", error=str(e), meta=self._jobs.get_job(job_id).meta
+                    )
+                    self._jobs.append_log_line(job_id, f"checkpoint saved: {p}")
+                except Exception as ck_e:
+                    self._jobs.append_log_line(job_id, f"checkpoint save failed: {ck_e}")
+
+                job = self._jobs.get_job(job_id)
+                job.transition(JobState.FAILED)
+                job.error = str(e)
+                job.finished_at = _utcnow_iso()
+                self._jobs.store.save_job(job)
+                self._jobs.append_log_line(job_id, f"failed: {e}")
             except Exception as e:
                 job = self._jobs.get_job(job_id)
                 job.transition(JobState.FAILED)

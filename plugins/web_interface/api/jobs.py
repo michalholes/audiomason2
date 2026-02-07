@@ -1,19 +1,15 @@
 from __future__ import annotations
 
-import asyncio
 import json
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
 from fastapi import BackgroundTasks, FastAPI, HTTPException
 
 from audiomason.core.config_service import ConfigService
-from audiomason.core.context import ProcessingContext
 from audiomason.core.jobs.model import JobState, JobType
 from audiomason.core.loader import PluginLoader
 from audiomason.core.orchestration import Orchestrator
-from audiomason.core.orchestration_models import ProcessRequest, WizardRequest
 from audiomason.core.plugin_registry import PluginRegistry
 
 from ..util.fs import find_repo_root
@@ -128,63 +124,14 @@ def mount_jobs(app: FastAPI) -> None:
         def _run() -> None:
             loader = _plugin_loader()
 
-            if job.type == JobType.PROCESS:
-                pipeline_path = job.meta.get("pipeline_path")
-                sources_json = job.meta.get("sources_json", "[]")
-                try:
-                    sources = json.loads(sources_json)
-                except Exception:
-                    sources = []
-                if not isinstance(pipeline_path, str) or not pipeline_path:
-                    orch.jobs.append_log_line(job_id, "failed: missing pipeline_path")
-                    j = orch.get_job(job_id)
-                    j.transition(JobState.FAILED)
-                    j.error = "missing pipeline_path"
-                    orch.jobs.store.save_job(j)
-                    return
-                contexts: list[ProcessingContext] = []
-                for i, s in enumerate(sources, 1):
-                    contexts.append(ProcessingContext(id=f"ctx_{i}", source=Path(str(s))))
-                req = ProcessRequest(
-                    contexts=contexts, pipeline_path=Path(pipeline_path), plugin_loader=loader
-                )
+            try:
+                orch.run_job(job_id, plugin_loader=loader)
+            except Exception as e:
+                orch.jobs.append_log_line(job_id, f"failed: {e}")
                 j = orch.get_job(job_id)
-                j.transition(JobState.RUNNING)
-                j.started_at = datetime.now(UTC).isoformat()
+                j.transition(JobState.FAILED)
+                j.error = str(e)
                 orch.jobs.store.save_job(j)
-                orch.jobs.append_log_line(job_id, "started")
-                asyncio.run(orch._run_process_job(job_id, req))
-                return
-
-            if job.type == JobType.WIZARD:
-                wizard_id = job.meta.get("wizard_id", "")
-                wizard_path = job.meta.get("wizard_path", "")
-                payload_json = job.meta.get("payload_json", "{}")
-                try:
-                    data = json.loads(payload_json)
-                except Exception:
-                    data = {}
-                if not isinstance(data, dict):
-                    data = {}
-                wizard_req = WizardRequest(
-                    wizard_id=str(wizard_id),
-                    wizard_path=Path(str(wizard_path)),
-                    plugin_loader=loader,
-                    payload=data,
-                )
-                j = orch.get_job(job_id)
-                j.transition(JobState.RUNNING)
-                j.started_at = datetime.now(UTC).isoformat()
-                orch.jobs.store.save_job(j)
-                orch.jobs.append_log_line(job_id, "started")
-                asyncio.run(orch._run_wizard_job(job_id, wizard_req))
-                return
-
-            orch.jobs.append_log_line(job_id, f"failed: unsupported job type: {job.type}")
-            j = orch.get_job(job_id)
-            j.transition(JobState.FAILED)
-            j.error = f"unsupported job type: {job.type}"
-            orch.jobs.store.save_job(j)
 
         bg.add_task(_run)
         job = orch.get_job(job_id)

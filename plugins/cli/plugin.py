@@ -11,7 +11,8 @@ Features:
 from __future__ import annotations
 
 import asyncio
-import contextlib
+import json
+import re
 import sys
 import uuid
 from pathlib import Path
@@ -32,7 +33,7 @@ from audiomason.core import (
     guess_year_from_path,
 )
 from audiomason.core.config_service import ConfigService
-from audiomason.core.jobs.model import JobState
+from audiomason.core.jobs.model import JobState, JobType
 from audiomason.core.orchestration import Orchestrator
 from audiomason.core.orchestration_models import ProcessRequest
 from audiomason.core.plugin_registry import PluginRegistry
@@ -741,168 +742,191 @@ class CLIPlugin:
         Args:
             args: Command arguments
         """
-        from audiomason.wizard_engine import WizardEngine
+        import yaml
 
-        wizards_dir = Path(__file__).parent.parent.parent / "wizards"
+        from audiomason.core.orchestration import Orchestrator
+        from audiomason.core.wizard_service import WizardService
+
+        svc = WizardService()
 
         # List wizards if no args
         if not args:
             print("\U0001f9d9 Available Wizards:")
             print()
-
-            if not wizards_dir.exists():
+            infos = svc.list_wizards()
+            if not infos:
                 print("  No wizards found!")
-                print(f"  Create wizards in: {wizards_dir}")
+                print(f"  User wizards dir: {svc.wizards_dir}")
+                print(f"  Built-in wizards dir: {svc.builtin_dir}")
                 return
 
-            wizard_files = list(wizards_dir.glob("*.yaml"))
-            if not wizard_files:
-                print("  No wizards found!")
-                return
-
-            for wizard_file in sorted(wizard_files):
-                # Load wizard to get name and description
-                import yaml
-
+            for info in infos:
                 try:
-                    with open(wizard_file) as f:
-                        wizard_def = yaml.safe_load(f)
-
-                    wizard = wizard_def.get("wizard", {})
-                    name = wizard.get("name", wizard_file.stem)
-                    desc = wizard.get("description", "No description")
-
-                    print(f"  {wizard_file.stem}")
+                    wizard_def = yaml.safe_load(info.path.read_text(encoding="utf-8"))
+                    wizard = wizard_def.get("wizard", {}) if isinstance(wizard_def, dict) else {}
+                    name = wizard.get("name", info.name) if isinstance(wizard, dict) else info.name
+                    desc = (
+                        wizard.get("description", "No description")
+                        if isinstance(wizard, dict)
+                        else "No description"
+                    )
+                    print(f"  {info.name}")
                     print(f"    Name: {name}")
                     print(f"    Description: {desc}")
                     print()
                 except Exception as e:
-                    print(f"  {wizard_file.stem} (error: {e})")
+                    print(f"  {info.name} (error: {e})")
                     print()
 
             print("Run a wizard with: audiomason wizard <name>")
             return
 
-        # Run specified wizard
         wizard_name = args[0]
-        wizard_file = wizards_dir / f"{wizard_name}.yaml"
-
-        if not wizard_file.exists():
-            self._error(f"Wizard not found: {wizard_name}")
-            print(f"Available wizards: {', '.join([f.stem for f in wizards_dir.glob('*.yaml')])}")
+        try:
+            wizard_path = svc.get_wizard_path(wizard_name)
+        except Exception as e:
+            self._error(str(e))
+            infos = svc.list_wizards()
+            if infos:
+                print(f"Available wizards: {', '.join([i.name for i in infos])}")
             return
 
         print(f"\U0001f9d9 Running wizard: {wizard_name}")
         print()
 
-        # Create wizard engine
+        # Create plugin loader
         plugins_dir = Path(__file__).parent.parent
         cfg = ConfigService()
         reg = PluginRegistry(cfg)
         loader = PluginLoader(builtin_plugins_dir=plugins_dir, registry=reg)
 
-        # Create config resolver
-        cli_args = self._parse_cli_args()
-        config_resolver = ConfigResolver(
-            cli_args=cli_args,
-            user_config_path=Path.home() / ".config/audiomason/config.yaml",
-            system_config_path=Path("/etc/audiomason/config.yaml"),
-        )
+        # Collect input payload in UI phase (interactive).
+        wizard_yaml = wizard_path.read_text(encoding="utf-8")
+        wizard_obj = yaml.safe_load(wizard_yaml)
+        wiz = wizard_obj.get("wizard") if isinstance(wizard_obj, dict) else None
+        steps = wiz.get("steps") if isinstance(wiz, dict) else None
+        if not isinstance(steps, list):
+            self._error("Invalid wizard yaml: missing wizard.steps list")
+            return
 
-        # Debug: Show loaded config values
-        if self.verbosity >= VerbosityLevel.DEBUG:
-            try:
-                inbox_dir, inbox_source = config_resolver.resolve("inbox_dir")
-                outbox_dir, outbox_source = config_resolver.resolve("outbox_dir")
-                self._debug("Config loaded:")
-                self._debug(f"  inbox_dir: {inbox_dir} (from {inbox_source})")
-                self._debug(f"  outbox_dir: {outbox_dir} (from {outbox_source})")
-            except Exception as e:
-                self._debug(f"  Config values unavailable: {e}")
+        payload: dict[str, Any] = {}
 
-        # Load commonly used plugins
-        for plugin in ["audio_processor", "file_io", "id3_tagger", "cover_handler"]:
-            plugin_dir = plugins_dir / plugin
-            if plugin_dir.exists():
-                with contextlib.suppress(Exception):
-                    loader.load_plugin(plugin_dir, validate=False)
+        def _ask_choice(prompt: str, choices: list[Any], default: str | None) -> str:
+            print(f"\n{prompt}")
+            for i, choice in enumerate(choices, 1):
+                marker = " (default)" if default and str(choice) == default else ""
+                print(f"  {i}. {choice}{marker}")
+            while True:
+                user_input = input(f"Select [1-{len(choices)}]: ").strip()
+                if not user_input and default:
+                    return default
+                if user_input.isdigit():
+                    idx = int(user_input) - 1
+                    if 0 <= idx < len(choices):
+                        return str(choices[idx])
+                print("Invalid choice, try again")
 
-        engine = WizardEngine(loader, verbosity=self.verbosity, config_resolver=config_resolver)
+        def _ask_input(prompt: str, required: bool, default: str | None) -> str:
+            prompt_text = f"{prompt} [{default}]: " if default else f"{prompt}: "
+            while True:
+                value = input(prompt_text).strip()
+                if not value and default:
+                    return default
+                if required and not value:
+                    print("This field is required")
+                    continue
+                return value
 
-        # Set input handler for interactive prompts
-        def input_handler(prompt: str, options: dict) -> str:
-            """Handle user input for wizard steps."""
-            if options.get("type") == "choice":
-                # Choice step
-                choices = options.get("choices", [])
-                default = options.get("default")
+        def _can_eval_condition(expr: str, data: dict[str, Any]) -> bool | None:
+            # Minimal evaluator for "var == 'value'" patterns.
+            m = re.match(r"^\s*([A-Za-z0-9_\-]+)\s*==\s*'([^']*)'\s*$", expr)
+            if not m:
+                return None
+            key, val = m.group(1), m.group(2)
+            if key not in data:
+                return None
+            return str(data.get(key)) == val
 
-                print(f"\n{prompt}")
-                for i, choice in enumerate(choices, 1):
-                    marker = " (default)" if choice == default else ""
-                    print(f"  {i}. {choice}{marker}")
-
-                while True:
-                    user_input = input(f"Select [1-{len(choices)}]: ").strip()
-
-                    if not user_input and default:
-                        return default
-
-                    if user_input.isdigit():
-                        idx = int(user_input) - 1
-                        if 0 <= idx < len(choices):
-                            return choices[idx]
-
-                    print("Invalid choice, try again")
-            else:
-                # Input step
-                required = options.get("required", False)
-                default = options.get("default")
-
-                prompt_text = f"{prompt} [{default}]: " if default else f"{prompt}: "
-
-                while True:
-                    value = input(prompt_text).strip()
-
-                    if not value and default:
-                        return default
-
-                    if required and not value:
-                        print("This field is required")
+        def _walk(step_list: list[Any]) -> None:
+            for step in step_list:
+                if not isinstance(step, dict):
+                    continue
+                stype = step.get("type")
+                sid = step.get("id")
+                if isinstance(stype, str) and isinstance(sid, str) and sid and sid not in payload:
+                    if stype == "choice":
+                        choices = step.get("choices", [])
+                        default = step.get("default")
+                        if not isinstance(choices, list) or not choices:
+                            continue
+                        payload[sid] = _ask_choice(
+                            str(step.get("prompt", sid)),
+                            choices,
+                            str(default) if default else None,
+                        )
+                        continue
+                    if stype == "input":
+                        required = bool(step.get("required", False))
+                        default = step.get("default")
+                        payload[sid] = _ask_input(
+                            str(step.get("prompt", sid)),
+                            required,
+                            str(default) if default else None,
+                        )
                         continue
 
-                    return value
+                if stype == "condition":
+                    cond = step.get("condition")
+                    if isinstance(cond, str):
+                        res = _can_eval_condition(cond, payload)
+                        if res is True and isinstance(step.get("if_true"), list):
+                            _walk(step["if_true"])
+                            continue
+                        if res is False and isinstance(step.get("if_false"), list):
+                            _walk(step["if_false"])
+                            continue
+                    if isinstance(step.get("if_true"), list):
+                        _walk(step["if_true"])
+                    if isinstance(step.get("if_false"), list):
+                        _walk(step["if_false"])
 
-        engine.set_input_handler(input_handler)
+        _walk(steps)
 
-        # Set progress callback
-        def progress_callback(step_name: str, current: int, total: int):
-            """Show progress."""
-            percent = int((current / total) * 100)
-            print(f"[{current}/{total}] {step_name}... ({percent}%)")
+        orch = Orchestrator()
+        job = orch.jobs.create_job(
+            JobType.WIZARD,
+            meta={
+                "wizard_id": wizard_name,
+                "wizard_path": str(wizard_path),
+                "payload_json": json.dumps(
+                    payload, ensure_ascii=True, separators=(",", ":"), sort_keys=True
+                ),
+            },
+        )
 
-        engine.set_progress_callback(progress_callback)
-
-        # Run wizard
         try:
-            context = engine.run_wizard_from_file(wizard_file)
+            orch.run_job(job.job_id, plugin_loader=loader, verbosity=int(self.verbosity))
+        except Exception as e:
+            self._error(f"Failed to start wizard job: {e}")
+            return
 
+        offset = 0
+        while True:
+            j = orch.get_job(job.job_id)
+            chunk, offset = orch.read_log(job.job_id, offset=offset)
+            if chunk:
+                for line in chunk.splitlines():
+                    self._info(line)
+
+            if j.state in (JobState.SUCCEEDED, JobState.FAILED, JobState.CANCELLED):
+                break
+
+        if j.state == JobState.SUCCEEDED:
             print()
             print("OK Wizard completed successfully!")
+        else:
             print()
-            print(f"  Author: {context.author}")
-            print(f"  Title: {context.title}")
-            if context.year:
-                print(f"  Year: {context.year}")
-            print()
-
-        except Exception as e:
-            print()
-            self._error(f"Wizard failed: {e}")
-            import traceback
-
-            if self.verbosity >= VerbosityLevel.DEBUG:
-                traceback.print_exc()
+            self._error(f"Wizard failed (state={j.state}, error={j.error})")
 
     async def _tui_command(self) -> None:
         """Launch TUI interface."""

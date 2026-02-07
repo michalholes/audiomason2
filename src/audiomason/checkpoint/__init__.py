@@ -82,13 +82,41 @@ class CheckpointManager:
 
             # Write JSON
             with open(checkpoint_file, "w") as f:
-                json.dump(data, f, indent=2)
+                json.dump(data, f, indent=2, ensure_ascii=True)
 
             context.checkpoint_path = checkpoint_file
             return checkpoint_file
 
         except Exception as e:
             raise FileError(f"Failed to save checkpoint: {e}") from e
+
+    def save_job_failure_checkpoint(
+        self, job_id: str, *, kind: str, error: str, meta: dict[str, Any]
+    ) -> Path:
+        """Save a minimal failure checkpoint for a job.
+
+        This is used for phase-contract failures where a ProcessingContext may not be available
+        (e.g. wizard jobs).
+
+        The file content is intentionally minimal and deterministic (no timestamps).
+
+        Args:
+            job_id: Job identifier.
+            kind: Job kind (e.g. "process", "wizard").
+            error: Error string.
+            meta: Job meta mapping.
+
+        Returns:
+            Path to the checkpoint file.
+        """
+        checkpoint_file = self.checkpoint_dir / f"job_{job_id}.json"
+        data = {"job_id": job_id, "kind": kind, "error": error, "meta": meta}
+        try:
+            with open(checkpoint_file, "w") as f:
+                json.dump(data, f, indent=2, ensure_ascii=True)
+            return checkpoint_file
+        except Exception as e:
+            raise FileError(f"Failed to save job checkpoint: {e}") from e
 
     def load_checkpoint(self, context_id: str) -> ProcessingContext:
         """Load context from checkpoint file.

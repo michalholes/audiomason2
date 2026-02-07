@@ -21,10 +21,20 @@ class WizardInfo:
 
 
 class WizardService:
-    """Manage wizard YAML definitions stored in the user config area."""
+    """Manage wizard YAML definitions stored in the user config area.
 
-    def __init__(self, wizards_dir: Path | None = None) -> None:
+    Wizards may also be shipped as built-in, read-only definitions under the repository
+    wizards/ directory.
+    """
+
+    def __init__(self, wizards_dir: Path | None = None, builtin_dir: Path | None = None) -> None:
         self._dir = wizards_dir or _default_wizards_dir()
+        repo_root = Path(__file__).resolve().parents[3]
+        self._builtin_dir = builtin_dir or (repo_root / "wizards")
+
+    @property
+    def builtin_dir(self) -> Path:
+        return self._builtin_dir
 
     @property
     def wizards_dir(self) -> Path:
@@ -32,16 +42,37 @@ class WizardService:
 
     def list_wizards(self) -> list[WizardInfo]:
         self._dir.mkdir(parents=True, exist_ok=True)
-        infos: list[WizardInfo] = []
+
+        # User-defined (override-capable)
+        user: dict[str, Path] = {}
         for p in sorted(self._dir.glob("*.yaml")):
             if p.is_file():
-                infos.append(WizardInfo(name=p.stem, path=p))
+                user[p.stem] = p
+
+        # Built-in (read-only)
+        builtin: dict[str, Path] = {}
+        if self._builtin_dir.exists():
+            for p in sorted(self._builtin_dir.glob("*.yaml")):
+                if p.is_file():
+                    builtin[p.stem] = p
+
+        merged: dict[str, Path] = {**builtin, **user}  # user overrides builtin
+        infos: list[WizardInfo] = []
+        for name in sorted(merged.keys()):
+            infos.append(WizardInfo(name=name, path=merged[name]))
         return infos
 
+    def get_wizard_path(self, name: str) -> Path:
+        user_path = self._wizard_path(name)
+        if user_path.exists():
+            return user_path
+        builtin_path = self._builtin_dir / f"{user_path.stem}.yaml"
+        if builtin_path.exists():
+            return builtin_path
+        raise ConfigError(f"Wizard not found: {name}")
+
     def get_wizard_text(self, name: str) -> str:
-        p = self._wizard_path(name)
-        if not p.exists():
-            raise ConfigError(f"Wizard not found: {name}")
+        p = self.get_wizard_path(name)
         return p.read_text(encoding="utf-8")
 
     def put_wizard_text(self, name: str, yaml_text: str) -> None:

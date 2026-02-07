@@ -16,10 +16,14 @@ class PluginState:
 class PluginRegistry:
     """Persist and query plugin enabled/disabled state.
 
-    The state is stored in the user config file via ConfigService under:
-        plugins.disabled: ["plugin_a", "plugin_b", ...]
+    The state is stored in the user config file via ConfigService.
 
-    This keeps a single source of truth that both CLI and Web can share.
+    Storage keys:
+        plugin_registry.disabled: ["plugin_a", "plugin_b", ...]  (preferred)
+        plugins.disabled: ["plugin_a", "plugin_b", ...]          (legacy fallback)
+
+    Writes always go to plugin_registry.disabled.
+
     """
 
     def __init__(self, config: ConfigService) -> None:
@@ -30,6 +34,15 @@ class PluginRegistry:
             cfg = self._config.get_config()
         except Exception:
             return []
+
+        # Preferred location
+        reg = cfg.get("plugin_registry")
+        if isinstance(reg, dict):
+            disabled = reg.get("disabled")
+            if isinstance(disabled, list):
+                return [str(x) for x in disabled]
+
+        # Legacy fallback
         plugins = cfg.get("plugins")
         if not isinstance(plugins, dict):
             return []
@@ -53,4 +66,4 @@ class PluginRegistry:
         else:
             if plugin_id not in disabled:
                 disabled.append(plugin_id)
-        self._config.set_value("plugins.disabled", disabled)
+        self._config.set_value("plugin_registry.disabled", disabled)
