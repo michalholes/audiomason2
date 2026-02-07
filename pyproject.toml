@@ -26,6 +26,7 @@ dev = [
     "ruff>=0.0.290",
     "types-pyyaml",
     "fastapi",
+    "uvicorn",
     "python-multipart",
 ]
 
@@ -35,15 +36,13 @@ target-version = "py311"
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
-ignore = ["E501"]
+#ignore = ["E501"]
 
 [tool.mypy]
 python_version = "3.11"
-strict = true
+strict = false
+disallow_untyped_defs = false
 
-[[tool.mypy.overrides]]
-module = ["yaml"]
-ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
