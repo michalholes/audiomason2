@@ -33,3 +33,10 @@ def stage_dir_from_config(inbox_dir: str | None, repo_root: Path) -> Path:
 def log_path_default() -> Path | None:
     p = os.environ.get("WEB_INTERFACE_LOG_PATH")
     return Path(p) if p else None
+
+
+def debug_enabled() -> bool:
+    v = os.environ.get("WEB_INTERFACE_DEBUG")
+    if not v:
+        return False
+    return v.strip().lower() not in {"0", "false", "no", "off"}

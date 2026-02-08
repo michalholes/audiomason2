@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 from audiomason.core.wizard_service import WizardService
 
+from ..util.paths import debug_enabled
 from ..util.yamlutil import safe_load_yaml
 
 
@@ -127,7 +128,20 @@ def mount_wizards(app: FastAPI) -> None:
     @app.get("/api/wizards")
     def list_wizards() -> dict[str, Any]:
         items = [{"name": w.name} for w in svc.list_wizards()]
-        return {"items": items, "dir": str(svc.wizards_dir)}
+        out: dict[str, Any] = {"items": items}
+        if debug_enabled():
+            out["dir"] = str(svc.wizards_dir)
+        return out
+
+    @app.post("/api/wizards/preview")
+    def preview_wizard(body: WizardPut) -> dict[str, Any]:
+        if body.model is None:
+            raise HTTPException(status_code=400, detail="expected model")
+        try:
+            yaml_text = _serialize_wizard_model(body.model)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        return {"yaml": yaml_text}
 
     @app.get("/api/wizards/{name}")
     def get_wizard(name: str) -> dict[str, Any]:

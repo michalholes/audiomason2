@@ -81,7 +81,7 @@ window.onerror = function(msg, src, line, col, err){
     for (const f of (content.fields || [])) {
       const key = f.key;
       let value = data && typeof data === "object" ? data[key] : "";
-      if (key && (key.endsWith("_ts") || key.includes("time"))) value = fmtTs(value);
+      if (key && key.endsWith("_ts")) value = fmtTs(value);
       box.appendChild(el("div", { class: "statRow" }, [
         el("div", { class: "statLabel", text: f.label || key }),
         el("div", { class: "statValue", text: value === undefined ? "" : String(value) }),
@@ -106,7 +106,7 @@ window.onerror = function(msg, src, line, col, err){
       const tr = el("tr");
       cols.forEach((c) => {
         let v = row ? row[c.key] : "";
-        if (c.key && (c.key.endsWith("_ts") || c.key.includes("time"))) v = fmtTs(v);
+        if (c.key && c.key.endsWith("_ts")) v = fmtTs(v);
         tr.appendChild(el("td", { text: v === undefined ? "" : String(v) }));
       });
       tbody.appendChild(tr);
@@ -173,7 +173,7 @@ window.onerror = function(msg, src, line, col, err){
         const src = content.source || {};
         if (src.type !== "api") throw new Error("source must be api");
         const data = await API.getJson(src.path);
-        if (data && typeof data.path === "string") info.textContent = `Source: ${data.path}`;
+        if (data && typeof data.info === "string") info.textContent = `Source: ${data.info}`;
         textarea.value = (data && typeof data.yaml === "string") ? data.yaml : "";
         if (!textarea.value.endsWith("\n")) textarea.value += "\n";
       } catch (e) {
@@ -230,6 +230,185 @@ window.onerror = function(msg, src, line, col, err){
     return wrap;
   }
 
+
+async function renderAmConfig(content, notify) {
+  const wrap = el("div");
+  const header = el("div", { class: "row" });
+  const refreshBtn = el("button", { class: "btn", text: "Refresh" });
+  header.appendChild(refreshBtn);
+  wrap.appendChild(header);
+
+  const hint = el("div", { class: "hint", text: "" });
+  wrap.appendChild(hint);
+
+  const pre = el("pre", { class: "codeBlock", text: "" });
+  wrap.appendChild(pre);
+
+  const form = el("div", { class: "configSet" });
+  const keyIn = el("input", { class: "input", placeholder: "key_path (e.g. inbox_dir)" });
+  const valIn = el("input", { class: "input", placeholder: "value (JSON or string)" });
+  const setBtn = el("button", { class: "btn", text: "Set" });
+  form.appendChild(keyIn);
+  form.appendChild(valIn);
+  form.appendChild(setBtn);
+  wrap.appendChild(form);
+
+  async function load() {
+    try {
+      const data = await API.getJson("/api/am/config");
+      const srcInfo = (data && typeof data.info === "string" && data.info) ? data.info : "";
+      hint.textContent = srcInfo ? `Source: ${srcInfo}` : "";
+      const snap = data && typeof data.effective_snapshot === "object" ? data.effective_snapshot : {};
+      pre.textContent = JSON.stringify(snap, null, 2) + "\n";
+    } catch (e) {
+      pre.textContent = "";
+      hint.textContent = String(e);
+    }
+  }
+
+  refreshBtn.addEventListener("click", load);
+  setBtn.addEventListener("click", async () => {
+    const key = String(keyIn.value || "").trim();
+    if (!key) {
+      notify("key_path is required");
+      return;
+    }
+    let value = valIn.value;
+    const raw = String(valIn.value || "");
+    try {
+      value = JSON.parse(raw);
+    } catch {
+      value = raw;
+    }
+    try {
+      await API.sendJson("POST", "/api/am/config/set", { key_path: key, value });
+      notify("Saved.");
+      await load();
+    } catch (e) {
+      notify(String(e));
+    }
+  });
+
+  await load();
+  return wrap;
+}
+
+
+async function renderJobsLogViewer(content, notify) {
+  const root = el("div", { class: "jobsLog" });
+  const header = el("div", { class: "row" });
+  const refreshBtn = el("button", { class: "btn", text: "Refresh jobs" });
+  header.appendChild(refreshBtn);
+  root.appendChild(header);
+
+  const grid = el("div", { class: "jobsGrid" });
+  const left = el("div", { class: "jobsCol" });
+  const right = el("div", { class: "jobsColWide" });
+  grid.appendChild(left);
+  grid.appendChild(right);
+  root.appendChild(grid);
+
+  const jobsBox = el("div");
+  left.appendChild(jobsBox);
+
+  const logHeader = el("div", { class: "row" });
+  const followChk = el("input", { type: "checkbox" });
+  const followLbl = el("label", { class: "hint", text: "Follow" });
+  followLbl.prepend(followChk);
+  const clearBtn = el("button", { class: "btn", text: "Clear" });
+  logHeader.appendChild(followLbl);
+  logHeader.appendChild(clearBtn);
+  right.appendChild(logHeader);
+
+  const pre = el("pre", { class: "logBox", text: "Select a job." });
+  right.appendChild(pre);
+
+  let currentJobId = null;
+  let offset = 0;
+  let followTimer = null;
+
+  async function loadJobs() {
+    jobsBox.innerHTML = "";
+    let data;
+    try {
+      data = await API.getJson("/api/jobs");
+    } catch (e) {
+      jobsBox.appendChild(el("div", { class: "hint", text: String(e) }));
+      return;
+    }
+    const items = Array.isArray(data.items) ? data.items : [];
+    if (!items.length) {
+      jobsBox.appendChild(el("div", { class: "hint", text: "No jobs." }));
+      return;
+    }
+
+    const table = el("table", { class: "table" });
+    const thead = el("thead");
+    const trh = el("tr");
+    ["job_id", "type", "state"].forEach((h) => trh.appendChild(el("th", { text: h })));
+    thead.appendChild(trh);
+    table.appendChild(thead);
+    const tbody = el("tbody");
+
+    for (const j of items) {
+      const jid = j.job_id || j.id || "";
+      const tr = el("tr");
+      tr.appendChild(el("td", { text: String(jid) }));
+      tr.appendChild(el("td", { text: String(j.type || "") }));
+      tr.appendChild(el("td", { text: String(j.state || "") }));
+      tr.addEventListener("click", async () => {
+        currentJobId = String(jid);
+        offset = 0;
+        pre.textContent = "";
+        await loadMore();
+      });
+      tbody.appendChild(tr);
+    }
+    table.appendChild(tbody);
+    jobsBox.appendChild(table);
+  }
+
+  async function loadMore() {
+    if (!currentJobId) {
+      pre.textContent = "Select a job.";
+      return;
+    }
+    try {
+      const data = await API.getJson(`/api/jobs/${encodeURIComponent(currentJobId)}/log?offset=${offset}`);
+      const txt = data && typeof data.text === "string" ? data.text : "";
+      pre.textContent += txt;
+      offset = (data && typeof data.next_offset === "number") ? data.next_offset : offset;
+      pre.scrollTop = pre.scrollHeight;
+    } catch (e) {
+      notify(String(e));
+    }
+  }
+
+  function stopFollow() {
+    if (followTimer) {
+      clearInterval(followTimer);
+      followTimer = null;
+    }
+  }
+
+  followChk.addEventListener("change", () => {
+    stopFollow();
+    if (followChk.checked) {
+      followTimer = setInterval(loadMore, 1500);
+    }
+  });
+
+  clearBtn.addEventListener("click", () => {
+    pre.textContent = "";
+    offset = 0;
+  });
+
+  refreshBtn.addEventListener("click", loadJobs);
+
+  await loadJobs();
+  return root;
+}
+
   
 async function renderPluginManager(content, notify) {
   const wrap = el("div");
@@ -262,7 +441,7 @@ async function renderPluginManager(content, notify) {
     const table = el("table", { class: "table" });
     const thead = el("thead");
     const trh = el("tr");
-    ["name","version","enabled","interfaces","actions"].forEach((h)=>trh.appendChild(el("th",{text:h})));
+    ["name","version","source","enabled","interfaces","actions"].forEach((h)=>trh.appendChild(el("th",{text:h})));
     thead.appendChild(trh);
     table.appendChild(thead);
     const tbody = el("tbody");
@@ -270,6 +449,7 @@ async function renderPluginManager(content, notify) {
       const tr = el("tr");
       tr.appendChild(el("td",{text:p.name||""}));
       tr.appendChild(el("td",{text:p.version||""}));
+      tr.appendChild(el("td",{text:p.source||""}));
       tr.appendChild(el("td",{text:String(!!p.enabled)}));
       tr.appendChild(el("td",{text:Array.isArray(p.interfaces)?p.interfaces.join(", "):""}));
       const actions = el("td");
@@ -281,13 +461,17 @@ async function renderPluginManager(content, notify) {
         } catch(e){ notify(String(e)); }
       });
       const delBtn = el("button",{class:"btn danger", text:"Delete"});
-      delBtn.addEventListener("click", async ()=>{
-        if (!confirm(`Delete plugin '${p.name}'?`)) return;
-        try{
-          await API.sendJson("DELETE", `/api/plugins/${encodeURIComponent(p.name)}`, undefined);
-          await load();
-        } catch(e){ notify(String(e)); }
-      });
+      if (p.source !== "user") {
+        delBtn.disabled = true;
+      } else {
+        delBtn.addEventListener("click", async ()=>{
+          if (!confirm(`Delete plugin '${p.name}'?`)) return;
+          try{
+            await API.sendJson("DELETE", `/api/plugins/${encodeURIComponent(p.name)}`, undefined);
+            await load();
+          } catch(e){ notify(String(e)); }
+        });
+      }
       actions.appendChild(enBtn);
       actions.appendChild(delBtn);
       tr.appendChild(actions);
@@ -341,7 +525,13 @@ async function renderStageManager(content, notify) {
     try{
       data = await API.getJson(content.list_path || "/api/stage");
     } catch(e){ tableBox.appendChild(el("div",{class:"hint", text:String(e)})); return; }
-    info.textContent = `Dir: ${data.dir || ""}`;
+    if (data.dir) {
+      info.textContent = data.dir ? `Dir: ${data.dir}` : "";
+      info.style.display = "block";
+    } else {
+      info.textContent = "";
+      info.style.display = "none";
+    }
     const items = Array.isArray(data.items)?data.items:[];
     const table = el("table", { class: "table" });
     const thead = el("thead");
@@ -393,6 +583,155 @@ async function renderStageManager(content, notify) {
 
   await load();
   return wrap;
+}
+
+async function renderAmConfig(content, notify) {
+  const wrap = el("div");
+
+  const topRow = el("div", { class: "toolbar" });
+  const refreshBtn = el("button", { class: "btn", text: "Refresh" });
+  topRow.appendChild(refreshBtn);
+  wrap.appendChild(topRow);
+
+  const snapTitle = el("div", { class: "subTitle", text: "Effective config snapshot" });
+  const snapPre = el("pre", { class: "codeBlock", text: "" });
+  wrap.appendChild(snapTitle);
+  wrap.appendChild(snapPre);
+
+  const form = el("div", { class: "formBox" });
+  form.appendChild(el("div", { class: "subTitle", text: "Set value" }));
+  const keyIn = el("input", { class: "input", placeholder: "key_path (e.g. web_interface.log_level)" });
+  const valIn = el("input", { class: "input", placeholder: "value (JSON)" });
+  const setBtn = el("button", { class: "btnPrimary", text: "Set" });
+  form.appendChild(el("div", { class: "formRow" }, [el("div", { class: "formLabel", text: "key_path" }), keyIn]));
+  form.appendChild(el("div", { class: "formRow" }, [el("div", { class: "formLabel", text: "value" }), valIn]));
+  form.appendChild(el("div", { class: "toolbar" }, [setBtn]));
+  wrap.appendChild(form);
+
+  async function load() {
+    const data = await API.getJson("/api/am/config");
+    const snap = data && typeof data === "object" ? data.effective_snapshot : null;
+    snapPre.textContent = JSON.stringify(snap || {}, null, 2) + "\n";
+  }
+
+  refreshBtn.addEventListener("click", async ()=>{
+    try { await load(); } catch(e){ notify(String(e)); }
+  });
+
+  setBtn.addEventListener("click", async ()=>{
+    const keyPath = (keyIn.value || "").trim();
+    if (!keyPath) { notify("key_path is required"); return; }
+    let v;
+    try {
+      v = JSON.parse(valIn.value || "null");
+    } catch(e) {
+      notify("value must be JSON");
+      return;
+    }
+    try {
+      await API.sendJson("POST", "/api/am/config/set", { key_path: keyPath, value: v });
+      notify("Saved.");
+      await load();
+    } catch(e) {
+      notify(String(e));
+    }
+  });
+
+  await load();
+  return wrap;
+}
+
+async function renderJobsLogViewer(content, notify) {
+  const root = el("div", { class: "wizardManager" });
+
+  const header = el("div", { class: "toolbar" }, [
+    el("button", { class: "btn", text: "Refresh" }),
+  ]);
+
+  const listPane = el("div", { class: "wizardList" });
+  const detailPane = el("div", { class: "wizardDetail" });
+  const logPane = el("div", { class: "wizardYaml" });
+  const main = el("div", { class: "wizardGrid" }, [
+    el("div", { class: "wizardCol" }, [listPane]),
+    el("div", { class: "wizardColWide" }, [detailPane, logPane]),
+  ]);
+
+  root.appendChild(header);
+  root.appendChild(main);
+
+  let currentJobId = null;
+  let currentOffset = 0;
+
+  function renderJobList(items) {
+    clear(listPane);
+    if (!items.length) {
+      listPane.appendChild(el("div", { class: "hint", text: "No jobs." }));
+      return;
+    }
+    for (const j of items) {
+      const jid = j.job_id || j.id || "";
+      const label = `${jid} (${j.state || ""})`;
+      const row = el("div", { class: "stepRow", text: label });
+      row.addEventListener("click", async ()=>{
+        currentJobId = jid;
+        currentOffset = 0;
+        await loadJob();
+      });
+      listPane.appendChild(row);
+    }
+  }
+
+  async function loadList() {
+    const data = await API.getJson("/api/jobs");
+    const items = Array.isArray(data.items) ? data.items : [];
+    renderJobList(items);
+  }
+
+  async function loadJob() {
+    clear(detailPane);
+    clear(logPane);
+    if (!currentJobId) {
+      detailPane.appendChild(el("div", { class: "hint", text: "Select a job." }));
+      return;
+    }
+    const job = await API.getJson(`/api/jobs/${encodeURIComponent(currentJobId)}`);
+    const item = job.item || {};
+    detailPane.appendChild(el("div", { class: "subTitle", text: "Job" }));
+    detailPane.appendChild(el("pre", { class: "codeBlock", text: JSON.stringify(item, null, 2) }));
+
+    const logHdr = el("div", { class: "toolbar" });
+    const moreBtn = el("button", { class: "btn", text: "Load more" });
+    logHdr.appendChild(moreBtn);
+    logPane.appendChild(logHdr);
+    const pre = el("pre", { class: "logBox", text: "" });
+    logPane.appendChild(pre);
+
+    async function appendLog() {
+      const r = await API.getJson(`/api/jobs/${encodeURIComponent(currentJobId)}/log?offset=${currentOffset}`);
+      pre.textContent += (r.text || "");
+      currentOffset = r.next_offset || currentOffset;
+      pre.scrollTop = pre.scrollHeight;
+    }
+
+    moreBtn.addEventListener("click", async ()=>{
+      try { await appendLog(); } catch(e){ notify(String(e)); }
+    });
+
+    await appendLog();
+  }
+
+  header.firstChild.addEventListener("click", async ()=>{
+    try {
+      await loadList();
+      await loadJob();
+    } catch(e) {
+      notify(String(e));
+    }
+  });
+
+  await loadList();
+  await loadJob();
+  return root;
 }
 
 async function renderWizardManager(content, notify) {
@@ -631,6 +970,8 @@ async function renderContent(content, notify) {
     if (t === "plugin_manager") return await renderPluginManager(content, notify);
     if (t === "stage_manager") return await renderStageManager(content, notify);
     if (t === "wizard_manager") return await renderWizardManager(content, notify);
+    if (t === "am_config") return await renderAmConfig(content, notify);
+    if (t === "jobs_log_viewer") return await renderJobsLogViewer(content, notify);
     return el("div", { class: "hint", text: `Unsupported content type: ${t}` });
   }
 

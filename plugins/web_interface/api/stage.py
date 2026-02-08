@@ -7,16 +7,16 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 
 from audiomason.core.config_service import ConfigService
 
+from ..util.fs import find_repo_root
+from ..util.paths import stage_dir_from_config
+
 
 def _stage_dir() -> Path:
-    svc = ConfigService()
-    cfg = svc.get_config()
+    cfg = ConfigService().get_config()
     inbox_dir = cfg.get("inbox_dir")
-    if isinstance(inbox_dir, str) and inbox_dir.strip():
-        base = Path(inbox_dir)
-        d = base / "stage"
-    else:
-        d = Path.home() / ".audiomason/stage"
+    inbox_dir_str = inbox_dir.strip() if isinstance(inbox_dir, str) else None
+    repo_root = find_repo_root()
+    d = stage_dir_from_config(inbox_dir_str, repo_root)
     d.mkdir(parents=True, exist_ok=True)
     return d
 
@@ -29,8 +29,11 @@ def mount_stage(app: FastAPI) -> None:
         for p in sorted(d.rglob("*")):
             if p.is_file():
                 rel = str(p.relative_to(d))
-                items.append({"name": rel, "size": p.stat().st_size})
-        return {"dir": str(d), "items": items}
+                st = p.stat()
+                items.append({"name": rel, "size": st.st_size, "mtime_ts": int(st.st_mtime)})
+        out: dict[str, Any] = {"items": items, "dir": str(d)}
+        # debug_enabled() may add more diagnostic keys in the future.
+        return out
 
     @app.delete("/api/stage/{name:path}")
     def delete_stage(name: str) -> dict[str, Any]:

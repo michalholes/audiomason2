@@ -5,7 +5,7 @@ from typing import Any
 
 from fastapi import FastAPI
 
-from ..util.paths import ui_overrides_path
+from ..util.paths import debug_enabled, ui_overrides_path
 
 
 def _default_nav() -> list[dict[str, Any]]:
@@ -48,18 +48,7 @@ def _default_pages() -> dict[str, dict[str, Any]]:
             "title": "Config",
             "layout": {
                 "type": "grid",
-                "children": [
-                    {
-                        "type": "card",
-                        "title": "AudioMason config.yaml",
-                        "content": {
-                            "type": "yaml_editor",
-                            "source": {"type": "api", "path": "/api/am/config"},
-                            "save": {"type": "api", "method": "PUT", "path": "/api/am/config"},
-                            "field": "yaml",
-                        },
-                    }
-                ],
+                "children": [{"type": "am_config"}],
             },
         },
         "plugins": {
@@ -85,13 +74,7 @@ def _default_pages() -> dict[str, dict[str, Any]]:
             "title": "Logs",
             "layout": {
                 "type": "grid",
-                "children": [
-                    {
-                        "type": "card",
-                        "title": "Server logs",
-                        "content": {"type": "log_stream"},
-                    }
-                ],
+                "children": [{"type": "jobs_log_viewer"}],
             },
         },
         "ui_config": {
@@ -106,7 +89,11 @@ def _default_pages() -> dict[str, dict[str, Any]]:
                         "content": {
                             "type": "json_editor",
                             "source": {"type": "api", "path": "/api/ui/config"},
-                            "save": {"type": "api", "method": "PUT", "path": "/api/ui/config"},
+                            "save_action": {
+                                "type": "api",
+                                "method": "PUT",
+                                "path": "/api/ui/config",
+                            },
                             "field": "data",
                         },
                     }
@@ -158,7 +145,12 @@ def mount_ui_schema(app: FastAPI) -> None:
     @app.get("/api/ui/config")
     def ui_config_get() -> dict[str, Any]:
         p = ui_overrides_path()
-        return {"path": str(p), "data": _load_overrides()}
+        out: dict[str, Any] = {"data": _load_overrides(), "info": ""}
+        if p.exists():
+            out["info"] = "user"
+        if debug_enabled():
+            out["path"] = str(p)
+        return out
 
     @app.put("/api/ui/config")
     def ui_config_put(body: dict[str, Any]) -> dict[str, Any]:
@@ -166,6 +158,9 @@ def mount_ui_schema(app: FastAPI) -> None:
         p.parent.mkdir(parents=True, exist_ok=True)
         data = body.get("data")
         if not isinstance(data, dict):
-            data = {"pages": {}, "nav": []}
+            data = body if isinstance(body, dict) else {"pages": {}, "nav": []}
         p.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-        return {"ok": True, "path": str(p)}
+        out: dict[str, Any] = {"ok": True, "info": "user"}
+        if debug_enabled():
+            out["path"] = str(p)
+        return out

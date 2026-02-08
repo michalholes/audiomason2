@@ -7,6 +7,8 @@ from pydantic import BaseModel
 
 from audiomason.core.config_service import ConfigService
 
+from ..util.paths import debug_enabled
+
 
 class SetConfigValue(BaseModel):
     key_path: str
@@ -23,11 +25,13 @@ def mount_am_config(app: FastAPI) -> None:
 
     @app.get("/api/am/config")
     def get_am_config() -> dict[str, Any]:
-        return {
-            "path": str(svc.user_config_path),
+        out: dict[str, Any] = {
             "config": svc.get_config(),
             "effective_snapshot": svc.get_effective_config_snapshot(),
         }
+        if debug_enabled():
+            out["path"] = str(svc.user_config_path)
+        return out
 
     @app.post("/api/am/config/set")
     def set_am_config_value(body: SetConfigValue) -> dict[str, Any]:
