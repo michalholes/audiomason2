@@ -21,5 +21,8 @@ config_schema:
   output_dir:
     type: string
     default: "~/Audiobooks/output"
+  wizards_dir:
+    type: string
+    default: "/tmp/audiomason/wizards"
 
 test_level: basic

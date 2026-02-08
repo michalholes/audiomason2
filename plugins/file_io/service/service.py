@@ -46,9 +46,10 @@ class FileService:
         - file_io.roots.stage_dir
         - file_io.roots.jobs_dir
         - file_io.roots.outbox_dir
+        - file_io.roots.wizards_dir
 
         Legacy fallback keys:
-        - inbox_dir, stage_dir, outbox_dir
+        - inbox_dir, stage_dir, outbox_dir, wizards_dir
         - output_dir (used as fallback for outbox_dir)
         """
 
@@ -77,12 +78,16 @@ class FileService:
         stage_dir = Path(_get("file_io.roots.stage_dir", "stage_dir"))
         jobs_dir = Path(_get("file_io.roots.jobs_dir", default="/tmp/audiomason/jobs"))
         outbox_dir = Path(_get("file_io.roots.outbox_dir", "outbox_dir", _get("output_dir")))
+        wizards_dir = Path(
+            _get("file_io.roots.wizards_dir", "wizards_dir", default="/tmp/audiomason/wizards")
+        )
 
         roots = {
             RootName.INBOX: inbox_dir.expanduser(),
             RootName.STAGE: stage_dir.expanduser(),
             RootName.JOBS: jobs_dir.expanduser(),
             RootName.OUTBOX: outbox_dir.expanduser(),
+            RootName.WIZARDS: wizards_dir.expanduser(),
         }
 
         # Ensure roots exist.
