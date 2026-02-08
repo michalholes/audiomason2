@@ -1,6 +1,10 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
+Specification Version: 1.0.1
+Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
+
+
 Author: Michal Holes  
 Status: **AUTHORITATIVE / BINDING**  
 Applies to: AudioMason2 core, plugins, tooling, UI, tests, documentation  
@@ -25,6 +29,17 @@ Any implementation, patch, refactor, or feature **must comply with this specific
 If a change contradicts this document, the change is **invalid** unless the specification itself is updated and approved first.
 
 ---
+
+## Specification Versioning and Change Log
+
+This specification is versioned. The version is tracked near the top of this document.
+
+Rules:
+
+- Start at version 1.0.0.
+- Every change to this specification MUST increment the patch number by +1 (e.g., 1.0.0 -> 1.0.1).
+- Every change delivered by a patch MUST be recorded in docs/changes.md.
+- Each change entry in docs/changes.md MUST start with an ISO 8601 timestamp captured at patch creation time.
 
 ## 2. Core Vision
 
