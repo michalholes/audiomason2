@@ -235,16 +235,25 @@ class FileIOPlugin:
         return context
 
     async def extract_archive(self, context: ProcessingContext) -> ProcessingContext:
-        """Extract archive file to staging area.
+        """Extract an archive file to a staging directory.
 
-        Supports ZIP, RAR, 7Z formats.
+        This is a pipeline helper. It operates on the absolute source path from
+        ProcessingContext and extracts into the legacy stage_dir.
+
+        Supported formats:
+        - .zip (stdlib)
+        - .tar, .tar.gz/.tgz, .tar.xz/.txz (stdlib)
+        - .rar (external tool: 7z or unrar)
+        - .7z (external tool: 7z)
 
         Args:
             context: Processing context
 
         Returns:
-            Updated context with extracted files
+            Updated context with stage_dir set to the extraction directory
         """
+        import subprocess
+        import tarfile
         import zipfile
 
         source = context.source
@@ -252,38 +261,38 @@ class FileIOPlugin:
         if not source.exists():
             raise FileError(f"Archive not found: {source}")
 
-        # Create extraction directory
         extract_dir = self.stage_dir / f"extract_{source.stem}"
         extract_dir.mkdir(parents=True, exist_ok=True)
 
-        # Extract based on type
-        suffix = source.suffix.lower()
+        name = source.name.lower()
 
-        if suffix == ".zip":
+        if name.endswith(".zip"):
             with zipfile.ZipFile(source, "r") as zip_ref:
                 zip_ref.extractall(extract_dir)
-        elif suffix == ".rar":
-            try:
-                import rarfile  # type: ignore[import-not-found]
-
-                with rarfile.RarFile(source, "r") as rar_ref:
-                    rar_ref.extractall(extract_dir)
-            except ImportError:
-                raise FileError(
-                    "RAR support not available. Install with: pip install rarfile"
-                ) from None
-        elif suffix == ".7z":
-            try:
-                import py7zr  # type: ignore[import-not-found]
-
-                with py7zr.SevenZipFile(source, "r") as sz_ref:
-                    sz_ref.extractall(extract_dir)
-            except ImportError:
-                raise FileError(
-                    "7Z support not available. Install with: pip install py7zr"
-                ) from None
+        elif (
+            name.endswith(".tar")
+            or name.endswith(".tar.gz")
+            or name.endswith(".tgz")
+            or name.endswith(".tar.xz")
+            or name.endswith(".txz")
+        ):
+            with tarfile.open(source, "r:*") as tf:
+                tf.extractall(extract_dir)
+        elif name.endswith(".rar"):
+            if shutil.which("7z"):
+                cmd = ["7z", "x", "-y", str(source), f"-o{extract_dir}"]
+            elif shutil.which("unrar"):
+                cmd = ["unrar", "x", "-o+", str(source), str(extract_dir)]
+            else:
+                raise FileError("RAR support requires an external tool: install 7z or unrar")
+            subprocess.run(cmd, check=True, capture_output=True, text=True)
+        elif name.endswith(".7z"):
+            if not shutil.which("7z"):
+                raise FileError("7Z support requires an external tool: install 7z")
+            cmd = ["7z", "x", "-y", str(source), f"-o{extract_dir}"]
+            subprocess.run(cmd, check=True, capture_output=True, text=True)
         else:
-            raise FileError(f"Unsupported archive format: {suffix}")
+            raise FileError(f"Unsupported archive format: {source.suffix}")
 
         context.stage_dir = extract_dir
         context.add_warning(f"Extracted to: {extract_dir}")

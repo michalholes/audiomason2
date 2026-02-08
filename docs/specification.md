@@ -263,6 +263,47 @@ The capability must provide, at minimum:
 - Naming policy and cleanup policy are part of pipeline behavior, not the core file capability.
 
 
+#### 7.4.5 Archive Capability (Plugin-Owned)
+
+The file I/O plugin must provide an archive capability built on top of the file roots.
+
+This capability must support:
+
+- pack: create an archive from a directory under a root
+- unpack: extract an archive under a root into a destination directory under a root
+- plan_pack and plan_unpack: return a deterministic plan without executing changes
+- detect_format: optional helper, executed only when explicitly requested by higher layers
+
+Required behavior:
+
+- The higher layer must be able to specify the exact archive filename to create.
+- The higher layer must be able to specify the destination directory name to unpack into.
+- The higher layer must be able to choose:
+  - preserve_tree: keep the directory structure inside the archive
+  - flatten: extract all files into a single directory
+- When flattening, the higher layer must be able to select a collision policy:
+  - error: fail on name collisions
+  - rename: deterministically rename collisions with __N suffixes
+  - overwrite: overwrite existing destination files
+
+Format support:
+
+- ZIP (pack and unpack, deterministic pack)
+- TAR, TAR.GZ, TAR.XZ (pack and unpack, deterministic pack)
+- RAR (unpack is required; pack is best-effort and may depend on external tools)
+
+Determinism note:
+
+- Deterministic pack output is guaranteed for the stdlib ZIP/TAR backends.
+- RAR pack may not be deterministic across tools/versions and is best-effort.
+
+Debug/trace support:
+
+- The archive capability must be able to emit a structured operation trace, including planned and ok/error phases,
+  when explicitly enabled by configuration or request parameters.
+
+
+
 ---
 
 ## 8. Wizard System

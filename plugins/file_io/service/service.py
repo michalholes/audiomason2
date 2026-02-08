@@ -96,6 +96,14 @@ class FileService:
             raise ValueError(f"Unknown root: {root}")
         return self._roots[root]
 
+    def root_dir(self, root: RootName) -> Path:
+        """Return the configured absolute directory for a root."""
+        return self._root(root).dir_path
+
+    def resolve_abs_path(self, root: RootName, rel_path: str) -> Path:
+        """Resolve a relative path to an absolute path under a root."""
+        return resolve_path(self._root(root).dir_path, rel_path)
+
     def list_dir(
         self, root: RootName, rel_path: str = ".", *, recursive: bool = False
     ) -> list[FileEntry]:
