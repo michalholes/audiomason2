@@ -218,6 +218,51 @@ Multiple parallel plugin state mechanisms are forbidden.
 - User?installed plugins live in user plugin directories only.
 - Installation mechanism must be abstracted.
 
+
+### 7.4 File I/O Capability (Plugin-Owned)
+
+- File operations are provided by the `file_io` plugin as a reusable capability.
+- UI layers (CLI, Web, TUI) must not implement filesystem logic; they call this capability.
+- Core must not implement a storage backend; file I/O remains plugin-owned.
+
+#### 7.4.1 Roots
+
+The file I/O capability must support named roots:
+
+- inbox: input drop area for new sources
+- stage: general staging area (non-job-specific)
+- jobs: isolated per-job workspaces
+- outbox: outputs intended for download/export
+
+#### 7.4.2 Operations
+
+The capability must provide, at minimum:
+
+- list_dir (stable deterministic order)
+- stat
+- exists
+- open_read (download streaming)
+- open_write (upload streaming)
+- mkdir (parents supported)
+- rename (move)
+- delete_file
+- rmdir (empty directories only)
+- rmtree (recursive delete)
+- copy
+- checksum (sha256 default)
+
+#### 7.4.3 Determinism Rules
+
+- list_dir ordering must be stable and deterministic (lexicographic by relative path).
+- checksum must be deterministic (sha256 over file bytes).
+- The file service itself must not generate random or time-based names.
+
+#### 7.4.4 Separation From Pipeline Semantics
+
+- Pipeline steps (import/export/extract/preflight) may use the file capability.
+- Naming policy and cleanup policy are part of pipeline behavior, not the core file capability.
+
+
 ---
 
 ## 8. Wizard System

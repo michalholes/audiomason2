@@ -1,4 +1,7 @@
-"""File I/O plugin - import and export operations."""
+"""File I/O plugin - import and export operations.
+
+This plugin also provides a reusable file service capability.
+"""
 
 from __future__ import annotations
 
@@ -6,6 +9,7 @@ import shutil
 from pathlib import Path
 
 from audiomason.core import ProcessingContext
+from audiomason.core.config import ConfigResolver
 from audiomason.core.context import PreflightResult
 from audiomason.core.detection import (
     detect_format,
@@ -16,6 +20,8 @@ from audiomason.core.detection import (
 )
 from audiomason.core.errors import FileError
 
+from .service import FileService, RootName
+
 
 class FileIOPlugin:
     """File I/O plugin.
@@ -25,17 +31,51 @@ class FileIOPlugin:
     - Export: Move processed files to output directory
     - Preflight: Detect metadata from filenames
     - Extract: Extract archives
+
+    Also provides:
+    - FileService capability for generalized file operations
     """
 
     def __init__(self, config: dict | None = None) -> None:
         """Initialize plugin.
 
         Args:
-            config: Plugin configuration
+            config: Optional plugin configuration. The loader does not currently
+                pass plugin config, but this is kept for backwards compatibility.
         """
         self.config = config or {}
-        self.stage_dir = Path(self.config.get("stage_dir", "/tmp/audiomason/stage"))
-        self.output_dir = Path(self.config.get("output_dir", "~/Audiobooks/output"))
+
+        resolver = ConfigResolver(cli_args={})
+
+        # Keep legacy stage/output behavior for pipeline steps.
+        stage_dir_value = self.config.get("stage_dir")
+        output_dir_value = self.config.get("output_dir")
+
+        if stage_dir_value is None:
+            stage_dir_value, _src = resolver.resolve("stage_dir")
+
+        if output_dir_value is None:
+            output_dir_value, _src = resolver.resolve("output_dir")
+
+        self.stage_dir = Path(str(stage_dir_value)).expanduser()
+        self.output_dir = Path(str(output_dir_value)).expanduser()
+
+        # File service roots are resolved via the central ConfigResolver.
+        # Optional config override: config["roots"]["inbox_dir"|...]
+        roots_override = self.config.get("roots")
+        if isinstance(roots_override, dict):
+            roots = {}
+            for name in RootName:
+                key = f"{name.value}_dir"
+                val = roots_override.get(key)
+                if isinstance(val, str) and val:
+                    roots[name] = Path(val).expanduser()
+            if roots:
+                self.file_service = FileService(roots)
+            else:
+                self.file_service = FileService.from_resolver(resolver)
+        else:
+            self.file_service = FileService.from_resolver(resolver)
 
     async def import_file(self, context: ProcessingContext) -> ProcessingContext:
         """Import source file to staging area.
@@ -88,7 +128,7 @@ class FileIOPlugin:
         author_clean = self._sanitize_filename(author)
         title_clean = self._sanitize_filename(title)
 
-        output_dir = self.output_dir.expanduser() / f"{author_clean} - {title_clean}"
+        output_dir = self.output_dir / f"{author_clean} - {title_clean}"
         output_dir.mkdir(parents=True, exist_ok=True)
 
         # Move files

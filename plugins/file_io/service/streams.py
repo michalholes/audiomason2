@@ -1,0 +1,35 @@
+"""Streaming helpers for file_io.
+
+The file service returns file handles for callers that need streaming I/O.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Iterator
+from contextlib import contextmanager
+from pathlib import Path
+from typing import BinaryIO
+
+from .ops import AlreadyExistsError
+
+
+@contextmanager
+def open_read(path: Path) -> Iterator[BinaryIO]:
+    """Open a file for reading in binary mode."""
+    with open(path, "rb") as f:
+        yield f
+
+
+@contextmanager
+def open_write(
+    path: Path, *, overwrite: bool = False, mkdir_parents: bool = True
+) -> Iterator[BinaryIO]:
+    """Open a file for writing in binary mode."""
+    if path.exists() and not overwrite:
+        raise AlreadyExistsError(f"Destination exists: {path.name}")
+
+    if mkdir_parents:
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+    with open(path, "wb") as f:
+        yield f

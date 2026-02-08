@@ -5,8 +5,10 @@ from pathlib import Path
 
 import pytest
 
-# Add src to path
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+# Add repo root and src to path (for 'plugins.*' and 'audiomason.*' imports)
+repo_root = Path(__file__).parent.parent
+sys.path.insert(0, str(repo_root))
+sys.path.insert(0, str(repo_root / "src"))
 
 
 @pytest.fixture(autouse=True)

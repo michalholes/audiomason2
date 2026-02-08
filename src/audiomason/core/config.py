@@ -257,4 +257,13 @@ class ConfigResolver:
                 "port": 8080,
                 "upload_dir": "/tmp/audiomason/uploads",
             },
+            # File I/O capability (plugin-owned)
+            "file_io": {
+                "roots": {
+                    "inbox_dir": str(Path.home() / "Audiobooks" / "inbox"),
+                    "stage_dir": "/tmp/audiomason/stage",
+                    "jobs_dir": "/tmp/audiomason/jobs",
+                    "outbox_dir": str(Path.home() / "Audiobooks" / "outbox"),
+                },
+            },
         }
