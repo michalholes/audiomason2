@@ -1,10 +1,24 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from typing import Any
 
 import pytest
-from plugins.web_interface.core import WebInterfacePlugin
+
+
+def _get_web_interface_plugin_cls() -> type:
+    """Import the web_interface plugin in a pytest-collection-safe way."""
+
+    # Ensure repository root is importable for 'plugins.*' imports.
+    repo_root = Path(__file__).resolve().parents[2]
+    repo_root_s = str(repo_root)
+    if repo_root_s not in sys.path:
+        sys.path.insert(0, repo_root_s)
+
+    from plugins.web_interface.core import WebInterfacePlugin
+
+    return WebInterfacePlugin
 
 
 def _make_client(app: Any) -> Any:
@@ -18,7 +32,8 @@ def test_web_jobs_api_create_list_cancel(tmp_path: Path, monkeypatch: Any) -> No
     # Isolate HOME so jobs persist under tmp_path, not the real user home.
     monkeypatch.setenv("HOME", str(tmp_path))
 
-    app = WebInterfacePlugin().create_app()
+    web_interface_plugin_cls = _get_web_interface_plugin_cls()
+    app = web_interface_plugin_cls().create_app()
     client = _make_client(app)
 
     # Create a pending job (no execution).

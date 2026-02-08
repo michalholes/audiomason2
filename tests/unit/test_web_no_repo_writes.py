@@ -11,7 +11,14 @@ from typing import Any
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 import pytest
-from plugins.web_interface.core import WebInterfacePlugin
+
+
+def _get_web_interface_plugin_cls() -> type:
+    """Import the web_interface plugin in a pytest-collection-safe way."""
+
+    from plugins.web_interface.core import WebInterfacePlugin
+
+    return WebInterfacePlugin
 
 
 def _assert_not_in_repo(repo_root: Path, target: Path) -> None:
@@ -119,7 +126,9 @@ def test_web_interface_does_not_write_to_repo(
     monkeypatch.setattr(Path, "mkdir", guarded_mkdir, raising=True)
     monkeypatch.setattr(shutil, "rmtree", guarded_rmtree, raising=True)
 
-    app = WebInterfacePlugin().create_app()
+    web_interface_plugin_cls = _get_web_interface_plugin_cls()
+
+    app = web_interface_plugin_cls().create_app()
 
     # Raw config editor endpoint must not exist.
     status, _, _ = _asgi_request(
