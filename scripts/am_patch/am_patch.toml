@@ -175,5 +175,6 @@ log_ts_format = "%Y%m%d_%H%M%S"
 # scope_ignore_prefixes = [".am_patch/", ".pytest_cache/", ".mypy_cache/", ".ruff_cache/", "__pycache__/"]
 # scope_ignore_suffixes = [".pyc"]
 # scope_ignore_contains = ["/__pycache__/"]
-venv_bootstrap_mode = "never"  # auto|always|never
+venv_bootstrap_mode = "auto"  # auto|always|never
+
 venv_bootstrap_python = ".venv/bin/python"
