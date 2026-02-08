@@ -246,6 +246,39 @@ Multiple parallel plugin state mechanisms are forbidden.
 
 The web UI must be replaceable without touching core logic.
 
+### 9.1 Web Interface Configuration Surface
+
+The web interface exposes a **UI-only** configuration surface. It must not create a
+new source of truth; it only reads and writes through existing APIs.
+
+Runtime configuration hooks:
+
+- Config keys (via `/api/am/config` and `/api/am/config/set`):
+  - `web.host`, `web.port`: bind host/port for the HTTP server.
+  - `web.upload_dir`: temporary upload directory used by the web server.
+  - `inbox_dir`, `outbox_dir`, `stage_dir`: core filesystem roots shown/used by UI.
+  - `ui.*`: UI theming and UI-related values (project-defined).
+- UI overrides file:
+  - Stored at `~/.config/audiomason/web_interface_ui.json`.
+  - Shape: `{ "nav": [...], "pages": { ... } }`.
+  - Read/write via `/api/ui/config`.
+- Environment variables:
+  - `WEB_INTERFACE_DEBUG`: enable extra diagnostic fields in API responses.
+  - `WEB_INTERFACE_STAGE_DIR`: override the stage upload directory.
+  - `WEB_INTERFACE_LOG_PATH`: optional log file path used for server log tail/stream.
+
+Developer endpoints:
+
+- `/api/ui/schema`: returns the current default UI schema and the configuration hooks above.
+
+Wizard listing contract:
+
+- `/api/wizards` returns `items[]` where each item contains:
+  - `name` (required)
+  - `step_count` (optional)
+  - `display_name` (optional)
+  - `description` (optional)
+
 ---
 
 ## 10. Logging & Observability

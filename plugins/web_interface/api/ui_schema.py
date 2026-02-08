@@ -114,6 +114,31 @@ def _load_overrides() -> dict[str, Any]:
 
 
 def mount_ui_schema(app: FastAPI) -> None:
+    @app.get("/api/ui/schema")
+    def ui_schema() -> dict[str, Any]:
+        """Developer-friendly schema snapshot.
+
+        This is not an OpenAPI replacement. It exposes the UI nav/pages schema and
+        the primary configuration hooks used by the web interface.
+        """
+
+        return {
+            "nav": _default_nav(),
+            "pages": _default_pages(),
+            "ui_overrides": {
+                "path": str(ui_overrides_path()),
+                "format": "json",
+                "default": {"pages": {}, "nav": []},
+            },
+            "env": {
+                "WEB_INTERFACE_DEBUG": (
+                    "if truthy, API responses may include extra diagnostic fields"
+                ),
+                "WEB_INTERFACE_STAGE_DIR": "override the stage upload directory",
+                "WEB_INTERFACE_LOG_PATH": "optional log file path for server log tail/stream",
+            },
+        }
+
     @app.get("/api/ui/nav")
     def ui_nav() -> dict[str, Any]:
         ov = _load_overrides()

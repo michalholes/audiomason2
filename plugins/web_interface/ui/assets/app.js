@@ -595,8 +595,13 @@ async function renderAmConfig(content, notify) {
 
   const snapTitle = el("div", { class: "subTitle", text: "Effective config snapshot" });
   const snapPre = el("pre", { class: "codeBlock", text: "" });
+  const snapHint = el("div", {
+    class: "hint",
+    text: "Tip: Values set here override config.yaml. Examples: inbox_dir, stage_dir, outbox_dir, web.host, web.port, web.upload_dir, ui.theme.",
+  });
   wrap.appendChild(snapTitle);
   wrap.appendChild(snapPre);
+  wrap.appendChild(snapHint);
 
   const form = el("div", { class: "formBox" });
   form.appendChild(el("div", { class: "subTitle", text: "Set value" }));
@@ -611,7 +616,11 @@ async function renderAmConfig(content, notify) {
   async function load() {
     const data = await API.getJson("/api/am/config");
     const snap = data && typeof data === "object" ? data.effective_snapshot : null;
-    snapPre.textContent = JSON.stringify(snap || {}, null, 2) + "\n";
+    if (typeof snap === "string") {
+      snapPre.textContent = snap.endsWith("\n") ? snap : (snap + "\n");
+    } else {
+      snapPre.textContent = JSON.stringify(snap || {}, null, 2) + "\n";
+    }
   }
 
   refreshBtn.addEventListener("click", async ()=>{
@@ -622,11 +631,12 @@ async function renderAmConfig(content, notify) {
     const keyPath = (keyIn.value || "").trim();
     if (!keyPath) { notify("key_path is required"); return; }
     let v;
+    const raw = String(valIn.value || "");
     try {
-      v = JSON.parse(valIn.value || "null");
-    } catch(e) {
-      notify("value must be JSON");
-      return;
+      v = JSON.parse(raw);
+    } catch {
+      // Allow plain strings without forcing JSON quoting.
+      v = raw;
     }
     try {
       await API.sendJson("POST", "/api/am/config/set", { key_path: keyPath, value: v });
@@ -1070,7 +1080,7 @@ async function loadNav() {
     const header = el("div", { class: "header" }, [
       el("div", { class: "headerTitle", text: "" }),
       el("div", { class: "headerRight" }, [
-        el("a", { class: "link", href: "/api/ui/page/dashboard", text: "schema" }),
+        el("a", { class: "link", href: "/api/ui/schema", text: "schema" }),
       ]),
     ]);
     main.appendChild(header);

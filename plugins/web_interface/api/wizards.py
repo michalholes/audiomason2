@@ -127,7 +127,25 @@ def mount_wizards(app: FastAPI) -> None:
 
     @app.get("/api/wizards")
     def list_wizards() -> dict[str, Any]:
-        items = [{"name": w.name} for w in svc.list_wizards()]
+        items: list[dict[str, Any]] = []
+        for w in svc.list_wizards():
+            item: dict[str, Any] = {"name": w.name}
+            try:
+                text = svc.get_wizard_text(w.name)
+                parsed = safe_load_yaml(text)
+                wiz = parsed.get("wizard") if isinstance(parsed, dict) else None
+                if isinstance(wiz, dict):
+                    if isinstance(wiz.get("name"), str) and wiz.get("name"):
+                        item["display_name"] = wiz["name"]
+                    if isinstance(wiz.get("description"), str) and wiz.get("description"):
+                        item["description"] = wiz["description"]
+                    steps = wiz.get("steps")
+                    if isinstance(steps, list):
+                        item["step_count"] = len(steps)
+            except Exception:
+                # Best-effort: listing should not fail if one wizard is malformed.
+                pass
+            items.append(item)
         out: dict[str, Any] = {"items": items}
         if debug_enabled():
             out["dir"] = str(svc.wizards_dir)
