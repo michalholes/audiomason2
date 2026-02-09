@@ -367,7 +367,8 @@ class ArchiveService:
         dst_root: RootName,
         dst_archive_path: str,
         *,
-        fmt: ArchiveFormat,
+        fmt: ArchiveFormat | None = None,
+        autodetect: bool = False,
         preserve_tree: bool = True,
         flatten: bool = False,
         collision: CollisionPolicy | None = None,
@@ -395,6 +396,15 @@ class ArchiveService:
             _include_stack = _bool_from_resolver(
                 self._resolver, "file_io.archives.debug.include_stack", False
             )
+
+        warnings: list[str] = []
+
+        if autodetect:
+            detected = self.detect_format(dst_root, dst_archive_path)
+            fmt = detected.format
+
+        if fmt is None:
+            raise ValueError("fmt is required unless autodetect=True")
 
         trace: list[OpEvent] = []
         backend = self._select_backend_for_pack(fmt, allow_external=_allow_external)
@@ -454,7 +464,7 @@ class ArchiveService:
                 files_packed=files,
                 total_bytes=total,
                 is_deterministic=is_det,
-                warnings=[],
+                warnings=warnings,
                 trace=trace if _debug_trace else [],
             )
         except Exception as e:
@@ -529,8 +539,74 @@ class ArchiveService:
                 with tarfile.open(name=str(abs_path), mode=mode) as tf:
                     names = [m.name for m in tf.getmembers() if m.isfile()]
                     return _stable_sorted(names), warnings
+        if backend == "external":
+            entries = self._list_entries_external(fmt, abs_path)
+            return _stable_sorted(entries), warnings
         warnings.append("Entry listing not available for selected backend; plan will be partial")
         return [], warnings
+
+    def _list_entries_external(self, fmt: ArchiveFormat, abs_path: Path) -> list[str]:
+        """List archive entries without extracting.
+
+        Preference order:
+        - 7z (works for many formats, including rar)
+        - unrar (rar-only)
+
+        Raises FileError if no suitable external lister is available.
+        """
+        if shutil.which("7z"):
+            # 7z -slt produces stable key/value blocks separated by blank lines.
+            cmd = ["7z", "l", "-slt", str(abs_path)]
+            res = subprocess.run(cmd, check=True, capture_output=True, text=True)
+            entries: list[str] = []
+            cur_path: str | None = None
+            cur_attr: str | None = None
+
+            def _flush() -> None:
+                nonlocal cur_path, cur_attr
+                if not cur_path:
+                    cur_path, cur_attr = None, None
+                    return
+                is_dir = False
+                if cur_attr is not None:
+                    is_dir = cur_attr.strip().startswith("D")
+                if not is_dir:
+                    p = cur_path.replace("\\\\", "/").lstrip("/")
+                    if p and not p.endswith("/"):
+                        entries.append(p)
+                cur_path, cur_attr = None, None
+
+            for line in res.stdout.splitlines():
+                s = line.strip()
+                if not s:
+                    _flush()
+                    continue
+                if s.startswith("Path = "):
+                    cur_path = s.split("=", 1)[1].strip()
+                    continue
+                if s.startswith("Attributes = "):
+                    cur_attr = s.split("=", 1)[1].strip()
+                    continue
+            _flush()
+            return _stable_sorted(entries)
+
+        if fmt == ArchiveFormat.RAR and shutil.which("unrar"):
+            # 'unrar vb' prints bare file names, one per line.
+            cmd = ["unrar", "vb", str(abs_path)]
+            res = subprocess.run(cmd, check=True, capture_output=True, text=True)
+            entries = []
+            for line in res.stdout.splitlines():
+                s = line.strip()
+                if not s:
+                    continue
+                p = s.replace("\\\\", "/").lstrip("/")
+                if p and not p.endswith("/"):
+                    entries.append(p)
+            return _stable_sorted(entries)
+
+        raise FileError(
+            f"No external listing tool available for {fmt.value}; install 7z (preferred) or unrar"
+        )
 
     def _map_entry_names(
         self,
@@ -612,9 +688,8 @@ class ArchiveService:
                     raise FileError(f"Archive entry escapes destination: {name}") from None
                 dst_path.parent.mkdir(parents=True, exist_ok=True)
                 with zf.open(info, "r") as src_f, open(dst_path, "wb") as dst_f:
-                    data = src_f.read()
-                    dst_f.write(data)
-                    total += len(data)
+                    shutil.copyfileobj(src_f, dst_f)
+                    total += int(info.file_size)
                 files += 1
         return files, total
 
@@ -659,10 +734,9 @@ class ArchiveService:
                 f = tf.extractfile(m)
                 if f is None:
                     continue
-                data = f.read()
-                with open(dst_path, "wb") as out_f:
-                    out_f.write(data)
-                total += len(data)
+                with contextlib.closing(f), open(dst_path, "wb") as out_f:
+                    shutil.copyfileobj(f, out_f)
+                total += int(m.size)
                 files += 1
         return files, total
 

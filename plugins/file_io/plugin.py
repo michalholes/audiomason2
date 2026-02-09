@@ -8,6 +8,8 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
+import anyio
+
 from audiomason.core import ProcessingContext
 from audiomason.core.config import ConfigResolver
 from audiomason.core.context import PreflightResult
@@ -95,11 +97,11 @@ class FileIOPlugin:
         import uuid
 
         stage_dir = self.stage_dir / f"book_{uuid.uuid4().hex[:8]}"
-        stage_dir.mkdir(parents=True, exist_ok=True)
+        await anyio.to_thread.run_sync(lambda: stage_dir.mkdir(parents=True, exist_ok=True))
 
         # Copy source to stage
         staged_file = stage_dir / source.name
-        shutil.copy2(source, staged_file)
+        await anyio.to_thread.run_sync(shutil.copy2, source, staged_file)
 
         # Update context
         context.stage_dir = stage_dir
@@ -129,22 +131,27 @@ class FileIOPlugin:
         title_clean = self._sanitize_filename(title)
 
         output_dir = self.output_dir / f"{author_clean} - {title_clean}"
-        output_dir.mkdir(parents=True, exist_ok=True)
+        await anyio.to_thread.run_sync(lambda: output_dir.mkdir(parents=True, exist_ok=True))
 
         # Move files
         exported = []
         for file in context.converted_files:
             if file.exists():
                 dest = output_dir / file.name
-                shutil.move(str(file), str(dest))
+                await anyio.to_thread.run_sync(shutil.move, str(file), str(dest))
                 exported.append(dest)
 
         context.output_path = output_dir
         context.add_warning(f"Exported {len(exported)} file(s) to: {output_dir}")
 
         # Cleanup stage directory
-        if context.stage_dir and context.stage_dir.exists():
-            shutil.rmtree(context.stage_dir, ignore_errors=True)
+        stage_dir = context.stage_dir
+        if stage_dir is not None and stage_dir.exists():
+
+            def _rmtree(p: Path) -> None:
+                shutil.rmtree(p, ignore_errors=True)
+
+            await anyio.to_thread.run_sync(_rmtree, stage_dir)
 
         return context
 

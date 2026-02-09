@@ -44,8 +44,10 @@ def test_archive_pack_unpack_roundtrip_in_wizards_root(
     svc = ArchiveService(service)
     # Create a small directory tree under wizards
     service.mkdir(RootName.WIZARDS, "src", parents=True)
-    service.open_write(RootName.WIZARDS, "src/a.txt").write(b"a")
-    service.open_write(RootName.WIZARDS, "src/nested/b.txt").write(b"b")
+    with service.open_write(RootName.WIZARDS, "src/a.txt") as f:
+        f.write(b"a")
+    with service.open_write(RootName.WIZARDS, "src/nested/b.txt") as f:
+        f.write(b"b")
 
     # Pack to a zip archive in wizards
     svc.pack(

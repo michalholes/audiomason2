@@ -2,6 +2,11 @@
 
 This file lists notable changes in AudioMason2, grouped by issue.
 
+## Issue 020
+
+- 2026-02-09T02:03:50+01:00 Fixed mypy failure in file_io plugin cleanup by avoiding Optional Path capture inside async thread lambda.
+- 2026-02-09T02:03:50+01:00 Updated specification version and change log per documentation gate requirements.
+
 ## Issue 554
 
 - 2026-02-09T00:00:11+01:00 Added new file I/O root `wizards` for wizard-owned filesystem data.
