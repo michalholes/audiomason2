@@ -125,7 +125,9 @@ Final summary (always printed at the end):
   - `LOG: <path>`
 - FAIL:
   - `RESULT: FAIL`
-  - `STAGE: <stage-id>`
+  - `STAGE: <stage-id>[, <stage-id>...]`
+  - When multiple failures occur in a single run, STAGE MUST be a single line
+    with a comma-separated list of all known failing stages (deterministic order).
   - `REASON: <one line>`
   - `LOG: <path>`
 

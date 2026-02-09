@@ -1415,30 +1415,90 @@ def main(argv: list[str]) -> int:
         logger.line(fingerprint(e))
 
         # Contract: map internal error to stable STAGE/REASON for final summary.
+        # STAGE may be a comma-separated list of stage identifiers when multiple failures occur.
         final_fail_stage = str(e.stage)
         final_fail_reason = str(e.message)
+
+        def _parse_gate_list(msg: str) -> list[str]:
+            if "gates failed:" in msg:
+                tail = msg.split("gates failed:", 1)[1]
+                parts = [p.strip() for p in tail.split(",")]
+                return [p for p in parts if p]
+            if "gate failed:" in msg:
+                tail = msg.split("gate failed:", 1)[1].strip()
+                first = tail.split()[0] if tail else ""
+                return [first] if first else []
+            return []
+
+        def _stage_rank(stage: str) -> int:
+            order = [
+                "PATCH_APPLY",
+                "SCOPE",
+                "PROMOTE",
+                "PREFLIGHT",
+                "SECURITY",
+                "GATE_COMPILE",
+                "GATE_RUFF",
+                "GATE_PYTEST",
+                "GATE_MYPY",
+                "GATE_DOCS",
+                "GATE_BADGUYS",
+                "GATES",
+                "INTERNAL",
+            ]
+            try:
+                return order.index(stage)
+            except ValueError:
+                return 10_000
+
+        # Accumulate all known failures for final on-screen summary.
+        stages: list[str] = []
+
+        # Patch apply is a primary failure even if gates failed later (partial apply diagnostics).
+        if primary_fail_stage is not None and primary_fail_stage == "PATCH":
+            stages.append("PATCH_APPLY")
+
+        # Secondary failures (e.g., scope after patch failure).
+        for stg, _msg in secondary_failures:
+            if stg == "PROMOTION":
+                stages.append("PROMOTE")
+            elif stg == "SCOPE":
+                stages.append("SCOPE")
+            elif stg:
+                stages.append(stg)
+
+        # Primary exception mapping.
         if e.stage == "GATES":
             msg = str(e.message)
-            gate = None
-            if "gate failed:" in msg:
-                gate = msg.split("gate failed:", 1)[1].strip().split()[0]
-            elif "gates failed:" in msg:
-                gate = msg.split("gates failed:", 1)[1].strip().split(",")[0].strip()
-            if gate:
-                final_fail_stage = f"GATE_{gate.upper()}"
-                final_fail_reason = f"{gate} failed"
-            else:
-                final_fail_stage = "GATES"
-                final_fail_reason = "gates failed"
+            gates = _parse_gate_list(msg)
+            for g in gates:
+                stages.append(f"GATE_{g.upper()}")
+            if not gates:
+                stages.append("GATES")
+            # Preserve existing reason mapping; keep it concise.
+            final_fail_reason = "gates failed"
         elif e.stage == "PATCH":
-            final_fail_stage = "PATCH_APPLY"
+            stages.append("PATCH_APPLY")
             final_fail_reason = "patch apply failed"
         elif e.stage == "PREFLIGHT":
-            final_fail_stage = "PREFLIGHT"
+            stages.append("PREFLIGHT")
             final_fail_reason = "invalid inputs"
-        elif e.stage in ("PROMOTION", "SCOPE"):
-            final_fail_stage = "PROMOTE" if e.stage == "PROMOTION" else "SCOPE"
-            final_fail_reason = "promotion failed" if e.stage == "PROMOTION" else "scope failed"
+        elif e.stage == "PROMOTION":
+            stages.append("PROMOTE")
+            final_fail_reason = "promotion failed"
+        elif e.stage == "SCOPE":
+            stages.append("SCOPE")
+            final_fail_reason = "scope failed"
+        else:
+            stages.append(str(e.stage))
+
+        # De-duplicate and sort deterministically.
+        uniq: list[str] = []
+        for s in stages:
+            if s and s not in uniq:
+                uniq.append(s)
+        uniq.sort(key=lambda s: (_stage_rank(s), s))
+        final_fail_stage = ", ".join(uniq) if uniq else (final_fail_stage or "INTERNAL")
 
         return 1
     finally:
