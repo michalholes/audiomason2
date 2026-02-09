@@ -12,8 +12,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import yaml
-
 from audiomason.core import PluginLoader, ProcessingContext, State
 from audiomason.core.errors import AudioMasonError
 from audiomason.core.phase import PhaseContractError
@@ -83,7 +81,7 @@ class WizardEngine:
         """Log error message (always shown)."""
         print(f"[ERROR] {msg}")
 
-    def set_input_handler(self, handler: Callable[[str, dict], str]):
+    def set_input_handler(self, handler: Callable[[str, dict], str]) -> None:
         """Set custom input handler for interactive steps.
 
         Args:
@@ -91,7 +89,7 @@ class WizardEngine:
         """
         self.user_input_handler = handler
 
-    def set_progress_callback(self, callback: Callable[[str, int, int], None]):
+    def set_progress_callback(self, callback: Callable[[str, int, int], None]) -> None:
         """Set progress callback.
 
         Args:
@@ -99,47 +97,15 @@ class WizardEngine:
         """
         self.progress_callback = callback
 
-    def load_yaml(self, path: Path) -> dict:
-        """Load wizard definition from YAML.
+    def load_yaml(self, _path: object) -> dict:
+        """Forbidden: WizardEngine must not read files directly.
 
-        Args:
-            path: Path to wizard YAML file
-
-        Returns:
-            Wizard definition dictionary
-
-        Raises:
-            WizardError: If file not found or invalid YAML
+        Wizard definitions MUST be loaded via WizardService (file_io) and then passed
+        to run_wizard() as a dict.
         """
-        if not path.exists():
-            raise WizardError(f"Wizard file not found: {path}")
+        raise WizardError("WizardEngine.load_yaml is forbidden; use WizardService")
 
-        try:
-            with open(path) as f:
-                self._debug(f"Loading wizard from: {path}")
-                wizard_def = yaml.safe_load(f)
-        except yaml.YAMLError as e:
-            raise WizardError(f"Invalid YAML: {e}") from e
-
-        self._verbose(f"Wizard loaded: {wizard_def.get('wizard', {}).get('name', 'Unknown')}")
-        # Validate structure
-        if not isinstance(wizard_def, dict):
-            raise WizardError("Wizard definition must be a dictionary")
-
-        if "wizard" not in wizard_def:
-            raise WizardError("Missing 'wizard' key in definition")
-
-        wizard = wizard_def["wizard"]
-
-        if "name" not in wizard:
-            raise WizardError("Missing 'name' in wizard definition")
-
-        if "steps" not in wizard or not wizard["steps"]:
-            raise WizardError("Wizard must have at least one step")
-
-        return wizard_def
-
-    def execute_step(self, step: dict, context: ProcessingContext) -> StepResult:
+    async def execute_step(self, step: dict, context: ProcessingContext) -> StepResult:
         """Execute single wizard step.
 
         Args:
@@ -157,13 +123,13 @@ class WizardEngine:
         try:
             if step_type == "input":
                 return self._execute_input_step(step, context)
-            elif step_type == "choice":
+            if step_type == "choice":
                 return self._execute_choice_step(step, context)
-            elif step_type == "plugin_call":
-                return self._execute_plugin_call(step, context)
-            elif step_type == "condition":
-                return self._execute_condition(step, context)
-            elif step_type == "set_value":
+            if step_type == "plugin_call":
+                return await self._execute_plugin_call(step, context)
+            if step_type == "condition":
+                return await self._execute_condition(step, context)
+            if step_type == "set_value":
                 return self._execute_set_value(step, context)
             else:
                 return StepResult(success=False, error=f"Unknown step type: {step_type}")
@@ -270,7 +236,7 @@ class WizardEngine:
 
         return StepResult(success=True, value=value)
 
-    def _execute_plugin_call(self, step: dict, context: ProcessingContext) -> StepResult:
+    async def _execute_plugin_call(self, step: dict, context: ProcessingContext) -> StepResult:
         """Execute plugin call step.
 
         Args:
@@ -301,7 +267,7 @@ class WizardEngine:
                 method_obj = getattr(plugin, method)
                 # Check if method is async
                 if asyncio.iscoroutinefunction(method_obj):
-                    result = asyncio.run(method_obj(context, **params))
+                    result = await method_obj(context, **params)
                 else:
                     result = method_obj(context, **params)
                 return StepResult(success=True, value=result)
@@ -310,7 +276,7 @@ class WizardEngine:
         except Exception as e:
             return StepResult(success=False, error=f"Plugin call failed: {str(e)}")
 
-    def _execute_condition(self, step: dict, context: ProcessingContext) -> StepResult:
+    async def _execute_condition(self, step: dict, context: ProcessingContext) -> StepResult:
         """Execute conditional step.
 
         Args:
@@ -334,7 +300,7 @@ class WizardEngine:
         steps_to_execute = if_true if result else if_false
 
         for substep in steps_to_execute:
-            step_result = self.execute_step(substep, context)
+            step_result = await self.execute_step(substep, context)
             if not step_result.success:
                 return step_result
 
@@ -431,7 +397,7 @@ class WizardEngine:
 
         return StepResult(success=True, value=value)
 
-    def run_wizard(
+    async def run_wizard(
         self, wizard_def: dict, context: ProcessingContext | None = None
     ) -> ProcessingContext:
         """Run complete wizard.
@@ -477,7 +443,7 @@ class WizardEngine:
                 self.progress_callback(step_id, i, total_steps)
 
             # Execute step
-            result = self.execute_step(step, context)
+            result = await self.execute_step(step, context)
 
             if not result.success:
                 self._error(f"Step '{step_id}' failed: {result.error}")
@@ -504,17 +470,6 @@ class WizardEngine:
 
         return context
 
-    def run_wizard_from_file(
-        self, path: Path, context: ProcessingContext | None = None
-    ) -> ProcessingContext:
-        """Load and run wizard from YAML file.
-
-        Args:
-            path: Path to wizard YAML
-            context: Optional existing context
-
-        Returns:
-            Processing context with results
-        """
-        wizard_def = self.load_yaml(path)
-        return self.run_wizard(wizard_def, context)
+    async def run_wizard_from_file(self, _path: object, _context: object | None = None) -> None:
+        """Forbidden: WizardEngine must not read files directly."""
+        raise WizardError("WizardEngine.run_wizard_from_file is forbidden; use WizardService")

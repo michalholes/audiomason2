@@ -1,4 +1,7 @@
-"""WizardService: CRUD and validation for wizards outside the repository."""
+"""WizardService: CRUD and validation for wizard definitions.
+
+All filesystem operations MUST go through the file_io capability (FileService).
+"""
 
 from __future__ import annotations
 
@@ -6,74 +9,67 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import yaml
+from plugins.file_io.service.service import FileService
+from plugins.file_io.service.types import RootName
 
+from audiomason.core.config import ConfigResolver
 from audiomason.core.errors import ConfigError
 
-
-def _default_wizards_dir() -> Path:
-    return Path.home() / ".config/audiomason/wizards"
+_DEFINITIONS_DIR = "definitions"
 
 
 @dataclass(frozen=True)
 class WizardInfo:
     name: str
-    path: Path
 
 
 class WizardService:
-    """Manage wizard YAML definitions stored in the user config area.
+    """Manage wizard YAML definitions stored under the file_io `wizards` root.
 
-    Wizards may also be shipped as built-in, read-only definitions under the repository
-    wizards/ directory.
+    Wizard definitions are stored under: <wizards_root>/definitions/<name>.yaml
     """
 
-    def __init__(self, wizards_dir: Path | None = None, builtin_dir: Path | None = None) -> None:
-        self._dir = wizards_dir or _default_wizards_dir()
-        repo_root = Path(__file__).resolve().parents[3]
-        self._builtin_dir = builtin_dir or (repo_root / "wizards")
+    def __init__(self, file_service: FileService | None = None) -> None:
+        if file_service is not None:
+            self._fs = file_service
+        else:
+            resolver = ConfigResolver()
+            self._fs = FileService.from_resolver(resolver)
 
-    @property
-    def builtin_dir(self) -> Path:
-        return self._builtin_dir
+        # Ensure the definitions directory exists.
+        if not self._fs.exists(RootName.WIZARDS, _DEFINITIONS_DIR):
+            self._fs.mkdir(RootName.WIZARDS, _DEFINITIONS_DIR, parents=True, exist_ok=True)
 
     @property
     def wizards_dir(self) -> Path:
-        return self._dir
+        return self._fs.root_dir(RootName.WIZARDS)
 
     def list_wizards(self) -> list[WizardInfo]:
-        self._dir.mkdir(parents=True, exist_ok=True)
-
-        # User-defined (override-capable)
-        user: dict[str, Path] = {}
-        for p in sorted(self._dir.glob("*.yaml")):
-            if p.is_file():
-                user[p.stem] = p
-
-        # Built-in (read-only)
-        builtin: dict[str, Path] = {}
-        if self._builtin_dir.exists():
-            for p in sorted(self._builtin_dir.glob("*.yaml")):
-                if p.is_file():
-                    builtin[p.stem] = p
-
-        merged: dict[str, Path] = {**builtin, **user}  # user overrides builtin
-        infos: list[WizardInfo] = []
-        for name in sorted(merged.keys()):
-            infos.append(WizardInfo(name=name, path=merged[name]))
-        return infos
-
-    def get_wizard_path(self, name: str) -> Path:
-        user_path = self._wizard_path(name)
-        if user_path.exists():
-            return user_path
-        builtin_path = self._builtin_dir / f"{user_path.stem}.yaml"
-        if builtin_path.exists():
-            return builtin_path
-        raise ConfigError(f"Wizard not found: {name}")
+        entries = self._fs.list_dir(RootName.WIZARDS, _DEFINITIONS_DIR, recursive=False)
+        names: list[str] = []
+        for e in entries:
+            if e.is_dir:
+                continue
+            if not e.rel_path.startswith(f"{_DEFINITIONS_DIR}/"):
+                continue
+            filename = e.rel_path.split("/", 1)[1]
+            if "/" in filename:
+                # Only accept direct children of definitions/
+                continue
+            if not filename.endswith(".yaml"):
+                continue
+            stem = filename[: -len(".yaml")]
+            if stem:
+                names.append(stem)
+        names.sort()
+        return [WizardInfo(name=n) for n in names]
 
     def get_wizard_text(self, name: str) -> str:
-        p = self.get_wizard_path(name)
-        return p.read_text(encoding="utf-8")
+        rel = self._wizard_rel_path(name)
+        if not self._fs.exists(RootName.WIZARDS, rel):
+            raise ConfigError(f"Wizard not found: {name}")
+        with self._fs.open_read(RootName.WIZARDS, rel) as f:
+            return f.read().decode("utf-8")
 
     def put_wizard_text(self, name: str, yaml_text: str) -> None:
         # Validate basic YAML structure.
@@ -86,23 +82,29 @@ class WizardService:
         if not isinstance(obj, dict):
             raise ConfigError("Wizard YAML must be a mapping")
 
-        p = self._wizard_path(name)
-        p.parent.mkdir(parents=True, exist_ok=True)
         # Store as provided to preserve user formatting, but enforce ASCII.
         try:
             yaml_text.encode("ascii")
         except UnicodeEncodeError as e:
             raise ConfigError("Wizard YAML must be ASCII-only") from e
-        p.write_text(yaml_text, encoding="utf-8")
+
+        rel = self._wizard_rel_path(name)
+        with self._fs.open_write(
+            RootName.WIZARDS,
+            rel,
+            overwrite=True,
+            mkdir_parents=True,
+        ) as f:
+            f.write(yaml_text.encode("utf-8"))
 
     def delete_wizard(self, name: str) -> None:
-        p = self._wizard_path(name)
-        if not p.exists():
+        rel = self._wizard_rel_path(name)
+        if not self._fs.exists(RootName.WIZARDS, rel):
             raise ConfigError(f"Wizard not found: {name}")
-        p.unlink()
+        self._fs.delete_file(RootName.WIZARDS, rel)
 
-    def _wizard_path(self, name: str) -> Path:
+    def _wizard_rel_path(self, name: str) -> str:
         safe = "".join(ch if (ch.isalnum() or ch in "_-") else "_" for ch in name)
         if not safe:
             raise ConfigError("Invalid wizard name")
-        return self._dir / f"{safe}.yaml"
+        return f"{_DEFINITIONS_DIR}/{safe}.yaml"

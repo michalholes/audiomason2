@@ -9,3 +9,10 @@ This file lists notable changes in AudioMason2, grouped by issue.
 - 2026-02-09T00:00:11+01:00 Added specification versioning (start at 1.0.0; bump patch version on each change).
 - 2026-02-09T00:00:11+01:00 Added mandatory change log rules: every patch must update `docs/changes.md` and each change entry must start with a patch creation timestamp.
 - 2026-02-09T00:00:11+01:00 Added pytest coverage for the `wizards` root jail behavior.
+
+## Issue 202
+
+- 2026-02-09T01:09:46+01:00 WizardService now stores wizard definitions under the file_io `wizards` root in `definitions/<name>.yaml`.
+- 2026-02-09T01:09:46+01:00 WizardEngine is async-only; removed nested asyncio.run during async plugin calls.
+- 2026-02-09T01:09:46+01:00 Orchestrator and CLI now resolve wizard definitions via WizardService (file_io) instead of direct filesystem reads.
+- 2026-02-09T01:09:46+01:00 Added test coverage for wizard execution via WizardService-backed storage.

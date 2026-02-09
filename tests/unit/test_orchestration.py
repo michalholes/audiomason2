@@ -21,20 +21,6 @@ def _write_empty_pipeline(path: Path) -> None:
     )
 
 
-def _write_simple_wizard(path: Path) -> None:
-    path.write_text(
-        """wizard:
-  name: simple
-  steps:
-    - id: name
-      type: input
-      prompt: Name
-      required: true
-""",
-        encoding="utf-8",
-    )
-
-
 class _DummyLoader:
     def get_plugin(self, name: str):  # pragma: no cover
         return None
@@ -72,15 +58,28 @@ def test_orchestrator_start_wizard_succeeds_with_payload(
 ) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
 
-    wizard_path = tmp_path / "wizards" / "simple.yaml"
-    wizard_path.parent.mkdir(parents=True, exist_ok=True)
-    _write_simple_wizard(wizard_path)
+    # Route wizard storage to the test sandbox.
+    monkeypatch.setenv("AUDIOMASON_FILE_IO_ROOTS_WIZARDS_DIR", str(tmp_path / "wizards_root"))
+
+    from audiomason.core.wizard_service import WizardService
+
+    WizardService().put_wizard_text(
+        "w1",
+        """wizard:
+  name: simple
+  steps:
+    - id: name
+      type: input
+      prompt: Name
+      required: true
+""",
+    )
 
     orchestrator = Orchestrator()
     job_id = orchestrator.start_wizard(
         WizardRequest(
             wizard_id="w1",
-            wizard_path=wizard_path,
+            wizard_path=tmp_path / "unused.yaml",
             plugin_loader=_DummyLoader(),
             payload={"name": "Alice"},
         )

@@ -759,13 +759,12 @@ class CLIPlugin:
             infos = svc.list_wizards()
             if not infos:
                 print("  No wizards found!")
-                print(f"  User wizards dir: {svc.wizards_dir}")
-                print(f"  Built-in wizards dir: {svc.builtin_dir}")
+                print(f"  Wizards dir: {svc.wizards_dir}")
                 return
 
             for info in infos:
                 try:
-                    wizard_def = yaml.safe_load(info.path.read_text(encoding="utf-8"))
+                    wizard_def = yaml.safe_load(svc.get_wizard_text(info.name))
                     wizard = wizard_def.get("wizard", {}) if isinstance(wizard_def, dict) else {}
                     name = wizard.get("name", info.name) if isinstance(wizard, dict) else info.name
                     desc = (
@@ -786,7 +785,7 @@ class CLIPlugin:
 
         wizard_name = args[0]
         try:
-            wizard_path = svc.get_wizard_path(wizard_name)
+            wizard_yaml = svc.get_wizard_text(wizard_name)
         except Exception as e:
             self._error(str(e))
             infos = svc.list_wizards()
@@ -804,7 +803,6 @@ class CLIPlugin:
         loader = PluginLoader(builtin_plugins_dir=plugins_dir, registry=reg)
 
         # Collect input payload in UI phase (interactive).
-        wizard_yaml = wizard_path.read_text(encoding="utf-8")
         wizard_obj = yaml.safe_load(wizard_yaml)
         wiz = wizard_obj.get("wizard") if isinstance(wizard_obj, dict) else None
         steps = wiz.get("steps") if isinstance(wiz, dict) else None
@@ -900,7 +898,7 @@ class CLIPlugin:
             JobType.WIZARD,
             meta={
                 "wizard_id": wizard_name,
-                "wizard_path": str(wizard_path),
+                "wizard_path": wizard_name,
                 "payload_json": json.dumps(
                     payload, ensure_ascii=True, separators=(",", ":"), sort_keys=True
                 ),

@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.1
+Specification Version: 1.0.2
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -328,6 +328,13 @@ Debug/trace support:
 - All wizard access goes through **WizardService API**.
 - UI must not manipulate wizard files directly.
 
+Wizard storage rules:
+
+- All wizard definitions are stored under the file_io root `wizards`.
+- WizardService MUST store definitions under: `definitions/<name>.yaml`.
+- No component may read/write wizard YAML definitions using direct filesystem calls
+  (no pathlib, no open()); all CRUD must go through the file_io capability.
+
 ---
 
 ### 8.2 Wizard Execution
@@ -335,6 +342,18 @@ Debug/trace support:
 - Wizard execution produces jobs.
 - Wizard UI interaction happens only in PHASE 1.
 - Processing follows standard pipeline rules.
+
+Async execution rule:
+
+- WizardEngine is async-only.
+- It is a BUG for wizard execution to call async plugin methods through sync wrappers
+  (e.g., nested `asyncio.run` within an existing event loop). Such violations MUST be
+  made explicit by failing fast.
+
+Async execution rules:
+
+- Wizard execution MUST be async-safe (no nested event loops, no asyncio.run() inside
+  a running loop).
 
 ---
 

@@ -16,6 +16,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from audiomason.checkpoint import CheckpointManager
 from audiomason.core.context import ProcessingContext
 from audiomason.core.jobs.api import JobService
@@ -288,11 +290,20 @@ class Orchestrator:
 
             raise RuntimeError(f"missing wizard input for step: {step_id or key}")
 
+        from audiomason.core.wizard_service import WizardService
+
         engine = WizardEngine(loader=request.plugin_loader, verbosity=request.verbosity)
         engine.set_input_handler(_payload_input)
 
-        wizard_def = engine.load_yaml(request.wizard_path)
-        engine.run_wizard(wizard_def)
+        # Wizard definitions are resolved strictly through WizardService (file_io).
+        svc = WizardService()
+        text = svc.get_wizard_text(request.wizard_id)
+        try:
+            wizard_def = yaml.safe_load(text)
+        except Exception as e:
+            raise RuntimeError(f"invalid wizard yaml: {e}") from e
+
+        await engine.run_wizard(wizard_def)
 
         job = self._jobs.get_job(job_id)
         job.progress = 1.0
