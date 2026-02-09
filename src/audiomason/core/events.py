@@ -22,8 +22,11 @@ class EventBus:
         bus = EventBus()
 
         # Subscribe
+        from audiomason.core.logging import get_logger
+        log = get_logger("example")
+
         def on_file_processed(data):
-            print(f"File processed: {data['path']}")
+            log.info(f"File processed: {data['path']}")
 
         bus.subscribe("file_processed", on_file_processed)
 
