@@ -147,7 +147,15 @@ class Policy:
     gates_skip_ruff: bool = False
     gates_skip_pytest: bool = False
     gates_skip_mypy: bool = False
-    gates_order: list[str] = field(default_factory=lambda: ["compile", "ruff", "pytest", "mypy"])
+    gates_skip_docs: bool = False
+    gate_docs_include: list[str] = field(default_factory=lambda: ["src", "plugins"])
+    gate_docs_exclude: list[str] = field(default_factory=lambda: ["badguys", "patches"])
+    gate_docs_required_files: list[str] = field(
+        default_factory=lambda: ["docs/changes.md", "docs/specification.md"]
+    )
+    gates_order: list[str] = field(
+        default_factory=lambda: ["compile", "ruff", "pytest", "mypy", "docs"]
+    )
 
     # NEW: extra runner-only gate: badguys (default auto)
     # - auto: run only when patch touches runner files

@@ -404,6 +404,7 @@ def main(argv: list[str]) -> int:
             "gates_skip_ruff": cli.skip_ruff,
             "gates_skip_pytest": cli.skip_pytest,
             "gates_skip_mypy": cli.skip_mypy,
+            "gates_skip_docs": getattr(cli, "skip_docs", None),
             "gates_order": (
                 []
                 if (
@@ -412,6 +413,26 @@ def main(argv: list[str]) -> int:
                 )
                 else ([s.strip().lower() for s in str(cli.gates_order).split(",") if s.strip()])
                 if getattr(cli, "gates_order", None) is not None
+                else None
+            ),
+            "gate_docs_include": (
+                []
+                if (
+                    getattr(cli, "docs_include", None) is not None
+                    and str(cli.docs_include).strip() == ""
+                )
+                else ([s.strip() for s in str(cli.docs_include).split(",") if s.strip()])
+                if getattr(cli, "docs_include", None) is not None
+                else None
+            ),
+            "gate_docs_exclude": (
+                []
+                if (
+                    getattr(cli, "docs_exclude", None) is not None
+                    and str(cli.docs_exclude).strip() == ""
+                )
+                else ([s.strip() for s in str(cli.docs_exclude).split(",") if s.strip()])
+                if getattr(cli, "docs_exclude", None) is not None
                 else None
             ),
             "ruff_autofix_legalize_outside": getattr(cli, "ruff_autofix_legalize_outside", None),
@@ -724,6 +745,10 @@ def main(argv: list[str]) -> int:
                 skip_ruff=policy.gates_skip_ruff,
                 skip_pytest=policy.gates_skip_pytest,
                 skip_mypy=policy.gates_skip_mypy,
+                skip_docs=policy.gates_skip_docs,
+                docs_include=policy.gate_docs_include,
+                docs_exclude=policy.gate_docs_exclude,
+                docs_required_files=policy.gate_docs_required_files,
                 ruff_format=policy.ruff_format,
                 ruff_autofix=policy.ruff_autofix,
                 ruff_targets=policy.ruff_targets,
@@ -731,6 +756,7 @@ def main(argv: list[str]) -> int:
                 mypy_targets=policy.mypy_targets,
                 gates_order=policy.gates_order,
                 pytest_use_venv=policy.pytest_use_venv,
+                decision_paths=decision_paths_ws,
                 progress=_gate_progress,
             )
 
@@ -774,6 +800,10 @@ def main(argv: list[str]) -> int:
                 skip_ruff=policy.gates_skip_ruff,
                 skip_pytest=policy.gates_skip_pytest,
                 skip_mypy=policy.gates_skip_mypy,
+                skip_docs=policy.gates_skip_docs,
+                docs_include=policy.gate_docs_include,
+                docs_exclude=policy.gate_docs_exclude,
+                docs_required_files=policy.gate_docs_required_files,
                 ruff_format=policy.ruff_format,
                 ruff_autofix=policy.ruff_autofix,
                 ruff_targets=policy.ruff_targets,
@@ -781,6 +811,7 @@ def main(argv: list[str]) -> int:
                 mypy_targets=policy.mypy_targets,
                 gates_order=policy.gates_order,
                 pytest_use_venv=policy.pytest_use_venv,
+                decision_paths=decision_paths_live,
                 progress=_gate_progress,
             )
 
@@ -855,6 +886,10 @@ def main(argv: list[str]) -> int:
                 skip_ruff=policy.gates_skip_ruff,
                 skip_pytest=policy.gates_skip_pytest,
                 skip_mypy=policy.gates_skip_mypy,
+                skip_docs=policy.gates_skip_docs,
+                docs_include=policy.gate_docs_include,
+                docs_exclude=policy.gate_docs_exclude,
+                docs_required_files=policy.gate_docs_required_files,
                 ruff_format=policy.ruff_format,
                 ruff_autofix=policy.ruff_autofix,
                 ruff_targets=policy.ruff_targets,
@@ -862,6 +897,7 @@ def main(argv: list[str]) -> int:
                 mypy_targets=policy.mypy_targets,
                 gates_order=policy.gates_order,
                 pytest_use_venv=policy.pytest_use_venv,
+                decision_paths=decision_paths_finalize,
                 progress=_gate_progress,
             )
 
@@ -1203,6 +1239,10 @@ def main(argv: list[str]) -> int:
             skip_ruff=policy.gates_skip_ruff,
             skip_pytest=policy.gates_skip_pytest,
             skip_mypy=policy.gates_skip_mypy,
+            skip_docs=policy.gates_skip_docs,
+            docs_include=policy.gate_docs_include,
+            docs_exclude=policy.gate_docs_exclude,
+            docs_required_files=policy.gate_docs_required_files,
             ruff_format=policy.ruff_format,
             ruff_autofix=policy.ruff_autofix,
             ruff_targets=policy.ruff_targets,
@@ -1210,6 +1250,7 @@ def main(argv: list[str]) -> int:
             mypy_targets=policy.mypy_targets,
             gates_order=policy.gates_order,
             pytest_use_venv=policy.pytest_use_venv,
+            decision_paths=touched,
             progress=_gate_progress,
         )
 

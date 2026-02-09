@@ -96,6 +96,9 @@ class CliArgs:
     skip_ruff: bool | None
     skip_pytest: bool | None
     skip_mypy: bool | None
+    skip_docs: bool | None
+    docs_include: str | None
+    docs_exclude: str | None
     gates_order: str | None
     ruff_autofix_legalize_outside: bool | None
     post_success_audit: bool | None
@@ -227,9 +230,22 @@ GATES / EXECUTION
       Skip mypy gate.
       [default: OFF]
 
+  --skip-docs
+      Skip docs gate (documentation obligation).
+      [default: OFF]
+
+  --docs-include CSV
+      Docs gate watched path prefixes (CSV). Gate triggers when changes touch any include prefix.
+      [default: src,plugins]
+
+  --docs-exclude CSV
+      Docs gate ignore path prefixes (CSV). Excluded paths do not trigger the gate.
+      [default: badguys,patches]
+
   --gates-order CSV
-      Gate execution order/selection as CSV (ruff,pytest,mypy). Empty means run no gates.
-      [default: ruff,pytest,mypy]
+      Gate execution order/selection as CSV (compile,ruff,pytest,mypy,docs).
+      Empty means run no gates.
+      [default: compile,ruff,pytest,mypy,docs]
 
   --gate-badguys-runner {{auto, on, off}}
       Runner-only extra gate: run badguys/badguys.py -q and require exit code 0.
@@ -679,6 +695,9 @@ def parse_args(argv: list[str]) -> CliArgs:
     p.add_argument("--skip-ruff", dest="skip_ruff", action="store_true", default=None)
     p.add_argument("--skip-pytest", dest="skip_pytest", action="store_true", default=None)
     p.add_argument("--skip-mypy", dest="skip_mypy", action="store_true", default=None)
+    p.add_argument("--skip-docs", dest="skip_docs", action="store_true", default=None)
+    p.add_argument("--docs-include", dest="docs_include", nargs="?", const="", default=None)
+    p.add_argument("--docs-exclude", dest="docs_exclude", nargs="?", const="", default=None)
     p.add_argument("--gates-order", dest="gates_order", nargs="?", const="", default=None)
 
     p.add_argument(
@@ -828,6 +847,9 @@ def parse_args(argv: list[str]) -> CliArgs:
             skip_ruff=ns.skip_ruff,
             skip_pytest=ns.skip_pytest,
             skip_mypy=ns.skip_mypy,
+            skip_docs=getattr(ns, "skip_docs", None),
+            docs_include=getattr(ns, "docs_include", None),
+            docs_exclude=getattr(ns, "docs_exclude", None),
             gates_order=ns.gates_order,
             ruff_autofix_legalize_outside=ns.ruff_autofix_legalize_outside,
             load_latest_patch=ns.load_latest_patch,
@@ -906,6 +928,9 @@ def parse_args(argv: list[str]) -> CliArgs:
         skip_ruff=ns.skip_ruff,
         skip_pytest=ns.skip_pytest,
         skip_mypy=ns.skip_mypy,
+        skip_docs=getattr(ns, "skip_docs", None),
+        docs_include=getattr(ns, "docs_include", None),
+        docs_exclude=getattr(ns, "docs_exclude", None),
         gates_order=ns.gates_order,
         ruff_autofix_legalize_outside=ns.ruff_autofix_legalize_outside,
         load_latest_patch=ns.load_latest_patch,

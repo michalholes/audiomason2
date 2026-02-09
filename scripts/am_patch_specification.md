@@ -284,6 +284,7 @@ Semantics:
   2) Ruff
   3) Pytest
   4) Mypy
+  5) Docs (documentation obligation)
 - Individual gates may be configured on/off.
 
 
@@ -342,6 +343,24 @@ This behavior is **uniform** across:
 - finalizeworkspace
 
 ---
+
+
+### 6.1.3 Docs gate (documentation obligation)
+- Purpose: enforce that documentation is updated when watched code areas change.
+- Trigger: the gate is evaluated only if at least one changed path matches `gate_docs_include`
+  and does not match `gate_docs_exclude` (directory-prefix match with boundary).
+- If triggered, the gate requires that all files listed in `gate_docs_required_files` are also
+  present in the changed paths set for this run.
+- Controls (precedence: CLI > config > defaults):
+  - `gates_skip_docs = true|false` (default: false)
+  - `gate_docs_include = ["src", "plugins"]` (default)
+  - `gate_docs_exclude = ["badguys", "patches"]` (default)
+  - `gate_docs_required_files = ["docs/changes.md", "docs/specification.md"]` (default)
+- CLI (optional convenience flags; equivalent overrides are also supported):
+  - `--skip-docs`
+  - `--docs-include CSV`
+  - `--docs-exclude CSV`
+- Failure behavior: treated the same as other gates (subject to `-g/--allow-gates-fail`).
 
 ## 7. Promotion Rules
 

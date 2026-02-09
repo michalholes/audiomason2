@@ -65,9 +65,9 @@ allow_no_op = false
 # Legacy alias (runner maps order -> gates_order)
 # order = []
 # order = ["pytest"]
-order = ["compile", "ruff", "pytest", "mypy"]
+order = ["compile", "ruff", "pytest", "mypy", "docs"]
 # Canonical (supported by runner; missing in your file)
-gates_order = ["compile", "ruff", "pytest", "mypy"]
+gates_order = ["compile", "ruff", "pytest", "mypy", "docs"]
 
 # Canonical (supported by runner; missing in your file)
 run_all_tests = true
@@ -92,6 +92,12 @@ gates_skip_ruff = false
 # Canonical (supported by runner; missing in your file)
 gates_skip_pytest = false
 gates_skip_mypy = false
+
+# Documentation gate (docs) - required updates when watched paths change
+gates_skip_docs = false
+gate_docs_include = ["src", "plugins"]
+gate_docs_exclude = ["badguys", "patches"]
+gate_docs_required_files = ["docs/changes.md", "docs/specification.md"]
 
 gate_badguys_runner = "auto"
 gate_badguys_command = ["badguys/badguys.py", "-q", "--exclude=test_900_commit_push_timestamp"]

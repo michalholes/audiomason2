@@ -57,6 +57,74 @@ def _compile_exclude_regex(exclude: list[str]) -> str | None:
     return rf"(^|/)({parts})(/|$)"
 
 
+def _norm_rel_path(p: str) -> str:
+    s = str(p).strip().replace("\\", "/")
+    if s.startswith("./"):
+        s = s[2:]
+    s = s.strip("/")
+    return s
+
+
+def _norm_rel_paths(paths: list[str]) -> list[str]:
+    out: list[str] = []
+    for p in paths:
+        s = _norm_rel_path(p)
+        if s and s not in out:
+            out.append(s)
+    return out
+
+
+def _path_has_prefix(path: str, prefix: str) -> bool:
+    # Directory-prefix match with boundary (src matches src/a.py but not src2/a.py).
+    if not prefix:
+        return False
+    if path == prefix:
+        return True
+    return path.startswith(prefix + "/")
+
+
+def _docs_gate_is_watched(
+    decision_paths: list[str],
+    *,
+    include: list[str],
+    exclude: list[str],
+) -> tuple[bool, str | None]:
+    inc = _norm_rel_paths(include)
+    exc = _norm_rel_paths(exclude)
+    paths = _norm_rel_paths(decision_paths)
+
+    for p in paths:
+        if any(_path_has_prefix(p, x) for x in exc):
+            continue
+        if any(_path_has_prefix(p, i) for i in inc):
+            return True, p
+    return False, None
+
+
+def check_docs_gate(
+    decision_paths: list[str],
+    *,
+    include: list[str],
+    exclude: list[str],
+    required_files: list[str],
+) -> tuple[bool, list[str], str | None]:
+    """Return (ok, missing_required, trigger_path).
+
+    The gate triggers only if at least one changed path matches include and does not match exclude.
+    If triggered, all required_files must be present in decision_paths to pass.
+    """
+    triggered, trigger_path = _docs_gate_is_watched(
+        decision_paths, include=include, exclude=exclude
+    )
+    if not triggered:
+        return True, [], None
+
+    paths_set = set(_norm_rel_paths(decision_paths))
+    req = _norm_rel_paths(required_files)
+    missing = [r for r in req if r not in paths_set]
+    return len(missing) == 0, missing, trigger_path
+
+
 def _select_python_for_gate(
     *,
     repo_root: Path,
@@ -222,7 +290,7 @@ def _norm_gate_name(s: str) -> str:
 def _norm_gates_order(order: list[str] | None) -> list[str]:
     if not order:
         return []
-    allowed = {"compile", "ruff", "pytest", "mypy"}
+    allowed = {"compile", "ruff", "pytest", "mypy", "docs"}
     out: list[str] = []
     for item in order:
         name = _norm_gate_name(item)
@@ -244,6 +312,10 @@ def run_gates(
     skip_ruff: bool,
     skip_pytest: bool,
     skip_mypy: bool,
+    skip_docs: bool,
+    docs_include: list[str],
+    docs_exclude: list[str],
+    docs_required_files: list[str],
     ruff_format: bool,
     ruff_autofix: bool,
     ruff_targets: list[str],
@@ -251,6 +323,7 @@ def run_gates(
     mypy_targets: list[str],
     gates_order: list[str] | None,
     pytest_use_venv: bool,
+    decision_paths: list[str],
     progress: Callable[[str], None] | None = None,
 ) -> None:
     failures: list[str] = []
@@ -309,9 +382,29 @@ def run_gates(
                 return True
             return run_mypy(logger, cwd, repo_root=repo_root, targets=mypy_targets)
 
+        if name == "docs":
+            if skip_docs:
+                skipped.append("docs")
+                logger.line("gate_docs=SKIP (skipped_by_user)")
+                return True
+            ok, missing, trigger = check_docs_gate(
+                decision_paths,
+                include=docs_include,
+                exclude=docs_exclude,
+                required_files=docs_required_files,
+            )
+            if ok:
+                logger.line("gate_docs=OK")
+                return True
+            trig = trigger or "unknown"
+            logger.line("gate_docs=FAIL")
+            logger.line("gate_docs_trigger=" + trig)
+            logger.line("gate_docs_missing=" + ",".join(missing))
+            return False
+
         return True
 
-    for gate in ("compile", "ruff", "pytest", "mypy"):
+    for gate in ("compile", "ruff", "pytest", "mypy", "docs"):
         if gate not in order:
             skipped.append(gate)
             logger.line(f"gate_{gate}=SKIP (not in gates_order)")
