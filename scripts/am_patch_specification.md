@@ -281,6 +281,10 @@ Semantics:
 
 ### 6.1 Execution
 - Gates run after the patch is applied (unified or script).
+- If patch apply fails, gates may still run only when explicitly enabled by policy:
+  - gates_on_partial_apply: run gates after partial apply failure (some files applied).
+  - gates_on_zero_apply: run gates after zero apply failure (nothing applied).
+- When gates run after patch apply failure, the run remains FAIL with PATCH_APPLY as the primary reason.
 - Default gate order is:
   1) COMPILE (python bytecode compilation)
   2) Ruff

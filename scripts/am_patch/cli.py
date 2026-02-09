@@ -99,6 +99,8 @@ class CliArgs:
     skip_pytest: bool | None
     skip_mypy: bool | None
     skip_docs: bool | None
+    gates_on_partial_apply: bool | None
+    gates_on_zero_apply: bool | None
     docs_include: str | None
     docs_exclude: str | None
     gates_order: str | None
@@ -235,6 +237,16 @@ GATES / EXECUTION
   --skip-docs
       Skip docs gate (documentation obligation).
       [default: OFF]
+  --gates-on-partial-apply
+      If patch apply fails but at least one file was applied, still run workspace gates.
+      Run remains FAIL with PATCH_APPLY as primary reason.
+      [default: OFF]
+
+  --gates-on-zero-apply
+      If patch apply fails and no files were applied, still run workspace gates.
+      Run remains FAIL with PATCH_APPLY as primary reason.
+      [default: OFF]
+
 
   --docs-include CSV
       Docs gate watched path prefixes (CSV). Gate triggers when changes touch any include prefix.
@@ -714,6 +726,19 @@ def parse_args(argv: list[str]) -> CliArgs:
     p.add_argument("--skip-pytest", dest="skip_pytest", action="store_true", default=None)
     p.add_argument("--skip-mypy", dest="skip_mypy", action="store_true", default=None)
     p.add_argument("--skip-docs", dest="skip_docs", action="store_true", default=None)
+
+    p.add_argument(
+        "--gates-on-partial-apply",
+        dest="gates_on_partial_apply",
+        action="store_true",
+        default=None,
+    )
+    p.add_argument(
+        "--gates-on-zero-apply",
+        dest="gates_on_zero_apply",
+        action="store_true",
+        default=None,
+    )
     p.add_argument("--docs-include", dest="docs_include", nargs="?", const="", default=None)
     p.add_argument("--docs-exclude", dest="docs_exclude", nargs="?", const="", default=None)
     p.add_argument("--gates-order", dest="gates_order", nargs="?", const="", default=None)
@@ -867,6 +892,8 @@ def parse_args(argv: list[str]) -> CliArgs:
             skip_pytest=ns.skip_pytest,
             skip_mypy=ns.skip_mypy,
             skip_docs=getattr(ns, "skip_docs", None),
+            gates_on_partial_apply=getattr(ns, "gates_on_partial_apply", None),
+            gates_on_zero_apply=getattr(ns, "gates_on_zero_apply", None),
             docs_include=getattr(ns, "docs_include", None),
             docs_exclude=getattr(ns, "docs_exclude", None),
             gates_order=ns.gates_order,
@@ -949,6 +976,8 @@ def parse_args(argv: list[str]) -> CliArgs:
         skip_pytest=ns.skip_pytest,
         skip_mypy=ns.skip_mypy,
         skip_docs=getattr(ns, "skip_docs", None),
+        gates_on_partial_apply=getattr(ns, "gates_on_partial_apply", None),
+        gates_on_zero_apply=getattr(ns, "gates_on_zero_apply", None),
         docs_include=getattr(ns, "docs_include", None),
         docs_exclude=getattr(ns, "docs_exclude", None),
         gates_order=ns.gates_order,

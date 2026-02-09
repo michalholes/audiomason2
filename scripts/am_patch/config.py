@@ -154,6 +154,8 @@ class Policy:
     gates_skip_pytest: bool = False
     gates_skip_mypy: bool = False
     gates_skip_docs: bool = False
+    gates_on_partial_apply: bool = False
+    gates_on_zero_apply: bool = False
     gate_docs_include: list[str] = field(default_factory=lambda: ["src", "plugins"])
     gate_docs_exclude: list[str] = field(default_factory=lambda: ["badguys", "patches"])
     gate_docs_required_files: list[str] = field(
@@ -594,6 +596,11 @@ def build_policy(defaults: Policy, cfg: dict[str, Any]) -> Policy:
 
     p.gates_allow_fail = _as_bool(cfg, "gates_allow_fail", p.gates_allow_fail)
     _mark_cfg(p, cfg, "gates_allow_fail")
+    p.gates_on_partial_apply = _as_bool(cfg, "gates_on_partial_apply", p.gates_on_partial_apply)
+    _mark_cfg(p, cfg, "gates_on_partial_apply")
+    p.gates_on_zero_apply = _as_bool(cfg, "gates_on_zero_apply", p.gates_on_zero_apply)
+    _mark_cfg(p, cfg, "gates_on_zero_apply")
+
     p.gates_skip_ruff = _as_bool(cfg, "gates_skip_ruff", p.gates_skip_ruff)
     _mark_cfg(p, cfg, "gates_skip_ruff")
     p.gates_skip_pytest = _as_bool(cfg, "gates_skip_pytest", p.gates_skip_pytest)

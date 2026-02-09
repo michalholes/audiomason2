@@ -407,6 +407,8 @@ def main(argv: list[str]) -> int:
             "gates_skip_pytest": cli.skip_pytest,
             "gates_skip_mypy": cli.skip_mypy,
             "gates_skip_docs": getattr(cli, "skip_docs", None),
+            "gates_on_partial_apply": getattr(cli, "gates_on_partial_apply", None),
+            "gates_on_zero_apply": getattr(cli, "gates_on_zero_apply", None),
             "gates_order": (
                 []
                 if (
@@ -1136,10 +1138,17 @@ def main(argv: list[str]) -> int:
                 patch_applied_successfully = patch_applied_any
 
             else:
-                run_patch(logger, patch_script, workspace_repo=ws.repo, policy=policy)
-                patch_applied_any = True
+                try:
+                    run_patch(logger, patch_script, workspace_repo=ws.repo, policy=policy)
+                    patch_applied_any = True
+                except RunnerError as e:
+                    primary_fail_stage = "PATCH"
+                    primary_fail_reason = e.message
+                    patch_applied_any = False
 
             after = changed_paths(logger, ws.repo)
+            if (not unified_mode) and (primary_fail_stage is not None):
+                patch_applied_any = set(after) != set(before)
             touched: list[str] = []
             try:
                 touched = enforce_scope_delta(
@@ -1222,8 +1231,10 @@ def main(argv: list[str]) -> int:
                 for stg, msg in secondary_failures:
                     logger.line(f"{stg}: {msg}")
 
-            if not patch_applied_any:
-                # Nothing was applied; fail immediately.
+            should_run_gates = (patch_applied_any and policy.gates_on_partial_apply) or (
+                (not patch_applied_any) and policy.gates_on_zero_apply
+            )
+            if not should_run_gates:
                 # Defer rollback until after diagnostics archive is created.
                 rollback_ckpt_for_posthook = ckpt
                 rollback_ws_for_posthook = ws
@@ -1231,8 +1242,9 @@ def main(argv: list[str]) -> int:
                     "PATCH", "PATCH_APPLY", primary_fail_reason or "patch apply failed"
                 )
 
-            # Partial apply: keep going so gates can run for diagnostics, but the run
-            # must still end as FAIL with PATCH_APPLY as the primary reason.
+            # Apply failed but gates were explicitly requested by policy.
+            # Emit exactly one line (screen-visible only at verbose/debug).
+            logger.line("continuing_to_workspace_gates_due_to_patch_apply_failure_policy")
             defer_patch_apply_failure = True
 
         # Gates in workspace (NO rollback)
