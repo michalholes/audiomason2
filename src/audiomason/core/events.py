@@ -10,6 +10,10 @@ from collections import defaultdict
 from collections.abc import Callable
 from typing import Any
 
+from audiomason.core.logging import get_logger
+
+_logger = get_logger(__name__)
+
 
 class EventBus:
     """Simple event bus for plugin communication.
@@ -65,7 +69,7 @@ class EventBus:
             except Exception as e:
                 # Log error but don't crash
                 # TODO: Use proper logging
-                print(f"Error in event handler for '{event}': {e}")
+                _logger.error(f"Error in event handler for '{event}': {e}")
 
     async def publish_async(self, event: str, data: dict[str, Any] | None = None) -> None:
         """Publish an event asynchronously.

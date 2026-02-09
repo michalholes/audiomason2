@@ -21,7 +21,9 @@ Usage:
 
 from __future__ import annotations
 
+import contextlib
 import sys
+from collections.abc import Callable
 from enum import IntEnum
 from pathlib import Path
 
@@ -43,6 +45,9 @@ _LOG_FILE: Path | None = None
 
 # Color support
 _USE_COLORS: bool = True
+
+# Optional log sink for job-aware routing (Phase 1)
+_LOG_SINK: Callable[[str], None] | None = None
 
 
 def set_verbosity(level: int | VerbosityLevel) -> None:
@@ -91,6 +96,24 @@ def set_colors(enabled: bool) -> None:
     """
     global _USE_COLORS
     _USE_COLORS = enabled
+
+
+def set_log_sink(sink: Callable[[str], None] | None) -> None:
+    """Set a global log sink callback.
+
+    When set, every log line emitted via core logging is forwarded to the sink
+    as plain text. When None, logging behaves as before.
+
+    Args:
+        sink: Callback receiving a single log line, or None to disable.
+    """
+    global _LOG_SINK
+    _LOG_SINK = sink
+
+
+def get_log_sink() -> Callable[[str], None] | None:
+    """Get the current global log sink callback (if any)."""
+    return _LOG_SINK
 
 
 class AudioMasonLogger:
@@ -156,6 +179,11 @@ class AudioMasonLogger:
 
         formatted = self._format_message(level_name, message)
 
+        plain = f"[{level_name.lower()}] {message}"
+        if _LOG_SINK is not None:
+            with contextlib.suppress(Exception):
+                _LOG_SINK(plain)
+
         # Console output
         print(formatted, file=sys.stderr if level_name == "ERROR" else sys.stdout)
 
@@ -209,6 +237,12 @@ class AudioMasonLogger:
         """
         # Errors are shown even in QUIET mode
         formatted = self._format_message("ERROR", message)
+
+        plain = f"[error] {message}"
+        if _LOG_SINK is not None:
+            with contextlib.suppress(Exception):
+                _LOG_SINK(plain)
+
         print(formatted, file=sys.stderr)
 
         # File output

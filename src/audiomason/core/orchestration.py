@@ -22,6 +22,7 @@ from audiomason.checkpoint import CheckpointManager
 from audiomason.core.context import ProcessingContext
 from audiomason.core.jobs.api import JobService
 from audiomason.core.jobs.model import Job, JobState, JobType
+from audiomason.core.logging import get_log_sink, set_log_sink
 from audiomason.core.orchestration_models import ProcessRequest, WizardRequest
 from audiomason.core.phase import PhaseContractError, PhaseGuard
 from audiomason.core.pipeline import PipelineExecutor
@@ -198,23 +199,28 @@ class Orchestrator:
         return self._jobs.read_log(job_id, offset=offset, limit_bytes=limit_bytes)
 
     async def _run_process_job(self, job_id: str, request: ProcessRequest) -> None:
-        with PhaseGuard.processing():
-            try:
-                await self._run_process_job_impl(job_id, request)
-            except PhaseContractError as e:
-                job = self._jobs.get_job(job_id)
-                job.transition(JobState.FAILED)
-                job.error = str(e)
-                job.finished_at = _utcnow_iso()
-                self._jobs.store.save_job(job)
-                self._jobs.append_log_line(job_id, f"failed: {e}")
-            except Exception as e:
-                job = self._jobs.get_job(job_id)
-                job.transition(JobState.FAILED)
-                job.error = str(e)
-                job.finished_at = _utcnow_iso()
-                self._jobs.store.save_job(job)
-                self._jobs.append_log_line(job_id, f"failed: {e}")
+        prev_sink = get_log_sink()
+        set_log_sink(lambda line: self._jobs.append_log_line(job_id, line))
+        try:
+            with PhaseGuard.processing():
+                try:
+                    await self._run_process_job_impl(job_id, request)
+                except PhaseContractError as e:
+                    job = self._jobs.get_job(job_id)
+                    job.transition(JobState.FAILED)
+                    job.error = str(e)
+                    job.finished_at = _utcnow_iso()
+                    self._jobs.store.save_job(job)
+                    self._jobs.append_log_line(job_id, f"failed: {e}")
+                except Exception as e:
+                    job = self._jobs.get_job(job_id)
+                    job.transition(JobState.FAILED)
+                    job.error = str(e)
+                    job.finished_at = _utcnow_iso()
+                    self._jobs.store.save_job(job)
+                    self._jobs.append_log_line(job_id, f"failed: {e}")
+        finally:
+            set_log_sink(prev_sink)
 
     async def _run_process_job_impl(self, job_id: str, request: ProcessRequest) -> None:
         contexts = request.contexts
@@ -247,32 +253,40 @@ class Orchestrator:
         self._jobs.append_log_line(job_id, "succeeded")
 
     async def _run_wizard_job(self, job_id: str, request: WizardRequest) -> None:
-        with PhaseGuard.processing():
-            try:
-                await self._run_wizard_job_impl(job_id, request)
-            except PhaseContractError as e:
-                ck = CheckpointManager()
+        prev_sink = get_log_sink()
+        set_log_sink(lambda line: self._jobs.append_log_line(job_id, line))
+        try:
+            with PhaseGuard.processing():
                 try:
-                    p = ck.save_job_failure_checkpoint(
-                        job_id, kind="wizard", error=str(e), meta=self._jobs.get_job(job_id).meta
-                    )
-                    self._jobs.append_log_line(job_id, f"checkpoint saved: {p}")
-                except Exception as ck_e:
-                    self._jobs.append_log_line(job_id, f"checkpoint save failed: {ck_e}")
+                    await self._run_wizard_job_impl(job_id, request)
+                except PhaseContractError as e:
+                    ck = CheckpointManager()
+                    try:
+                        p = ck.save_job_failure_checkpoint(
+                            job_id,
+                            kind="wizard",
+                            error=str(e),
+                            meta=self._jobs.get_job(job_id).meta,
+                        )
+                        self._jobs.append_log_line(job_id, f"checkpoint saved: {p}")
+                    except Exception as ck_e:
+                        self._jobs.append_log_line(job_id, f"checkpoint save failed: {ck_e}")
 
-                job = self._jobs.get_job(job_id)
-                job.transition(JobState.FAILED)
-                job.error = str(e)
-                job.finished_at = _utcnow_iso()
-                self._jobs.store.save_job(job)
-                self._jobs.append_log_line(job_id, f"failed: {e}")
-            except Exception as e:
-                job = self._jobs.get_job(job_id)
-                job.transition(JobState.FAILED)
-                job.error = str(e)
-                job.finished_at = _utcnow_iso()
-                self._jobs.store.save_job(job)
-                self._jobs.append_log_line(job_id, f"failed: {e}")
+                    job = self._jobs.get_job(job_id)
+                    job.transition(JobState.FAILED)
+                    job.error = str(e)
+                    job.finished_at = _utcnow_iso()
+                    self._jobs.store.save_job(job)
+                    self._jobs.append_log_line(job_id, f"failed: {e}")
+                except Exception as e:
+                    job = self._jobs.get_job(job_id)
+                    job.transition(JobState.FAILED)
+                    job.error = str(e)
+                    job.finished_at = _utcnow_iso()
+                    self._jobs.store.save_job(job)
+                    self._jobs.append_log_line(job_id, f"failed: {e}")
+        finally:
+            set_log_sink(prev_sink)
 
     async def _run_wizard_job_impl(self, job_id: str, request: WizardRequest) -> None:
         self._jobs.append_log_line(job_id, f"wizard: {request.wizard_id}")

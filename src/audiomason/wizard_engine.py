@@ -14,16 +14,8 @@ from typing import Any
 
 from audiomason.core import PluginLoader, ProcessingContext, State
 from audiomason.core.errors import AudioMasonError
+from audiomason.core.logging import VerbosityLevel, get_logger
 from audiomason.core.phase import PhaseContractError
-
-
-class VerbosityLevel:
-    """Verbosity levels."""
-
-    QUIET = 0  # Errors only
-    NORMAL = 1  # Progress + warnings
-    VERBOSE = 2  # Detailed info
-    DEBUG = 3  # Everything
 
 
 class WizardError(AudioMasonError):
@@ -61,25 +53,26 @@ class WizardEngine:
         self.context: ProcessingContext | None = None
         self.user_input_handler: Callable | None = None
         self.progress_callback: Callable | None = None
+        self._log = get_logger(__name__)
 
     def _debug(self, msg: str) -> None:
         """Log debug message."""
         if self.verbosity >= VerbosityLevel.DEBUG:
-            print(f"[DEBUG] {msg}")
+            self._log.debug(msg)
 
     def _verbose(self, msg: str) -> None:
         """Log verbose message."""
         if self.verbosity >= VerbosityLevel.VERBOSE:
-            print(f"[VERBOSE] {msg}")
+            self._log.info(msg)
 
     def _info(self, msg: str) -> None:
         """Log info message."""
         if self.verbosity >= VerbosityLevel.NORMAL:
-            print(msg)
+            self._log.info(msg)
 
     def _error(self, msg: str) -> None:
         """Log error message (always shown)."""
-        print(f"[ERROR] {msg}")
+        self._log.error(msg)
 
     def set_input_handler(self, handler: Callable[[str, dict], str]) -> None:
         """Set custom input handler for interactive steps.
