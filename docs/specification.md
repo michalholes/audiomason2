@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.8
+Specification Version: 1.0.9
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -201,6 +201,32 @@ Configuration priority is fixed and mandatory:
 5. Defaults  
 
 The source of each resolved value must be traceable in debug mode.
+
+---
+
+
+### 6.3 Canonical Logging Verbosity
+
+Canonical key:
+- `logging.level`
+
+Allowed values (after normalization):
+- `quiet`
+- `normal`
+- `verbose`
+- `debug`
+
+Normalization rules:
+- value must be a string
+- trim whitespace
+- lowercase
+- empty string is invalid
+
+Default semantics:
+- If no source provides `logging.level`, resolver returns `normal`.
+
+Failure semantics:
+- Resolver raises ConfigError if value is non-string, empty/whitespace, or not in the allowed set.
 
 ---
 

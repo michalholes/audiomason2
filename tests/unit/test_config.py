@@ -116,6 +116,64 @@ logging:
         assert loudnorm is False
         assert source == "default"
 
+    def test_resolve_logging_level_default_is_normal(self, tmp_path):
+        """If logging.level is missing, resolver returns the explicit default."""
+        resolver = ConfigResolver(
+            cli_args={},
+            user_config_path=tmp_path / "nonexistent.yaml",
+            system_config_path=tmp_path / "nonexistent_system.yaml",
+            defaults={},
+        )
+
+        assert resolver.resolve_logging_level() == "normal"
+
+    def test_resolve_logging_level_normalizes(self, tmp_path):
+        """Resolver normalizes whitespace and case."""
+        resolver = ConfigResolver(
+            cli_args={},
+            user_config_path=tmp_path / "nonexistent.yaml",
+            system_config_path=tmp_path / "nonexistent_system.yaml",
+            defaults={"logging": {"level": "  DeBuG  "}},
+        )
+
+        assert resolver.resolve_logging_level() == "debug"
+
+    def test_resolve_logging_level_invalid_string_raises(self, tmp_path):
+        """Unknown verbosity string must raise."""
+        resolver = ConfigResolver(
+            cli_args={},
+            user_config_path=tmp_path / "nonexistent.yaml",
+            system_config_path=tmp_path / "nonexistent_system.yaml",
+            defaults={"logging": {"level": "loud"}},
+        )
+
+        with pytest.raises(ConfigError):
+            resolver.resolve_logging_level()
+
+    def test_resolve_logging_level_non_string_raises(self, tmp_path):
+        """Non-string verbosity value must raise."""
+        resolver = ConfigResolver(
+            cli_args={},
+            user_config_path=tmp_path / "nonexistent.yaml",
+            system_config_path=tmp_path / "nonexistent_system.yaml",
+            defaults={"logging": {"level": 123}},
+        )
+
+        with pytest.raises(ConfigError):
+            resolver.resolve_logging_level()
+
+    def test_resolve_logging_level_empty_string_raises(self, tmp_path):
+        """Empty/whitespace verbosity value must raise."""
+        resolver = ConfigResolver(
+            cli_args={},
+            user_config_path=tmp_path / "nonexistent.yaml",
+            system_config_path=tmp_path / "nonexistent_system.yaml",
+            defaults={"logging": {"level": "   "}},
+        )
+
+        with pytest.raises(ConfigError):
+            resolver.resolve_logging_level()
+
     def test_resolve_all(self, tmp_path):
         """Test resolving all keys."""
         resolver = ConfigResolver(

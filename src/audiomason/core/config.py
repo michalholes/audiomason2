@@ -18,6 +18,9 @@ import yaml
 
 from audiomason.core.errors import ConfigError
 
+ALLOWED_LOGGING_LEVELS = frozenset({"quiet", "normal", "verbose", "debug"})
+DEFAULT_LOGGING_LEVEL = "normal"
+
 
 @dataclass
 class ConfigSource:
@@ -102,6 +105,41 @@ class ConfigResolver:
             return value, "default"
 
         raise ConfigError(f"Config key '{key}' not found in any source")
+
+    def resolve_logging_level(self) -> str:
+        """Resolve and validate logging.level.
+
+        Canonical key:
+            logging.level
+
+        Allowed values (after normalization):
+            quiet | normal | verbose | debug
+
+        If the key is not provided by any source, returns DEFAULT_LOGGING_LEVEL.
+
+        Raises:
+            ConfigError: If the resolved value is invalid.
+        """
+        key = "logging.level"
+        try:
+            value, _source = self.resolve(key)
+        except ConfigError as e:
+            if "not found in any source" in str(e):
+                return DEFAULT_LOGGING_LEVEL
+            raise
+
+        if not isinstance(value, str):
+            raise ConfigError(f"Config key '{key}' must be a string, got {type(value).__name__}")
+
+        norm = value.strip().lower()
+        if norm == "":
+            raise ConfigError(f"Config key '{key}' must not be empty")
+
+        if norm not in ALLOWED_LOGGING_LEVELS:
+            allowed = ", ".join(sorted(ALLOWED_LOGGING_LEVELS))
+            raise ConfigError(f"Invalid '{key}': {value!r}. Allowed values: {allowed}")
+
+        return norm
 
     def resolve_all(self) -> dict[str, ConfigSource]:
         """Resolve all known config keys.

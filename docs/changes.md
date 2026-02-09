@@ -54,3 +54,10 @@ This file lists notable changes in AudioMason2, grouped by issue.
 ## Issue 266
 
 - 2026-02-09T00:00:00+01:00 Web `/api/stage` now always returns `dir` to keep unit tests stable independent of debug mode.
+
+## Issue 400
+
+- 2026-02-09T00:00:00+01:00 Resolver now provides resolve_logging_level() for `logging.level`.
+- 2026-02-09T00:00:00+01:00 Strict validation and explicit default `normal`.
+- 2026-02-09T00:00:00+01:00 Specification updated for canonical `logging.level` contract.
+
