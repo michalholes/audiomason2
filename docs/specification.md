@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.9
+Specification Version: 1.0.10
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -227,6 +227,63 @@ Default semantics:
 
 Failure semantics:
 - Resolver raises ConfigError if value is non-string, empty/whitespace, or not in the allowed set.
+
+---
+
+
+### 6.4 Resolved LoggingPolicy
+
+The configuration resolver MUST provide a canonical, structured logging policy
+derived from the canonical verbosity key. This ensures that the meaning of
+verbosity is defined in exactly one place.
+
+Type: LoggingPolicy (immutable)
+
+Fields:
+- level_name: str
+  - One of: quiet | normal | verbose | debug
+- emit_error: bool
+- emit_warning: bool
+- emit_info: bool
+- emit_progress: bool
+- emit_debug: bool
+- sources: dict[str, ConfigSource]
+  - Must include the source for level_name under the key "level_name".
+
+Semantics (derived deterministically from level_name):
+
+quiet:
+- emit_error = True
+- emit_warning = True
+- emit_info = False
+- emit_progress = False
+- emit_debug = False
+
+normal:
+- emit_error = True
+- emit_warning = True
+- emit_info = True
+- emit_progress = True
+- emit_debug = False
+
+verbose:
+- emit_error = True
+- emit_warning = True
+- emit_info = True
+- emit_progress = True
+- emit_debug = True
+
+debug:
+- Same as verbose.
+
+Alias rules (resolver-only):
+- The legacy key "verbosity" is treated as an alias for "logging.level".
+- If both are present, "logging.level" ALWAYS wins.
+- Consumers MUST NOT be aware of aliases.
+
+Guarantees:
+- resolve_logging_policy() is deterministic and side-effect free.
+- No numeric levels and no coupling to any logging library.
 
 ---
 

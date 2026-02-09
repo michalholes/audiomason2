@@ -191,3 +191,83 @@ logging:
 
         assert "loudnorm" in all_config
         assert all_config["loudnorm"].value is False
+
+    def test_resolve_logging_policy_default_normal(self, tmp_path):
+        resolver = ConfigResolver(
+            cli_args={},
+            user_config_path=tmp_path / "nonexistent.yaml",
+            system_config_path=tmp_path / "nonexistent_system.yaml",
+            defaults={},
+        )
+
+        policy = resolver.resolve_logging_policy()
+
+        assert policy.level_name == "normal"
+        assert policy.emit_error is True
+        assert policy.emit_warning is True
+        assert policy.emit_info is True
+        assert policy.emit_progress is True
+        assert policy.emit_debug is False
+
+    @pytest.mark.parametrize(
+        "level, expected",
+        [
+            ("quiet", (True, True, False, False, False)),
+            ("normal", (True, True, True, True, False)),
+            ("verbose", (True, True, True, True, True)),
+            ("debug", (True, True, True, True, True)),
+        ],
+    )
+    def test_resolve_logging_policy_flags(self, tmp_path, level, expected):
+        resolver = ConfigResolver(
+            cli_args={},
+            user_config_path=tmp_path / "nonexistent.yaml",
+            system_config_path=tmp_path / "nonexistent_system.yaml",
+            defaults={"logging": {"level": level}},
+        )
+
+        policy = resolver.resolve_logging_policy()
+
+        assert policy.level_name == level
+        flags = (
+            policy.emit_error,
+            policy.emit_warning,
+            policy.emit_info,
+            policy.emit_progress,
+            policy.emit_debug,
+        )
+
+        assert flags == expected
+
+    def test_resolve_logging_level_alias_verbosity(self, tmp_path):
+        resolver = ConfigResolver(
+            cli_args={},
+            user_config_path=tmp_path / "nonexistent.yaml",
+            system_config_path=tmp_path / "nonexistent_system.yaml",
+            defaults={"verbosity": "verbose"},
+        )
+
+        assert resolver.resolve_logging_level() == "verbose"
+
+    def test_logging_level_canonical_wins_over_alias(self, tmp_path):
+        resolver = ConfigResolver(
+            cli_args={"verbosity": "debug"},
+            user_config_path=tmp_path / "nonexistent.yaml",
+            system_config_path=tmp_path / "nonexistent_system.yaml",
+            defaults={"logging": {"level": "quiet"}},
+        )
+
+        assert resolver.resolve_logging_level() == "quiet"
+
+    def test_resolve_logging_policy_sources_tracks_level(self, tmp_path):
+        resolver = ConfigResolver(
+            cli_args={"logging": {"level": "debug"}},
+            user_config_path=tmp_path / "nonexistent.yaml",
+            system_config_path=tmp_path / "nonexistent_system.yaml",
+            defaults={},
+        )
+
+        policy = resolver.resolve_logging_policy()
+
+        assert policy.sources["level_name"].value == "debug"
+        assert policy.sources["level_name"].source == "cli"

@@ -30,6 +30,22 @@ class ConfigSource:
     source: str  # 'cli' | 'env' | 'user_config' | 'system_config' | 'default'
 
 
+@dataclass(frozen=True)
+class LoggingPolicy:
+    """Resolved, immutable logging policy.
+
+    This is resolver-level only and must not couple to any logging library.
+    """
+
+    level_name: str  # quiet | normal | verbose | debug
+    emit_error: bool
+    emit_warning: bool
+    emit_info: bool
+    emit_progress: bool
+    emit_debug: bool
+    sources: dict[str, ConfigSource]
+
+
 class ConfigResolver:
     """Resolve configuration with strict 4-level priority.
 
@@ -117,17 +133,84 @@ class ConfigResolver:
 
         If the key is not provided by any source, returns DEFAULT_LOGGING_LEVEL.
 
+        Backwards compatible alias (resolver-only):
+            verbosity -> logging.level
+
         Raises:
             ConfigError: If the resolved value is invalid.
         """
+        level, _src = self._resolve_logging_level_and_source()
+        return level
+
+    def resolve_logging_policy(self) -> LoggingPolicy:
+        """Resolve canonical logging policy.
+
+        This is deterministic and side-effect free. It does not change runtime
+        logging behavior; it only resolves a structured policy.
+        """
+        level_name = self.resolve_logging_level()
+        src = self._resolve_logging_level_source()
+
+        if level_name == "quiet":
+            emit_error = True
+            emit_warning = True
+            emit_info = False
+            emit_progress = False
+            emit_debug = False
+        elif level_name == "normal":
+            emit_error = True
+            emit_warning = True
+            emit_info = True
+            emit_progress = True
+            emit_debug = False
+        else:
+            # verbose and debug
+            emit_error = True
+            emit_warning = True
+            emit_info = True
+            emit_progress = True
+            emit_debug = True
+
+        return LoggingPolicy(
+            level_name=level_name,
+            emit_error=emit_error,
+            emit_warning=emit_warning,
+            emit_info=emit_info,
+            emit_progress=emit_progress,
+            emit_debug=emit_debug,
+            sources={"level_name": src},
+        )
+
+    def _resolve_logging_level_source(self) -> ConfigSource:
+        _level, src = self._resolve_logging_level_and_source()
+        return src
+
+    def _resolve_logging_level_and_source(self) -> tuple[str, ConfigSource]:
         key = "logging.level"
+        found = self._try_resolve_value(key)
+        if found is None:
+            # Resolver-only alias
+            found = self._try_resolve_value("verbosity")
+
+        if found is None:
+            return DEFAULT_LOGGING_LEVEL, ConfigSource(
+                value=DEFAULT_LOGGING_LEVEL,
+                source="default",
+            )
+
+        value, source = found
+        norm = self._normalize_logging_level(key, value)
+        return norm, ConfigSource(value=norm, source=source)
+
+    def _try_resolve_value(self, key: str) -> tuple[Any, str] | None:
         try:
-            value, _source = self.resolve(key)
+            return self.resolve(key)
         except ConfigError as e:
             if "not found in any source" in str(e):
-                return DEFAULT_LOGGING_LEVEL
+                return None
             raise
 
+    def _normalize_logging_level(self, key: str, value: Any) -> str:
         if not isinstance(value, str):
             raise ConfigError(f"Config key '{key}' must be a string, got {type(value).__name__}")
 

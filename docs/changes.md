@@ -61,3 +61,9 @@ This file lists notable changes in AudioMason2, grouped by issue.
 - 2026-02-09T00:00:00+01:00 Strict validation and explicit default `normal`.
 - 2026-02-09T00:00:00+01:00 Specification updated for canonical `logging.level` contract.
 
+## Issue 402
+
+- 2026-02-09T20:43:47+01:00 Resolver: Added immutable LoggingPolicy resolved in one place from canonical logging.level.
+- 2026-02-09T20:43:47+01:00 Resolver: LoggingPolicy derives emission flags deterministically (quiet/normal/verbose/debug).
+- 2026-02-09T20:43:47+01:00 Documentation: Updated specification to describe LoggingPolicy and alias rules.
+
