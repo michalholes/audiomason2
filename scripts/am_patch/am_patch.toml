@@ -1,4 +1,4 @@
-verbosity = "normal" # debug | verbose | normal | quiet
+verbosity = "verbose" # debug | verbose | normal | quiet
 console_color = "auto" # auto | always | never
 
 
