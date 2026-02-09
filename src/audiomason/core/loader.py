@@ -63,11 +63,35 @@ class PluginLoader:
         self.user_plugins_dir = user_plugins_dir or Path.home() / ".audiomason/plugins"
         self.system_plugins_dir = system_plugins_dir or Path("/etc/audiomason/plugins")
 
+        self._ensure_builtin_import_root()
+
         self._registry = registry
 
         # Loaded plugins
         self._plugins: dict[str, Any] = {}
         self._manifests: dict[str, PluginManifest] = {}
+
+    def _ensure_builtin_import_root(self) -> None:
+        """Ensure built-in plugins can import the top-level 'plugins' package.
+
+        Built-in plugins live under the repository 'plugins/' package. When running AM2
+        via an installed entrypoint, the repository root may not be on sys.path, which
+        breaks absolute imports like 'plugins.file_io...'.
+
+        If (and only if) the built-in plugins directory is a Python package, add the
+        repository root to sys.path deterministically and idempotently.
+        """
+        if self.builtin_plugins_dir is None:
+            return
+
+        if not (self.builtin_plugins_dir / "__init__.py").exists():
+            return
+
+        repo_root = self.builtin_plugins_dir.parent
+        repo_root_str = str(repo_root)
+
+        if repo_root_str not in sys.path:
+            sys.path.insert(0, repo_root_str)
 
     def discover(self) -> list[Path]:
         """Discover all available plugins.

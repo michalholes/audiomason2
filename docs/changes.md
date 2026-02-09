@@ -2,6 +2,13 @@
 
 This file lists notable changes in AudioMason2, grouped by issue.
 
+
+## Issue 344
+
+- 2026-02-09T20:00:00+01:00 Issue 344: Fix unit test isolation by clearing pre-imported 'plugins' modules from sys.modules.
+- 2026-02-09T10:49:39+01:00 Issue 344: Fix builtin plugin loading so 'plugins.*' imports work without PYTHONPATH by ensuring repo root is on sys.path when plugins/ is a package.
+- 2026-02-09T10:49:39+01:00 Issue 344: Updated specification version and change log per documentation gate requirements.
+
 ## Issue 020
 
 - 2026-02-09T02:03:50+01:00 Fixed mypy failure in file_io plugin cleanup by avoiding Optional Path capture inside async thread lambda.

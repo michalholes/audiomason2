@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.4
+Specification Version: 1.0.5
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -233,6 +233,15 @@ Multiple parallel plugin state mechanisms are forbidden.
 - User?installed plugins live in user plugin directories only.
 - Installation mechanism must be abstracted.
 
+
+
+### 7.3.1 Built-in Plugin Import Path Rules (Loader Responsibility)
+
+- Built-in plugin loading MUST work without requiring the user to set PYTHONPATH.
+- When loading built-in plugins from the repository 'plugins/' package, the core plugin loader MUST ensure
+  the repository root is present on sys.path so that absolute imports like 'plugins.*' are resolvable.
+- This rule applies only to built-in plugins. Loading plugins from user/system plugin directories MUST NOT
+  implicitly grant repository-root import privileges.
 
 ### 7.4 File I/O Capability (Plugin-Owned)
 
