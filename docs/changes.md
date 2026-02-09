@@ -11,6 +11,14 @@ This file lists notable changes in AudioMason2, grouped by issue.
 
 
 
+## Issue 341
+
+- 2026-02-09T20:00:00+01:00 Phase 2: Resolve effective verbosity at job start using ConfigResolver key `logging.level`.
+- 2026-02-09T20:00:00+01:00 Phase 2: Logging semantics aligned so QUIET emits warning + error and suppresses INFO.
+- 2026-02-09T20:00:00+01:00 Phase 2: Pipeline step start/done logs are emitted only at VERBOSE/DEBUG; failures emit error.
+- 2026-02-09T20:00:00+01:00 Phase 2: Orchestrator progress logging uses core logger levels instead of unconditional job log appends.
+- 2026-02-09T20:00:00+01:00 Updated specification version and change log per documentation gate requirements.
+
 ## Issue 340
 
 - 2026-02-09T00:00:00+01:00 Phase 1: Core logging supports an optional global log sink.

@@ -16,6 +16,7 @@ import yaml
 
 from audiomason.core.context import ProcessingContext
 from audiomason.core.errors import PipelineError
+from audiomason.core.logging import get_logger
 
 
 @dataclass
@@ -70,6 +71,7 @@ class PipelineExecutor:
         """
         self.plugin_loader = plugin_loader
         self._log_fn = log_fn
+        self._logger = get_logger(__name__)
 
     def _log(self, msg: str) -> None:
         if self._log_fn is not None:
@@ -262,7 +264,7 @@ class PipelineExecutor:
         Raises:
             PipelineError: If step fails
         """
-        self._log(f"step start: {step.id}")
+        self._logger.verbose(f"step start: {step.id}")
 
         try:
             # Mark step as current
@@ -287,10 +289,10 @@ class PipelineExecutor:
             # Mark step complete
             context.mark_step_complete(step.id)
 
-            self._log(f"step done: {step.id}")
+            self._logger.verbose(f"step done: {step.id}")
 
             return context
 
         except Exception as e:
-            self._log(f"step failed: {step.id}: {e}")
+            self._logger.error(f"step failed: {step.id}: {e}")
             raise PipelineError(f"Step '{step.id}' failed: {e}") from e

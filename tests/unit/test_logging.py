@@ -194,8 +194,8 @@ class TestLogFile:
 class TestVerbosityFiltering:
     """Test verbosity level filtering."""
 
-    def test_quiet_shows_only_errors(self):
-        """Test QUIET shows only errors."""
+    def test_quiet_shows_warning_and_errors(self):
+        """Test QUIET shows warnings and errors."""
         with tempfile.TemporaryDirectory() as tmpdir:
             log_path = Path(tmpdir) / "test.log"
             set_log_file(log_path)
@@ -212,7 +212,7 @@ class TestVerbosityFiltering:
             assert "debug" not in content
             assert "verbose" not in content
             assert "info" not in content
-            assert "warning" not in content
+            assert "warning" in content
             assert "error" in content
 
             set_log_file(None)

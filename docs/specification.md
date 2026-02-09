@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.7
+Specification Version: 1.0.8
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -438,6 +438,19 @@ Requirements:
   - audiomason.core.logging provides an optional global log sink callback (set_log_sink).
   - Orchestrator binds the sink to JobService.append_log_line(job_id, line) for the lifetime of a running job and clears/restores it on exit (exception-safe).
 - Verbosity levels must be respected globally.
+
+- Effective verbosity is resolved once at job start via ConfigResolver using config key: logging.level.
+  - Resolver priority: CLI > environment > user config > system config > defaults.
+  - Canonical values: quiet | normal | verbose | debug (case-insensitive). Numeric 0-3 is also accepted.
+- Emission rules:
+  - QUIET: warning + error (INFO and lower MUST NOT appear).
+  - NORMAL: info + warning + error.
+  - VERBOSE/DEBUG: detailed progress, including pipeline step start/done and diagnostics.
+- Known limitation (Phase 2 strict scope):
+  - WizardRequest.verbosity defaults to NORMAL and cannot be distinguished from "unset".
+  - For jobs executed via Orchestrator.run_job(..., verbosity=...), the provided verbosity is treated as an override.
+  - For jobs started via start_wizard/start_process, resolver-based default applies.
+
 
 Silent failures are forbidden.
 

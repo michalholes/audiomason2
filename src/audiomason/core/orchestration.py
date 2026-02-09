@@ -19,10 +19,17 @@ from typing import Any
 import yaml
 
 from audiomason.checkpoint import CheckpointManager
+from audiomason.core.config import ConfigResolver
 from audiomason.core.context import ProcessingContext
 from audiomason.core.jobs.api import JobService
 from audiomason.core.jobs.model import Job, JobState, JobType
-from audiomason.core.logging import get_log_sink, set_log_sink
+from audiomason.core.logging import (
+    VerbosityLevel,
+    get_log_sink,
+    get_logger,
+    set_log_sink,
+    set_verbosity,
+)
 from audiomason.core.orchestration_models import ProcessRequest, WizardRequest
 from audiomason.core.phase import PhaseContractError, PhaseGuard
 from audiomason.core.pipeline import PipelineExecutor
@@ -31,6 +38,42 @@ from audiomason.wizard_engine import WizardEngine
 
 def _utcnow_iso() -> str:
     return datetime.now(UTC).isoformat()
+
+
+_LOGGER = get_logger(__name__)
+
+
+def _parse_verbosity(value: object) -> VerbosityLevel:
+    if isinstance(value, VerbosityLevel):
+        return value
+    if isinstance(value, int):
+        try:
+            return VerbosityLevel(value)
+        except Exception:
+            return VerbosityLevel.NORMAL
+    if isinstance(value, str):
+        v = value.strip().lower()
+        mapping = {
+            "0": VerbosityLevel.QUIET,
+            "1": VerbosityLevel.NORMAL,
+            "2": VerbosityLevel.VERBOSE,
+            "3": VerbosityLevel.DEBUG,
+            "quiet": VerbosityLevel.QUIET,
+            "normal": VerbosityLevel.NORMAL,
+            "verbose": VerbosityLevel.VERBOSE,
+            "debug": VerbosityLevel.DEBUG,
+        }
+        return mapping.get(v, VerbosityLevel.NORMAL)
+    return VerbosityLevel.NORMAL
+
+
+def _resolve_effective_verbosity() -> VerbosityLevel:
+    resolver = ConfigResolver()
+    try:
+        value, _source = resolver.resolve("logging.level")
+    except Exception:
+        value = "normal"
+    return _parse_verbosity(value)
 
 
 class Orchestrator:
@@ -66,7 +109,12 @@ class Orchestrator:
         job.started_at = _utcnow_iso()
         self._jobs.store.save_job(job)
 
-        self._jobs.append_log_line(job.job_id, "started")
+        prev_sink = get_log_sink()
+        set_log_sink(lambda line: self._jobs.append_log_line(job.job_id, line))
+        try:
+            _LOGGER.info("started")
+        finally:
+            set_log_sink(prev_sink)
 
         try:
             loop = asyncio.get_running_loop()
@@ -94,7 +142,12 @@ class Orchestrator:
         job.started_at = _utcnow_iso()
         self._jobs.store.save_job(job)
 
-        self._jobs.append_log_line(job.job_id, "started")
+        prev_sink = get_log_sink()
+        set_log_sink(lambda line: self._jobs.append_log_line(job.job_id, line))
+        try:
+            _LOGGER.info("started")
+        finally:
+            set_log_sink(prev_sink)
 
         try:
             loop = asyncio.get_running_loop()
@@ -114,7 +167,7 @@ class Orchestrator:
         Args:
             job_id: Existing job id in PENDING state.
             plugin_loader: Plugin loader instance.
-            verbosity: Verbosity level for wizard execution.
+            verbosity: Verbosity override (see docs/specification.md).
         """
         job = self._jobs.get_job(job_id)
         if job.state != JobState.PENDING:
@@ -131,17 +184,28 @@ class Orchestrator:
                 sources = []
             if not isinstance(sources, list):
                 sources = []
+
             contexts: list[ProcessingContext] = []
             for i, s in enumerate(sources, 1):
                 contexts.append(ProcessingContext(id=f"ctx_{i}", source=Path(str(s))))
+
             process_request = ProcessRequest(
-                contexts=contexts, pipeline_path=Path(pipeline_path), plugin_loader=plugin_loader
+                contexts=contexts,
+                pipeline_path=Path(pipeline_path),
+                plugin_loader=plugin_loader,
             )
 
             job.transition(JobState.RUNNING)
             job.started_at = _utcnow_iso()
+            job.meta["verbosity_override"] = str(int(verbosity))
             self._jobs.store.save_job(job)
-            self._jobs.append_log_line(job.job_id, "started")
+
+            prev_sink = get_log_sink()
+            set_log_sink(lambda line: self._jobs.append_log_line(job.job_id, line))
+            try:
+                _LOGGER.info("started")
+            finally:
+                set_log_sink(prev_sink)
 
             try:
                 loop = asyncio.get_running_loop()
@@ -161,6 +225,7 @@ class Orchestrator:
                 data = {}
             if not isinstance(data, dict):
                 data = {}
+
             wizard_request = WizardRequest(
                 wizard_id=str(wizard_id),
                 wizard_path=Path(str(wizard_path)),
@@ -171,8 +236,15 @@ class Orchestrator:
 
             job.transition(JobState.RUNNING)
             job.started_at = _utcnow_iso()
+            job.meta["verbosity_override"] = str(int(verbosity))
             self._jobs.store.save_job(job)
-            self._jobs.append_log_line(job.job_id, "started")
+
+            prev_sink = get_log_sink()
+            set_log_sink(lambda line: self._jobs.append_log_line(job.job_id, line))
+            try:
+                _LOGGER.info("started")
+            finally:
+                set_log_sink(prev_sink)
 
             try:
                 loop = asyncio.get_running_loop()
@@ -201,7 +273,13 @@ class Orchestrator:
     async def _run_process_job(self, job_id: str, request: ProcessRequest) -> None:
         prev_sink = get_log_sink()
         set_log_sink(lambda line: self._jobs.append_log_line(job_id, line))
+        set_verbosity(_resolve_effective_verbosity())
         try:
+            job = self._jobs.get_job(job_id)
+            override = job.meta.get("verbosity_override")
+            if isinstance(override, str) and override.isdigit():
+                set_verbosity(_parse_verbosity(int(override)))
+
             with PhaseGuard.processing():
                 try:
                     await self._run_process_job_impl(job_id, request)
@@ -211,23 +289,21 @@ class Orchestrator:
                     job.error = str(e)
                     job.finished_at = _utcnow_iso()
                     self._jobs.store.save_job(job)
-                    self._jobs.append_log_line(job_id, f"failed: {e}")
+                    _LOGGER.error(f"failed: {e}")
                 except Exception as e:
                     job = self._jobs.get_job(job_id)
                     job.transition(JobState.FAILED)
                     job.error = str(e)
                     job.finished_at = _utcnow_iso()
                     self._jobs.store.save_job(job)
-                    self._jobs.append_log_line(job_id, f"failed: {e}")
+                    _LOGGER.error(f"failed: {e}")
         finally:
             set_log_sink(prev_sink)
 
     async def _run_process_job_impl(self, job_id: str, request: ProcessRequest) -> None:
         contexts = request.contexts
         total = max(1, len(contexts))
-        executor = PipelineExecutor(
-            request.plugin_loader, log_fn=lambda line: self._jobs.append_log_line(job_id, line)
-        )
+        executor = PipelineExecutor(request.plugin_loader)
 
         for i, ctx in enumerate(contexts, 1):
             job = self._jobs.get_job(job_id)
@@ -235,10 +311,10 @@ class Orchestrator:
                 job.transition(JobState.CANCELLED)
                 job.finished_at = _utcnow_iso()
                 self._jobs.store.save_job(job)
-                self._jobs.append_log_line(job_id, "cancelled")
+                _LOGGER.warning("cancelled")
                 return
 
-            self._jobs.append_log_line(job_id, f"processing: {ctx.source}")
+            _LOGGER.info(f"processing: {ctx.source}")
             await executor.execute_from_yaml(request.pipeline_path, ctx)
 
             job = self._jobs.get_job(job_id)
@@ -250,12 +326,18 @@ class Orchestrator:
         job.transition(JobState.SUCCEEDED)
         job.finished_at = _utcnow_iso()
         self._jobs.store.save_job(job)
-        self._jobs.append_log_line(job_id, "succeeded")
+        _LOGGER.info("succeeded")
 
     async def _run_wizard_job(self, job_id: str, request: WizardRequest) -> None:
         prev_sink = get_log_sink()
         set_log_sink(lambda line: self._jobs.append_log_line(job_id, line))
+        set_verbosity(_resolve_effective_verbosity())
         try:
+            job = self._jobs.get_job(job_id)
+            override = job.meta.get("verbosity_override")
+            if isinstance(override, str) and override.isdigit():
+                set_verbosity(_parse_verbosity(int(override)))
+
             with PhaseGuard.processing():
                 try:
                     await self._run_wizard_job_impl(job_id, request)
@@ -268,28 +350,28 @@ class Orchestrator:
                             error=str(e),
                             meta=self._jobs.get_job(job_id).meta,
                         )
-                        self._jobs.append_log_line(job_id, f"checkpoint saved: {p}")
+                        _LOGGER.info(f"checkpoint saved: {p}")
                     except Exception as ck_e:
-                        self._jobs.append_log_line(job_id, f"checkpoint save failed: {ck_e}")
+                        _LOGGER.warning(f"checkpoint save failed: {ck_e}")
 
                     job = self._jobs.get_job(job_id)
                     job.transition(JobState.FAILED)
                     job.error = str(e)
                     job.finished_at = _utcnow_iso()
                     self._jobs.store.save_job(job)
-                    self._jobs.append_log_line(job_id, f"failed: {e}")
+                    _LOGGER.error(f"failed: {e}")
                 except Exception as e:
                     job = self._jobs.get_job(job_id)
                     job.transition(JobState.FAILED)
                     job.error = str(e)
                     job.finished_at = _utcnow_iso()
                     self._jobs.store.save_job(job)
-                    self._jobs.append_log_line(job_id, f"failed: {e}")
+                    _LOGGER.error(f"failed: {e}")
         finally:
             set_log_sink(prev_sink)
 
     async def _run_wizard_job_impl(self, job_id: str, request: WizardRequest) -> None:
-        self._jobs.append_log_line(job_id, f"wizard: {request.wizard_id}")
+        _LOGGER.info(f"wizard: {request.wizard_id}")
 
         def _payload_input(prompt: str, options: dict[str, Any]) -> str:
             step_id = options.get("step_id")
@@ -324,4 +406,4 @@ class Orchestrator:
         job.transition(JobState.SUCCEEDED)
         job.finished_at = _utcnow_iso()
         self._jobs.store.save_job(job)
-        self._jobs.append_log_line(job_id, "succeeded")
+        _LOGGER.info("succeeded")

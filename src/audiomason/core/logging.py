@@ -1,8 +1,8 @@
 """Centralized logging system for AudioMason.
 
 Provides unified logging across all plugins with 4 verbosity levels:
-- QUIET (0): Errors only
-- NORMAL (1): Progress + warnings + errors
+- QUIET (0): Warnings + errors
+- NORMAL (1): Info + warnings + errors
 - VERBOSE (2): Detailed info
 - DEBUG (3): Everything including internal state
 
@@ -31,8 +31,8 @@ from pathlib import Path
 class VerbosityLevel(IntEnum):
     """Verbosity levels for AudioMason."""
 
-    QUIET = 0  # Errors only
-    NORMAL = 1  # Progress + warnings + errors
+    QUIET = 0  # Warnings + errors
+    NORMAL = 1  # Info + warnings + errors
     VERBOSE = 2  # Detailed info
     DEBUG = 3  # Everything
 
@@ -222,12 +222,12 @@ class AudioMasonLogger:
         self._log(VerbosityLevel.NORMAL, "INFO", message)
 
     def warning(self, message: str) -> None:
-        """Log warning message (always shown except QUIET).
+        """Log warning message (verbosity >= QUIET).
 
         Args:
             message: Message to log
         """
-        self._log(VerbosityLevel.NORMAL, "WARNING", message)
+        self._log(VerbosityLevel.QUIET, "WARNING", message)
 
     def error(self, message: str) -> None:
         """Log error message (always shown).
