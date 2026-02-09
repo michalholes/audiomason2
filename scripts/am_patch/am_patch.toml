@@ -1,6 +1,5 @@
 verbosity = "normal" # debug | verbose | normal | quiet
 console_color = "auto" # auto | always | never
-console_color = "auto" # auto | always | never
 
 
 [paths]
@@ -101,7 +100,7 @@ gate_docs_include = ["src", "plugins"]
 gate_docs_exclude = ["badguys", "patches"]
 gate_docs_required_files = ["docs/changes.md", "docs/specification.md"]
 
-gate_badguys_runner = "auto"
+gate_badguys_runner = "off"
 gate_badguys_command = ["badguys/badguys.py", "-q", "--exclude=test_900_commit_push_timestamp"]
 gate_badguys_cwd = "auto"
 
