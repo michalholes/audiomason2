@@ -16,18 +16,12 @@ from audiomason.core import (
     State,
 )
 from audiomason.core.config_service import ConfigService
+from audiomason.core.logging import get_logger
 from audiomason.core.orchestration import Orchestrator
 from audiomason.core.orchestration_models import ProcessRequest
 from audiomason.core.plugin_registry import PluginRegistry
 
-
-class VerbosityLevel:
-    """Verbosity levels."""
-
-    QUIET = 0  # Errors only
-    NORMAL = 1  # Progress + warnings
-    VERBOSE = 2  # Detailed info
-    DEBUG = 3  # Everything
+logger = get_logger(__name__)
 
 
 class DaemonPlugin:
@@ -40,7 +34,6 @@ class DaemonPlugin:
             config: Plugin configuration
         """
         self.config = config or {}
-        self.verbosity = VerbosityLevel.NORMAL
         self.watch_folders = self.config.get("watch_folders", [])
         self.interval = self.config.get("interval", 30)
         self.on_success = self.config.get("on_success", "move_to_output")
@@ -51,16 +44,12 @@ class DaemonPlugin:
 
     async def run(self) -> None:
         """Run daemon - main entry point."""
-        if self.verbosity >= VerbosityLevel.NORMAL:
-            print("\U0001f504 AudioMason Daemon Mode")
-            print()
-            print(f"Watch folders: {len(self.watch_folders)}")
-            for folder in self.watch_folders:
-                print(f"  * {folder}")
-            print(f"Check interval: {self.interval}s")
-            print()
-            print("Press Ctrl+C to stop")
-            print()
+        logger.info("AudioMason Daemon Mode")
+        logger.info(f"Watch folders: {len(self.watch_folders)}")
+        for folder in self.watch_folders:
+            logger.info(f"  * {folder}")
+        logger.info(f"Check interval: {self.interval}s")
+        logger.info("Press Ctrl+C to stop")
 
         # Setup signal handlers
         signal.signal(signal.SIGINT, self._handle_signal)
@@ -89,8 +78,7 @@ class DaemonPlugin:
                 await self._check_folders(orch, loader, pipeline_path)
                 await asyncio.sleep(self.interval)
             except Exception as e:
-                if self.verbosity >= VerbosityLevel.NORMAL:
-                    print(f"Error in daemon loop: {e}")
+                logger.error(f"Error in daemon loop: {e}")
                 await asyncio.sleep(self.interval)
 
     async def _check_folders(
@@ -116,14 +104,13 @@ class DaemonPlugin:
                 if not self._is_file_stable(file_path):
                     continue
 
-                if self.verbosity >= VerbosityLevel.NORMAL:
-                    print(f"\U0001f4c1 Found new file: {file_path.name}")
+                logger.info(f"Found new file: {file_path.name}")
 
                 try:
                     await self._process_file(file_path, orch, loader, pipeline_path)
                     self.processed_files.add(file_path)
                 except Exception as e:
-                    print(f"   X Error: {e}")
+                    logger.error(f"Error processing {file_path.name}: {e}")
 
             # Also check for Opus files
             for file_path in folder_path.glob("*.opus"):
@@ -133,14 +120,13 @@ class DaemonPlugin:
                 if not self._is_file_stable(file_path):
                     continue
 
-                if self.verbosity >= VerbosityLevel.NORMAL:
-                    print(f"\U0001f4c1 Found new file: {file_path.name}")
+                logger.info(f"Found new file: {file_path.name}")
 
                 try:
                     await self._process_file(file_path, orch, loader, pipeline_path)
                     self.processed_files.add(file_path)
                 except Exception as e:
-                    print(f"   X Error: {e}")
+                    logger.error(f"Error processing {file_path.name}: {e}")
 
     def _is_file_stable(self, file_path: Path, threshold: float = 5.0) -> bool:
         """Check if file is stable (not being written).
@@ -177,21 +163,24 @@ class DaemonPlugin:
             state=State.PROCESSING,
         )
 
-        if self.verbosity >= VerbosityLevel.NORMAL:
-            print("   \u26a1 Processing...")
+        logger.info("Processing...")
 
         # Process via core orchestration (jobs)
         job_id = orch.start_process(
-            ProcessRequest(contexts=[context], pipeline_path=pipeline_path, plugin_loader=loader)
+            ProcessRequest(
+                contexts=[context],
+                pipeline_path=pipeline_path,
+                plugin_loader=loader,
+            )
         )
 
         offset = 0
         while True:
             job = orch.get_job(job_id)
             chunk, offset = orch.read_log(job_id, offset=offset)
-            if chunk and self.verbosity >= VerbosityLevel.VERBOSE:
+            if chunk:
                 for line in chunk.splitlines():
-                    print(f"   {line}")
+                    logger.verbose(line)
 
             if job.state in (JobState.SUCCEEDED, JobState.FAILED, JobState.CANCELLED):
                 break
@@ -199,32 +188,28 @@ class DaemonPlugin:
             await asyncio.sleep(0.2)
 
         if job.state != JobState.SUCCEEDED:
-            print("   X Failed")
+            logger.error("Failed")
 
-            if job.error and self.verbosity >= VerbosityLevel.NORMAL:
-                print(f"   Error: {job.error}")
+            if job.error:
+                logger.error(f"Job error: {job.error}")
 
             if self.on_error == "move_to_error":
                 error_dir = file_path.parent / "error"
                 error_dir.mkdir(exist_ok=True)
                 file_path.rename(error_dir / file_path.name)
-                if self.verbosity >= VerbosityLevel.NORMAL:
-                    print(f"   Moved to: {error_dir}")
+                logger.info(f"Moved to: {error_dir}")
             elif self.on_error == "delete":
                 file_path.unlink()
-                if self.verbosity >= VerbosityLevel.NORMAL:
-                    print("   Deleted source file")
+                logger.info("Deleted source file")
         else:
-            if self.verbosity >= VerbosityLevel.NORMAL:
-                print("   OK Success")
+            logger.info("Success")
 
             if self.on_success == "move_to_output":
                 # Already moved by pipeline
                 pass
             elif self.on_success == "delete" and file_path.exists():
                 file_path.unlink()
-                if self.verbosity >= VerbosityLevel.NORMAL:
-                    print("   Deleted source file")
+                logger.info("Deleted source file")
 
     def _handle_signal(self, signum: int, frame: Any) -> None:
         """Handle shutdown signal.
@@ -233,7 +218,5 @@ class DaemonPlugin:
             signum: Signal number
             frame: Stack frame
         """
-        if self.verbosity >= VerbosityLevel.NORMAL:
-            print()
-            print("\U0001f6d1 Shutting down daemon...")
+        logger.info("Shutting down daemon...")
         self.running = False

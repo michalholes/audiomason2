@@ -439,19 +439,10 @@ Requirements:
   - Orchestrator binds the sink to JobService.append_log_line(job_id, line) for the lifetime of a running job and clears/restores it on exit (exception-safe).
 - Verbosity levels must be respected globally.
 
-- Effective verbosity is resolved once at job start via ConfigResolver using config key: logging.level.
-  - Resolver priority: CLI > environment > user config > system config > defaults.
-  - Canonical values: quiet | normal | verbose | debug (case-insensitive). Numeric 0-3 is also accepted.
-- Emission rules:
-  - QUIET: warning + error (INFO and lower MUST NOT appear).
-  - NORMAL: info + warning + error.
-  - VERBOSE/DEBUG: detailed progress, including pipeline step start/done and diagnostics.
-- Known limitation (Phase 2 strict scope):
-  - WizardRequest.verbosity defaults to NORMAL and cannot be distinguished from "unset".
-  - For jobs executed via Orchestrator.run_job(..., verbosity=...), the provided verbosity is treated as an override.
-  - For jobs started via start_wizard/start_process, resolver-based default applies.
 
-
+- Plugins and daemon MUST NOT use print() for runtime diagnostics.
+- All runtime diagnostics MUST go through the core logger.
+- This guarantees job-context observability (JobService logs) and preserves standalone behavior.
 Silent failures are forbidden.
 
 

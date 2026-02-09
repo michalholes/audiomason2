@@ -17,6 +17,9 @@ from urllib.parse import urlparse
 
 from audiomason.core import CoverChoice, ProcessingContext
 from audiomason.core.errors import CoverError
+from audiomason.core.logging import get_logger
+
+logger = get_logger(__name__)
 
 
 class CoverHandlerPlugin:
@@ -354,4 +357,4 @@ class CoverHandlerPlugin:
                 await self.embed_cover(mp3_file, cover_path)
             except Exception as e:
                 # Log error but continue with other files
-                print(f"Failed to embed cover in {mp3_file.name}: {e}")
+                logger.warning(f"Failed to embed cover in {mp3_file.name}: {e}")
