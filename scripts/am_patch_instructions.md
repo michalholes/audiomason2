@@ -177,3 +177,7 @@ This rule is absolute and overrides all informal reasoning.
 
 9. The chat MUST NOT use **inter-chat or cross-conversation memory** as a source of truth under any circumstances.
 
+Color output:
+- --color {auto,always,never}
+- --no-color
+- NO_COLOR disables color

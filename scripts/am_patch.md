@@ -294,3 +294,12 @@ It contains only git-tracked files and does not include logs, workspaces, caches
 
 
 - --gate-badguys-runner {auto,on,off}: runner-only badguys gate (default auto)
+
+## Console color output
+
+The runner can colorize only the OK/FAIL/SUCCESS tokens on stdout.
+
+Configuration:
+- Config file key: console_color = "auto"|"always"|"never"
+- CLI: --color {auto,always,never} or --no-color
+- Env: NO_COLOR disables color regardless of config/CLI

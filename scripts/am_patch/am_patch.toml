@@ -1,4 +1,6 @@
 verbosity = "normal" # debug | verbose | normal | quiet
+console_color = "auto" # auto | always | never
+console_color = "auto" # auto | always | never
 
 
 [paths]

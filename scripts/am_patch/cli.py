@@ -57,6 +57,8 @@ class CliArgs:
 
     verbosity: str | None
 
+    console_color: str | None
+
     run_all_tests: bool | None
     allow_no_op: bool | None
 
@@ -692,6 +694,22 @@ def parse_args(argv: list[str]) -> CliArgs:
         default=None,
     )
 
+    p.add_argument(
+        "--color",
+        dest="console_color",
+        choices=["auto", "always", "never"],
+        default=None,
+        help="Console color output mode (auto=TTY only).",
+    )
+    p.add_argument(
+        "--no-color",
+        dest="console_color",
+        action="store_const",
+        const="never",
+        default=None,
+        help="Disable console color output (same as --color never).",
+    )
+
     p.add_argument("--skip-ruff", dest="skip_ruff", action="store_true", default=None)
     p.add_argument("--skip-pytest", dest="skip_pytest", action="store_true", default=None)
     p.add_argument("--skip-mypy", dest="skip_mypy", action="store_true", default=None)
@@ -816,6 +834,7 @@ def parse_args(argv: list[str]) -> CliArgs:
             message=None,
             config_path=ns.config_path,
             verbosity=ns.verbosity,
+            console_color=getattr(ns, "console_color", None),
             run_all_tests=ns.run_all_tests,
             allow_no_op=ns.allow_no_op,
             compile_check=getattr(ns, "compile_check", None),
@@ -897,6 +916,7 @@ def parse_args(argv: list[str]) -> CliArgs:
         message=message,
         config_path=ns.config_path,
         verbosity=ns.verbosity,
+        console_color=getattr(ns, "console_color", None),
         run_all_tests=ns.run_all_tests,
         allow_no_op=ns.allow_no_op,
         compile_check=getattr(ns, "compile_check", None),

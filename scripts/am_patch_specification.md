@@ -499,3 +499,17 @@ an additional **AUDIT** step:
 Failure semantics:
 - If the audit command exits non-zero, the run FAILS with stage `AUDIT`.
 - No rollback is performed (code is already committed and pushed).
+
+### Console color output
+
+The runner may emit ANSI colors on stdout for the tokens:
+- OK, FAIL in normal progress lines
+- SUCCESS, FAIL in the final RESULT summary
+- OK, FAIL in PUSH summary
+
+Controls:
+- Policy/config key: console_color (auto|always|never, default auto)
+- CLI: --color {auto,always,never} and --no-color (alias for never)
+- Env: NO_COLOR forces never
+
+Precedence: NO_COLOR > CLI > config > default.

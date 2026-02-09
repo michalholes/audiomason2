@@ -124,6 +124,12 @@ class Policy:
     # Screen output verbosity (default: verbose = today's behavior)
     verbosity: str = "verbose"
 
+    # Console output coloring for OK/FAIL tokens.
+    # auto: enable colors only when stdout is a TTY
+    # always: always enable
+    # never: disable
+    console_color: str = "auto"  # auto|always|never
+
     # Unified patch input (.patch / .zip)
     unified_patch: bool = False
     unified_patch_continue: bool = True
@@ -490,6 +496,15 @@ def build_policy(defaults: Policy, cfg: dict[str, Any]) -> Policy:
             "CONFIG",
             "INVALID_VERBOSITY",
             f"invalid verbosity={p.verbosity!r}; allowed: debug|verbose|normal|quiet",
+        )
+
+    p.console_color = str(cfg.get("console_color", p.console_color))
+    _mark_cfg(p, cfg, "console_color")
+    if p.console_color not in ("auto", "always", "never"):
+        raise RunnerError(
+            "CONFIG",
+            "INVALID_CONSOLE_COLOR",
+            f"invalid console_color={p.console_color!r}; allowed: auto|always|never",
         )
 
     # Phase 2: hardcoded layout/settings must be configurable (cfg + CLI overrides).

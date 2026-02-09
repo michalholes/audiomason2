@@ -120,6 +120,7 @@ from am_patch.config import (
     policy_for_log,
     resolve_config_path,
 )
+from am_patch.console import stdout_color_enabled, wrap_green, wrap_red
 from am_patch.errors import RunnerError, fingerprint
 from am_patch.gates import run_badguys, run_gates
 from am_patch.lock import FileLock
@@ -394,6 +395,7 @@ def main(argv: list[str]) -> int:
         {
             "run_all_tests": cli.run_all_tests,
             "verbosity": getattr(cli, "verbosity", None),
+            "console_color": getattr(cli, "console_color", None),
             "allow_no_op": cli.allow_no_op,
             "skip_up_to_date": cli.skip_up_to_date,
             "allow_non_main": cli.allow_non_main,
@@ -532,6 +534,8 @@ def main(argv: list[str]) -> int:
     status = StatusReporter(enabled=verbosity in ("normal", "verbose", "debug"))
     status.start()
 
+    color_enabled = stdout_color_enabled(getattr(policy, "console_color", "auto"))
+
     def _screen_line(line: str) -> None:
         sys.stdout.write(line + "\n")
         sys.stdout.flush()
@@ -543,11 +547,11 @@ def main(argv: list[str]) -> int:
 
     def _stage_ok(stage: str) -> None:
         if verbosity == "normal":
-            _screen_line(f"OK: {stage}")
+            _screen_line(f"{wrap_green('OK', color_enabled)}: {stage}")
 
     def _stage_fail(stage: str) -> None:
         if verbosity == "normal":
-            _screen_line(f"FAIL: {stage}")
+            _screen_line(f"{wrap_red('FAIL', color_enabled)}: {stage}")
 
     def _gate_progress(token: str) -> None:
         kind, _, stage = token.partition(":")
@@ -557,7 +561,12 @@ def main(argv: list[str]) -> int:
         if verbosity != "normal":
             return
         if kind in ("DO", "OK", "FAIL"):
-            _screen_line(f"{kind}: {stage}")
+            label = kind
+            if kind == "OK":
+                label = wrap_green(kind, color_enabled)
+            elif kind == "FAIL":
+                label = wrap_red(kind, color_enabled)
+            _screen_line(f"{label}: {stage}")
 
     def _is_runner_path(rel: str) -> bool:
         p = (rel or "").strip().replace("\\", "/").lstrip("/")
@@ -1626,7 +1635,7 @@ def main(argv: list[str]) -> int:
         # Final on-screen summary (contract).
         try:
             if exit_code == 0:
-                sys.stdout.write("RESULT: SUCCESS\n")
+                sys.stdout.write(f"RESULT: {wrap_green('SUCCESS', color_enabled)}\n")
                 if push_ok_for_posthook is True and final_pushed_files is not None:
                     sys.stdout.write("FILES:\n\n")
                     for line in final_pushed_files:
@@ -1637,14 +1646,14 @@ def main(argv: list[str]) -> int:
                     sys.stdout.write("COMMIT: (none)\n")
                 if policy.commit_and_push:
                     if push_ok_for_posthook is True:
-                        sys.stdout.write("PUSH: OK\n")
+                        sys.stdout.write(f"PUSH: {wrap_green('OK', color_enabled)}\n")
                     elif push_ok_for_posthook is False:
-                        sys.stdout.write("PUSH: FAIL\n")
+                        sys.stdout.write(f"PUSH: {wrap_red('FAIL', color_enabled)}\n")
                     else:
                         sys.stdout.write("PUSH: UNKNOWN\n")
                 sys.stdout.write(f"LOG: {log_path}\n")
             else:
-                sys.stdout.write("RESULT: FAIL\n")
+                sys.stdout.write(f"RESULT: {wrap_red('FAIL', color_enabled)}\n")
                 stage = final_fail_stage or "INTERNAL"
                 reason = final_fail_reason or "unexpected error"
                 sys.stdout.write(f"STAGE: {stage}\n")
