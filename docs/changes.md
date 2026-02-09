@@ -10,6 +10,14 @@ This file lists notable changes in AudioMason2, grouped by issue.
 - 2026-02-09T00:00:00+01:00 Updated specification version and change log per documentation gate requirements.
 
 
+
+## Issue 340
+
+- 2026-02-09T00:00:00+01:00 Phase 1: Core logging supports an optional global log sink.
+- 2026-02-09T00:00:00+01:00 Phase 1: Orchestrator binds the log sink to JobService.append_log_line(job_id, line) for the lifetime of a running job.
+- 2026-02-09T00:00:00+01:00 Phase 1: WizardEngine and EventBus route runtime diagnostics through core logging so they appear in job logs when a job is running.
+- 2026-02-09T00:00:00+01:00 Updated specification version and change log per documentation gate requirements.
+
 ## Issue 344
 
 - 2026-02-09T20:00:00+01:00 Issue 344: Fix unit test isolation by clearing pre-imported 'plugins' modules from sys.modules.

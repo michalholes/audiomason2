@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.6
+Specification Version: 1.0.7
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -431,13 +431,16 @@ Requirements:
 
 ## 10. Logging & Observability
 
-- Logging is job?centric.
-- All logs are attributable to a job_id.
+- Logging is job-centric.
+- When a job is running, core logger output MUST be routed into the job log stream (JobService.read_log(job_id)).
+- When no job is running, logging behavior MUST remain unchanged.
+- Phase 1 implementation mechanism:
+  - audiomason.core.logging provides an optional global log sink callback (set_log_sink).
+  - Orchestrator binds the sink to JobService.append_log_line(job_id, line) for the lifetime of a running job and clears/restores it on exit (exception-safe).
 - Verbosity levels must be respected globally.
 
 Silent failures are forbidden.
 
----
 
 ## 11. Testing Requirements
 
