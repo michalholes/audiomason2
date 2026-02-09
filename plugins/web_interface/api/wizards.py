@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 
 from audiomason.core.wizard_service import WizardService
@@ -126,7 +126,7 @@ def mount_wizards(app: FastAPI) -> None:
     svc = _service()
 
     @app.get("/api/wizards")
-    def list_wizards() -> dict[str, Any]:
+    def list_wizards(request: Request) -> dict[str, Any]:
         items: list[dict[str, Any]] = []
         for w in svc.list_wizards():
             item: dict[str, Any] = {"name": w.name}
@@ -147,7 +147,7 @@ def mount_wizards(app: FastAPI) -> None:
                 pass
             items.append(item)
         out: dict[str, Any] = {"items": items}
-        if debug_enabled():
+        if int(getattr(request.app.state, "verbosity", 1)) >= 3 or debug_enabled():
             out["dir"] = str(svc.wizards_dir)
         return out
 

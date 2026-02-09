@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.3
+Specification Version: 1.0.4
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -383,7 +383,7 @@ Runtime configuration hooks:
   - Shape: `{ "nav": [...], "pages": { ... } }`.
   - Read/write via `/api/ui/config`.
 - Environment variables:
-  - `WEB_INTERFACE_DEBUG`: enable extra diagnostic fields in API responses.
+  - `WEB_INTERFACE_DEBUG`: enable extra diagnostic fields in API responses (also enabled when CLI verbosity is "debug").
   - `WEB_INTERFACE_STAGE_DIR`: override the stage upload directory.
   - `WEB_INTERFACE_LOG_PATH`: optional log file path used for server log tail/stream.
 
@@ -400,6 +400,23 @@ Wizard listing contract:
   - `description` (optional)
 
 ---
+
+### 9.2 Web File Management API
+
+The web interface provides a UI surface for filesystem operations, but it MUST NOT implement filesystem logic itself.
+All filesystem operations MUST be delegated to the File I/O Capability (file_io plugin / FileService).
+
+Requirements:
+- All operations are restricted to configured roots (jail): inbox, stage, jobs, outbox.
+- Directory listings must be stable-ordered (deterministic).
+- Upload supports:
+  - file upload (including .rar as a regular file),
+  - directory upload as a directory tree (relative paths preserved).
+- Download supports:
+  - file download (streamed),
+  - directory download either as a bulk set of file downloads or as a streamed archive (zip or tar).
+- File names in inbox may contain non-ASCII characters; the UI/API must preserve them as UTF-8 and MUST NOT apply ASCII sanitization.
+
 
 ## 10. Logging & Observability
 

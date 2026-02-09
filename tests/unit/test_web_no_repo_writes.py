@@ -157,11 +157,22 @@ def test_web_interface_does_not_write_to_repo(
     )
     assert status == 200
 
-    # Stage listing creates stage dir under inbox/stage (under HOME).
-    status, body, _ = _asgi_request(app, method="GET", path="/api/stage")
+    # Stage endpoint is obsolete; exercise FS API instead.
+    status, _, _ = _asgi_request(
+        app,
+        method="POST",
+        path="/api/fs/mkdir",
+        json_body={"root": "stage", "path": "t_stage", "parents": True},
+    )
     assert status == 200
-    stage_dir = json.loads(body.decode("utf-8")).get("dir")
-    assert stage_dir == str(inbox / "stage")
+
+    status, _, _ = _asgi_request(
+        app,
+        method="POST",
+        path="/api/fs/rmdir",
+        json_body={"root": "stage", "path": "t_stage"},
+    )
+    assert status == 200
 
     # Plugin listing is read-only and must not write to repo.
     status, _, _ = _asgi_request(app, method="GET", path="/api/plugins")

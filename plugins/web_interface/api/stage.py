@@ -1,57 +1,73 @@
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Annotated, Any
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 
-from audiomason.core.config_service import ConfigService
+from audiomason.core.config import ConfigResolver
+from plugins.file_io.service.service import FileService
+from plugins.file_io.service.types import RootName
 
-from ..util.fs import find_repo_root
-from ..util.paths import stage_dir_from_config
+
+def _resolver(request: Request) -> ConfigResolver:
+    r = getattr(request.app.state, "config_resolver", None)
+    if isinstance(r, ConfigResolver):
+        return r
+    return ConfigResolver()
 
 
-def _stage_dir() -> Path:
-    cfg = ConfigService().get_config()
-    inbox_dir = cfg.get("inbox_dir")
-    inbox_dir_str = inbox_dir.strip() if isinstance(inbox_dir, str) else None
-    repo_root = find_repo_root()
-    d = stage_dir_from_config(inbox_dir_str, repo_root)
-    d.mkdir(parents=True, exist_ok=True)
-    return d
+def _fs(request: Request) -> FileService:
+    fs = getattr(request.app.state, "file_service", None)
+    if isinstance(fs, FileService):
+        return fs
+    fs = FileService.from_resolver(_resolver(request))
+    request.app.state.file_service = fs
+    return fs
+
+
+def _debug(request: Request) -> bool:
+    v = getattr(request.app.state, "verbosity", 1)
+    return int(v) >= 3
 
 
 def mount_stage(app: FastAPI) -> None:
+    # Backward-compatible stage endpoints implemented via FileService.
     @app.get("/api/stage")
-    def list_stage() -> dict[str, Any]:
-        d = _stage_dir()
+    def list_stage(request: Request) -> dict[str, Any]:
+        fs = _fs(request)
         items: list[dict[str, Any]] = []
-        for p in sorted(d.rglob("*")):
-            if p.is_file():
-                rel = str(p.relative_to(d))
-                st = p.stat()
-                items.append({"name": rel, "size": st.st_size, "mtime_ts": int(st.st_mtime)})
-        out: dict[str, Any] = {"items": items, "dir": str(d)}
-        # debug_enabled() may add more diagnostic keys in the future.
+        for e in fs.list_dir(RootName.STAGE, ".", recursive=True):
+            if e.is_dir:
+                continue
+            items.append(
+                {
+                    "name": e.rel_path,
+                    "size": e.size,
+                    "mtime_ts": int(e.mtime) if e.mtime is not None else None,
+                }
+            )
+        out: dict[str, Any] = {"items": items, "dir": str(fs.root_dir(RootName.STAGE))}
+        if _debug(request):
+            out["root"] = RootName.STAGE.value
         return out
 
     @app.delete("/api/stage/{name:path}")
-    def delete_stage(name: str) -> dict[str, Any]:
-        d = _stage_dir()
-        target = (d / name).resolve()
-        if d not in target.parents and target != d:
-            raise HTTPException(status_code=400, detail="invalid path")
-        if target.exists() and target.is_file():
-            target.unlink()
-            return {"ok": True}
-        raise HTTPException(status_code=404, detail="not found")
+    def delete_stage(request: Request, name: str) -> dict[str, Any]:
+        fs = _fs(request)
+        rel = name.lstrip("/")
+        try:
+            fs.delete_file(RootName.STAGE, rel)
+        except FileNotFoundError as e:
+            raise HTTPException(status_code=404, detail="not found") from e
+        return {"ok": True}
 
     @app.post("/api/stage/upload")
     async def upload_stage(
+        request: Request,
         files: Annotated[list[UploadFile], File()],
         relpaths: Annotated[list[str] | None, Form()] = None,
     ) -> dict[str, Any]:
-        d = _stage_dir()
+        fs = _fs(request)
         if relpaths is None:
             relpaths = [f.filename or "upload.bin" for f in files]
         if len(relpaths) != len(files):
@@ -59,11 +75,15 @@ def mount_stage(app: FastAPI) -> None:
 
         saved = 0
         for up, rel in zip(files, relpaths, strict=True):
-            rel = rel.lstrip("/").replace("..", "_")
-            out = (d / rel).resolve()
-            if d not in out.parents and out != d:
-                raise HTTPException(status_code=400, detail="invalid path")
-            out.parent.mkdir(parents=True, exist_ok=True)
-            out.write_bytes(await up.read())
+            rel = rel.lstrip("/")
+            parent = rel.rsplit("/", 1)[0] if "/" in rel else ""
+            if parent:
+                fs.mkdir(RootName.STAGE, parent, parents=True, exist_ok=True)
+            with fs.open_write(RootName.STAGE, rel, overwrite=True) as out:
+                while True:
+                    chunk = await up.read(1024 * 1024)
+                    if not chunk:
+                        break
+                    out.write(chunk)
             saved += 1
         return {"ok": True, "saved": saved}

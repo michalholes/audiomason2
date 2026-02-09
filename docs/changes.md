@@ -21,3 +21,7 @@ This file lists notable changes in AudioMason2, grouped by issue.
 - 2026-02-09T01:09:46+01:00 WizardEngine is async-only; removed nested asyncio.run during async plugin calls.
 - 2026-02-09T01:09:46+01:00 Orchestrator and CLI now resolve wizard definitions via WizardService (file_io) instead of direct filesystem reads.
 - 2026-02-09T01:09:46+01:00 Added test coverage for wizard execution via WizardService-backed storage.
+
+## Issue 266
+
+- 2026-02-09T00:00:00+01:00 Web `/api/stage` now always returns `dir` to keep unit tests stable independent of debug mode.

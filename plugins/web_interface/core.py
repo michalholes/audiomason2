@@ -5,6 +5,7 @@ from typing import Any
 from fastapi import FastAPI
 
 from .api.am_config import mount_am_config
+from .api.fs import mount_fs
 from .api.jobs import mount_jobs
 from .api.logs import mount_logs
 from .api.plugins_mgmt import mount_plugins_mgmt
@@ -18,13 +19,24 @@ from .util.status import build_status
 class WebInterfacePlugin:
     """Standalone web interface plugin (no dependency on other AM plugins)."""
 
-    def create_app(self) -> FastAPI:
+    def create_app(
+        self,
+        *,
+        config_resolver: Any | None = None,
+        plugin_loader: Any | None = None,
+        verbosity: int = 1,
+    ) -> FastAPI:
         app = FastAPI(title="AudioMason Web Interface")
+
+        app.state.config_resolver = config_resolver
+        app.state.plugin_loader = plugin_loader
+        app.state.verbosity = int(verbosity)
 
         # API first (avoid catch-all swallowing /api/*)
         mount_am_config(app)
         mount_ui_schema(app)
         mount_plugins_mgmt(app)
+        mount_fs(app)
         mount_stage(app)
         mount_wizards(app)
         mount_logs(app)
@@ -43,7 +55,15 @@ class WebInterfacePlugin:
 
         return app
 
-    def run(self, host: str, port: int) -> None:
+    def run(
+        self,
+        host: str,
+        port: int,
+        *,
+        config_resolver: Any | None = None,
+        plugin_loader: Any | None = None,
+        verbosity: int = 1,
+    ) -> None:
         """Run the web server in a standalone (non-async) context."""
         try:
             import uvicorn
@@ -51,10 +71,20 @@ class WebInterfacePlugin:
             raise RuntimeError(
                 "Missing dependency: uvicorn. Install in venv: pip install uvicorn"
             ) from e
-        app = self.create_app()
+        app = self.create_app(
+            config_resolver=config_resolver, plugin_loader=plugin_loader, verbosity=verbosity
+        )
         uvicorn.run(app, host=host, port=port, log_level="info")
 
-    async def serve(self, host: str, port: int) -> None:
+    async def serve(
+        self,
+        host: str,
+        port: int,
+        *,
+        config_resolver: Any | None = None,
+        plugin_loader: Any | None = None,
+        verbosity: int = 1,
+    ) -> None:
         """Serve the web server inside an existing asyncio event loop."""
         try:
             import uvicorn
@@ -62,7 +92,9 @@ class WebInterfacePlugin:
             raise RuntimeError(
                 "Missing dependency: uvicorn. Install in venv: pip install uvicorn"
             ) from e
-        app = self.create_app()
+        app = self.create_app(
+            config_resolver=config_resolver, plugin_loader=plugin_loader, verbosity=verbosity
+        )
         config = uvicorn.Config(app, host=host, port=port, log_level="info")
         server = uvicorn.Server(config)
         await server.serve()

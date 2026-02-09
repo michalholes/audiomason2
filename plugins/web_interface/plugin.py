@@ -24,8 +24,12 @@ class WebInterfacePlugin:
         # Prefer ConfigResolver provided by CLI plugin, if available.
         host = "0.0.0.0"
         port = 8080
+        verbosity = int(getattr(self, "verbosity", 1))
         if self.config_resolver is not None:
             try:
+                resolved_host, _source_h = self.config_resolver.resolve("web.host")
+                if isinstance(resolved_host, str) and resolved_host:
+                    host = resolved_host
                 resolved_port, _source = self.config_resolver.resolve("web.port")
                 port = int(resolved_port)
             except Exception:
@@ -38,4 +42,10 @@ class WebInterfacePlugin:
                 port = 8080
             host = str(self.config.get("host", host))
 
-        await _CoreWebInterface().serve(host=host, port=port)
+        await _CoreWebInterface().serve(
+            host=host,
+            port=port,
+            config_resolver=self.config_resolver,
+            plugin_loader=self.plugin_loader,
+            verbosity=verbosity,
+        )
