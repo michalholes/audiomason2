@@ -5,25 +5,25 @@ workflow:
   name: "Basic Import"
   description: "Standard audiobook import workflow"
   
-  # Preflight steps (otázky pred spracovaním)
+  # Preflight steps (otazky pred spracovanim)
   preflight_steps:
-    # Krok 1: Vyber zdroja (vždy sa zobrazí)
+    # Krok 1: Vyber zdroja (vzdy sa zobrazi)
     - id: choose_source
       type: menu
       enabled: true
       prompt: "Choose source number, or 'a' for all"
       default: "1"
     
-    # Krok 2: Clean inbox otázka
+    # Krok 2: Clean inbox otazka
     - id: clean_inbox
       type: yes_no
       enabled: true
       prompt: "Clean inbox after successful import"
       default: no
-      # Ak je v config/CLI nastavené, preskočí otázku
+      # Ak je v config/CLI nastavene, preskoci otazku
       skip_if_set: true
     
-    # Krok 3: Publish otázka
+    # Krok 3: Publish otazka
     - id: publish
       type: yes_no
       enabled: true
@@ -31,7 +31,7 @@ workflow:
       default: no
       skip_if_set: true
     
-    # Krok 4: Wipe ID3 otázka
+    # Krok 4: Wipe ID3 otazka
     - id: wipe_id3
       type: yes_no
       enabled: true
@@ -39,7 +39,7 @@ workflow:
       default: no
       skip_if_set: true
     
-    # Krok 5: Clean stage otázka
+    # Krok 5: Clean stage otazka
     - id: clean_stage
       type: yes_no
       enabled: true
@@ -53,7 +53,7 @@ workflow:
       enabled: true
       prompt: "Author name"
       required: true
-      # Hint z názvu adresára (pred " - ")
+      # Hint z nazvu adresara (pred " - ")
       hint_from: source_name
       hint_pattern: "^([^-]+)"
     
@@ -63,11 +63,11 @@ workflow:
       enabled: true
       prompt: "Book title"
       required: true
-      # Hint z názvu adresára (po " - ")
+      # Hint z nazvu adresara (po " - ")
       hint_from: source_name
       hint_pattern: " - (.+?)(?:\\s*\\(\\d{4}\\))?(?:\\s*\\([A-Z]{2}\\))?$"
   
-  # Processing steps (samotné spracovanie)
+  # Processing steps (samotne spracovanie)
   processing_steps:
     # Krok 1: Import do stage
     - id: import
@@ -83,11 +83,11 @@ workflow:
       enabled: true
       description: "Detect cover art"
     
-    # Krok 3: Fetch metadata (voliteľné)
+    # Krok 3: Fetch metadata (volitelne)
     - id: fetch_metadata
       plugin: metadata_sync
       method: process
-      enabled: false  # Vypnuté defaultne
+      enabled: false  # Vypnute defaultne
       description: "Fetch metadata from online sources"
       # Zapne sa len ak je v config fetch_metadata: true
       condition: "config.fetch_metadata == true"
@@ -130,7 +130,7 @@ workflow:
       description: "Clean inbox source"
       condition: "answers.clean_inbox == true"
 
-# Verbosity settings - čo sa zobrazuje pri každom leveli
+# Verbosity settings - co sa zobrazuje pri kazdom leveli
 verbosity:
   quiet:  # Level 0
     - errors

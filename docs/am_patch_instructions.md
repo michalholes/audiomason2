@@ -1,7 +1,7 @@
 # AM Patch Runner 
 # Patch Authoring Manual
 
-AUTHORITATIVE – AudioMason2  
+AUTHORITATIVE - AudioMason2  
 Status: active  
 Version: v2.32
 This manual defines what a chat must produce so that the user can run the patch successfully and close the issue.
@@ -20,8 +20,8 @@ A chat MUST NOT create a monolith or contribute to monolith growth. The patch MU
 Required constraints:
 
 1. Locality-first: prefer the smallest change set that fixes the issue.
-2. No “god modules”: do not introduce new catch-all modules (e.g., `utils.py`, `common.py`, `helpers.py`, `misc.py`) that aggregate unrelated responsibilities.
-3. No centralization without approval: do not move many unrelated functions/classes into a single new location “for reuse” unless the user explicitly requested that refactor.
+2. No "god modules": do not introduce new catch-all modules (e.g., `utils.py`, `common.py`, `helpers.py`, `misc.py`) that aggregate unrelated responsibilities.
+3. No centralization without approval: do not move many unrelated functions/classes into a single new location "for reuse" unless the user explicitly requested that refactor.
 4. Respect ownership boundaries: avoid cross-cutting edits across many packages/subsystems when a narrow fix is possible.
 5. New code must have a single clear responsibility and belong to the closest existing module where that responsibility naturally fits.
 6. If the required change would inherently be cross-cutting (touching many subsystems), the chat MUST stop and request explicit permission with a concrete scoped plan before producing such a patch.
@@ -40,7 +40,7 @@ Rules:
 2. Each patch file MUST contain a unified diff that changes **only** its corresponding file.
    - No multi-file diffs.
    - No `diff --git` entries for other files.
-3. The zip MUST NOT contain a “combined” patch.
+3. The zip MUST NOT contain a "combined" patch.
 4. The set of patch files must be non-empty.
 5. Each patch file MUST pass: `git apply --check <that_file.patch>`.
 6. Optional but recommended: include a short ASCII-only `patches/per_file/MANIFEST.txt` listing patch filenames in application order (one per line). If present, the order MUST be deterministic (lexicographic by patch filename).
@@ -62,7 +62,7 @@ Constraints:
 - Do not prompt the user for input.
 - Do not require network access.
 
-All changes must be expressed as unified diff patches ("git apply" format), packaged **per file** (see “Per-file patch zip format”).
+All changes must be expressed as unified diff patches ("git apply" format), packaged **per file** (see "Per-file patch zip format").
 Forbidden:
 - generating any `.py` patch script
 - embedding runnable Python code as the patch mechanism
@@ -113,7 +113,7 @@ The runner is the authority.
 
 ---
 
-## “Issue can be closed” rule
+## "Issue can be closed" rule
 
 An issue can be closed only if:
 - the runner returns SUCCESS, and

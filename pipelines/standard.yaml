@@ -9,7 +9,7 @@ pipeline:
       interface: IProcessor
       after: []
     
-    # Step 2: Convert audio (M4A/Opus → MP3)
+    # Step 2: Convert audio (M4A/Opus -> MP3)
     - id: convert
       plugin: audio_processor
       interface: IProcessor

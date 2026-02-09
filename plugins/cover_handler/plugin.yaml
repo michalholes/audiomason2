@@ -1,7 +1,7 @@
 name: cover_handler
 version: 1.0.0
 description: "Cover image handling: extract, download, convert, embed"
-author: "Michal Holeš <michal@holes.sk>"
+author: "Michal Holes <michal@holes.sk>"
 license: MIT
 
 entrypoint: plugin:CoverHandlerPlugin

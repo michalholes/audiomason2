@@ -1,5 +1,5 @@
 # AudioMason Minimal Workflow - no questions, auto mode
-# Použite pre automatizované spracovanie bez interakcie
+# Pouzite pre automatizovane spracovanie bez interakcie
 
 workflow:
   name: "Minimal Import"
@@ -13,8 +13,8 @@ workflow:
       prompt: "Choose source number, or 'a' for all"
       default: "1"
     
-    # Žiadne otázky - použijú sa config/CLI hodnoty
-    # Author a title sa berú z názvu adresára
+    # Ziadne otazky - pouziju sa config/CLI hodnoty
+    # Author a title sa beru z nazvu adresara
     - id: author
       type: input
       enabled: true
@@ -31,7 +31,7 @@ workflow:
       hint_from: source_name
       hint_pattern: " - (.+?)(?:\\s*\\(\\d{4}\\))?(?:\\s*\\([A-Z]{2}\\))?$"
   
-  # Processing steps - len základné
+  # Processing steps - len zakladne
   processing_steps:
     - id: import
       plugin: file_io_sync
@@ -57,7 +57,7 @@ workflow:
       enabled: true
       description: "Export to output"
     
-    # Cleanup vždy zapnutý
+    # Cleanup vzdy zapnuty
     - id: cleanup_stage
       plugin: file_io_sync
       method: cleanup_stage

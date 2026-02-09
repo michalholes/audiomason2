@@ -137,10 +137,10 @@ wizard:
           type: choice
           prompt: "Cover priority order"
           choices:
-            - "1. Book level → 2. Embedded → 3. Root"
-            - "1. Embedded → 2. Book level → 3. Root"
-            - "1. Download → 2. Embedded → 3. Local"
-          default: "1. Book level → 2. Embedded → 3. Root"
+            - "1. Book level -> 2. Embedded -> 3. Root"
+            - "1. Embedded -> 2. Book level -> 3. Root"
+            - "1. Download -> 2. Embedded -> 3. Local"
+          default: "1. Book level -> 2. Embedded -> 3. Root"
         
         - id: cover_process
           type: plugin_call
@@ -214,10 +214,10 @@ wizard:
       type: choice
       prompt: "Tag language/encoding"
       choices:
-        - "With diacritics (ľščťžýáíéúô)"
+        - "With diacritics (lsctzyaieuo)"
         - "Without diacritics (ASCII)"
         - "UTF-8"
-      default: "With diacritics (ľščťžýáíéúô)"
+      default: "With diacritics (lsctzyaieuo)"
     
     - id: tag
       type: plugin_call

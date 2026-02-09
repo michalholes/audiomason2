@@ -1,7 +1,7 @@
 name: audio_processor_sync
 version: 1.0.0
 description: Synchronous audio processing - FFmpeg operations
-author: Michal Holeš
+author: Michal Holes
 entrypoint: plugin:AudioProcessorSync
 
 interfaces:

@@ -1,7 +1,7 @@
 name: metadata_openlibrary
 version: 1.0.0
 description: "Fetch metadata from OpenLibrary API"
-author: "Michal Holeš <michal@holes.sk>"
+author: "Michal Holes <michal@holes.sk>"
 license: MIT
 
 entrypoint: plugin:OpenLibraryPlugin

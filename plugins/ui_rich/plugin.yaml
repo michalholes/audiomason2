@@ -1,7 +1,7 @@
 name: ui_rich
 version: 1.0.0
 description: "Rich UI enhancements: progress bars, colored output, better formatting"
-author: "Michal Holeš <michal@holes.sk>"
+author: "Michal Holes <michal@holes.sk>"
 license: MIT
 
 entrypoint: plugin:RichUIPlugin

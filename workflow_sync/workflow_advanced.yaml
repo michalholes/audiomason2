@@ -1,4 +1,4 @@
-# AudioMason Advanced Workflow - všetky funkcie zapnuté
+# AudioMason Advanced Workflow - vsetky funkcie zapnute
 # Metadata fetch, cover download, chapter splitting, loudnorm
 
 workflow:
@@ -30,7 +30,7 @@ workflow:
       type: yes_no
       enabled: true
       prompt: "Wipe all existing ID3 tags"
-      default: yes  # Advanced workflow vždy wipne
+      default: yes  # Advanced workflow vzdy wipne
       skip_if_set: true
     
     - id: clean_stage
@@ -40,7 +40,7 @@ workflow:
       default: yes
       skip_if_set: true
     
-    # Nové otázky pre advanced
+    # Nove otazky pre advanced
     - id: fetch_metadata
       type: yes_no
       enabled: true
@@ -85,7 +85,7 @@ workflow:
       enabled: true
       description: "Import to staging"
     
-    # Fetch metadata ak zapnuté
+    # Fetch metadata ak zapnute
     - id: fetch_metadata
       plugin: metadata_sync
       method: process
@@ -99,7 +99,7 @@ workflow:
       enabled: true
       description: "Detect/extract cover art"
     
-    # Audio processing - použije answers pre loudnorm/split_chapters
+    # Audio processing - pouzije answers pre loudnorm/split_chapters
     - id: audio_process
       plugin: audio_processor_sync
       method: process_files

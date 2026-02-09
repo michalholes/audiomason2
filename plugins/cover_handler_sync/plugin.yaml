@@ -1,7 +1,7 @@
 name: cover_handler_sync
 version: 1.0.0
 description: Synchronous cover handler - extract, download, embed cover art
-author: Michal Holeš
+author: Michal Holes
 entrypoint: plugin:CoverHandlerSync
 
 interfaces:

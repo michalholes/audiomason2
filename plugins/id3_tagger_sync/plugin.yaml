@@ -1,7 +1,7 @@
 name: id3_tagger_sync
 version: 1.0.0
 description: Synchronous ID3 tagging - write metadata to MP3 files
-author: Michal Holeš
+author: Michal Holes
 entrypoint: plugin:ID3TaggerSync
 
 interfaces:
