@@ -3,6 +3,13 @@
 This file lists notable changes in AudioMason2, grouped by issue.
 
 
+## Issue TBD
+
+- 2026-02-09T00:00:00+01:00 Added new file I/O root `config` for configuration-owned filesystem data.
+- 2026-02-09T00:00:00+01:00 Added configuration key: `file_io.roots.config_dir` (legacy fallback: `config_dir`).
+- 2026-02-09T00:00:00+01:00 Updated specification version and change log per documentation gate requirements.
+
+
 ## Issue 344
 
 - 2026-02-09T20:00:00+01:00 Issue 344: Fix unit test isolation by clearing pre-imported 'plugins' modules from sys.modules.

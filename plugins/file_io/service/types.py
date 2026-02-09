@@ -16,6 +16,7 @@ class RootName(StrEnum):
     STAGE = "stage"
     JOBS = "jobs"
     OUTBOX = "outbox"
+    CONFIG = "config"
     WIZARDS = "wizards"
 
 

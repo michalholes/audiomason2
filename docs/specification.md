@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.5
+Specification Version: 1.0.6
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -257,6 +257,8 @@ The file I/O capability must support named roots:
 - stage: general staging area (non-job-specific)
 - jobs: isolated per-job workspaces
 - outbox: outputs intended for download/export
+- config: configuration-owned filesystem data (optional)
+- wizards: wizard-owned filesystem data
 
 #### 7.4.2 Operations
 
