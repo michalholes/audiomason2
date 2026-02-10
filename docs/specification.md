@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.24
+Specification Version: 1.0.25
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -620,6 +620,7 @@ Mandatory rules:
 
 2. Within each directory:
    - plugin directories MUST be sorted lexicographically by directory name.
+   - Sorting key MUST be the directory name (Path.name).
 
 3. For command registration:
    - plugins MUST be ordered by `manifest.name` (lexicographically).

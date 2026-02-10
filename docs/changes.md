@@ -1,3 +1,9 @@
+## 2026-02-10T22:16:04+01:00
+
+- core: plugin discovery enumerates plugin directories in deterministic lexicographic order by directory name.
+- tests: add unit test asserting deterministic discovery ordering.
+- spec: document discovery sorting key and bump specification version to 1.0.25.
+
 ## 2026-02-10T21:43:20+01:00
 
 - cli/web: default `audiomason web` no longer emits debug messages; verbose output is info-level and gated by verbosity >= verbose.

@@ -204,7 +204,7 @@ class PluginLoader:
         if not base_dir.exists():
             return plugin_dirs
 
-        for item in base_dir.iterdir():
+        for item in sorted(base_dir.iterdir(), key=lambda p: p.name):
             if item.is_dir() and (item / "plugin.yaml").exists():
                 plugin_dirs.append(item)
 
