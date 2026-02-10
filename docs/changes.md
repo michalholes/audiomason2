@@ -2,6 +2,11 @@
 
 This file lists notable changes in AudioMason2 in strict chronological order.
 
+## 2026-02-10T21:15:00+01:00
+
+- spec: define CLI plugin command extension contract (ICLICommands, determinism, failure isolation).
+- spec: bump specification version to 1.0.21.
+
 ## 2026-02-10T21:00:00+01:00
 
 - web UI: render effective_snapshot entries and add per-key Reset actions.

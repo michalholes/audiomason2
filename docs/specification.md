@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.20
+Specification Version: 1.0.21
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -499,6 +499,90 @@ Debug/trace support:
 
 
 ---
+
+---
+
+### 7.5 CLI Plugin Command Extension
+
+This section defines the contract for extending the AudioMason2 CLI with plugin-provided commands.
+
+This mechanism is strictly limited to adding new CLI commands. Plugins MUST NOT modify, override,
+intercept, or disable existing CLI commands.
+
+This section intentionally defines stricter constraints for CLI extensibility than the general plugin
+capability model described elsewhere in this specification.
+
+#### 7.5.1 Ownership and Responsibility
+
+- CLI command extensibility is owned by the CLI plugin.
+- Core MUST NOT provide a global CLI hook bus.
+- Core responsibilities end at plugin discovery, manifest loading, and enable/disable state via
+  PluginRegistry.
+
+#### 7.5.2 Declaration Contract
+
+Plugins that provide CLI commands MUST explicitly declare this capability via a dedicated interface.
+
+- The canonical interface name is: ICLICommands
+- Plugins that do not declare this interface MUST be ignored for CLI command registration.
+- Implicit or heuristic detection is forbidden.
+
+#### 7.5.3 Discovery Sources
+
+The CLI plugin MAY discover CLI command providers from all supported plugin sources:
+
+- built-in plugins
+- user plugins
+- system plugins
+
+Discovery MUST be deterministic and independent of filesystem enumeration order.
+
+#### 7.5.4 Loading Model
+
+A hybrid loading model is required:
+
+- At CLI startup, the system MUST perform lightweight discovery (manifest reads, validation, and
+  command stub preparation).
+- Full plugin import and initialization MUST NOT occur until the corresponding CLI command is invoked.
+- Manifest-only discovery MUST NOT execute plugin code.
+
+#### 7.5.5 Command Name Rules
+
+Plugin-provided CLI command names MUST be globally unique.
+
+- Command name collisions are FORBIDDEN.
+- Any collision MUST result in a deterministic error.
+- Silent overrides or filesystem-order resolution are prohibited.
+
+#### 7.5.6 Failure Isolation
+
+Failure of a CLI command plugin MUST NOT crash the CLI.
+
+- A plugin that fails during loading or execution MUST be disabled for the current session.
+- Other CLI commands MUST remain available.
+- Errors SHOULD be reported clearly to the user.
+
+#### 7.5.7 Enable / Disable Semantics
+
+CLI command registration MUST respect PluginRegistry.
+
+- Disabled plugins MUST NOT register CLI commands.
+- Plugin enable/disable state is authoritative and centralized.
+
+#### 7.5.8 User Visibility
+
+The origin of every plugin-provided CLI command MUST be visible to the user.
+
+- Help output MUST indicate the providing plugin for each plugin-provided command.
+- Anonymous or hidden command registration is forbidden.
+
+#### 7.5.9 Determinism Requirements
+
+All CLI plugin command behavior MUST be deterministic.
+
+- Plugin processing order MUST be explicitly defined and stable.
+- Filesystem order MUST NOT affect behavior.
+- Help output, command lists, and error messages SHOULD be stable across runs.
 
 ## 8. Wizard System
 
