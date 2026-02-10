@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.19
+Specification Version: 1.0.20
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -37,9 +37,28 @@ This specification is versioned. The version is tracked near the top of this doc
 Rules:
 
 - Start at version 1.0.0.
-- Every change to this specification MUST increment the patch number by +1 (e.g., 1.0.0 -> 1.0.1).
+- Every change to this specification MUST increment the patch number by +1 (e.g. 1.0.0 -> 1.0.1).
 - Every change delivered by a patch MUST be recorded in docs/changes.md.
 - Each change entry in docs/changes.md MUST start with an ISO 8601 timestamp captured at patch creation time.
+
+### docs/changes.md – Canonical Change Log Format (MANDATORY)
+
+The file docs/changes.md is a **pure chronological change log**.
+
+It MUST contain:
+- only ISO 8601 timestamps and human-readable descriptions of changes,
+- entries ordered strictly by time (newest first or oldest first, but consistent),
+- one or more change descriptions per timestamp.
+
+It MUST NOT contain:
+- issue numbers or issue references,
+- issue groupings or headings (e.g. "Issue 123"),
+- patch IDs, commit hashes, or author names,
+- explanations of motivation, discussion, or process.
+
+docs/changes.md records **what changed and when**, nothing else.
+Process tracking (issues, discussions, rationale) belongs elsewhere.
+
 
 ## 2. Core Vision
 
