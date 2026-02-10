@@ -34,9 +34,12 @@ from audiomason.core import (
 )
 from audiomason.core.config_service import ConfigService
 from audiomason.core.jobs.model import JobState, JobType
+from audiomason.core.logging import get_logger
 from audiomason.core.orchestration import Orchestrator
 from audiomason.core.orchestration_models import ProcessRequest
 from audiomason.core.plugin_registry import PluginRegistry
+
+log = get_logger(__name__)
 
 
 class VerbosityLevel:
@@ -592,7 +595,7 @@ class CLIPlugin:
         cli_args = self._parse_cli_args()
 
         if self.verbosity >= VerbosityLevel.DEBUG:
-            print(f"[DEBUG] Parsed CLI args: {cli_args}")
+            log.debug(f"Parsed CLI args: {cli_args}")
 
         # Create ConfigResolver with CLI args
         config_resolver = ConfigResolver(cli_args=cli_args)
@@ -601,12 +604,12 @@ class CLIPlugin:
         try:
             port, source = config_resolver.resolve("web.port")
             if self.verbosity >= VerbosityLevel.DEBUG:
-                print(f"[DEBUG] Resolved port {port} from {source}")
+                log.debug(f"Resolved port {port} from {source}")
             self._verbose(f"Using port {port} (source: {source})")
         except Exception as e:
             port = 8080
             if self.verbosity >= VerbosityLevel.DEBUG:
-                print(f"[DEBUG] Failed to resolve web.port: {e}, using default 8080")
+                log.debug(f"Failed to resolve web.port: {e}, using default 8080")
             self._debug("Using default port 8080")
 
         self._info(f"\U0001f310 Starting web server on port {port}...")
@@ -619,8 +622,8 @@ class CLIPlugin:
         loader = PluginLoader(builtin_plugins_dir=plugins_dir, registry=reg)
 
         if self.verbosity >= VerbosityLevel.DEBUG:
-            print(f"[DEBUG] Plugins directory: {plugins_dir}")
-            print("[DEBUG] Loading all plugins...")
+            log.debug(f"Plugins directory: {plugins_dir}")
+            log.debug("Loading all plugins...")
 
         # Load all plugins first (so web UI can list them)
         plugin_dirs = [
@@ -628,22 +631,22 @@ class CLIPlugin:
         ]
 
         if self.verbosity >= VerbosityLevel.DEBUG:
-            print(f"[DEBUG] Found {len(plugin_dirs)} plugin directories")
+            log.debug(f"Found {len(plugin_dirs)} plugin directories")
 
         for plugin_dir in plugin_dirs:
             try:
                 if self.verbosity >= VerbosityLevel.DEBUG:
-                    print(f"[DEBUG]   Loading: {plugin_dir.name}...")
+                    log.debug(f"Loading: {plugin_dir.name}...")
                 loader.load_plugin(plugin_dir, validate=False)
                 if self.verbosity >= VerbosityLevel.DEBUG:
-                    print("[DEBUG]     OK Loaded")
+                    log.debug("OK Loaded")
             except Exception as e:
                 if self.verbosity >= VerbosityLevel.DEBUG:
-                    print(f"[DEBUG]     X Failed: {e}")
+                    log.debug(f"X Failed: {e}")
 
         if self.verbosity >= VerbosityLevel.DEBUG:
             loaded = loader.list_plugins()
-            print(f"[DEBUG] Successfully loaded {len(loaded)} plugins: {loaded}")
+            log.debug(f"Successfully loaded {len(loaded)} plugins: {loaded}")
 
         # Get web_server plugin
         web_plugin = loader.get_plugin("web_interface")
@@ -662,9 +665,9 @@ class CLIPlugin:
 
             if self.verbosity >= VerbosityLevel.DEBUG:
                 print("[DEBUG] Web plugin initialized with:")
-                print(f"[DEBUG]   - config_resolver: {config_resolver is not None}")
-                print(f"[DEBUG]   - plugin_loader: {loader is not None}")
-                print(f"[DEBUG]   - verbosity: {self.verbosity}")
+            log.debug(f"  - config_resolver: {config_resolver is not None}")
+            log.debug(f"  - plugin_loader: {loader is not None}")
+            log.debug(f"  - verbosity: {self.verbosity}")
 
             await web_plugin.run()
         except Exception as e:
@@ -672,7 +675,7 @@ class CLIPlugin:
             if self.verbosity >= VerbosityLevel.DEBUG:
                 import traceback
 
-                traceback.print_exc()
+                log.debug(traceback.format_exc())
 
     async def _daemon_command(self) -> None:
         """Start daemon mode."""
@@ -700,7 +703,7 @@ class CLIPlugin:
             if self.verbosity >= VerbosityLevel.DEBUG:
                 import traceback
 
-                traceback.print_exc()
+                log.debug(traceback.format_exc())
 
     async def _checkpoints_command(self, args: list[str]) -> None:
         """Manage checkpoints.
@@ -960,4 +963,4 @@ class CLIPlugin:
             import traceback
 
             if self.verbosity >= VerbosityLevel.DEBUG:
-                traceback.print_exc()
+                log.debug(traceback.format_exc())

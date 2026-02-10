@@ -69,10 +69,7 @@ def _parse_verbosity(value: object) -> VerbosityLevel:
 
 def _resolve_effective_verbosity() -> VerbosityLevel:
     resolver = ConfigResolver()
-    try:
-        value, _source = resolver.resolve("logging.level")
-    except Exception:
-        value = "normal"
+    value = resolver.resolve_logging_level()
     return _parse_verbosity(value)
 
 

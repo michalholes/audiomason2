@@ -11,6 +11,10 @@ from __future__ import annotations
 
 from typing import Any
 
+from audiomason.core.logging import get_logger
+
+log = get_logger(__name__)
+
 
 class RichUIPlugin:
     """Rich UI enhancements.
@@ -64,9 +68,7 @@ class RichUIPlugin:
 
             self.console.print(Panel(f"[bold cyan]{text}[/bold cyan]"))
         else:
-            print(f"\n{'=' * 70}")
-            print(f" {text}")
-            print(f"{'=' * 70}\n")
+            log.info(text)
 
     def print_success(self, text: str) -> None:
         """Print success message.
@@ -77,7 +79,7 @@ class RichUIPlugin:
         if self.has_rich and self.console:
             self.console.print(f"[bold green]OK[/bold green] {text}")
         else:
-            print(f"OK {text}")
+            log.info(f"OK {text}")
 
     def print_error(self, text: str) -> None:
         """Print error message.
@@ -88,7 +90,7 @@ class RichUIPlugin:
         if self.has_rich and self.console:
             self.console.print(f"[bold red]X[/bold red] {text}")
         else:
-            print(f"X {text}")
+            log.error(f"X {text}")
 
     def print_warning(self, text: str) -> None:
         """Print warning message.
@@ -99,7 +101,7 @@ class RichUIPlugin:
         if self.has_rich and self.console:
             self.console.print(f"[bold yellow][WARN][/bold yellow] {text}")
         else:
-            print(f"[WARN] {text}")
+            log.warning(text)
 
     def print_info(self, text: str) -> None:
         """Print info message.
@@ -110,7 +112,7 @@ class RichUIPlugin:
         if self.has_rich and self.console:
             self.console.print(f"[bold blue]\u2139[/bold blue] {text}")
         else:
-            print(f"\u2139 {text}")
+            log.info(text)
 
     def create_progress(self) -> Any:
         """Create progress bar.
@@ -149,12 +151,9 @@ class RichUIPlugin:
         else:
             # Fallback to simple formatting
             print(f"\n{title}")
-            print("-" * 70)
             print(" | ".join(headers))
-            print("-" * 70)
             for row in rows:
                 print(" | ".join(row))
-            print()
 
     def print_status(self, contexts: list[Any]) -> None:
         """Print status for multiple books.
@@ -180,14 +179,12 @@ class RichUIPlugin:
             self.console.print(table)
         else:
             # Fallback
-            print("\nProcessing Status:")
-            print("-" * 70)
+            log.info("Processing Status:")
             for i, ctx in enumerate(contexts, 1):
                 title = getattr(ctx, "title", "Unknown")
                 status = ctx.state.value if hasattr(ctx, "state") else "unknown"
                 progress = f"{ctx.progress * 100:.0f}%" if hasattr(ctx, "progress") else "0%"
-                print(f"{i}. {title:30s} {status:15s} {progress:>6s}")
-            print()
+                log.info(f"{i}. {title} {status} {progress}")
 
 
 # Global instance

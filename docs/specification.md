@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.10
+Specification Version: 1.0.11
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -525,6 +525,7 @@ Requirements:
 
 - Plugins and daemon MUST NOT use print() for runtime diagnostics.
 - All runtime diagnostics MUST go through the core logger.
+- Plugins and services MUST NOT use stdlib logging for runtime diagnostics; use the core logger only.
 - This guarantees job-context observability (JobService logs) and preserves standalone behavior.
 Silent failures are forbidden.
 

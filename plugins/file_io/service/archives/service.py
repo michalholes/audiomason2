@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import contextlib
 import io
-import logging
 import os
 import shutil
 import subprocess
@@ -21,6 +20,7 @@ from typing import Literal, cast
 
 from audiomason.core.config import ConfigResolver
 from audiomason.core.errors import FileError
+from audiomason.core.logging import get_logger
 
 from ..service import FileService
 from ..types import RootName
@@ -37,7 +37,7 @@ from .types import (
     UnpackResult,
 )
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 
 TarReadMode = Literal["r:", "r:gz", "r:xz"]
@@ -174,11 +174,10 @@ class ArchiveService:
 
         if debug:
             log.debug(
-                "plan_unpack format=%s backend=%s entries=%d collisions=%d",
-                _fmt,
-                backend,
-                len(entries),
-                len(collisions),
+
+                    f"plan_unpack format={_fmt} backend={backend} entries={len(entries)} "
+                    f"collisions={len(collisions)}"
+
             )
 
         return UnpackPlan(
@@ -338,11 +337,10 @@ class ArchiveService:
 
         if debug:
             log.debug(
-                "plan_pack format=%s backend=%s entries=%d collisions=%d",
-                fmt,
-                backend,
-                len(entries),
-                len(collisions),
+
+                    f"plan_pack format={fmt} backend={backend} entries={len(entries)} "
+                    f"collisions={len(collisions)}"
+
             )
 
         return PackPlan(

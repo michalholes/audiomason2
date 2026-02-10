@@ -11,6 +11,14 @@ This file lists notable changes in AudioMason2, grouped by issue.
 
 
 
+
+## Issue 831
+
+- 2026-02-09T00:00:00+01:00 Logging contract debt: orchestrator rejects invalid logging.level (no silent fallback).
+- 2026-02-09T00:00:00+01:00 Logging contract debt: CLI/UI runtime diagnostics do not use print(); all diagnostics go through core logger.
+- 2026-02-09T00:00:00+01:00 Logging contract debt: file_io archives do not use stdlib logging; use core logger.
+- 2026-02-09T00:00:00+01:00 Updated specification version and change log per documentation gate requirements.
+
 ## Issue 343
 
 - 2026-02-09T19:48:26+01:00 Phase 3: Plugins and daemon route runtime diagnostics through core logging (no print()).
@@ -66,4 +74,3 @@ This file lists notable changes in AudioMason2, grouped by issue.
 - 2026-02-09T20:43:47+01:00 Resolver: Added immutable LoggingPolicy resolved in one place from canonical logging.level.
 - 2026-02-09T20:43:47+01:00 Resolver: LoggingPolicy derives emission flags deterministically (quiet/normal/verbose/debug).
 - 2026-02-09T20:43:47+01:00 Documentation: Updated specification to describe LoggingPolicy and alias rules.
-
