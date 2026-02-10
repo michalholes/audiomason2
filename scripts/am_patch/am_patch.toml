@@ -2,6 +2,7 @@ verbosity = "verbose" # debug | verbose | normal | quiet
 console_color = "auto" # auto | always | never
 
 
+
 [paths]
 # Canonical (optional; runner may infer)
 # repo_root = "/home/pi/audiomason2"
