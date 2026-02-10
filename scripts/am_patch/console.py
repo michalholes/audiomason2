@@ -5,6 +5,7 @@ import sys
 
 _ANSI_GREEN = "\x1b[32m"
 _ANSI_RED = "\x1b[31m"
+_ANSI_YELLOW = "\x1b[33m"
 _ANSI_RESET = "\x1b[0m"
 
 
@@ -41,3 +42,7 @@ def wrap_green(text: str, enabled: bool) -> str:
 
 def wrap_red(text: str, enabled: bool) -> str:
     return f"{_ANSI_RED}{text}{_ANSI_RESET}" if enabled else text
+
+
+def wrap_yellow(text: str, enabled: bool) -> str:
+    return f"{_ANSI_YELLOW}{text}{_ANSI_RESET}" if enabled else text

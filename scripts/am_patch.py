@@ -120,7 +120,7 @@ from am_patch.config import (
     policy_for_log,
     resolve_config_path,
 )
-from am_patch.console import stdout_color_enabled, wrap_green, wrap_red
+from am_patch.console import stdout_color_enabled, wrap_green, wrap_red, wrap_yellow
 from am_patch.errors import RunnerError, fingerprint
 from am_patch.gates import run_badguys, run_gates
 from am_patch.lock import FileLock
@@ -1733,8 +1733,13 @@ def main(argv: list[str]) -> int:
                 sys.stdout.write(f"RESULT: {wrap_green('SUCCESS', color_enabled)}\n")
                 if push_ok_for_posthook is True and final_pushed_files is not None:
                     sys.stdout.write("FILES:\n\n")
+                    files_color_enabled = color_enabled and verbosity in (
+                        "normal",
+                        "verbose",
+                        "debug",
+                    )
                     for line in final_pushed_files:
-                        sys.stdout.write(f"{line}\n")
+                        sys.stdout.write(f"{wrap_yellow(line, files_color_enabled)}\n")
                 if final_commit_sha:
                     sys.stdout.write(f"COMMIT: {final_commit_sha}\n")
                 else:
