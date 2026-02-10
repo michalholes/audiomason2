@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.27
+Specification Version: 1.0.28
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -693,6 +693,26 @@ Resolution order:
 2. Plugin-provided CLI commands
 
 Plugins MUST NOT override or shadow core commands.
+
+### 7.5.16 Reference Plugin: test_all_plugin
+
+The repository includes a builtin reference plugin named `test_all_plugin`.
+
+Purpose:
+
+- Provide a canonical, deterministic "kitchen sink" example for plugin authors.
+- Provide stable integration test coverage for the plugin loader and CLI command extension.
+
+Location:
+
+- `plugins/test_all_plugin/`
+
+Required properties:
+
+- Deterministic and non-interactive.
+- Declares multiple interfaces (IProcessor, IEnricher, IProvider, IUI, ICLICommands).
+- Declares `cli_commands` and provides handlers via `get_cli_commands()`.
+
 ## 8. Wizard System
 
 ### 8.1 Wizard Service

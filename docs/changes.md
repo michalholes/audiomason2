@@ -1,3 +1,9 @@
+## 2026-02-10T23:30:00+01:00
+
+- Plugins: Add builtin sample plugin test_all_plugin exercising multiple interfaces and ICLICommands.
+- Tests: Add integration coverage for test_all_plugin discovery, interface methods, and CLI command execution.
+- spec: Document test_all_plugin as the canonical reference plugin for authors and tests.
+
 ## 2026-02-10T23:00:00+01:00
 
 - CLI: Execute plugin-provided CLI commands lazily at invocation time (sync + async handlers).

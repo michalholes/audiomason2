@@ -1,0 +1,42 @@
+name: test_all_plugin
+version: 1.0.0
+description: Sample plugin exercising all supported interfaces and CLI command extension.
+author: "Michal Holes <michal@holes.sk>"
+license: MIT
+
+entrypoint: plugin:TestAllPlugin
+
+interfaces:
+  - IProcessor
+  - IEnricher
+  - IProvider
+  - IUI
+  - ICLICommands
+
+hooks:
+  - post_import
+  - post_metadata
+  - post_process
+  - post_convert
+
+dependencies:
+  python: ">=3.11"
+  system: []
+
+config_schema:
+  enabled:
+    type: boolean
+    default: true
+  mode:
+    type: string
+    default: "demo"
+    enum: ["demo", "strict"]
+  demo_value:
+    type: integer
+    default: 123
+
+test_level: basic
+
+cli_commands:
+  - test-all
+  - test-echo
