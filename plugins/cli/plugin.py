@@ -664,10 +664,10 @@ class CLIPlugin:
             web_plugin.verbosity = self.verbosity
 
             if self.verbosity >= VerbosityLevel.DEBUG:
-                print("[DEBUG] Web plugin initialized with:")
-            log.debug(f"  - config_resolver: {config_resolver is not None}")
-            log.debug(f"  - plugin_loader: {loader is not None}")
-            log.debug(f"  - verbosity: {self.verbosity}")
+                log.debug("Web plugin initialized with:")
+                log.debug(f"  - config_resolver: {config_resolver is not None}")
+                log.debug(f"  - plugin_loader: {loader is not None}")
+                log.debug(f"  - verbosity: {self.verbosity}")
 
             await web_plugin.run()
         except Exception as e:
