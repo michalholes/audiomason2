@@ -51,6 +51,7 @@ jobs:
         run: |
           . .venv/bin/activate
           python3 badguys/badguys.py \
-            --exclude=test_064_a_allows_undeclared \
-            --exclude=test_900_commit_push_timestamp
+           -v \
+           --exclude=test_064_a_allows_undeclared \
+           --exclude=test_900_commit_push_timestamp
 
