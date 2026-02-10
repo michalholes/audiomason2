@@ -1,3 +1,7 @@
+## 2026-02-10T20:58:21+01:00
+
+- spec: extend CLI plugin command extension with normative ICLICommands contract, determinism, and UX rules.
+
 # Changes
 
 This file lists notable changes in AudioMason2 in strict chronological order.

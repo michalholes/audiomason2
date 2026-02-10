@@ -584,6 +584,103 @@ All CLI plugin command behavior MUST be deterministic.
 - Filesystem order MUST NOT affect behavior.
 - Help output, command lists, and error messages SHOULD be stable across runs.
 
+
+### 7.5.10 ICLICommands Interface Contract
+
+Plugins that declare the `ICLICommands` interface MUST implement the following Python-level contract.
+
+The plugin class MUST expose a method:
+
+`get_cli_commands() -> dict[str, Callable]`
+
+Normative requirements:
+
+- Dictionary keys MUST be CLI command names.
+- Command names MUST:
+  - be lowercase,
+  - contain only ASCII letters, digits, and hyphens,
+  - not conflict with existing core CLI commands.
+- Dictionary values MUST be callables.
+- Callables MUST accept a single argument: `argv: list[str]`.
+- Callables MAY be synchronous or asynchronous.
+- The CLI host MUST transparently support both sync and async handlers.
+- The CLI host MUST NOT call `get_cli_commands()` until the command is invoked.
+
+### 7.5.11 Deterministic Discovery and Ordering Rules
+
+All CLI command plugin discovery MUST be deterministic.
+
+Mandatory rules:
+
+1. Plugin discovery directories MUST be processed in this order:
+   1. built-in plugins
+   2. user plugins
+   3. system plugins
+
+2. Within each directory:
+   - plugin directories MUST be sorted lexicographically by directory name.
+
+3. For command registration:
+   - plugins MUST be ordered by `manifest.name` (lexicographically).
+   - filesystem iteration order MUST NOT influence behavior.
+
+4. If two plugins declare the same CLI command name:
+   - this is a fatal configuration error,
+   - the CLI MUST abort startup with a clear error message.
+
+### 7.5.12 CLI Command Stub Registry
+
+The CLI plugin MUST maintain an internal registry of CLI command stubs.
+
+A command stub MUST contain:
+- command name,
+- providing plugin identifier (`manifest.name`),
+- a reference sufficient to lazily load the plugin.
+
+At CLI startup:
+- only stubs MAY be registered,
+- plugin code MUST NOT be imported.
+
+On command invocation:
+- the CLI MUST load exactly one plugin,
+- call `get_cli_commands()`,
+- resolve the requested command,
+- execute its handler.
+
+### 7.5.13 Failure Semantics for Command Invocation
+
+If a CLI command plugin fails during load or execution:
+
+- the failure MUST NOT crash the CLI process,
+- the plugin MUST be marked as failed for the current session,
+- subsequent invocations MUST be rejected with a clear error,
+- other CLI commands MUST remain functional.
+
+Failure of one plugin MUST NOT affect discovery or execution of other plugins.
+
+### 7.5.14 Help and User-Facing Output Format
+
+The CLI help output MUST distinguish core commands from plugin commands.
+
+For plugin-provided commands, the following format is mandatory:
+
+`<command-name>    (plugin: <plugin-name>)`
+
+The ordering of help output MUST be deterministic and stable across runs.
+
+If a plugin command exists but its plugin failed to load:
+- the command MUST still appear in help output,
+- and MUST be annotated as unavailable.
+
+### 7.5.15 Relationship to Core CLI Dispatch
+
+Core CLI commands take precedence in name resolution.
+
+Resolution order:
+1. Core CLI commands
+2. Plugin-provided CLI commands
+
+Plugins MUST NOT override or shadow core commands.
 ## 8. Wizard System
 
 ### 8.1 Wizard Service
