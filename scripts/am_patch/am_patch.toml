@@ -86,6 +86,7 @@ ruff_format = true
 
 pytest_use_venv = true
 
+
 # Canonical (supported by runner; missing in your file)
 gates_allow_fail = false
 gates_on_partial_apply = true
