@@ -75,7 +75,10 @@ class CLIPlugin:
         """
         self.config = config or {}
         self.verbosity = VerbosityLevel.NORMAL
-        self._plugin_cli_commands: dict[str, str] = {}
+        # Mapping: command_name -> (plugin_dir, plugin_name)
+        self._plugin_cli_commands: dict[str, tuple[Path, str]] = {}
+        # Session-level failure isolation: plugin_name -> error summary.
+        self._failed_plugins: dict[str, str] = {}
 
     def _parse_cli_args(self, *, emit_debug: bool = True) -> dict[str, Any]:
         """Parse all CLI arguments into a dictionary for ConfigResolver.
@@ -176,7 +179,7 @@ class CLIPlugin:
 
     def _build_plugin_cli_stub_registry(
         self, *, plugin_dirs: list[Path] | None = None
-    ) -> dict[str, str]:
+    ) -> dict[str, tuple[Path, str]]:
         """Build manifest-only CLI command stub registry.
 
         Returns:
@@ -186,40 +189,53 @@ class CLIPlugin:
             PluginError: on collisions, shadowing, or invalid manifests.
         """
         plugins_dir = Path(__file__).parent.parent
-        cfg = ConfigService()
-        reg = PluginRegistry(cfg)
+
+        # NOTE: For tests that provide explicit plugin dirs, do not read or enforce
+        # user configuration state from ConfigService/PluginRegistry.
+        reg: PluginRegistry | None
+        if plugin_dirs is None:
+            cfg = ConfigService()
+            reg = PluginRegistry(cfg)
+        else:
+            reg = None
+
         loader = PluginLoader(builtin_plugins_dir=plugins_dir, registry=reg)
 
         discovered = loader.discover() if plugin_dirs is None else list(plugin_dirs)
 
         discovered = sorted(discovered, key=lambda p: p.name)
 
-        manifests = []
+        manifests_and_dirs: list[tuple[Path, Any]] = []
         for pdir in discovered:
             manifest = loader.load_manifest_only(pdir)
-            if not reg.is_enabled(manifest.name):
+
+            if reg is not None and not reg.is_enabled(manifest.name):
                 continue
             if "ICLICommands" in manifest.interfaces:
-                manifests.append(manifest)
+                manifests_and_dirs.append((pdir, manifest))
 
-        manifests.sort(key=lambda m: m.name)
+        manifests_and_dirs.sort(key=lambda x: x[1].name)
 
-        stubs: dict[str, str] = {}
-        for manifest in manifests:
+        stubs: dict[str, tuple[Path, str]] = {}
+        for pdir, manifest in manifests_and_dirs:
             for cmd in manifest.cli_commands:
                 if cmd in CORE_COMMANDS:
                     raise PluginError(f"CLI command conflict with core command: {cmd}")
                 if cmd in stubs:
                     raise PluginError(f"CLI command name collision: {cmd}")
-                stubs[cmd] = manifest.name
+                stubs[cmd] = (pdir, manifest.name)
 
         return stubs
 
     @staticmethod
-    def _format_plugin_help_lines(stubs: dict[str, str]) -> list[str]:
+    def _format_plugin_help_lines(
+        stubs: dict[str, tuple[Path, str]], *, failed_plugins: dict[str, str]
+    ) -> list[str]:
         lines: list[str] = []
         for cmd in sorted(stubs.keys()):
-            lines.append(f"{cmd}    (plugin: {stubs[cmd]})")
+            plugin_name = stubs[cmd][1]
+            suffix = " [unavailable]" if plugin_name in failed_plugins else ""
+            lines.append(f"{cmd}    (plugin: {plugin_name}){suffix}")
         return lines
 
     @classmethod
@@ -251,48 +267,11 @@ class CLIPlugin:
         # Build stub registry for plugin-provided CLI commands (manifest-only).
         self._plugin_cli_commands = self._build_plugin_cli_stub_registry()
 
-        if len(sys.argv) < 2:
-            self._print_usage()
-            return
+        exit_code = await self._execute_argv(sys.argv)
+        if exit_code != 0:
+            raise SystemExit(exit_code)
 
-        command = sys.argv[1]
-
-        # Handle --help and -h flags
-        if command in ("--help", "-h"):
-            self._print_usage()
-            return
-
-        if command == "process":
-            await self._process_command(sys.argv[2:])
-        elif command == "wizard":
-            await self._wizard_command(sys.argv[2:])
-        elif command == "tui":
-            await self._tui_command()
-        elif command == "version":
-            self._version_command()
-        elif command == "help":
-            self._print_usage()
-        elif command == "web":
-            await self._web_command(sys.argv[2:])
-        elif command == "daemon":
-            await self._daemon_command()
-        elif command == "checkpoints":
-            await self._checkpoints_command(sys.argv[2:])
-        else:
-            if command in self._plugin_cli_commands:
-                plugin_name = self._plugin_cli_commands[command]
-                msg = (
-                    "Plugin command is not executable in this phase: "
-                    f"{command} (plugin: {plugin_name})"
-                )
-                self._error(msg)
-                self._print_usage()
-                return
-
-            self._error(f"Unknown command: {command}")
-            self._print_usage()
-
-    def _format_usage(self, stubs: dict[str, str]) -> str:
+    def _format_usage(self, stubs: dict[str, tuple[Path, str]]) -> str:
         lines: list[str] = []
         lines.append("AudioMason v2.0.0-alpha")
         lines.append("")
@@ -323,7 +302,7 @@ class CLIPlugin:
         lines.append("")
         if stubs:
             lines.append("Plugin commands:")
-            for line in self._format_plugin_help_lines(stubs):
+            for line in self._format_plugin_help_lines(stubs, failed_plugins=self._failed_plugins):
                 lines.append(f"  {line}")
             lines.append("")
         lines.append("Examples:")
@@ -339,6 +318,99 @@ class CLIPlugin:
     def _print_usage(self) -> None:
         """Print usage information."""
         print(self._format_usage(self._plugin_cli_commands))
+
+    async def _execute_argv(self, argv: list[str], *, plugin_dirs: list[Path] | None = None) -> int:
+        """Execute a single CLI argv invocation.
+
+        This is used by the real CLI entrypoint and by tests.
+
+        Returns:
+            Exit code (0 for success).
+        """
+        # Allow tests to provide isolated plugin directories.
+        if plugin_dirs is not None:
+            self._plugin_cli_commands = self._build_plugin_cli_stub_registry(
+                plugin_dirs=plugin_dirs
+            )
+
+        if len(argv) < 2:
+            self._print_usage()
+            return 0
+
+        command = argv[1]
+
+        # Handle --help and -h flags
+        if command in ("--help", "-h"):
+            self._print_usage()
+            return 0
+
+        # Core commands are executed unchanged.
+        if command == "process":
+            await self._process_command(argv[2:])
+            return 0
+        if command == "wizard":
+            await self._wizard_command(argv[2:])
+            return 0
+        if command == "tui":
+            await self._tui_command()
+            return 0
+        if command == "version":
+            self._version_command()
+            return 0
+        if command == "help":
+            self._print_usage()
+            return 0
+        if command == "web":
+            await self._web_command(argv[2:])
+            return 0
+        if command == "daemon":
+            await self._daemon_command()
+            return 0
+        if command == "checkpoints":
+            await self._checkpoints_command(argv[2:])
+            return 0
+
+        # Plugin command dispatch.
+        return await self._execute_plugin_command(command, argv[2:])
+
+    async def _execute_plugin_command(self, command: str, argv: list[str]) -> int:
+        stub = self._plugin_cli_commands.get(command)
+        if stub is None:
+            self._error(f"Unknown command: {command}")
+            self._print_usage()
+            return 1
+
+        plugin_dir, plugin_name = stub
+
+        if plugin_name in self._failed_plugins:
+            reason = self._failed_plugins[plugin_name]
+            self._error(f"Plugin failed for session: {plugin_name}: {reason}")
+            return 1
+
+        plugins_dir = Path(__file__).parent.parent
+        cfg = ConfigService()
+        reg = PluginRegistry(cfg)
+        loader = PluginLoader(builtin_plugins_dir=plugins_dir, registry=reg)
+
+        try:
+            plugin = loader.load_plugin(plugin_dir, validate=False)
+            commands = plugin.get_cli_commands()
+            if command not in commands:
+                raise PluginError(
+                    "ICLICommands contract violation: get_cli_commands() did not "
+                    f"provide '{command}'"
+                )
+
+            handler = commands[command]
+            result = handler(argv)
+            if asyncio.iscoroutine(result):
+                await result
+            return 0
+        except Exception as e:
+            summary = str(e) or e.__class__.__name__
+            self._failed_plugins[plugin_name] = summary
+            self._error(f"Plugin command failed: {command} (plugin: {plugin_name}): {summary}")
+            return 1
 
     def _version_command(self) -> None:
         """Print version."""
@@ -587,7 +659,8 @@ class CLIPlugin:
                     ctx.cover_url = cli_args["cover_url"]
 
             # Processing options
-            ctx.bitrate = cli_args.get("bitrate", "128k")  # type: ignore[attr-defined]  # type: ignore[attr-defined]
+            # ProcessingContext is a model object; these fields are attached dynamically.
+            ctx.bitrate = cli_args.get("bitrate", "128k")  # type: ignore[attr-defined]
             ctx.loudnorm = cli_args.get("loudnorm", False)
             ctx.split_chapters = cli_args.get("split_chapters", False)
 

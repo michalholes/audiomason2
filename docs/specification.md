@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.26
+Specification Version: 1.0.27
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -655,6 +655,9 @@ On command invocation:
 - call `get_cli_commands()`,
 - resolve the requested command,
 - execute its handler.
+
+Phase 3 implementation requirement:
+- The built-in CLI plugin MUST execute plugin-provided CLI commands by following this contract.
 
 ### 7.5.13 Failure Semantics for Command Invocation
 

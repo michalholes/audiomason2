@@ -1,3 +1,9 @@
+## 2026-02-10T23:00:00+01:00
+
+- CLI: Execute plugin-provided CLI commands lazily at invocation time (sync + async handlers).
+- CLI: Track session-level plugin failures and mark affected plugin commands as [unavailable] in help output.
+- Tests: Add integration tests for plugin command execution, failure isolation, and lazy import behavior.
+
 ## 2026-02-10T22:40:00+01:00
 
 - CLI: Added manifest-only stub registry for plugin-provided CLI commands.
