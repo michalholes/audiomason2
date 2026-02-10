@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from fastapi import FastAPI
@@ -14,6 +15,30 @@ from .api.ui_schema import mount_ui_schema
 from .api.wizards import mount_wizards
 from .ui_static import mount_ui_static
 from .util.status import build_status
+
+
+def _uvicorn_log_settings(verbosity: int) -> tuple[str, bool]:
+    """Map AM verbosity to uvicorn log settings.
+
+    Returns:
+        (log_level, access_log)
+    """
+    if verbosity <= 0:
+        return ("error", False)
+    if verbosity == 1:
+        return ("info", False)
+    if verbosity == 2:
+        return ("info", True)
+    return ("debug", True)
+
+
+def _silence_uvicorn_loggers() -> None:
+    """Best-effort silencing for uvicorn loggers (quiet mode)."""
+    for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+        logger = logging.getLogger(name)
+        logger.handlers.clear()
+        logger.propagate = False
+        logger.setLevel(logging.ERROR)
 
 
 class WebInterfacePlugin:
@@ -74,7 +99,16 @@ class WebInterfacePlugin:
         app = self.create_app(
             config_resolver=config_resolver, plugin_loader=plugin_loader, verbosity=verbosity
         )
-        uvicorn.run(app, host=host, port=port, log_level="info")
+        log_level, access_log = _uvicorn_log_settings(int(verbosity))
+        if int(verbosity) <= 0:
+            _silence_uvicorn_loggers()
+        uvicorn.run(
+            app,
+            host=host,
+            port=port,
+            log_level=log_level,
+            access_log=access_log,
+        )
 
     async def serve(
         self,
@@ -95,6 +129,15 @@ class WebInterfacePlugin:
         app = self.create_app(
             config_resolver=config_resolver, plugin_loader=plugin_loader, verbosity=verbosity
         )
-        config = uvicorn.Config(app, host=host, port=port, log_level="info")
+        log_level, access_log = _uvicorn_log_settings(int(verbosity))
+        if int(verbosity) <= 0:
+            _silence_uvicorn_loggers()
+        config = uvicorn.Config(
+            app,
+            host=host,
+            port=port,
+            log_level=log_level,
+            access_log=access_log,
+        )
         server = uvicorn.Server(config)
         await server.serve()

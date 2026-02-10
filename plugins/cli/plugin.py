@@ -588,13 +588,31 @@ class CLIPlugin:
         """Log error message."""
         log.error(msg)
 
+    def _configure_quiet_web_console(self) -> None:
+        """Configure logging so quiet web mode prints only the required 2 lines.
+
+        This is intentionally scoped to the current process invocation.
+        """
+        import logging
+
+        # Disable everything below ERROR globally.
+        logging.disable(logging.ERROR - 1)
+
+        # Uvicorn uses these loggers for startup/shutdown and access logs.
+        for name in ("uvicorn", "uvicorn.error", "uvicorn.access"):
+            logger = logging.getLogger(name)
+            logger.handlers.clear()
+            logger.propagate = False
+            logger.setLevel(logging.ERROR)
+
     async def _web_command(self, args: list[str]) -> None:
         """Start web server.
 
         Args:
             args: Command arguments
         """
-        self._debug(f"Starting web server with verbosity: {self.verbosity}")
+        if self.verbosity >= VerbosityLevel.DEBUG:
+            self._debug(f"Starting web server with verbosity: {self.verbosity}")
 
         # Parse CLI arguments
         cli_args = self._parse_cli_args()
@@ -617,8 +635,11 @@ class CLIPlugin:
                 log.debug(f"Failed to resolve web.port: {e}, using default 8080")
             self._debug("Using default port 8080")
 
-        self._info(f"\U0001f310 Starting web server on port {port}...")
-        self._info("")
+        if self.verbosity <= VerbosityLevel.QUIET:
+            self._configure_quiet_web_console()
+            print(f"Starting web server on port {port}...", flush=True)
+        else:
+            self._info(f"\U0001f310 Starting web server on port {port}...")
 
         # Load web server plugin
         plugins_dir = Path(__file__).parent.parent
@@ -689,7 +710,10 @@ class CLIPlugin:
 
                 log.debug(traceback.format_exc())
         finally:
-            self._info(f"Finished (reason: {reason})")
+            if self.verbosity <= VerbosityLevel.QUIET:
+                print(f"Finished (reason: {reason})", flush=True)
+            else:
+                self._info(f"Finished (reason: {reason})")
             raise SystemExit(exit_code)
 
     async def _daemon_command(self) -> None:

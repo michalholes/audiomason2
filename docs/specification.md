@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.22
+Specification Version: 1.0.23
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -736,6 +736,22 @@ emit exactly one shutdown summary line on process exit, in the following canonic
 - Normal return: `Finished (reason: normal exit)` with exit code 0
 
 The literal line `Interrupted.` MUST NOT be printed.
+
+### 9.0.1 Web server quiet mode output (CLI contract)
+
+When running the web server in quiet mode (`audiomason -q web`), console output MUST be
+exactly 2 lines and nothing else:
+
+1) `Starting web server on port 8080...`
+2) `Finished (reason: <...>)`
+
+In quiet mode, uvicorn logging MUST be silenced (no startup/shutdown/access output).
+Uvicorn log settings MUST map from AM verbosity as follows:
+
+- QUIET: log_level=error, access_log=False
+- NORMAL: log_level=info, access_log=False
+- VERBOSE: log_level=info, access_log=True
+- DEBUG: log_level=debug, access_log=True
 
 ### 9.1 Web Interface Configuration Surface
 

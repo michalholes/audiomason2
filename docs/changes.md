@@ -1,3 +1,8 @@
+## 2026-02-10T21:25:00+01:00
+
+- cli/web: in quiet mode (-q web), print exactly 2 lines (Starting..., Finished...) and silence uvicorn logging.
+- web_interface: map AM verbosity to uvicorn log_level/access_log (quiet mode fully silenced).
+
 ## 2026-02-10T21:15:00+01:00
 
 - spec: define CLI plugin command extension contract (ICLICommands, determinism, failure isolation).
