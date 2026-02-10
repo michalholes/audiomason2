@@ -29,6 +29,12 @@ def _parse_effective_snapshot(yaml_text: str) -> dict[str, Any]:
     return data if isinstance(data, dict) else {}
 
 
+def _ascii_detail(text: str) -> str:
+    """Return ASCII-only text safe for HTTP error bodies."""
+
+    return (text or "").encode("ascii", "backslashreplace").decode("ascii")
+
+
 def mount_am_config(app: FastAPI) -> None:
     """Config endpoints.
 
@@ -53,7 +59,7 @@ def mount_am_config(app: FastAPI) -> None:
         try:
             svc.set_value(body.key_path, body.value)
         except ConfigError as e:
-            raise HTTPException(status_code=400, detail=str(e)) from e
+            raise HTTPException(status_code=400, detail=_ascii_detail(str(e))) from e
         return {"ok": True}
 
     @app.post("/api/am/config/unset")
@@ -61,5 +67,5 @@ def mount_am_config(app: FastAPI) -> None:
         try:
             svc.unset_value(body.key_path)
         except ConfigError as e:
-            raise HTTPException(status_code=400, detail=str(e)) from e
+            raise HTTPException(status_code=400, detail=_ascii_detail(str(e))) from e
         return {"ok": True}

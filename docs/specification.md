@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.17
+Specification Version: 1.0.18
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -533,6 +533,8 @@ Runtime configuration hooks:
 - Config API contract:
   - `/api/am/config` returns `effective_snapshot` as a JSON object (parsed from YAML).
   - `/api/am/config/unset` (POST) unsets a single `key_path` in user config (reset to inherit).
+  - Web UI renders `effective_snapshot` entries and exposes a per-key Reset action calling `/api/am/config/unset`.
+  - Errors from config set/unset must be returned as ASCII-only text.
 
   - `web.host`, `web.port`: bind host/port for the HTTP server.
   - `web.upload_dir`: temporary upload directory used by the web server.

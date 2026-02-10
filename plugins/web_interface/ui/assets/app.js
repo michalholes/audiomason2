@@ -231,69 +231,6 @@ window.onerror = function(msg, src, line, col, err){
   }
 
 
-async function renderAmConfig(content, notify) {
-  const wrap = el("div");
-  const header = el("div", { class: "row" });
-  const refreshBtn = el("button", { class: "btn", text: "Refresh" });
-  header.appendChild(refreshBtn);
-  wrap.appendChild(header);
-
-  const hint = el("div", { class: "hint", text: "" });
-  wrap.appendChild(hint);
-
-  const pre = el("pre", { class: "codeBlock", text: "" });
-  wrap.appendChild(pre);
-
-  const form = el("div", { class: "configSet" });
-  const keyIn = el("input", { class: "input", placeholder: "key_path (e.g. inbox_dir)" });
-  const valIn = el("input", { class: "input", placeholder: "value (JSON or string)" });
-  const setBtn = el("button", { class: "btn", text: "Set" });
-  form.appendChild(keyIn);
-  form.appendChild(valIn);
-  form.appendChild(setBtn);
-  wrap.appendChild(form);
-
-  async function load() {
-    try {
-      const data = await API.getJson("/api/am/config");
-      const srcInfo = (data && typeof data.info === "string" && data.info) ? data.info : "";
-      hint.textContent = srcInfo ? `Source: ${srcInfo}` : "";
-      const snap = data && typeof data.effective_snapshot === "object" ? data.effective_snapshot : {};
-      pre.textContent = JSON.stringify(snap, null, 2) + "\n";
-    } catch (e) {
-      pre.textContent = "";
-      hint.textContent = String(e);
-    }
-  }
-
-  refreshBtn.addEventListener("click", load);
-  setBtn.addEventListener("click", async () => {
-    const key = String(keyIn.value || "").trim();
-    if (!key) {
-      notify("key_path is required");
-      return;
-    }
-    let value = valIn.value;
-    const raw = String(valIn.value || "");
-    try {
-      value = JSON.parse(raw);
-    } catch {
-      value = raw;
-    }
-    try {
-      await API.sendJson("POST", "/api/am/config/set", { key_path: key, value });
-      notify("Saved.");
-      await load();
-    } catch (e) {
-      notify(String(e));
-    }
-  });
-
-  await load();
-  return wrap;
-}
-
-
 async function renderJobsLogViewer(content, notify) {
   const root = el("div", { class: "jobsLog" });
   const header = el("div", { class: "row" });
@@ -597,11 +534,16 @@ async function renderAmConfig(content, notify) {
   const snapPre = el("pre", { class: "codeBlock", text: "" });
   const snapHint = el("div", {
     class: "hint",
-    text: "Tip: Values set here override config.yaml. Examples: inbox_dir, stage_dir, outbox_dir, web.host, web.port, web.upload_dir, ui.theme.",
+    text: "Tip: Values set here override config.yaml. Use Reset to remove a user override (inherit).",
   });
   wrap.appendChild(snapTitle);
   wrap.appendChild(snapPre);
   wrap.appendChild(snapHint);
+
+  const listTitle = el("div", { class: "subTitle", text: "Entries" });
+  const listBox = el("div");
+  wrap.appendChild(listTitle);
+  wrap.appendChild(listBox);
 
   const form = el("div", { class: "formBox" });
   form.appendChild(el("div", { class: "subTitle", text: "Set value" }));
@@ -614,41 +556,82 @@ async function renderAmConfig(content, notify) {
   form.appendChild(el("div", { class: "toolbar" }, [setBtn, resetBtn]));
   wrap.appendChild(form);
 
-  function renderSnapshot(snap) {
-    if (snap && typeof snap === "object" && !Array.isArray(snap)) {
-      const keys = Object.keys(snap).sort();
-      const lines = [];
-      for (const k of keys) {
-        const item = snap[k];
-        if (item && typeof item === "object" && !Array.isArray(item) && ("value" in item || "source" in item)) {
-          let vText;
-          try {
-            vText = JSON.stringify(item.value);
-          } catch {
-            vText = String(item.value);
-          }
-          const src = item.source ? String(item.source) : "";
-          lines.push(src ? `${k}: ${vText} (${src})` : `${k}: ${vText}`);
-        } else {
-          lines.push(`${k}: ${JSON.stringify(item)}`);
-        }
+  function flatten(obj, prefix, out) {
+    if (!obj || typeof obj !== "object" || Array.isArray(obj)) {
+      out.push([prefix, obj]);
+      return;
+    }
+    const keys = Object.keys(obj).sort();
+    if (!keys.length) {
+      out.push([prefix, obj]);
+      return;
+    }
+    for (const k of keys) {
+      const v = obj[k];
+      const next = prefix ? `${prefix}.${k}` : k;
+      if (v && typeof v === "object" && !Array.isArray(v)) {
+        flatten(v, next, out);
+      } else {
+        out.push([next, v]);
       }
-      snapPre.textContent = lines.join("\n") + "\n";
+    }
+  }
+
+  function renderEntries(snap) {
+    clear(listBox);
+    const flat = [];
+    flatten(snap, "", flat);
+    if (!flat.length) {
+      listBox.appendChild(el("div", { class: "hint", text: "(empty)" }));
       return;
     }
 
-    if (typeof snap === "string") {
-      snapPre.textContent = snap.endsWith("\n") ? snap : (snap + "\n");
-      return;
-    }
+    const table = el("table", { class: "table" });
+    const thead = el("thead");
+    const trh = el("tr");
+    ["key_path", "value", "actions"].forEach((h) => trh.appendChild(el("th", { text: h })));
+    thead.appendChild(trh);
+    table.appendChild(thead);
+    const tbody = el("tbody");
 
-    snapPre.textContent = "(no snapshot)\n";
+    for (const [k, v] of flat) {
+      const tr = el("tr");
+      tr.appendChild(el("td", { text: k }));
+      let vText = "";
+      try {
+        if (v && typeof v === "object") vText = JSON.stringify(v);
+        else vText = String(v);
+      } catch {
+        vText = String(v);
+      }
+      tr.appendChild(el("td", { text: vText }));
+      const actions = el("td");
+      const rowReset = el("button", { class: "btn", text: "Reset" });
+      rowReset.addEventListener("click", async () => {
+        try {
+          await API.sendJson("POST", "/api/am/config/unset", { key_path: k });
+          notify("Reset.");
+          await load();
+        } catch (e) {
+          notify(String(e));
+        }
+      });
+      actions.appendChild(rowReset);
+      tr.appendChild(actions);
+      tbody.appendChild(tr);
+    }
+    table.appendChild(tbody);
+    listBox.appendChild(table);
   }
 
   async function load() {
     const data = await API.getJson("/api/am/config");
-    const snap = data && typeof data === "object" ? data.effective_snapshot : null;
-    renderSnapshot(snap);
+    const snap = data ? data.effective_snapshot : undefined;
+    if (!snap || typeof snap !== "object") {
+      throw new Error("effective_snapshot must be an object");
+    }
+    snapPre.textContent = JSON.stringify(snap, null, 2) + "\n";
+    renderEntries(snap);
   }
 
   refreshBtn.addEventListener("click", async ()=>{
