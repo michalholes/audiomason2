@@ -108,3 +108,9 @@ This file lists notable changes in AudioMason2, grouped by issue.
 - 2026-02-09T20:43:47+01:00 Resolver: Added immutable LoggingPolicy resolved in one place from canonical logging.level.
 - 2026-02-09T20:43:47+01:00 Resolver: LoggingPolicy derives emission flags deterministically (quiet/normal/verbose/debug).
 - 2026-02-09T20:43:47+01:00 Documentation: Updated specification to describe LoggingPolicy and alias rules.
+
+## Issue 500
+
+- 2026-02-10T00:00:00+01:00 Web UI: Added Basic configuration editor (fixed common keys) and Advanced full-surface editor.
+- 2026-02-10T00:00:00+01:00 Web UI: Advanced supports search, grouping by prefix, and 'overrides only' filter (source == user_config).
+- 2026-02-10T00:00:00+01:00 Web UI: Value editing attempts JSON parse and falls back to string; Reset unsets (inherit).

@@ -174,3 +174,78 @@ a { color: inherit; text-decoration: none; }
 
 /* Config */
 .configSet { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; align-items: center; }
+
+
+/* Config UI (Issue 500) */
+
+.configBox {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.configRow {
+  display: grid;
+  grid-template-columns: 240px 1fr 320px;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  background: rgba(255,255,255,0.03);
+}
+
+.configColKey { display: flex; flex-direction: column; gap: 4px; }
+.configKey { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 12px; }
+.configLabel { font-size: 12px; color: rgba(230,233,242,0.70); }
+
+.configColValue { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.configValue { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 12px; white-space: pre-wrap; word-break: break-word; }
+.configSource { display: flex; align-items: center; gap: 8px; }
+
+.configColEdit { display: flex; flex-direction: column; gap: 8px; }
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 12px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.06);
+}
+
+.badgeUser {
+  border-color: rgba(89, 217, 131, 0.35);
+  background: rgba(89, 217, 131, 0.12);
+}
+
+.badgeOther {
+  border-color: rgba(88, 166, 255, 0.35);
+  background: rgba(88, 166, 255, 0.12);
+}
+
+.toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  user-select: none;
+  color: rgba(230,233,242,0.85);
+}
+
+.configGroup {
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  padding: 8px;
+  background: rgba(255,255,255,0.02);
+}
+
+.configGroup > summary {
+  cursor: pointer;
+  font-weight: 650;
+  padding: 6px 6px;
+}
+
+.configDetails > summary {
+  cursor: pointer;
+  padding: 6px 0;
+}

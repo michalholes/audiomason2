@@ -529,16 +529,25 @@ new source of truth; it only reads and writes through existing APIs.
 
 Runtime configuration hooks:
 
-- Config keys (via `/api/am/config` and `/api/am/config/set`):
 - Config API contract:
-  - `/api/am/config` returns `effective_snapshot` as a JSON object (parsed from YAML).
-  - `/api/am/config/unset` (POST) unsets a single `key_path` in user config (reset to inherit).
-  - Web UI renders `effective_snapshot` entries and exposes a per-key Reset action calling `/api/am/config/unset`.
+  - `GET /api/am/config` returns:
+    - `config` (nested config object)
+    - `effective_snapshot` (object mapping `key_path` -> `{ value, source }`)
+  - `POST /api/am/config/set` sets a single `key_path` in user config.
+  - `POST /api/am/config/unset` unsets a single `key_path` in user config (reset to inherit).
   - Errors from config set/unset must be returned as ASCII-only text.
 
+- Web config UI contract:
+  - Basic configuration: fixed list of common keys (UI hardcoded list).
+  - Advanced configuration: full-surface editor over all `effective_snapshot` entries.
+  - Advanced supports an 'overrides only' view where `source == "user_config"`.
+  - UI does not validate semantics; it only attempts `JSON.parse()` and falls back to a string.
+
+- Common keys:
   - `web.host`, `web.port`: bind host/port for the HTTP server.
   - `web.upload_dir`: temporary upload directory used by the web server.
   - `inbox_dir`, `outbox_dir`, `stage_dir`: core filesystem roots shown/used by UI.
+  - `logging.level`: canonical logging verbosity (resolved by resolver).
   - `ui.*`: UI theming and UI-related values (project-defined).
 - UI overrides file:
   - Stored at `~/.config/audiomason/web_interface_ui.json`.

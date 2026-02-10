@@ -525,103 +525,211 @@ async function renderStageManager(content, notify) {
 async function renderAmConfig(content, notify) {
   const wrap = el("div");
 
+  const BASIC_FIELDS = [
+    { key: "web.host", label: "Web host" },
+    { key: "web.port", label: "Web port" },
+    { key: "web.upload_dir", label: "Web upload dir" },
+    { key: "inbox_dir", label: "Inbox dir" },
+    { key: "outbox_dir", label: "Outbox dir" },
+    { key: "stage_dir", label: "Stage dir" },
+    { key: "logging.level", label: "Logging level" },
+  ];
+
+  function formatValue(v, pretty) {
+    if (v === null) return "null";
+    if (v === undefined) return "";
+    try {
+      if (typeof v === "string") return v;
+      if (typeof v === "number") return String(v);
+      if (typeof v === "boolean") return v ? "true" : "false";
+      if (typeof v === "object") return JSON.stringify(v, null, pretty ? 2 : 0);
+      return String(v);
+    } catch {
+      return String(v);
+    }
+  }
+
+  function parseInputValue(raw) {
+    const text = String(raw || "");
+    try {
+      return JSON.parse(text);
+    } catch {
+      // Allow plain strings without forcing JSON quoting.
+      return text;
+    }
+  }
+
+  function getEntry(snap, keyPath) {
+    if (!snap || typeof snap !== "object") return { value: undefined, source: "" };
+    const e = snap[keyPath];
+    if (!e || typeof e !== "object") return { value: undefined, source: "" };
+    return { value: e.value, source: String(e.source || "") };
+  }
+
+  async function apiSet(keyPath, rawValue) {
+    const value = parseInputValue(rawValue);
+    await API.sendJson("POST", "/api/am/config/set", { key_path: keyPath, value });
+  }
+
+  async function apiReset(keyPath) {
+    await API.sendJson("POST", "/api/am/config/unset", { key_path: keyPath });
+  }
+
+  function sourceBadge(source) {
+    const cls = source === "user_config" ? "badge badgeUser" : "badge badgeOther";
+    const text = source || "(unknown)";
+    return el("span", { class: cls, text });
+  }
+
+  function buildRow(keyPath, label, entry, onActionDone) {
+    const valueText = formatValue(entry.value, false);
+    const valueBox = el("div", { class: "configValue", text: valueText });
+
+    const sourceBox = el("div", { class: "configSource" }, [sourceBadge(entry.source)]);
+
+    const input = el("input", { class: "input", placeholder: "new value (JSON or string)" });
+
+    const setBtn = el("button", { class: "btnPrimary", text: "Set" });
+    const resetBtn = el("button", { class: "btn", text: "Reset" });
+
+    setBtn.addEventListener("click", async () => {
+      try {
+        await apiSet(keyPath, input.value);
+        notify("Saved.");
+        input.value = "";
+        await onActionDone();
+      } catch (e) {
+        notify(String(e));
+      }
+    });
+
+    resetBtn.addEventListener("click", async () => {
+      try {
+        await apiReset(keyPath);
+        notify("Reset.");
+        input.value = "";
+        await onActionDone();
+      } catch (e) {
+        notify(String(e));
+      }
+    });
+
+    const actions = el("div", { class: "toolbar" }, [setBtn, resetBtn]);
+
+    const left = el("div", { class: "configColKey" }, [
+      el("div", { class: "configKey", text: keyPath }),
+      el("div", { class: "configLabel", text: label || "" }),
+    ]);
+
+    const mid = el("div", { class: "configColValue" }, [valueBox, sourceBox]);
+    const right = el("div", { class: "configColEdit" }, [input, actions]);
+
+    return el("div", { class: "configRow" }, [left, mid, right]);
+  }
+
+  function groupByPrefix(keys) {
+    const out = {};
+    for (const k of keys) {
+      const idx = k.indexOf(".");
+      const prefix = idx > 0 ? k.slice(0, idx) : "(root)";
+      if (!out[prefix]) out[prefix] = [];
+      out[prefix].push(k);
+    }
+    for (const p of Object.keys(out)) out[p].sort();
+    return out;
+  }
+
   const topRow = el("div", { class: "toolbar" });
   const refreshBtn = el("button", { class: "btn", text: "Refresh" });
   topRow.appendChild(refreshBtn);
   wrap.appendChild(topRow);
 
-  const snapTitle = el("div", { class: "subTitle", text: "Effective config snapshot" });
-  const snapPre = el("pre", { class: "codeBlock", text: "" });
-  const snapHint = el("div", {
-    class: "hint",
-    text: "Tip: Values set here override config.yaml. Use Reset to remove a user override (inherit).",
-  });
-  wrap.appendChild(snapTitle);
-  wrap.appendChild(snapPre);
-  wrap.appendChild(snapHint);
+  const basicTitle = el("div", { class: "subTitle", text: "Basic configuration" });
+  const basicBox = el("div", { class: "configBox" });
+  wrap.appendChild(basicTitle);
+  wrap.appendChild(basicBox);
 
-  const listTitle = el("div", { class: "subTitle", text: "Entries" });
-  const listBox = el("div");
-  wrap.appendChild(listTitle);
-  wrap.appendChild(listBox);
+  const advTitleRow = el("div", { class: "toolbar" }, [
+    el("div", { class: "subTitle", text: "Advanced configuration" }),
+  ]);
+  wrap.appendChild(advTitleRow);
 
-  const form = el("div", { class: "formBox" });
-  form.appendChild(el("div", { class: "subTitle", text: "Set value" }));
-  const keyIn = el("input", { class: "input", placeholder: "key_path (e.g. web.host)" });
-  const valIn = el("input", { class: "input", placeholder: "value (JSON)" });
-  const setBtn = el("button", { class: "btnPrimary", text: "Set" });
-  const resetBtn = el("button", { class: "btn", text: "Reset" });
-  form.appendChild(el("div", { class: "formRow" }, [el("div", { class: "formLabel", text: "key_path" }), keyIn]));
-  form.appendChild(el("div", { class: "formRow" }, [el("div", { class: "formLabel", text: "value" }), valIn]));
-  form.appendChild(el("div", { class: "toolbar" }, [setBtn, resetBtn]));
-  wrap.appendChild(form);
+  const advControls = el("div", { class: "toolbar" });
+  const searchIn = el("input", { class: "input", placeholder: "Search key_path" });
+  const overridesOnly = el("input", { type: "checkbox" });
+  const overridesLabel = el("label", { class: "toggle" }, [
+    overridesOnly,
+    el("span", { text: "Show overrides only" }),
+  ]);
+  advControls.appendChild(searchIn);
+  advControls.appendChild(overridesLabel);
+  wrap.appendChild(advControls);
 
-  function flatten(obj, prefix, out) {
-    if (!obj || typeof obj !== "object" || Array.isArray(obj)) {
-      out.push([prefix, obj]);
-      return;
-    }
-    const keys = Object.keys(obj).sort();
-    if (!keys.length) {
-      out.push([prefix, obj]);
-      return;
-    }
-    for (const k of keys) {
-      const v = obj[k];
-      const next = prefix ? `${prefix}.${k}` : k;
-      if (v && typeof v === "object" && !Array.isArray(v)) {
-        flatten(v, next, out);
-      } else {
-        out.push([next, v]);
-      }
+  const advBox = el("div", { class: "configBox" });
+  wrap.appendChild(advBox);
+
+  const rawTitle = el("div", { class: "subTitle", text: "Raw effective_snapshot" });
+  const rawPre = el("pre", { class: "codeBlock", text: "" });
+  const rawDetails = el("details", { class: "configDetails" }, [
+    el("summary", { text: "Show raw snapshot" }),
+    rawPre,
+  ]);
+  wrap.appendChild(rawDetails);
+
+  let lastSnap = {};
+
+  function renderBasic(snap) {
+    clear(basicBox);
+    const hint = el("div", {
+      class: "hint",
+      text: "Set writes a user override. Reset removes the user override (inherit).",
+    });
+    basicBox.appendChild(hint);
+
+    for (const f of BASIC_FIELDS) {
+      const entry = getEntry(snap, f.key);
+      basicBox.appendChild(buildRow(f.key, f.label, entry, async () => { await load(); }));
     }
   }
 
-  function renderEntries(snap) {
-    clear(listBox);
-    const flat = [];
-    flatten(snap, "", flat);
-    if (!flat.length) {
-      listBox.appendChild(el("div", { class: "hint", text: "(empty)" }));
+  function renderAdvanced(snap) {
+    clear(advBox);
+
+    const allKeys = Object.keys(snap || {}).sort();
+    const query = (searchIn.value || "").trim().toLowerCase();
+    const onlyOverrides = !!overridesOnly.checked;
+
+    let keys = allKeys;
+    if (query) {
+      keys = keys.filter((k) => k.toLowerCase().includes(query));
+    }
+    if (onlyOverrides) {
+      keys = keys.filter((k) => {
+        const e = getEntry(snap, k);
+        return e.source === "user_config";
+      });
+    }
+
+    if (!keys.length) {
+      advBox.appendChild(el("div", { class: "hint", text: "(no entries)" }));
       return;
     }
 
-    const table = el("table", { class: "table" });
-    const thead = el("thead");
-    const trh = el("tr");
-    ["key_path", "value", "actions"].forEach((h) => trh.appendChild(el("th", { text: h })));
-    thead.appendChild(trh);
-    table.appendChild(thead);
-    const tbody = el("tbody");
+    const grouped = groupByPrefix(keys);
+    const prefixes = Object.keys(grouped).sort();
 
-    for (const [k, v] of flat) {
-      const tr = el("tr");
-      tr.appendChild(el("td", { text: k }));
-      let vText = "";
-      try {
-        if (v && typeof v === "object") vText = JSON.stringify(v);
-        else vText = String(v);
-      } catch {
-        vText = String(v);
+    for (const prefix of prefixes) {
+      const section = el("details", { class: "configGroup" });
+      section.open = true;
+      section.appendChild(el("summary", { text: prefix }));
+      const body = el("div");
+      for (const k of grouped[prefix]) {
+        const e = getEntry(snap, k);
+        body.appendChild(buildRow(k, "", e, async () => { await load(); }));
       }
-      tr.appendChild(el("td", { text: vText }));
-      const actions = el("td");
-      const rowReset = el("button", { class: "btn", text: "Reset" });
-      rowReset.addEventListener("click", async () => {
-        try {
-          await API.sendJson("POST", "/api/am/config/unset", { key_path: k });
-          notify("Reset.");
-          await load();
-        } catch (e) {
-          notify(String(e));
-        }
-      });
-      actions.appendChild(rowReset);
-      tr.appendChild(actions);
-      tbody.appendChild(tr);
+      section.appendChild(body);
+      advBox.appendChild(section);
     }
-    table.appendChild(tbody);
-    listBox.appendChild(table);
   }
 
   async function load() {
@@ -630,44 +738,22 @@ async function renderAmConfig(content, notify) {
     if (!snap || typeof snap !== "object") {
       throw new Error("effective_snapshot must be an object");
     }
-    snapPre.textContent = JSON.stringify(snap, null, 2) + "\n";
-    renderEntries(snap);
+    lastSnap = snap;
+    rawPre.textContent = JSON.stringify(snap, null, 2) + "\n";
+    renderBasic(snap);
+    renderAdvanced(snap);
   }
 
-  refreshBtn.addEventListener("click", async ()=>{
-    try { await load(); } catch(e){ notify(String(e)); }
+  refreshBtn.addEventListener("click", async () => {
+    try { await load(); } catch (e) { notify(String(e)); }
   });
 
-  setBtn.addEventListener("click", async ()=>{
-    const keyPath = (keyIn.value || "").trim();
-    if (!keyPath) { notify("key_path is required"); return; }
-    let v;
-    const raw = String(valIn.value || "");
-    try {
-      v = JSON.parse(raw);
-    } catch {
-      // Allow plain strings without forcing JSON quoting.
-      v = raw;
-    }
-    try {
-      await API.sendJson("POST", "/api/am/config/set", { key_path: keyPath, value: v });
-      notify("Saved.");
-      await load();
-    } catch(e) {
-      notify(String(e));
-    }
+  searchIn.addEventListener("input", () => {
+    try { renderAdvanced(lastSnap); } catch { /* ignore */ }
   });
 
-  resetBtn.addEventListener("click", async ()=>{
-    const keyPath = (keyIn.value || "").trim();
-    if (!keyPath) { notify("key_path is required"); return; }
-    try {
-      await API.sendJson("POST", "/api/am/config/unset", { key_path: keyPath });
-      notify("Reset.");
-      await load();
-    } catch(e) {
-      notify(String(e));
-    }
+  overridesOnly.addEventListener("change", () => {
+    try { renderAdvanced(lastSnap); } catch { /* ignore */ }
   });
 
   await load();
