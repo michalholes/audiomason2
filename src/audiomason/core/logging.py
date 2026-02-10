@@ -27,6 +27,8 @@ from collections.abc import Callable
 from enum import IntEnum
 from pathlib import Path
 
+from audiomason.core.config import LoggingPolicy
+
 
 class VerbosityLevel(IntEnum):
     """Verbosity levels for AudioMason."""
@@ -71,6 +73,21 @@ def get_verbosity() -> VerbosityLevel:
         Current verbosity level
     """
     return _VERBOSITY
+
+
+def apply_logging_policy(policy: LoggingPolicy) -> None:
+    """Apply a resolved LoggingPolicy to core logging.
+
+    This bridges resolver output to the core logger's global verbosity state.
+    """
+    # Respect resolver policy deterministically.
+    if policy.emit_debug:
+        set_verbosity(VerbosityLevel.DEBUG)
+    elif policy.emit_info or policy.emit_progress:
+        set_verbosity(VerbosityLevel.NORMAL)
+    else:
+        # quiet (errors + warnings) in current core logging model
+        set_verbosity(VerbosityLevel.QUIET)
 
 
 def set_log_file(path: Path | str | None) -> None:

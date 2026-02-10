@@ -10,6 +10,12 @@ This file lists notable changes in AudioMason2, grouped by issue.
 - 2026-02-10T00:00:00+01:00 Documentation: bump specification version and update change log.
 
 
+
+## Issue 401
+
+- 2026-02-10T00:00:00+01:00 CLI: apply resolved LoggingPolicy to core logger at process startup so -d enables debug output.
+
+
 ## Issue TBD
 
 - 2026-02-09T00:00:00+01:00 Added new file I/O root `config` for configuration-owned filesystem data.

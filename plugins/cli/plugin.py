@@ -34,7 +34,7 @@ from audiomason.core import (
 )
 from audiomason.core.config_service import ConfigService
 from audiomason.core.jobs.model import JobState, JobType
-from audiomason.core.logging import get_logger
+from audiomason.core.logging import apply_logging_policy, get_logger
 from audiomason.core.orchestration import Orchestrator
 from audiomason.core.orchestration_models import ProcessRequest
 from audiomason.core.plugin_registry import PluginRegistry
@@ -63,7 +63,7 @@ class CLIPlugin:
         self.config = config or {}
         self.verbosity = VerbosityLevel.NORMAL
 
-    def _parse_cli_args(self) -> dict[str, Any]:
+    def _parse_cli_args(self, *, emit_debug: bool = True) -> dict[str, Any]:
         """Parse all CLI arguments into a dictionary for ConfigResolver.
 
         Returns:
@@ -128,7 +128,8 @@ class CLIPlugin:
 
             i += 1
 
-        self._debug(f"Parsed CLI args: {cli_args}")
+        if emit_debug:
+            self._debug(f"Parsed CLI args: {cli_args}")
         return cli_args
 
     def _extract_verbosity_from_argv(self) -> None:
@@ -170,6 +171,17 @@ class CLIPlugin:
 
         # Extract verbosity flags from ANY position in argv
         self._extract_verbosity_from_argv()
+
+        # Resolve logging policy and apply it to the core logger (global).
+        # This must come from ConfigResolver.resolve_logging_policy() and must
+        # not be derived directly from self.verbosity.
+        cli_args = self._parse_cli_args(emit_debug=False)
+        resolver = ConfigResolver(cli_args=cli_args)
+        policy = resolver.resolve_logging_policy()
+        apply_logging_policy(policy)
+
+        # Now that core logging is configured, emit debug-only diagnostics.
+        self._debug(f"Parsed CLI args: {cli_args}")
 
         command = sys.argv[1]
 

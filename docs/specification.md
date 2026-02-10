@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.18
+Specification Version: 1.0.19
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -602,6 +602,7 @@ Requirements:
   - audiomason.core.logging provides an optional global log sink callback (set_log_sink).
   - Orchestrator binds the sink to JobService.append_log_line(job_id, line) for the lifetime of a running job and clears/restores it on exit (exception-safe).
 - Verbosity levels must be respected globally.
+- CLI MUST apply the resolved LoggingPolicy to the core logger at process startup.
 
 
 - Plugins and daemon MUST NOT use print() for runtime diagnostics.
