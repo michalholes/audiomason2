@@ -605,22 +605,50 @@ async function renderAmConfig(content, notify) {
 
   const form = el("div", { class: "formBox" });
   form.appendChild(el("div", { class: "subTitle", text: "Set value" }));
-  const keyIn = el("input", { class: "input", placeholder: "key_path (e.g. web_interface.log_level)" });
+  const keyIn = el("input", { class: "input", placeholder: "key_path (e.g. web.host)" });
   const valIn = el("input", { class: "input", placeholder: "value (JSON)" });
   const setBtn = el("button", { class: "btnPrimary", text: "Set" });
+  const resetBtn = el("button", { class: "btn", text: "Reset" });
   form.appendChild(el("div", { class: "formRow" }, [el("div", { class: "formLabel", text: "key_path" }), keyIn]));
   form.appendChild(el("div", { class: "formRow" }, [el("div", { class: "formLabel", text: "value" }), valIn]));
-  form.appendChild(el("div", { class: "toolbar" }, [setBtn]));
+  form.appendChild(el("div", { class: "toolbar" }, [setBtn, resetBtn]));
   wrap.appendChild(form);
+
+  function renderSnapshot(snap) {
+    if (snap && typeof snap === "object" && !Array.isArray(snap)) {
+      const keys = Object.keys(snap).sort();
+      const lines = [];
+      for (const k of keys) {
+        const item = snap[k];
+        if (item && typeof item === "object" && !Array.isArray(item) && ("value" in item || "source" in item)) {
+          let vText;
+          try {
+            vText = JSON.stringify(item.value);
+          } catch {
+            vText = String(item.value);
+          }
+          const src = item.source ? String(item.source) : "";
+          lines.push(src ? `${k}: ${vText} (${src})` : `${k}: ${vText}`);
+        } else {
+          lines.push(`${k}: ${JSON.stringify(item)}`);
+        }
+      }
+      snapPre.textContent = lines.join("\n") + "\n";
+      return;
+    }
+
+    if (typeof snap === "string") {
+      snapPre.textContent = snap.endsWith("\n") ? snap : (snap + "\n");
+      return;
+    }
+
+    snapPre.textContent = "(no snapshot)\n";
+  }
 
   async function load() {
     const data = await API.getJson("/api/am/config");
     const snap = data && typeof data === "object" ? data.effective_snapshot : null;
-    if (typeof snap === "string") {
-      snapPre.textContent = snap.endsWith("\n") ? snap : (snap + "\n");
-    } else {
-      snapPre.textContent = JSON.stringify(snap || {}, null, 2) + "\n";
-    }
+    renderSnapshot(snap);
   }
 
   refreshBtn.addEventListener("click", async ()=>{
@@ -647,9 +675,22 @@ async function renderAmConfig(content, notify) {
     }
   });
 
+  resetBtn.addEventListener("click", async ()=>{
+    const keyPath = (keyIn.value || "").trim();
+    if (!keyPath) { notify("key_path is required"); return; }
+    try {
+      await API.sendJson("POST", "/api/am/config/unset", { key_path: keyPath });
+      notify("Reset.");
+      await load();
+    } catch(e) {
+      notify(String(e));
+    }
+  });
+
   await load();
   return wrap;
 }
+
 
 async function renderJobsLogViewer(content, notify) {
   const root = el("div", { class: "wizardManager" });

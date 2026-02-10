@@ -26,6 +26,14 @@ This file lists notable changes in AudioMason2, grouped by issue.
 - 2026-02-10T00:00:00+01:00 Specification: add minimal type validation baseline for known keys.
 
 
+## Issue 500
+
+- 2026-02-10T00:00:00+01:00 web_interface: parse effective_snapshot YAML into an object for the UI.
+- 2026-02-10T00:00:00+01:00 web_interface: add POST /api/am/config/unset to reset a user override (inherit).
+- 2026-02-10T00:00:00+01:00 web UI: add Reset action and render effective_snapshot entries (value + source).
+- 2026-02-10T00:00:00+01:00 Documentation: update specification and change log for Issue 500.
+
+
 ## Issue 474
 
 - 2026-02-10T09:43:25+01:00 ConfigService: add unset_value(key_path) to remove a user config key and prune empty parent mappings.
