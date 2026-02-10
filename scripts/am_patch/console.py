@@ -5,7 +5,7 @@ import sys
 
 _ANSI_GREEN = "\x1b[32m"
 _ANSI_RED = "\x1b[31m"
-_ANSI_YELLOW = "\x1b[33m"
+_ANSI_YELLOW = "\x1b[38;5;11m"
 _ANSI_RESET = "\x1b[0m"
 
 

@@ -533,10 +533,10 @@ The runner may emit ANSI colors on stdout for the tokens:
 - OK, FAIL in normal progress lines
 - SUCCESS, FAIL in the final RESULT summary
 - OK, FAIL in PUSH summary
-- FILE lines in the final FILES block (when printed) may be colored yellow (ANSI standard yellow) when color is enabled.
+- FILE lines in the final FILES block (when printed) may be colored yellow (ANSI palette index 11) when color is enabled.
 
 Implementation note:
-- Use ANSI 16-color yellow: \\x1b[33m. Exact RGB is not guaranteed; this is widely supported.
+- Use ANSI 256-color yellow (palette 11): \\x1b[38;5;11m. Exact RGB is not guaranteed; this is widely supported when 256-color is available.
 
 Controls:
 - Policy/config key: console_color (auto|always|never, default auto)
