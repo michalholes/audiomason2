@@ -55,3 +55,16 @@ jobs:
            --exclude=test_064_a_allows_undeclared \
            --exclude=test_900_commit_push_timestamp
 
+      - name: Collect am_patch logs (always)
+        if: always()
+        run: |
+          mkdir -p ci_artifacts
+          cp -a patches/logs/*.log ci_artifacts/ || true
+          ls -la ci_artifacts || true
+
+      - name: Upload artifacts (always)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: am-patch-logs
+          path: ci_artifacts
