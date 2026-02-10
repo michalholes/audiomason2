@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.28
+Specification Version: 1.0.29
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -617,6 +617,9 @@ Mandatory rules:
    1. built-in plugins
    2. user plugins
    3. system plugins
+
+   The CLI host MUST preserve this source ordering when iterating discovered plugin directories.
+   The CLI host MUST NOT globally re-sort the combined discovered list across sources.
 
 2. Within each directory:
    - plugin directories MUST be sorted lexicographically by directory name.

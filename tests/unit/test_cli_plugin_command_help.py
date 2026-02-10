@@ -76,3 +76,59 @@ def test_shadowing_core_command_fails(tmp_path: Path) -> None:
         cli._build_plugin_cli_stub_registry(plugin_dirs=[p1])
 
     assert "process" in str(excinfo.value)
+
+
+def test_registry_does_not_globally_sort_discovered_across_sources(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """When plugin_dirs is None, preserve PluginLoader.discover() iteration order.
+
+    This asserts that the CLI host does not globally re-sort the combined discovered
+    plugin directory list across sources (builtin/user/system).
+    """
+
+    import plugins.cli.plugin as cli_mod
+
+    calls: list[Path] = []
+
+    p2 = tmp_path / "zz_source"
+    p1 = tmp_path / "aa_source"
+
+    class FakeConfigService:
+        pass
+
+    class FakePluginRegistry:
+        def __init__(self, cfg: FakeConfigService) -> None:
+            self._cfg = cfg
+
+        def is_enabled(self, plugin_name: str) -> bool:
+            return True
+
+    class FakePluginLoader:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            pass
+
+        def discover(self) -> list[Path]:
+            return [p2, p1]
+
+        def load_manifest_only(self, plugin_dir: Path):
+            calls.append(plugin_dir)
+            name = "p2" if plugin_dir == p2 else "p1"
+            return type(
+                "M",
+                (),
+                {
+                    "name": name,
+                    "interfaces": ["ICLICommands"],
+                    "cli_commands": [f"cmd-{name}"],
+                },
+            )()
+
+    monkeypatch.setattr(cli_mod, "ConfigService", FakeConfigService)
+    monkeypatch.setattr(cli_mod, "PluginRegistry", FakePluginRegistry)
+    monkeypatch.setattr(cli_mod, "PluginLoader", FakePluginLoader)
+
+    cli = cli_mod.CLIPlugin()
+    _ = cli._build_plugin_cli_stub_registry(plugin_dirs=None)
+
+    assert calls == [p2, p1]

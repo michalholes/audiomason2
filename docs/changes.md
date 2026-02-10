@@ -1,3 +1,9 @@
+## 2026-02-11T00:03:29+01:00
+
+- CLI: Preserve plugin discovery source ordering (builtin -> user -> system) for CLI command stubs.
+- Tests: Add unit coverage ensuring the CLI does not globally re-sort discovered plugin directories across sources.
+- spec: Clarify discovery source ordering preservation and bump specification version to 1.0.29.
+
 ## 2026-02-10T23:30:00+01:00
 
 - Plugins: Add builtin sample plugin test_all_plugin exercising multiple interfaces and ICLICommands.

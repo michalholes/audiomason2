@@ -201,9 +201,10 @@ class CLIPlugin:
 
         loader = PluginLoader(builtin_plugins_dir=plugins_dir, registry=reg)
 
-        discovered = loader.discover() if plugin_dirs is None else list(plugin_dirs)
-
-        discovered = sorted(discovered, key=lambda p: p.name)
+        if plugin_dirs is None:
+            discovered = loader.discover()
+        else:
+            discovered = sorted(list(plugin_dirs), key=lambda p: p.name)
 
         manifests_and_dirs: list[tuple[Path, Any]] = []
         for pdir in discovered:
