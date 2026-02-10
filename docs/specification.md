@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.25
+Specification Version: 1.0.26
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -638,6 +638,13 @@ A command stub MUST contain:
 - command name,
 - providing plugin identifier (`manifest.name`),
 - a reference sufficient to lazily load the plugin.
+
+Manifest requirement (Phase 2):
+
+- For plugins that declare `ICLICommands`, the plugin manifest (`plugin.yaml`) MUST declare
+  the command names under `cli_commands: [<command-name>, ...]`.
+- This list MUST be used to build the stub registry and help output without importing plugin code.
+- If `ICLICommands` is not declared, `cli_commands` MUST be ignored.
 
 At CLI startup:
 - only stubs MAY be registered,

@@ -1,3 +1,10 @@
+## 2026-02-10T22:40:00+01:00
+
+- CLI: Added manifest-only stub registry for plugin-provided CLI commands.
+- CLI: Help output lists plugin commands with origin; deterministic ordering and collision checks.
+- Plugins: Added `cli_commands` field to plugin.yaml for ICLICommands providers.
+- Tests: Added unit coverage for plugin CLI command help and collision/shadowing failures.
+
 ## 2026-02-10T22:16:04+01:00
 
 - core: plugin discovery enumerates plugin directories in deterministic lexicographic order by directory name.

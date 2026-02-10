@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import re
 import sys
 import types
 from dataclasses import dataclass
@@ -28,6 +29,7 @@ class PluginManifest:
     license: str
     entrypoint: str  # "module:ClassName"
     interfaces: list[str]
+    cli_commands: list[str]
     hooks: list[str]
     dependencies: dict[str, Any]
     config_schema: dict[str, Any]
@@ -111,6 +113,14 @@ class PluginLoader:
                 plugin_dirs.extend(self._scan_directory(base_dir))
 
         return plugin_dirs
+
+    def load_manifest_only(self, plugin_dir: Path) -> PluginManifest:
+        """Load and validate plugin manifest only.
+
+        This performs manifest parsing and manifest-level validation only and MUST NOT
+        import or execute plugin code.
+        """
+        return self._load_manifest(plugin_dir)
 
     def load_plugin(self, plugin_dir: Path, validate: bool = True) -> Any:
         """Load a single plugin.
@@ -231,6 +241,35 @@ class PluginLoader:
             with open(manifest_path) as f:
                 data = yaml.safe_load(f)
 
+            interfaces = data.get("interfaces", [])
+            if not isinstance(interfaces, list) or not all(isinstance(x, str) for x in interfaces):
+                raise PluginError(
+                    f"Invalid 'interfaces' in manifest {manifest_path}: must be list[str]"
+                )
+
+            cli_commands: list[str] = []
+            if "ICLICommands" in interfaces:
+                if "cli_commands" not in data:
+                    raise PluginError(
+                        f"Missing required 'cli_commands' for ICLICommands in {manifest_path}"
+                    )
+                raw_cli_commands = data.get("cli_commands")
+                if not isinstance(raw_cli_commands, list):
+                    raise PluginError(
+                        f"Invalid 'cli_commands' in manifest {manifest_path}: must be list[str]"
+                    )
+                for cmd in raw_cli_commands:
+                    if not isinstance(cmd, str):
+                        raise PluginError(
+                            f"Invalid 'cli_commands' in manifest {manifest_path}: must be list[str]"
+                        )
+                    if re.fullmatch(r"[a-z0-9-]+", cmd) is None:
+                        raise PluginError(
+                            f"Invalid CLI command name '{cmd}' in {manifest_path}: "
+                            "must match ^[a-z0-9-]+$"
+                        )
+                cli_commands = list(raw_cli_commands)
+
             return PluginManifest(
                 name=data["name"],
                 version=data["version"],
@@ -238,7 +277,8 @@ class PluginLoader:
                 author=data.get("author", "Unknown"),
                 license=data.get("license", "Unknown"),
                 entrypoint=data["entrypoint"],
-                interfaces=data.get("interfaces", []),
+                interfaces=interfaces,
+                cli_commands=cli_commands,
                 hooks=data.get("hooks", []),
                 dependencies=data.get("dependencies", {}),
                 config_schema=data.get("config_schema", {}),

@@ -33,6 +33,7 @@ from audiomason.core import (
     guess_year_from_path,
 )
 from audiomason.core.config_service import ConfigService
+from audiomason.core.errors import PluginError
 from audiomason.core.jobs.model import JobState, JobType
 from audiomason.core.logging import apply_logging_policy, get_logger
 from audiomason.core.orchestration import Orchestrator
@@ -51,6 +52,18 @@ class VerbosityLevel:
     DEBUG = 3  # Everything
 
 
+CORE_COMMANDS: set[str] = {
+    "process",
+    "wizard",
+    "tui",
+    "web",
+    "daemon",
+    "checkpoints",
+    "version",
+    "help",
+}
+
+
 class CLIPlugin:
     """Enhanced CLI plugin."""
 
@@ -62,6 +75,7 @@ class CLIPlugin:
         """
         self.config = config or {}
         self.verbosity = VerbosityLevel.NORMAL
+        self._plugin_cli_commands: dict[str, str] = {}
 
     def _parse_cli_args(self, *, emit_debug: bool = True) -> dict[str, Any]:
         """Parse all CLI arguments into a dictionary for ConfigResolver.
@@ -160,12 +174,63 @@ class CLIPlugin:
 
         self._debug(f"Verbosity level set to: {self.verbosity}")
 
+    def _build_plugin_cli_stub_registry(
+        self, *, plugin_dirs: list[Path] | None = None
+    ) -> dict[str, str]:
+        """Build manifest-only CLI command stub registry.
+
+        Returns:
+            Mapping: command_name -> plugin_name
+
+        Raises:
+            PluginError: on collisions, shadowing, or invalid manifests.
+        """
+        plugins_dir = Path(__file__).parent.parent
+        cfg = ConfigService()
+        reg = PluginRegistry(cfg)
+        loader = PluginLoader(builtin_plugins_dir=plugins_dir, registry=reg)
+
+        discovered = loader.discover() if plugin_dirs is None else list(plugin_dirs)
+
+        discovered = sorted(discovered, key=lambda p: p.name)
+
+        manifests = []
+        for pdir in discovered:
+            manifest = loader.load_manifest_only(pdir)
+            if not reg.is_enabled(manifest.name):
+                continue
+            if "ICLICommands" in manifest.interfaces:
+                manifests.append(manifest)
+
+        manifests.sort(key=lambda m: m.name)
+
+        stubs: dict[str, str] = {}
+        for manifest in manifests:
+            for cmd in manifest.cli_commands:
+                if cmd in CORE_COMMANDS:
+                    raise PluginError(f"CLI command conflict with core command: {cmd}")
+                if cmd in stubs:
+                    raise PluginError(f"CLI command name collision: {cmd}")
+                stubs[cmd] = manifest.name
+
+        return stubs
+
+    @staticmethod
+    def _format_plugin_help_lines(stubs: dict[str, str]) -> list[str]:
+        lines: list[str] = []
+        for cmd in sorted(stubs.keys()):
+            lines.append(f"{cmd}    (plugin: {stubs[cmd]})")
+        return lines
+
+    @classmethod
+    def _build_help_for_tests(cls, plugin_dirs: list[Path]) -> str:
+        """Build help output for unit tests using temporary plugin dirs."""
+        cli = cls()
+        stubs = cli._build_plugin_cli_stub_registry(plugin_dirs=plugin_dirs)
+        return cli._format_usage(stubs)
+
     async def run(self) -> None:
         """Run CLI - main entry point."""
-        if len(sys.argv) < 2:
-            self._print_usage()
-            return
-
         # Store original argv before modification
         self._original_argv = sys.argv.copy()
 
@@ -182,6 +247,13 @@ class CLIPlugin:
 
         # Now that core logging is configured, emit debug-only diagnostics.
         self._debug(f"Parsed CLI args: {cli_args}")
+
+        # Build stub registry for plugin-provided CLI commands (manifest-only).
+        self._plugin_cli_commands = self._build_plugin_cli_stub_registry()
+
+        if len(sys.argv) < 2:
+            self._print_usage()
+            return
 
         command = sys.argv[1]
 
@@ -207,46 +279,66 @@ class CLIPlugin:
         elif command == "checkpoints":
             await self._checkpoints_command(sys.argv[2:])
         else:
+            if command in self._plugin_cli_commands:
+                plugin_name = self._plugin_cli_commands[command]
+                msg = (
+                    "Plugin command is not executable in this phase: "
+                    f"{command} (plugin: {plugin_name})"
+                )
+                self._error(msg)
+                self._print_usage()
+                return
+
             self._error(f"Unknown command: {command}")
             self._print_usage()
 
+    def _format_usage(self, stubs: dict[str, str]) -> str:
+        lines: list[str] = []
+        lines.append("AudioMason v2.0.0-alpha")
+        lines.append("")
+        lines.append("Usage:")
+        lines.append("  audiomason process <file(s)>   Process audiobook file(s)")
+        lines.append("  audiomason wizard [name]       Run wizard (interactive)")
+        lines.append("  audiomason tui                 Terminal UI (ncurses)")
+        lines.append("  audiomason web [--port PORT]   Start web server")
+        lines.append("  audiomason daemon              Start daemon mode")
+        lines.append("  audiomason checkpoints         Manage checkpoints")
+        lines.append("  audiomason version             Show version")
+        lines.append("  audiomason help                Show this help")
+        lines.append("")
+        lines.append("Options:")
+        lines.append("  --author TEXT                  Book author")
+        lines.append("  --title TEXT                   Book title")
+        lines.append("  --year INT                     Publication year")
+        lines.append("  --bitrate TEXT                 Audio bitrate (default: 128k)")
+        lines.append("  --loudnorm                     Enable loudness normalization")
+        lines.append("  --split-chapters               Split M4A by chapters")
+        lines.append("  --cover [embedded|file|url|skip]  Cover source")
+        lines.append("  --cover-url URL                Cover URL (if --cover url)")
+        lines.append("")
+        lines.append("Verbosity:")
+        lines.append("  -q, --quiet                    Quiet mode (errors only)")
+        lines.append("  -v, --verbose                  Verbose mode (detailed info)")
+        lines.append("  -d, --debug                    Debug mode (everything)")
+        lines.append("")
+        if stubs:
+            lines.append("Plugin commands:")
+            for line in self._format_plugin_help_lines(stubs):
+                lines.append(f"  {line}")
+            lines.append("")
+        lines.append("Examples:")
+        lines.append("  audiomason tui                 Launch terminal interface")
+        lines.append("  audiomason wizard              List available wizards")
+        lines.append("  audiomason wizard quick_import Run quick import wizard")
+        lines.append("  audiomason process book.m4a")
+        lines.append('  audiomason process book.m4a --author "George Orwell" --title "1984"')
+        lines.append("  audiomason web --port 8080")
+        lines.append("  audiomason process *.m4a --bitrate 320k --loudnorm -v")
+        return "\n".join(lines)
+
     def _print_usage(self) -> None:
         """Print usage information."""
-        print("AudioMason v2.0.0-alpha")
-        print()
-        print("Usage:")
-        print("  audiomason process <file(s)>   Process audiobook file(s)")
-        print("  audiomason wizard [name]       Run wizard (interactive)")
-        print("  audiomason tui                 Terminal UI (ncurses)")
-        print("  audiomason web [--port PORT]   Start web server")
-        print("  audiomason daemon              Start daemon mode")
-        print("  audiomason checkpoints         Manage checkpoints")
-        print("  audiomason version             Show version")
-        print("  audiomason help                Show this help")
-        print()
-        print("Options:")
-        print("  --author TEXT                  Book author")
-        print("  --title TEXT                   Book title")
-        print("  --year INT                     Publication year")
-        print("  --bitrate TEXT                 Audio bitrate (default: 128k)")
-        print("  --loudnorm                     Enable loudness normalization")
-        print("  --split-chapters               Split M4A by chapters")
-        print("  --cover [embedded|file|url|skip]  Cover source")
-        print("  --cover-url URL                Cover URL (if --cover url)")
-        print()
-        print("Verbosity:")
-        print("  -q, --quiet                    Quiet mode (errors only)")
-        print("  -v, --verbose                  Verbose mode (detailed info)")
-        print("  -d, --debug                    Debug mode (everything)")
-        print()
-        print("Examples:")
-        print("  audiomason tui                 Launch terminal interface")
-        print("  audiomason wizard              List available wizards")
-        print("  audiomason wizard quick_import Run quick import wizard")
-        print("  audiomason process book.m4a")
-        print('  audiomason process book.m4a --author "George Orwell" --title "1984"')
-        print("  audiomason web --port 8080")
-        print("  audiomason process *.m4a --bitrate 320k --loudnorm -v")
+        print(self._format_usage(self._plugin_cli_commands))
 
     def _version_command(self) -> None:
         """Print version."""
