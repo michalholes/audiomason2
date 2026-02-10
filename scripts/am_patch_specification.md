@@ -83,7 +83,7 @@ The runner prints its version:
 
 Example:
 ```
-am_patch RUNNER_VERSION=4.1.43
+am_patch RUNNER_VERSION=4.2.24
 ```
 
 ---
@@ -533,10 +533,10 @@ The runner may emit ANSI colors on stdout for the tokens:
 - OK, FAIL in normal progress lines
 - SUCCESS, FAIL in the final RESULT summary
 - OK, FAIL in PUSH summary
-- FILE lines in the final FILES block (when printed) may be colored yellow (RGB #FFFF00) when color is enabled.
+- FILE lines in the final FILES block (when printed) may be colored yellow (ANSI standard yellow) when color is enabled.
 
 Implementation note:
-- To achieve RGB #FFFF00 on compatible terminals, use ANSI truecolor foreground escape: \x1b[38;2;255;255;0m.
+- Use ANSI 16-color yellow: \\x1b[33m. Exact RGB is not guaranteed; this is widely supported.
 
 Controls:
 - Policy/config key: console_color (auto|always|never, default auto)
