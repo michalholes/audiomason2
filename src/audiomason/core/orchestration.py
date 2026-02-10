@@ -21,6 +21,7 @@ import yaml
 from audiomason.checkpoint import CheckpointManager
 from audiomason.core.config import ConfigResolver
 from audiomason.core.context import ProcessingContext
+from audiomason.core.errors import ConfigError
 from audiomason.core.jobs.api import JobService
 from audiomason.core.jobs.model import Job, JobState, JobType
 from audiomason.core.logging import (
@@ -49,8 +50,8 @@ def _parse_verbosity(value: object) -> VerbosityLevel:
     if isinstance(value, int):
         try:
             return VerbosityLevel(value)
-        except Exception:
-            return VerbosityLevel.NORMAL
+        except ValueError as e:
+            raise ConfigError(f"Invalid logging.level integer: {value}") from e
     if isinstance(value, str):
         v = value.strip().lower()
         mapping = {
@@ -63,8 +64,10 @@ def _parse_verbosity(value: object) -> VerbosityLevel:
             "verbose": VerbosityLevel.VERBOSE,
             "debug": VerbosityLevel.DEBUG,
         }
-        return mapping.get(v, VerbosityLevel.NORMAL)
-    return VerbosityLevel.NORMAL
+        if v in mapping:
+            return mapping[v]
+        raise ConfigError(f"Invalid logging.level string: {value!r}")
+    raise ConfigError(f"Invalid logging.level type: {type(value).__name__}")
 
 
 def _resolve_effective_verbosity() -> VerbosityLevel:

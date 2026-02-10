@@ -174,10 +174,8 @@ class ArchiveService:
 
         if debug:
             log.debug(
-
-                    f"plan_unpack format={_fmt} backend={backend} entries={len(entries)} "
-                    f"collisions={len(collisions)}"
-
+                f"plan_unpack format={_fmt} backend={backend} entries={len(entries)} "
+                f"collisions={len(collisions)}"
             )
 
         return UnpackPlan(
@@ -337,10 +335,8 @@ class ArchiveService:
 
         if debug:
             log.debug(
-
-                    f"plan_pack format={fmt} backend={backend} entries={len(entries)} "
-                    f"collisions={len(collisions)}"
-
+                f"plan_pack format={fmt} backend={backend} entries={len(entries)} "
+                f"collisions={len(collisions)}"
             )
 
         return PackPlan(

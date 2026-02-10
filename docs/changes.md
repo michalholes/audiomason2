@@ -14,6 +14,7 @@ This file lists notable changes in AudioMason2, grouped by issue.
 
 ## Issue 831
 
+- 2026-02-10T00:00:00+01:00 Orchestrator: strict validation of `logging.level`; invalid values raise ConfigError (no silent fallback).
 - 2026-02-09T00:00:00+01:00 Logging contract debt: orchestrator rejects invalid logging.level (no silent fallback).
 - 2026-02-09T00:00:00+01:00 Logging contract debt: CLI/UI runtime diagnostics do not use print(); all diagnostics go through core logger.
 - 2026-02-09T00:00:00+01:00 Logging contract debt: file_io archives do not use stdlib logging; use core logger.
