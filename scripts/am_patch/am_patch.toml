@@ -108,7 +108,6 @@ gate_badguys_command = ["badguys/badguys.py", "-q", "--exclude=test_900_commit_p
 gate_badguys_cwd = "auto"
 
 
-
 [promotion]
 # NOTE: present in your file; not part of runner Policy surface (keep only if used elsewhere).
 mode = "copy_files"
