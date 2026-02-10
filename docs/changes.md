@@ -1,3 +1,8 @@
+## 2026-02-10T21:43:20+01:00
+
+- cli/web: default `audiomason web` no longer emits debug messages; verbose output is info-level and gated by verbosity >= verbose.
+- spec: LoggingPolicy verbose no longer implies debug emission; debug mode is required for debug emission.
+
 ## 2026-02-10T21:25:00+01:00
 
 - cli/web: in quiet mode (-q web), print exactly 2 lines (Starting..., Finished...) and silence uvicorn logging.

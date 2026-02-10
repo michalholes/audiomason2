@@ -578,11 +578,13 @@ class CLIPlugin:
 
     def _verbose(self, msg: str) -> None:
         """Log verbose message."""
-        log.debug(msg)
+        if self.verbosity >= VerbosityLevel.VERBOSE:
+            log.info(msg)
 
     def _debug(self, msg: str) -> None:
         """Log debug message."""
-        log.debug(msg)
+        if self.verbosity >= VerbosityLevel.DEBUG:
+            log.debug(msg)
 
     def _error(self, msg: str) -> None:
         """Log error message."""

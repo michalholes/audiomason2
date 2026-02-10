@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.23
+Specification Version: 1.0.24
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -352,10 +352,11 @@ verbose:
 - emit_warning = True
 - emit_info = True
 - emit_progress = True
-- emit_debug = True
+- emit_debug = False
 
 debug:
-- Same as verbose.
+- Same as verbose, except:
+- emit_debug = True
 
 Alias rules (resolver-only):
 - The legacy key "verbosity" is treated as an alias for "logging.level".
