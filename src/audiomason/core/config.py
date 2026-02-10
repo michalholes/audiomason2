@@ -30,6 +30,97 @@ class ConfigSource:
     source: str  # 'cli' | 'env' | 'user_config' | 'system_config' | 'default'
 
 
+CONFIG_TYPE_ANY = "any"
+CONFIG_TYPE_STRING = "string"
+CONFIG_TYPE_INT = "int"
+CONFIG_TYPE_BOOL = "bool"
+CONFIG_TYPE_ENUM = "enum"
+CONFIG_TYPE_LIST = "list"
+CONFIG_TYPE_OBJECT = "object"
+CONFIG_TYPE_PATH = "path"
+
+
+@dataclass(frozen=True)
+class ConfigKeySchema:
+    """Schema metadata for a single config key.
+
+    This schema is resolver-level infrastructure. UI and other consumers may use
+    it for deterministic key listing and for type hints / validation.
+    """
+
+    key_path: str
+    type: str
+    description: str = ""
+    default: Any | None = None
+    enum_values: list[str] | None = None
+    allow_numeric_strings: bool = False
+    allow_bool_strings: bool = False
+    unknown: bool = False
+
+
+class ConfigSchema:
+    """Registry of known config keys and their metadata."""
+
+    def __init__(self, keys: dict[str, ConfigKeySchema]) -> None:
+        self._keys = dict(keys)
+
+    @classmethod
+    def from_defaults(cls, defaults: dict[str, Any]) -> ConfigSchema:
+        keys: dict[str, ConfigKeySchema] = {}
+        for key_path, value in _flatten_items(defaults):
+            keys[key_path] = ConfigKeySchema(
+                key_path=key_path,
+                type=_infer_schema_type(value),
+                default=value,
+            )
+        return cls(keys)
+
+    def list_known_keys(self) -> list[str]:
+        return sorted(self._keys.keys())
+
+    def get(self, key_path: str) -> ConfigKeySchema | None:
+        return self._keys.get(key_path)
+
+
+def _infer_schema_type(value: Any) -> str:
+    if isinstance(value, bool):
+        return CONFIG_TYPE_BOOL
+    if isinstance(value, int):
+        return CONFIG_TYPE_INT
+    if isinstance(value, list):
+        return CONFIG_TYPE_LIST
+    if isinstance(value, dict):
+        return CONFIG_TYPE_OBJECT
+    if value is None:
+        return CONFIG_TYPE_ANY
+    if isinstance(value, str):
+        return CONFIG_TYPE_STRING
+    return CONFIG_TYPE_ANY
+
+
+def _flatten_items(data: dict[str, Any], prefix: str = "") -> list[tuple[str, Any]]:
+    """Flatten nested dicts to dot-notation key paths.
+
+    For lists and scalars, the current prefix becomes the leaf key.
+    For dicts, recursion continues.
+    """
+    items: list[tuple[str, Any]] = []
+
+    for key, value in data.items():
+        key_path = f"{prefix}.{key}" if prefix else str(key)
+
+        if isinstance(value, dict):
+            items.extend(_flatten_items(value, key_path))
+        else:
+            items.append((key_path, value))
+
+    return items
+
+
+def _flatten_keys(data: dict[str, Any], prefix: str = "") -> set[str]:
+    return {k for k, _v in _flatten_items(data, prefix=prefix)}
+
+
 @dataclass(frozen=True)
 class LoggingPolicy:
     """Resolved, immutable logging policy.
@@ -65,6 +156,7 @@ class ConfigResolver:
         user_config_path: Path | None = None,
         system_config_path: Path | None = None,
         defaults: dict[str, Any] | None = None,
+        schema: ConfigSchema | None = None,
     ) -> None:
         """Initialize config resolver.
 
@@ -78,6 +170,8 @@ class ConfigResolver:
         self.user_config_path = user_config_path or Path.home() / ".config/audiomason/config.yaml"
         self.system_config_path = system_config_path or Path("/etc/audiomason/config.yaml")
         self.defaults = defaults or self._default_config()
+
+        self.schema = schema or ConfigSchema.from_defaults(self.defaults)
 
         # Cache loaded configs
         self._user_config: dict[str, Any] | None = None
@@ -224,28 +318,114 @@ class ConfigResolver:
 
         return norm
 
+    def list_known_keys(self) -> list[str]:
+        """Return a deterministic list of known keys (schema-driven)."""
+        return self.schema.list_known_keys()
+
+    def get_key_schema(self, key_path: str) -> ConfigKeySchema:
+        """Return schema metadata for a key.
+
+        Unknown keys are allowed (Variant B) and will be returned as type 'any'
+        with unknown=True.
+        """
+        known = self.schema.get(key_path)
+        if known is not None:
+            return known
+        return ConfigKeySchema(
+            key_path=key_path,
+            type=CONFIG_TYPE_ANY,
+            unknown=True,
+        )
+
+    def validate_value(self, key_path: str, value: Any) -> None:
+        """Validate a value against schema (no coercion).
+
+        Unknown keys are not validated.
+        """
+        schema = self.get_key_schema(key_path)
+        if schema.unknown:
+            return
+
+        if value is None:
+            return
+
+        t = schema.type
+        if t == CONFIG_TYPE_ANY:
+            return
+        if t == CONFIG_TYPE_STRING:
+            if not isinstance(value, str):
+                raise ConfigError(
+                    f"Config key '{key_path}' must be a string, got {type(value).__name__}"
+                )
+            return
+        if t == CONFIG_TYPE_INT:
+            if isinstance(value, int):
+                return
+            if schema.allow_numeric_strings and isinstance(value, str) and value.isdigit():
+                return
+            raise ConfigError(f"Config key '{key_path}' must be an int")
+        if t == CONFIG_TYPE_BOOL:
+            if isinstance(value, bool):
+                return
+            if (
+                schema.allow_bool_strings
+                and isinstance(value, str)
+                and value.lower() in {"true", "false"}
+            ):
+                return
+            raise ConfigError(f"Config key '{key_path}' must be a bool")
+        if t == CONFIG_TYPE_ENUM:
+            if not isinstance(value, str):
+                raise ConfigError(f"Config key '{key_path}' must be a string enum")
+            if not schema.enum_values:
+                raise ConfigError(f"Config key '{key_path}' has no enum_values defined")
+            if value not in schema.enum_values:
+                allowed = ", ".join(schema.enum_values)
+                raise ConfigError(f"Invalid '{key_path}': {value!r}. Allowed values: {allowed}")
+            return
+        if t == CONFIG_TYPE_LIST:
+            if not isinstance(value, list):
+                raise ConfigError(f"Config key '{key_path}' must be a list")
+            return
+        if t == CONFIG_TYPE_OBJECT:
+            if not isinstance(value, dict):
+                raise ConfigError(f"Config key '{key_path}' must be an object")
+            return
+        if t == CONFIG_TYPE_PATH:
+            if not isinstance(value, str):
+                raise ConfigError(f"Config key '{key_path}' must be a path string")
+            return
+
+        raise ConfigError(f"Unknown schema type for '{key_path}': {t!r}")
+
     def resolve_all(self) -> dict[str, ConfigSource]:
         """Resolve all known config keys.
+
+        Known keys come from the resolver schema (defaults-derived unless an
+        explicit schema was provided). Unknown keys found in user/system config
+        are also included (Variant B).
 
         Returns:
             Dict of key -> ConfigSource
         """
-        result = {}
+        result: dict[str, ConfigSource] = {}
 
-        # Get all possible keys
-        all_keys: set[str] = set()
+        all_keys: set[str] = set(self.list_known_keys())
+
+        # Explicit CLI keys (may include keys not present in defaults-derived schema).
         all_keys.update(self.cli_args.keys())
-        all_keys.update(self._get_user_config().keys())
-        all_keys.update(self._get_system_config().keys())
-        all_keys.update(self.defaults.keys())
 
-        # Resolve each key
-        for key in all_keys:
+        # Unknown keys: include nested leaves from configs/defaults.
+        all_keys.update(_flatten_keys(self._get_user_config()))
+        all_keys.update(_flatten_keys(self._get_system_config()))
+        all_keys.update(_flatten_keys(self.defaults))
+
+        for key in sorted(all_keys):
             try:
                 value, source = self.resolve(key)
                 result[key] = ConfigSource(value=value, source=source)
             except ConfigError:
-                pass
+                continue
 
         return result
 

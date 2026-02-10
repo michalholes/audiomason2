@@ -12,6 +12,14 @@ This file lists notable changes in AudioMason2, grouped by issue.
 
 
 
+## Issue 994
+
+- 2026-02-10T00:00:00+01:00 Resolver documentation: define configuration schema registry and deterministic key listing for admin tooling.
+- 2026-02-10T00:00:00+01:00 Resolver documentation: allow unknown keys for compatibility (Variant B), surfaced as unknown/advanced with no type validation.
+- 2026-02-10T00:00:00+01:00 Specification: add minimal type validation baseline for known keys.
+
+
+
 ## Issue 831
 
 - 2026-02-10T00:00:00+01:00 CLI: remove diagnostic print in web start; emit debug details only at DEBUG verbosity.

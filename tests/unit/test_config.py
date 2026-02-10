@@ -271,3 +271,56 @@ logging:
 
         assert policy.sources["level_name"].value == "debug"
         assert policy.sources["level_name"].source == "cli"
+
+    def test_list_known_keys_includes_nested_defaults(self, tmp_path):
+        resolver = ConfigResolver(
+            cli_args={},
+            user_config_path=tmp_path / "nonexistent.yaml",
+            system_config_path=tmp_path / "nonexistent_system.yaml",
+            defaults={"web": {"port": 8080}, "logging": {"level": "normal"}},
+        )
+
+        keys = resolver.list_known_keys()
+
+        assert "web.port" in keys
+        assert "logging.level" in keys
+
+    def test_resolve_all_includes_nested_default_key(self, tmp_path):
+        resolver = ConfigResolver(
+            cli_args={},
+            user_config_path=tmp_path / "nonexistent.yaml",
+            system_config_path=tmp_path / "nonexistent_system.yaml",
+            defaults={"web": {"port": 8080}},
+        )
+
+        all_config = resolver.resolve_all()
+
+        assert "web.port" in all_config
+        assert all_config["web.port"].value == 8080
+        assert all_config["web.port"].source == "default"
+
+    def test_unknown_user_key_is_included_and_marked_unknown(self, tmp_path):
+        user_config = tmp_path / "config.yaml"
+        user_config.write_text(
+            """
+web:
+  port: 8080
+magic:
+  foo: 123
+"""
+        )
+
+        resolver = ConfigResolver(
+            cli_args={},
+            user_config_path=user_config,
+            system_config_path=tmp_path / "nonexistent_system.yaml",
+            defaults={"web": {"port": 8000}},
+        )
+
+        all_config = resolver.resolve_all()
+        assert "magic.foo" in all_config
+        assert all_config["magic.foo"].value == 123
+        assert all_config["magic.foo"].source == "user_config"
+
+        schema = resolver.get_key_schema("magic.foo")
+        assert schema.unknown is True

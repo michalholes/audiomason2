@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.13
+Specification Version: 1.0.14
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -205,7 +205,49 @@ The source of each resolved value must be traceable in debug mode.
 ---
 
 
-### 6.3 Canonical Logging Verbosity
+### 6.3 Configuration Schema Registry
+
+- ConfigResolver must expose an authoritative schema registry for known configuration keys.
+- Each schema entry must define at minimum:
+  - key_path (dot notation, e.g. "web.port")
+  - value_type ("string" | "int" | "bool" | "enum" | "list" | "object" | "path")
+  - description (ASCII-only)
+  - default (if defined)
+  - enum_values (only for enum)
+
+UI and other layers consume the schema through resolver APIs. UI is never a source of truth.
+
+---
+
+### 6.4 Deterministic Key Enumeration
+
+- Resolver must provide a deterministic list of known keys:
+  - `list_known_keys() -> list[str]` returns schema keys sorted lexicographically.
+- `resolve_all()` must enumerate at least all known keys from the schema.
+
+---
+
+### 6.5 Unknown Keys Policy (Compatibility)
+
+- Unknown keys (keys not present in the schema registry) are permitted for compatibility.
+- Unknown keys are treated as type `any`:
+  - no type validation is applied by resolver
+  - admin tooling may surface them as "unknown/advanced"
+- Unknown keys must not make the resolver non-deterministic.
+
+---
+
+### 6.6 Minimal Type Validation (Known Keys)
+
+- Known keys (present in schema) must support minimal type validation:
+  - int: must be int (no implicit string coercion unless schema explicitly allows it)
+  - bool: must be bool (no implicit string coercion unless schema explicitly allows it)
+  - enum: must be one of the allowed enum values
+  - path: baseline is string (no filesystem checks in this baseline)
+
+---
+
+### 6.7 Canonical Logging Verbosity
 
 Canonical key:
 - `logging.level`
