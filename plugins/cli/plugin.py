@@ -565,23 +565,19 @@ class CLIPlugin:
     # Logging methods
     def _info(self, msg: str) -> None:
         """Log info message."""
-        if self.verbosity >= VerbosityLevel.NORMAL:
-            print(msg)
+        log.info(msg)
 
     def _verbose(self, msg: str) -> None:
         """Log verbose message."""
-        if self.verbosity >= VerbosityLevel.VERBOSE:
-            print(msg)
+        log.debug(msg)
 
     def _debug(self, msg: str) -> None:
         """Log debug message."""
-        if self.verbosity >= VerbosityLevel.DEBUG:
-            print(msg)
+        log.debug(msg)
 
     def _error(self, msg: str) -> None:
         """Log error message."""
-        # Always shown
-        print(msg)
+        log.error(msg)
 
     async def _web_command(self, args: list[str]) -> None:
         """Start web server.

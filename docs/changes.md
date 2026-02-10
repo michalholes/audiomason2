@@ -3,6 +3,13 @@
 This file lists notable changes in AudioMason2, grouped by issue.
 
 
+## Issue 203
+
+- 2026-02-10T00:00:00+01:00 Logging contract debt: route CLI runtime diagnostics through core logger (no print()).
+- 2026-02-10T00:00:00+01:00 Logging contract debt: route UI rich runtime status output through core logger (no console.print()).
+- 2026-02-10T00:00:00+01:00 Documentation: bump specification version and update change log.
+
+
 ## Issue TBD
 
 - 2026-02-09T00:00:00+01:00 Added new file I/O root `config` for configuration-owned filesystem data.

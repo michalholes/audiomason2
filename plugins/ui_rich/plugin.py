@@ -76,10 +76,7 @@ class RichUIPlugin:
         Args:
             text: Success text
         """
-        if self.has_rich and self.console:
-            self.console.print(f"[bold green]OK[/bold green] {text}")
-        else:
-            log.info(f"OK {text}")
+        log.info(f"OK {text}")
 
     def print_error(self, text: str) -> None:
         """Print error message.
@@ -87,10 +84,7 @@ class RichUIPlugin:
         Args:
             text: Error text
         """
-        if self.has_rich and self.console:
-            self.console.print(f"[bold red]X[/bold red] {text}")
-        else:
-            log.error(f"X {text}")
+        log.error(f"X {text}")
 
     def print_warning(self, text: str) -> None:
         """Print warning message.
@@ -98,10 +92,7 @@ class RichUIPlugin:
         Args:
             text: Warning text
         """
-        if self.has_rich and self.console:
-            self.console.print(f"[bold yellow][WARN][/bold yellow] {text}")
-        else:
-            log.warning(text)
+        log.warning(f"WARN {text}")
 
     def print_info(self, text: str) -> None:
         """Print info message.
@@ -109,10 +100,7 @@ class RichUIPlugin:
         Args:
             text: Info text
         """
-        if self.has_rich and self.console:
-            self.console.print(f"[bold blue]\u2139[/bold blue] {text}")
-        else:
-            log.info(text)
+        log.info(text)
 
     def create_progress(self) -> Any:
         """Create progress bar.
