@@ -76,7 +76,7 @@ class CliArgs:
     enforce_allowed_files: bool | None
 
     # NEW controls
-    rollback_workspace_on_fail: bool | None
+    rollback_workspace_on_fail: str | None
     live_repo_guard: bool | None
     live_repo_guard_scope: str | None
     patch_jail: bool | None
@@ -314,9 +314,15 @@ PROMOTION / GIT
       On LIVE_CHANGED: keep live repo and drop those files from promotion.
 
 SAFETY / CONSISTENCY
-  --rollback-workspace-on-fail / --no-rollback-workspace-on-fail
-      Roll back workspace to pre-patch state if patch or gates fail.
-      [default: ON]
+  --rollback-workspace-on-fail none-applied|always|never
+      Control workspace rollback after a failed run:
+        none-applied: rollback only if 0 patches applied
+        always: rollback on any FAIL (including partial apply)
+        never: never rollback workspace automatically
+      [default: none-applied]
+
+  --no-rollback-workspace-on-fail
+      Alias for --rollback-workspace-on-fail=never.
 
   --live-repo-guard / --no-live-repo-guard
       Fail if live repo changes during patching.
@@ -753,7 +759,18 @@ def parse_args(argv: list[str]) -> CliArgs:
     p.add_argument(
         "--rollback-workspace-on-fail",
         dest="rollback_workspace_on_fail",
-        action=argparse.BooleanOptionalAction,
+        nargs="?",
+        const="none-applied",
+        choices=["none-applied", "always", "never"],
+        default=None,
+        metavar="{none-applied,always,never}",
+    )
+
+    p.add_argument(
+        "--no-rollback-workspace-on-fail",
+        dest="rollback_workspace_on_fail",
+        action="store_const",
+        const="never",
         default=None,
     )
     p.add_argument(

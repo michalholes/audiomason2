@@ -686,6 +686,7 @@ def main(argv: list[str]) -> int:
     files_for_fail_zip: list[str] = []
     failed_patch_blobs_for_zip: list[tuple[str, bytes]] = []
     patch_applied_successfully: bool = False
+    applied_ok_count: int = 0
     rollback_ckpt_for_posthook = None
     rollback_ws_for_posthook = None
 
@@ -1103,7 +1104,11 @@ def main(argv: list[str]) -> int:
             live_guard_before = r.stdout or ""
             logger.line(f"live_repo_porcelain_len={len(live_guard_before)}")
 
-        ckpt = create_checkpoint(logger, ws.repo, enabled=policy.rollback_workspace_on_fail)
+        ckpt = create_checkpoint(
+            logger,
+            ws.repo,
+            enabled=(policy.rollback_workspace_on_fail != "never"),
+        )
 
         # Baseline changes BEFORE running patch (so scope is delta).
         before = changed_paths(logger, ws.repo)
@@ -1123,6 +1128,7 @@ def main(argv: list[str]) -> int:
                     policy=policy,
                 )
                 patch_applied_any = res.applied_ok > 0
+                applied_ok_count = res.applied_ok
                 files_current = list(res.declared_files)
                 touched_for_zip = list(res.touched_files)
                 failed_patch_blobs = [(f.name, f.data) for f in res.failures]
@@ -1141,6 +1147,7 @@ def main(argv: list[str]) -> int:
                 try:
                     run_patch(logger, patch_script, workspace_repo=ws.repo, policy=policy)
                     patch_applied_any = True
+                    applied_ok_count = 1
                 except RunnerError as e:
                     primary_fail_stage = "PATCH"
                     primary_fail_reason = e.message
@@ -1660,13 +1667,29 @@ def main(argv: list[str]) -> int:
                     exit_code != 0
                     and rollback_ws_for_posthook is not None
                     and rollback_ckpt_for_posthook is not None
-                    and getattr(policy, "rollback_workspace_on_fail", False)
                 ):
-                    rollback_to_checkpoint(
-                        logger,
-                        rollback_ws_for_posthook.repo,
-                        rollback_ckpt_for_posthook,
-                    )
+                    mode = getattr(policy, "rollback_workspace_on_fail", "none-applied")
+                    do_rb = False
+                    if mode == "never":
+                        do_rb = False
+                    elif mode == "always":
+                        do_rb = True
+                    else:  # none-applied (default)
+                        do_rb = applied_ok_count == 0
+
+                    if do_rb:
+                        logger.line(
+                            f"ROLLBACK: executed (mode={mode} applied_ok={applied_ok_count})"
+                        )
+                        rollback_to_checkpoint(
+                            logger,
+                            rollback_ws_for_posthook.repo,
+                            rollback_ckpt_for_posthook,
+                        )
+                    else:
+                        logger.line(
+                            f"ROLLBACK: skipped (mode={mode} applied_ok={applied_ok_count})"
+                        )
 
                 if (
                     exit_code == 0

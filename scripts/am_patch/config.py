@@ -195,7 +195,7 @@ class Policy:
     no_rollback: bool = False
 
     # NEW: rollback workspace to pre-patch checkpoint on PATCH failure only (default ON)
-    rollback_workspace_on_fail: bool = True
+    rollback_workspace_on_fail: str = "none-applied"
 
     # NEW: live repo guard (default ON)
     live_repo_guard: bool = True
@@ -230,6 +230,20 @@ def _as_bool(d: dict[str, Any], k: str, default: bool) -> bool:
 def _as_str(d: dict[str, Any], k: str, default: str | None) -> str | None:
     v = d.get(k, default)
     return None if v is None else str(v)
+
+
+def _as_rollback_mode(d: dict[str, Any], k: str, default: str) -> str:
+    v = d.get(k, default)
+    if isinstance(v, bool):
+        # Legacy bool config support:
+        # True  -> none-applied (rollback only if 0 patches applied)
+        # False -> never
+        return "none-applied" if v else "never"
+    if not isinstance(v, str):
+        raise TypeError(f"config key {k!r} must be a string or bool, got {type(v).__name__}")
+    if v not in ("none-applied", "always", "never"):
+        raise ValueError(f"config key {k!r} has invalid value {v!r}")
+    return v
 
 
 def _as_list_str(d: dict[str, Any], k: str, default: list[str]) -> list[str]:
@@ -692,7 +706,7 @@ def build_policy(defaults: Policy, cfg: dict[str, Any]) -> Policy:
     p.no_rollback = _as_bool(cfg, "no_rollback", p.no_rollback)
     _mark_cfg(p, cfg, "no_rollback")
 
-    p.rollback_workspace_on_fail = _as_bool(
+    p.rollback_workspace_on_fail = _as_rollback_mode(
         cfg, "rollback_workspace_on_fail", p.rollback_workspace_on_fail
     )
     _mark_cfg(p, cfg, "rollback_workspace_on_fail")

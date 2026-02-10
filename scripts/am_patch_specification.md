@@ -60,6 +60,7 @@ The following keys are normative (defaults shown):
 - scope_ignore_contains = ["/__pycache__/"]
 - venv_bootstrap_mode = "auto"  (allowed: auto|always|never)
 - venv_bootstrap_python = ".venv/bin/python"
+- rollback_workspace_on_fail = "none-applied"  (allowed: none-applied|always|never)
 
 These keys affect concrete behavior:
 - filesystem locations (patch dir layout and workspace layout),
@@ -409,6 +410,26 @@ When building `patched.zip`, the runner excludes repository internals and tool/r
 
 This is independent of scope logic and does not affect patch execution, gates, or promotion semantics.
 
+
+## 1.2 Workspace rollback after failure
+
+Workspace rollback after a failed run is controlled by `rollback_workspace_on_fail`.
+
+CLI:
+- `--rollback-workspace-on-fail {none-applied,always,never}`
+
+Config:
+- `rollback_workspace_on_fail = "none-applied"|"always"|"never"`
+
+Semantics on failure (`RESULT: FAIL`):
+- `none-applied`: rollback workspace only if 0 patches were applied successfully (`applied_ok == 0`)
+- `always`: rollback workspace on any failure (including partial apply)
+- `never`: never rollback workspace automatically
+
+The runner MUST log a single summary line stating whether rollback was executed or skipped, including
+the selected mode and `applied_ok`.
+
+---
 
 ## 7.4 Success archive (git-archive zip)
 
