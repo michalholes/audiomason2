@@ -16,7 +16,7 @@ from typing import Any
 
 import yaml
 
-from audiomason.core.config import ConfigResolver
+from audiomason.core.config import ALLOWED_LOGGING_LEVELS, ConfigResolver
 from audiomason.core.errors import ConfigError
 
 
@@ -58,6 +58,53 @@ def _set_nested(data: dict[str, Any], key_path: str, value: Any) -> None:
         cur = nxt
 
     cur[parts[-1]] = value
+
+
+def _validate_minimal(key_path: str, value: object) -> None:
+    """Minimal validation parity with resolver (logging.level only)."""
+    if key_path != "logging.level":
+        return
+
+    if not isinstance(value, str):
+        raise ConfigError(f"Config key '{key_path}' must be a string, got {type(value).__name__}")
+
+    norm = value.strip().lower()
+    if norm == "":
+        raise ConfigError(f"Config key '{key_path}' must not be empty")
+
+    if norm not in ALLOWED_LOGGING_LEVELS:
+        allowed = ", ".join(sorted(ALLOWED_LOGGING_LEVELS))
+        raise ConfigError(f"Invalid '{key_path}': {value!r}. Allowed values: {allowed}")
+
+
+def _unset_nested(data: dict[str, Any], key_path: str) -> bool:
+    parts = [p for p in key_path.split(".") if p]
+    if not parts:
+        raise ConfigError("Empty key path")
+
+    cur: dict[str, Any] = data
+    stack: list[tuple[dict[str, Any], str]] = []
+
+    for part in parts[:-1]:
+        nxt = cur.get(part)
+        if not isinstance(nxt, dict):
+            return False
+        stack.append((cur, part))
+        cur = nxt
+
+    leaf = parts[-1]
+    if leaf not in cur:
+        return False
+
+    del cur[leaf]
+
+    # Prune empty parent mappings.
+    while stack and cur == {}:
+        parent, key = stack.pop()
+        del parent[key]
+        cur = parent
+
+    return True
 
 
 @dataclass(frozen=True)
@@ -113,17 +160,38 @@ class ConfigService:
             flat[item.key] = {"value": item.value, "source": item.source}
         return _dump_yaml_dict(flat)
 
-    def set_value(self, key_path: str, value: Any) -> None:
-        """Set a value in the user config file (lowest of non-default sources)."""
+    def _reinit_resolver(self) -> None:
         path = self.user_config_path
-        data = _load_yaml_dict(path)
-        _set_nested(data, key_path, value)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(_dump_yaml_dict(data), encoding="utf-8")
-        # Invalidate resolver cache by re-creating it.
         self._resolver = ConfigResolver(
             cli_args=self._resolver.cli_args,
             user_config_path=path,
             system_config_path=self._resolver.system_config_path,
             defaults=self._resolver.defaults,
         )
+
+    def set_value(self, key_path: str, value: Any) -> None:
+        """Set a value in the user config file (lowest of non-default sources)."""
+        _validate_minimal(key_path, value)
+        path = self.user_config_path
+        data = _load_yaml_dict(path)
+        _set_nested(data, key_path, value)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(_dump_yaml_dict(data), encoding="utf-8")
+        self._reinit_resolver()
+
+    def unset_value(self, key_path: str) -> None:
+        """Remove a key from the user config file (reset to inherit).
+
+        This is idempotent: if the key does not exist, no change is made.
+        Empty parent mappings are pruned recursively.
+        """
+        path = self.user_config_path
+        data = _load_yaml_dict(path)
+
+        changed = _unset_nested(data, key_path)
+        if not changed:
+            return
+
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(_dump_yaml_dict(data), encoding="utf-8")
+        self._reinit_resolver()

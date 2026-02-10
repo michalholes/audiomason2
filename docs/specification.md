@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.14
+Specification Version: 1.0.15
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -257,6 +257,26 @@ Allowed values (after normalization):
 - `normal`
 - `verbose`
 - `debug`
+
+---
+
+### 6.8 ConfigService Mutation Primitives
+
+UI layers must not edit raw YAML directly. If a UI needs to mutate user configuration, it must use ConfigService.
+
+ConfigService provides two execution primitives:
+
+- `set_value(key_path, value)`
+  - writes a single key path into the user config YAML
+  - unknown keys are allowed and are not validated
+  - minimal validation is applied only for `logging.level` (quiet|normal|verbose|debug)
+
+- `unset_value(key_path)`
+  - removes a single key path from the user config YAML (reset to inherit)
+  - prunes empty parent mappings recursively
+  - idempotent: unsetting a missing key is a no-op
+
+ConfigService must re-initialize the resolver after each mutation so subsequent reads reflect the change deterministically.
 
 Normalization rules:
 - value must be a string

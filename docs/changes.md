@@ -19,6 +19,14 @@ This file lists notable changes in AudioMason2, grouped by issue.
 - 2026-02-10T00:00:00+01:00 Specification: add minimal type validation baseline for known keys.
 
 
+## Issue 474
+
+- 2026-02-10T09:43:25+01:00 ConfigService: add unset_value(key_path) to remove a user config key and prune empty parent mappings.
+- 2026-02-10T09:43:25+01:00 ConfigService: validate logging.level on set_value with the same allowed values and normalization baseline as resolver.
+- 2026-02-10T09:43:25+01:00 Documentation: update specification and change log for ConfigService unset support.
+
+
+
 
 ## Issue 831
 
