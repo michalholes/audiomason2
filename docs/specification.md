@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.21
+Specification Version: 1.0.22
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -725,6 +725,17 @@ Async execution rules:
 - No direct filesystem manipulation outside APIs.
 
 The web UI must be replaceable without touching core logic.
+
+### 9.0 Web server shutdown output (CLI contract)
+
+When running the web server via the CLI (for example, `audiomason web`), the CLI MUST
+emit exactly one shutdown summary line on process exit, in the following canonical form:
+
+- Ctrl+C: `Finished (reason: interrupted by user)` with exit code 130
+- Error: `Finished (reason: error: <TypeName>: <message>)` with exit code 1
+- Normal return: `Finished (reason: normal exit)` with exit code 0
+
+The literal line `Interrupted.` MUST NOT be printed.
 
 ### 9.1 Web Interface Configuration Surface
 

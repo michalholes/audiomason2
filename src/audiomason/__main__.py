@@ -62,9 +62,6 @@ async def main() -> None:
     try:
         cli_plugin = loader.load_plugin(cli_plugin_dir, validate=False)
         await cli_plugin.run()
-    except KeyboardInterrupt:
-        print("\n\nInterrupted.")
-        sys.exit(130)
     except Exception as e:  # pragma: no cover
         print(f"Error: {e}")
         sys.exit(1)

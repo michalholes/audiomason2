@@ -1,21 +1,23 @@
-## 2026-02-10T20:58:21+01:00
-
-- spec: extend CLI plugin command extension with normative ICLICommands contract, determinism, and UX rules.
-
-# Changes
-
-This file lists notable changes in AudioMason2 in strict chronological order.
-
 ## 2026-02-10T21:15:00+01:00
 
 - spec: define CLI plugin command extension contract (ICLICommands, determinism, failure isolation).
 - spec: bump specification version to 1.0.21.
+
+## 2026-02-10T21:10:29+01:00
+
+- cli: ensure web shutdown prints a single `Finished (reason: ...)` line on normal exit, error, and Ctrl+C.
+- cli: remove global KeyboardInterrupt handler that printed the literal line `Interrupted.`
+- spec: document web shutdown output contract and bump specification version to 1.0.22.
 
 ## 2026-02-10T21:00:00+01:00
 
 - web UI: render effective_snapshot entries and add per-key Reset actions.
 - web_interface: return ASCII-only error text for config set/unset failures.
 - Documentation: update specification and change log for Issue 500.
+
+## 2026-02-10T20:58:21+01:00
+
+- spec: extend CLI plugin command extension with normative ICLICommands contract, determinism, and UX rules.
 
 ## 2026-02-10T09:43:25+01:00
 

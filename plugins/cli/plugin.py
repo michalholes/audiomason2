@@ -662,6 +662,8 @@ class CLIPlugin:
             self._error("X Web server plugin not found")
             return
 
+        exit_code = 0
+        reason = "normal exit"
         try:
             # Pass ConfigResolver and PluginLoader
             web_plugin.config_resolver = config_resolver
@@ -675,12 +677,20 @@ class CLIPlugin:
                 log.debug(f"  - verbosity: {self.verbosity}")
 
             await web_plugin.run()
+        except KeyboardInterrupt:
+            exit_code = 130
+            reason = "interrupted by user"
         except Exception as e:
+            exit_code = 1
+            reason = f"error: {type(e).__name__}: {e}"
             self._error(f"X Error starting web server: {e}")
             if self.verbosity >= VerbosityLevel.DEBUG:
                 import traceback
 
                 log.debug(traceback.format_exc())
+        finally:
+            self._info(f"Finished (reason: {reason})")
+            raise SystemExit(exit_code)
 
     async def _daemon_command(self) -> None:
         """Start daemon mode."""
