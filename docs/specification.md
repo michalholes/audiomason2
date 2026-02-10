@@ -343,6 +343,10 @@ Alias rules (resolver-only):
 - If both are present, "logging.level" ALWAYS wins.
 - Consumers MUST NOT be aware of aliases.
 
+CLI input rules:
+- CLI MUST set the canonical key logging.level (nested: logging.level).
+- CLI MUST NOT set the resolver-only alias verbosity.
+
 Guarantees:
 - resolve_logging_policy() is deterministic and side-effect free.
 - No numeric levels and no coupling to any logging library.

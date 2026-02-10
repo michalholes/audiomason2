@@ -102,6 +102,7 @@ This file lists notable changes in AudioMason2, grouped by issue.
 - 2026-02-09T00:00:00+01:00 Resolver now provides resolve_logging_level() for `logging.level`.
 - 2026-02-09T00:00:00+01:00 Strict validation and explicit default `normal`.
 - 2026-02-09T00:00:00+01:00 Specification updated for canonical `logging.level` contract.
+- 2026-02-10T00:00:00+01:00 CLI now sets canonical `logging.level` instead of alias `verbosity`.
 
 ## Issue 402
 

@@ -16,7 +16,7 @@ import re
 import sys
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from audiomason.core import (
     ConfigResolver,
@@ -69,7 +69,16 @@ class CLIPlugin:
         Returns:
             Dictionary of CLI arguments with nested structure for dotted keys
         """
-        cli_args = {}
+        cli_args: dict[str, Any] = {}
+
+        def _ensure_dict(root: dict[str, Any], key: str) -> dict[str, Any]:
+            val = root.get(key)
+            if isinstance(val, dict):
+                return cast(dict[str, Any], val)
+            new: dict[str, Any] = {}
+            root[key] = new
+            return new
+
         # Use original argv (before verbosity extraction)
         args = getattr(self, "_original_argv", sys.argv)[1:]  # Skip program name
         i = 0
@@ -79,24 +88,20 @@ class CLIPlugin:
 
             # Verbosity flags
             if arg in ("-q", "--quiet"):
-                cli_args["verbosity"] = "quiet"
+                _ensure_dict(cli_args, "logging")["level"] = "quiet"
             elif arg in ("-v", "--verbose"):
-                cli_args["verbosity"] = "verbose"
+                _ensure_dict(cli_args, "logging")["level"] = "verbose"
             elif arg in ("-d", "--debug"):
-                cli_args["verbosity"] = "debug"
+                _ensure_dict(cli_args, "logging")["level"] = "debug"
 
             # Port flag - nested under 'web'
             elif arg == "--port" and i + 1 < len(args):
-                if "web" not in cli_args:
-                    cli_args["web"] = {}  # type: ignore[assignment]
-                cli_args["web"]["port"] = int(args[i + 1])  # type: ignore[index]
+                _ensure_dict(cli_args, "web")["port"] = int(args[i + 1])
                 i += 1  # Skip next arg
 
             # Bitrate flag - nested under 'audio'
             elif arg == "--bitrate" and i + 1 < len(args):
-                if "audio" not in cli_args:
-                    cli_args["audio"] = {}  # type: ignore[assignment]
-                cli_args["audio"]["bitrate"] = args[i + 1]  # type: ignore[index]
+                _ensure_dict(cli_args, "audio")["bitrate"] = args[i + 1]
                 i += 1
 
             # Output directory
@@ -111,23 +116,15 @@ class CLIPlugin:
 
             # Loudnorm flag - nested under 'audio'
             elif arg == "--loudnorm":
-                if "audio" not in cli_args:
-                    cli_args["audio"] = {}  # type: ignore[assignment]
-                cli_args["audio"]["loudnorm"] = True  # type: ignore[index]
+                _ensure_dict(cli_args, "audio")["loudnorm"] = True
             elif arg == "--no-loudnorm":
-                if "audio" not in cli_args:
-                    cli_args["audio"] = {}  # type: ignore[assignment]
-                cli_args["audio"]["loudnorm"] = False  # type: ignore[index]
+                _ensure_dict(cli_args, "audio")["loudnorm"] = False
 
             # Split chapters - nested under 'audio'
             elif arg == "--split-chapters":
-                if "audio" not in cli_args:
-                    cli_args["audio"] = {}  # type: ignore[assignment]
-                cli_args["audio"]["split_chapters"] = True  # type: ignore[index]
+                _ensure_dict(cli_args, "audio")["split_chapters"] = True
             elif arg == "--no-split-chapters":
-                if "audio" not in cli_args:
-                    cli_args["audio"] = {}  # type: ignore[assignment]
-                cli_args["audio"]["split_chapters"] = False  # type: ignore[index]
+                _ensure_dict(cli_args, "audio")["split_chapters"] = False
 
             i += 1
 
