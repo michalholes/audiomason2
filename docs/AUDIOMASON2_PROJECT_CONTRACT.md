@@ -1,6 +1,6 @@
 
 # AUDIOMASON2_PROJECT_CONTRACT.md
-Version: 1.1
+Version: 1.2
 
 Status: AUTHORITATIVE / IMMUTABLE BASE CONTRACT  
 Applies to: Entire AudioMason2 project (core, plugins, UI, tests, tooling, docs)  
@@ -91,6 +91,38 @@ AudioMason2 is NOT:
 - Long-running work is asynchronous.
 - UI never blocks on processing.
 - Progress and logs are observable.
+
+### 4.5 Mandatory Runtime Diagnostic Emission
+
+AudioMason2 provides exactly one authoritative runtime diagnostic emission entry point, provided by Core.
+
+All runtime components (Core, Plugins, Wizards, Jobs, and user-facing interfaces such as CLI and Web) MUST emit diagnostic lifecycle information exclusively through this authoritative entry point.
+
+Forbidden:
+- emitting runtime diagnostics through any mechanism other than the authoritative entry point,
+- creating additional global diagnostic buses or alternate diagnostic pipelines,
+- bypassing the Core-provided authoritative diagnostic entry point for emission.
+
+Call-boundary rule (no swallowed failures):
+- Whenever one component invokes another component (a "call boundary"), failures MUST NOT be silently swallowed.
+- If an invoked component fails, the invoking component MUST emit a diagnostic failure event via the authoritative entry point that preserves enough context to identify:
+  - which component or operation failed,
+  - which boundary invocation failed,
+  - and the failure reason (at minimum: error type and message; ideally with causal context).
+
+Minimum requirement:
+- Each component that performs work or participates in a call boundary MUST emit at least a start and an end state (succeeded/failed) for that work/boundary via the authoritative entry point.
+
+Non-substitution rule:
+- Logging, exceptions, or return values do not substitute the mandatory emission to the authoritative diagnostic entry point.
+
+Scope note:
+- This invariant applies to diagnostic lifecycle and call-boundary visibility. It does not require emitting diagnostics from every low-level internal helper or pure computation step.
+
+Diagnostics are non-functional and fail-safe:
+- Diagnostic emission MUST NOT change functional behavior or outputs.
+- Failure of the diagnostic mechanism MUST NOT crash or block processing; processing must remain valid even if diagnostics fail.
+
 
 ---
 
