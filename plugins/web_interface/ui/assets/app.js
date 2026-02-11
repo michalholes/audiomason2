@@ -1120,9 +1120,12 @@ async function renderRootBrowser(content, notify) {
     const items = Array.isArray(data.items) ? data.items : [];
     clear(rootsSel);
     items.forEach((it) => {
-      rootsSel.appendChild(el("option", { value: it.name, text: it.name }));
+      const id = it && (it.id ?? it.name ?? "");
+      const label = it && (it.label ?? it.name ?? it.id ?? "");
+      rootsSel.appendChild(el("option", { value: id, text: label }));
     });
-    currentRoot = items[0] ? items[0].name : "";
+    const first = items[0] || null;
+    currentRoot = first ? (first.id ?? first.name ?? "") : "";
     rootsSel.value = currentRoot;
   }
 
