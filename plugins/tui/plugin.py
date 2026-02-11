@@ -1554,7 +1554,7 @@ class TUIPlugin:
         self, wizard_name: str, root: RootName, rel_path: str
     ) -> str | None:
         """Execute wizard on a path."""
-        if not self._orchestrator or not self._engine:
+        if not self._orchestrator or not self._engine or not self._plugin_loader:
             return "Services not initialized"
 
         try:
@@ -1567,17 +1567,18 @@ class TUIPlugin:
             svc = WizardService()
             wizards = svc.list_wizards()
 
-            wizard_path = None
-            for w in wizards:
-                if w.name == wizard_name:
-                    wizard_path = str(w.path) if hasattr(w, "path") else None
-                    break
+            if not any(w.name == wizard_name for w in wizards):
+                return f"Wizard not found: {wizard_name}"
 
-            # Create request with path in payload
+            wizard_path = svc.wizards_dir / "definitions" / f"{wizard_name}.yaml"
+
+            # Create request with path in payload (non-interactive)
             request = WizardRequest(
                 wizard_id=wizard_name,
-                wizard_path=wizard_path or "",
+                wizard_path=wizard_path,
+                plugin_loader=self._plugin_loader,
                 payload={"input_root": root.value, "input_path": rel_path},
+                verbosity=self._verbosity,
             )
 
             job_id = self._orchestrator.start_wizard(request)
