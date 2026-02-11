@@ -163,6 +163,11 @@ def mount_jobs(app: FastAPI) -> None:
         else:
             raise HTTPException(status_code=400, detail="wizard_path or targets are required")
 
+        wizard_payload_norm = dict(wizard_payload)
+        sp = wizard_payload_norm.get("source_path")
+        if not isinstance(sp, str) or not sp.strip():
+            wizard_payload_norm["source_path"] = resolved_targets[0]
+
         job = orch.jobs.create_job(
             JobType.WIZARD,
             meta={
@@ -172,7 +177,7 @@ def mount_jobs(app: FastAPI) -> None:
                     resolved_targets, ensure_ascii=True, separators=(",", ":"), sort_keys=True
                 ),
                 "payload_json": json.dumps(
-                    wizard_payload, ensure_ascii=True, separators=(",", ":"), sort_keys=True
+                    wizard_payload_norm, ensure_ascii=True, separators=(",", ":"), sort_keys=True
                 ),
             },
         )

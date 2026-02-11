@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 from typing import Any
@@ -94,3 +95,42 @@ def test_web_roots_api_and_wizard_job_path_resolution(tmp_path: Path, monkeypatc
     assert resp.status_code == 200
     meta = resp.json().get("item", {}).get("meta", {})
     assert str(tmp_path / "inbox" / "a.mp3") == meta.get("wizard_path")
+    payload_json = meta.get("payload_json")
+    assert isinstance(payload_json, str)
+    payload_obj = json.loads(payload_json)
+    assert str(tmp_path / "inbox" / "a.mp3") == payload_obj.get("source_path")
+
+
+def test_web_wizard_job_does_not_override_source_path(tmp_path: Path, monkeypatch: Any) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("AUDIOMASON_FILE_IO_ROOTS_INBOX_DIR", str(tmp_path / "inbox"))
+    monkeypatch.setenv("AUDIOMASON_FILE_IO_ROOTS_STAGE_DIR", str(tmp_path / "stage"))
+    monkeypatch.setenv("AUDIOMASON_FILE_IO_ROOTS_JOBS_DIR", str(tmp_path / "jobs"))
+    monkeypatch.setenv("AUDIOMASON_FILE_IO_ROOTS_OUTBOX_DIR", str(tmp_path / "outbox"))
+
+    web_interface_plugin_cls = _get_web_interface_plugin_cls()
+    app = web_interface_plugin_cls().create_app()
+    client = _make_client(app)
+
+    (tmp_path / "inbox").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "inbox" / "a.mp3").write_bytes(b"dummy")
+
+    resp = client.post(
+        "/api/jobs/wizard",
+        json={
+            "wizard_id": "w1",
+            "target_root": "inbox",
+            "target_path": "a.mp3",
+            "payload": {"source_path": "/custom/source"},
+        },
+    )
+    assert resp.status_code == 200
+    job_id = resp.json()["job_id"]
+
+    resp = client.get(f"/api/jobs/{job_id}")
+    assert resp.status_code == 200
+    meta = resp.json().get("item", {}).get("meta", {})
+    payload_json = meta.get("payload_json")
+    assert isinstance(payload_json, str)
+    payload_obj = json.loads(payload_json)
+    assert payload_obj.get("source_path") == "/custom/source"
