@@ -1,0 +1,7 @@
+wizard:
+  name: "asdfjkl"
+  description: ""
+  steps:
+    - id: step_1
+      type: text
+      prompt: ""
