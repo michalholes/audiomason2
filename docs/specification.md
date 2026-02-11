@@ -882,21 +882,79 @@ Requirements:
 
 ## 10. Logging & Observability
 
-- Logging is job-centric.
-- When a job is running, core logger output MUST be routed into the job log stream (JobService.read_log(job_id)).
-- When no job is running, logging behavior MUST remain unchanged.
-- Phase 1 implementation mechanism:
-  - audiomason.core.logging provides an optional global log sink callback (set_log_sink).
-  - Orchestrator binds the sink to JobService.append_log_line(job_id, line) for the lifetime of a running job and clears/restores it on exit (exception-safe).
-- Verbosity levels must be respected globally.
-- CLI MUST apply the resolved LoggingPolicy to the core logger at process startup.
+Observability in AudioMason2 consists of two mandatory and distinct layers:
 
+1) Human-readable logging (core logger based)
+2) Structured runtime diagnostic events (authoritative diagnostic emission entry point)
 
-- Plugins and daemon MUST NOT use print() for runtime diagnostics.
-- All runtime diagnostics MUST go through the core logger.
-- Plugins and services MUST NOT use stdlib logging for runtime diagnostics; use the core logger only.
-- This guarantees job-context observability (JobService logs) and preserves standalone behavior.
-Silent failures are forbidden.
+These layers are complementary and non-substitutable.
+
+---
+
+### 10.1 Human-Readable Logging (Mandatory)
+
+Human-readable logs MUST go through the Core-provided logger.
+
+Plugins, Jobs, Wizards, CLI and Web layers:
+
+- MUST NOT use print() for runtime logging.
+- MUST NOT use stdlib logging directly.
+- MUST use the Core-provided logger exclusively.
+
+Minimum logging requirement:
+
+Any component that performs work or participates in a call boundary MUST log:
+
+- start of the operation,
+- end of the operation (succeeded or failed).
+
+Logs MUST be deterministic, concise, and suitable for human debugging.
+
+Logging does NOT substitute structured diagnostic event emission.
+
+---
+
+### 10.2 Structured Runtime Diagnostic Events (Mandatory)
+
+Authoritative diagnostic emission entry point:
+
+audiomason.core.events.get_event_bus().publish(event, data)
+
+Async variant:
+
+audiomason.core.events.get_event_bus().publish_async(event, data)
+
+All structured runtime diagnostic lifecycle and call-boundary events MUST be emitted exclusively via the above entry point.
+
+Forbidden:
+
+- Direct instantiation of EventBus for diagnostic emission.
+- Creating alternate diagnostic emission paths or global buses.
+- Bypassing audiomason.core.events.get_event_bus() for emission.
+
+Minimum emission requirement:
+
+Any component that performs work or participates in a call boundary MUST:
+
+- emit a start event,
+- emit a terminal event (succeeded or failed).
+
+Failure handling rule:
+
+- Errors MUST NOT be silently swallowed.
+- If an invoked component fails, the invoking component MUST emit a failure diagnostic event preserving sufficient context to identify:
+  - the component or operation,
+  - the boundary invocation,
+  - and the failure reason (minimum: error type and message).
+
+Non-substitution rule:
+
+- Logging, exceptions, or return values do NOT substitute mandatory diagnostic event emission.
+
+Fail-safe requirement:
+
+- Failure of the diagnostic emission mechanism MUST NOT crash or block processing.
+
 
 
 ## 11. Testing Requirements

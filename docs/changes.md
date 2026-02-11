@@ -1,3 +1,10 @@
+## 2026-02-11T09:45:00+01:00
+
+- spec: Require both human-readable logging and structured diagnostic events project-wide.
+- spec: Define authoritative diagnostic emission entry points and forbid alternate diagnostic buses.
+- spec: Forbid swallowing failures across call boundaries; require start and terminal states.
+- spec: Bump specification version to 1.0.32.
+
 ## 2026-02-11T02:00:00+01:00
 
 - web UI: Add "Run wizard here" dashboard card with root browsing and wizard execution.
