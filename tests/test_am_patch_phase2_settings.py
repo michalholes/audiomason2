@@ -161,3 +161,28 @@ def test_phase2_cli_flags_set_overrides() -> None:
     assert "/__X__/" in p.scope_ignore_contains
     assert p.venv_bootstrap_mode == "never"
     assert p.venv_bootstrap_python == ".venv/bin/python"
+
+
+def test_parse_args_finalize_allows_flags_after_f() -> None:
+    _, _, _, parse_args = _import_am_patch()
+
+    cli_before = parse_args(["--skip-docs", "-f", "msg"])
+    assert cli_before.mode == "finalize"
+    assert cli_before.message == "msg"
+    assert cli_before.skip_docs is True
+
+    cli_after = parse_args(["-f", "msg", "--skip-docs"])
+    assert cli_after.mode == "finalize"
+    assert cli_after.message == "msg"
+    assert cli_after.skip_docs is True
+
+
+def test_parse_args_finalize_still_rejects_positional_args() -> None:
+    _, _, _, parse_args = _import_am_patch()
+
+    try:
+        parse_args(["-f", "msg", "EXTRA"])
+    except SystemExit as e:
+        assert "finalize mode" in str(e)
+    else:
+        raise AssertionError("expected SystemExit")

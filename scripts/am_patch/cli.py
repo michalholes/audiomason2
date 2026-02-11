@@ -155,7 +155,7 @@ Options:
       auto=only when runner files changed. [default: auto]
 
   -f, --finalize-live MESSAGE
-      Finalize live repo using MESSAGE as commit message. Put all flags before -f/--finalize-live.
+      Finalize live repo using MESSAGE as commit message.
 
   -w, --finalize-workspace ISSUE_ID
       Finalize existing workspace for ISSUE_ID; commit message is read from workspace meta.json.
@@ -433,16 +433,6 @@ def parse_args(argv: list[str]) -> CliArgs:
     if "-H" in argv or "--help-all" in argv:
         print(_fmt_full_help())
         raise SystemExit(0)
-
-    # Finalize strict rule: -f/--finalize-live MESSAGE must be the final tokens.
-    for tok in ("-f", "--finalize-live"):
-        if tok in argv:
-            i = argv.index(tok)
-            if i != len(argv) - 2:
-                raise SystemExit(
-                    "finalize mode (-f/--finalize-live) requires MESSAGE as the final argument; "
-                    "put all flags before -f/--finalize-live"
-                )
 
     p = argparse.ArgumentParser(
         prog="am_patch.py",
