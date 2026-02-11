@@ -1,3 +1,7 @@
+## 2026-02-11T17:41:11+01:00
+
+- spec: Document web wizard job payload source_path injection; bump specification version to 1.0.34.
+
 ## 2026-02-11T15:00:00+01:00
 
 - docs: Record core ruff-driven formatting fixes; enforce docs gate requirements.

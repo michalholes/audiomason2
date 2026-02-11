@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.33
+Specification Version: 1.0.34
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -852,6 +852,13 @@ When creating a wizard job from the web UI, the selected filesystem target MUST 
 
 - For each wizard execution target, orchestration MUST create a `ProcessingContext` with `source=<target_path>`.
 - Batch mode is permitted: a single wizard job may execute the same wizard for multiple targets in a deterministic order.
+
+Implementation note (web job creation):
+
+- When the web backend creates a wizard job for a selected target, it MUST ensure the wizard payload contains a non-empty `source_path`.
+- If the UI request omits `source_path` or provides an empty string, the backend MUST set `source_path` to the selected `target_path` before the job is queued.
+- If the UI provides a non-empty `source_path`, the backend MUST NOT overwrite it.
+
 
 Wizard listing contract:
 
