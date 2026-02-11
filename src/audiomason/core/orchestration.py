@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -21,6 +22,7 @@ import yaml
 from audiomason.checkpoint import CheckpointManager
 from audiomason.core.config import ConfigResolver
 from audiomason.core.context import ProcessingContext
+from audiomason.core.diagnostics import build_envelope
 from audiomason.core.errors import ConfigError
 from audiomason.core.events import get_event_bus
 from audiomason.core.jobs.api import JobService
@@ -45,13 +47,26 @@ def _utcnow_iso() -> str:
 _LOGGER = get_logger(__name__)
 
 
-def _emit_diag(event: str, data: dict[str, Any]) -> None:
+COMPONENT = "orchestration"
+OP_RUN_JOB = "run_job"
+OP_CTX = "context_lifecycle"
+OP_EXECUTE_PIPELINE = "execute_pipeline"
+OP_RUN_WIZARD = "run_wizard"
+
+
+def _emit_diag(event: str, *, operation: str, data: dict[str, Any]) -> None:
     """Emit a structured runtime diagnostic event via the authoritative entrypoint.
 
     This must never crash or block processing.
     """
     try:
-        get_event_bus().publish(event, data)
+        envelope = build_envelope(
+            event=event,
+            component=COMPONENT,
+            operation=operation,
+            data=data,
+        )
+        get_event_bus().publish(event, envelope)
     except Exception as e:
         _LOGGER.warning(f"diagnostic emission failed: {type(e).__name__}: {e}")
 
@@ -88,6 +103,10 @@ def _resolve_effective_verbosity() -> VerbosityLevel:
     return _parse_verbosity(value)
 
 
+def _duration_ms(start: float, end: float) -> int:
+    return int((end - start) * 1000)
+
+
 class Orchestrator:
     """Orchestration facade for Phase 2+."""
 
@@ -120,7 +139,11 @@ class Orchestrator:
         job.transition(JobState.RUNNING)
         job.started_at = _utcnow_iso()
         self._jobs.store.save_job(job)
-        _emit_diag("diag.job.start", {"job_id": job.job_id, "job_type": "process"})
+        _emit_diag(
+            "diag.job.start",
+            operation=OP_RUN_JOB,
+            data={"job_id": job.job_id, "job_type": "process", "status": "running"},
+        )
 
         prev_sink = get_log_sink()
         set_log_sink(lambda line: self._jobs.append_log_line(job.job_id, line))
@@ -164,7 +187,13 @@ class Orchestrator:
 
         _emit_diag(
             "diag.job.start",
-            {"job_id": job.job_id, "job_type": "wizard", "wizard_id": request.wizard_id},
+            operation=OP_RUN_JOB,
+            data={
+                "job_id": job.job_id,
+                "job_type": "wizard",
+                "wizard_id": request.wizard_id,
+                "status": "running",
+            },
         )
 
         prev_sink = get_log_sink()
@@ -310,6 +339,7 @@ class Orchestrator:
         prev_sink = get_log_sink()
         set_log_sink(lambda line: self._jobs.append_log_line(job_id, line))
         set_verbosity(_resolve_effective_verbosity())
+        start_time = time.monotonic()
         try:
             job = self._jobs.get_job(job_id)
             override = job.meta.get("verbosity_override")
@@ -318,7 +348,7 @@ class Orchestrator:
 
             with PhaseGuard.processing():
                 try:
-                    await self._run_process_job_impl(job_id, request)
+                    await self._run_process_job_impl(job_id, request, start_time=start_time)
                 except PhaseContractError as e:
                     job = self._jobs.get_job(job_id)
                     job.transition(JobState.FAILED)
@@ -327,11 +357,14 @@ class Orchestrator:
                     self._jobs.store.save_job(job)
                     _emit_diag(
                         "diag.job.end",
-                        {
+                        operation=OP_RUN_JOB,
+                        data={
                             "job_id": job_id,
+                            "job_type": "process",
                             "status": "failed",
+                            "duration_ms": _duration_ms(start_time, time.monotonic()),
                             "error_type": type(e).__name__,
-                            "error": str(e),
+                            "error_message": str(e),
                         },
                     )
                     _LOGGER.error(f"failed: {e}")
@@ -343,18 +376,26 @@ class Orchestrator:
                     self._jobs.store.save_job(job)
                     _emit_diag(
                         "diag.job.end",
-                        {
+                        operation=OP_RUN_JOB,
+                        data={
                             "job_id": job_id,
+                            "job_type": "process",
                             "status": "failed",
+                            "duration_ms": _duration_ms(start_time, time.monotonic()),
                             "error_type": type(e).__name__,
-                            "error": str(e),
+                            "error_message": str(e),
                         },
                     )
                     _LOGGER.error(f"failed: {e}")
+                else:
+                    # Success path is responsible for emitting diag.job.end.
+                    pass
         finally:
             set_log_sink(prev_sink)
 
-    async def _run_process_job_impl(self, job_id: str, request: ProcessRequest) -> None:
+    async def _run_process_job_impl(
+        self, job_id: str, request: ProcessRequest, *, start_time: float
+    ) -> None:
         contexts = request.contexts
         total = max(1, len(contexts))
         executor = PipelineExecutor(request.plugin_loader)
@@ -365,43 +406,95 @@ class Orchestrator:
                 job.transition(JobState.CANCELLED)
                 job.finished_at = _utcnow_iso()
                 self._jobs.store.save_job(job)
-                _emit_diag("diag.job.end", {"job_id": job_id, "status": "cancelled"})
+                _emit_diag(
+                    "diag.job.end",
+                    operation=OP_RUN_JOB,
+                    data={
+                        "job_id": job_id,
+                        "job_type": "process",
+                        "status": "cancelled",
+                        "duration_ms": _duration_ms(start_time, time.monotonic()),
+                    },
+                )
                 _LOGGER.warning("cancelled")
                 return
 
             _LOGGER.info(f"processing: {ctx.source}")
+
+            _emit_diag(
+                "diag.ctx.start",
+                operation=OP_CTX,
+                data={
+                    "job_id": job_id,
+                    "context_index": i,
+                    "context_total": total,
+                    "source": str(ctx.source),
+                },
+            )
+
             _emit_diag(
                 "diag.boundary.start",
-                {
+                operation=OP_EXECUTE_PIPELINE,
+                data={
                     "job_id": job_id,
-                    "component": "orchestrator",
-                    "operation": "pipeline.execute_from_yaml",
                     "pipeline_path": str(request.pipeline_path),
                     "source": str(ctx.source),
                 },
             )
+
             try:
                 await executor.execute_from_yaml(request.pipeline_path, ctx)
             except Exception as e:
                 _emit_diag(
-                    "diag.boundary.end",
-                    {
+                    "diag.boundary.fail",
+                    operation=OP_EXECUTE_PIPELINE,
+                    data={
                         "job_id": job_id,
-                        "component": "orchestrator",
-                        "operation": "pipeline.execute_from_yaml",
+                        "error_type": type(e).__name__,
+                        "error_message": str(e),
+                    },
+                )
+                _emit_diag(
+                    "diag.boundary.end",
+                    operation=OP_EXECUTE_PIPELINE,
+                    data={
+                        "job_id": job_id,
+                        "pipeline_path": str(request.pipeline_path),
                         "status": "failed",
                         "error_type": type(e).__name__,
-                        "error": str(e),
+                        "error_message": str(e),
+                    },
+                )
+                _emit_diag(
+                    "diag.ctx.end",
+                    operation=OP_CTX,
+                    data={
+                        "job_id": job_id,
+                        "context_index": i,
+                        "context_total": total,
+                        "source": str(ctx.source),
+                        "status": "failed",
                     },
                 )
                 raise
             else:
                 _emit_diag(
                     "diag.boundary.end",
-                    {
+                    operation=OP_EXECUTE_PIPELINE,
+                    data={
                         "job_id": job_id,
-                        "component": "orchestrator",
-                        "operation": "pipeline.execute_from_yaml",
+                        "pipeline_path": str(request.pipeline_path),
+                        "status": "succeeded",
+                    },
+                )
+                _emit_diag(
+                    "diag.ctx.end",
+                    operation=OP_CTX,
+                    data={
+                        "job_id": job_id,
+                        "context_index": i,
+                        "context_total": total,
+                        "source": str(ctx.source),
                         "status": "succeeded",
                     },
                 )
@@ -415,13 +508,23 @@ class Orchestrator:
         job.transition(JobState.SUCCEEDED)
         job.finished_at = _utcnow_iso()
         self._jobs.store.save_job(job)
-        _emit_diag("diag.job.end", {"job_id": job_id, "status": "succeeded"})
+        _emit_diag(
+            "diag.job.end",
+            operation=OP_RUN_JOB,
+            data={
+                "job_id": job_id,
+                "job_type": "process",
+                "status": "succeeded",
+                "duration_ms": _duration_ms(start_time, time.monotonic()),
+            },
+        )
         _LOGGER.info("succeeded")
 
     async def _run_wizard_job(self, job_id: str, request: WizardRequest) -> None:
         prev_sink = get_log_sink()
         set_log_sink(lambda line: self._jobs.append_log_line(job_id, line))
         set_verbosity(_resolve_effective_verbosity())
+        start_time = time.monotonic()
         try:
             job = self._jobs.get_job(job_id)
             override = job.meta.get("verbosity_override")
@@ -430,20 +533,9 @@ class Orchestrator:
 
             with PhaseGuard.processing():
                 try:
-                    await self._run_wizard_job_impl(job_id, request)
+                    await self._run_wizard_job_impl(job_id, request, start_time=start_time)
                 except PhaseContractError as e:
-                    ck = CheckpointManager()
-                    try:
-                        p = ck.save_job_failure_checkpoint(
-                            job_id,
-                            kind="wizard",
-                            error=str(e),
-                            meta=self._jobs.get_job(job_id).meta,
-                        )
-                        _LOGGER.info(f"checkpoint saved: {p}")
-                    except Exception as ck_e:
-                        _LOGGER.warning(f"checkpoint save failed: {ck_e}")
-
+                    self._save_wizard_checkpoint(job_id, request, e)
                     job = self._jobs.get_job(job_id)
                     job.transition(JobState.FAILED)
                     job.error = str(e)
@@ -451,11 +543,14 @@ class Orchestrator:
                     self._jobs.store.save_job(job)
                     _emit_diag(
                         "diag.job.end",
-                        {
+                        operation=OP_RUN_JOB,
+                        data={
                             "job_id": job_id,
+                            "job_type": "wizard",
                             "status": "failed",
+                            "duration_ms": _duration_ms(start_time, time.monotonic()),
                             "error_type": type(e).__name__,
-                            "error": str(e),
+                            "error_message": str(e),
                         },
                     )
                     _LOGGER.error(f"failed: {e}")
@@ -467,21 +562,39 @@ class Orchestrator:
                     self._jobs.store.save_job(job)
                     _emit_diag(
                         "diag.job.end",
-                        {
+                        operation=OP_RUN_JOB,
+                        data={
                             "job_id": job_id,
+                            "job_type": "wizard",
                             "status": "failed",
+                            "duration_ms": _duration_ms(start_time, time.monotonic()),
                             "error_type": type(e).__name__,
-                            "error": str(e),
+                            "error_message": str(e),
                         },
                     )
                     _LOGGER.error(f"failed: {e}")
         finally:
             set_log_sink(prev_sink)
 
-    async def _run_wizard_job_impl(self, job_id: str, request: WizardRequest) -> None:
+    def _save_wizard_checkpoint(self, job_id: str, request: WizardRequest, err: Exception) -> None:
+        ck = CheckpointManager()
+        try:
+            p = ck.save_job_failure_checkpoint(
+                job_id,
+                kind="wizard",
+                error=str(err),
+                meta=self._jobs.get_job(job_id).meta,
+            )
+            _LOGGER.info(f"checkpoint saved: {p}")
+        except Exception as ck_e:
+            _LOGGER.warning(f"checkpoint save failed: {ck_e}")
+
+    async def _run_wizard_job_impl(
+        self, job_id: str, request: WizardRequest, *, start_time: float
+    ) -> None:
         _LOGGER.info(f"wizard: {request.wizard_id}")
 
-        def _payload_input(prompt: str, options: dict[str, Any]) -> str:
+        def _payload_input(_prompt: str, options: dict[str, Any]) -> str:
             step_id = options.get("step_id")
             if isinstance(step_id, str) and step_id in request.payload:
                 value = request.payload[step_id]
@@ -499,7 +612,6 @@ class Orchestrator:
         engine = WizardEngine(loader=request.plugin_loader, verbosity=request.verbosity)
         engine.set_input_handler(_payload_input)
 
-        # Wizard definitions are resolved strictly through WizardService (file_io).
         svc = WizardService()
         text = svc.get_wizard_text(request.wizard_id)
         try:
@@ -509,25 +621,37 @@ class Orchestrator:
 
         targets = request.wizard_paths or [request.wizard_path]
         total = max(1, len(targets))
+
         for i, target in enumerate(targets, 1):
             job = self._jobs.get_job(job_id)
             if job.cancel_requested:
                 job.transition(JobState.CANCELLED)
                 job.finished_at = _utcnow_iso()
                 self._jobs.store.save_job(job)
-                _emit_diag("diag.job.end", {"job_id": job_id, "status": "cancelled"})
+                _emit_diag(
+                    "diag.job.end",
+                    operation=OP_RUN_JOB,
+                    data={
+                        "job_id": job_id,
+                        "job_type": "wizard",
+                        "status": "cancelled",
+                        "duration_ms": _duration_ms(start_time, time.monotonic()),
+                    },
+                )
                 _LOGGER.warning("cancelled")
                 return
 
             ctx = ProcessingContext(id=f"wizard_{i}", source=target)
             _LOGGER.info(f"wizard_target: {target}")
+
             _emit_diag(
                 "diag.boundary.start",
-                {
+                operation=OP_RUN_WIZARD,
+                data={
                     "job_id": job_id,
-                    "component": "orchestrator",
-                    "operation": "wizard_engine.run_wizard",
                     "wizard_id": request.wizard_id,
+                    "context_index": i,
+                    "context_total": total,
                     "source": str(target),
                 },
             )
@@ -535,24 +659,36 @@ class Orchestrator:
                 await engine.run_wizard(wizard_def, context=ctx)
             except Exception as e:
                 _emit_diag(
-                    "diag.boundary.end",
-                    {
+                    "diag.boundary.fail",
+                    operation=OP_RUN_WIZARD,
+                    data={
                         "job_id": job_id,
-                        "component": "orchestrator",
-                        "operation": "wizard_engine.run_wizard",
+                        "wizard_id": request.wizard_id,
+                        "error_type": type(e).__name__,
+                        "error_message": str(e),
+                    },
+                )
+                _emit_diag(
+                    "diag.boundary.end",
+                    operation=OP_RUN_WIZARD,
+                    data={
+                        "job_id": job_id,
+                        "wizard_id": request.wizard_id,
+                        "source": str(target),
                         "status": "failed",
                         "error_type": type(e).__name__,
-                        "error": str(e),
+                        "error_message": str(e),
                     },
                 )
                 raise
             else:
                 _emit_diag(
                     "diag.boundary.end",
-                    {
+                    operation=OP_RUN_WIZARD,
+                    data={
                         "job_id": job_id,
-                        "component": "orchestrator",
-                        "operation": "wizard_engine.run_wizard",
+                        "wizard_id": request.wizard_id,
+                        "source": str(target),
                         "status": "succeeded",
                     },
                 )
@@ -566,5 +702,14 @@ class Orchestrator:
         job.transition(JobState.SUCCEEDED)
         job.finished_at = _utcnow_iso()
         self._jobs.store.save_job(job)
-        _emit_diag("diag.job.end", {"job_id": job_id, "status": "succeeded"})
+        _emit_diag(
+            "diag.job.end",
+            operation=OP_RUN_JOB,
+            data={
+                "job_id": job_id,
+                "job_type": "wizard",
+                "status": "succeeded",
+                "duration_ms": _duration_ms(start_time, time.monotonic()),
+            },
+        )
         _LOGGER.info("succeeded")

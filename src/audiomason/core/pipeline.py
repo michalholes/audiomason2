@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,6 +17,7 @@ from typing import Any
 import yaml
 
 from audiomason.core.context import ProcessingContext
+from audiomason.core.diagnostics import build_envelope
 from audiomason.core.errors import PipelineError
 from audiomason.core.events import get_event_bus
 from audiomason.core.logging import get_logger
@@ -79,10 +81,16 @@ class PipelineExecutor:
         if self._log_fn is not None:
             self._log_fn(msg)
 
-    def _emit_diag(self, event: str, data: dict[str, Any]) -> None:
+    def _emit_diag(self, event: str, *, operation: str, data: dict[str, Any]) -> None:
         """Emit a structured diagnostic event via the authoritative EventBus."""
         with contextlib.suppress(Exception):
-            get_event_bus().publish(event, data)
+            envelope = build_envelope(
+                event=event,
+                component="pipeline",
+                operation=operation,
+                data=data,
+            )
+            get_event_bus().publish(event, envelope)
 
     async def execute(self, pipeline: Pipeline, context: ProcessingContext) -> ProcessingContext:
         """Execute pipeline.
@@ -121,8 +129,45 @@ class PipelineExecutor:
         Raises:
             PipelineError: If loading or execution fails
         """
+        start_time = time.monotonic()
+        self._emit_diag(
+            "diag.pipeline.start",
+            operation="execute_from_yaml",
+            data={
+                "pipeline_path": str(yaml_path),
+                "source": str(context.source),
+                "status": "running",
+            },
+        )
         pipeline = self.load_pipeline(yaml_path)
-        return await self.execute(pipeline, context)
+        try:
+            result = await self.execute(pipeline, context)
+        except Exception as e:
+            self._emit_diag(
+                "diag.pipeline.end",
+                operation="execute_from_yaml",
+                data={
+                    "pipeline_path": str(yaml_path),
+                    "source": str(context.source),
+                    "status": "failed",
+                    "duration_ms": int((time.monotonic() - start_time) * 1000),
+                    "error_type": type(e).__name__,
+                    "error_message": str(e),
+                },
+            )
+            raise
+        else:
+            self._emit_diag(
+                "diag.pipeline.end",
+                operation="execute_from_yaml",
+                data={
+                    "pipeline_path": str(yaml_path),
+                    "source": str(context.source),
+                    "status": "succeeded",
+                    "duration_ms": int((time.monotonic() - start_time) * 1000),
+                },
+            )
+            return result
 
     def load_pipeline(self, yaml_path: Path) -> Pipeline:
         """Load pipeline from YAML.
@@ -273,11 +318,12 @@ class PipelineExecutor:
         """
         self._logger.verbose(f"step start: {step.id}")
 
+        start_time = time.monotonic()
+
         self._emit_diag(
             "diag.pipeline.step.start",
-            {
-                "component": "pipeline",
-                "op": "step",
+            operation="step",
+            data={
                 "step_id": step.id,
                 "plugin": step.plugin,
                 "interface": step.interface,
@@ -312,11 +358,11 @@ class PipelineExecutor:
 
             self._emit_diag(
                 "diag.pipeline.step.end",
-                {
-                    "component": "pipeline",
-                    "op": "step",
+                operation="step",
+                data={
                     "step_id": step.id,
                     "status": "succeeded",
+                    "duration_ms": int((time.monotonic() - start_time) * 1000),
                     "plugin": step.plugin,
                     "interface": step.interface,
                     "source": str(context.source),
@@ -326,14 +372,26 @@ class PipelineExecutor:
             return context
 
         except Exception as e:
+            self._emit_diag(
+                "diag.boundary.fail",
+                operation="plugin_call",
+                data={
+                    "step_id": step.id,
+                    "plugin": step.plugin,
+                    "interface": step.interface,
+                    "source": str(context.source),
+                    "error_type": type(e).__name__,
+                    "error_message": str(e),
+                },
+            )
             self._logger.error(f"step failed: {step.id}: {e}")
             self._emit_diag(
                 "diag.pipeline.step.end",
-                {
-                    "component": "pipeline",
-                    "op": "step",
+                operation="step",
+                data={
                     "step_id": step.id,
                     "status": "failed",
+                    "duration_ms": int((time.monotonic() - start_time) * 1000),
                     "plugin": step.plugin,
                     "interface": step.interface,
                     "source": str(context.source),

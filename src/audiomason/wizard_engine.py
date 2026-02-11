@@ -7,12 +7,14 @@ workflows defined in YAML files.
 from __future__ import annotations
 
 import asyncio
+import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from audiomason.core import PluginLoader, ProcessingContext, State
+from audiomason.core.diagnostics import build_envelope
 from audiomason.core.errors import AudioMasonError
 from audiomason.core.events import get_event_bus
 from audiomason.core.logging import VerbosityLevel, get_logger
@@ -75,10 +77,16 @@ class WizardEngine:
         """Log error message (always shown)."""
         self._log.error(msg)
 
-    def _emit_diag(self, event: str, data: dict[str, Any]) -> None:
+    def _emit_diag(self, event: str, *, operation: str, data: dict[str, Any]) -> None:
         """Emit a structured runtime diagnostic event (fail-safe)."""
         try:
-            get_event_bus().publish(event, data)
+            envelope = build_envelope(
+                event=event,
+                component="wizard",
+                operation=operation,
+                data=data,
+            )
+            get_event_bus().publish(event, envelope)
         except Exception as e:
             self._debug(f"diagnostic emit failed: {type(e).__name__}: {e}")
 
@@ -254,57 +262,63 @@ class WizardEngine:
         if not plugin_name:
             return StepResult(success=False, error="No plugin specified")
 
-        # Get plugin
         self._debug(f"Getting plugin: {plugin_name}")
         plugin = self.loader.get_plugin(plugin_name)
         if not plugin:
             self._error(f"Plugin not found: {plugin_name}")
             return StepResult(success=False, error=f"Plugin not found: {plugin_name}")
 
-        # Execute method
         try:
             self._verbose(f"Calling {plugin_name}.{method}()")
             self._emit_diag(
                 "diag.wizard.plugin_call.start",
-                {
-                    "component": "wizard_engine",
-                    "op": "plugin_call",
+                operation="plugin_call",
+                data={
                     "plugin": str(plugin_name),
                     "method": str(method),
                 },
             )
-            if hasattr(plugin, method):
-                method_obj = getattr(plugin, method)
-                # Check if method is async
-                if asyncio.iscoroutinefunction(method_obj):
-                    result = await method_obj(context, **params)
-                else:
-                    result = method_obj(context, **params)
-                self._emit_diag(
-                    "diag.wizard.plugin_call.succeeded",
-                    {
-                        "component": "wizard_engine",
-                        "op": "plugin_call",
-                        "plugin": str(plugin_name),
-                        "method": str(method),
-                    },
-                )
-                return StepResult(success=True, value=result)
-            else:
+
+            if not hasattr(plugin, method):
                 return StepResult(success=False, error=f"Method not found: {plugin_name}.{method}")
+
+            method_obj = getattr(plugin, method)
+            if asyncio.iscoroutinefunction(method_obj):
+                result = await method_obj(context, **params)
+            else:
+                result = method_obj(context, **params)
+
+            self._emit_diag(
+                "diag.wizard.plugin_call.succeeded",
+                operation="plugin_call",
+                data={
+                    "plugin": str(plugin_name),
+                    "method": str(method),
+                },
+            )
+            return StepResult(success=True, value=result)
         except Exception as e:
             self._emit_diag(
-                "diag.wizard.plugin_call.failed",
-                {
-                    "component": "wizard_engine",
-                    "op": "plugin_call",
+                "diag.boundary.fail",
+                operation="plugin_call",
+                data={
                     "plugin": str(plugin_name),
                     "method": str(method),
                     "error_type": type(e).__name__,
-                    "error": str(e),
+                    "error_message": str(e),
                 },
             )
-            return StepResult(success=False, error=f"Plugin call failed: {str(e)}")
+            self._emit_diag(
+                "diag.wizard.plugin_call.failed",
+                operation="plugin_call",
+                data={
+                    "plugin": str(plugin_name),
+                    "method": str(method),
+                    "error_type": type(e).__name__,
+                    "error_message": str(e),
+                },
+            )
+            return StepResult(success=False, error=f"Plugin call failed: {e}")
 
     async def _execute_condition(self, step: dict, context: ProcessingContext) -> StepResult:
         """Execute conditional step.
@@ -460,101 +474,133 @@ class WizardEngine:
             except Exception as e:
                 self._debug(f"Could not set output_dir from config: {e}")
 
+        wizard_id = str(wizard.get("id", ""))
+        total_steps = len(steps)
+
         # Execute steps
         self._info("Starting wizard execution...")
+        start_time = time.monotonic()
+
+        self._emit_diag(
+            "diag.wizard.start",
+            operation="run_wizard",
+            data={
+                "wizard_id": wizard_id,
+                "step_count": int(total_steps),
+                "source": str(getattr(context, "source", "")),
+                "status": "running",
+            },
+        )
+        # Legacy event name (kept for backward compatibility)
         self._emit_diag(
             "diag.wizard.run.start",
-            {
-                "component": "wizard_engine",
-                "op": "run_wizard",
-                "wizard_id": str(wizard.get("id", "")),
-                "step_count": int(len(steps)),
+            operation="run_wizard",
+            data={
+                "wizard_id": wizard_id,
+                "step_count": int(total_steps),
                 "source": str(getattr(context, "source", "")),
             },
         )
-        total_steps = len(steps)
-        for i, step in enumerate(steps, 1):
-            step_id = step.get("id", f"step_{i}")
 
-            self._debug(f"Step {i}/{total_steps}: {step_id}")
+        try:
+            for i, step in enumerate(steps, 1):
+                step_id = str(step.get("id", f"step_{i}"))
+                self._debug(f"Step {i}/{total_steps}: {step_id}")
 
-            # Progress callback
-            if self.progress_callback:
-                self.progress_callback(step_id, i, total_steps)
-            # Execute step
-            self._emit_diag(
-                "diag.wizard.step.start",
-                {
-                    "component": "wizard_engine",
-                    "op": "step",
-                    "wizard_id": str(wizard.get("id", "")),
-                    "step_id": str(step_id),
-                    "step_index": int(i),
-                    "step_total": int(total_steps),
-                },
-            )
-            result = await self.execute_step(step, context)
+                if self.progress_callback:
+                    self.progress_callback(step_id, i, total_steps)
 
-            if not result.success:
-                self._error(f"Step '{step_id}' failed: {result.error}")
                 self._emit_diag(
-                    "diag.wizard.step.failed",
-                    {
-                        "component": "wizard_engine",
-                        "op": "step",
-                        "wizard_id": str(wizard.get("id", "")),
-                        "step_id": str(step_id),
-                        "error": "" if result.error is None else str(result.error),
+                    "diag.wizard.step.start",
+                    operation="step",
+                    data={
+                        "wizard_id": wizard_id,
+                        "step_id": step_id,
+                        "step_index": int(i),
+                        "step_total": int(total_steps),
                     },
                 )
-                error_msg = f"Wizard failed at step '{step_id}': {result.error}"
-                context.state = State.ERROR
-                context.add_error(Exception(error_msg))
 
-                # Check if step has on_error handler
-                on_error = step.get("on_error", "stop")
-                if on_error == "continue":
-                    continue
-                elif on_error == "stop":
+                result = await self.execute_step(step, context)
+
+                if not result.success:
+                    self._error(f"Step '{step_id}' failed: {result.error}")
                     self._emit_diag(
-                        "diag.wizard.run.failed",
-                        {
-                            "component": "wizard_engine",
-                            "op": "run_wizard",
-                            "wizard_id": str(wizard.get("id", "")),
-                            "step_id": str(step_id),
-                            "error": str(error_msg),
+                        "diag.wizard.step.failed",
+                        operation="step",
+                        data={
+                            "wizard_id": wizard_id,
+                            "step_id": step_id,
+                            "error_message": "" if result.error is None else str(result.error),
                         },
                     )
-                    raise WizardError(error_msg)
-            else:
-                self._debug(f"Step '{step_id}' completed successfully")
-                self._emit_diag(
-                    "diag.wizard.step.succeeded",
-                    {
-                        "component": "wizard_engine",
-                        "op": "step",
-                        "wizard_id": str(wizard.get("id", "")),
-                        "step_id": str(step_id),
-                    },
-                )
 
-            # Check if should skip remaining steps
-            if result.skip_remaining:
-                break
+                    error_msg = f"Wizard failed at step '{step_id}': {result.error}"
+                    context.state = State.ERROR
+                    context.add_error(Exception(error_msg))
+
+                    on_error = step.get("on_error", "stop")
+                    if on_error == "continue":
+                        continue
+                    if on_error == "stop":
+                        self._emit_diag(
+                            "diag.wizard.run.failed",
+                            operation="run_wizard",
+                            data={
+                                "wizard_id": wizard_id,
+                                "step_id": step_id,
+                                "error_message": str(error_msg),
+                            },
+                        )
+                        raise WizardError(error_msg)
+                else:
+                    self._debug(f"Step '{step_id}' completed successfully")
+                    self._emit_diag(
+                        "diag.wizard.step.succeeded",
+                        operation="step",
+                        data={
+                            "wizard_id": wizard_id,
+                            "step_id": step_id,
+                        },
+                    )
+
+                if result.skip_remaining:
+                    break
+
+        except Exception as e:
+            # Ensure a terminal wizard end event exists even when callers catch exceptions.
+            self._emit_diag(
+                "diag.wizard.end",
+                operation="run_wizard",
+                data={
+                    "wizard_id": wizard_id,
+                    "status": "failed",
+                    "duration_ms": int((time.monotonic() - start_time) * 1000),
+                    "error_type": type(e).__name__,
+                    "error_message": str(e),
+                },
+            )
+            raise
 
         # Mark as complete
         self._info("Wizard execution completed!")
         self._emit_diag(
             "diag.wizard.run.succeeded",
-            {
-                "component": "wizard_engine",
-                "op": "run_wizard",
-                "wizard_id": str(wizard.get("id", "")),
+            operation="run_wizard",
+            data={
+                "wizard_id": wizard_id,
+            },
+        )
+        self._emit_diag(
+            "diag.wizard.end",
+            operation="run_wizard",
+            data={
+                "wizard_id": wizard_id,
+                "status": "succeeded",
+                "duration_ms": int((time.monotonic() - start_time) * 1000),
             },
         )
         context.state = State.DONE
-
         return context
 
     async def run_wizard_from_file(self, _path: object, _context: object | None = None) -> None:

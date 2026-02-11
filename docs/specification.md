@@ -1010,6 +1010,65 @@ Fail-safe requirement:
 - Any sink write failure MUST be caught and logged as warning; it MUST NOT crash runtime.
 
 
+### 10.4 Runtime Diagnostics Event Set (Mandatory)
+
+All events below MUST be published via EventBus using the canonical envelope schema.
+The EventBus event name MUST equal the envelope "event" value.
+
+Required status values:
+- "running" for start events
+- "succeeded" / "failed" / "cancelled" for terminal events
+
+Required events (minimum):
+
+Orchestration (component="orchestration")
+- diag.job.start
+  - operation: "run_job"
+  - data: {job_id, job_type, status}
+- diag.job.end
+  - operation: "run_job"
+  - data: {job_id, job_type, status, duration_ms, error_type?, error_message?}
+- diag.ctx.start
+  - operation: "context_lifecycle"
+  - data: {job_id, context_index, context_total, source}
+- diag.ctx.end
+  - operation: "context_lifecycle"
+  - data: {job_id, context_index, context_total, source, status}
+- diag.boundary.start
+  - operation: "execute_pipeline" or "run_wizard"
+  - data: {job_id, pipeline_path?/wizard_id?, source}
+- diag.boundary.end
+  - operation: "execute_pipeline" or "run_wizard"
+  - data: {job_id, pipeline_path?/wizard_id?, source, status, error_type?, error_message?}
+- diag.boundary.fail
+  - operation: "execute_pipeline" / "run_wizard" / "plugin_call"
+  - data: {job_id?, pipeline_path?/wizard_id?/step_id?, error_type, error_message}
+
+Pipeline (component="pipeline")
+- diag.pipeline.start
+  - operation: "execute_from_yaml"
+  - data: {pipeline_path, source, status}
+- diag.pipeline.end
+  - operation: "execute_from_yaml"
+  - data: {pipeline_path, source, status, duration_ms, error_type?, error_message?}
+- diag.pipeline.step.start
+  - operation: "step"
+  - data: {step_id, plugin, interface, source}
+- diag.pipeline.step.end
+  - operation: "step"
+  - data: {step_id, plugin, interface, source, status, duration_ms, error_type?, error_message?}
+
+Wizard (component="wizard")
+- diag.wizard.start
+  - operation: "run_wizard"
+  - data: {wizard_id, step_count, source, status}
+- diag.wizard.end
+  - operation: "run_wizard"
+  - data: {wizard_id, status, duration_ms, error_type?, error_message?}
+
+Compatibility rule:
+- Existing event names may continue to be emitted (e.g. diag.wizard.run.*) but MUST also use the canonical envelope.
+
 
 ## 11. Testing Requirements
 

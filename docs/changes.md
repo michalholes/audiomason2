@@ -1,3 +1,9 @@
+## 2026-02-11T20:08:27+01:00
+
+- Issue 557: Normalized runtime diagnostic events to always publish the canonical envelope schema.
+- Issue 557: Added mandatory diagnostics event set (jobs/contexts/boundaries/pipelines/wizards) including boundary.fail and duration_ms.
+- Issue 557: Added pytest coverage for diagnostics envelope shape and minimal event sequences during pipeline execution.
+
 ## 2026-02-11T18:23:13+01:00
 
 - core: Add EventBus.subscribe_all to support all-event subscribers.
