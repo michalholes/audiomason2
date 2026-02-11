@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import contextlib
+import os
 from pathlib import Path
 
+from .archive import _fsync_dir, _fsync_file, _tmp_path_for_atomic_write
 from .errors import RunnerError
 from .log import Logger
 
@@ -105,12 +108,25 @@ def files_changed_since(logger: Logger, repo: Path, base_sha: str, files: list[s
 
 def git_archive(logger: Logger, repo: Path, out_zip: Path, treeish: str = "HEAD") -> None:
     out_zip.parent.mkdir(parents=True, exist_ok=True)
-    r = logger.run_logged(
-        ["git", "archive", "--format=zip", "-o", str(out_zip), treeish],
-        cwd=repo,
-    )
-    if r.returncode != 0:
-        raise RunnerError("ARCHIVE", "GIT", f"git archive failed (rc={r.returncode})")
+
+    tmp_path = _tmp_path_for_atomic_write(out_zip)
+    with contextlib.suppress(FileNotFoundError):
+        tmp_path.unlink()
+
+    try:
+        r = logger.run_logged(
+            ["git", "archive", "--format=zip", "-o", str(tmp_path), treeish],
+            cwd=repo,
+        )
+        if r.returncode != 0:
+            raise RunnerError("ARCHIVE", "GIT", f"git archive failed (rc={r.returncode})")
+
+        _fsync_file(tmp_path)
+        os.replace(tmp_path, out_zip)
+        _fsync_dir(out_zip.parent)
+    finally:
+        with contextlib.suppress(FileNotFoundError):
+            tmp_path.unlink()
 
 
 def commit_changed_files_name_status(

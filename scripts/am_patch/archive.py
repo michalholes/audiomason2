@@ -1,10 +1,37 @@
 from __future__ import annotations
 
+import contextlib
+import os
 import shutil
 import zipfile
 from pathlib import Path
 
 from .log import Logger
+
+
+def _tmp_path_for_atomic_write(target: Path) -> Path:
+    # Deterministic within process, avoids time/random.
+    return target.with_name(f".{target.name}.tmp.{os.getpid()}")
+
+
+def _fsync_file(path: Path) -> None:
+    with open(path, "rb") as f:
+        os.fsync(f.fileno())
+
+
+def _fsync_dir(path: Path) -> None:
+    # Best-effort on platforms without O_DIRECTORY.
+    flags = os.O_RDONLY
+    if hasattr(os, "O_DIRECTORY"):
+        flags |= os.O_DIRECTORY
+    try:
+        fd = os.open(path, flags)
+    except OSError:
+        return
+    try:
+        os.fsync(fd)
+    finally:
+        os.close(fd)
 
 
 def archive_patch(logger: Logger, patch_script: Path, dest_dir: Path) -> Path:
@@ -86,33 +113,45 @@ def make_failure_zip(
     # De-dup patch entries by archive name.
     seen_patch: set[str] = set()
 
-    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as z:
-        if log_path.exists():
-            z.write(log_path, arcname=f"{log_dir_name}/{log_path.name}")
+    tmp_path = _tmp_path_for_atomic_write(zip_path)
+    with contextlib.suppress(FileNotFoundError):
+        tmp_path.unlink()
 
-        for name, data in patch_blobs:
-            arc = f"{patch_dir_name}/{Path(name).name}"
-            if arc in seen_patch:
-                continue
-            seen_patch.add(arc)
-            z.writestr(arc, data)
+    try:
+        with zipfile.ZipFile(tmp_path, "w", compression=zipfile.ZIP_DEFLATED) as z:
+            if log_path.exists():
+                z.write(log_path, arcname=f"{log_dir_name}/{log_path.name}")
 
-        for patch_path in patch_paths:
-            if not patch_path.exists():
-                continue
-            arcname: str = f"{patch_dir_name}/{patch_path.name}"
-            if arcname in seen_patch:
-                continue
-            seen_patch.add(arcname)
-            z.write(patch_path, arcname=arcname)
+            for name, data in patch_blobs:
+                arc = f"{patch_dir_name}/{Path(name).name}"
+                if arc in seen_patch:
+                    continue
+                seen_patch.add(arc)
+                z.writestr(arc, data)
 
-        for rel in files:
-            src = (workspace_repo / rel).resolve()
-            try:
-                src.relative_to(workspace_repo.resolve())
-            except Exception:
-                continue
-            if src.is_file():
-                z.write(src, arcname=rel)
+            for patch_path in patch_paths:
+                if not patch_path.exists():
+                    continue
+                arcname: str = f"{patch_dir_name}/{patch_path.name}"
+                if arcname in seen_patch:
+                    continue
+                seen_patch.add(arcname)
+                z.write(patch_path, arcname=arcname)
+
+            for rel in files:
+                src = (workspace_repo / rel).resolve()
+                try:
+                    src.relative_to(workspace_repo.resolve())
+                except Exception:
+                    continue
+                if src.is_file():
+                    z.write(src, arcname=rel)
+
+        _fsync_file(tmp_path)
+        os.replace(tmp_path, zip_path)
+        _fsync_dir(zip_path.parent)
+    finally:
+        with contextlib.suppress(FileNotFoundError):
+            tmp_path.unlink()
 
     logger.line(f"created failure zip: {zip_path}")

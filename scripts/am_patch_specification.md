@@ -47,6 +47,9 @@ The following keys are normative (defaults shown):
 - failure_zip_name = "patched.zip"
 - failure_zip_log_dir = "logs"
 - failure_zip_patch_dir = "patches"
+
+Note: Zip artifacts written by the runner (patched.zip and the success archive zip) are written atomically (tmp file + replace + fsync) to avoid partial reads.
+
 - workspace_issue_dir_template = "issue_{issue}"
 - workspace_repo_dir_name = "repo"
 - workspace_meta_filename = "meta.json"
@@ -435,6 +438,8 @@ the selected mode and `applied_ok`.
 
 On SUCCESS (in `workspace`, `--finalize-live`, and `-w` / `--finalize-workspace` modes; excluding `--test-mode`),
 the runner creates a clean git-archive success zip named by `success_archive_name` (default `{repo}-{branch}.zip`, e.g. `audiomason2-main.zip`) as a clean `git archive HEAD` snapshot of the final live repository state.
+
+The runner writes both the failure zip and the success archive zip atomically (tmp file + replace + fsync) so they are safe to read immediately after the run.
 It contains only git-tracked files (as if fetched from the remote) and does not include logs, workspaces, caches, or patch inputs.
 
 Unified patch mode (`--unified-patch`):
