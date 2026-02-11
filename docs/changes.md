@@ -12,13 +12,6 @@
 - core: Wizard jobs propagate target path into ProcessingContext.source; batch wizard jobs supported.
 - spec: Document root browsing and wizard target propagation; bump specification version to 1.0.31.
 
-## 2026-02-11T02:00:00+01:00
-
-- web UI: Add "Run wizard here" dashboard card with root browsing and wizard execution.
-- web API: Add `/api/roots` allowlisted roots and path traversal rejection.
-- core: Wizard jobs propagate target path into ProcessingContext.source; batch wizard jobs supported.
-- spec: Document root browsing and wizard target propagation; bump specification version to 1.0.31.
-
 ## 2026-02-11T01:11:05+01:00
 
 - CLI: Allow plugins to provide the `tui` command name by removing it from core reserved command names.
