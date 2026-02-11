@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.31
+Specification Version: 1.0.30
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -707,8 +707,6 @@ Reserved core command names (plugins MUST NOT provide these names):
 - help
 
 Note: `tui` is not reserved and may be provided by plugins.
-
-The builtin `tui` plugin provides the `tui` command via ICLICommands; the CLI must not hardcode TUI dispatch.
 
 ### 7.5.16 Reference Plugin: test_all_plugin
 

@@ -278,6 +278,7 @@ class CLIPlugin:
         lines.append("Usage:")
         lines.append("  audiomason process <file(s)>   Process audiobook file(s)")
         lines.append("  audiomason wizard [name]       Run wizard (interactive)")
+        lines.append("  audiomason tui                 Terminal UI (ncurses)")
         lines.append("  audiomason web [--port PORT]   Start web server")
         lines.append("  audiomason daemon              Start daemon mode")
         lines.append("  audiomason checkpoints         Manage checkpoints")
@@ -348,6 +349,9 @@ class CLIPlugin:
             return 0
         if command == "wizard":
             await self._wizard_command(argv[2:])
+            return 0
+        if command == "tui":
+            await self._tui_command()
             return 0
         if command == "version":
             self._version_command()
@@ -1132,3 +1136,36 @@ class CLIPlugin:
         else:
             print()
             self._error(f"Wizard failed (state={j.state}, error={j.error})")
+
+    async def _tui_command(self) -> None:
+        """Launch TUI interface."""
+        self._debug(f"Launching TUI with verbosity level: {self.verbosity}")
+
+        try:
+            # Load TUI plugin
+            plugins_dir = Path(__file__).parent.parent
+            tui_dir = plugins_dir / "tui"
+
+            if not tui_dir.exists():
+                self._error("TUI plugin not found!")
+                print("Install TUI plugin to use this feature.")
+                return
+
+            # Import and run
+            sys.path.insert(0, str(tui_dir))
+            from plugin import TUIPlugin  # type: ignore[import-not-found]
+
+            # Pass verbosity level to TUI
+            tui = TUIPlugin(config={"verbosity": self.verbosity})
+            await tui.run()
+
+        except ImportError as e:
+            self._error(f"Failed to load TUI: {e}")
+            print("\nTUI requires the 'curses' module.")
+            print("On Windows, install: pip install windows-curses")
+        except Exception as e:
+            self._error(f"TUI error: {e}")
+            import traceback
+
+            if self.verbosity >= VerbosityLevel.DEBUG:
+                log.debug(traceback.format_exc())

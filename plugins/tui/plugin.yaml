@@ -1,6 +1,6 @@
-name: tui
-version: 1.0.1
-description: "Ncurses Terminal User Interface for AudioMason2"
+name: tui2
+version: 1.0.0
+description: "Ncurses Terminal User Interface for AudioMason2 (raspi-config style)"
 author: "Michal Holes <michal@holes.sk>"
 license: MIT
 
@@ -21,4 +21,4 @@ config_schema:
 test_level: basic
 
 cli_commands:
-  - tui
+  - tui2

@@ -1,9 +1,3 @@
-## 2026-02-11T03:27:19+01:00
-
-- CLI: Remove legacy core `tui` command implementation; `tui` is now provided by the builtin tui plugin via ICLICommands.
-- tui plugin: Provide the `tui` command (manifest + handler) and keep UI logic free of filesystem operations.
-- spec: Document builtin tui plugin ownership of the `tui` command and bump specification version to 1.0.31.
-
 ## 2026-02-11T01:11:05+01:00
 
 - CLI: Allow plugins to provide the `tui` command name by removing it from core reserved command names.
