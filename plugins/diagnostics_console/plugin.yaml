@@ -1,0 +1,23 @@
+name: diagnostics_console
+version: 1.0.0
+description: CLI diagnostics console (tail the runtime diagnostics JSONL sink).
+author: "Michal Holes <michal@holes.sk>"
+license: MIT
+
+entrypoint: plugin:DiagnosticsConsolePlugin
+
+interfaces:
+  - ICLICommands
+
+hooks: []
+
+dependencies:
+  python: ">=3.11"
+  system: []
+
+config_schema: {}
+
+test_level: basic
+
+cli_commands:
+  - diag

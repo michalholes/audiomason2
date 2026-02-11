@@ -1,3 +1,15 @@
+## 2026-02-11T20:45:00+01:00
+
+- plugins: Add diagnostics_console plugin providing `audiomason diag` (tail/status/on/off) for runtime diagnostics JSONL sink.
+- tests: Add unit coverage for diag command help registration and basic behavior.
+- spec: Document diagnostics console command; bump specification version to 1.0.37.
+
+## 2026-02-11T20:45:00+01:00
+
+- plugins: Add diagnostics_console plugin providing `audiomason diag` (tail/status/on/off) for runtime diagnostics JSONL sink.
+- tests: Add unit coverage for diag command help registration and basic behavior.
+- spec: Document diagnostics console command; bump specification version to 1.0.37.
+
 ## 2026-02-11T20:08:27+01:00
 
 - Issue 557: Normalized runtime diagnostic events to always publish the canonical envelope schema.

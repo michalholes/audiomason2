@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.36
+Specification Version: 1.0.37
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -1011,9 +1011,18 @@ CLI:
 audiomason process book.m4a --diagnostics
 audiomason process book.m4a --no-diagnostics
 
+Diagnostics console (CLI plugin):
+
+- audiomason diag
+- audiomason diag tail [--max-events N] [--no-follow]
+- audiomason diag status
+- audiomason diag on
+- audiomason diag off
+
 JSONL sink (mandatory):
 
 - The sink MUST be registered once per process and MUST receive ALL published events.
+- A CLI diagnostics console may tail this sink to provide live visibility; this must not change emission semantics.
 - Implementation MUST use EventBus.subscribe_all(callback).
 - Sink path (append-only): <stage_dir>/diagnostics/diagnostics.jsonl
 - The sink MUST be installed unconditionally; disabled mode means no writes.
