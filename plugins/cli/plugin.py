@@ -55,7 +55,6 @@ class VerbosityLevel:
 CORE_COMMANDS: set[str] = {
     "process",
     "wizard",
-    "tui",
     "web",
     "daemon",
     "checkpoints",

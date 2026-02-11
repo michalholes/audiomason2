@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.29
+Specification Version: 1.0.30
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -696,6 +696,17 @@ Resolution order:
 2. Plugin-provided CLI commands
 
 Plugins MUST NOT override or shadow core commands.
+
+Reserved core command names (plugins MUST NOT provide these names):
+- process
+- wizard
+- web
+- daemon
+- checkpoints
+- version
+- help
+
+Note: `tui` is not reserved and may be provided by plugins.
 
 ### 7.5.16 Reference Plugin: test_all_plugin
 

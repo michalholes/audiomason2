@@ -1,3 +1,8 @@
+## 2026-02-11T01:11:05+01:00
+
+- CLI: Allow plugins to provide the `tui` command name by removing it from core reserved command names.
+- spec: Document reserved core CLI command names and bump specification version to 1.0.30.
+
 ## 2026-02-11T00:03:29+01:00
 
 - CLI: Preserve plugin discovery source ordering (builtin -> user -> system) for CLI command stubs.
