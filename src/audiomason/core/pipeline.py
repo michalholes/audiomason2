@@ -7,6 +7,7 @@ as a DAG (Directed Acyclic Graph) with async and parallel support.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -16,6 +17,7 @@ import yaml
 
 from audiomason.core.context import ProcessingContext
 from audiomason.core.errors import PipelineError
+from audiomason.core.events import get_event_bus
 from audiomason.core.logging import get_logger
 
 
@@ -76,6 +78,11 @@ class PipelineExecutor:
     def _log(self, msg: str) -> None:
         if self._log_fn is not None:
             self._log_fn(msg)
+
+    def _emit_diag(self, event: str, data: dict[str, Any]) -> None:
+        """Emit a structured diagnostic event via the authoritative EventBus."""
+        with contextlib.suppress(Exception):
+            get_event_bus().publish(event, data)
 
     async def execute(self, pipeline: Pipeline, context: ProcessingContext) -> ProcessingContext:
         """Execute pipeline.
@@ -266,6 +273,18 @@ class PipelineExecutor:
         """
         self._logger.verbose(f"step start: {step.id}")
 
+        self._emit_diag(
+            "diag.pipeline.step.start",
+            {
+                "component": "pipeline",
+                "op": "step",
+                "step_id": step.id,
+                "plugin": step.plugin,
+                "interface": step.interface,
+                "source": str(context.source),
+            },
+        )
+
         try:
             # Mark step as current
             context.current_step = step.id
@@ -291,8 +310,35 @@ class PipelineExecutor:
 
             self._logger.verbose(f"step done: {step.id}")
 
+            self._emit_diag(
+                "diag.pipeline.step.end",
+                {
+                    "component": "pipeline",
+                    "op": "step",
+                    "step_id": step.id,
+                    "status": "succeeded",
+                    "plugin": step.plugin,
+                    "interface": step.interface,
+                    "source": str(context.source),
+                },
+            )
+
             return context
 
         except Exception as e:
             self._logger.error(f"step failed: {step.id}: {e}")
+            self._emit_diag(
+                "diag.pipeline.step.end",
+                {
+                    "component": "pipeline",
+                    "op": "step",
+                    "step_id": step.id,
+                    "status": "failed",
+                    "plugin": step.plugin,
+                    "interface": step.interface,
+                    "source": str(context.source),
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                },
+            )
             raise PipelineError(f"Step '{step.id}' failed: {e}") from e

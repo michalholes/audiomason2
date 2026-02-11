@@ -1,3 +1,8 @@
+## 2026-02-11T15:00:00+01:00
+
+- docs: Record core ruff-driven formatting fixes; enforce docs gate requirements.
+- spec: Bump specification version to 1.0.33.
+
 ## 2026-02-11T09:45:00+01:00
 
 - spec: Require both human-readable logging and structured diagnostic events project-wide.

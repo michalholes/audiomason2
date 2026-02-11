@@ -6,6 +6,7 @@ without direct dependencies.
 
 from __future__ import annotations
 
+import traceback
 from collections import defaultdict
 from collections.abc import Callable
 from typing import Any
@@ -70,9 +71,15 @@ class EventBus:
             try:
                 callback(data)
             except Exception as e:
-                # Log error but don't crash
-                # TODO: Use proper logging
-                _logger.error(f"Error in event handler for '{event}': {e}")
+                # Log error but don't crash (fail-safe diagnostics requirement).
+                cb = getattr(callback, "__name__", repr(callback))
+                tb = traceback.format_exc()
+                msg = (
+                    f"Error in event handler for '{event}' (callback={cb}): "
+                    f"{type(e).__name__}: {e}\n"
+                    f"{tb}"
+                )
+                _logger.error(msg)
 
     async def publish_async(self, event: str, data: dict[str, Any] | None = None) -> None:
         """Publish an event asynchronously.

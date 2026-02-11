@@ -22,6 +22,7 @@ from audiomason.checkpoint import CheckpointManager
 from audiomason.core.config import ConfigResolver
 from audiomason.core.context import ProcessingContext
 from audiomason.core.errors import ConfigError
+from audiomason.core.events import get_event_bus
 from audiomason.core.jobs.api import JobService
 from audiomason.core.jobs.model import Job, JobState, JobType
 from audiomason.core.logging import (
@@ -42,6 +43,17 @@ def _utcnow_iso() -> str:
 
 
 _LOGGER = get_logger(__name__)
+
+
+def _emit_diag(event: str, data: dict[str, Any]) -> None:
+    """Emit a structured runtime diagnostic event via the authoritative entrypoint.
+
+    This must never crash or block processing.
+    """
+    try:
+        get_event_bus().publish(event, data)
+    except Exception as e:
+        _LOGGER.warning(f"diagnostic emission failed: {type(e).__name__}: {e}")
 
 
 def _parse_verbosity(value: object) -> VerbosityLevel:
@@ -108,6 +120,7 @@ class Orchestrator:
         job.transition(JobState.RUNNING)
         job.started_at = _utcnow_iso()
         self._jobs.store.save_job(job)
+        _emit_diag("diag.job.start", {"job_id": job.job_id, "job_type": "process"})
 
         prev_sink = get_log_sink()
         set_log_sink(lambda line: self._jobs.append_log_line(job.job_id, line))
@@ -148,6 +161,11 @@ class Orchestrator:
         job.transition(JobState.RUNNING)
         job.started_at = _utcnow_iso()
         self._jobs.store.save_job(job)
+
+        _emit_diag(
+            "diag.job.start",
+            {"job_id": job.job_id, "job_type": "wizard", "wizard_id": request.wizard_id},
+        )
 
         prev_sink = get_log_sink()
         set_log_sink(lambda line: self._jobs.append_log_line(job.job_id, line))
@@ -307,6 +325,15 @@ class Orchestrator:
                     job.error = str(e)
                     job.finished_at = _utcnow_iso()
                     self._jobs.store.save_job(job)
+                    _emit_diag(
+                        "diag.job.end",
+                        {
+                            "job_id": job_id,
+                            "status": "failed",
+                            "error_type": type(e).__name__,
+                            "error": str(e),
+                        },
+                    )
                     _LOGGER.error(f"failed: {e}")
                 except Exception as e:
                     job = self._jobs.get_job(job_id)
@@ -314,6 +341,15 @@ class Orchestrator:
                     job.error = str(e)
                     job.finished_at = _utcnow_iso()
                     self._jobs.store.save_job(job)
+                    _emit_diag(
+                        "diag.job.end",
+                        {
+                            "job_id": job_id,
+                            "status": "failed",
+                            "error_type": type(e).__name__,
+                            "error": str(e),
+                        },
+                    )
                     _LOGGER.error(f"failed: {e}")
         finally:
             set_log_sink(prev_sink)
@@ -329,11 +365,46 @@ class Orchestrator:
                 job.transition(JobState.CANCELLED)
                 job.finished_at = _utcnow_iso()
                 self._jobs.store.save_job(job)
+                _emit_diag("diag.job.end", {"job_id": job_id, "status": "cancelled"})
                 _LOGGER.warning("cancelled")
                 return
 
             _LOGGER.info(f"processing: {ctx.source}")
-            await executor.execute_from_yaml(request.pipeline_path, ctx)
+            _emit_diag(
+                "diag.boundary.start",
+                {
+                    "job_id": job_id,
+                    "component": "orchestrator",
+                    "operation": "pipeline.execute_from_yaml",
+                    "pipeline_path": str(request.pipeline_path),
+                    "source": str(ctx.source),
+                },
+            )
+            try:
+                await executor.execute_from_yaml(request.pipeline_path, ctx)
+            except Exception as e:
+                _emit_diag(
+                    "diag.boundary.end",
+                    {
+                        "job_id": job_id,
+                        "component": "orchestrator",
+                        "operation": "pipeline.execute_from_yaml",
+                        "status": "failed",
+                        "error_type": type(e).__name__,
+                        "error": str(e),
+                    },
+                )
+                raise
+            else:
+                _emit_diag(
+                    "diag.boundary.end",
+                    {
+                        "job_id": job_id,
+                        "component": "orchestrator",
+                        "operation": "pipeline.execute_from_yaml",
+                        "status": "succeeded",
+                    },
+                )
 
             job = self._jobs.get_job(job_id)
             job.progress = float(i) / float(total)
@@ -344,6 +415,7 @@ class Orchestrator:
         job.transition(JobState.SUCCEEDED)
         job.finished_at = _utcnow_iso()
         self._jobs.store.save_job(job)
+        _emit_diag("diag.job.end", {"job_id": job_id, "status": "succeeded"})
         _LOGGER.info("succeeded")
 
     async def _run_wizard_job(self, job_id: str, request: WizardRequest) -> None:
@@ -377,6 +449,15 @@ class Orchestrator:
                     job.error = str(e)
                     job.finished_at = _utcnow_iso()
                     self._jobs.store.save_job(job)
+                    _emit_diag(
+                        "diag.job.end",
+                        {
+                            "job_id": job_id,
+                            "status": "failed",
+                            "error_type": type(e).__name__,
+                            "error": str(e),
+                        },
+                    )
                     _LOGGER.error(f"failed: {e}")
                 except Exception as e:
                     job = self._jobs.get_job(job_id)
@@ -384,6 +465,15 @@ class Orchestrator:
                     job.error = str(e)
                     job.finished_at = _utcnow_iso()
                     self._jobs.store.save_job(job)
+                    _emit_diag(
+                        "diag.job.end",
+                        {
+                            "job_id": job_id,
+                            "status": "failed",
+                            "error_type": type(e).__name__,
+                            "error": str(e),
+                        },
+                    )
                     _LOGGER.error(f"failed: {e}")
         finally:
             set_log_sink(prev_sink)
@@ -425,12 +515,47 @@ class Orchestrator:
                 job.transition(JobState.CANCELLED)
                 job.finished_at = _utcnow_iso()
                 self._jobs.store.save_job(job)
+                _emit_diag("diag.job.end", {"job_id": job_id, "status": "cancelled"})
                 _LOGGER.warning("cancelled")
                 return
 
             ctx = ProcessingContext(id=f"wizard_{i}", source=target)
             _LOGGER.info(f"wizard_target: {target}")
-            await engine.run_wizard(wizard_def, context=ctx)
+            _emit_diag(
+                "diag.boundary.start",
+                {
+                    "job_id": job_id,
+                    "component": "orchestrator",
+                    "operation": "wizard_engine.run_wizard",
+                    "wizard_id": request.wizard_id,
+                    "source": str(target),
+                },
+            )
+            try:
+                await engine.run_wizard(wizard_def, context=ctx)
+            except Exception as e:
+                _emit_diag(
+                    "diag.boundary.end",
+                    {
+                        "job_id": job_id,
+                        "component": "orchestrator",
+                        "operation": "wizard_engine.run_wizard",
+                        "status": "failed",
+                        "error_type": type(e).__name__,
+                        "error": str(e),
+                    },
+                )
+                raise
+            else:
+                _emit_diag(
+                    "diag.boundary.end",
+                    {
+                        "job_id": job_id,
+                        "component": "orchestrator",
+                        "operation": "wizard_engine.run_wizard",
+                        "status": "succeeded",
+                    },
+                )
 
             job = self._jobs.get_job(job_id)
             job.progress = float(i) / float(total)
@@ -441,4 +566,5 @@ class Orchestrator:
         job.transition(JobState.SUCCEEDED)
         job.finished_at = _utcnow_iso()
         self._jobs.store.save_job(job)
+        _emit_diag("diag.job.end", {"job_id": job_id, "status": "succeeded"})
         _LOGGER.info("succeeded")

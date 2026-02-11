@@ -14,6 +14,7 @@ from typing import Any
 
 from audiomason.core import PluginLoader, ProcessingContext, State
 from audiomason.core.errors import AudioMasonError
+from audiomason.core.events import get_event_bus
 from audiomason.core.logging import VerbosityLevel, get_logger
 from audiomason.core.phase import PhaseContractError
 
@@ -73,6 +74,13 @@ class WizardEngine:
     def _error(self, msg: str) -> None:
         """Log error message (always shown)."""
         self._log.error(msg)
+
+    def _emit_diag(self, event: str, data: dict[str, Any]) -> None:
+        """Emit a structured runtime diagnostic event (fail-safe)."""
+        try:
+            get_event_bus().publish(event, data)
+        except Exception as e:
+            self._debug(f"diagnostic emit failed: {type(e).__name__}: {e}")
 
     def set_input_handler(self, handler: Callable[[str, dict], str]) -> None:
         """Set custom input handler for interactive steps.
@@ -256,6 +264,15 @@ class WizardEngine:
         # Execute method
         try:
             self._verbose(f"Calling {plugin_name}.{method}()")
+            self._emit_diag(
+                "diag.wizard.plugin_call.start",
+                {
+                    "component": "wizard_engine",
+                    "op": "plugin_call",
+                    "plugin": str(plugin_name),
+                    "method": str(method),
+                },
+            )
             if hasattr(plugin, method):
                 method_obj = getattr(plugin, method)
                 # Check if method is async
@@ -263,10 +280,30 @@ class WizardEngine:
                     result = await method_obj(context, **params)
                 else:
                     result = method_obj(context, **params)
+                self._emit_diag(
+                    "diag.wizard.plugin_call.succeeded",
+                    {
+                        "component": "wizard_engine",
+                        "op": "plugin_call",
+                        "plugin": str(plugin_name),
+                        "method": str(method),
+                    },
+                )
                 return StepResult(success=True, value=result)
             else:
                 return StepResult(success=False, error=f"Method not found: {plugin_name}.{method}")
         except Exception as e:
+            self._emit_diag(
+                "diag.wizard.plugin_call.failed",
+                {
+                    "component": "wizard_engine",
+                    "op": "plugin_call",
+                    "plugin": str(plugin_name),
+                    "method": str(method),
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                },
+            )
             return StepResult(success=False, error=f"Plugin call failed: {str(e)}")
 
     async def _execute_condition(self, step: dict, context: ProcessingContext) -> StepResult:
@@ -425,6 +462,16 @@ class WizardEngine:
 
         # Execute steps
         self._info("Starting wizard execution...")
+        self._emit_diag(
+            "diag.wizard.run.start",
+            {
+                "component": "wizard_engine",
+                "op": "run_wizard",
+                "wizard_id": str(wizard.get("id", "")),
+                "step_count": int(len(steps)),
+                "source": str(getattr(context, "source", "")),
+            },
+        )
         total_steps = len(steps)
         for i, step in enumerate(steps, 1):
             step_id = step.get("id", f"step_{i}")
@@ -434,12 +481,32 @@ class WizardEngine:
             # Progress callback
             if self.progress_callback:
                 self.progress_callback(step_id, i, total_steps)
-
             # Execute step
+            self._emit_diag(
+                "diag.wizard.step.start",
+                {
+                    "component": "wizard_engine",
+                    "op": "step",
+                    "wizard_id": str(wizard.get("id", "")),
+                    "step_id": str(step_id),
+                    "step_index": int(i),
+                    "step_total": int(total_steps),
+                },
+            )
             result = await self.execute_step(step, context)
 
             if not result.success:
                 self._error(f"Step '{step_id}' failed: {result.error}")
+                self._emit_diag(
+                    "diag.wizard.step.failed",
+                    {
+                        "component": "wizard_engine",
+                        "op": "step",
+                        "wizard_id": str(wizard.get("id", "")),
+                        "step_id": str(step_id),
+                        "error": "" if result.error is None else str(result.error),
+                    },
+                )
                 error_msg = f"Wizard failed at step '{step_id}': {result.error}"
                 context.state = State.ERROR
                 context.add_error(Exception(error_msg))
@@ -449,9 +516,28 @@ class WizardEngine:
                 if on_error == "continue":
                     continue
                 elif on_error == "stop":
+                    self._emit_diag(
+                        "diag.wizard.run.failed",
+                        {
+                            "component": "wizard_engine",
+                            "op": "run_wizard",
+                            "wizard_id": str(wizard.get("id", "")),
+                            "step_id": str(step_id),
+                            "error": str(error_msg),
+                        },
+                    )
                     raise WizardError(error_msg)
             else:
                 self._debug(f"Step '{step_id}' completed successfully")
+                self._emit_diag(
+                    "diag.wizard.step.succeeded",
+                    {
+                        "component": "wizard_engine",
+                        "op": "step",
+                        "wizard_id": str(wizard.get("id", "")),
+                        "step_id": str(step_id),
+                    },
+                )
 
             # Check if should skip remaining steps
             if result.skip_remaining:
@@ -459,6 +545,14 @@ class WizardEngine:
 
         # Mark as complete
         self._info("Wizard execution completed!")
+        self._emit_diag(
+            "diag.wizard.run.succeeded",
+            {
+                "component": "wizard_engine",
+                "op": "run_wizard",
+                "wizard_id": str(wizard.get("id", "")),
+            },
+        )
         context.state = State.DONE
 
         return context
