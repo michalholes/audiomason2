@@ -68,7 +68,7 @@ def is_diagnostics_enabled(resolver: ConfigResolver) -> bool:
     Environment values are returned as strings and normalized here.
     """
     try:
-        value, _src = resolver.resolve("diagnostics.enabled")
+        value, src = resolver.resolve("diagnostics.enabled")
     except ConfigError:
         return False
 
@@ -86,6 +86,11 @@ def is_diagnostics_enabled(resolver: ConfigResolver) -> bool:
         return True
     if s in _FALSE_VALUES:
         return False
+
+    if src == "env":
+        _logger.warning(
+            f"Invalid AUDIOMASON_DIAGNOSTICS_ENABLED value; treating as disabled. value={value!r}"
+        )
 
     return False
 

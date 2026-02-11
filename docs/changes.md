@@ -142,6 +142,12 @@
 - Phase 3: Job-context routing is guaranteed by the core log sink binding; standalone daemon remains usable.
 - Updated specification version and change log per documentation gate requirements.
 
+## 2026-02-11T21:22:52+01:00
+
+- Issue 558: Diagnostics enablement now warns on invalid AUDIOMASON_DIAGNOSTICS_ENABLED values and treats them as disabled.
+- Issue 558: Specification updated with enablement examples and clarified unconditional sink install.
+- Issue 558: Added unit tests for CLI/ENV/config enable priority.
+
 ## 2026-02-09T10:49:39+01:00
 
 - Issue 344: Fix builtin plugin loading so 'plugins.*' imports work without PYTHONPATH by ensuring repo root is on sys.path when plugins/ is a package.

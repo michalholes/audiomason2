@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.35
+Specification Version: 1.0.36
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -995,11 +995,28 @@ ENV values are strings and are normalized as:
 
 Unknown values MUST be treated as disabled.
 
+Examples (mandatory):
+
+Config:
+
+diagnostics:
+  enabled: true
+
+ENV:
+
+export AUDIOMASON_DIAGNOSTICS_ENABLED=1
+
+CLI:
+
+audiomason process book.m4a --diagnostics
+audiomason process book.m4a --no-diagnostics
+
 JSONL sink (mandatory):
 
 - The sink MUST be registered once per process and MUST receive ALL published events.
 - Implementation MUST use EventBus.subscribe_all(callback).
 - Sink path (append-only): <stage_dir>/diagnostics/diagnostics.jsonl
+- The sink MUST be installed unconditionally; disabled mode means no writes.
 - When diagnostics are disabled, the sink MUST perform no file IO.
 - When enabled, the sink MUST append exactly one JSON object per published event.
   - If the event payload is already the canonical envelope, write it as-is.
