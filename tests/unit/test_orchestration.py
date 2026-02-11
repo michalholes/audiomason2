@@ -90,3 +90,60 @@ def test_orchestrator_start_wizard_succeeds_with_payload(
 
     log, _ = orchestrator.read_log(job_id)
     assert "succeeded" in log
+
+
+def test_orchestrator_wizard_propagates_target_to_context_source(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("AUDIOMASON_FILE_IO_ROOTS_WIZARDS_DIR", str(tmp_path / "wizards_root"))
+
+    from audiomason.core.wizard_service import WizardService
+
+    WizardService().put_wizard_text(
+        "w1",
+        (
+            "wizard:\n"
+            "  name: simple\n"
+            "  steps:\n"
+            "    - id: name\n"
+            "      type: input\n"
+            "      prompt: Name\n"
+            "      required: true\n"
+        ),
+    )
+
+    seen: dict[str, Path] = {}
+
+    class _CapturingEngine:
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            pass
+
+        def set_input_handler(self, _fn: object) -> None:
+            return None
+
+        async def run_wizard(self, wizard_def: dict, context: ProcessingContext | None = None):
+            assert context is not None
+            seen["source"] = context.source
+            return context
+
+    from audiomason.core import orchestration as orch_mod
+
+    monkeypatch.setattr(orch_mod, "WizardEngine", _CapturingEngine)
+
+    target = tmp_path / "input" / "book"
+    target.mkdir(parents=True, exist_ok=True)
+
+    orchestrator = Orchestrator()
+    job_id = orchestrator.start_wizard(
+        WizardRequest(
+            wizard_id="w1",
+            wizard_path=target,
+            plugin_loader=_DummyLoader(),
+            payload={"name": "Alice"},
+        )
+    )
+
+    job = orchestrator.get_job(job_id)
+    assert job.state == JobState.SUCCEEDED
+    assert seen.get("source") == target

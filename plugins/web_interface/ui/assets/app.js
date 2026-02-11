@@ -1079,6 +1079,239 @@ async function renderWizardManager(content, notify) {
   renderDetail();  return root;
 }
 
+async function renderRootBrowser(content, notify) {
+  const root = el("div", { class: "rootBrowser" });
+
+  const header = el("div", { class: "row" });
+  const rootsSel = el("select");
+  const pathInp = el("input", { type: "text", value: ".", placeholder: "path" });
+  const upBtn = el("button", { class: "btn", text: "Up" });
+  const refreshBtn = el("button", { class: "btn", text: "Refresh" });
+  header.appendChild(rootsSel);
+  header.appendChild(pathInp);
+  header.appendChild(upBtn);
+  header.appendChild(refreshBtn);
+  root.appendChild(header);
+
+  const listBox = el("div", { class: "fileList" });
+  root.appendChild(listBox);
+
+  const wizRow = el("div", { class: "row" });
+  const wizSel = el("select");
+  const modeSel = el("select");
+  modeSel.appendChild(el("option", { value: "per", text: "Job per selection" }));
+  modeSel.appendChild(el("option", { value: "batch", text: "Single batch job" }));
+  const runBtn = el("button", { class: "btn", text: "Run" });
+  wizRow.appendChild(wizSel);
+  wizRow.appendChild(modeSel);
+  wizRow.appendChild(runBtn);
+  root.appendChild(wizRow);
+
+  const formBox = el("div", { class: "wizardForm" });
+  root.appendChild(formBox);
+
+  let currentRoot = "";
+  let currentPath = ".";
+  let selected = new Set();
+  let wizardModel = null;
+
+  async function loadRoots() {
+    const data = await API.getJson("/api/roots");
+    const items = Array.isArray(data.items) ? data.items : [];
+    clear(rootsSel);
+    items.forEach((it) => {
+      rootsSel.appendChild(el("option", { value: it.name, text: it.name }));
+    });
+    currentRoot = items[0] ? items[0].name : "";
+    rootsSel.value = currentRoot;
+  }
+
+  async function loadWizards() {
+    const data = await API.getJson("/api/wizards");
+    const items = Array.isArray(data.items) ? data.items : [];
+    clear(wizSel);
+    wizSel.appendChild(el("option", { value: "", text: "Select wizard" }));
+    items.forEach((it) => {
+      const label = it.display_name || it.name;
+      wizSel.appendChild(el("option", { value: it.name, text: label }));
+    });
+  }
+
+  function normPath(p) {
+    p = String(p || ".").trim();
+    if (!p) return ".";
+    p = p.replace(/^\/+/, "");
+    const parts = p.split("/").filter((x) => x && x !== ".");
+    if (parts.some((x) => x === "..")) throw new Error("invalid path");
+    return parts.length ? parts.join("/") : ".";
+  }
+
+  async function loadDir() {
+    if (!currentRoot) return;
+    currentPath = normPath(pathInp.value);
+    pathInp.value = currentPath;
+    selected = new Set();
+    const url = `/api/fs/list?root=${encodeURIComponent(currentRoot)}&path=${encodeURIComponent(currentPath)}&recursive=0`;
+    const data = await API.getJson(url);
+    const items = Array.isArray(data.items) ? data.items : [];
+    items.sort((a, b) => {
+      const ad = a.is_dir ? 0 : 1;
+      const bd = b.is_dir ? 0 : 1;
+      if (ad !== bd) return ad - bd;
+      return String(a.path).localeCompare(String(b.path));
+    });
+    clear(listBox);
+
+    const curRow = el("div", { class: "fileRow" });
+    const curChk = el("input", { type: "checkbox" });
+    curChk.addEventListener("change", () => {
+      const key = currentPath;
+      if (curChk.checked) selected.add(key);
+      else selected.delete(key);
+    });
+    curRow.appendChild(curChk);
+    curRow.appendChild(el("span", { class: "fileName", text: "[current directory]" }));
+    listBox.appendChild(curRow);
+
+    items.forEach((it) => {
+      const row = el("div", { class: "fileRow" });
+      const chk = el("input", { type: "checkbox" });
+      chk.addEventListener("change", () => {
+        if (chk.checked) selected.add(it.path);
+        else selected.delete(it.path);
+      });
+      const name = it.path.split("/").pop();
+      const nameEl = el("span", { class: "fileName", text: name });
+      if (it.is_dir) {
+        nameEl.classList.add("isDir");
+        nameEl.style.cursor = "pointer";
+        nameEl.addEventListener("click", async () => {
+          pathInp.value = it.path;
+          await loadDir();
+        });
+      }
+      row.appendChild(chk);
+      row.appendChild(nameEl);
+      listBox.appendChild(row);
+    });
+  }
+
+  async function loadWizardModel() {
+    wizardModel = null;
+    clear(formBox);
+    const id = wizSel.value;
+    if (!id) return;
+    const data = await API.getJson(`/api/wizards/${encodeURIComponent(id)}`);
+    wizardModel = data && data.model ? data.model : null;
+    const wiz = wizardModel && wizardModel.wizard ? wizardModel.wizard : null;
+    const steps = wiz && Array.isArray(wiz.steps) ? wiz.steps : [];
+
+    const title = (wiz && wiz.name) ? String(wiz.name) : id;
+    formBox.appendChild(el("div", { class: "hint", text: `Wizard: ${title}` }));
+    steps.forEach((s) => {
+      const sid = s.id || s.key || "";
+      if (!sid) return;
+      const st = String(s.type || "input");
+      const row = el("div", { class: "formRow" });
+      row.appendChild(el("div", { class: "formLabel", text: sid }));
+      if (st === "text") {
+        row.appendChild(el("div", { class: "hint", text: String(s.prompt || "") }));
+      } else if (st === "confirm") {
+        const inp = el("input", { type: "checkbox" });
+        inp.dataset.stepId = sid;
+        row.appendChild(inp);
+        row.appendChild(el("span", { class: "hint", text: String(s.prompt || "") }));
+      } else if (st === "choice" || st === "select") {
+        const sel = el("select");
+        sel.dataset.stepId = sid;
+        const opts = Array.isArray(s.options) ? s.options : [];
+        opts.forEach((o) => {
+          const v = (typeof o === "string") ? o : String(o && o.value !== undefined ? o.value : "");
+          const lbl = (typeof o === "string") ? o : String(o && o.label !== undefined ? o.label : v);
+          sel.appendChild(el("option", { value: v, text: lbl }));
+        });
+        row.appendChild(sel);
+      } else {
+        const inp = el("input", { type: "text" });
+        inp.dataset.stepId = sid;
+        row.appendChild(inp);
+        if (s.prompt) row.appendChild(el("span", { class: "hint", text: String(s.prompt) }));
+      }
+      formBox.appendChild(row);
+    });
+  }
+
+  function collectPayload() {
+    const payload = {};
+    Array.from(formBox.querySelectorAll("input,select")).forEach((n) => {
+      const sid = n.dataset.stepId;
+      if (!sid) return;
+      if (n.tagName.toLowerCase() === "input" && n.getAttribute("type") === "checkbox") {
+        payload[sid] = !!n.checked;
+      } else {
+        payload[sid] = n.value;
+      }
+    });
+    return payload;
+  }
+
+  rootsSel.addEventListener("change", async () => {
+    currentRoot = rootsSel.value;
+    pathInp.value = ".";
+    await loadDir();
+  });
+  refreshBtn.addEventListener("click", () => loadDir());
+  upBtn.addEventListener("click", async () => {
+    const p = normPath(pathInp.value);
+    if (p === ".") return;
+    const parts = p.split("/");
+    parts.pop();
+    pathInp.value = parts.length ? parts.join("/") : ".";
+    await loadDir();
+  });
+  pathInp.addEventListener("keydown", async (ev) => {
+    if (ev.key === "Enter") await loadDir();
+  });
+  wizSel.addEventListener("change", () => loadWizardModel());
+
+  runBtn.addEventListener("click", async () => {
+    try {
+      const wid = wizSel.value;
+      if (!wid) throw new Error("select a wizard");
+      if (!selected.size) throw new Error("select at least one target");
+      const paths = Array.from(selected.values());
+      const payload = collectPayload();
+      const mode = modeSel.value;
+      const jobIds = [];
+      if (mode === "batch") {
+        const body = {
+          wizard_id: wid,
+          targets: paths.map((p) => ({ root: currentRoot, path: p })),
+          payload: payload,
+        };
+        const r = await API.sendJson("POST", "/api/jobs/wizard", body);
+        await API.sendJson("POST", `/api/jobs/${encodeURIComponent(r.job_id)}/run`, {});
+        jobIds.push(r.job_id);
+      } else {
+        for (const p of paths) {
+          const body = { wizard_id: wid, target_root: currentRoot, target_path: p, payload: payload };
+          const r = await API.sendJson("POST", "/api/jobs/wizard", body);
+          await API.sendJson("POST", `/api/jobs/${encodeURIComponent(r.job_id)}/run`, {});
+          jobIds.push(r.job_id);
+        }
+      }
+      notify(`Started: ${jobIds.join(", ")}`);
+    } catch (e) {
+      notify(String(e));
+    }
+  });
+
+  await loadRoots();
+  await loadWizards();
+  await loadDir();
+  return root;
+}
+
 async function renderContent(content, notify) {
     const t = content.type;
     if (t === "stat_list") return await renderStatList(content);
@@ -1090,6 +1323,7 @@ async function renderContent(content, notify) {
     if (t === "plugin_manager") return await renderPluginManager(content, notify);
     if (t === "stage_manager") return await renderStageManager(content, notify);
     if (t === "wizard_manager") return await renderWizardManager(content, notify);
+    if (t === "root_browser") return await renderRootBrowser(content, notify);
     if (t === "am_config") return await renderAmConfig(content, notify);
     if (t === "jobs_log_viewer") return await renderJobsLogViewer(content, notify);
     return el("div", { class: "hint", text: `Unsupported content type: ${t}` });

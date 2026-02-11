@@ -23,7 +23,11 @@ class ProcessRequest:
 @dataclass(frozen=True)
 class WizardRequest:
     wizard_id: str
+    # Backwards-compatible single-target field.
     wizard_path: Path
     plugin_loader: Any
     payload: dict[str, Any]
+    # Optional multi-target support (batch mode). When provided, orchestration
+    # executes the wizard once per target, using ProcessingContext.source.
+    wizard_paths: list[Path] | None = None
     verbosity: int = 1

@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.30
+Specification Version: 1.0.31
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -838,6 +838,20 @@ Runtime configuration hooks:
 Developer endpoints:
 
 - `/api/ui/schema`: returns the current default UI schema and the configuration hooks above.
+
+### 9.2 Root browsing and "Run wizard here"
+
+The web UI may browse only an allowlisted set of file roots exposed by the backend.
+
+- The backend MUST expose `GET /api/roots`.
+- The response MUST include only user-facing roots: `inbox`, `stage`, `jobs`, `outbox`.
+- The `jobs` root may be hidden via config key `web_interface.browse.show_jobs_root` (default: true).
+- Path traversal MUST be rejected (no `..` segments) in all file browsing and wizard-target inputs.
+
+When creating a wizard job from the web UI, the selected filesystem target MUST be propagated into the wizard execution context:
+
+- For each wizard execution target, orchestration MUST create a `ProcessingContext` with `source=<target_path>`.
+- Batch mode is permitted: a single wizard job may execute the same wizard for multiple targets in a deterministic order.
 
 Wizard listing contract:
 

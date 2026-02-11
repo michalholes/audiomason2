@@ -42,7 +42,11 @@ def _norm_rel_path(p: str) -> str:
     p = p.strip()
     if not p:
         return "."
-    return p.lstrip("/")
+    p = p.lstrip("/")
+    parts = [x for x in p.split("/") if x not in {"", "."}]
+    if any(x == ".." for x in parts):
+        raise HTTPException(status_code=400, detail="invalid path")
+    return "/".join(parts) if parts else "."
 
 
 def mount_fs(app: FastAPI) -> None:

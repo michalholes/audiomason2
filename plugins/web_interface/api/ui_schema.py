@@ -39,7 +39,12 @@ def _default_pages() -> dict[str, dict[str, Any]]:
                                 {"label": "uptime_s", "key": "uptime_s"},
                             ],
                         },
-                    }
+                    },
+                    {
+                        "type": "card",
+                        "title": "Run wizard here",
+                        "content": {"type": "root_browser"},
+                    },
                 ],
             },
         },

@@ -127,11 +127,18 @@ class Orchestrator:
         return job.job_id
 
     def start_wizard(self, request: WizardRequest) -> str:
+        targets = request.wizard_paths or [request.wizard_path]
         job = self._jobs.create_job(
             JobType.WIZARD,
             meta={
                 "wizard_id": request.wizard_id,
                 "wizard_path": str(request.wizard_path),
+                "wizard_paths_json": json.dumps(
+                    [str(p) for p in targets],
+                    ensure_ascii=True,
+                    separators=(",", ":"),
+                    sort_keys=True,
+                ),
                 "payload_json": json.dumps(
                     request.payload, ensure_ascii=True, separators=(",", ":"), sort_keys=True
                 ),
@@ -218,6 +225,7 @@ class Orchestrator:
         if job.type == JobType.WIZARD:
             wizard_id = job.meta.get("wizard_id", "")
             wizard_path = job.meta.get("wizard_path", "")
+            wizard_paths_json = job.meta.get("wizard_paths_json", "")
             payload_json = job.meta.get("payload_json", "{}")
             try:
                 data = json.loads(payload_json)
@@ -226,9 +234,19 @@ class Orchestrator:
             if not isinstance(data, dict):
                 data = {}
 
+            targets: list[Path] | None = None
+            if isinstance(wizard_paths_json, str) and wizard_paths_json:
+                try:
+                    raw = json.loads(wizard_paths_json)
+                except Exception:
+                    raw = None
+                if isinstance(raw, list) and raw:
+                    targets = [Path(str(x)) for x in raw]
+
             wizard_request = WizardRequest(
                 wizard_id=str(wizard_id),
                 wizard_path=Path(str(wizard_path)),
+                wizard_paths=targets,
                 plugin_loader=plugin_loader,
                 payload=data,
                 verbosity=verbosity,
@@ -399,7 +417,24 @@ class Orchestrator:
         except Exception as e:
             raise RuntimeError(f"invalid wizard yaml: {e}") from e
 
-        await engine.run_wizard(wizard_def)
+        targets = request.wizard_paths or [request.wizard_path]
+        total = max(1, len(targets))
+        for i, target in enumerate(targets, 1):
+            job = self._jobs.get_job(job_id)
+            if job.cancel_requested:
+                job.transition(JobState.CANCELLED)
+                job.finished_at = _utcnow_iso()
+                self._jobs.store.save_job(job)
+                _LOGGER.warning("cancelled")
+                return
+
+            ctx = ProcessingContext(id=f"wizard_{i}", source=target)
+            _LOGGER.info(f"wizard_target: {target}")
+            await engine.run_wizard(wizard_def, context=ctx)
+
+            job = self._jobs.get_job(job_id)
+            job.progress = float(i) / float(total)
+            self._jobs.store.save_job(job)
 
         job = self._jobs.get_job(job_id)
         job.progress = 1.0

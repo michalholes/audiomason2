@@ -10,6 +10,7 @@ from .api.fs import mount_fs
 from .api.jobs import mount_jobs
 from .api.logs import mount_logs
 from .api.plugins_mgmt import mount_plugins_mgmt
+from .api.roots import mount_roots
 from .api.stage import mount_stage
 from .api.ui_schema import mount_ui_schema
 from .api.wizards import mount_wizards
@@ -61,6 +62,7 @@ class WebInterfacePlugin:
         mount_am_config(app)
         mount_ui_schema(app)
         mount_plugins_mgmt(app)
+        mount_roots(app)
         mount_fs(app)
         mount_stage(app)
         mount_wizards(app)

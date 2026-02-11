@@ -9,6 +9,8 @@ from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
 from audiomason.core.jobs.model import JobState, JobType
 from audiomason.core.loader import PluginLoader
 from audiomason.core.orchestration import Orchestrator
+from plugins.file_io.service.service import FileService
+from plugins.file_io.service.types import RootName
 
 from ..util.fs import find_repo_root
 
@@ -29,6 +31,42 @@ def _plugin_loader(request: Any | None = None) -> PluginLoader:
     return PluginLoader(
         builtin_plugins_dir=repo / "plugins", user_plugins_dir=_user_plugins_root(), registry=None
     )
+
+
+def _get_resolver(request: Request) -> Any:
+    resolver = getattr(request.app.state, "config_resolver", None)
+    return resolver
+
+
+def _get_file_service(request: Request) -> FileService:
+    fs = getattr(request.app.state, "file_service", None)
+    if isinstance(fs, FileService):
+        return fs
+    resolver = _get_resolver(request)
+    from audiomason.core.config import ConfigResolver
+
+    cr = resolver if isinstance(resolver, ConfigResolver) else ConfigResolver()
+    fs = FileService.from_resolver(cr)
+    request.app.state.file_service = fs
+    return fs
+
+
+def _parse_root_name(root: str) -> RootName:
+    try:
+        return RootName(root)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail="invalid root") from e
+
+
+def _norm_rel_path(p: str) -> str:
+    p = p.strip()
+    if not p:
+        return "."
+    p = p.lstrip("/")
+    parts = [x for x in p.split("/") if x not in {"", "."}]
+    if any(x == ".." for x in parts):
+        raise HTTPException(status_code=400, detail="invalid path")
+    return "/".join(parts) if parts else "."
 
 
 def _serialize_job(job: Any) -> dict[str, Any]:
@@ -91,22 +129,48 @@ def mount_jobs(app: FastAPI) -> None:
         return {"job_id": job.job_id, "item": _serialize_job(job)}
 
     @app.post("/api/jobs/wizard")
-    def create_wizard_job(payload: dict[str, Any]) -> dict[str, Any]:
+    def create_wizard_job(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
         wizard_id = payload.get("wizard_id")
         wizard_path = payload.get("wizard_path")
+        target_root = payload.get("target_root")
+        target_path = payload.get("target_path")
+        targets = payload.get("targets")
         wizard_payload = payload.get("payload", {})
         if not isinstance(wizard_id, str) or not wizard_id:
             raise HTTPException(status_code=400, detail="wizard_id is required")
-        if not isinstance(wizard_path, str) or not wizard_path:
-            raise HTTPException(status_code=400, detail="wizard_path is required")
         if not isinstance(wizard_payload, dict):
             raise HTTPException(status_code=400, detail="payload must be a dict")
+
+        resolved_targets: list[str] = []
+        if isinstance(targets, list) and targets:
+            for t in targets:
+                if not isinstance(t, dict):
+                    raise HTTPException(status_code=400, detail="targets must be a list of objects")
+                r = t.get("root")
+                p = t.get("path")
+                if not isinstance(r, str) or not isinstance(p, str):
+                    raise HTTPException(status_code=400, detail="targets require root and path")
+                fs = _get_file_service(request)
+                abs_p = fs.resolve_abs_path(_parse_root_name(r), _norm_rel_path(p))
+                resolved_targets.append(str(abs_p))
+        elif isinstance(target_root, str) and isinstance(target_path, str):
+            fs = _get_file_service(request)
+            abs_p = fs.resolve_abs_path(_parse_root_name(target_root), _norm_rel_path(target_path))
+            resolved_targets.append(str(abs_p))
+        elif isinstance(wizard_path, str) and wizard_path:
+            # Backwards compatible: accept absolute path (trusted UI input).
+            resolved_targets.append(str(Path(wizard_path)))
+        else:
+            raise HTTPException(status_code=400, detail="wizard_path or targets are required")
 
         job = orch.jobs.create_job(
             JobType.WIZARD,
             meta={
                 "wizard_id": wizard_id,
-                "wizard_path": wizard_path,
+                "wizard_path": resolved_targets[0],
+                "wizard_paths_json": json.dumps(
+                    resolved_targets, ensure_ascii=True, separators=(",", ":"), sort_keys=True
+                ),
                 "payload_json": json.dumps(
                     wizard_payload, ensure_ascii=True, separators=(",", ":"), sort_keys=True
                 ),

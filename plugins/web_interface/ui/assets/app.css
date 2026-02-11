@@ -249,3 +249,52 @@ a { color: inherit; text-decoration: none; }
   cursor: pointer;
   padding: 6px 0;
 }
+
+.rootBrowser select,
+.rootBrowser input {
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid #333;
+  background: #111;
+  color: #eee;
+}
+
+.rootBrowser .fileList {
+  border: 1px solid #333;
+  border-radius: 12px;
+  padding: 8px;
+  max-height: 420px;
+  overflow: auto;
+  background: #0c0c0c;
+}
+
+.rootBrowser .fileRow {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 6px 4px;
+  border-bottom: 1px solid #222;
+}
+
+.rootBrowser .fileRow:last-child { border-bottom: none; }
+
+.rootBrowser .fileName.isDir {
+  font-weight: 600;
+}
+
+.rootBrowser .wizardForm {
+  margin-top: 10px;
+  border-top: 1px solid #222;
+  padding-top: 10px;
+}
+
+.rootBrowser .formRow {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  gap: 10px;
+  align-items: center;
+  padding: 6px 0;
+}
+
+.rootBrowser .formLabel { color: #bbb; font-size: 12px; }
+

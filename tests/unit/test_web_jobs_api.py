@@ -55,3 +55,42 @@ def test_web_jobs_api_create_list_cancel(tmp_path: Path, monkeypatch: Any) -> No
     assert resp.status_code == 200
     item = resp.json().get("item", {})
     assert item.get("state") == "cancelled"
+
+
+def test_web_roots_api_and_wizard_job_path_resolution(tmp_path: Path, monkeypatch: Any) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("AUDIOMASON_FILE_IO_ROOTS_INBOX_DIR", str(tmp_path / "inbox"))
+    monkeypatch.setenv("AUDIOMASON_FILE_IO_ROOTS_STAGE_DIR", str(tmp_path / "stage"))
+    monkeypatch.setenv("AUDIOMASON_FILE_IO_ROOTS_JOBS_DIR", str(tmp_path / "jobs"))
+    monkeypatch.setenv("AUDIOMASON_FILE_IO_ROOTS_OUTBOX_DIR", str(tmp_path / "outbox"))
+
+    web_interface_plugin_cls = _get_web_interface_plugin_cls()
+    app = web_interface_plugin_cls().create_app()
+    client = _make_client(app)
+
+    resp = client.get("/api/roots")
+    assert resp.status_code == 200
+    ids = [it.get("id") for it in resp.json().get("items", [])]
+    assert "inbox" in ids
+    assert "stage" in ids
+    assert "outbox" in ids
+
+    (tmp_path / "inbox").mkdir(parents=True, exist_ok=True)
+    (tmp_path / "inbox" / "a.mp3").write_bytes(b"dummy")
+
+    resp = client.post(
+        "/api/jobs/wizard",
+        json={
+            "wizard_id": "w1",
+            "target_root": "inbox",
+            "target_path": "a.mp3",
+            "payload": {},
+        },
+    )
+    assert resp.status_code == 200
+    job_id = resp.json()["job_id"]
+
+    resp = client.get(f"/api/jobs/{job_id}")
+    assert resp.status_code == 200
+    meta = resp.json().get("item", {}).get("meta", {})
+    assert str(tmp_path / "inbox" / "a.mp3") == meta.get("wizard_path")
