@@ -11,6 +11,8 @@ from __future__ import annotations
 import contextlib
 import os
 
+# ruff: noqa: E501
+
 # Fix ESC delay - must be set before importing curses
 os.environ.setdefault("ESCDELAY", "25")
 
