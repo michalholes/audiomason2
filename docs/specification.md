@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.34
+Specification Version: 1.0.35
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -961,6 +961,53 @@ Non-substitution rule:
 Fail-safe requirement:
 
 - Failure of the diagnostic emission mechanism MUST NOT crash or block processing.
+
+
+### 10.3 Runtime Diagnostics (Envelope + JSONL Sink)
+
+The runtime diagnostics layer has a canonical envelope schema and a central JSONL sink.
+
+Envelope schema (mandatory):
+
+- "event": string
+- "component": string
+- "operation": string
+- "timestamp": ISO8601 UTC string ending with "Z" (example: 2026-02-11T12:34:56Z)
+- "data": object (JSON dict)
+
+No keys outside this schema are allowed for envelope events.
+
+Enablement key (canonical):
+
+- diagnostics.enabled
+
+Enablement sources and priority (mandatory):
+
+1) CLI args
+2) ENV: AUDIOMASON_DIAGNOSTICS_ENABLED
+3) config files
+4) defaults (disabled)
+
+ENV values are strings and are normalized as:
+
+- true: "1", "true", "yes", "on" (case-insensitive)
+- false: "0", "false", "no", "off" (case-insensitive)
+
+Unknown values MUST be treated as disabled.
+
+JSONL sink (mandatory):
+
+- The sink MUST be registered once per process and MUST receive ALL published events.
+- Implementation MUST use EventBus.subscribe_all(callback).
+- Sink path (append-only): <stage_dir>/diagnostics/diagnostics.jsonl
+- When diagnostics are disabled, the sink MUST perform no file IO.
+- When enabled, the sink MUST append exactly one JSON object per published event.
+  - If the event payload is already the canonical envelope, write it as-is.
+  - Otherwise, wrap it into the envelope using component="unknown" and operation="unknown".
+
+Fail-safe requirement:
+
+- Any sink write failure MUST be caught and logged as warning; it MUST NOT crash runtime.
 
 
 

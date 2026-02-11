@@ -37,7 +37,8 @@ class EventBus:
 
     def __init__(self) -> None:
         """Initialize event bus."""
-        self._subscribers: dict[str, list[Callable]] = defaultdict(list)
+        self._subscribers: dict[str, list[Callable[[dict[str, Any]], None]]] = defaultdict(list)
+        self._all_subscribers: list[Callable[[str, dict[str, Any]], None]] = []
 
     def subscribe(self, event: str, callback: Callable[[dict[str, Any]], None]) -> None:
         """Subscribe to an event.
@@ -58,6 +59,14 @@ class EventBus:
         if event in self._subscribers:
             self._subscribers[event].remove(callback)
 
+    def subscribe_all(self, callback: Callable[[str, dict[str, Any]], None]) -> None:
+        """Subscribe to all published events.
+
+        Args:
+            callback: Callback function (receives event name and event data dict)
+        """
+        self._all_subscribers.append(callback)
+
     def publish(self, event: str, data: dict[str, Any] | None = None) -> None:
         """Publish an event.
 
@@ -67,15 +76,28 @@ class EventBus:
         """
         data = data or {}
 
-        for callback in self._subscribers.get(event, []):
+        # Exact-event subscribers (legacy behavior).
+        for cb_event in list(self._subscribers.get(event, [])):
             try:
-                callback(data)
+                cb_event(data)
             except Exception as e:
                 # Log error but don't crash (fail-safe diagnostics requirement).
-                cb = getattr(callback, "__name__", repr(callback))
                 tb = traceback.format_exc()
                 msg = (
-                    f"Error in event handler for '{event}' (callback={cb}): "
+                    f"Error in event handler for '{event}' (callback={cb_event}): "
+                    f"{type(e).__name__}: {e}\n"
+                    f"{tb}"
+                )
+                _logger.error(msg)
+
+        # All-event subscribers (diagnostics sink, etc.).
+        for cb_all in list(self._all_subscribers):
+            try:
+                cb_all(event, data)
+            except Exception as e:
+                tb = traceback.format_exc()
+                msg = (
+                    f"Error in all-event handler (event='{event}', callback={cb_all}): "
                     f"{type(e).__name__}: {e}\n"
                     f"{tb}"
                 )
@@ -95,6 +117,7 @@ class EventBus:
     def clear(self) -> None:
         """Clear all subscribers."""
         self._subscribers.clear()
+        self._all_subscribers.clear()
 
 
 # Global event bus instance

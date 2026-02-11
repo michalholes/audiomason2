@@ -1,3 +1,11 @@
+## 2026-02-11T18:23:13+01:00
+
+- core: Add EventBus.subscribe_all to support all-event subscribers.
+- core: Add runtime diagnostics envelope and JSONL sink (config/env/cli enablement).
+- CLI: Add --diagnostics/--no-diagnostics flags and always-register diagnostics sink.
+- tests: Add coverage for diagnostics sink enablement, wrapping, idempotency, and subscribe_all.
+- spec: Document runtime diagnostics envelope and JSONL sink; bump specification version to 1.0.35.
+
 ## 2026-02-11T17:41:11+01:00
 
 - spec: Document web wizard job payload source_path injection; bump specification version to 1.0.34.

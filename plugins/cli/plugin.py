@@ -74,6 +74,8 @@ class CLIPlugin:
         """
         self.config = config or {}
         self.verbosity = VerbosityLevel.NORMAL
+        # Original argv snapshot used for CLI parsing (set in run())
+        self._original_argv: list[str] = []
         # Mapping: command_name -> (plugin_dir, plugin_name)
         self._plugin_cli_commands: dict[str, tuple[Path, str]] = {}
         # Session-level failure isolation: plugin_name -> error summary.
@@ -141,6 +143,12 @@ class CLIPlugin:
                 _ensure_dict(cli_args, "audio")["split_chapters"] = True
             elif arg == "--no-split-chapters":
                 _ensure_dict(cli_args, "audio")["split_chapters"] = False
+
+            # Runtime diagnostics (structured event sink)
+            elif arg == "--diagnostics":
+                _ensure_dict(cli_args, "diagnostics")["enabled"] = True
+            elif arg == "--no-diagnostics":
+                _ensure_dict(cli_args, "diagnostics")["enabled"] = False
 
             i += 1
 
@@ -261,6 +269,11 @@ class CLIPlugin:
         policy = resolver.resolve_logging_policy()
         apply_logging_policy(policy)
 
+        # Always register diagnostics sink; it self-filters when disabled.
+        from audiomason.core.diagnostics import install_jsonl_sink
+
+        install_jsonl_sink(resolver=resolver)
+
         # Now that core logging is configured, emit debug-only diagnostics.
         self._debug(f"Parsed CLI args: {cli_args}")
 
@@ -294,6 +307,8 @@ class CLIPlugin:
         lines.append("  --split-chapters               Split M4A by chapters")
         lines.append("  --cover [embedded|file|url|skip]  Cover source")
         lines.append("  --cover-url URL                Cover URL (if --cover url)")
+        lines.append("  --diagnostics                  Enable runtime diagnostics JSONL sink")
+        lines.append("  --no-diagnostics               Disable runtime diagnostics JSONL sink")
         lines.append("")
         lines.append("Verbosity:")
         lines.append("  -q, --quiet                    Quiet mode (errors only)")
