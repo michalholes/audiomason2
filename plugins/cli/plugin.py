@@ -306,7 +306,6 @@ class CLIPlugin:
                 lines.append(f"  {line}")
             lines.append("")
         lines.append("Examples:")
-        lines.append("  audiomason tui                 Launch terminal interface")
         lines.append("  audiomason wizard              List available wizards")
         lines.append("  audiomason wizard quick_import Run quick import wizard")
         lines.append("  audiomason process book.m4a")
