@@ -2,19 +2,39 @@
 
 # Patch Authoring Manual
 
-AUTHORITATIVE - AudioMason2 Status: active Version: v2.33
+AUTHORITATIVE -- AudioMason2 Status: active Version: v2.34
 
 This manual defines what a chat must produce so that the user can run
 the patch successfully and close the issue.
 
+------------------------------------------------------------------------
+
 ## Absolute rules
 
 1.  The patch path MUST be under the repo patches directory (default:
-    `/home/pi/audiomason2/patches/`). Bare filenames are resolved under
-    `patches/`.
-2.  The patch MUST be served in .zip file.
-3.  The patch MUST be a unified diff in `git apply` format (aka "unified
-    patch"). Any Python patch scripts (.py) are non-compliant.
+    `/home/pi/audiomason2/patches/`).
+2.  The patch MUST be served in a `.zip` file.
+3.  The patch MUST be a unified diff in `git apply` format. Python patch
+    scripts are non-compliant.
+
+------------------------------------------------------------------------
+
+# PRE-FLIGHT GATE (HARD)
+
+Before generating any patch, the chat MUST have:
+
+1.  A valid ISSUE ID.
+2.  An authoritative workspace snapshot (full repository or all files
+    that will be modified).
+
+If any required input is missing, the chat MUST request the missing
+input and MUST NOT generate a patch.
+
+Clarification: - "No prompts / no user input" applies to patch runtime
+behavior, not to requesting missing authoritative inputs before patch
+creation.
+
+------------------------------------------------------------------------
 
 ## Anti-monolith rule set (HARD)
 
@@ -24,15 +44,15 @@ patch MUST preserve modular boundaries and keep changes localized.
 Required constraints:
 
 1.  Locality-first: prefer the smallest change set that fixes the issue.
-2.  No "god modules": do not introduce new catch-all modules (e.g.,
-    `utils.py`, `common.py`, `helpers.py`, `misc.py`) that aggregate
-    unrelated responsibilities.
+2.  No "god modules": do not introduce new catch-all modules.
 3.  No centralization without approval.
 4.  Respect ownership boundaries.
 5.  New code must have a single clear responsibility.
 6.  If the required change would inherently be cross-cutting, the chat
     MUST stop and request explicit permission before producing such a
     patch.
+
+------------------------------------------------------------------------
 
 ## Per-file patch zip format (HARD)
 
@@ -50,81 +70,122 @@ Rules:
 4.  The set of patch files must be non-empty.
 5.  Each patch file MUST pass: `git apply --check <that_file.patch>`.
 
-## Patch requirements (must)
+------------------------------------------------------------------------
+
+## Patch requirements (HARD)
 
 -   Paths are repo-relative.
 -   Deterministic behavior only.
--   No randomness, no time dependence, no prompts, no network access.
--   All changes must be expressed as unified diff patches, packaged per
+-   No randomness, no time dependence, no interactive prompts during
+    runtime, no network access.
+-   All changes MUST be expressed as unified diff patches, packaged per
     file.
+-   `git apply --check <patch>.patch` MUST succeed.
 
-Validation expectation (MUST): `git apply --check <patch>.patch` must
-succeed.
+------------------------------------------------------------------------
 
-## Authoritative workspace rule (HARD)
+# INITIAL PATCH RULES (HARD)
 
-Single source of truth:
+These rules apply when generating the first patch for an issue.
 
-1.  Always base the patch on the latest authoritative workspace.
-2.  Open and inspect the workspace before writing a patch.
-3.  No guessing or reconstruction.
-4.  Workspace snapshot overrides chat history.
+## Deliverable (MANDATORY)
 
-## File authority, inspection & repair rules (HARD)
+The chat MUST provide:
 
-1.  The chat MUST open and inspect every uploaded file or archive before
-    any conclusion or patch.
-2.  Authority is applied per file, never globally.
-3.  Files present in a patched upload replace older versions of the same
-    file.
-4.  Logs are authoritative only for diagnostics.
+1.  A downloadable `.zip` patch under `patches/`.
+2.  A canonical invocation command in a code block.
+3.  The exact PATCH argument used in invocation.
 
-  -----------------------------------------------
-  REPAIR WORKFLOW: AUTHORITATIVE OVERLAY (HARD)
-  -----------------------------------------------
+Canonical invocation format (NO VARIANTS):
 
-When a previous patch failed and the user provides `patched.zip`, the
-authoritative file set is composed as follows:
+    python3 scripts/am_patch.py ISSUE_ID "commit message" PATCH
+
+-   `PATCH` may be `patches/<name>.zip` or `<name>.zip`
+-   Absolute paths are forbidden unless under `patches/`
+-   The command MUST be provided exactly once
+-   No alternative forms are allowed
+
+If invocation command is missing or malformed, the patch is
+NON-COMPLIANT.
+
+## Validation discipline
+
+Before sending:
+
+1.  Patch MUST modify at least one file.
+2.  Patch MUST apply cleanly (`git apply --check`).
+3.  Modified files MUST compile (`python -m compileall` minimum).
+4.  Patch MUST not introduce new dependencies without explicit approval.
+
+The chat MUST NOT claim success without evidence.
+
+The runner remains the authority.
+
+------------------------------------------------------------------------
+
+# REPAIR PATCH RULES (HARD)
+
+These rules apply when user provides `patched.zip`.
+
+## Authoritative overlay model
+
+Authoritative file set is composed of:
 
 1.  Last full workspace snapshot.
 2.  Most recent `patched.zip`.
 
 Per-file authority:
 
--   If a file exists in `patched.zip`, that version is authoritative.
--   If not, use the version from the full workspace snapshot.
--   Logs are diagnostic only and never override file authority.
+-   If file exists in `patched.zip`, that version is authoritative.
+-   Otherwise, use version from full workspace.
+-   Logs are diagnostic only.
 
-It is forbidden to generate a repair patch against only the original
-full snapshot if newer file versions exist in `patched.zip`.
+Generating repair patch against outdated snapshot is FORBIDDEN.
 
-  --------------------------------------------
-  FILE AUTHORITY MANIFEST (HARD REQUIREMENT)
-  --------------------------------------------
+------------------------------------------------------------------------
 
-Before generating any repair patch, the chat MUST output a FILE
-AUTHORITY MANIFEST that includes:
+## FILE AUTHORITY MANIFEST (MANDATORY FOR REPAIR)
 
-1.  Full list of repository files to be modified.
-2.  Explicit authority source for each file:
+Before generating repair patch, the chat MUST output:
+
+1.  Full list of repo files to be modified.
+2.  Authority source per file:
     -   source = patched.zip
-    -   or
-    -   source = full workspace snapshot
-3.  At least one structural anchor per file (function/class/context)
-    proving inspection.
+    -   or source = full workspace snapshot
+3.  At least one structural anchor per file proving inspection.
 
-If this manifest is missing or incomplete, the patch is NON-COMPLIANT.
+Missing manifest = NON-COMPLIANT.
 
-  -----------------------------------
-  REPAIR VALIDATION EVIDENCE (HARD)
-  -----------------------------------
+------------------------------------------------------------------------
 
-For repair patches, the chat MUST provide verifiable evidence of:
+## Repair validation evidence (MANDATORY)
 
-1.  Successful `git apply --check` for each per-file patch.
-2.  Successful compilation via `python -m compileall` (at least for
-    modified files).
+For repair patches, the chat MUST provide evidence of:
 
-If evidence is not shown, the chat MUST NOT claim the patch was tested.
+1.  `git apply --check` success per file
+2.  `python -m compileall` success (at least modified files)
 
-The runner remains the final authority.
+If evidence is not shown, the chat MUST NOT claim patch was tested.
+
+------------------------------------------------------------------------
+
+## Issue closing rule
+
+An issue may be closed only if:
+
+-   Runner returns SUCCESS
+-   Success log shows commit SHA
+-   Push status line exists (e.g., `push=OK`)
+-   User confirms correctness
+
+Chats must never instruct closing based on reasoning alone.
+
+------------------------------------------------------------------------
+
+# Single Source of Truth (HARD)
+
+1.  Always base patch on latest authoritative workspace.
+2.  Open and inspect workspace before writing patch.
+3.  No guessing or reconstruction.
+4.  Workspace overrides chat history.
+5.  No cross-chat memory as source of truth.
