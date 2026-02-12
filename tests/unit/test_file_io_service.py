@@ -7,6 +7,7 @@ from pathlib import Path
 import pytest
 from plugins.file_io.service import FileService, RootName
 from plugins.file_io.service.ops import AlreadyExistsError, IsADirectoryError, NotFoundError
+from plugins.file_io.service.streams import open_append
 
 
 @pytest.fixture()
@@ -97,3 +98,28 @@ def test_copy_and_checksum(service: FileService) -> None:
     service.mkdir(RootName.INBOX, "dir")
     with pytest.raises(IsADirectoryError):
         service.checksum(RootName.INBOX, "dir")
+
+
+def test_open_append_creates_parent_dir(tmp_path: Path) -> None:
+    path = tmp_path / "newdir" / "log.bin"
+    assert not (tmp_path / "newdir").exists()
+    with open_append(path, mkdir_parents=True) as f:
+        f.write(b"a")
+    assert path.read_bytes() == b"a"
+
+
+def test_open_append_preserves_existing_content(service: FileService) -> None:
+    with service.open_write(RootName.INBOX, "a.bin") as f:
+        f.write(b"hello")
+    with service.open_append(RootName.INBOX, "a.bin") as f:
+        f.write(b"world")
+    with service.open_read(RootName.INBOX, "a.bin") as f:
+        assert f.read() == b"helloworld"
+
+
+def test_file_service_open_append_via_root_and_rel_path(service: FileService) -> None:
+    with service.open_append(RootName.STAGE, "logs/system.log") as f:
+        f.write(b"x")
+
+    abs_path = service.resolve_abs_path(RootName.STAGE, "logs/system.log")
+    assert abs_path.read_bytes() == b"x"

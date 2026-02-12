@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.38
+Specification Version: 1.0.39
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -457,6 +457,7 @@ The capability must provide, at minimum:
 - exists
 - open_read (download streaming)
 - open_write (upload streaming)
+- open_append (upload streaming append-only)
 - mkdir (parents supported)
 - rename (move)
 - delete_file
@@ -464,6 +465,12 @@ The capability must provide, at minimum:
 - rmtree (recursive delete)
 - copy
 - checksum (sha256 default)
+
+
+Append rules:
+
+- Append is a byte-level primitive (callers provide bytes; no formatting).
+- The file I/O capability must not implement rotation, size limits, or flush policy.
 
 #### 7.4.3 Determinism Rules
 

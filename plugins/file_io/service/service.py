@@ -24,7 +24,7 @@ from .ops import rmdir as op_rmdir
 from .ops import rmtree as op_rmtree
 from .ops import stat_path as op_stat
 from .paths import RootConfig, resolve_path
-from .streams import open_read, open_write
+from .streams import open_append, open_read, open_write
 from .types import FileEntry, FileStat, RootName
 
 
@@ -176,4 +176,12 @@ class FileService:
     ) -> Iterator[BinaryIO]:
         abs_path = resolve_path(self._root(root).dir_path, rel_path)
         with open_write(abs_path, overwrite=overwrite, mkdir_parents=mkdir_parents) as f:
+            yield f
+
+    @contextmanager
+    def open_append(
+        self, root: RootName, rel_path: str, *, mkdir_parents: bool = True
+    ) -> Iterator[BinaryIO]:
+        abs_path = resolve_path(self._root(root).dir_path, rel_path)
+        with open_append(abs_path, mkdir_parents=mkdir_parents) as f:
             yield f

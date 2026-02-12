@@ -1,3 +1,9 @@
+## 2026-02-12T09:43:00+01:00
+
+- file_io: Add open_append (append-only upload streaming) for byte-level log appends.
+- tests: Add unit coverage for open_append stream and FileService.open_append.
+- spec: Document file_io open_append and bump specification version to 1.0.39.
+
 ## 2026-02-12T08:30:00+01:00
 
 - Issue 432: Add config keys logging.system_log_enabled and logging.system_log_path for human-readable system log file routing.

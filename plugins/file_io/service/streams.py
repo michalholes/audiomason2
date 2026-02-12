@@ -33,3 +33,13 @@ def open_write(
 
     with open(path, "wb") as f:
         yield f
+
+
+@contextmanager
+def open_append(path: Path, *, mkdir_parents: bool = True) -> Iterator[BinaryIO]:
+    """Open a file for append-only writing in binary mode."""
+    if mkdir_parents:
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+    with open(path, "ab") as f:
+        yield f
