@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.39
+Specification Version: 1.0.40
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -279,22 +279,20 @@ Allowed values (after normalization):
 
 ### 6.7.1 Human-Readable System Log File
 
-New keys:
-- `logging.system_log_enabled`
-  - type: bool
-  - default: false
-  - semantics: when true, the Core-provided logger also writes human-readable logs to a file.
-- `logging.system_log_path`
-  - type: string
-  - default: ~/.audiomason/system.log
-  - semantics: target file path for the human-readable system log.
+Core does not implement a file-backed system log backend. Instead, Core emits a human-readable log stream via a Core-owned publish/subscribe bus called LogBus.
 
-Failure semantics:
-- If `logging.system_log_enabled` is present and not a bool: resolver must raise ConfigError.
-- If `logging.system_log_path` is present and not a string, or is empty/whitespace: resolver must raise ConfigError.
-- If the path is valid but the process cannot create the directory or open the file at startup: the application must not crash.
-  File logging is disabled and a warning is emitted via the Core-provided logger.
+Semantics:
+- Every log line emitted by the Core logger is published to LogBus as a LogRecord (plain, no colors, no trailing newline).
+- If no subscribers exist, publishing is a no-op (logs are effectively dropped).
+- If a subscriber raises, the exception is suppressed and reported to stderr; the system must not crash.
 
+Persistence semantics:
+- Log persistence is performed by external subscribers (plugins) that subscribe to LogBus.
+- Persistence MUST use the File I/O capability (and its roots). UI layers must not write to arbitrary filesystem paths directly.
+- If no persistence subscriber exists, no human-readable system log file is created or updated.
+
+Diagnostics note:
+- LogBus is a log streaming mechanism only. It is NOT the authoritative runtime diagnostic emission entry point. Diagnostic lifecycle events remain exclusively emitted via the existing Core diagnostic entry point as specified elsewhere in this document and in the base project contract.
 
 ---
 

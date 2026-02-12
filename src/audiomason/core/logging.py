@@ -21,13 +21,13 @@ Usage:
 
 from __future__ import annotations
 
-import contextlib
 import sys
 from collections.abc import Callable
 from enum import IntEnum
 from pathlib import Path
 
 from audiomason.core.config import LoggingPolicy
+from audiomason.core.log_bus import LogRecord, get_log_bus
 
 
 class VerbosityLevel(IntEnum):
@@ -42,14 +42,15 @@ class VerbosityLevel(IntEnum):
 # Global verbosity level
 _VERBOSITY: VerbosityLevel = VerbosityLevel.NORMAL
 
-# Log file path (optional)
-_LOG_FILE: Path | None = None
+# Deprecated log file path (kept for compatibility; core does not write files)
+_DEPRECATED_LOG_FILE: Path | None = None
 
 # Color support
 _USE_COLORS: bool = True
 
-# Optional log sink for job-aware routing (Phase 1)
+# Backward compatible log sink
 _LOG_SINK: Callable[[str], None] | None = None
+_LEGACY_SINK_ADAPTER: Callable[[LogRecord], None] | None = None
 
 
 def set_verbosity(level: int | VerbosityLevel) -> None:
@@ -91,18 +92,16 @@ def apply_logging_policy(policy: LoggingPolicy) -> None:
 
 
 def set_log_file(path: Path | str | None) -> None:
-    """Set log file path.
+    """Deprecated: Core no longer writes a file-backed system log.
+
+    This function is kept for compatibility with existing callers. It stores
+    the last provided path but does not create directories or write to files.
 
     Args:
-        path: Path to log file or None to disable file logging
+        path: Path to log file or None.
     """
-    global _LOG_FILE
-
-    if path:
-        _LOG_FILE = Path(path)
-        _LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
-    else:
-        _LOG_FILE = None
+    global _DEPRECATED_LOG_FILE
+    _DEPRECATED_LOG_FILE = None if path is None else Path(path)
 
 
 def set_colors(enabled: bool) -> None:
@@ -118,14 +117,31 @@ def set_colors(enabled: bool) -> None:
 def set_log_sink(sink: Callable[[str], None] | None) -> None:
     """Set a global log sink callback.
 
-    When set, every log line emitted via core logging is forwarded to the sink
-    as plain text. When None, logging behaves as before.
+    Backward compatible adapter over LogBus.
 
     Args:
         sink: Callback receiving a single log line, or None to disable.
     """
     global _LOG_SINK
+    global _LEGACY_SINK_ADAPTER
+
+    if _LEGACY_SINK_ADAPTER is not None:
+        get_log_bus().unsubscribe_all(_LEGACY_SINK_ADAPTER)
+        _LEGACY_SINK_ADAPTER = None
+
     _LOG_SINK = sink
+
+    if sink is None:
+        return
+
+    def _adapter(rec: LogRecord) -> None:
+        try:
+            sink(rec.plain)
+        except Exception:
+            return
+
+    _LEGACY_SINK_ADAPTER = _adapter
+    get_log_bus().subscribe_all(_adapter)
 
 
 def get_log_sink() -> Callable[[str], None] | None:
@@ -180,8 +196,7 @@ class AudioMasonLogger:
             color = self.COLORS.get(level, "")
             reset = self.COLORS["RESET"]
             return f"{color}[{level.lower()}]{reset} {message}"
-        else:
-            return f"[{level.lower()}] {message}"
+        return f"[{level.lower()}] {message}"
 
     def _log(self, level: VerbosityLevel, level_name: str, message: str) -> None:
         """Internal logging method.
@@ -197,22 +212,10 @@ class AudioMasonLogger:
         formatted = self._format_message(level_name, message)
 
         plain = f"[{level_name.lower()}] {message}"
-        if _LOG_SINK is not None:
-            with contextlib.suppress(Exception):
-                _LOG_SINK(plain)
+        get_log_bus().publish(LogRecord(level_name=level_name, plain=plain, logger_name=self.name))
 
         # Console output
         print(formatted, file=sys.stderr if level_name == "ERROR" else sys.stdout)
-
-        # File output (if configured)
-        if _LOG_FILE:
-            try:
-                with open(_LOG_FILE, "a") as f:
-                    # Remove colors for file
-                    plain = f"[{level_name.lower()}] {message}\n"
-                    f.write(plain)
-            except Exception:
-                pass  # Don't crash if logging fails
 
     def debug(self, message: str) -> None:
         """Log debug message (verbosity >= DEBUG).
@@ -252,23 +255,12 @@ class AudioMasonLogger:
         Args:
             message: Message to log
         """
-        # Errors are shown even in QUIET mode
         formatted = self._format_message("ERROR", message)
 
         plain = f"[error] {message}"
-        if _LOG_SINK is not None:
-            with contextlib.suppress(Exception):
-                _LOG_SINK(plain)
+        get_log_bus().publish(LogRecord(level_name="ERROR", plain=plain, logger_name=self.name))
 
         print(formatted, file=sys.stderr)
-
-        # File output
-        if _LOG_FILE:
-            try:
-                with open(_LOG_FILE, "a") as f:
-                    f.write(f"[error] {message}\n")
-            except Exception:
-                pass
 
 
 # Logger registry

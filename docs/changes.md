@@ -7,6 +7,9 @@
 
 ## 2026-02-12T09:43:00+01:00
 
+-   core: Add LogBus (publish/subscribe) for log streaming, mirroring the EventBus model.
+-   core: Remove file-backed system log backend; core no longer writes any log files.
+-   docs: Update system log specification: persistence is performed by external LogBus subscribers using File I/O roots.
 -   file_io: Add open_append (append-only upload streaming) for
     byte-level log appends.
 -   tests: Add unit coverage for open_append stream and
