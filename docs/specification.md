@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.46
+Specification Version: 1.0.47
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -885,6 +885,22 @@ Issue 403 extension (PHASE 2 processing engine):
 - engine MAY provide a deterministic queue runner entrypoint (sync) to execute pending import jobs.
 
 Import foundation MAY include a "hybrid" mode in the data model only. Behavior is reserved.
+
+### 8.4 CLI Import Command (AM1-like)
+
+The CLI MUST expose an AM1-like import entrypoint:
+
+- Command: `audiomason import`
+- The command MUST be implemented as a plugin-provided CLI command via `ICLICommands`.
+- The providing built-in plugin MUST be named `import_cli`.
+
+Behavioral requirements:
+
+- The command MUST use the Import foundation and engine services under `plugins/import/`.
+- PHASE 0 (preflight) MUST be deterministic and read-only.
+- PHASE 1 MUST collect all decisions (interactive prompts unless explicitly disabled).
+- PHASE 2 MUST be implemented exclusively via persisted Jobs created by ImportEngineService.
+- Non-interactive operation MUST be possible via explicit CLI flags.
 
 ## 9. Web Interface Rules
 

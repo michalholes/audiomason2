@@ -1,3 +1,9 @@
+## 2026-02-12T22:42:28+01:00
+
+-   cli: Add AM1-like `audiomason import` command implemented as a plugin-provided CLI command (import_cli).
+-   tests: Add unit coverage for import CLI command registration and argument parsing.
+-   spec: Document CLI import command and bump specification version to 1.0.47.
+
 ## 2026-02-12T22:30:00+01:00
 
 -   web_interface: Add visual wizard configuration editor (drag reorder, enable toggle, templates, defaults memory) with server-side validation.
