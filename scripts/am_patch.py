@@ -745,6 +745,10 @@ def main(argv: list[str]) -> int:
 
             decision_paths_ws = changed_paths(logger, ws.repo)
 
+            # Failure archive hint: include current workspace changes (even in -w) so
+            # patched.zip is reproducible if gates fail.
+            files_for_fail_zip = sorted(set(files_for_fail_zip) | set(decision_paths_ws))
+
             run_gates(
                 logger,
                 cwd=ws.repo,
@@ -772,6 +776,11 @@ def main(argv: list[str]) -> int:
                 progress=_gate_progress,
             )
 
+            # Gates can modify files (e.g. ruff format/autofix). Refresh the failure
+            # archive subset after workspace gates.
+            changed_after_ws_gates = changed_paths(logger, ws.repo)
+            files_for_fail_zip = sorted(set(files_for_fail_zip) | set(changed_after_ws_gates))
+
             _maybe_run_badguys(cwd=ws.repo, decision_paths=decision_paths_ws)
 
             changed_all = changed_paths(logger, ws.repo)
@@ -787,6 +796,10 @@ def main(argv: list[str]) -> int:
             logger.line(f"files_to_promote={promote_list}")
             if not promote_list:
                 raise RunnerError("PREFLIGHT", "WORKSPACE", "no promotable workspace changes")
+
+            # If later steps (promotion or live gates) fail, ensure the failure zip
+            # includes the exact files that were planned for promotion.
+            files_for_fail_zip = sorted(set(files_for_fail_zip) | set(promote_list))
 
             promote_files(
                 logger=logger,

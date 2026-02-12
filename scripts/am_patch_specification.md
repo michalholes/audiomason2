@@ -413,6 +413,14 @@ When building `patched.zip`, the runner excludes repository internals and tool/r
 
 This is independent of scope logic and does not affect patch execution, gates, or promotion semantics.
 
+Finalize-workspace failure subset:
+- In `-w` / `--finalize-workspace`, the failure zip MUST include the workspace changed/touched subset even if
+  the run fails during workspace gates, promotion, or live gates.
+- The subset is the deterministic union of:
+  - workspace `changed_paths` snapshot before workspace gates,
+  - workspace `changed_paths` snapshot after workspace gates (to capture gate-induced edits such as formatting),
+  - the `files_to_promote` list computed from the promotable workspace change set.
+
 
 ## 1.2 Workspace rollback after failure
 

@@ -111,6 +111,11 @@ The runner excludes the following from the archived changed/touched subset when 
 
 This reduces archive size without changing patch semantics or gates behavior.
 
+-
+Note on `-w` / `--finalize-workspace`:
+- On failure (e.g. a gate fails), `patched.zip` includes the log plus the workspace changed/touched subset,
+  including the files that were planned for promotion.
+
 
 ## Standard workflow (workspace mode)
 
