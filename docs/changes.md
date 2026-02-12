@@ -1,3 +1,13 @@
+## 2026-02-13T00:00:00+01:00
+
+-   import_cli: Fix silent exits during interactive selection and support mixed
+    inbox layouts (author/book, book-only, file units).
+-   import_cli: In debug verbosity, print import-related diagnostics envelopes
+    to stdout.
+-   tests: Add unit coverage for mixed layout import CLI selection.
+-   spec: Document import CLI UX stability rules; bump specification version to
+    1.0.49.
+
 ## 2026-02-12T23:53:10+01:00
 
 -   import: Extend PHASE 0 import preflight to support mixed inbox layouts

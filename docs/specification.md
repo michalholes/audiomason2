@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.48
+Specification Version: 1.0.49
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -901,6 +901,19 @@ Behavioral requirements:
 - PHASE 1 MUST collect all decisions (interactive prompts unless explicitly disabled).
 - PHASE 2 MUST be implemented exclusively via persisted Jobs created by ImportEngineService.
 - Non-interactive operation MUST be possible via explicit CLI flags.
+
+CLI import UX stability requirements:
+
+- Interactive selection MUST NOT silently exit when an author has no books.
+  The CLI must re-prompt or emit an explicit message before returning.
+- The CLI MUST support mixed inbox layouts from import preflight:
+  - author/book directories
+  - single-level book directories
+  - single-file units (archives/audio files)
+- When debug verbosity is enabled (`-d` / `--debug`), the CLI MUST surface
+  import-related runtime diagnostics envelopes on stdout.
+- In non-interactive mode, unresolved selection/policy MUST fail loudly
+  (non-zero exit) rather than silently returning.
 
 ## 9. Web Interface Rules
 

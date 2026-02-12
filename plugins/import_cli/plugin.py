@@ -19,6 +19,8 @@ from __future__ import annotations
 import argparse
 import hashlib
 import importlib
+import json
+import sys
 from dataclasses import dataclass
 from typing import Any
 
@@ -26,9 +28,78 @@ from plugins.file_io.service.service import FileService
 from plugins.file_io.service.types import RootName
 
 from audiomason.core.config import ConfigResolver
+from audiomason.core.diagnostics import build_envelope
+from audiomason.core.events import get_event_bus
 from audiomason.core.logging import get_logger
 
 log = get_logger(__name__)
+
+
+def _emit_diag(event: str, *, operation: str, data: dict[str, Any]) -> None:
+    try:
+        env = build_envelope(
+            event=event,
+            component="import_cli",
+            operation=operation,
+            data=data,
+        )
+        get_event_bus().publish(event, env)
+    except Exception:
+        return
+
+
+def _cli_overrides_from_sys_argv(argv: list[str]) -> dict[str, Any]:
+    """Extract minimal ConfigResolver CLI overrides from the process argv.
+
+    The import CLI command is invoked through the top-level CLI plugin, which
+    parses and removes verbosity flags before dispatching to plugin commands.
+    This helper re-reads sys.argv to obtain the effective global overrides.
+
+    Only a minimal subset is extracted to avoid duplicating CLI parsing logic.
+    """
+
+    cli_args: dict[str, Any] = {}
+
+    def _ensure_dict(root: dict[str, Any], key: str) -> dict[str, Any]:
+        val = root.get(key)
+        if isinstance(val, dict):
+            return val
+        new: dict[str, Any] = {}
+        root[key] = new
+        return new
+
+    for arg in argv:
+        if arg in ("-q", "--quiet"):
+            _ensure_dict(cli_args, "logging")["level"] = "quiet"
+        elif arg in ("-v", "--verbose"):
+            _ensure_dict(cli_args, "logging")["level"] = "verbose"
+        elif arg in ("-d", "--debug"):
+            _ensure_dict(cli_args, "logging")["level"] = "debug"
+        elif arg == "--diagnostics":
+            _ensure_dict(cli_args, "diagnostics")["enabled"] = True
+        elif arg == "--no-diagnostics":
+            _ensure_dict(cli_args, "diagnostics")["enabled"] = False
+
+    return cli_args
+
+
+def _install_console_diag_subscriber(*, enabled: bool) -> None:
+    if not enabled:
+        return
+
+    def _on_any_event(event: str, data: dict[str, Any]) -> None:
+        if not isinstance(data, dict):
+            return
+        comp = data.get("component")
+        if comp not in ("import_cli", "import.preflight", "import.engine"):
+            return
+        try:
+            line = json.dumps(data, ensure_ascii=True, separators=(",", ":"), sort_keys=True)
+        except Exception:
+            return
+        print(f"DIAG {line}")
+
+    get_event_bus().subscribe_all(_on_any_event)
 
 
 @dataclass(frozen=True)
@@ -207,12 +278,29 @@ class ImportCLIPlugin:
         return {"import": self.import_cmd}
 
     def import_cmd(self, argv: list[str]) -> None:
+        _emit_diag(
+            "boundary.start",
+            operation="import_cmd",
+            data={"argv": list(argv)},
+        )
         args = parse_import_cli_args(argv)
         if "--help" in argv or "-h" in argv:
             _print_help()
+            _emit_diag(
+                "boundary.end",
+                operation="import_cmd",
+                data={"status": "succeeded", "reason": "help"},
+            )
             return
 
-        resolver = ConfigResolver()
+        resolver = ConfigResolver(cli_args=_cli_overrides_from_sys_argv(sys.argv))
+        # In debug mode, surface import diagnostics envelopes on stdout.
+        try:
+            debug_enabled = resolver.resolve_logging_level() == "debug"
+        except Exception:
+            debug_enabled = False
+        _install_console_diag_subscriber(enabled=debug_enabled)
+
         fs = FileService.from_resolver(resolver)
         mods = _mods()
         engine = mods["ImportEngineService"](fs=fs)
@@ -223,6 +311,11 @@ class ImportCLIPlugin:
             print(f"Ran {len(ran)} job(s) for run_id={args.run_id}")
             for jid in ran:
                 print(f"  {jid}")
+            _emit_diag(
+                "boundary.end",
+                operation="import_cmd",
+                data={"status": "succeeded", "reason": "resume", "ran_n": len(ran)},
+            )
             return
 
         preflight_svc = mods["PreflightService"](fs)
@@ -230,31 +323,97 @@ class ImportCLIPlugin:
 
         if not preflight.books:
             print("No books detected under the selected source root.")
+            _emit_diag(
+                "boundary.end",
+                operation="import_cmd",
+                data={"status": "succeeded", "reason": "no_books"},
+            )
             return
 
-        selected_books = []
+        selected_books: list[Any] = []
         if args.all_books:
             selected_books = list(preflight.books)
         elif args.non_interactive:
             if args.book_rel_path is None:
-                print("Non-interactive mode requires --all or --book-rel-path")
+                print("Error: non-interactive mode requires --all or --book-rel-path")
                 _print_help()
-                return
+                _emit_diag(
+                    "boundary.fail",
+                    operation="import_cmd",
+                    data={"status": "failed", "reason": "missing_selection"},
+                )
+                raise SystemExit(2)
             selected = [b for b in preflight.books if b.rel_path == args.book_rel_path]
             if not selected:
-                print("book_rel_path not found in preflight")
-                return
+                print("Error: book_rel_path not found in preflight")
+                _emit_diag(
+                    "boundary.fail",
+                    operation="import_cmd",
+                    data={"status": "failed", "reason": "book_rel_path_not_found"},
+                )
+                raise SystemExit(2)
             selected_books = selected
         else:
-            author = _prompt_select("Select author (or q to quit):", list(preflight.authors))
-            if author is None:
+            # Interactive selection must support mixed layouts:
+            # - Author/Book layout (authors list)
+            # - Single-level book directories (author == "")
+            # - File units (author == "")
+            has_book_only = any(b.author == "" for b in preflight.books)
+            author_options: list[str] = list(preflight.authors)
+            book_only_label = "<book-only>"
+            if has_book_only:
+                author_options = author_options + [book_only_label] if author_options else []
+
+            selected_author: str | None
+            if author_options:
+                while True:
+                    selected_author = _prompt_select(
+                        "Select author (or q to quit):", author_options
+                    )
+                    if selected_author is None:
+                        _emit_diag(
+                            "boundary.end",
+                            operation="import_cmd",
+                            data={"status": "succeeded", "reason": "user_quit"},
+                        )
+                        return
+                    author_key = "" if selected_author == book_only_label else selected_author
+                    books = [b for b in preflight.books if b.author == author_key]
+                    if not books:
+                        print("No books detected for the selected author.")
+                        continue
+                    book_names = [b.rel_path for b in books]
+                    book_rel = _prompt_select("Select book (or q to quit):", book_names)
+                    if book_rel is None:
+                        _emit_diag(
+                            "boundary.end",
+                            operation="import_cmd",
+                            data={"status": "succeeded", "reason": "user_quit"},
+                        )
+                        return
+                    selected_books = [b for b in books if b.rel_path == book_rel]
+                    break
+            else:
+                # No authors detected; select directly from all discovered books.
+                book_names = [b.rel_path for b in preflight.books]
+                book_rel = _prompt_select("Select book (or q to quit):", book_names)
+                if book_rel is None:
+                    _emit_diag(
+                        "boundary.end",
+                        operation="import_cmd",
+                        data={"status": "succeeded", "reason": "user_quit"},
+                    )
+                    return
+                selected_books = [b for b in preflight.books if b.rel_path == book_rel]
+
+            if not selected_books:
+                print("No book selected.")
+                _emit_diag(
+                    "boundary.end",
+                    operation="import_cmd",
+                    data={"status": "succeeded", "reason": "no_selection"},
+                )
                 return
-            books = [b for b in preflight.books if b.author == author]
-            book_names = [b.rel_path for b in books]
-            book_rel = _prompt_select("Select book (or q to quit):", book_names)
-            if book_rel is None:
-                return
-            selected_books = [b for b in books if b.rel_path == book_rel]
 
         # Build run state.
         selected_rel_paths = sorted([b.rel_path for b in selected_books])
@@ -277,6 +436,7 @@ class ImportCLIPlugin:
             source_root_rel_path=preflight.source_root_rel_path,
             authors=sorted({b.author for b in selected_books}),
             books=selected_books,
+            skipped=[],
         )
 
         decisions = engine.resolve_book_decisions(preflight=preflight_subset, state=state)
@@ -298,3 +458,9 @@ class ImportCLIPlugin:
         ran = engine.run_pending(limit=args.parallelism_n)
         if ran:
             print(f"Executed {len(ran)} job(s) in background.")
+
+        _emit_diag(
+            "boundary.end",
+            operation="import_cmd",
+            data={"status": "succeeded", "run_id": run_id, "jobs_n": len(job_ids)},
+        )
