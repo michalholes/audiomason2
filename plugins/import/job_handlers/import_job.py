@@ -1,0 +1,158 @@
+"""Import job handler.
+
+This is PHASE 2 processing. It must be non-interactive.
+
+ASCII-only.
+"""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime
+from typing import Any
+
+from audiomason.core.diagnostics import build_envelope
+from audiomason.core.events import get_event_bus
+from audiomason.core.jobs.api import JobService
+from audiomason.core.jobs.model import JobState
+from plugins.file_io.service.service import FileService
+from plugins.file_io.service.types import RootName
+
+from ..processed_registry.service import ProcessedRegistry
+from ..session_store.types import ImportRunState
+
+
+def _utcnow_iso() -> str:
+    return datetime.now(UTC).isoformat()
+
+
+_AUDIO_EXT = {".mp3", ".m4a", ".m4b", ".flac", ".wav", ".ogg", ".opus"}
+_IMG_EXT = {".jpg", ".jpeg", ".png", ".webp"}
+
+
+def _emit_diag(event: str, *, operation: str, data: dict[str, Any]) -> None:
+    try:
+        env = build_envelope(
+            event=event,
+            component="import.engine.job_handler",
+            operation=operation,
+            data=data,
+        )
+        get_event_bus().publish(event, env)
+    except Exception:
+        return
+
+
+def _ext(rel_path: str) -> str:
+    name = rel_path.rstrip("/").split("/")[-1].lower()
+    if "." not in name:
+        return ""
+    return "." + name.split(".")[-1]
+
+
+def _copy_tree(
+    fs: FileService,
+    *,
+    src_root: RootName,
+    src_rel: str,
+    dst_root: RootName,
+    dst_rel: str,
+) -> int:
+    """Copy a directory tree deterministically.
+
+    Returns number of copied files.
+    """
+    entries = fs.list_dir(src_root, src_rel, recursive=True)
+    files = [e.rel_path for e in entries if not e.is_dir]
+    copied = 0
+    for rel in sorted(files):
+        # Derive relative path within book folder.
+        suffix = rel[len(src_rel.rstrip("/")) :].lstrip("/")
+        dst_file_rel = f"{dst_rel.rstrip('/')}/{suffix}" if suffix else dst_rel
+
+        with fs.open_read(src_root, rel) as r:
+            data = r.read()
+        with fs.open_write(dst_root, dst_file_rel, overwrite=True, mkdir_parents=True) as w:
+            w.write(data)
+
+        copied += 1
+    return copied
+
+
+def run_import_job(
+    *,
+    job_id: str,
+    job_service: JobService,
+    fs: FileService,
+    registry: ProcessedRegistry,
+    run_state: ImportRunState,
+    source_root: RootName,
+    book_rel_path: str,
+) -> None:
+    """Execute a single import job."""
+    _emit_diag(
+        "boundary.start",
+        operation="run_import_job",
+        data={
+            "job_id": job_id,
+            "book_rel_path": book_rel_path,
+            "mode": run_state.source_handling_mode,
+        },
+    )
+
+    job = job_service.get_job(job_id)
+
+    try:
+        if registry.is_processed(book_rel_path):
+            job_service.append_log_line(job_id, f"already processed: {book_rel_path}")
+            job.set_progress(1.0)
+            job.transition(JobState.SUCCEEDED)
+            job.finished_at = _utcnow_iso()
+            job_service.store.save_job(job)
+            _emit_diag(
+                "boundary.end",
+                operation="run_import_job",
+                data={"job_id": job_id, "status": "succeeded", "skipped": True},
+            )
+            return
+
+        if run_state.source_handling_mode == "stage":
+            dst_base = f"import/stage/{job_id}/{book_rel_path}"
+            fs.mkdir(RootName.STAGE, f"import/stage/{job_id}", parents=True, exist_ok=True)
+            copied = _copy_tree(
+                fs,
+                src_root=source_root,
+                src_rel=book_rel_path,
+                dst_root=RootName.STAGE,
+                dst_rel=dst_base,
+            )
+            job_service.append_log_line(job_id, f"staged files: {copied}")
+        elif run_state.source_handling_mode == "inplace":
+            job_service.append_log_line(job_id, f"inplace source: {book_rel_path}")
+        else:
+            raise ValueError(f"Unsupported handling mode: {run_state.source_handling_mode}")
+
+        registry.mark_processed(book_rel_path)
+        job.set_progress(1.0)
+        job.transition(JobState.SUCCEEDED)
+        job.finished_at = _utcnow_iso()
+        job_service.store.save_job(job)
+        job_service.append_log_line(job_id, "succeeded")
+        _emit_diag(
+            "boundary.end",
+            operation="run_import_job",
+            data={"job_id": job_id, "status": "succeeded"},
+        )
+    except Exception as e:
+        job.error = f"{type(e).__name__}: {e}"
+        try:
+            job.transition(JobState.FAILED)
+        except Exception:
+            job.state = JobState.FAILED
+        job.finished_at = _utcnow_iso()
+        job_service.store.save_job(job)
+        job_service.append_log_line(job_id, f"failed: {job.error}")
+        _emit_diag(
+            "boundary.end",
+            operation="run_import_job",
+            data={"job_id": job_id, "status": "failed", "error": job.error},
+        )

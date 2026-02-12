@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.43
+Specification Version: 1.0.44
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -870,6 +870,19 @@ Required components:
 - session_store: Persist ImportRunState under the file_io JOBS root.
 - preflight: Deterministic read-only detection producing author/book list, cover candidates, rename preview map, and a basic book fingerprint.
 - processed_registry: Book-folder processed registry under the file_io JOBS root.
+
+Issue 403 extension (PHASE 2 processing engine):
+
+- import engine MUST create persisted Jobs for PHASE 2 processing (no UI dependency).
+- engine MUST expose a stable service API callable from CLI and Web:
+  - resolve_book_decisions()
+  - start_import_job()
+  - get_job_status()
+  - retry_failed_jobs()
+  - pause_queue()
+  - resume_queue()
+- engine processing MUST be non-interactive and MUST survive restart via persisted job state.
+- engine MAY provide a deterministic queue runner entrypoint (sync) to execute pending import jobs.
 
 Import foundation MAY include a "hybrid" mode in the data model only. Behavior is reserved.
 

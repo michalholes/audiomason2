@@ -1,3 +1,8 @@
+## 2026-02-12T19:10:00+01:00
+
+-   import: Add PHASE 2 import processing engine with persisted Jobs and CLI-safe service API.
+-   tests: Add unit coverage for import engine stage determinism, inplace semantics, retry behavior, and service entry.
+
 ## 2026-02-12T18:45:00+01:00
 
 -   import: Add import foundation infrastructure (run state store, deterministic preflight, processed registry) under plugins/import/.
