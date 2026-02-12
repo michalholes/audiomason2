@@ -47,6 +47,13 @@ def _serialize_wizard_model(model: dict[str, Any]) -> str:
     if not isinstance(steps, list):
         raise ValueError("invalid model: 'wizard.steps' must be a list")
 
+    # Preserve a small, explicitly allowed UI metadata namespace under wizard._ui.
+    ui_allowed = {"defaults_memory", "templates"}
+    ui_raw = wiz.get("_ui")
+    ui: dict[str, Any] | None = None
+    if isinstance(ui_raw, dict):
+        ui = {k: v for k, v in ui_raw.items() if k in ui_allowed}
+
     norm_steps: list[dict[str, Any]] = []
     for i, s in enumerate(steps):
         if not isinstance(s, dict):
@@ -59,7 +66,13 @@ def _serialize_wizard_model(model: dict[str, Any]) -> str:
         cleaned["type"] = stype
         norm_steps.append(cleaned)
 
-    out = {"wizard": {**wiz, "steps": norm_steps}}
+    out_wiz = {**wiz, "steps": norm_steps}
+    if ui is not None:
+        out_wiz["_ui"] = ui
+    else:
+        out_wiz.pop("_ui", None)
+
+    out = {"wizard": out_wiz}
 
     # Prefer project dumper if available
     try:
@@ -77,6 +90,78 @@ def _serialize_wizard_model(model: dict[str, Any]) -> str:
     import yaml
 
     return yaml.safe_dump(out, sort_keys=False, allow_unicode=False)
+
+
+def _validate_wizard_model(model: dict[str, Any]) -> None:
+    """Strict server-side validation for safe saving.
+
+    The goal is to prevent saving obviously invalid or non-deterministic wizard
+    definitions from the visual editor, while still accepting legacy files on
+    read-only paths.
+    """
+
+    if not isinstance(model, dict) or "wizard" not in model:
+        raise ValueError("invalid model: missing 'wizard'")
+    wiz = model.get("wizard")
+    if not isinstance(wiz, dict):
+        raise ValueError("invalid model: 'wizard' must be a mapping")
+
+    steps = wiz.get("steps")
+    if not isinstance(steps, list):
+        raise ValueError("invalid model: 'wizard.steps' must be a list")
+
+    ids: set[str] = set()
+    for i, s in enumerate(steps):
+        if not isinstance(s, dict):
+            raise ValueError(f"invalid step at index {i}: step must be a mapping")
+        sid = s.get("id")
+        if not isinstance(sid, str) or not sid.strip():
+            raise ValueError(f"invalid step at index {i}: missing 'id'")
+        if sid in ids:
+            raise ValueError(f"duplicate step id: {sid}")
+        ids.add(sid)
+        stype = s.get("type")
+        if not isinstance(stype, str) or not stype.strip():
+            raise ValueError(f"invalid step '{sid}': missing 'type'")
+
+        enabled = s.get("enabled", True)
+        if not isinstance(enabled, bool):
+            raise ValueError(f"invalid step '{sid}': 'enabled' must be boolean")
+
+        # Keep conditions and templates as data-only structures.
+        # Enforce that they are YAML/JSON-like.
+        if "when" in s and not isinstance(
+            s.get("when"), (dict, list, str, int, float, bool, type(None))
+        ):
+            raise ValueError(f"invalid step '{sid}': 'when' must be JSON/YAML-like")
+
+        if "defaults" in s and not isinstance(s.get("defaults"), (dict, type(None))):
+            raise ValueError(f"invalid step '{sid}': 'defaults' must be a mapping or null")
+
+    ui = wiz.get("_ui")
+    if ui is not None and not isinstance(ui, dict):
+        raise ValueError("invalid wizard: '_ui' must be a mapping")
+
+    # allowed keys only
+    if isinstance(ui, dict):
+        for k in ui:
+            if k not in {"defaults_memory", "templates"}:
+                raise ValueError(f"invalid wizard: unsupported _ui key '{k}'")
+        if "defaults_memory" in ui and not isinstance(ui.get("defaults_memory"), dict):
+            raise ValueError("invalid wizard: _ui.defaults_memory must be a mapping")
+        if "templates" in ui and not isinstance(ui.get("templates"), dict):
+            raise ValueError("invalid wizard: _ui.templates must be a mapping")
+
+
+def _validate_wizard_yaml(yaml_text: str) -> None:
+    data = safe_load_yaml(yaml_text)
+    if not isinstance(data, dict):
+        raise ValueError("wizard yaml must be a mapping")
+    wiz = data.get("wizard")
+    if not isinstance(wiz, dict):
+        raise ValueError("wizard yaml: missing 'wizard' mapping")
+    model = _parse_wizard_model(yaml_text)
+    _validate_wizard_model(model)
 
 
 class WizardPut(BaseModel):
@@ -161,6 +246,23 @@ def mount_wizards(app: FastAPI) -> None:
             raise HTTPException(status_code=400, detail=str(e)) from e
         return {"yaml": yaml_text}
 
+    @app.post("/api/wizards/validate")
+    def validate_wizard(body: WizardPut) -> dict[str, Any]:
+        try:
+            if body.model is not None:
+                _validate_wizard_model(body.model)
+                yaml_text = _serialize_wizard_model(body.model)
+                return {"ok": True, "yaml": yaml_text, "model": body.model}
+            if body.yaml is not None:
+                _validate_wizard_yaml(body.yaml)
+                model = _parse_wizard_model(body.yaml)
+                return {"ok": True, "yaml": body.yaml, "model": model}
+            raise HTTPException(status_code=400, detail="expected yaml or model")
+        except HTTPException:
+            raise
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+
     @app.get("/api/wizards/{name}")
     def get_wizard(name: str) -> dict[str, Any]:
         try:
@@ -178,6 +280,7 @@ def mount_wizards(app: FastAPI) -> None:
     @app.post("/api/wizards")
     def create_wizard(body: WizardCreate) -> dict[str, Any]:
         try:
+            _validate_wizard_yaml(body.yaml)
             svc.put_wizard_text(body.name, body.yaml)
         except Exception as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
@@ -189,8 +292,10 @@ def mount_wizards(app: FastAPI) -> None:
             raise HTTPException(status_code=400, detail="expected yaml or model")
         try:
             if body.yaml is not None:
+                _validate_wizard_yaml(body.yaml)
                 svc.put_wizard_text(name, body.yaml)
             else:
+                _validate_wizard_model(body.model or {})
                 yaml_text = _serialize_wizard_model(body.model or {})
                 svc.put_wizard_text(name, yaml_text)
         except Exception as e:

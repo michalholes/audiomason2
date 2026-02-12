@@ -1149,16 +1149,101 @@ async function renderWizardManager(content, notify) {
     const typeIn = el("input", { class: "input", value: String(s.type || "") });
     const promptIn = el("input", { class: "input", value: String(s.prompt || s.label || "") });
 
+    const enabledIn = el("input", { type: "checkbox" });
+    enabledIn.checked = (s.enabled !== false);
+
+    // Templates are stored under wizard._ui.templates (dict: name -> step partial).
+    const tmplSel = el("select", { class: "input" });
+    tmplSel.appendChild(el("option", { value: "", text: "(no template)" }));
+    const wiz = currentModel && currentModel.wizard ? currentModel.wizard : null;
+    const tmplMap = (wiz && wiz._ui && wiz._ui.templates && typeof wiz._ui.templates === "object") ? wiz._ui.templates : {};
+    Object.keys(tmplMap || {}).sort().forEach((k) => {
+      tmplSel.appendChild(el("option", { value: k, text: k }));
+    });
+    tmplSel.value = String(s.template || "");
+
+    const defaultsTa = el("textarea", { class: "textarea", text: JSON.stringify(s.defaults || {}, null, 2) });
+    const whenTa = el("textarea", { class: "textarea", text: s.when != null ? JSON.stringify(s.when, null, 2) : "" });
+
     const mkRow = (label, inputEl) =>
       el("div", { class: "formRow" }, [el("div", { class: "formLabel", text: label }), inputEl]);
 
     editorPane.appendChild(mkRow("id", idIn));
     editorPane.appendChild(mkRow("type", typeIn));
     editorPane.appendChild(mkRow("prompt/label", promptIn));
+    editorPane.appendChild(mkRow("enabled", enabledIn));
+    editorPane.appendChild(mkRow("template", tmplSel));
+
+    editorPane.appendChild(el("div", { class: "subTitle", text: "defaults (JSON)" }));
+    editorPane.appendChild(defaultsTa);
+    editorPane.appendChild(el("div", { class: "subTitle", text: "when/conditions (JSON)" }));
+    editorPane.appendChild(whenTa);
+
+    const tmplBar = el("div", { class: "toolbar" });
+    const applyTmplBtn = el("button", { class: "btn", text: "Apply template" });
+    const saveTmplBtn = el("button", { class: "btn", text: "Save as template" });
+    tmplBar.appendChild(applyTmplBtn);
+    tmplBar.appendChild(saveTmplBtn);
+    editorPane.appendChild(tmplBar);
 
     idIn.addEventListener("input", () => { s.id = idIn.value; refreshYamlPreview(); });
     typeIn.addEventListener("input", () => { s.type = typeIn.value; refreshYamlPreview(); });
     promptIn.addEventListener("input", () => { s.prompt = promptIn.value; s.label = promptIn.value; refreshYamlPreview(); });
+    enabledIn.addEventListener("change", () => { s.enabled = !!enabledIn.checked; refreshYamlPreview(); });
+    tmplSel.addEventListener("change", () => { s.template = tmplSel.value || ""; refreshYamlPreview(); });
+
+    function parseJsonOrEmpty(txt, label) {
+      const t = String(txt || "").trim();
+      if (!t) return null;
+      try { return JSON.parse(t); } catch (e) { throw new Error(`Invalid JSON for ${label}`); }
+    }
+
+    defaultsTa.addEventListener("input", () => {
+      try {
+        const v = parseJsonOrEmpty(defaultsTa.value, "defaults");
+        s.defaults = (v === null) ? {} : v;
+        refreshYamlPreview();
+      } catch (e) { /* ignore while typing */ }
+    });
+    whenTa.addEventListener("input", () => {
+      try {
+        const v = parseJsonOrEmpty(whenTa.value, "when");
+        if (v === null) delete s.when;
+        else s.when = v;
+        refreshYamlPreview();
+      } catch (e) { /* ignore while typing */ }
+    });
+
+    applyTmplBtn.addEventListener("click", () => {
+      const key = tmplSel.value;
+      if (!key) return;
+      const tpl = tmplMap && tmplMap[key] ? tmplMap[key] : null;
+      if (!tpl) return;
+      Object.keys(tpl).forEach((k) => {
+        if (k === "id") return;
+        s[k] = tpl[k];
+      });
+      // Refresh inputs from model
+      renderStepEditor(stepIndex);
+      refreshYamlPreview();
+    });
+
+    saveTmplBtn.addEventListener("click", () => {
+      const key = (s.template && String(s.template).trim()) || prompt("Template name?");
+      if (!key) return;
+      currentModel.wizard._ui = currentModel.wizard._ui || {};
+      currentModel.wizard._ui.templates = currentModel.wizard._ui.templates || {};
+      const tpl = {};
+      Object.keys(s).forEach((k) => {
+        if (k === "id") return;
+        if (k === "_ui") return;
+        tpl[k] = s[k];
+      });
+      currentModel.wizard._ui.templates[key] = tpl;
+      s.template = key;
+      renderStepEditor(stepIndex);
+      refreshYamlPreview();
+    });
 
     const actions = el("div", { class: "toolbar" });
     const upBtn = el("button", { class: "btn", text: "Up" });
@@ -1212,6 +1297,22 @@ async function renderWizardManager(content, notify) {
     detailPane.appendChild(mkRow("Display name", nameIn));
     detailPane.appendChild(mkRow("Description", descIn));
 
+    // defaults memory is stored under wizard._ui.defaults_memory
+    wiz._ui = wiz._ui || {};
+    if (!wiz._ui.defaults_memory) wiz._ui.defaults_memory = {};
+    const dmTa = el("textarea", { class: "textarea", text: JSON.stringify(wiz._ui.defaults_memory || {}, null, 2) });
+    detailPane.appendChild(el("div", { class: "subTitle", text: "Defaults memory (JSON)" }));
+    detailPane.appendChild(dmTa);
+    dmTa.addEventListener("input", () => {
+      try {
+        const t = String(dmTa.value || "").trim();
+        wiz._ui.defaults_memory = t ? JSON.parse(t) : {};
+        refreshYamlPreview();
+      } catch (e) {
+        // ignore while typing
+      }
+    });
+
     nameIn.addEventListener("input", () => { wiz.name = nameIn.value; refreshYamlPreview(); });
     descIn.addEventListener("input", () => { wiz.description = descIn.value; refreshYamlPreview(); });
 
@@ -1228,9 +1329,34 @@ async function renderWizardManager(content, notify) {
     stepsBox.appendChild(addBtn);
 
     (wiz.steps || []).forEach((s, idx) => {
-      const label = `${s.id || ("step_" + (idx + 1))} : ${s.type || "unknown"}`;
+      const label = `${s.id || ("step_" + (idx + 1))} : ${s.type || "unknown"}${(s.enabled === false) ? " [disabled]" : ""}`;
       const row = el("div", { class: "stepRow", text: label });
+      row.dataset.stepIndex = String(idx);
+      row.draggable = true;
       row.addEventListener("click", () => renderStepEditor(idx));
+
+      row.addEventListener("dragstart", (ev) => {
+        ev.dataTransfer.setData("text/plain", String(idx));
+        ev.dataTransfer.effectAllowed = "move";
+      });
+      row.addEventListener("dragover", (ev) => {
+        ev.preventDefault();
+        ev.dataTransfer.dropEffect = "move";
+      });
+      row.addEventListener("drop", (ev) => {
+        ev.preventDefault();
+        const from = parseInt(ev.dataTransfer.getData("text/plain") || "-1", 10);
+        const to = idx;
+        if (Number.isNaN(from) || from < 0 || from >= (wiz.steps || []).length) return;
+        if (from === to) return;
+        const arr = wiz.steps || [];
+        const [it] = arr.splice(from, 1);
+        arr.splice(to, 0, it);
+        renderDetail();
+        renderStepEditor(to);
+        refreshYamlPreview();
+      });
+
       stepsBox.appendChild(row);
     });
 
@@ -1246,6 +1372,9 @@ async function renderWizardManager(content, notify) {
     saveBtn.addEventListener("click", async () => {
       if (!currentName) return;
       try {
+        // Validate on server before saving (safe-save contract).
+        await API.sendJson("POST", "/api/wizards/validate", { model: currentModel });
+
         await API.sendJson("PUT", `/api/wizards/${encodeURIComponent(currentName)}`, { model: currentModel });
         notify(`Saved wizard: ${currentName}`);
         await loadList();

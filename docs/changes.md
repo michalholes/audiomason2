@@ -1,3 +1,10 @@
+## 2026-02-12T22:30:00+01:00
+
+-   web_interface: Add visual wizard configuration editor (drag reorder, enable toggle, templates, defaults memory) with server-side validation.
+-   web_interface: Add /api/wizards/validate safe-save endpoint and strict model validation.
+-   tests: Add unit coverage for wizard validation and backward-compatible parsing.
+-   spec: Document wizard visual configuration editor and bump specification version to 1.0.46.
+
 ## 2026-02-12T21:52:44+01:00
 
 -   web_interface: Add dedicated Import Wizard UI (author -> book guided flow) backed by import plugin services.

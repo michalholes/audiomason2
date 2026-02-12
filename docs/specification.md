@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.45
+Specification Version: 1.0.46
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -990,6 +990,36 @@ Wizard listing contract:
   - `step_count` (optional)
   - `display_name` (optional)
   - `description` (optional)
+
+
+### 9.2.1 Wizard Visual Configuration Editor
+
+The web interface MUST allow editing wizard definitions visually (no YAML editing required):
+
+- Reorder steps via drag & drop.
+- Enable/disable steps (`step.enabled: bool`, default true).
+- Edit per-step defaults (stored under `step.defaults` as a mapping).
+- Step templates and defaults-memory are stored under a single, explicit UI namespace:
+  - `wizard._ui.defaults_memory` (mapping)
+  - `wizard._ui.templates` (mapping: template_name -> step partial mapping)
+
+Rules:
+
+- Wizard YAML remains the single source of truth and is saved only via WizardService.
+- The UI MUST use the model-based API (`PUT /api/wizards/{name}` with `model`).
+- The backend MUST perform server-side validation before saving:
+  - Reject duplicate step ids.
+  - Reject non-mapping steps.
+  - Enforce JSON/YAML-like structures for `defaults` and `when`.
+
+Backend API additions:
+
+- `POST /api/wizards/validate` with body `{yaml?: str, model?: object}`.
+  - Returns `{ok: true, yaml: str, model: object}` on success.
+  - Returns HTTP 400 with error detail on invalid input.
+
+The editor may store future-facing condition data under `step.when` without requiring runtime support.
+
 
 ---
 
