@@ -456,6 +456,7 @@ The capability must provide, at minimum:
 - stat
 - exists
 - open_read (download streaming)
+- tail_bytes (download tail primitive)
 - open_write (upload streaming)
 - open_append (upload streaming append-only)
 - mkdir (parents supported)
@@ -471,6 +472,11 @@ Append rules:
 
 - Append is a byte-level primitive (callers provide bytes; no formatting).
 - The file I/O capability must not implement rotation, size limits, or flush policy.
+
+Tail rules:
+
+- tail_bytes is a byte-level primitive (callers interpret bytes; no decoding).
+- The file I/O capability must not implement follow, rotation, formatting, or line parsing.
 
 #### 7.4.3 Determinism Rules
 

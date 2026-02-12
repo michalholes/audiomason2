@@ -100,6 +100,39 @@ def test_copy_and_checksum(service: FileService) -> None:
         service.checksum(RootName.INBOX, "dir")
 
 
+def test_tail_bytes_returns_whole_file_when_shorter_than_max(service: FileService) -> None:
+    with service.open_write(RootName.INBOX, "x.bin") as f:
+        f.write(b"hello")
+    out = service.tail_bytes(RootName.INBOX, "x.bin", max_bytes=999)
+    assert out == b"hello"
+
+
+def test_tail_bytes_returns_last_n_bytes_when_longer(service: FileService) -> None:
+    with service.open_write(RootName.INBOX, "x.bin") as f:
+        f.write(b"0123456789")
+    out = service.tail_bytes(RootName.INBOX, "x.bin", max_bytes=4)
+    assert out == b"6789"
+
+
+def test_tail_bytes_raises_for_missing_file(service: FileService) -> None:
+    with pytest.raises(NotFoundError):
+        service.tail_bytes(RootName.INBOX, "missing.bin", max_bytes=10)
+
+
+def test_tail_bytes_raises_for_directory(service: FileService) -> None:
+    service.mkdir(RootName.INBOX, "d")
+    with pytest.raises(IsADirectoryError):
+        service.tail_bytes(RootName.INBOX, "d", max_bytes=10)
+
+
+@pytest.mark.parametrize("max_bytes", [0, -1])
+def test_tail_bytes_rejects_non_positive_max_bytes(service: FileService, max_bytes: int) -> None:
+    with service.open_write(RootName.INBOX, "x.bin") as f:
+        f.write(b"x")
+    with pytest.raises(ValueError):
+        service.tail_bytes(RootName.INBOX, "x.bin", max_bytes=max_bytes)
+
+
 def test_open_append_creates_parent_dir(tmp_path: Path) -> None:
     path = tmp_path / "newdir" / "log.bin"
     assert not (tmp_path / "newdir").exists()

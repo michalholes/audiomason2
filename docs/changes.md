@@ -1,3 +1,9 @@
+## 2026-02-12T18:00:00+01:00
+
+- file_io: Add tail_bytes (byte-level tail read) for UI diagnostics/system log viewers.
+- tests: Add unit coverage for tail_bytes.
+- spec: Document file_io tail_bytes operation.
+
 ## 2026-02-12T09:43:00+01:00
 
 - file_io: Add open_append (append-only upload streaming) for byte-level log appends.

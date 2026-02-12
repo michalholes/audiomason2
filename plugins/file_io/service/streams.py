@@ -10,7 +10,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import BinaryIO
 
-from .ops import AlreadyExistsError
+from .ops import AlreadyExistsError, IsADirectoryError, NotFoundError
 
 
 @contextmanager
@@ -43,3 +43,24 @@ def open_append(path: Path, *, mkdir_parents: bool = True) -> Iterator[BinaryIO]
 
     with open(path, "ab") as f:
         yield f
+
+
+def tail_bytes(path: Path, *, max_bytes: int) -> bytes:
+    """Return the last max_bytes bytes from a file.
+
+    This is a byte-level primitive (no decoding, no line parsing).
+    """
+    if max_bytes <= 0:
+        raise ValueError("max_bytes must be > 0")
+
+    if not path.exists():
+        raise NotFoundError(f"Not found: {path.name}")
+    if path.is_dir():
+        raise IsADirectoryError(f"Is a directory: {path.name}")
+
+    size = int(path.stat().st_size)
+    start = max(0, size - max_bytes)
+
+    with open(path, "rb") as f:
+        f.seek(start)
+        return f.read()

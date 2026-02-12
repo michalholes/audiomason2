@@ -25,6 +25,7 @@ from .ops import rmtree as op_rmtree
 from .ops import stat_path as op_stat
 from .paths import RootConfig, resolve_path
 from .streams import open_append, open_read, open_write
+from .streams import tail_bytes as stream_tail_bytes
 from .types import FileEntry, FileStat, RootName
 
 
@@ -158,6 +159,10 @@ class FileService:
         if algo != "sha256":
             raise ValueError("Only sha256 is supported")
         return checksums.sha256(abs_path)
+
+    def tail_bytes(self, root: RootName, rel_path: str, *, max_bytes: int) -> bytes:
+        abs_path = resolve_path(self._root(root).dir_path, rel_path)
+        return stream_tail_bytes(abs_path, max_bytes=max_bytes)
 
     @contextmanager
     def open_read(self, root: RootName, rel_path: str) -> Iterator[BinaryIO]:
