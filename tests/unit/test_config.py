@@ -1,5 +1,7 @@
 """Unit tests for core.config module."""
 
+from pathlib import Path
+
 import pytest
 
 from audiomason.core.config import ConfigResolver
@@ -324,3 +326,39 @@ magic:
 
         schema = resolver.get_key_schema("magic.foo")
         assert schema.unknown is True
+
+    def test_resolve_system_log_defaults(self, tmp_path):
+        resolver = ConfigResolver(
+            cli_args={},
+            user_config_path=tmp_path / "nonexistent.yaml",
+            system_config_path=tmp_path / "nonexistent_system.yaml",
+            defaults={},
+        )
+
+        assert resolver.resolve_system_log_enabled() is False
+        path = resolver.resolve_system_log_path()
+        assert isinstance(path, str)
+        assert path.strip() != ""
+        assert str(Path.home() / ".audiomason" / "system.log") == path
+
+    def test_resolve_system_log_enabled_type_validation(self, tmp_path):
+        resolver = ConfigResolver(
+            cli_args={},
+            user_config_path=tmp_path / "nonexistent.yaml",
+            system_config_path=tmp_path / "nonexistent_system.yaml",
+            defaults={"logging": {"system_log_enabled": "yes"}},
+        )
+
+        with pytest.raises(ConfigError):
+            resolver.resolve_system_log_enabled()
+
+    def test_resolve_system_log_path_validation(self, tmp_path):
+        resolver = ConfigResolver(
+            cli_args={},
+            user_config_path=tmp_path / "nonexistent.yaml",
+            system_config_path=tmp_path / "nonexistent_system.yaml",
+            defaults={"logging": {"system_log_path": "   "}},
+        )
+
+        with pytest.raises(ConfigError):
+            resolver.resolve_system_log_path()

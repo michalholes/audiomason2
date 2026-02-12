@@ -275,6 +275,24 @@ class ConfigResolver:
             sources={"level_name": src},
         )
 
+    def resolve_system_log_enabled(self) -> bool:
+        """Resolve and validate logging.system_log_enabled."""
+        key = "logging.system_log_enabled"
+        value, _src = self.resolve(key)
+        if not isinstance(value, bool):
+            raise ConfigError(f"Config key '{key}' must be a bool, got {type(value).__name__}")
+        return value
+
+    def resolve_system_log_path(self) -> str:
+        """Resolve and validate logging.system_log_path."""
+        key = "logging.system_log_path"
+        value, _src = self.resolve(key)
+        if not isinstance(value, str):
+            raise ConfigError(f"Config key '{key}' must be a string, got {type(value).__name__}")
+        if value.strip() == "":
+            raise ConfigError(f"Config key '{key}' must not be empty")
+        return value
+
     def _resolve_logging_level_source(self) -> ConfigSource:
         _level, src = self._resolve_logging_level_and_source()
         return src
@@ -537,6 +555,8 @@ class ConfigResolver:
                 "file": None,
                 "color": True,
                 "per_module": {},
+                "system_log_enabled": False,
+                "system_log_path": str(Path.home() / ".audiomason" / "system.log"),
             },
             # Pipeline
             "pipeline": "standard",

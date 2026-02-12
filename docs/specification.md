@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.37
+Specification Version: 1.0.38
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -276,6 +276,25 @@ Allowed values (after normalization):
 - `normal`
 - `verbose`
 - `debug`
+
+### 6.7.1 Human-Readable System Log File
+
+New keys:
+- `logging.system_log_enabled`
+  - type: bool
+  - default: false
+  - semantics: when true, the Core-provided logger also writes human-readable logs to a file.
+- `logging.system_log_path`
+  - type: string
+  - default: ~/.audiomason/system.log
+  - semantics: target file path for the human-readable system log.
+
+Failure semantics:
+- If `logging.system_log_enabled` is present and not a bool: resolver must raise ConfigError.
+- If `logging.system_log_path` is present and not a string, or is empty/whitespace: resolver must raise ConfigError.
+- If the path is valid but the process cannot create the directory or open the file at startup: the application must not crash.
+  File logging is disabled and a warning is emitted via the Core-provided logger.
+
 
 ---
 

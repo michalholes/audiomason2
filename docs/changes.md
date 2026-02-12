@@ -1,3 +1,10 @@
+## 2026-02-12T08:30:00+01:00
+
+- Issue 432: Add config keys logging.system_log_enabled and logging.system_log_path for human-readable system log file routing.
+- Issue 432: Apply system log file configuration in CLI bootstrap (fail-safe; never crash on file errors).
+- Issue 432: Add resolver unit tests for system log keys.
+- spec: Document system log keys and bump specification version to 1.0.38.
+
 ## 2026-02-11T20:45:00+01:00
 
 - plugins: Add diagnostics_console plugin providing `audiomason diag` (tail/status/on/off) for runtime diagnostics JSONL sink.

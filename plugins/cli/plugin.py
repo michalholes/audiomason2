@@ -35,7 +35,7 @@ from audiomason.core import (
 from audiomason.core.config_service import ConfigService
 from audiomason.core.errors import PluginError
 from audiomason.core.jobs.model import JobState, JobType
-from audiomason.core.logging import apply_logging_policy, get_logger
+from audiomason.core.logging import apply_logging_policy, get_logger, set_log_file
 from audiomason.core.orchestration import Orchestrator
 from audiomason.core.orchestration_models import ProcessRequest
 from audiomason.core.plugin_registry import PluginRegistry
@@ -268,6 +268,16 @@ class CLIPlugin:
         resolver = ConfigResolver(cli_args=cli_args)
         policy = resolver.resolve_logging_policy()
         apply_logging_policy(policy)
+
+        # Optional human-readable system log file (global).
+        try:
+            if resolver.resolve_system_log_enabled():
+                set_log_file(resolver.resolve_system_log_path())
+            else:
+                set_log_file(None)
+        except Exception as e:
+            set_log_file(None)
+            log.warning(f"Failed to configure system log file: {e}")
 
         # Always register diagnostics sink; it self-filters when disabled.
         from audiomason.core.diagnostics import install_jsonl_sink
