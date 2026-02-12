@@ -1,3 +1,14 @@
+## 2026-02-12T23:53:10+01:00
+
+-   import: Extend PHASE 0 import preflight to support mixed inbox layouts
+    (author/book directories, single-level book directories, and single-file
+    units for archives/audio) without modifying the inbox.
+-   import: Emit explicit skipped entries (with reason) and stable book_ref per
+    discovered unit.
+-   tests: Add unit coverage for mixed inbox discovery.
+-   spec: Document mixed inbox preflight behavior and bump specification version
+    to 1.0.48.
+
 ## 2026-02-12T22:42:28+01:00
 
 -   cli: Add AM1-like `audiomason import` command implemented as a plugin-provided CLI command (import_cli).

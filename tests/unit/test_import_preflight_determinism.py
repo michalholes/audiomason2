@@ -49,5 +49,8 @@ def test_preflight_is_deterministic(service: FileService) -> None:
     assert r1 == r2
     assert r1.authors == ["Author"]
     assert len(r1.books) == 1
+    assert r1.skipped == []
+    assert r1.books[0].book_ref.startswith("book_")
+    assert r1.books[0].unit_type == "dir"
     assert r1.books[0].fingerprint is not None
     assert r1.books[0].cover_candidates == ["source/Author/Book/cover.jpg"]

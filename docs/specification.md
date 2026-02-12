@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.47
+Specification Version: 1.0.48
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -868,7 +868,7 @@ The foundational infrastructure for Import Wizard MUST live in plugins/import/ a
 Required components:
 
 - session_store: Persist ImportRunState under the file_io JOBS root.
-- preflight: Deterministic read-only detection producing author/book list, cover candidates, rename preview map, and a basic book fingerprint.
+- preflight: Deterministic read-only detection producing a list of discovered book units (mixed inbox layout support), cover candidates, rename preview map, a stable book_ref per unit, explicit skipped entries (with reason), and a basic unit fingerprint.
 - processed_registry: Book-folder processed registry under the file_io JOBS root.
 
 Issue 403 extension (PHASE 2 processing engine):

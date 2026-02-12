@@ -56,6 +56,8 @@ def _make_book(tmp_inbox: Path, rel: str, *, content: bytes) -> None:
 
 def _make_preflight(rel: str) -> PreflightResult:
     b = BookPreflight(
+        book_ref="book_test",
+        unit_type="dir",
         author="A",
         book="B",
         rel_path=rel,
@@ -66,7 +68,7 @@ def _make_preflight(rel: str) -> PreflightResult:
         fingerprint=BookFingerprint(algo="sha256", value="x", strength="basic"),
         meta={"id3_majority": None},
     )
-    return PreflightResult(source_root_rel_path="", authors=["A"], books=[b])
+    return PreflightResult(source_root_rel_path="", authors=["A"], books=[b], skipped=[])
 
 
 def _hash_tree(path: Path) -> list[tuple[str, bytes]]:
