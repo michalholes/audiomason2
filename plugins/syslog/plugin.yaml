@@ -1,0 +1,14 @@
+name: syslog
+version: "1.0.0"
+description: "Persist Core LogBus records via file_io and provide syslog CLI."
+author: "AudioMason2"
+license: "MIT"
+entrypoint: "plugin:SyslogPlugin"
+interfaces:
+  - ICLICommands
+cli_commands:
+  - syslog
+hooks: []
+dependencies: {}
+config_schema: {}
+test_level: none

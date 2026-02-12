@@ -1,3 +1,8 @@
+## 2026-02-12T14:59:43+01:00
+
+-   syslog: Add syslog LogBus persistence plugin (file_io CONFIG root) with CLI (status/cat/tail).
+-   spec: Document syslog plugin configuration and behavior; bump specification version to 1.0.41.
+
 ## 2026-02-12T18:00:00+01:00
 
 -   file_io: Add tail_bytes (byte-level tail read) for UI

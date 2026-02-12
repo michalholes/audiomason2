@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.40
+Specification Version: 1.0.41
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -293,6 +293,63 @@ Persistence semantics:
 
 Diagnostics note:
 - LogBus is a log streaming mechanism only. It is NOT the authoritative runtime diagnostic emission entry point. Diagnostic lifecycle events remain exclusively emitted via the existing Core diagnostic entry point as specified elsewhere in this document and in the base project contract.
+
+---
+
+### 6.7.2 Syslog plugin
+
+The syslog plugin is a LogBus subscriber that persists Core log records to a
+file under the file_io CONFIG root. Core remains independent of this plugin.
+
+Behavior:
+- Subscribes to LogBus only when enabled.
+- Persists records via file_io (no direct filesystem access in the plugin).
+- Append-only file semantics.
+
+Configuration (preferred, plugin-scoped):
+- plugins.syslog.enabled: bool (default false)
+- plugins.syslog.filename: string (default "logs/system.log")
+- plugins.syslog.disk_format: string (default "jsonl"; allowed: jsonl, plain)
+- plugins.syslog.cli_default_command: string (default "tail"; allowed: tail, status, cat)
+- plugins.syslog.cli_default_follow: bool (default true)
+
+Legacy alias fallback (used only when plugins.syslog namespace is not present):
+- logging.system_log_enabled -> plugins.syslog.enabled
+- logging.system_log_filename -> plugins.syslog.filename
+- logging.system_log_format -> plugins.syslog.disk_format
+
+Priority:
+- If the plugins.syslog namespace exists, legacy aliases are ignored.
+- If disk_format is unknown, the plugin disables itself (enabled=false), emits a
+  warning, and emits a diagnostic FAIL event.
+
+Disk formats:
+- plain: append one human-readable line per record.
+- jsonl: append one JSON object per record (JSON Lines).
+
+JSONL schema (stable minimum):
+- level: string
+- logger: string
+- message: string
+- ts: string or null (only if provided by the record; do not synthesize time)
+
+Failure isolation:
+- Subscriber callbacks must catch all exceptions.
+- After 3 consecutive write failures, the plugin unsubscribes from LogBus, emits
+  one warning, emits a diagnostic FAIL event, and stops writing.
+
+CLI:
+- audiomason syslog: runs the configured default command (default tail).
+- Subcommands: status, cat, tail.
+- tail supports --lines N (default 50), --follow, --no-follow, and --raw.
+- tail follow mode must not print periodic waiting messages; it blocks silently.
+- Missing log file for cat/tail results in a human error message, non-zero exit
+  code, and a diagnostic FAIL event.
+
+Diagnostics:
+- The plugin must not publish to LogBus.
+- The plugin must emit lifecycle and CLI diagnostics via the authoritative Core
+  diagnostic entry point (START/END/FAIL), and this emission must be fail-safe.
 
 ---
 
