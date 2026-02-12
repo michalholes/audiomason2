@@ -1,3 +1,9 @@
+## 2026-02-12T21:52:44+01:00
+
+-   web_interface: Add dedicated Import Wizard UI (author -> book guided flow) backed by import plugin services.
+-   web_interface: Add import_wizard API endpoints (preflight/start/run_pending).
+-   spec: Document web import wizard UX and bump specification version to 1.0.45.
+
 ## 2026-02-12T19:10:00+01:00
 
 -   import: Add PHASE 2 import processing engine with persisted Jobs and CLI-safe service API.

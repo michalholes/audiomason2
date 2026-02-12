@@ -346,6 +346,246 @@ async function renderJobsLogViewer(content, notify) {
   return root;
 }
 
+
+async function renderImportWizard(content, notify) {
+  const root = el("div", { class: "importWizard" });
+
+  const row1 = el("div", { class: "row" });
+  const rootLbl = el("span", { class: "hint", text: "Root:" });
+  const rootSel = el("select");
+  const pathLbl = el("span", { class: "hint", text: "Path:" });
+  const pathInp = el("input", { type: "text", value: ".", style: "min-width:220px" });
+  const loadBtn = el("button", { class: "btn", text: "Load" });
+  const spinner = el("span", { class: "hint", text: "" });
+  row1.appendChild(rootLbl);
+  row1.appendChild(rootSel);
+  row1.appendChild(pathLbl);
+  row1.appendChild(pathInp);
+  row1.appendChild(loadBtn);
+  row1.appendChild(spinner);
+  root.appendChild(row1);
+
+  const grid = el("div", { class: "jobsGrid" });
+  const left = el("div", { class: "jobsCol" });
+  const mid = el("div", { class: "jobsCol" });
+  const right = el("div", { class: "jobsColWide" });
+  grid.appendChild(left);
+  grid.appendChild(mid);
+  grid.appendChild(right);
+  root.appendChild(grid);
+
+  left.appendChild(el("div", { class: "hint", text: "Authors" }));
+  const authorsBox = el("div");
+  left.appendChild(authorsBox);
+
+  mid.appendChild(el("div", { class: "hint", text: "Books" }));
+  const booksBox = el("div");
+  mid.appendChild(booksBox);
+
+  const actionsRow = el("div", { class: "row" });
+  const modeSel = el("select");
+  ["stage", "inplace", "hybrid"].forEach((m) => modeSel.appendChild(el("option", { value: m, text: m })));
+  const run1Btn = el("button", { class: "btn", text: "Run 1 pending" });
+  const run5Btn = el("button", { class: "btn", text: "Run 5 pending" });
+  actionsRow.appendChild(el("span", { class: "hint", text: "Mode:" }));
+  actionsRow.appendChild(modeSel);
+  actionsRow.appendChild(run1Btn);
+  actionsRow.appendChild(run5Btn);
+  right.appendChild(actionsRow);
+
+  const statusBox = el("div", { class: "hint", text: "No jobs started." });
+  const jobsTableWrap = el("div");
+  right.appendChild(statusBox);
+  right.appendChild(jobsTableWrap);
+
+  let preflight = null;
+  let selectedAuthor = "";
+  let jobIds = [];
+  let pollTimer = null;
+  let dotsTimer = null;
+
+  async function loadRoots() {
+    const data = await API.getJson("/api/roots");
+    const items = Array.isArray(data.items) ? data.items : [];
+    clear(rootSel);
+    items.forEach((it) => {
+      if (it && it.id) {
+        rootSel.appendChild(el("option", { value: it.id, text: it.label || it.id }));
+      }
+    });
+    if (!rootSel.value) rootSel.value = "inbox";
+    // Prefer Inbox if present.
+    const optInbox = Array.from(rootSel.options).find((o) => o.value === "inbox");
+    if (optInbox) rootSel.value = "inbox";
+  }
+
+  function setBusy(on) {
+    loadBtn.disabled = !!on;
+    rootSel.disabled = !!on;
+    pathInp.disabled = !!on;
+    if (dotsTimer) { clearInterval(dotsTimer); dotsTimer = null; }
+    if (!on) { spinner.textContent = ""; return; }
+    let n = 0;
+    dotsTimer = setInterval(() => {
+      n = (n + 1) % 4;
+      spinner.textContent = "Working" + ".".repeat(n);
+    }, 250);
+  }
+
+  function renderAuthors() {
+    clear(authorsBox);
+    const authors = preflight && Array.isArray(preflight.authors) ? preflight.authors : [];
+    if (!authors.length) {
+      authorsBox.appendChild(el("div", { class: "hint", text: "No authors found." }));
+      return;
+    }
+    authors.forEach((a) => {
+      const btn = el("button", { class: "btn", text: String(a) });
+      btn.style.width = "100%";
+      btn.addEventListener("click", () => {
+        selectedAuthor = String(a);
+        renderBooks();
+        // Auto-next: scroll books list into view.
+        try { booksBox.scrollIntoView({ block: "nearest" }); } catch {}
+      });
+      authorsBox.appendChild(btn);
+    });
+  }
+
+  function renderBooks() {
+    clear(booksBox);
+    const books = preflight && Array.isArray(preflight.books) ? preflight.books : [];
+    const filtered = selectedAuthor ? books.filter((b) => b && b.author === selectedAuthor) : [];
+    if (!selectedAuthor) {
+      booksBox.appendChild(el("div", { class: "hint", text: "Select an author." }));
+      return;
+    }
+    if (!filtered.length) {
+      booksBox.appendChild(el("div", { class: "hint", text: "No books found." }));
+      return;
+    }
+    filtered.forEach((b) => {
+      const title = (b && b.book) ? String(b.book) : (b && b.rel_path ? String(b.rel_path) : "(book)");
+      const btn = el("button", { class: "btn", text: title });
+      btn.style.width = "100%";
+      btn.addEventListener("click", async () => {
+        try {
+          setBusy(true);
+          statusBox.textContent = "Starting import...";
+          jobsTableWrap.textContent = "";
+          jobIds = [];
+          const body = {
+            root: rootSel.value,
+            path: pathInp.value,
+            book_rel_path: String(b.rel_path || ""),
+            mode: modeSel.value,
+          };
+          const r = await API.sendJson("POST", "/api/import_wizard/start", body);
+          jobIds = Array.isArray(r.job_ids) ? r.job_ids : [];
+          if (!jobIds.length) {
+            statusBox.textContent = "No jobs created.";
+          } else {
+            statusBox.textContent = `Jobs created: ${jobIds.join(", ")}`;
+            startPolling();
+          }
+        } catch (e) {
+          notify(String(e));
+          statusBox.textContent = String(e);
+        } finally {
+          setBusy(false);
+        }
+      });
+      booksBox.appendChild(btn);
+    });
+
+    // Auto-next: if there is only one book, start it immediately.
+    if (filtered.length === 1) {
+      try { filtered[0] && booksBox.querySelector("button") && booksBox.querySelector("button").click(); } catch {}
+    }
+  }
+
+  function renderJobsTable(items) {
+    const table = el("table", { class: "table" });
+    const thead = el("thead");
+    const trh = el("tr");
+    ["job_id", "state", "type", "error"].forEach((h) => trh.appendChild(el("th", { text: h })));
+    thead.appendChild(trh);
+    table.appendChild(thead);
+    const tbody = el("tbody");
+    (items || []).forEach((it) => {
+      const tr = el("tr");
+      tr.appendChild(el("td", { text: String(it.job_id || "") }));
+      tr.appendChild(el("td", { text: String(it.state || "") }));
+      tr.appendChild(el("td", { text: String(it.type || "") }));
+      tr.appendChild(el("td", { text: String(it.error || "") }));
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    clear(jobsTableWrap);
+    jobsTableWrap.appendChild(el("div", { class: "tableWrap" }, [table]));
+  }
+
+  async function pollOnce() {
+    if (!jobIds.length) return;
+    const items = [];
+    for (const id of jobIds) {
+      try {
+        const r = await API.getJson(`/api/jobs/${encodeURIComponent(id)}`);
+        const it = r && r.item ? r.item : {};
+        items.push({
+          job_id: it.job_id || id,
+          state: it.state || "",
+          type: it.type || "",
+          error: it.error || "",
+        });
+      } catch (e) {
+        items.push({ job_id: id, state: "(missing)", type: "", error: String(e) });
+      }
+    }
+    renderJobsTable(items);
+  }
+
+  function startPolling() {
+    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    void pollOnce();
+    pollTimer = setInterval(() => { void pollOnce(); }, 1000);
+  }
+
+  async function doRunPending(limit) {
+    try {
+      const r = await API.sendJson("POST", "/api/import_wizard/run_pending", { limit: limit });
+      const ran = r && Array.isArray(r.ran) ? r.ran : [];
+      if (ran.length) notify("Ran: " + ran.join(", "));
+      await pollOnce();
+    } catch (e) {
+      notify(String(e));
+    }
+  }
+
+  run1Btn.addEventListener("click", () => { void doRunPending(1); });
+  run5Btn.addEventListener("click", () => { void doRunPending(5); });
+
+  loadBtn.addEventListener("click", async () => {
+    try {
+      setBusy(true);
+      preflight = await API.getJson(`/api/import_wizard/preflight?root=${encodeURIComponent(rootSel.value)}&path=${encodeURIComponent(pathInp.value)}`);
+      selectedAuthor = "";
+      jobIds = [];
+      statusBox.textContent = "Preflight loaded. Select author.";
+      clear(jobsTableWrap);
+      renderAuthors();
+      renderBooks();
+    } catch (e) {
+      notify(String(e));
+    } finally {
+      setBusy(false);
+    }
+  });
+
+  await loadRoots();
+  return root;
+}
+
   
 async function renderPluginManager(content, notify) {
   const wrap = el("div");
@@ -1329,6 +1569,7 @@ async function renderContent(content, notify) {
     if (t === "root_browser") return await renderRootBrowser(content, notify);
     if (t === "am_config") return await renderAmConfig(content, notify);
     if (t === "jobs_log_viewer") return await renderJobsLogViewer(content, notify);
+    if (t === "import_wizard") return await renderImportWizard(content, notify);
     return el("div", { class: "hint", text: `Unsupported content type: ${t}` });
   }
 

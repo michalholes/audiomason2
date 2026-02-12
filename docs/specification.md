@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.44
+Specification Version: 1.0.45
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -993,7 +993,42 @@ Wizard listing contract:
 
 ---
 
-### 9.2 Web File Management API
+### 9.3 Web Import Wizard UX
+
+The web interface MUST expose a dedicated Import Wizard UX that mirrors the
+guided author -> book selection flow from AM1.
+
+Rules:
+
+- The web interface MUST NOT implement import logic.
+- All import detection and job creation MUST be delegated to the Import plugin
+  services (plugins/import/), which are the single source of truth.
+- The UX MUST be a simple guided flow:
+  - Select the source root/path.
+  - Select an author (auto-next to books).
+  - Select a book (auto-start).
+- The UI MUST show a minimal async indicator while API calls are running.
+
+Backend API contract:
+
+- Preflight listing:
+  - `GET /api/import_wizard/preflight?root=<root>&path=<rel_path>`
+  - Returns `authors[]` and `books[]` (each book includes `rel_path`).
+- Start import processing for a selected book:
+  - `POST /api/import_wizard/start` with JSON body:
+    - `root` (required)
+    - `path` (optional, default: ".")
+    - `book_rel_path` (required)
+    - `mode` (optional: stage|inplace|hybrid, default: stage)
+  - The backend MUST create persisted import Jobs via ImportEngineService.
+- Queue runner hook (optional, for web-triggered execution):
+  - `POST /api/import_wizard/run_pending` with JSON body `{ "limit": <n> }`.
+
+The UI MAY offer a manual "run pending" trigger using the endpoint above.
+
+---
+
+### 9.4 Web File Management API
 
 The web interface provides a UI surface for filesystem operations, but it MUST NOT implement filesystem logic itself.
 All filesystem operations MUST be delegated to the File I/O Capability (file_io plugin / FileService).

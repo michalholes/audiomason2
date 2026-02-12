@@ -11,6 +11,7 @@ from ..util.paths import debug_enabled, ui_overrides_path
 def _default_nav() -> list[dict[str, Any]]:
     return [
         {"title": "Dashboard", "route": "/", "page_id": "dashboard"},
+        {"title": "Import", "route": "/import", "page_id": "import_wizard"},
         {"title": "Config", "route": "/config", "page_id": "config"},
         {"title": "Plugins", "route": "/plugins", "page_id": "plugins"},
         {"title": "Stage", "route": "/stage", "page_id": "stage"},
@@ -45,6 +46,20 @@ def _default_pages() -> dict[str, dict[str, Any]]:
                         "title": "Run wizard here",
                         "content": {"type": "root_browser"},
                     },
+                ],
+            },
+        },
+        "import_wizard": {
+            "id": "import_wizard",
+            "title": "Import",
+            "layout": {
+                "type": "grid",
+                "children": [
+                    {
+                        "type": "card",
+                        "title": "Import wizard",
+                        "content": {"type": "import_wizard"},
+                    }
                 ],
             },
         },

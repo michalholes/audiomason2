@@ -7,6 +7,7 @@ from fastapi import FastAPI
 
 from .api.am_config import mount_am_config
 from .api.fs import mount_fs
+from .api.import_wizard import mount_import_wizard
 from .api.jobs import mount_jobs
 from .api.logs import mount_logs
 from .api.plugins_mgmt import mount_plugins_mgmt
@@ -66,6 +67,7 @@ class WebInterfacePlugin:
         mount_fs(app)
         mount_stage(app)
         mount_wizards(app)
+        mount_import_wizard(app)
         mount_logs(app)
         mount_jobs(app)
 
@@ -99,7 +101,9 @@ class WebInterfacePlugin:
                 "Missing dependency: uvicorn. Install in venv: pip install uvicorn"
             ) from e
         app = self.create_app(
-            config_resolver=config_resolver, plugin_loader=plugin_loader, verbosity=verbosity
+            config_resolver=config_resolver,
+            plugin_loader=plugin_loader,
+            verbosity=verbosity,
         )
         log_level, access_log = _uvicorn_log_settings(int(verbosity))
         if int(verbosity) <= 0:
@@ -129,7 +133,9 @@ class WebInterfacePlugin:
                 "Missing dependency: uvicorn. Install in venv: pip install uvicorn"
             ) from e
         app = self.create_app(
-            config_resolver=config_resolver, plugin_loader=plugin_loader, verbosity=verbosity
+            config_resolver=config_resolver,
+            plugin_loader=plugin_loader,
+            verbosity=verbosity,
         )
         log_level, access_log = _uvicorn_log_settings(int(verbosity))
         if int(verbosity) <= 0:
