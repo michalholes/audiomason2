@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.42
+Specification Version: 1.0.43
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -849,6 +849,29 @@ Async execution rules:
   a running loop).
 
 ---
+
+
+
+### 8.3 Import Wizard Foundation (Infrastructure Only)
+
+The Import Wizard is implemented as a WizardSystem-anchored workflow.
+
+Rules:
+
+- Wizard definition remains the single source of truth (WizardService / WizardEngine).
+- Import runtime state is a wizard-run scoped artifact keyed by wizard job id (run id).
+- PHASE 0 preflight is deterministic and read-only.
+- Processed tracking is performed by a book-folder registry (no inbox markers, no inbox writes).
+
+The foundational infrastructure for Import Wizard MUST live in plugins/import/ and MUST use file_io capability only.
+
+Required components:
+
+- session_store: Persist ImportRunState under the file_io JOBS root.
+- preflight: Deterministic read-only detection producing author/book list, cover candidates, rename preview map, and a basic book fingerprint.
+- processed_registry: Book-folder processed registry under the file_io JOBS root.
+
+Import foundation MAY include a "hybrid" mode in the data model only. Behavior is reserved.
 
 ## 9. Web Interface Rules
 

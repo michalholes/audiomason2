@@ -1,3 +1,9 @@
+## 2026-02-12T18:45:00+01:00
+
+-   import: Add import foundation infrastructure (run state store, deterministic preflight, processed registry) under plugins/import/.
+-   tests: Add unit coverage for import foundation persistence and determinism.
+-   spec: Document import wizard foundation and bump specification version to 1.0.43.
+
 ## 2026-02-12T18:32:21+01:00
 
 -   diagnostics_console: Fix diag --help/-h handling; add wait_status_repeat and --mode events|log|both.
