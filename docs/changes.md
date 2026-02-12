@@ -1,3 +1,9 @@
+## 2026-02-12T18:32:21+01:00
+
+-   diagnostics_console: Fix diag --help/-h handling; add wait_status_repeat and --mode events|log|both.
+-   tests: Add deterministic unit tests for diagnostics_console CLI.
+-   spec: Bump specification version to 1.0.42; document diagnostics console modes.
+
 ## 2026-02-12T14:59:43+01:00
 
 -   syslog: Add syslog LogBus persistence plugin (file_io CONFIG root) with CLI (status/cat/tail).

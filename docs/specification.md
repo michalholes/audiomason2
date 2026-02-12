@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.41
+Specification Version: 1.0.42
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -1100,11 +1100,17 @@ audiomason process book.m4a --no-diagnostics
 
 Diagnostics console (CLI plugin):
 
-- audiomason diag
-- audiomason diag tail [--max-events N] [--no-follow]
+- audiomason diag [--mode events|log|both]
+- audiomason diag tail [--max-events N] [--no-follow] [--mode events|log|both]
 - audiomason diag status
 - audiomason diag on
 - audiomason diag off
+
+Diagnostics console config:
+
+- diagnostics.console.wait_status_repeat: bool (default false)
+  - false: print waiting status once
+  - true: repeat waiting status periodically
 
 JSONL sink (mandatory):
 
