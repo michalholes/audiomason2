@@ -2,7 +2,7 @@
 
 # Patch Authoring Manual
 
-AUTHORITATIVE -- AudioMason2 Status: active Version: v2.34
+AUTHORITATIVE -- AudioMason2 Status: active Version: v2.35
 
 This manual defines what a chat must produce so that the user can run
 the patch successfully and close the issue.
@@ -26,13 +26,24 @@ Before generating any patch, the chat MUST have:
 1.  A valid ISSUE ID.
 2.  An authoritative workspace snapshot (full repository or all files
     that will be modified).
+3. Workspace Snapshot Format and Authority
 
-If any required input is missing, the chat MUST request the missing
-input and MUST NOT generate a patch.
+If a single `.zip` archive is provided and it contains the full repository tree, it MUST be treated as an authoritative workspace snapshot.
 
-Clarification: - "No prompts / no user input" applies to patch runtime
-behavior, not to requesting missing authoritative inputs before patch
-creation.
+No additional confirmation of authority MUST be requested from the user.
+
+The implementing agent MUST:
+- unzip the archive,
+- treat its contents as the current workspace state,
+- inspect the files before generating any patch.
+
+The physical form of the snapshot (compressed archive vs. pre-unzipped directory tree) MUST NOT affect its authority.
+
+Refusal to proceed solely on the basis that the snapshot is provided as a `.zip` archive constitutes a PRE-FLIGHT violation.
+
+4. If any required input is missing → STOP and request missing input.
+
+
 
 ------------------------------------------------------------------------
 

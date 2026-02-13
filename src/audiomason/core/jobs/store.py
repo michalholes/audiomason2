@@ -133,13 +133,11 @@ class JobStore:
                 data["prev_state"] = prev_state.value
             _emit_diag("jobs.update_state", operation="jobs.update_state", data=data)
             _LOGGER.info(
-
-                    f"job state updated: "
-                    f"job_id={job.job_id} "
-                    f"type={job.type.value} "
-                    f"state={job.state.value} "
-                    f"progress={job.progress:.3f}"
-
+                f"job state updated: "
+                f"job_id={job.job_id} "
+                f"type={job.type.value} "
+                f"state={job.state.value} "
+                f"progress={job.progress:.3f}"
             )
 
         # Failure reason emission (best-effort, based on persisted fields).
@@ -173,13 +171,11 @@ class JobStore:
             }
             _emit_diag("jobs.fail", operation="jobs.fail", data=data)
             _LOGGER.error(
-
-                    f"job failed: "
-                    f"job_id={job.job_id} "
-                    f"type={job.type.value} "
-                    f"error_type={err_type} "
-                    f"error_message={data['error_message']}"
-
+                f"job failed: "
+                f"job_id={job.job_id} "
+                f"type={job.type.value} "
+                f"error_type={err_type} "
+                f"error_message={data['error_message']}"
             )
 
     def load_job(self, job_id: str) -> Job:

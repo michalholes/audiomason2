@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.53
+Specification Version: 1.0.54
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -198,6 +198,29 @@ Each job has at minimum:
 - Storage backend is abstracted and replaceable.
 - Loss of job state after restart is unacceptable.
 
+### 5.4 Job Observability (Mandatory)
+
+Jobs MUST emit lifecycle diagnostics through the authoritative EventBus.
+
+Minimum events:
+
+- operation.start / operation.end with operation one of: jobs.create, jobs.get, jobs.list, jobs.update_state
+- jobs.create, jobs.get, jobs.list
+- jobs.update_state on state or progress changes
+- jobs.fail when a job fails, including error_type, error_message, and a shortened traceback if available
+
+Events MUST include at minimum:
+- job_id
+- job_type
+- state
+- progress (when available)
+- status
+- duration_ms (for operation.* events)
+
+- Jobs must be persisted.
+- Storage backend is abstracted and replaceable.
+- Loss of job state after restart is unacceptable.
+
 ---
 
 ## 6. Configuration System
@@ -298,60 +321,22 @@ Diagnostics note:
 
 ### 6.7.2 Syslog plugin
 
-The syslog plugin is a LogBus subscriber that persists Core log records to a
-file under the file_io CONFIG root. Core remains independent of this plugin.
+The syslog plugin is a LogBus subscriber that persists Core log records to a file under the file_io STAGE root. Core remains independent of this plugin.
 
 Behavior:
 - Subscribes to LogBus only when enabled.
 - Persists records via file_io (no direct filesystem access in the plugin).
 - Append-only file semantics.
 
-Configuration (preferred, plugin-scoped):
-- plugins.syslog.enabled: bool (default false)
-- plugins.syslog.filename: string (default "logs/system.log")
-- plugins.syslog.disk_format: string (default "jsonl"; allowed: jsonl, plain)
-- plugins.syslog.cli_default_command: string (default "tail"; allowed: tail, status, cat)
-- plugins.syslog.cli_default_follow: bool (default true)
+Configuration (single source of truth):
+- logging.system_log_enabled: bool (default false)
+- logging.system_log_path: string (path under STAGE root)
 
-Legacy alias fallback (used only when plugins.syslog namespace is not present):
-- logging.system_log_enabled -> plugins.syslog.enabled
-- logging.system_log_filename -> plugins.syslog.filename
-- logging.system_log_format -> plugins.syslog.disk_format
+The plugin MUST validate that logging.system_log_path resolves under the file_io STAGE root and fail with a clear error if the path is invalid.
 
-Priority:
-- If the plugins.syslog namespace exists, legacy aliases are ignored.
-- If disk_format is unknown, the plugin disables itself (enabled=false), emits a
-  warning, and emits a diagnostic FAIL event.
+Deprecated:
+- plugins.syslog.filename (must not be used anymore)
 
-Disk formats:
-- plain: append one human-readable line per record.
-- jsonl: append one JSON object per record (JSON Lines).
-
-JSONL schema (stable minimum):
-- level: string
-- logger: string
-- message: string
-- ts: string or null (only if provided by the record; do not synthesize time)
-
-Failure isolation:
-- Subscriber callbacks must catch all exceptions.
-- After 3 consecutive write failures, the plugin unsubscribes from LogBus, emits
-  one warning, emits a diagnostic FAIL event, and stops writing.
-
-CLI:
-- audiomason syslog: runs the configured default command (default tail).
-- Subcommands: status, cat, tail.
-- tail supports --lines N (default 50), --follow, --no-follow, and --raw.
-- tail follow mode must not print periodic waiting messages; it blocks silently.
-- Missing log file for cat/tail results in a human error message, non-zero exit
-  code, and a diagnostic FAIL event.
-
-Diagnostics:
-- The plugin must not publish to LogBus.
-- The plugin must emit lifecycle and CLI diagnostics via the authoritative Core
-  diagnostic entry point (START/END/FAIL), and this emission must be fail-safe.
-
----
 
 ### 6.8 ConfigService Mutation Primitives
 
@@ -929,11 +914,16 @@ The web UI must be replaceable without touching core logic.
 The web interface exposes a debug bundle download endpoint for support workflows.
 
 - GET /api/debug/bundle
-  - Query params: logs_tail_lines (default 2000), jobs_n (default 50)
+  - Query params: logs_tail_lines (default 2000)
   - Returns: application/zip
-  - The response sets a stable attachment filename prefix: audiomason_debug_bundle_<timestamp>.zip
+  - The response uses a stable attachment filename: audiomason_debug_bundle.zip
+  - The zip contains stable filenames; timestamps appear only in manifest.json
 
-The Import page includes a "Download debug info" action that downloads this bundle.
+The bundle MUST be deterministic:
+- No timestamped filenames inside the archive
+- Stable internal paths across invocations
+- Runtime timestamps allowed only inside manifest.json
+
 
 ### 9.0 Web server shutdown output (CLI contract)
 

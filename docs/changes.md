@@ -1,3 +1,15 @@
+## 2026-02-13T12:30:00+01:00
+
+-   syslog: Persist system log to logging.system_log_path under file_io STAGE root; enforce STAGE root validation and clear errors for invalid paths.
+-   web_interface: Make /api/debug/bundle zip contents deterministic (stable internal paths; timestamps only in manifest.json).
+-   web_interface: Add API snapshot files (status/roots/wizards/jobs) to debug bundle.
+-   spec: Document syslog single source of truth and deterministic debug bundle contract; bump specification version to 1.0.54.
+
+## 2026-02-13T12:20:00+01:00
+
+-   core.jobs: Emit job lifecycle diagnostics events (create/get/list, state changes, failure reasons).
+-   spec: Document mandatory job observability events; bump specification version to 1.0.54.
+
 ## 2026-02-13T12:15:00+01:00
 
 -   Issue 701: file_io: Emit operation.start/operation.end runtime diagnostics (diagnostics.jsonl) and Core logger summaries for file operations, including resolver decisions (resolved_path), counts, delete status, and short tracebacks on failures.
