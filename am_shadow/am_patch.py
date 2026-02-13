@@ -41,7 +41,11 @@ def _bootstrap_venv_policy(argv: list[str]) -> tuple[str, str]:
 
     # CLI-only config selection for bootstrap.
     cfg_arg = _bootstrap_get_arg(argv, "--config")
-    cfg_path = Path(cfg_arg) if cfg_arg else (_REPO_ROOT / "scripts" / "am_patch" / "am_patch.toml")
+    cfg_path = (
+        Path(cfg_arg)
+        if cfg_arg
+        else (_REPO_ROOT / "am_shadow" / "am_patch" / "am_patch.toml")
+    )
     if cfg_path and not cfg_path.is_absolute():
         cfg_path = _REPO_ROOT / cfg_path
 
@@ -107,9 +111,6 @@ def _maybe_bootstrap_venv(argv: list[str]) -> None:
 
 _maybe_bootstrap_venv(sys.argv)
 _REPO_ROOT = Path(__file__).resolve().parents[1]
-_SCRIPTS_DIR = _REPO_ROOT / "scripts"
-if str(_SCRIPTS_DIR) not in sys.path:
-    sys.path.insert(0, str(_SCRIPTS_DIR))
 
 from am_patch import git_ops
 from am_patch.archive import archive_patch, make_failure_zip

@@ -83,7 +83,7 @@ Never hide errors.
 The chat must produce a patch zip that:
 
 Canonical invocation (workspace mode):
-- `python3 scripts/am_patch.py ISSUE_ID "message" [PATCH]`
+- `python3 am_shadow/am_patch.py ISSUE_ID "message" [PATCH]`
 The chat must under the download link publish in code box command for invocation.
  
 Notes:

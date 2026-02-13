@@ -147,9 +147,9 @@ allow_non_main = false
 
 
 # Gate targets
-ruff_targets = ["src", "plugins", "scripts", "tests"]
+ruff_targets = ["src", "plugins", "tests"]
 pytest_targets = ["tests"]
-mypy_targets = ["src", "plugins", "scripts"]
+mypy_targets = ["src", "plugins"]
 
 
 [audit]

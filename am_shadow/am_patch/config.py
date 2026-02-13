@@ -10,21 +10,21 @@ from typing import Any
 from .errors import RunnerError
 
 
-def default_config_path(scripts_dir: Path) -> Path:
+def default_config_path(shadow_dir: Path) -> Path:
     """Return the default config path (repo-relative, deterministic)."""
-    return scripts_dir / "am_patch" / "am_patch.toml"
+    return shadow_dir / "am_patch" / "am_patch.toml"
 
 
-def resolve_config_path(cli_config: str | None, repo_root: Path, scripts_dir: Path) -> Path:
+def resolve_config_path(cli_config: str | None, repo_root: Path, shadow_dir: Path) -> Path:
     """Resolve config path.
 
     - If cli_config is provided, use it (relative paths are resolved against repo_root).
-    - Otherwise use the default config path under scripts/.
+    - Otherwise use the default config path under am_shadow/.
     """
     if cli_config:
         p = Path(cli_config)
         return p if p.is_absolute() else (repo_root / p)
-    return default_config_path(scripts_dir)
+    return default_config_path(shadow_dir)
 
 
 @dataclass

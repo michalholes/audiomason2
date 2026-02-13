@@ -35,7 +35,11 @@ def test_subscribe_all_receives_events() -> None:
 def test_disabled_does_not_create_jsonl(tmp_path: Path) -> None:
     _reset_bus_and_sink()
 
-    resolver = ConfigResolver(cli_args={"stage_dir": str(tmp_path)})
+    resolver = ConfigResolver(
+        cli_args={"stage_dir": str(tmp_path)},
+        user_config_path=tmp_path / "user_config.yaml",
+        system_config_path=tmp_path / "system_config.yaml",
+    )
     install_jsonl_sink(resolver=resolver)
 
     get_event_bus().publish("evt", {"k": "v"})

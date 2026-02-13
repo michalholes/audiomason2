@@ -183,7 +183,7 @@ Workspace cleanup:
 ## 3. Configuration System
 
 ### 3.1 Config file
-- Path: `scripts/am_patch/am_patch.toml`
+- Path: `am_shadow/am_patch/am_patch.toml`
 - Loaded on every run.
 - Source of each effective value is logged.
 

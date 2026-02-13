@@ -129,7 +129,7 @@ Options:
 
   --config PATH
       Use PATH as config file (CLI only; not a config key).
-      [default: scripts/am_patch/am_patch.toml]
+      [default: am_shadow/am_patch/am_patch.toml]
 
   -q, -v, -n, -d, --verbosity {{debug, verbose, normal, quiet}}
       Control screen output amount. [default: verbose]
@@ -191,7 +191,7 @@ CORE / INFO
   --config PATH
       Use PATH as config file (CLI only; not a config key).
       Relative paths are resolved against repo root.
-      [default: scripts/am_patch/am_patch.toml]
+      [default: am_shadow/am_patch/am_patch.toml]
 
   --version
       Print runner version and exit.
