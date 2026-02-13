@@ -126,6 +126,11 @@ from am_patch.config import (
 from am_patch.console import stdout_color_enabled, wrap_green, wrap_red, wrap_yellow
 from am_patch.errors import RunnerError, fingerprint
 from am_patch.gates import run_badguys, run_gates
+from am_patch.issue_diff import (
+    collect_issue_logs,
+    derive_finalize_pseudo_issue_id,
+    make_issue_diff_zip,
+)
 from am_patch.lock import FileLock
 from am_patch.log import Logger, new_log_file
 from am_patch.manifest import load_files
@@ -692,6 +697,8 @@ def main(argv: list[str]) -> int:
     applied_ok_count: int = 0
     rollback_ckpt_for_posthook = None
     rollback_ws_for_posthook = None
+    issue_diff_base_sha: str | None = None
+    issue_diff_paths: list[str] = []
 
     delete_workspace_after_archive: bool = False
     ws_for_posthook = None
@@ -797,6 +804,10 @@ def main(argv: list[str]) -> int:
             logger.line(f"changed_all={changed_all}")
             logger.line(f"ignored_paths={ignored}")
             logger.line(f"files_to_promote={promote_list}")
+
+            issue_diff_base_sha = ws.base_sha
+            issue_diff_paths = list(promote_list)
+
             if not promote_list:
                 raise RunnerError("PREFLIGHT", "WORKSPACE", "no promotable workspace changes")
 
@@ -900,7 +911,9 @@ def main(argv: list[str]) -> int:
             if policy.enforce_main_branch and not policy.allow_non_main:
                 git_ops.require_branch(logger, repo_root, policy.default_branch)
 
+            issue_diff_base_sha = git_ops.head_sha(logger, repo_root)
             decision_paths_finalize = changed_paths(logger, repo_root)
+            issue_diff_paths = list(decision_paths_finalize)
 
             run_gates(
                 logger,
@@ -928,6 +941,9 @@ def main(argv: list[str]) -> int:
                 decision_paths=decision_paths_finalize,
                 progress=_gate_progress,
             )
+
+            changed_after_finalize_gates = changed_paths(logger, repo_root)
+            issue_diff_paths = sorted(set(issue_diff_paths) | set(changed_after_finalize_gates))
 
             _maybe_run_badguys(cwd=repo_root, decision_paths=decision_paths_finalize)
 
@@ -1646,6 +1662,34 @@ def main(argv: list[str]) -> int:
                         name = f"{name}.zip"
                     zip_path = paths.patch_dir / name
                     git_ops.git_archive(logger, repo_root, zip_path, treeish="HEAD")
+
+                    if issue_diff_base_sha is None:
+                        raise RunnerError("POSTHOOK", "DIFF", "missing issue_diff_base_sha")
+
+                    if cli.issue_id is not None:
+                        issue_diff_bundle_issue_id = cli.issue_id
+                        issue_diff_bundle_logs = collect_issue_logs(
+                            logs_dir=paths.logs_dir,
+                            issue_id=cli.issue_id,
+                            issue_template=policy.log_template_issue,
+                        )
+                    else:
+                        issue_diff_bundle_issue_id = derive_finalize_pseudo_issue_id(
+                            log_path=log_path,
+                            finalize_template=policy.log_template_finalize,
+                        )
+                        issue_diff_bundle_logs = [log_path]
+
+                    make_issue_diff_zip(
+                        logger=logger,
+                        repo_root=repo_root,
+                        artifacts_dir=paths.artifacts_dir,
+                        logs_dir=paths.logs_dir,
+                        base_sha=issue_diff_base_sha,
+                        issue_id=issue_diff_bundle_issue_id,
+                        files_to_promote=issue_diff_paths,
+                        log_paths=issue_diff_bundle_logs,
+                    )
                 else:
                     # Failure: create diagnostics archive with log + subset of repo files.
                     zip_path = paths.patch_dir / policy.failure_zip_name

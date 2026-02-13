@@ -34,21 +34,32 @@ def _fsync_dir(path: Path) -> None:
         os.close(fd)
 
 
+def pick_versioned_dest(dest: Path) -> Path:
+    """Return a non-existing path by adding _vN suffix when needed.
+
+    Contract:
+    - If dest does not exist, return dest.
+    - If it exists, return dest with suffix _v2, _v3, ... (first available).
+    """
+    if not dest.exists():
+        return dest
+
+    stem = dest.stem
+    suf = dest.suffix
+    i = 2
+    while True:
+        cand = dest.with_name(f"{stem}_v{i}{suf}")
+        if not cand.exists():
+            return cand
+        i += 1
+
+
 def archive_patch(logger: Logger, patch_script: Path, dest_dir: Path) -> Path:
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest = dest_dir / patch_script.name
 
     # If exists, add suffix
-    if dest.exists():
-        stem = dest.stem
-        suf = dest.suffix
-        i = 2
-        while True:
-            cand = dest_dir / f"{stem}_v{i}{suf}"
-            if not cand.exists():
-                dest = cand
-                break
-            i += 1
+    dest = pick_versioned_dest(dest)
 
     # dest_dir is patches/successful or patches/unsuccessful; its parent is canonical patches/
     try:

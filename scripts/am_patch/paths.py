@@ -12,6 +12,7 @@ class Paths:
     workspaces_dir: Path
     successful_dir: Path
     unsuccessful_dir: Path
+    artifacts_dir: Path
     lock_path: Path
     symlink_path: Path
 
@@ -23,6 +24,7 @@ def ensure_dirs(paths: Paths) -> None:
         paths.workspaces_dir,
         paths.successful_dir,
         paths.unsuccessful_dir,
+        paths.artifacts_dir,
     ]:
         d.mkdir(parents=True, exist_ok=True)
 
@@ -42,6 +44,7 @@ def default_paths(
     workspaces_dir = patch_dir / workspaces_dir_name
     successful_dir = patch_dir / successful_dir_name
     unsuccessful_dir = patch_dir / unsuccessful_dir_name
+    artifacts_dir = patch_dir / "artifacts"
     lock_path = patch_dir / lockfile_name
     symlink_path = patch_dir / current_log_symlink_name
     return Paths(
@@ -51,6 +54,7 @@ def default_paths(
         workspaces_dir=workspaces_dir,
         successful_dir=successful_dir,
         unsuccessful_dir=unsuccessful_dir,
+        artifacts_dir=artifacts_dir,
         lock_path=lock_path,
         symlink_path=symlink_path,
     )

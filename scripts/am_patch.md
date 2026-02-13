@@ -300,6 +300,25 @@ creates a git-archive success zip in `patches/`. The filename is configurable vi
 `success_archive_name` / `--success-archive-name` (default `{repo}-{branch}.zip`, e.g. `audiomason2-main.zip`).
 It contains only git-tracked files and does not include logs, workspaces, caches, or patch inputs.
 
+---
+
+## Issue diff bundle (SUCCESS: per-file unified diffs + logs)
+
+On SUCCESS (in `workspace`, `finalize`, and `finalize_workspace` modes; excluding `--test-mode`), the runner also creates an issue diff bundle zip under `patches/artifacts/`.
+
+Naming:
+- `issue_<ISSUE>_diff.zip`
+- If a file already exists, the runner creates `issue_<ISSUE>_diff_v2.zip`, `issue_<ISSUE>_diff_v3.zip`, etc.
+- In `finalize` mode (no issue id), the runner uses a pseudo issue id derived from the finalize log filename: `FINALIZE_<ts>`.
+
+Contents:
+- `manifest.txt` (issue id, base sha, files list, diff entries list, logs list)
+- `diff/` (per-file unified diffs: `diff/<repo-path>.patch`)
+- `logs/` (all logs for the issue id; for `finalize`, only the current finalize log)
+
+Diff scope rules:
+- In workspace modes, the diff set is limited to `files_to_promote` (the promotion plan), and it includes any gate modifications of those files (for example ruff autofix/format).
+- In `finalize`, the diff set is limited to the union of decision paths before gates and changed paths after gates (so ruff changes are included without pulling in unrelated tracked files).
 
 
 - --gate-badguys-runner {auto,on,off}: runner-only badguys gate (default auto)

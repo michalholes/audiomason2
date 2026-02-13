@@ -59,6 +59,20 @@ def file_diff_since(logger: Logger, repo: Path, base_sha: str, paths: list[str])
     return [line.strip() for line in (r.stdout or "").splitlines() if line.strip()]
 
 
+def unified_diff_since(logger: Logger, repo: Path, base_sha: str, rel_path: str) -> str:
+    """Return unified diff (git apply format) for a single repo-relative path.
+
+    Returns an empty string when there is no diff.
+    """
+    r = logger.run_logged(
+        ["git", "diff", "--no-color", f"{base_sha}..HEAD", "--", rel_path],
+        cwd=repo,
+    )
+    if r.returncode != 0:
+        raise RunnerError("PROMOTION", "GIT", f"git diff failed (rc={r.returncode})")
+    return r.stdout or ""
+
+
 def commit(logger: Logger, repo: Path, message: str, *, stage_all: bool = True) -> str:
     if stage_all:
         r1 = logger.run_logged(["git", "status", "--porcelain"], cwd=repo)
