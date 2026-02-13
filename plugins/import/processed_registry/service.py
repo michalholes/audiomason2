@@ -2,6 +2,9 @@
 
 Storage is performed via file_io capability (FileService) under the JOBS root.
 
+The registry stores stable book identity keys. For Import Wizard integration,
+the identity key is the book fingerprint key (algo:value).
+
 ASCII-only.
 """
 
@@ -21,6 +24,15 @@ _BASE_DIR = "import/processed_registry"
 _REGISTRY_PATH = f"{_BASE_DIR}/registry.json"
 
 
+def fingerprint_key(*, algo: str, value: str) -> str:
+    """Return the canonical identity key for a fingerprint."""
+    algo = str(algo or "").strip()
+    value = str(value or "").strip()
+    if not algo:
+        algo = "unknown"
+    return f"{algo}:{value}" if value else f"{algo}:"
+
+
 def _emit_diag(event: str, *, operation: str, data: dict[str, Any]) -> None:
     try:
         env = build_envelope(
@@ -35,52 +47,55 @@ def _emit_diag(event: str, *, operation: str, data: dict[str, Any]) -> None:
 
 
 class ProcessedRegistry:
-    """Book-folder processed registry."""
+    """Processed registry keyed by stable book identity."""
 
     def __init__(self, fs: FileService) -> None:
         self._fs = fs
         if not self._fs.exists(RootName.JOBS, _BASE_DIR):
             self._fs.mkdir(RootName.JOBS, _BASE_DIR, parents=True, exist_ok=True)
 
-    def is_processed(self, book_rel_path: str) -> bool:
-        _emit_diag(
-            "boundary.start", operation="is_processed", data={"book_rel_path": book_rel_path}
-        )
+    def is_processed(self, identity_key: str) -> bool:
+        _emit_diag("boundary.start", operation="is_processed", data={"identity_key": identity_key})
         data = self._load()
-        res = book_rel_path in data
+        res = identity_key in data
         _emit_diag(
             "boundary.end",
             operation="is_processed",
-            data={"book_rel_path": book_rel_path, "status": "succeeded"},
+            data={"identity_key": identity_key, "status": "succeeded"},
         )
         return res
 
-    def mark_processed(self, book_rel_path: str) -> None:
+    def mark_processed(self, identity_key: str) -> None:
         _emit_diag(
-            "boundary.start", operation="mark_processed", data={"book_rel_path": book_rel_path}
+            "boundary.start", operation="mark_processed", data={"identity_key": identity_key}
         )
         data = self._load()
-        data.add(book_rel_path)
+        data.add(identity_key)
         self._store(data)
         _emit_diag(
             "boundary.end",
             operation="mark_processed",
-            data={"book_rel_path": book_rel_path, "status": "succeeded"},
+            data={"identity_key": identity_key, "status": "succeeded"},
         )
 
-    def unmark_processed(self, book_rel_path: str) -> None:
+    def unmark_processed(self, identity_key: str) -> None:
         _emit_diag(
-            "boundary.start", operation="unmark_processed", data={"book_rel_path": book_rel_path}
+            "boundary.start", operation="unmark_processed", data={"identity_key": identity_key}
         )
         data = self._load()
-        if book_rel_path in data:
-            data.remove(book_rel_path)
+        if identity_key in data:
+            data.remove(identity_key)
             self._store(data)
         _emit_diag(
             "boundary.end",
             operation="unmark_processed",
-            data={"book_rel_path": book_rel_path, "status": "succeeded"},
+            data={"identity_key": identity_key, "status": "succeeded"},
         )
+
+    def list_processed(self) -> list[str]:
+        """Return sorted list of processed identity keys."""
+        data = self._load()
+        return sorted(data)
 
     def stats(self) -> ProcessedRegistryStats:
         data = self._load()

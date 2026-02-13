@@ -1,3 +1,9 @@
+## 2026-02-13T22:45:00+01:00
+
+-   Issue 502: import_wizard: Add processed registry integration keyed by book fingerprint (algo:value).
+-   Issue 502: import: Mark processed only on successful PHASE 2 completion and support unmark.
+-   Issue 502: web_interface: Gray-out processed books, disable Start, and add Unmark action in Import Wizard UI.
+
 ## 2026-02-13T21:15:00+01:00
 
 -   import_wizard: Deep enrichment now includes deterministic ID3 majority vote, APIC cover markers, stronger fingerprints, and deterministic rename preview ordering.

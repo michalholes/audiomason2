@@ -554,11 +554,25 @@ async function renderImportWizard(content, notify) {
       booksBox.appendChild(el("div", { class: "hint", text: "No books found." }));
       return;
     }
+
     filtered.forEach((b) => {
       const title = (b && b.book) ? String(b.book) : (b && b.rel_path ? String(b.rel_path) : "(book)");
+      const relPath = String((b && b.rel_path) ? b.rel_path : "");
+      const key = fpKeyForBook(b);
+      const isProcessed = !!(key && processedKeys && processedKeys.has(key));
+
+      const row = el("div", { class: "row", style: "gap:8px;align-items:center" });
       const btn = el("button", { class: "btn", text: title });
+      btn.style.flex = "1";
       btn.style.width = "100%";
+      if (isProcessed) {
+        btn.disabled = true;
+        btn.style.opacity = "0.55";
+        btn.title = "Already processed.";
+      }
+
       btn.addEventListener("click", async () => {
+        if (isProcessed) return;
         try {
           setBusy(true);
           statusBox.textContent = "Starting import...";
@@ -567,7 +581,7 @@ async function renderImportWizard(content, notify) {
           const body = {
             root: rootSel.value,
             path: pathInp.value,
-            book_rel_path: String(b.rel_path || ""),
+            book_rel_path: relPath,
             mode: modeSel.value,
           };
           const r = await API.sendJson("POST", "/api/import_wizard/start", body);
@@ -585,12 +599,40 @@ async function renderImportWizard(content, notify) {
           setBusy(false);
         }
       });
-      booksBox.appendChild(btn);
+
+      row.appendChild(btn);
+
+      if (isProcessed) {
+        const unmarkBtn = el("button", { class: "btn danger", text: "Unmark" });
+        unmarkBtn.addEventListener("click", async (ev) => {
+          try { ev && ev.preventDefault && ev.preventDefault(); } catch {}
+          try {
+            if (!key) throw new Error("Missing fingerprint key.");
+            await API.sendJson("POST", "/api/import_wizard/unmark_processed", { key: key });
+            await loadProcessedRegistry();
+            renderBooks();
+            statusBox.textContent = "Unmarked. You can start again.";
+          } catch (e) {
+            notify(String(e));
+          }
+        });
+        row.appendChild(unmarkBtn);
+      }
+
+      booksBox.appendChild(row);
     });
 
-    // Auto-next: if there is only one book, start it immediately.
-    if (filtered.length === 1) {
-      try { filtered[0] && booksBox.querySelector("button") && booksBox.querySelector("button").click(); } catch {}
+    // Auto-next: if there is only one unprocessed book, start it immediately.
+    const unprocessed = filtered.filter((b) => {
+      const k = fpKeyForBook(b);
+      return !(k && processedKeys && processedKeys.has(k));
+    });
+    if (unprocessed.length === 1) {
+      try {
+        const buttons = booksBox.querySelectorAll("button");
+        // first button in the row is the start button
+        if (buttons && buttons[0]) buttons[0].click();
+      } catch {}
     }
   }
 

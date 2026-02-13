@@ -7,6 +7,7 @@ ASCII-only.
 
 from __future__ import annotations
 
+import hashlib
 from datetime import UTC, datetime
 from typing import Any
 
@@ -17,7 +18,7 @@ from audiomason.core.jobs.model import JobState
 from plugins.file_io.service.service import FileService
 from plugins.file_io.service.types import RootName
 
-from ..processed_registry.service import ProcessedRegistry
+from ..processed_registry.service import ProcessedRegistry, fingerprint_key
 from ..session_store.types import ImportRunState
 
 
@@ -47,6 +48,45 @@ def _ext(rel_path: str) -> str:
     if "." not in name:
         return ""
     return "." + name.split(".")[-1]
+
+
+def _fingerprint_identity_key(
+    fs: FileService,
+    *,
+    source_root: RootName,
+    book_rel_path: str,
+    unit_type: str,
+) -> str:
+    """Compute the canonical processed identity key for a book unit.
+
+    The algorithm matches Import Wizard preflight strong fingerprint.
+    """
+    if unit_type == "file":
+        chk = fs.checksum(source_root, book_rel_path, algo="sha256")
+        h = hashlib.sha256()
+        h.update(book_rel_path.encode("utf-8"))
+        h.update(b"\n")
+        h.update(chk.encode("utf-8"))
+        h.update(b"\n")
+        return fingerprint_key(algo="sha256", value=h.hexdigest())
+
+    entries = fs.list_dir(source_root, book_rel_path, recursive=True)
+    files = [e.rel_path for e in entries if not e.is_dir]
+    items: list[tuple[str, str]] = []
+    for rel in sorted(files):
+        ext = _ext(rel)
+        if ext not in _AUDIO_EXT and ext not in _IMG_EXT:
+            continue
+        chk = fs.checksum(source_root, rel, algo="sha256")
+        items.append((rel, chk))
+
+    h = hashlib.sha256()
+    for rel, chk in items:
+        h.update(rel.encode("utf-8"))
+        h.update(b"\n")
+        h.update(chk.encode("utf-8"))
+        h.update(b"\n")
+    return fingerprint_key(algo="sha256", value=h.hexdigest())
 
 
 def _copy_tree(
@@ -141,8 +181,17 @@ def run_import_job(
             unit_type = "dir"
 
     try:
-        if registry.is_processed(book_rel_path):
-            job_service.append_log_line(job_id, f"already processed: {book_rel_path}")
+        identity_key = _fingerprint_identity_key(
+            fs,
+            source_root=source_root,
+            book_rel_path=book_rel_path,
+            unit_type=unit_type,
+        )
+
+        if registry.is_processed(identity_key):
+            job_service.append_log_line(
+                job_id, f"already processed: {identity_key} rel={book_rel_path}"
+            )
             job.set_progress(1.0)
             job.transition(JobState.SUCCEEDED)
             job.finished_at = _utcnow_iso()
@@ -189,12 +238,18 @@ def run_import_job(
         else:
             raise ValueError(f"Unsupported handling mode: {run_state.source_handling_mode}")
 
-        registry.mark_processed(book_rel_path)
         job.set_progress(1.0)
         job.transition(JobState.SUCCEEDED)
         job.finished_at = _utcnow_iso()
         job_service.store.save_job(job)
         job_service.append_log_line(job_id, "succeeded")
+        try:
+            registry.mark_processed(identity_key)
+        except Exception as e:
+            job_service.append_log_line(
+                job_id, f"processed_registry_mark_failed: {type(e).__name__}: {e}"
+            )
+
         _emit_diag(
             "boundary.end",
             operation="run_import_job",

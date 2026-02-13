@@ -872,6 +872,8 @@ Deep enrichment requirements (PHASE 0):
   3) natural sort of filenames
 - Lookup/metadata integration MAY be implemented as a best-effort opt-in enrichment step and MUST be disabled by default to preserve determinism.
 - processed_registry: Book-folder processed registry under the file_io JOBS root.
+  - Registry keys MUST be book fingerprints (algo:value) and MUST be marked only on successful PHASE 2 completion.
+  - Web UI MUST gray-out processed books, disable Start, and provide an Unmark action.
 
 Issue 403 extension (PHASE 2 processing engine):
 

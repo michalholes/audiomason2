@@ -42,6 +42,12 @@ def _import_plugin() -> dict[str, Any]:
         "ImportRunState": importlib.import_module(
             "plugins.import.session_store.types"
         ).ImportRunState,
+        "ProcessedRegistry": importlib.import_module(
+            "plugins.import.processed_registry.service"
+        ).ProcessedRegistry,
+        "fingerprint_key": importlib.import_module(
+            "plugins.import.processed_registry.service"
+        ).fingerprint_key,
     }
 
 
@@ -118,6 +124,11 @@ def _run_id_for(root: str, rel: str, book_rel: str, mode: str) -> str:
 def _engine(request: Request) -> Any:
     fs = _get_file_service(request)
     return _mods()["ImportEngineService"](fs=fs)
+
+
+def _registry(request: Request) -> Any:
+    fs = _get_file_service(request)
+    return _mods()["ProcessedRegistry"](fs)
 
 
 def _preflight_service(request: Request) -> Any:
@@ -391,6 +402,51 @@ def mount_import_wizard(app: FastAPI) -> None:
             component="web_interface.import_wizard",
         ):
             return _run_preflight(request, root=root, path=path)
+
+    @app.get("/api/import_wizard/processed_registry")
+    def import_processed_registry(request: Request) -> dict[str, Any]:
+        with web_operation(
+            request,
+            name="import_wizard.processed_registry",
+            ctx={},
+            component="web_interface.import_wizard",
+        ):
+            reg = _registry(request)
+            try:
+                items = reg.list_processed()
+            except Exception as e:
+                raise HTTPException(
+                    status_code=500, detail=_error_detail("processed_registry", e)
+                ) from e
+            return {"items": items, "count": len(items)}
+
+    @app.post("/api/import_wizard/unmark_processed")
+    def import_unmark_processed(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
+        key = payload.get("key")
+        if not isinstance(key, str) or not key.strip():
+            fp = payload.get("fingerprint")
+            if isinstance(fp, dict):
+                algo = fp.get("algo")
+                value = fp.get("value")
+                if isinstance(algo, str) and isinstance(value, str):
+                    key = _mods()["fingerprint_key"](algo=algo, value=value)
+        if not isinstance(key, str) or not key.strip():
+            raise HTTPException(status_code=400, detail="key is required")
+
+        with web_operation(
+            request,
+            name="import_wizard.unmark_processed",
+            ctx={"key": key},
+            component="web_interface.import_wizard",
+        ):
+            reg = _registry(request)
+            try:
+                reg.unmark_processed(str(key))
+            except Exception as e:
+                raise HTTPException(
+                    status_code=500, detail=_error_detail("unmark_processed", e)
+                ) from e
+            return {"ok": True}
 
     @app.post("/api/import_wizard/start")
     def import_start(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
