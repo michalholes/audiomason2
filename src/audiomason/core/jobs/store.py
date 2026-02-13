@@ -50,6 +50,14 @@ def _emit_diag(event: str, *, operation: str, data: dict[str, Any]) -> None:
         get_event_bus().publish(event, envelope)
 
 
+def _emit_op_start(operation: str, data: dict[str, Any]) -> None:
+    _emit_diag("operation.start", operation=operation, data=data)
+
+
+def _emit_op_end(operation: str, data: dict[str, Any]) -> None:
+    _emit_diag("operation.end", operation=operation, data=data)
+
+
 class JobStore:
     def __init__(self, root: Path | None = None) -> None:
         self._root = root if root is not None else jobs_root()
@@ -131,7 +139,29 @@ class JobStore:
             }
             if prev_state is not None:
                 data["prev_state"] = prev_state.value
+
+            _emit_op_start(
+                "jobs.update_state",
+                {
+                    "job_id": job.job_id,
+                    "job_type": job.type.value,
+                    "state": job.state.value,
+                    "progress": job.progress,
+                    "status": "ok",
+                },
+            )
             _emit_diag("jobs.update_state", operation="jobs.update_state", data=data)
+            _emit_op_end(
+                "jobs.update_state",
+                {
+                    "job_id": job.job_id,
+                    "job_type": job.type.value,
+                    "state": job.state.value,
+                    "progress": job.progress,
+                    "status": "ok",
+                    "duration_ms": data["duration_ms"],
+                },
+            )
             _LOGGER.info(
                 f"job state updated: "
                 f"job_id={job.job_id} "
@@ -169,7 +199,29 @@ class JobStore:
                 "error_message": _shorten_text(err_msg, max_chars=400),
                 "traceback": _shorten_traceback(tb),
             }
+
+            _emit_op_start(
+                "jobs.fail",
+                {
+                    "job_id": job.job_id,
+                    "job_type": job.type.value,
+                    "state": job.state.value,
+                    "status": "failed",
+                },
+            )
             _emit_diag("jobs.fail", operation="jobs.fail", data=data)
+            _emit_op_end(
+                "jobs.fail",
+                {
+                    "job_id": job.job_id,
+                    "job_type": job.type.value,
+                    "state": job.state.value,
+                    "status": "failed",
+                    "duration_ms": data["duration_ms"],
+                    "error_type": data["error_type"],
+                    "error_message": data["error_message"],
+                },
+            )
             _LOGGER.error(
                 f"job failed: "
                 f"job_id={job.job_id} "
