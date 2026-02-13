@@ -413,6 +413,12 @@ When building `patched.zip`, the runner excludes repository internals and tool/r
 
 This is independent of scope logic and does not affect patch execution, gates, or promotion semantics.
 
+Workspace failure subset (general):
+- In workspace mode, the failure zip MUST include the deterministic union of:
+  - the per-issue cumulative `allowed_union` set,
+  - the workspace `changed_paths` snapshot immediately after the patch attempt (before gates),
+  - patch targets (declared/touched targets in unified mode; touched delta in script mode).
+
 Finalize-workspace failure subset:
 - In `-w` / `--finalize-workspace`, the failure zip MUST include the workspace changed/touched subset even if
   the run fails during workspace gates, promotion, or live gates.

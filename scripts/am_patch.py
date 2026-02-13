@@ -1205,9 +1205,15 @@ def main(argv: list[str]) -> int:
             # Snapshot dirty paths immediately after patch (before gates).
             dirty_after_patch = list(after)
 
-            # For patched.zip on failure: include changed files plus all touched targets
-            # (including failed patches).
-            files_for_fail_zip = sorted(set(touched) | set(touched_for_zip))
+            # For patched.zip on failure: include the cumulative issue allowed_union plus any known
+            # patch targets and current dirty paths. This must be available even if scope
+            # enforcement failed (e.g. patch apply failure followed by a scope secondary failure).
+            fail_zip_files = set(st.allowed_union)
+            fail_zip_files |= set(dirty_after_patch)
+            fail_zip_files |= set(files_current)
+            fail_zip_files |= set(touched)
+            fail_zip_files |= set(touched_for_zip)
+            files_for_fail_zip = sorted(fail_zip_files)
             failed_patch_blobs_for_zip = list(failed_patch_blobs)
             patch_applied_successfully = patch_applied_any
 
