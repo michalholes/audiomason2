@@ -2,7 +2,7 @@
 
 # Patch Authoring Manual
 
-AUTHORITATIVE -- AudioMason2 Status: active Version: v2.35
+AUTHORITATIVE -- AudioMason2 Status: active Version: v2.36
 
 This manual defines what a chat must produce so that the user can run
 the patch successfully and close the issue.
@@ -171,7 +171,6 @@ The default behavior is minimal-scope modification based on failing gate logs.
     file inspection.
 -   Automatic full-tree restoration or overlay merging is prohibited.
 
-------------------------------------------------------------------------
 
 ## Ruff / Mypy failures (default-minimal workflow)
 
@@ -185,7 +184,6 @@ If the failing gates include `ruff` and/or `mypy`, the agent MUST:
 
 Fixing pure ruff/mypy failures MUST NOT trigger full repository rebuild.
 
-------------------------------------------------------------------------
 
 ## Pytest failures (triage workflow)
 
