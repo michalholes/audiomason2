@@ -495,6 +495,18 @@ async function renderImportWizard(content, notify) {
   let enrichTimer = null;
   let lastEnrichKey = "";
   let enrichRefreshCounter = 0;
+  let processedKeys = new Set();
+
+  async function loadProcessedRegistry() {
+    try {
+      const r = await API.getJson("/api/import_wizard/processed_registry");
+      const keys = (r && Array.isArray(r.keys)) ? r.keys : [];
+      processedKeys = new Set(keys.filter((k) => typeof k === "string" && k));
+    } catch {
+      processedKeys = new Set();
+    }
+  }
+
 
   function stopEnrichmentPolling() {
     if (enrichTimer) { clearInterval(enrichTimer); enrichTimer = null; }
@@ -770,6 +782,7 @@ async function renderImportWizard(content, notify) {
       const pathV = pathInp.value;
       const url = `/api/import_wizard/index?root=${encodeURIComponent(rootV)}&path=${encodeURIComponent(pathV)}`;
       indexData = await API.getJson(url);
+      await loadProcessedRegistry();
       selectedAuthor = "";
       jobIds = [];
       clear(jobsTableWrap);
