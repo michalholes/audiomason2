@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.57
+Specification Version: 1.0.58
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -1004,6 +1004,14 @@ Logs UI:
 - The web server MUST NOT tail a web-specific log file as its primary diagnostics source.
 - `/api/logs/stream` and `/api/logs/tail` stream recent diagnostics/events from the Core EventBus tap.
 - When runtime diagnostics are enabled (`diagnostics.enabled`), Core also writes JSONL at `<stage_dir>/diagnostics/diagnostics.jsonl` and the web may expose it via file IO endpoints.
+
+
+Additional LogBus endpoints:
+
+- `/api/logbus/stream` and `/api/logbus/tail` stream recent Core log records from the in-process LogBus tap.
+- The Logs UI SHOULD prefer LogBus for human-readable log lines and MAY also expose EventBus diagnostics.
+- The Logs UI SHOULD auto-scroll to the newest records while a stream is active.
+- The Logs UI MUST expose a "Download debug bundle" action that calls `GET /api/debug/bundle`.
 
 Developer endpoints:
 

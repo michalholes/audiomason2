@@ -1,3 +1,10 @@
+## 2026-02-13T20:30:00+01:00
+
+-   Issue 706: web_interface: Add LogBus SSE stream/tail endpoints and expose them in Logs UI (auto-scroll).
+-   web_interface: Add Logs UI download action for the debug bundle endpoint.
+-   spec: Document LogBus endpoints and Logs UI debug bundle action; bump specification version to 1.0.58.
+
+
 ## 2026-02-13T19:00:00+01:00
 
 -   Issue 416: import: Support file-based book units (archives + single audio) in PHASE 2 jobs.
