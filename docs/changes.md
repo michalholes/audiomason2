@@ -1,3 +1,7 @@
+## 2026-02-13T00:30:00+01:00
+
+-   web_interface: Add "/api/debug/bundle" ZIP endpoint and Import page "Download debug info" action.
+
 ## 2026-02-13T00:15:00+01:00
 
 -   web_interface: Import wizard preflight auto-load (debounced) and improved error detail rendering.

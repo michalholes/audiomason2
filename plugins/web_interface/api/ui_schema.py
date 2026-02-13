@@ -6,6 +6,7 @@ from typing import Any
 from fastapi import FastAPI
 
 from ..util.paths import debug_enabled, ui_overrides_path
+from .debug_bundle import mount_debug_bundle
 
 
 def _default_nav() -> list[dict[str, Any]]:
@@ -58,7 +59,16 @@ def _default_pages() -> dict[str, dict[str, Any]]:
                     {
                         "type": "card",
                         "title": "Import wizard",
-                        "content": {"type": "import_wizard"},
+                        "content": {
+                            "type": "import_wizard",
+                            "actions": [
+                                {
+                                    "type": "download",
+                                    "label": "Download debug info",
+                                    "href": "/api/debug/bundle",
+                                }
+                            ],
+                        },
                     }
                 ],
             },
@@ -134,6 +144,8 @@ def _load_overrides() -> dict[str, Any]:
 
 
 def mount_ui_schema(app: FastAPI) -> None:
+    mount_debug_bundle(app)
+
     @app.get("/api/ui/schema")
     def ui_schema() -> dict[str, Any]:
         """Developer-friendly schema snapshot.

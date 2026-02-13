@@ -369,6 +369,41 @@ async function renderJobsLogViewer(content, notify) {
 async function renderImportWizard(content, notify) {
   const root = el("div", { class: "importWizard" });
 
+  // Optional actions declared in UI schema (e.g., debug bundle download).
+  if (content && Array.isArray(content.actions) && content.actions.length) {
+    const actionsRow = el("div", { class: "row" });
+    content.actions.forEach((a) => {
+      if (!a || a.type !== "download" || !a.href) return;
+      const btn = el("button", { class: "btn", text: String(a.label || "Download") });
+      btn.addEventListener("click", async () => {
+        try {
+          const r = await fetch(String(a.href));
+          if (!r.ok) {
+            const t = await r.text();
+            throw new Error(r.status + " " + r.statusText + ": " + t);
+          }
+          const blob = await r.blob();
+          let filename = "audiomason_debug_bundle.zip";
+          const cd = r.headers.get("Content-Disposition") || "";
+          const m = cd.match(/filename="([^"]+)"/);
+          if (m && m[1]) filename = m[1];
+          const url = URL.createObjectURL(blob);
+          const link = document.createElement("a");
+          link.href = url;
+          link.download = filename;
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          setTimeout(() => URL.revokeObjectURL(url), 1000);
+        } catch (e) {
+          notify(String(e));
+        }
+      });
+      actionsRow.appendChild(btn);
+    });
+    root.appendChild(actionsRow);
+  }
+
   const row1 = el("div", { class: "row" });
   const rootLbl = el("span", { class: "hint", text: "Root:" });
   const rootSel = el("select");

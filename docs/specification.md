@@ -924,6 +924,17 @@ CLI import UX stability requirements:
 
 The web UI must be replaceable without touching core logic.
 
+### Debug bundle download (web)
+
+The web interface exposes a debug bundle download endpoint for support workflows.
+
+- GET /api/debug/bundle
+  - Query params: logs_tail_lines (default 2000), jobs_n (default 50)
+  - Returns: application/zip
+  - The response sets a stable attachment filename prefix: audiomason_debug_bundle_<timestamp>.zip
+
+The Import page includes a "Download debug info" action that downloads this bundle.
+
 ### 9.0 Web server shutdown output (CLI contract)
 
 When running the web server via the CLI (for example, `audiomason web`), the CLI MUST
