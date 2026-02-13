@@ -482,6 +482,10 @@ async function renderImportWizard(content, notify) {
   let lastEnrichKey = "";
   let enrichRefreshCounter = 0;
 
+  function stopEnrichmentPolling() {
+    if (enrichTimer) { clearInterval(enrichTimer); enrichTimer = null; }
+  }
+
 
   async function loadRoots() {
     const data = await API.getJson("/api/roots");
@@ -650,7 +654,7 @@ async function renderImportWizard(content, notify) {
 
 
   function startEnrichmentPolling() {
-    if (enrichTimer) { clearInterval(enrichTimer); enrichTimer = null; }
+    stopEnrichmentPolling();
     enrichRefreshCounter = 0;
     const rootV = rootSel.value;
     const pathV = pathInp.value;
@@ -682,8 +686,14 @@ async function renderImportWizard(content, notify) {
             await loadIndex("poll");
           }
         } else if (st && st.state === "done") {
-          // One final refresh to show enriched data.
+          // Done: stop polling and do one final refresh to show enriched data.
+          stopEnrichmentPolling();
           await loadIndex("done");
+          return;
+        } else if (st && st.state === "idle") {
+          // Idle: nothing to poll.
+          stopEnrichmentPolling();
+          return;
         }
       } catch (e) {
         // Do not spam notifications; keep UI responsive.
@@ -715,7 +725,11 @@ async function renderImportWizard(content, notify) {
       } else {
         statusBox.textContent = "Index loaded. Select author.";
       }
-      startEnrichmentPolling();
+      if (deep && deep.state === "running") {
+        startEnrichmentPolling();
+      } else {
+        stopEnrichmentPolling();
+      }
     } catch (e) {
       notify(String(e));
       statusBox.textContent = String(e);
