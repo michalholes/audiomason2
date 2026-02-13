@@ -7,6 +7,8 @@ from typing import Any
 from fastapi import FastAPI, HTTPException, Request
 
 from audiomason.core.config import ConfigResolver
+from audiomason.core.diagnostics import build_envelope
+from audiomason.core.events import get_event_bus
 from plugins.file_io.service.service import FileService
 from plugins.file_io.service.types import RootName
 
@@ -43,6 +45,19 @@ def _mods() -> dict[str, Any]:
     if _IMPORT_MODS is None:
         _IMPORT_MODS = _import_plugin()
     return _IMPORT_MODS
+
+
+def _emit_import_action(event_name: str, *, operation: str, data: dict[str, Any]) -> None:
+    try:
+        env = build_envelope(
+            event=event_name,
+            component="web_interface.import_wizard",
+            operation=operation,
+            data=data,
+        )
+        get_event_bus().publish(event_name, env)
+    except Exception:
+        return
 
 
 def _get_resolver(request: Request) -> ConfigResolver:
@@ -95,13 +110,32 @@ def _engine(request: Request) -> Any:
 def mount_import_wizard(app: FastAPI) -> None:
     @app.get("/api/import_wizard/preflight")
     def import_preflight(request: Request, root: str, path: str = ".") -> dict[str, Any]:
+        _emit_import_action(
+            "import.preflight",
+            operation="preflight",
+            data={"status": "start", "root": root, "path": path},
+        )
         mods = _mods()
         preflight_service_cls = mods["PreflightService"]
         fs = _get_file_service(request)
         r = _parse_root(root)
         rel = _norm_rel_path(path)
         svc = preflight_service_cls(fs)
-        res = svc.run(r, rel)
+        try:
+            res = svc.run(r, rel)
+        except Exception as e:
+            _emit_import_action(
+                "import.preflight",
+                operation="preflight",
+                data={"status": "failed", "error_type": type(e).__name__, "error": str(e)},
+            )
+            raise
+
+        _emit_import_action(
+            "import.preflight",
+            operation="preflight",
+            data={"status": "succeeded", "authors_n": len(res.authors), "books_n": len(res.books)},
+        )
         return {
             "source_root_rel_path": res.source_root_rel_path,
             "authors": list(res.authors),
@@ -120,6 +154,7 @@ def mount_import_wizard(app: FastAPI) -> None:
 
     @app.post("/api/import_wizard/start")
     def import_start(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
+        _emit_import_action("import.queue", operation="queue", data={"status": "start"})
         mods = _mods()
         preflight_service_cls = mods["PreflightService"]
         preflight_result_cls = mods["PreflightResult"]
@@ -173,13 +208,27 @@ def mount_import_wizard(app: FastAPI) -> None:
 
         engine = _engine(request)
         decisions = engine.resolve_book_decisions(preflight=preflight_one, state=state)
-        job_ids = engine.start_import_job(
-            import_job_request_cls(
-                run_id=run_id,
-                source_root=root,
-                state=state,
-                decisions=decisions,
+        try:
+            job_ids = engine.start_import_job(
+                import_job_request_cls(
+                    run_id=run_id,
+                    source_root=root,
+                    state=state,
+                    decisions=decisions,
+                )
             )
+        except Exception as e:
+            _emit_import_action(
+                "import.queue",
+                operation="queue",
+                data={"status": "failed", "error_type": type(e).__name__, "error": str(e)},
+            )
+            raise
+
+        _emit_import_action(
+            "import.queue",
+            operation="queue",
+            data={"status": "succeeded", "run_id": run_id, "job_ids_n": len(job_ids)},
         )
         return {"run_id": run_id, "job_ids": job_ids}
 
@@ -187,6 +236,7 @@ def mount_import_wizard(app: FastAPI) -> None:
     def import_run_pending(
         request: Request, payload: dict[str, Any] | None = None
     ) -> dict[str, Any]:
+        _emit_import_action("import.run", operation="run_pending", data={"status": "start"})
         limit = 1
         if isinstance(payload, dict) and isinstance(payload.get("limit"), int):
             limit = int(payload["limit"]) or 1
@@ -194,5 +244,51 @@ def mount_import_wizard(app: FastAPI) -> None:
             limit = 1
 
         engine = _engine(request)
-        ran = engine.run_pending(limit=limit)
+        try:
+            ran = engine.run_pending(limit=limit)
+        except Exception as e:
+            _emit_import_action(
+                "import.run",
+                operation="run_pending",
+                data={"status": "failed", "error_type": type(e).__name__, "error": str(e)},
+            )
+            raise
+
+        _emit_import_action(
+            "import.run",
+            operation="run_pending",
+            data={"status": "succeeded", "ran_n": len(ran)},
+        )
         return {"ran": ran}
+
+    @app.post("/api/import_wizard/pause_queue")
+    def import_pause_queue(request: Request) -> dict[str, Any]:
+        _emit_import_action("import.pause", operation="pause_queue", data={"status": "start"})
+        engine = _engine(request)
+        try:
+            engine.pause_queue()
+        except Exception as e:
+            _emit_import_action(
+                "import.pause",
+                operation="pause_queue",
+                data={"status": "failed", "error_type": type(e).__name__, "error": str(e)},
+            )
+            raise
+        _emit_import_action("import.pause", operation="pause_queue", data={"status": "succeeded"})
+        return {"ok": True}
+
+    @app.post("/api/import_wizard/resume_queue")
+    def import_resume_queue(request: Request) -> dict[str, Any]:
+        _emit_import_action("import.resume", operation="resume_queue", data={"status": "start"})
+        engine = _engine(request)
+        try:
+            engine.resume_queue()
+        except Exception as e:
+            _emit_import_action(
+                "import.resume",
+                operation="resume_queue",
+                data={"status": "failed", "error_type": type(e).__name__, "error": str(e)},
+            )
+            raise
+        _emit_import_action("import.resume", operation="resume_queue", data={"status": "succeeded"})
+        return {"ok": True}

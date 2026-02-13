@@ -985,7 +985,12 @@ Runtime configuration hooks:
 - Environment variables:
   - `WEB_INTERFACE_DEBUG`: enable extra diagnostic fields in API responses (also enabled when CLI verbosity is "debug").
   - `WEB_INTERFACE_STAGE_DIR`: override the stage upload directory.
-  - `WEB_INTERFACE_LOG_PATH`: optional log file path used for server log tail/stream.
+
+Logs UI:
+
+- The web server MUST NOT tail a web-specific log file as its primary diagnostics source.
+- `/api/logs/stream` and `/api/logs/tail` stream recent diagnostics/events from the Core EventBus tap.
+- When runtime diagnostics are enabled (`diagnostics.enabled`), Core also writes JSONL at `<stage_dir>/diagnostics/diagnostics.jsonl` and the web may expose it via file IO endpoints.
 
 Developer endpoints:
 

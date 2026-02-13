@@ -130,3 +130,4 @@
 -   docs: Record core ruff-driven formatting fixes; enforce docs gate
     requirements.
 -   spec: Bump specification version to 1.0.33.
+-   web_interface: Stream and tail diagnostics/events via Core EventBus tap; emit API route boundary diagnostics; emit import action events (preflight/queue/run/pause/resume).
