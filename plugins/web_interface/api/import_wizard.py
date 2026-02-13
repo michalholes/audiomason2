@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import importlib
 from typing import Any
@@ -119,6 +120,61 @@ def _engine(request: Request) -> Any:
     return _mods()["ImportEngineService"](fs=fs)
 
 
+def _preflight_service(request: Request) -> Any:
+    mods = _mods()
+    fs = _get_file_service(request)
+    return mods["PreflightService"](fs)
+
+
+def _serialize_index(res: Any) -> dict[str, Any]:
+    return {
+        "source_root_rel_path": res.source_root_rel_path,
+        "signature": res.signature,
+        "changed": bool(res.changed),
+        "last_scan_ts": res.last_scan_ts,
+        "deep_scan_state": {
+            "state": res.deep_scan_state.state,
+            "signature": res.deep_scan_state.signature,
+            "last_scan_ts": res.deep_scan_state.last_scan_ts,
+            "scanned_items": res.deep_scan_state.scanned_items,
+            "total_items": res.deep_scan_state.total_items,
+            "last_error": res.deep_scan_state.last_error,
+        },
+        "root_items": [
+            {
+                "rel_path": it.rel_path,
+                "item_type": it.item_type,
+                "size": it.size,
+                "mtime": it.mtime,
+            }
+            for it in res.root_items
+        ],
+        "authors": list(res.authors),
+        "books": [
+            {
+                "book_ref": b.book_ref,
+                "unit_type": b.unit_type,
+                "author": b.author,
+                "book": b.book,
+                "rel_path": b.rel_path,
+                "suggested_author": b.suggested_author,
+                "suggested_title": b.suggested_title,
+                "cover_candidates": b.cover_candidates or [],
+                "rename_preview": b.rename_preview or None,
+                "fingerprint": None
+                if b.fingerprint is None
+                else {
+                    "algo": b.fingerprint.algo,
+                    "value": b.fingerprint.value,
+                    "strength": b.fingerprint.strength,
+                },
+                "meta": b.meta or None,
+            }
+            for b in res.books
+        ],
+    }
+
+
 def mount_import_wizard(app: FastAPI) -> None:
     def _serialize_preflight(res: Any) -> dict[str, Any]:
         authors = list(res.authors)
@@ -149,6 +205,35 @@ def mount_import_wizard(app: FastAPI) -> None:
                 for s in getattr(res, "skipped", []) or []
             ],
         }
+
+    def _task_key(root: str, path: str) -> str:
+        return f"{root}:{path}"
+
+    def _get_tasks(app: FastAPI) -> dict[str, asyncio.Task[None]]:
+        tasks = getattr(app.state, "import_wizard_deep_tasks", None)
+        if isinstance(tasks, dict):
+            return tasks
+        tasks = {}
+        app.state.import_wizard_deep_tasks = tasks
+        return tasks
+
+    def _start_deep_scan(app: FastAPI, *, fs: FileService, root: RootName, rel: str) -> None:
+        # Fire-and-forget; never block request handling.
+        key = _task_key(str(root.value), rel)
+        tasks = _get_tasks(app)
+        existing = tasks.get(key)
+        if existing is not None and not existing.done():
+            return
+
+        async def _runner() -> None:
+            svc = _mods()["PreflightService"](fs)
+            try:
+                await asyncio.to_thread(svc.run_deep_enrichment_if_needed, root, rel)
+            finally:
+                # Keep task slot but let it complete.
+                pass
+
+        tasks[key] = asyncio.create_task(_runner())
 
     def _run_preflight(request: Request, *, root: str, path: str) -> dict[str, Any]:
         _emit_import_action(
@@ -190,6 +275,96 @@ def mount_import_wizard(app: FastAPI) -> None:
             data={"status": "succeeded", "authors_n": len(res.authors), "books_n": len(res.books)},
         )
         return _serialize_preflight(res)
+
+    @app.get("/api/import_wizard/index")
+    def import_index_get(request: Request, root: str, path: str = ".") -> dict[str, Any]:
+        fs = _get_file_service(request)
+        svc = _preflight_service(request)
+        with web_operation(
+            request,
+            name="import_wizard.index",
+            ctx={"root": root, "path": path},
+            component="web_interface.import_wizard",
+        ):
+            root_name = _parse_root(root)
+            rel = path
+
+            try:
+                res = svc.fast_index(root_name, rel)
+            except HTTPException:
+                raise
+            except Exception as e:
+                raise HTTPException(status_code=500, detail=_error_detail("index", e)) from e
+
+            # Ensure book-only label appears in authors list when needed.
+            authors = list(res.authors)
+            has_book_only = any(getattr(b, "author", "") == "" for b in res.books)
+            if has_book_only and BOOK_ONLY_LABEL not in authors:
+                authors.append(BOOK_ONLY_LABEL)
+                authors.sort()
+                res = type(res)(
+                    source_root_rel_path=res.source_root_rel_path,
+                    signature=res.signature,
+                    changed=res.changed,
+                    last_scan_ts=res.last_scan_ts,
+                    deep_scan_state=res.deep_scan_state,
+                    root_items=res.root_items,
+                    authors=authors,
+                    books=res.books,
+                )
+
+            # Trigger deep scan in background when index signature changed.
+            if bool(res.changed):
+                _start_deep_scan(request.app, fs=fs, root=root_name, rel=rel)
+
+            return _serialize_index(res)
+
+    @app.get("/api/import_wizard/enrichment_status")
+    def import_enrichment_status_get(
+        request: Request, root: str, path: str = "."
+    ) -> dict[str, Any]:
+        svc = _preflight_service(request)
+        with web_operation(
+            request,
+            name="import_wizard.enrichment_status",
+            ctx={"root": root, "path": path},
+            component="web_interface.import_wizard",
+        ):
+            try:
+                st = svc.get_deep_scan_state()
+            except Exception as e:
+                raise HTTPException(
+                    status_code=500, detail=_error_detail("enrichment_status", e)
+                ) from e
+            return {
+                "state": st.state,
+                "signature": st.signature,
+                "last_scan_ts": st.last_scan_ts,
+                "scanned_items": st.scanned_items,
+                "total_items": st.total_items,
+                "last_error": st.last_error,
+            }
+
+    @app.on_event("startup")
+    async def _import_wizard_startup() -> None:
+        # Best-effort: trigger background deep scan for default inbox root.
+        try:
+            resolver = getattr(app.state, "config_resolver", None)
+            if not isinstance(resolver, ConfigResolver):
+                resolver = ConfigResolver()
+                app.state.config_resolver = resolver
+            fs = getattr(app.state, "file_service", None)
+            if not isinstance(fs, FileService):
+                fs = FileService.from_resolver(resolver)
+                app.state.file_service = fs
+            root_name = RootName("inbox")
+            rel = "."
+            # Build/update index quickly, then start deep scan if needed.
+            svc = _mods()["PreflightService"](fs)
+            await asyncio.to_thread(svc.fast_index, root_name, rel)
+            _start_deep_scan(app, fs=fs, root=root_name, rel=rel)
+        except Exception:
+            return
 
     @app.get("/api/import_wizard/preflight")
     def import_preflight_get(request: Request, root: str, path: str = ".") -> dict[str, Any]:

@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.58
+Specification Version: 1.0.59
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -847,6 +847,10 @@ Rules:
 - Wizard definition remains the single source of truth (WizardService / WizardEngine).
 - Import runtime state is a wizard-run scoped artifact keyed by wizard job id (run id).
 - PHASE 0 preflight is deterministic and read-only.
+- PHASE 0 start-screen discovery is split into:
+  - fast index (2-level listing, cache-first, no deep reads)
+  - background deep enrichment (read-only, delta-only, signature-triggered; no TTL)
+- PHASE 0 cache for index/enrichment MUST live under file_io JOBS root (not inbox).
 - Processed tracking is performed by a book-folder registry (no inbox markers, no inbox writes).
 
 The foundational infrastructure for Import Wizard MUST live in plugins/import/ and MUST use file_io capability only.
@@ -1094,17 +1098,29 @@ Rules:
   - Select a book (auto-start).
 - The UI MUST show a minimal async indicator while API calls are running.
 
+Start-screen performance rule:
 
-- The UI SHOULD auto-load preflight on page open and whenever root/path changes
+- The UI SHOULD auto-load a fast index on page open and whenever root/path changes
   (debounced, e.g. ~350ms). A manual refresh button may remain.
-- If preflight discovers author-less books (author == ""), the UI MUST expose a
+- If the source signature changes, the backend MUST trigger background deep
+  enrichment (non-blocking) and the UI SHOULD poll a status endpoint.
+- If discovery finds author-less books (author == ""), the UI MUST expose a
   selectable synthetic author entry labeled "<book-only>" and show those books.
+
 Backend API contract:
 
-- Preflight listing:
+- Fast index (start screen):
+  - `GET /api/import_wizard/index?root=<root>&path=<rel_path>`
+  - Returns `signature`, `changed`, `deep_scan_state`, `root_items[]`, `authors[]`, `books[]`.
+  - MUST be PHASE 0 only and MUST NOT perform deep reads (no recursive scan, no checksums).
+- Background deep enrichment status:
+  - `GET /api/import_wizard/enrichment_status?root=<root>&path=<rel_path>`
+  - Returns `{state, scanned_items, total_items, last_error?}`.
+- Optional preflight listing (deep, may be heavier than index):
   - `GET /api/import_wizard/preflight?root=<root>&path=<rel_path>`
   - `POST /api/import_wizard/preflight` with JSON body `{root: str, path?: str}`
   - Returns `authors[]` and `books[]` (each book includes `rel_path`).
+
 - Start import processing for a selected book:
   - `POST /api/import_wizard/start` with JSON body:
     - `root` (required)

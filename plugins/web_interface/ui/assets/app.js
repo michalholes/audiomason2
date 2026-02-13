@@ -428,7 +428,7 @@ async function renderImportWizard(content, notify) {
   const rootSel = el("select");
   const pathLbl = el("span", { class: "hint", text: "Path:" });
   const pathInp = el("input", { type: "text", value: ".", style: "min-width:220px" });
-  const loadBtn = el("button", { class: "btn", text: "Load" });
+  const loadBtn = el("button", { class: "btn", text: "Refresh index" });
   const spinner = el("span", { class: "hint", text: "" });
   row1.appendChild(rootLbl);
   row1.appendChild(rootSel);
@@ -471,13 +471,16 @@ async function renderImportWizard(content, notify) {
   right.appendChild(statusBox);
   right.appendChild(jobsTableWrap);
 
-  let preflight = null;
+  let indexData = null;
   let selectedAuthor = "";
   let jobIds = [];
   let pollTimer = null;
   let dotsTimer = null;
   const BOOK_ONLY_LABEL = "<book-only>";
-  let preflightTimer = null;
+  let indexTimer = null;
+  let enrichTimer = null;
+  let lastEnrichKey = "";
+  let enrichRefreshCounter = 0;
 
 
   async function loadRoots() {
@@ -510,7 +513,7 @@ async function renderImportWizard(content, notify) {
 
   function renderAuthors() {
     clear(authorsBox);
-    const authors = preflight && Array.isArray(preflight.authors) ? preflight.authors : [];
+    const authors = indexData && Array.isArray(indexData.authors) ? indexData.authors : [];
     if (!authors.length) {
       authorsBox.appendChild(el("div", { class: "hint", text: "No authors found." }));
       return;
@@ -530,7 +533,7 @@ async function renderImportWizard(content, notify) {
 
   function renderBooks() {
     clear(booksBox);
-    const books = preflight && Array.isArray(preflight.books) ? preflight.books : [];
+    const books = indexData && Array.isArray(indexData.books) ? indexData.books : [];
     const isBookOnly = selectedAuthor === BOOK_ONLY_LABEL;
     const filtered = selectedAuthor
       ? books.filter((b) => {
@@ -645,21 +648,74 @@ async function renderImportWizard(content, notify) {
     }
   }
 
+
+  function startEnrichmentPolling() {
+    if (enrichTimer) { clearInterval(enrichTimer); enrichTimer = null; }
+    enrichRefreshCounter = 0;
+    const rootV = rootSel.value;
+    const pathV = pathInp.value;
+    const key = rootV + ":" + pathV;
+    lastEnrichKey = key;
+    async function tick() {
+      if (!lastEnrichKey || lastEnrichKey !== key) return;
+      try {
+        const url = `/api/import_wizard/enrichment_status?root=${encodeURIComponent(rootV)}&path=${encodeURIComponent(pathV)}`;
+        const st = await API.getJson(url);
+        if (st && st.state && st.state !== "idle" && st.state !== "done") {
+          const total = Number(st.total_items || 0);
+          const scanned = Number(st.scanned_items || 0);
+          statusBox.textContent = `Index loaded. Background scan: ${st.state} (${scanned}/${total}).`;
+        } else if (st && st.last_error) {
+          statusBox.textContent = `Index loaded. Background scan failed: ${st.last_error}`;
+        } else {
+          // done/idle: keep a stable message
+          if (statusBox.textContent.indexOf("Background scan") !== -1) {
+            statusBox.textContent = "Index loaded. Select author.";
+          }
+        }
+
+        // When running, refresh index occasionally to show progressive enrichment.
+        if (st && st.state === "running") {
+          enrichRefreshCounter += 1;
+          if (enrichRefreshCounter >= 5) {
+            enrichRefreshCounter = 0;
+            await loadIndex("poll");
+          }
+        } else if (st && st.state === "done") {
+          // One final refresh to show enriched data.
+          await loadIndex("done");
+        }
+      } catch (e) {
+        // Do not spam notifications; keep UI responsive.
+        return;
+      }
+    }
+    void tick();
+    enrichTimer = setInterval(() => { void tick(); }, 1000);
+  }
   run1Btn.addEventListener("click", () => { void doRunPending(1); });
   run5Btn.addEventListener("click", () => { void doRunPending(5); });
 
-  async function loadPreflight(trigger) {
+  
+  async function loadIndex(trigger) {
     try {
       setBusy(true);
-      const body = { root: rootSel.value, path: pathInp.value };
-      // Prefer POST to allow structured error detail.
-      preflight = await API.sendJson("POST", "/api/import_wizard/preflight", body);
+      const rootV = rootSel.value;
+      const pathV = pathInp.value;
+      const url = `/api/import_wizard/index?root=${encodeURIComponent(rootV)}&path=${encodeURIComponent(pathV)}`;
+      indexData = await API.getJson(url);
       selectedAuthor = "";
       jobIds = [];
-      statusBox.textContent = "Preflight loaded. Select author.";
       clear(jobsTableWrap);
       renderAuthors();
       renderBooks();
+      const deep = indexData && indexData.deep_scan_state ? indexData.deep_scan_state : null;
+      if (deep && deep.state && deep.state !== "idle" && deep.state !== "done") {
+        statusBox.textContent = `Index loaded. Background scan: ${deep.state}.`;
+      } else {
+        statusBox.textContent = "Index loaded. Select author.";
+      }
+      startEnrichmentPolling();
     } catch (e) {
       notify(String(e));
       statusBox.textContent = String(e);
@@ -668,18 +724,18 @@ async function renderImportWizard(content, notify) {
     }
   }
 
-  function schedulePreflight() {
-    if (preflightTimer) { clearTimeout(preflightTimer); preflightTimer = null; }
-    preflightTimer = setTimeout(() => { void loadPreflight("auto"); }, 350);
+  function scheduleIndex() {
+    if (indexTimer) { clearTimeout(indexTimer); indexTimer = null; }
+    indexTimer = setTimeout(() => { void loadIndex("auto"); }, 350);
   }
 
-  rootSel.addEventListener("change", schedulePreflight);
-  pathInp.addEventListener("input", schedulePreflight);
+  rootSel.addEventListener("change", scheduleIndex);
+  pathInp.addEventListener("input", scheduleIndex);
 
-  loadBtn.addEventListener("click", () => { void loadPreflight("manual"); });
+  loadBtn.addEventListener("click", () => { void loadIndex("manual"); });
 
   await loadRoots();
-  void loadPreflight("auto");
+  void loadIndex("auto");
   return root;
 }
 
