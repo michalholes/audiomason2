@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import time
 import traceback
 from typing import Any
@@ -23,6 +24,7 @@ from .types import (
     BookFingerprint,
     BookPreflight,
     DeepScanState,
+    Id3MajorityConfig,
     IndexBook,
     IndexItem,
     IndexResult,
@@ -74,8 +76,16 @@ def _emit_diag(event: str, *, operation: str, data: dict[str, Any]) -> None:
 class PreflightService:
     """Read-only preflight detection under a source root."""
 
-    def __init__(self, fs: FileService) -> None:
+    def __init__(
+        self,
+        fs: FileService,
+        *,
+        id3_majority: Id3MajorityConfig | None = None,
+        enable_lookup: bool = False,
+    ) -> None:
         self._fs = fs
+        self._id3_majority = id3_majority or Id3MajorityConfig()
+        self._enable_lookup = bool(enable_lookup)
 
     def run(self, root: RootName, source_root_rel_path: str) -> PreflightResult:
         t0 = time.monotonic()
@@ -866,28 +876,89 @@ class PreflightService:
         *,
         unit_type: str,
     ) -> dict[str, Any]:
-        # This is intentionally minimal for Issue 500
-        # (pipeline correctness over full enrichment parity).
         if unit_type == "dir":
-            cover_candidates = self._find_cover_candidates(root, rel_path)
-            fingerprint = self._fingerprint_stat_based_dir(root, rel_path)
-            return {
-                "suggested_author": None,
-                "suggested_title": _basename(rel_path),
-                "cover_candidates": cover_candidates,
-                "rename_preview": {rel_path: rel_path},
-                "fingerprint": _fingerprint_to_dict(fingerprint),
-                "meta": {"id3_majority": None},
-            }
+            return self._enrich_book_dir(root, rel_path)
+        return self._enrich_book_file(root, rel_path)
 
-        fingerprint = self._fingerprint_stat_based_file(root, rel_path)
+    def _enrich_book_dir(self, root: RootName, book_rel: str) -> dict[str, Any]:
+        audio_files = self._list_audio_files(root, book_rel)
+        id3 = self._id3_majority_vote(root, audio_files)
+
+        # Covers: embedded APIC + directory images.
+        dir_imgs = self._find_cover_candidates(root, book_rel)
+        apic_markers = self._find_apic_markers(root, audio_files)
+        cover_candidates = sorted(set(dir_imgs + apic_markers))
+
+        rename_preview = self._build_rename_preview(root, audio_files)
+
+        fp_basic = self._fingerprint_stat_based_dir(root, book_rel)
+        fp_strong = self._fingerprint_dir(
+            root,
+            book_rel,
+            extra={
+                "id3_majority": id3,
+                "apic_markers": apic_markers,
+                "rename_preview": rename_preview,
+            },
+        )
+
+        meta: dict[str, Any] = {
+            "id3_majority": id3,
+            "fingerprint_basic": _fingerprint_to_dict(fp_basic),
+        }
+
+        # Optional lookup integration (best-effort, opt-in).
+        if self._enable_lookup:
+            meta["lookup"] = self._lookup_best_effort(id3)
+
+        suggested_author = _opt_str((id3 or {}).get("author"))
+        suggested_title = _opt_str((id3 or {}).get("album")) or _basename(book_rel)
+
         return {
-            "suggested_author": None,
-            "suggested_title": _stem(rel_path),
-            "cover_candidates": [],
-            "rename_preview": {rel_path: rel_path},
-            "fingerprint": _fingerprint_to_dict(fingerprint),
-            "meta": {"id3_majority": None},
+            "suggested_author": suggested_author,
+            "suggested_title": suggested_title,
+            "cover_candidates": cover_candidates,
+            "rename_preview": rename_preview,
+            "fingerprint": _fingerprint_to_dict(fp_strong),
+            "meta": meta,
+        }
+
+    def _enrich_book_file(self, root: RootName, file_rel: str) -> dict[str, Any]:
+        audio_files = [file_rel] if _ext(file_rel) in _AUDIO_EXT else []
+        id3 = self._id3_majority_vote(root, audio_files)
+        apic_markers = self._find_apic_markers(root, audio_files)
+
+        rename_preview = (
+            self._build_rename_preview(root, audio_files) if audio_files else {file_rel: file_rel}
+        )
+
+        fp_basic = self._fingerprint_stat_based_file(root, file_rel)
+        fp_strong = self._fingerprint_file(
+            root,
+            file_rel,
+            extra={
+                "id3_majority": id3,
+                "apic_markers": apic_markers,
+                "rename_preview": rename_preview,
+            },
+        )
+        meta: dict[str, Any] = {
+            "id3_majority": id3,
+            "fingerprint_basic": _fingerprint_to_dict(fp_basic),
+        }
+        if self._enable_lookup:
+            meta["lookup"] = self._lookup_best_effort(id3)
+
+        suggested_title = _opt_str((id3 or {}).get("title")) or _stem(file_rel)
+        suggested_author = _opt_str((id3 or {}).get("author"))
+
+        return {
+            "suggested_author": suggested_author,
+            "suggested_title": suggested_title,
+            "cover_candidates": sorted(set(apic_markers)),
+            "rename_preview": rename_preview,
+            "fingerprint": _fingerprint_to_dict(fp_strong),
+            "meta": meta,
         }
 
     def _fingerprint_stat_based_dir(self, root: RootName, book_rel: str) -> BookFingerprint:
@@ -931,11 +1002,7 @@ class PreflightService:
         book: str,
         book_rel: str,
     ) -> BookPreflight:
-        cover_candidates = self._find_cover_candidates(root, book_rel)
-        fingerprint = self._fingerprint_dir(root, book_rel)
-
-        # Rename preview is a deterministic placeholder map (identity mapping).
-        rename_preview = {book_rel: book_rel}
+        enrich = self._enrich_book_dir(root, book_rel)
 
         return BookPreflight(
             book_ref=_book_ref(source_root_rel_path, book_rel),
@@ -943,12 +1010,14 @@ class PreflightService:
             author=author,
             book=book,
             rel_path=book_rel,
-            suggested_author=author or None,
-            suggested_title=book,
-            cover_candidates=cover_candidates,
-            rename_preview=rename_preview,
-            fingerprint=fingerprint,
-            meta={"id3_majority": None},
+            suggested_author=_opt_str(enrich.get("suggested_author")) or (author or None),
+            suggested_title=_opt_str(enrich.get("suggested_title")) or book,
+            cover_candidates=list(enrich.get("cover_candidates") or []),
+            rename_preview=enrich.get("rename_preview")
+            if isinstance(enrich.get("rename_preview"), dict)
+            else None,
+            fingerprint=_fingerprint_from_dict(enrich.get("fingerprint")),
+            meta=enrich.get("meta") if isinstance(enrich.get("meta"), dict) else None,
         )
 
     def _preflight_file(
@@ -960,20 +1029,196 @@ class PreflightService:
         book: str,
         file_rel: str,
     ) -> BookPreflight:
-        fingerprint = self._fingerprint_file(root, file_rel)
+        enrich = self._enrich_book_file(root, file_rel)
         return BookPreflight(
             book_ref=_book_ref(source_root_rel_path, file_rel),
             unit_type="file",
             author=author,
             book=book,
             rel_path=file_rel,
-            suggested_author=author or None,
-            suggested_title=book,
-            cover_candidates=[],
-            rename_preview={file_rel: file_rel},
-            fingerprint=fingerprint,
-            meta={"id3_majority": None},
+            suggested_author=_opt_str(enrich.get("suggested_author")) or (author or None),
+            suggested_title=_opt_str(enrich.get("suggested_title")) or book,
+            cover_candidates=list(enrich.get("cover_candidates") or []),
+            rename_preview=enrich.get("rename_preview")
+            if isinstance(enrich.get("rename_preview"), dict)
+            else None,
+            fingerprint=_fingerprint_from_dict(enrich.get("fingerprint")),
+            meta=enrich.get("meta") if isinstance(enrich.get("meta"), dict) else None,
         )
+
+    def _read_id3v2_prefix(self, root: RootName, rel_path: str) -> bytes:
+        """Read the full ID3v2 tag prefix for MP3 files.
+
+        Returns empty bytes when no ID3v2 tag is present or on read failure.
+        """
+
+        try:
+            with self._fs.open_read(root, rel_path) as f:
+                head = f.read(10)
+                if len(head) != 10 or head[:3] != b"ID3":
+                    return b""
+                size = _id3v2_synchsafe_to_int(head[6:10])
+                # Hard cap for safety and determinism.
+                if size < 0 or size > 8 * 1024 * 1024:
+                    return b""
+                body = f.read(int(size))
+                return head + body
+        except Exception:
+            return b""
+
+    def _list_audio_files(self, root: RootName, book_rel: str) -> list[str]:
+        entries = self._fs.list_dir(root, book_rel, recursive=True)
+        files = [e.rel_path for e in entries if (not e.is_dir) and _ext(e.rel_path) in _AUDIO_EXT]
+        return sorted(files)
+
+    def _find_apic_markers(self, root: RootName, audio_files: list[str]) -> list[str]:
+        markers: list[str] = []
+        for rel in audio_files:
+            if _ext(rel) != ".mp3":
+                continue
+            apics = _id3v2_apic_hashes(self._read_id3v2_prefix(root, rel))
+            for h in apics:
+                markers.append(f"apic:sha256:{h}")
+        return sorted(set(markers))
+
+    def _build_rename_preview(self, root: RootName, audio_files: list[str]) -> dict[str, str]:
+        if not audio_files:
+            return {}
+
+        items: list[tuple[str, tuple[int, int, tuple[Any, ...]], str, int | None]] = []
+        for rel in audio_files:
+            ext = _ext(rel)
+            stem = _stem(rel)
+            title = None
+            trk = None
+            if ext == ".mp3":
+                tags = _id3v2_text_frames(self._read_id3v2_prefix(root, rel))
+                title = _opt_str(tags.get("TIT2"))
+                trk = _parse_track_number(tags.get("TRCK"))
+
+            fname_num = _parse_track_number(stem)
+            if trk is not None:
+                key = (0, int(trk), _natural_key(title or stem))
+            elif fname_num is not None:
+                key = (1, int(fname_num), _natural_key(stem))
+            else:
+                key = (2, 0, _natural_key(stem))
+            explicit_num = (
+                int(trk) if trk is not None else (int(fname_num) if fname_num is not None else None)
+            )
+            items.append((rel, key, title or stem, explicit_num))
+
+        items.sort(key=lambda x: x[1])
+        max_explicit = max([n for (_r, _k, _t, n) in items if n is not None] or [0])
+        width = max(2, len(str(max(len(items), max_explicit))))
+
+        preview: dict[str, str] = {}
+        used: set[int] = set()
+        next_auto = 1
+        for rel, _k, title, explicit_num in items:
+            dir_part = "/".join(rel.split("/")[:-1])
+            safe_title = _sanitize_filename(title)
+            if explicit_num is not None and explicit_num > 0 and explicit_num not in used:
+                num = explicit_num
+            else:
+                while next_auto in used:
+                    next_auto += 1
+                num = next_auto
+                next_auto += 1
+            used.add(int(num))
+            new_name = f"{int(num):0{width}d} - {safe_title}{_ext(rel)}"
+            new_rel = new_name if not dir_part else f"{dir_part}/{new_name}"
+            preview[rel] = new_rel
+        return preview
+
+    def _id3_majority_vote(self, root: RootName, audio_files: list[str]) -> dict[str, Any] | None:
+        if not audio_files:
+            return None
+
+        norm = self._id3_majority.normalization
+
+        def _norm(v: str | None) -> str | None:
+            if v is None:
+                return None
+            s = v
+            if norm.strip:
+                s = s.strip()
+            if norm.collapse_whitespace:
+                s = " ".join(s.split())
+            if norm.casefold:
+                s = s.casefold()
+            return s or None
+
+        counts: dict[str, dict[str, int]] = {"author": {}, "album": {}, "title": {}}
+        raw_best: dict[tuple[str, str], str] = {}
+
+        for rel in audio_files:
+            if _ext(rel) != ".mp3":
+                continue
+            tags = _id3v2_text_frames(self._read_id3v2_prefix(root, rel))
+            author = _opt_str(tags.get("TPE2")) or _opt_str(tags.get("TPE1"))
+            album = _opt_str(tags.get("TALB"))
+            title = _opt_str(tags.get("TIT2"))
+            for field, val in ("author", author), ("album", album), ("title", title):
+                n = _norm(val)
+                if not n:
+                    continue
+                d = counts[field]
+                d[n] = int(d.get(n, 0)) + 1
+                key = (field, n)
+                # Keep a deterministic representative raw string.
+                prev = raw_best.get(key)
+                if prev is None or (val is not None and str(val) < prev):
+                    raw_best[key] = str(val)
+
+        def _majority(field: str) -> str | None:
+            d = counts[field]
+            if not d:
+                return None
+            # Deterministic tie-break: higher count, then normalized text.
+            best_norm = sorted(d.items(), key=lambda it: (-int(it[1]), str(it[0])))[0][0]
+            return raw_best.get((field, best_norm))
+
+        res = {
+            "author": _majority("author"),
+            "album": _majority("album"),
+            "title": _majority("title"),
+        }
+        if not any(res.values()):
+            return None
+        return res
+
+    def _lookup_best_effort(self, id3_majority: dict[str, Any] | None) -> dict[str, Any] | None:
+        # Best-effort integration point. This is opt-in only.
+        if not id3_majority:
+            return None
+        author = _opt_str(id3_majority.get("author"))
+        title = _opt_str(id3_majority.get("album")) or _opt_str(id3_majority.get("title"))
+        if not author and not title:
+            return None
+        try:
+            from plugins.metadata_sync.plugin import MetadataSync
+
+            plugin = MetadataSync(config={"verbosity": 0})
+            md = plugin.fetch_from_googlebooks(
+                author=author, title=title
+            ) or plugin.fetch_from_openlibrary(author=author, title=title)
+            if md is None:
+                return None
+            # Stable dict shape.
+            d = {
+                "title": md.title,
+                "author": md.author,
+                "year": md.year,
+                "publisher": md.publisher,
+                "isbn": md.isbn,
+                "description": md.description,
+                "cover_url": md.cover_url,
+                "source": md.source,
+            }
+            return {k: v for k, v in d.items() if v is not None}
+        except Exception:
+            return None
 
     def _find_cover_candidates(self, root: RootName, book_rel: str) -> list[str]:
         entries = self._fs.list_dir(root, book_rel, recursive=True)
@@ -985,7 +1230,13 @@ class PreflightService:
                 imgs.append(rel)
         return sorted(imgs)
 
-    def _fingerprint_dir(self, root: RootName, book_rel: str) -> BookFingerprint:
+    def _fingerprint_dir(
+        self,
+        root: RootName,
+        book_rel: str,
+        *,
+        extra: dict[str, Any] | None = None,
+    ) -> BookFingerprint:
         entries = self._fs.list_dir(root, book_rel, recursive=True)
         files = [e.rel_path for e in entries if not e.is_dir]
         items: list[tuple[str, str]] = []
@@ -1002,16 +1253,31 @@ class PreflightService:
             h.update(b"\n")
             h.update(chk.encode("utf-8"))
             h.update(b"\n")
-        return BookFingerprint(algo="sha256", value=h.hexdigest(), strength="basic")
 
-    def _fingerprint_file(self, root: RootName, file_rel: str) -> BookFingerprint:
+        if extra is not None:
+            payload = json.dumps(extra, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+            h.update(payload.encode("utf-8"))
+            h.update(b"\n")
+        return BookFingerprint(algo="sha256", value=h.hexdigest(), strength="strong")
+
+    def _fingerprint_file(
+        self,
+        root: RootName,
+        file_rel: str,
+        *,
+        extra: dict[str, Any] | None = None,
+    ) -> BookFingerprint:
         chk = self._fs.checksum(root, file_rel, algo="sha256")
         h = hashlib.sha256()
         h.update(file_rel.encode("utf-8"))
         h.update(b"\n")
         h.update(chk.encode("utf-8"))
         h.update(b"\n")
-        return BookFingerprint(algo="sha256", value=h.hexdigest(), strength="basic")
+        if extra is not None:
+            payload = json.dumps(extra, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+            h.update(payload.encode("utf-8"))
+            h.update(b"\n")
+        return BookFingerprint(algo="sha256", value=h.hexdigest(), strength="strong")
 
 
 def _opt_str(v: Any) -> str | None:
@@ -1135,3 +1401,183 @@ def _book_ref(source_root_rel_path: str, rel_path: str) -> str:
     h.update(rel_path.encode("utf-8"))
     h.update(b"\n")
     return "book_" + h.hexdigest()[:24]
+
+
+def _id3v2_synchsafe_to_int(b4: bytes) -> int:
+    """Decode a 4-byte synchsafe integer used by ID3v2 headers."""
+
+    if len(b4) != 4:
+        return 0
+    out = 0
+    for b in b4:
+        out = (out << 7) | (b & 0x7F)
+    return int(out)
+
+
+def _id3v2_text_frames(tag: bytes) -> dict[str, str]:
+    """Parse a minimal subset of ID3v2 text frames.
+
+    Supported frames: TIT2, TALB, TPE1, TPE2, TRCK.
+    """
+
+    if len(tag) < 10 or tag[:3] != b"ID3":
+        return {}
+    size = _id3v2_synchsafe_to_int(tag[6:10])
+    data = tag[10 : 10 + size]
+    out: dict[str, str] = {}
+
+    i = 0
+    while i + 10 <= len(data):
+        fid = data[i : i + 4]
+        if fid == b"\x00\x00\x00\x00":
+            break
+        frame_id = fid.decode("ascii", errors="ignore")
+        frame_size = int.from_bytes(data[i + 4 : i + 8], "big", signed=False)
+        # flags = data[i+8:i+10]  (ignored)
+        i += 10
+        if frame_size <= 0 or i + frame_size > len(data):
+            break
+
+        payload = data[i : i + frame_size]
+        i += frame_size
+
+        if frame_id not in {"TIT2", "TALB", "TPE1", "TPE2", "TRCK"}:
+            continue
+        if not payload:
+            continue
+
+        enc = payload[0]
+        raw = payload[1:]
+        txt = _decode_id3_text(enc, raw)
+        if txt:
+            out[frame_id] = txt
+
+    return out
+
+
+def _decode_id3_text(enc: int, data: bytes) -> str:
+    """Decode ID3v2 text payload deterministically."""
+
+    if not data:
+        return ""
+    # 0: latin1, 1: utf-16 (with BOM), 2: utf-16be, 3: utf-8
+    codec = "latin1"
+    if enc == 1:
+        codec = "utf-16"
+    elif enc == 2:
+        codec = "utf-16-be"
+    elif enc == 3:
+        codec = "utf-8"
+    try:
+        s = data.decode(codec, errors="replace")
+    except Exception:
+        s = data.decode("latin1", errors="replace")
+    # ID3 text fields may contain nulls or multiple values separated by null.
+    s = s.replace("\x00", " ")
+    return " ".join(s.split())
+
+
+def _id3v2_apic_hashes(tag: bytes) -> list[str]:
+    """Return SHA256 hashes for APIC payload image data."""
+
+    if len(tag) < 10 or tag[:3] != b"ID3":
+        return []
+    size = _id3v2_synchsafe_to_int(tag[6:10])
+    data = tag[10 : 10 + size]
+    hashes: list[str] = []
+
+    i = 0
+    while i + 10 <= len(data):
+        fid = data[i : i + 4]
+        if fid == b"\x00\x00\x00\x00":
+            break
+        frame_id = fid.decode("ascii", errors="ignore")
+        frame_size = int.from_bytes(data[i + 4 : i + 8], "big", signed=False)
+        i += 10
+        if frame_size <= 0 or i + frame_size > len(data):
+            break
+        payload = data[i : i + frame_size]
+        i += frame_size
+        if frame_id != "APIC":
+            continue
+
+        img = _extract_apic_image_bytes(payload)
+        if img:
+            h = hashlib.sha256()
+            h.update(img)
+            hashes.append(h.hexdigest())
+
+    return sorted(set(hashes))
+
+
+def _extract_apic_image_bytes(payload: bytes) -> bytes:
+    """Extract embedded image bytes from an APIC frame payload."""
+
+    if len(payload) < 5:
+        return b""
+    enc = payload[0]
+    rest = payload[1:]
+    # MIME is null-terminated latin1 string.
+    nul = rest.find(b"\x00")
+    if nul < 0:
+        return b""
+    rest = rest[nul + 1 :]
+    if not rest:
+        return b""
+    # picture type
+    rest = rest[1:]
+    if not rest:
+        return b""
+    # description is null-terminated in selected encoding
+    if enc in (0, 3):
+        nul2 = rest.find(b"\x00")
+        if nul2 < 0:
+            return b""
+        return rest[nul2 + 1 :]
+    # UTF-16 variants: terminator is two null bytes
+    nul2 = rest.find(b"\x00\x00")
+    if nul2 < 0:
+        return b""
+    return rest[nul2 + 2 :]
+
+
+def _parse_track_number(v: str | None) -> int | None:
+    if not v:
+        return None
+    s = str(v).strip()
+    if not s:
+        return None
+    # Common patterns: "1", "01", "1/10", "01/10"
+    m = re.match(r"^\s*(\d{1,4})\s*(?:/\s*\d{1,4}\s*)?$", s)
+    if not m:
+        return None
+    try:
+        n = int(m.group(1))
+    except Exception:
+        return None
+    return n if n > 0 else None
+
+
+def _natural_key(s: str) -> tuple[Any, ...]:
+    """Key for deterministic natural sorting."""
+
+    parts: list[Any] = []
+    for p in re.split(r"(\d+)", s.casefold()):
+        if not p:
+            continue
+        if p.isdigit():
+            parts.append(int(p))
+        else:
+            parts.append(p)
+    return tuple(parts)
+
+
+def _sanitize_filename(name: str) -> str:
+    """Deterministic, filesystem-safe filename component."""
+
+    s = str(name)
+    # Replace path separators and control characters.
+    s = "".join("_" if (ch in "/\\" or ord(ch) < 32) else ch for ch in s)
+    s = " ".join(s.split())
+    s = s.strip(" .")
+    return s or "untitled"

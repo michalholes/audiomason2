@@ -1,3 +1,8 @@
+## 2026-02-13T21:15:00+01:00
+
+-   import_wizard: Deep enrichment now includes deterministic ID3 majority vote, APIC cover markers, stronger fingerprints, and deterministic rename preview ordering.
+-   spec: Document deep enrichment requirements and bump specification version to 1.0.60.
+
 ## 2026-02-13T21:00:00+01:00
 
 -   Issue 500: import_wizard: Add fast index endpoint for start screen (2-level scan, no deep reads) with deterministic root signature cache under file_io JOBS.

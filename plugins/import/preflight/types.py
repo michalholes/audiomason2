@@ -10,6 +10,28 @@ from typing import Any
 
 
 @dataclass(frozen=True)
+class TextNormalization:
+    """Deterministic text normalization settings.
+
+    Used for ID3 majority vote and rename preview.
+    """
+
+    strip: bool = True
+    collapse_whitespace: bool = True
+    casefold: bool = True
+
+
+@dataclass(frozen=True)
+class Id3MajorityConfig:
+    """ID3 majority vote configuration.
+
+    Majority is computed over non-empty normalized values.
+    """
+
+    normalization: TextNormalization = TextNormalization()
+
+
+@dataclass(frozen=True)
 class BookFingerprint:
     """Deterministic fingerprint (basic)."""
 

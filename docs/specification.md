@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.59
+Specification Version: 1.0.60
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -859,6 +859,18 @@ Required components:
 
 - session_store: Persist ImportRunState under the file_io JOBS root.
 - preflight: Deterministic read-only detection producing a list of discovered book units (mixed inbox layout support), cover candidates, rename preview map, a stable book_ref per unit, explicit skipped entries (with reason), and a basic unit fingerprint.
+
+Deep enrichment requirements (PHASE 0):
+
+- ID3 majority vote (MP3): suggested author/title MAY be derived from ID3v2 tags via majority vote over non-empty values.
+  Normalization MUST be deterministic and configurable (strip, whitespace collapse, casefold).
+- Cover candidates MUST include both directory image files and embedded APIC images (represented as stable markers).
+- Fingerprints MUST include a basic fingerprint (stat-based) and a stronger fingerprint (content checksums + enrichment inputs).
+- Rename preview ordering MUST be deterministic and MUST use the following precedence for ordering/numbering:
+  1) ID3 track number (TRCK)
+  2) filename number prefix
+  3) natural sort of filenames
+- Lookup/metadata integration MAY be implemented as a best-effort opt-in enrichment step and MUST be disabled by default to preserve determinism.
 - processed_registry: Book-folder processed registry under the file_io JOBS root.
 
 Issue 403 extension (PHASE 2 processing engine):
