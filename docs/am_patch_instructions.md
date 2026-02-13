@@ -153,6 +153,61 @@ Per-file authority:
 
 Generating repair patch against outdated snapshot is FORBIDDEN.
 
+Repair patches MUST follow a file-local default workflow.
+The agent MUST NOT reconstruct, overwrite, or mechanically rebuild the
+entire repository tree unless strictly required for correctness.
+
+The default behavior is minimal-scope modification based on failing gate logs.
+
+------------------------------------------------------------------------
+
+## Repair workflow optimization (MANDATORY)
+
+### Core principle: minimal scope
+
+-   The agent MUST modify only the minimal set of files required to fix
+    the failing gate(s).
+-   The agent MUST justify any widening of scope using log evidence and
+    file inspection.
+-   Automatic full-tree restoration or overlay merging is prohibited.
+
+------------------------------------------------------------------------
+
+## Ruff / Mypy failures (default-minimal workflow)
+
+If the failing gates include `ruff` and/or `mypy`, the agent MUST:
+
+1.  Use the provided logs to identify exact failing file paths.
+2.  Restrict modifications to only the implicated files.
+3.  Prefer files present in `patched.zip` when applicable.
+4.  Avoid unpacking or reconstructing the full workspace unless the log
+    explicitly references files outside `patched.zip`.
+
+Fixing pure ruff/mypy failures MUST NOT trigger full repository rebuild.
+
+------------------------------------------------------------------------
+
+## Pytest failures (triage workflow)
+
+If the failing gates include `pytest`, the agent MUST perform triage
+before escalating scope.
+
+Minimal path (preferred):
+
+-   If the failure can plausibly be fixed within files present in
+    `patched.zip`, modifications MUST be restricted to those files.
+
+Escalation (only when required):
+
+-   The agent MAY inspect the full workspace snapshot ONLY if the log
+    references files not included in `patched.zip`, or the failure
+    depends on configuration, fixtures, test resources, packaging,
+    entrypoints, or other files outside the authoritative overlay.
+
+Even after escalation, only the minimal required files may be modified.
+
+Mechanical replacement of the entire repository tree is prohibited.
+
 ------------------------------------------------------------------------
 
 ## FILE AUTHORITY MANIFEST (MANDATORY FOR REPAIR)
