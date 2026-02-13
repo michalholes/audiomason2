@@ -36,7 +36,7 @@ def list_dir(root: RootConfig, rel_path: str, *, recursive: bool = False) -> lis
 
     Ordering is stable and deterministic: lexicographic by rel_path.
     """
-    base = resolve_path(root.dir_path, rel_path)
+    base = resolve_path(root.dir_path, rel_path, root_name=root.name)
 
     if not base.exists():
         raise NotFoundError(f"Not found: {rel_path}")
@@ -76,7 +76,7 @@ def list_dir(root: RootConfig, rel_path: str, *, recursive: bool = False) -> lis
 
 
 def stat_path(root: RootConfig, rel_path: str) -> FileStat:
-    abs_path = resolve_path(root.dir_path, rel_path)
+    abs_path = resolve_path(root.dir_path, rel_path, root_name=root.name)
     if not abs_path.exists():
         raise NotFoundError(f"Not found: {rel_path}")
     st = abs_path.stat()
@@ -89,12 +89,12 @@ def stat_path(root: RootConfig, rel_path: str) -> FileStat:
 
 
 def exists(root: RootConfig, rel_path: str) -> bool:
-    abs_path = resolve_path(root.dir_path, rel_path)
+    abs_path = resolve_path(root.dir_path, rel_path, root_name=root.name)
     return abs_path.exists()
 
 
 def mkdir(root: RootConfig, rel_path: str, *, parents: bool = True, exist_ok: bool = True) -> None:
-    abs_path = resolve_path(root.dir_path, rel_path)
+    abs_path = resolve_path(root.dir_path, rel_path, root_name=root.name)
     abs_path.mkdir(parents=parents, exist_ok=exist_ok)
 
 
@@ -105,8 +105,8 @@ def rename(
     *,
     overwrite: bool = False,
 ) -> None:
-    src_path = resolve_path(root.dir_path, src)
-    dst_path = resolve_path(root.dir_path, dst)
+    src_path = resolve_path(root.dir_path, src, root_name=root.name)
+    dst_path = resolve_path(root.dir_path, dst, root_name=root.name)
 
     if not src_path.exists():
         raise NotFoundError(f"Not found: {src}")
@@ -126,7 +126,7 @@ def rename(
 
 
 def delete_file(root: RootConfig, rel_path: str) -> None:
-    abs_path = resolve_path(root.dir_path, rel_path)
+    abs_path = resolve_path(root.dir_path, rel_path, root_name=root.name)
     if not abs_path.exists():
         raise NotFoundError(f"Not found: {rel_path}")
     if abs_path.is_dir():
@@ -135,14 +135,14 @@ def delete_file(root: RootConfig, rel_path: str) -> None:
 
 
 def rmdir(root: RootConfig, rel_path: str) -> None:
-    abs_path = resolve_path(root.dir_path, rel_path)
+    abs_path = resolve_path(root.dir_path, rel_path, root_name=root.name)
     if not abs_path.exists():
         raise NotFoundError(f"Not found: {rel_path}")
     abs_path.rmdir()
 
 
 def rmtree(root: RootConfig, rel_path: str) -> None:
-    abs_path = resolve_path(root.dir_path, rel_path)
+    abs_path = resolve_path(root.dir_path, rel_path, root_name=root.name)
     if not abs_path.exists():
         raise NotFoundError(f"Not found: {rel_path}")
     if abs_path.is_file():
@@ -159,8 +159,8 @@ def copy(
     overwrite: bool = False,
     mkdir_parents: bool = True,
 ) -> None:
-    src_path = resolve_path(root.dir_path, src)
-    dst_path = resolve_path(root.dir_path, dst)
+    src_path = resolve_path(root.dir_path, src, root_name=root.name)
+    dst_path = resolve_path(root.dir_path, dst, root_name=root.name)
 
     if not src_path.exists():
         raise NotFoundError(f"Not found: {src}")

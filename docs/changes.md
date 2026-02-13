@@ -1,3 +1,7 @@
+## 2026-02-13T12:15:00+01:00
+
+-   Issue 701: file_io: Emit operation.start/operation.end runtime diagnostics (diagnostics.jsonl) and Core logger summaries for file operations, including resolver decisions (resolved_path), counts, delete status, and short tracebacks on failures.
+
 ## 2026-02-13T12:00:00+01:00
 
 -   Issue 333: web_interface: Emit operational logs via Core logger (LogBus) for request and handler operations; include traceback on failures.

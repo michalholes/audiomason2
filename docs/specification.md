@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.52
+Specification Version: 1.0.53
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -1216,7 +1216,30 @@ Fail-safe requirement:
 
 The runtime diagnostics layer has a canonical envelope schema and a central JSONL sink.
 
+#### 10.3.1 File I/O Observability
+
+The `file_io` plugin MUST emit observable diagnostics and logs from within the File I/O capability layer.
+
+Requirements:
+
+- Each public File I/O operation MUST emit `operation.start` and `operation.end` diagnostics envelopes.
+- Envelope fields:
+  - component: `file_io`
+  - operation: `file_io.<op>` (examples: file_io.resolve, file_io.list, file_io.delete, file_io.open_read, file_io.open_write)
+- Minimum data fields:
+  - root, rel_path
+  - resolved_path (when resolution occurs)
+  - status (succeeded|failed) and duration_ms (on operation.end)
+- Optional summary fields:
+  - list: items_count, files_count, dirs_count
+  - delete: deleted
+  - read/write: bytes (count)
+- On failure, operation.end MUST include: error_type, error_message, and a short traceback string.
+
+In addition to diagnostics, the File I/O capability MUST emit an equivalent summary via the Core logger.
+
 Envelope schema (mandatory):
+
 
 - "event": string
 - "component": string
