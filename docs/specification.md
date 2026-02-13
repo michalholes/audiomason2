@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.54
+Specification Version: 1.0.55
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -1227,6 +1227,43 @@ Requirements:
 - On failure, operation.end MUST include: error_type, error_message, and a short traceback string.
 
 In addition to diagnostics, the File I/O capability MUST emit an equivalent summary via the Core logger.
+
+
+#### 10.3.2 Import Observability
+
+The Import wizard MUST emit step-level runtime diagnostics envelopes so that a single log stream
+is sufficient to reconstruct the wizard progression.
+
+Requirements:
+
+- Each import step MUST emit `operation.start` and `operation.end` diagnostics envelopes.
+- The envelope "operation" field MUST be one of:
+  - import.preflight
+  - import.scan
+  - import.select_source
+  - import.finish
+- The component field SHOULD identify the emitting component (examples: import.preflight, import_cli).
+
+Minimum data fields (all steps):
+
+- wizard: "import"
+- step: a stable step name (examples: preflight, scan, select_source, finish)
+- inputs_summary: a dict of safe aggregates only (counts, root names, mode strings)
+- status: running for start events; succeeded/failed/cancelled for terminal events
+
+Terminal event requirements (operation.end):
+
+- duration_ms: integer
+- On failure, include:
+  - error_type
+  - error_message
+  - traceback: short traceback string (last N lines; ASCII-only)
+
+Optional summary fields (allowed):
+
+- scan: items_count, skipped_count
+- select_source: available_sources_n, selected_source (identifier), selected_books_n
+- finish: run_id, jobs_n, ran_n
 
 Envelope schema (mandatory):
 

@@ -9,6 +9,8 @@ ASCII-only.
 from __future__ import annotations
 
 import hashlib
+import time
+import traceback
 from typing import Any
 
 from audiomason.core.diagnostics import build_envelope
@@ -21,6 +23,26 @@ from .types import BookFingerprint, BookPreflight, PreflightResult, SkippedEntry
 _AUDIO_EXT = {".mp3", ".m4a", ".m4b", ".flac", ".wav", ".ogg", ".opus"}
 _ARCHIVE_EXT = {".zip", ".rar", ".7z"}
 _IMG_EXT = {".jpg", ".jpeg", ".png", ".webp"}
+
+
+def _duration_ms(t0: float, t1: float) -> int:
+    ms = int((t1 - t0) * 1000.0)
+    return 0 if ms < 0 else ms
+
+
+def _shorten_text(s: str, *, max_chars: int = 2000) -> str:
+    if len(s) <= max_chars:
+        return s
+    return s[: max(0, max_chars - 3)] + "..."
+
+
+def _shorten_traceback(tb: str) -> str:
+    tb = tb.strip("\n")
+    if not tb:
+        return ""
+    lines = tb.splitlines()
+    lines = lines[-20:]
+    return _shorten_text("\n".join(lines), max_chars=2000)
 
 
 def _emit_diag(event: str, *, operation: str, data: dict[str, Any]) -> None:
@@ -43,105 +65,206 @@ class PreflightService:
         self._fs = fs
 
     def run(self, root: RootName, source_root_rel_path: str) -> PreflightResult:
+        t0 = time.monotonic()
+        inputs_summary = {"root": str(root), "source_root_rel_path": source_root_rel_path}
+
+        # Keep legacy boundary events for compatibility.
+        _emit_diag("boundary.start", operation="run", data=inputs_summary)
+
+        # Contracted step-level observability.
         _emit_diag(
-            "boundary.start",
-            operation="run",
-            data={"root": str(root), "source_root_rel_path": source_root_rel_path},
+            "operation.start",
+            operation="import.preflight",
+            data={
+                "wizard": "import",
+                "step": "preflight",
+                "inputs_summary": inputs_summary,
+                "status": "running",
+            },
         )
 
-        authors: list[str] = []
-        books: list[BookPreflight] = []
-        skipped: list[SkippedEntry] = []
+        try:
+            authors: list[str] = []
+            books: list[BookPreflight] = []
+            skipped: list[SkippedEntry] = []
 
-        root_entries = self._fs.list_dir(root, source_root_rel_path, recursive=False)
-        # Deterministic traversal order.
-        for entry in sorted(root_entries, key=lambda e: e.rel_path):
-            name = _basename(entry.rel_path)
-            if not name or name in (".", ".."):
-                continue
+            scan_t0 = time.monotonic()
+            _emit_diag(
+                "operation.start",
+                operation="import.scan",
+                data={
+                    "wizard": "import",
+                    "step": "scan",
+                    "inputs_summary": inputs_summary,
+                    "status": "running",
+                },
+            )
+            try:
+                root_entries = self._fs.list_dir(root, source_root_rel_path, recursive=False)
+                # Deterministic traversal order.
+                for entry in sorted(root_entries, key=lambda e: e.rel_path):
+                    name = _basename(entry.rel_path)
+                    if not name or name in (".", ".."):
+                        continue
 
-            if entry.is_dir:
-                dir_rel = entry.rel_path.rstrip("/")
-                child_entries = self._fs.list_dir(root, dir_rel, recursive=False)
-                child_dirs = sorted(
-                    [
-                        _basename(e.rel_path)
-                        for e in child_entries
-                        if e.is_dir and _basename(e.rel_path) not in ("", ".", "..")
-                    ]
-                )
+                    if entry.is_dir:
+                        dir_rel = entry.rel_path.rstrip("/")
+                        child_entries = self._fs.list_dir(root, dir_rel, recursive=False)
+                        child_dirs = sorted(
+                            [
+                                _basename(e.rel_path)
+                                for e in child_entries
+                                if e.is_dir and _basename(e.rel_path) not in ("", ".", "..")
+                            ]
+                        )
 
-                # Mixed inbox layout support:
-                # - if the directory contains at least one subdirectory, treat it as an
-                #   author directory (author/book)
-                # - otherwise treat it as a single-level book directory
-                if child_dirs:
-                    author = name
-                    authors.append(author)
-                    author_rel = dir_rel
-                    # Any files directly under an author directory are not book units.
-                    for e in child_entries:
-                        if not e.is_dir:
-                            skipped.append(
-                                SkippedEntry(
-                                    rel_path=e.rel_path,
-                                    entry_type="file",
-                                    reason="unexpected_file_in_author_dir",
+                        # Mixed inbox layout support:
+                        # - if the directory contains at least one subdirectory, treat it as an
+                        #   author directory (author/book)
+                        # - otherwise treat it as a single-level book directory
+                        if child_dirs:
+                            author = name
+                            authors.append(author)
+                            author_rel = dir_rel
+                            # Any files directly under an author directory are not book units.
+                            for e in child_entries:
+                                if not e.is_dir:
+                                    skipped.append(
+                                        SkippedEntry(
+                                            rel_path=e.rel_path,
+                                            entry_type="file",
+                                            reason="unexpected_file_in_author_dir",
+                                        )
+                                    )
+
+                            for book in child_dirs:
+                                book_rel = _join(author_rel, book)
+                                books.append(
+                                    self._preflight_dir(
+                                        root,
+                                        source_root_rel_path,
+                                        author=author,
+                                        book=book,
+                                        book_rel=book_rel,
+                                    )
+                                )
+                        else:
+                            # Single-level book directory in inbox.
+                            books.append(
+                                self._preflight_dir(
+                                    root,
+                                    source_root_rel_path,
+                                    author="",
+                                    book=name,
+                                    book_rel=dir_rel,
                                 )
                             )
-
-                    for book in child_dirs:
-                        book_rel = _join(author_rel, book)
-                        books.append(
-                            self._preflight_dir(
-                                root,
-                                source_root_rel_path,
-                                author=author,
-                                book=book,
-                                book_rel=book_rel,
+                    else:
+                        ext = _ext(entry.rel_path)
+                        if ext in _ARCHIVE_EXT or ext in _AUDIO_EXT:
+                            books.append(
+                                self._preflight_file(
+                                    root,
+                                    source_root_rel_path,
+                                    author="",
+                                    book=_stem(entry.rel_path),
+                                    file_rel=entry.rel_path,
+                                )
                             )
-                        )
-                else:
-                    # Single-level book directory in inbox.
-                    books.append(
-                        self._preflight_dir(
-                            root,
-                            source_root_rel_path,
-                            author="",
-                            book=name,
-                            book_rel=dir_rel,
-                        )
-                    )
+                        else:
+                            skipped.append(
+                                SkippedEntry(
+                                    rel_path=entry.rel_path,
+                                    entry_type="file",
+                                    reason="unsupported_file_ext",
+                                )
+                            )
+            except Exception as e:
+                scan_t1 = time.monotonic()
+                _emit_diag(
+                    "operation.end",
+                    operation="import.scan",
+                    data={
+                        "wizard": "import",
+                        "step": "scan",
+                        "inputs_summary": inputs_summary,
+                        "status": "failed",
+                        "duration_ms": _duration_ms(scan_t0, scan_t1),
+                        "error_type": type(e).__name__,
+                        "error_message": str(e),
+                        "traceback": _shorten_traceback(traceback.format_exc()),
+                    },
+                )
+                raise
             else:
-                ext = _ext(entry.rel_path)
-                if ext in _ARCHIVE_EXT or ext in _AUDIO_EXT:
-                    books.append(
-                        self._preflight_file(
-                            root,
-                            source_root_rel_path,
-                            author="",
-                            book=_stem(entry.rel_path),
-                            file_rel=entry.rel_path,
-                        )
-                    )
-                else:
-                    skipped.append(
-                        SkippedEntry(
-                            rel_path=entry.rel_path,
-                            entry_type="file",
-                            reason="unsupported_file_ext",
-                        )
-                    )
+                scan_t1 = time.monotonic()
+                _emit_diag(
+                    "operation.end",
+                    operation="import.scan",
+                    data={
+                        "wizard": "import",
+                        "step": "scan",
+                        "inputs_summary": inputs_summary,
+                        "status": "succeeded",
+                        "duration_ms": _duration_ms(scan_t0, scan_t1),
+                        "items_count": len(books),
+                        "skipped_count": len(skipped),
+                    },
+                )
 
-        authors = sorted(set(authors))
-        books.sort(key=lambda b: (b.author, b.book, b.rel_path))
-        skipped.sort(key=lambda s: s.rel_path)
+            authors = sorted(set(authors))
+            books.sort(key=lambda b: (b.author, b.book, b.rel_path))
+            skipped.sort(key=lambda s: s.rel_path)
 
-        res = PreflightResult(
-            source_root_rel_path=source_root_rel_path,
-            authors=authors,
-            books=books,
-            skipped=skipped,
+            res = PreflightResult(
+                source_root_rel_path=source_root_rel_path,
+                authors=authors,
+                books=books,
+                skipped=skipped,
+            )
+        except Exception as e:
+            t1 = time.monotonic()
+            _emit_diag(
+                "operation.end",
+                operation="import.preflight",
+                data={
+                    "wizard": "import",
+                    "step": "preflight",
+                    "inputs_summary": inputs_summary,
+                    "status": "failed",
+                    "duration_ms": _duration_ms(t0, t1),
+                    "error_type": type(e).__name__,
+                    "error_message": str(e),
+                    "traceback": _shorten_traceback(traceback.format_exc()),
+                },
+            )
+            _emit_diag(
+                "boundary.end",
+                operation="run",
+                data={
+                    "root": str(root),
+                    "source_root_rel_path": source_root_rel_path,
+                    "status": "failed",
+                    "error_type": type(e).__name__,
+                    "error_message": str(e),
+                },
+            )
+            raise
+
+        t1 = time.monotonic()
+        _emit_diag(
+            "operation.end",
+            operation="import.preflight",
+            data={
+                "wizard": "import",
+                "step": "preflight",
+                "inputs_summary": inputs_summary,
+                "status": "succeeded",
+                "duration_ms": _duration_ms(t0, t1),
+                "authors_n": len(authors),
+                "books_n": len(books),
+                "skipped_n": len(skipped),
+            },
         )
         _emit_diag(
             "boundary.end",

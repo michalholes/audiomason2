@@ -35,6 +35,26 @@ from audiomason.core.events import get_event_bus
 from audiomason.core.log_bus import LogRecord, get_log_bus
 
 
+def _duration_ms(t0: float, t1: float) -> int:
+    ms = int((t1 - t0) * 1000.0)
+    return 0 if ms < 0 else ms
+
+
+def _shorten_text(s: str, *, max_chars: int = 2000) -> str:
+    if len(s) <= max_chars:
+        return s
+    return s[: max(0, max_chars - 3)] + "..."
+
+
+def _shorten_traceback(tb: str) -> str:
+    tb = tb.strip("\n")
+    if not tb:
+        return ""
+    lines = tb.splitlines()
+    lines = lines[-20:]
+    return _shorten_text("\n".join(lines), max_chars=2000)
+
+
 def _emit_diag(event: str, *, operation: str, data: dict[str, Any]) -> None:
     try:
         env = build_envelope(
@@ -240,6 +260,14 @@ def _run_id_for(*parts: str) -> str:
     return "run_" + h.hexdigest()[:12]
 
 
+def _selection_id_for(rel_paths: list[str]) -> str:
+    h = hashlib.sha256()
+    for rel in sorted(rel_paths):
+        h.update(rel.encode("utf-8"))
+        h.update(b"\n")
+    return "sel_" + h.hexdigest()[:12]
+
+
 def _mods() -> dict[str, Any]:
     # The plugin package is named 'import' which collides with Python syntax,
     # therefore we must use importlib.
@@ -369,7 +397,7 @@ class ImportCLIPlugin:
 
         preflight_svc = mods["PreflightService"](fs)
 
-        t0 = __import__("time").monotonic()
+        preflight_t0 = time.monotonic()
         _emit_diag(
             "boundary.start",
             operation="preflight",
@@ -378,14 +406,12 @@ class ImportCLIPlugin:
         try:
             preflight = preflight_svc.run(args.root, args.path)
         except Exception as e:
-            dur_ms = int((__import__("time").monotonic() - t0) * 1000)
-            tb: str | None
-            try:
+            preflight_t1 = time.monotonic()
+            tb = ""
+            with suppress(Exception):
                 import traceback
 
-                tb = traceback.format_exc()
-            except Exception:
-                tb = None
+                tb = _shorten_traceback(traceback.format_exc())
             _emit_diag(
                 "boundary.end",
                 operation="preflight",
@@ -394,12 +420,12 @@ class ImportCLIPlugin:
                     "error_type": type(e).__name__,
                     "error": str(e),
                     "traceback": tb,
-                    "duration_ms": dur_ms,
+                    "duration_ms": _duration_ms(preflight_t0, preflight_t1),
                 },
             )
             raise
 
-        dur_ms = int((__import__("time").monotonic() - t0) * 1000)
+        preflight_t1 = time.monotonic()
         _emit_diag(
             "boundary.end",
             operation="preflight",
@@ -407,7 +433,7 @@ class ImportCLIPlugin:
                 "status": "succeeded",
                 "authors_n": len(getattr(preflight, "authors", []) or []),
                 "books_n": len(getattr(preflight, "books", []) or []),
-                "duration_ms": dur_ms,
+                "duration_ms": _duration_ms(preflight_t0, preflight_t1),
             },
         )
 
@@ -419,6 +445,18 @@ class ImportCLIPlugin:
                 data={"status": "succeeded", "reason": "no_books"},
             )
             return
+
+        select_t0 = time.monotonic()
+        _emit_diag(
+            "operation.start",
+            operation="import.select_source",
+            data={
+                "wizard": "import",
+                "step": "select_source",
+                "inputs_summary": {"available_sources_n": len(preflight.books)},
+                "status": "running",
+            },
+        )
 
         selected_books: list[Any] = []
         if args.all_books:
@@ -432,6 +470,19 @@ class ImportCLIPlugin:
                     operation="import_cmd",
                     data={"status": "failed", "reason": "missing_selection"},
                 )
+                _emit_diag(
+                    "operation.end",
+                    operation="import.select_source",
+                    data={
+                        "wizard": "import",
+                        "step": "select_source",
+                        "inputs_summary": {"available_sources_n": len(preflight.books)},
+                        "status": "failed",
+                        "duration_ms": _duration_ms(select_t0, time.monotonic()),
+                        "error_type": "SystemExit",
+                        "error_message": "missing_selection",
+                    },
+                )
                 raise SystemExit(2)
             selected = [b for b in preflight.books if b.rel_path == args.book_rel_path]
             if not selected:
@@ -440,6 +491,19 @@ class ImportCLIPlugin:
                     "boundary.fail",
                     operation="import_cmd",
                     data={"status": "failed", "reason": "book_rel_path_not_found"},
+                )
+                _emit_diag(
+                    "operation.end",
+                    operation="import.select_source",
+                    data={
+                        "wizard": "import",
+                        "step": "select_source",
+                        "inputs_summary": {"available_sources_n": len(preflight.books)},
+                        "status": "failed",
+                        "duration_ms": _duration_ms(select_t0, time.monotonic()),
+                        "error_type": "SystemExit",
+                        "error_message": "book_rel_path_not_found",
+                    },
                 )
                 raise SystemExit(2)
             selected_books = selected
@@ -462,6 +526,17 @@ class ImportCLIPlugin:
                     )
                     if selected_author is None:
                         _emit_diag(
+                            "operation.end",
+                            operation="import.select_source",
+                            data={
+                                "wizard": "import",
+                                "step": "select_source",
+                                "inputs_summary": {"available_sources_n": len(preflight.books)},
+                                "status": "cancelled",
+                                "duration_ms": _duration_ms(select_t0, time.monotonic()),
+                            },
+                        )
+                        _emit_diag(
                             "boundary.end",
                             operation="import_cmd",
                             data={"status": "succeeded", "reason": "user_quit"},
@@ -476,6 +551,17 @@ class ImportCLIPlugin:
                     book_rel = _prompt_select("Select book (or q to quit):", book_names)
                     if book_rel is None:
                         _emit_diag(
+                            "operation.end",
+                            operation="import.select_source",
+                            data={
+                                "wizard": "import",
+                                "step": "select_source",
+                                "inputs_summary": {"available_sources_n": len(preflight.books)},
+                                "status": "cancelled",
+                                "duration_ms": _duration_ms(select_t0, time.monotonic()),
+                            },
+                        )
+                        _emit_diag(
                             "boundary.end",
                             operation="import_cmd",
                             data={"status": "succeeded", "reason": "user_quit"},
@@ -489,6 +575,17 @@ class ImportCLIPlugin:
                 book_rel = _prompt_select("Select book (or q to quit):", book_names)
                 if book_rel is None:
                     _emit_diag(
+                        "operation.end",
+                        operation="import.select_source",
+                        data={
+                            "wizard": "import",
+                            "step": "select_source",
+                            "inputs_summary": {"available_sources_n": len(preflight.books)},
+                            "status": "cancelled",
+                            "duration_ms": _duration_ms(select_t0, time.monotonic()),
+                        },
+                    )
+                    _emit_diag(
                         "boundary.end",
                         operation="import_cmd",
                         data={"status": "succeeded", "reason": "user_quit"},
@@ -499,6 +596,17 @@ class ImportCLIPlugin:
             if not selected_books:
                 print("No book selected.")
                 _emit_diag(
+                    "operation.end",
+                    operation="import.select_source",
+                    data={
+                        "wizard": "import",
+                        "step": "select_source",
+                        "inputs_summary": {"available_sources_n": len(preflight.books)},
+                        "status": "cancelled",
+                        "duration_ms": _duration_ms(select_t0, time.monotonic()),
+                    },
+                )
+                _emit_diag(
                     "boundary.end",
                     operation="import_cmd",
                     data={"status": "succeeded", "reason": "no_selection"},
@@ -506,7 +614,23 @@ class ImportCLIPlugin:
                 return
 
         # Build run state.
+        select_t1 = time.monotonic()
         selected_rel_paths = sorted([b.rel_path for b in selected_books])
+        selected_source_id = _selection_id_for(selected_rel_paths)
+        _emit_diag(
+            "operation.end",
+            operation="import.select_source",
+            data={
+                "wizard": "import",
+                "step": "select_source",
+                "inputs_summary": {"available_sources_n": len(preflight.books)},
+                "status": "succeeded",
+                "duration_ms": _duration_ms(select_t0, select_t1),
+                "selected_source": selected_source_id,
+                "selected_books_n": len(selected_books),
+            },
+        )
+
         run_id = _run_id_for(
             str(args.root.value), args.path, ",".join(selected_rel_paths), args.mode
         )
@@ -529,25 +653,100 @@ class ImportCLIPlugin:
             skipped=[],
         )
 
-        decisions = engine.resolve_book_decisions(preflight=preflight_subset, state=state)
-        job_ids = engine.start_import_job(
-            mods["ImportJobRequest"](
-                run_id=run_id,
-                source_root=str(args.root.value),
-                state=state,
-                decisions=decisions,
-            )
+        finish_t0 = time.monotonic()
+        _emit_diag(
+            "operation.start",
+            operation="import.finish",
+            data={
+                "wizard": "import",
+                "step": "finish",
+                "inputs_summary": {"selected_books_n": len(selected_books)},
+                "status": "running",
+            },
         )
 
-        print(f"Created import run: {run_id}")
-        print(f"Jobs: {len(job_ids)}")
-        for jid in job_ids:
-            print(f"  {jid}")
+        try:
+            decisions = engine.resolve_book_decisions(preflight=preflight_subset, state=state)
+            job_ids = engine.start_import_job(
+                mods["ImportJobRequest"](
+                    run_id=run_id,
+                    source_root=str(args.root.value),
+                    state=state,
+                    decisions=decisions,
+                )
+            )
+        except Exception as e:
+            finish_t1 = time.monotonic()
+            tb = ""
+            with suppress(Exception):
+                import traceback
 
-        # Minimal background execution indicator: run up to parallelism jobs once.
-        ran = engine.run_pending(limit=args.parallelism_n)
-        if ran:
-            print(f"Executed {len(ran)} job(s) in background.")
+                tb = _shorten_traceback(traceback.format_exc())
+            _emit_diag(
+                "operation.end",
+                operation="import.finish",
+                data={
+                    "wizard": "import",
+                    "step": "finish",
+                    "inputs_summary": {"selected_books_n": len(selected_books)},
+                    "status": "failed",
+                    "duration_ms": _duration_ms(finish_t0, finish_t1),
+                    "error_type": type(e).__name__,
+                    "error_message": str(e),
+                    "traceback": tb,
+                },
+            )
+            raise
+
+        ran_bg: list[str] = []
+        try:
+            print(f"Created import run: {run_id}")
+            print(f"Jobs: {len(job_ids)}")
+            for jid in job_ids:
+                print(f"  {jid}")
+
+            # Minimal background execution indicator: run up to parallelism jobs once.
+            ran_bg = engine.run_pending(limit=args.parallelism_n)
+            if ran_bg:
+                print(f"Executed {len(ran_bg)} job(s) in background.")
+        except Exception as e:
+            finish_t1 = time.monotonic()
+            tb = ""
+            with suppress(Exception):
+                import traceback
+
+                tb = _shorten_traceback(traceback.format_exc())
+            _emit_diag(
+                "operation.end",
+                operation="import.finish",
+                data={
+                    "wizard": "import",
+                    "step": "finish",
+                    "inputs_summary": {"selected_books_n": len(selected_books)},
+                    "status": "failed",
+                    "duration_ms": _duration_ms(finish_t0, finish_t1),
+                    "error_type": type(e).__name__,
+                    "error_message": str(e),
+                    "traceback": tb,
+                },
+            )
+            raise
+
+        finish_t1 = time.monotonic()
+        _emit_diag(
+            "operation.end",
+            operation="import.finish",
+            data={
+                "wizard": "import",
+                "step": "finish",
+                "inputs_summary": {"selected_books_n": len(selected_books)},
+                "status": "succeeded",
+                "duration_ms": _duration_ms(finish_t0, finish_t1),
+                "run_id": run_id,
+                "jobs_n": len(job_ids),
+                "ran_n": len(ran_bg),
+            },
+        )
 
         _emit_diag(
             "boundary.end",

@@ -1,3 +1,8 @@
+## 2026-02-13T14:00:00+01:00
+
+-   Issue 703: import: Emit contracted step-level runtime diagnostics envelopes for import wizard steps (preflight/scan/select_source/finish), including duration, safe aggregate summaries, and short tracebacks on failures.
+-   spec: Document Import observability events and bump specification version to 1.0.55.
+
 ## 2026-02-13T12:30:00+01:00
 
 -   syslog: Persist system log to logging.system_log_path under file_io STAGE root; enforce STAGE root validation and clear errors for invalid paths.
