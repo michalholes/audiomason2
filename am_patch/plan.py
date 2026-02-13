@@ -7,38 +7,46 @@ from .model import CLIArgs, ExecutionPlan, Phase
 
 
 def build_plan(repo_root: Path, cli: CLIArgs) -> ExecutionPlan:
-    """Build a deterministic ExecutionPlan.
-
-    Planning-only: no patch application, no gates execution, no git operations.
-    """
+    """Build a deterministic ExecutionPlan for the root runner."""
 
     cfg, cfg_path, sources = load_shadow_config(repo_root, cli)
 
     mode = "workspace"
     if cli.finalize_message:
         mode = "finalize"
-    elif cli.finalize_workspace_issue_id:
+    elif cli.finalize_workspace:
         mode = "finalize_workspace"
 
-    # test_mode can be expressed either by CLI flag or config.
     effective_test_mode = cfg.test_mode
 
-    phases: list[Phase]
-    if mode == "workspace":
-        phases = [Phase.PREFLIGHT, Phase.PATCH, Phase.GATES]
-        if effective_test_mode:
-            phases.append(Phase.CLEANUP)
-        else:
-            phases.extend([Phase.PROMOTE, Phase.COMMIT, Phase.PUSH, Phase.ARCHIVE])
-    else:
-        phases = [Phase.PREFLIGHT, Phase.GATES]
-        if effective_test_mode:
-            phases.append(Phase.CLEANUP)
-        else:
-            phases.extend([Phase.PROMOTE, Phase.COMMIT, Phase.PUSH, Phase.ARCHIVE])
+    phases: list[Phase] = [Phase.PREFLIGHT]
+
+    # Workspace is always created for workspace/finalize-workspace, never for finalize-live.
+    if mode in {"workspace", "finalize_workspace"}:
+        phases.append(Phase.WORKSPACE)
+        phases.append(Phase.PATCH)
+        phases.append(Phase.GATES_WORKSPACE)
+
+        if mode == "finalize_workspace" and not effective_test_mode:
+            phases.append(Phase.PROMOTE)
+            phases.append(Phase.GATES_LIVE)
+            phases.append(Phase.ARCHIVE)
+            phases.append(Phase.COMMIT)
+            phases.append(Phase.PUSH)
+
+        phases.append(Phase.CLEANUP)
+
+    else:  # finalize (live)
+        phases.append(Phase.PATCH)
+        phases.append(Phase.GATES_LIVE)
+        if not effective_test_mode:
+            phases.append(Phase.ARCHIVE)
+            phases.append(Phase.COMMIT)
+            phases.append(Phase.PUSH)
 
     params: dict[str, object] = {
-        "issue_id": cli.finalize_workspace_issue_id or cli.issue_id,
+        "issue_id": cli.issue_id,
+        "commit_message": cli.finalize_message or cli.commit_message,
         "verbosity": cfg.verbosity,
         "test_mode": effective_test_mode,
         "update_workspace": bool(cli.update_workspace) if cli.update_workspace is not None else False,
@@ -57,19 +65,14 @@ def build_plan(repo_root: Path, cli: CLIArgs) -> ExecutionPlan:
 
 
 def render_plan_summary(plan: ExecutionPlan) -> str:
-    """Render plan summary deterministically."""
-
     lines: list[str] = []
-    lines.append("am_patch (shadow runner) PLAN")
+    lines.append("am_patch (root runner) PLAN")
     lines.append(f"mode={plan.mode}")
     lines.append(f"repo_root={plan.repo_root}")
     lines.append(f"config_path={plan.config_path}")
     lines.append(f"config_sources={','.join(plan.config_sources)}")
     lines.append("phases=" + ",".join(p.value for p in plan.phases))
-
-    # Sorted keys for stable output.
     lines.append("parameters:")
     for k in sorted(plan.parameters.keys()):
         lines.append(f"  - {k}={plan.parameters[k]}")
-
     return "\n".join(lines) + "\n"

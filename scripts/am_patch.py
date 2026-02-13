@@ -88,13 +88,16 @@ def _maybe_bootstrap_venv(argv: list[str]) -> None:
     venv_py = venv_py if venv_py.is_absolute() else (_REPO_ROOT / venv_py)
 
     if not venv_py.exists():
-        print(f"[am_patch_v2] ERROR: venv python not found: {venv_py}", file=sys.stderr)
-        print(
-            "[am_patch_v2] Hint: create venv at repo/.venv and install dev deps "
-            "(ruff/pytest/mypy).",
-            file=sys.stderr,
-        )
-        raise SystemExit(2)
+        if mode == "always":
+            print(f"[am_patch_v2] ERROR: venv python not found: {venv_py}", file=sys.stderr)
+            print(
+                "[am_patch_v2] Hint: create venv at repo/.venv and install dev deps "
+                "(ruff/pytest/mypy).",
+                file=sys.stderr,
+            )
+            raise SystemExit(2)
+        # mode == 'auto': keep running under current interpreter.
+        return
 
     cur = Path(sys.executable).resolve()
     if mode == "always" or ".venv" not in str(cur):

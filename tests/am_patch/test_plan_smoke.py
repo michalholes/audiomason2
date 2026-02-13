@@ -18,10 +18,10 @@ def test_cli_overrides_config(tmp_path: Path) -> None:
 
     cli = CLIArgs(
         issue_id="800",
-        commit_message="msg",
+        commit_message=None,
         patch_input="patches/issue.zip",
         finalize_message=None,
-        finalize_workspace_issue_id=None,
+        finalize_workspace=False,
         config_path=str(cfg),
         verbosity="debug",
         test_mode=False,
@@ -41,10 +41,10 @@ def test_plan_summary_is_deterministic(tmp_path: Path) -> None:
 
     cli = CLIArgs(
         issue_id="800",
-        commit_message="msg",
+        commit_message=None,
         patch_input="patches/issue.zip",
         finalize_message=None,
-        finalize_workspace_issue_id=None,
+        finalize_workspace=None,
         config_path=None,
         verbosity="normal",
         test_mode=None,

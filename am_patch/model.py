@@ -3,27 +3,27 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Mapping
+from typing import Any, Mapping
 
 
 class Phase(str, Enum):
     PREFLIGHT = "preflight"
+    WORKSPACE = "workspace"
     PATCH = "patch"
-    GATES = "gates"
+    GATES_WORKSPACE = "gates_workspace"
     PROMOTE = "promote"
+    GATES_LIVE = "gates_live"
+    ARCHIVE = "archive"
     COMMIT = "commit"
     PUSH = "push"
-    ARCHIVE = "archive"
     CLEANUP = "cleanup"
 
 
 @dataclass(frozen=True)
 class CLIArgs:
-    """Normalized CLI inputs (planning-only).
+    """Normalized CLI inputs.
 
     This is intentionally a small subset of the full scripts/am_patch runner CLI.
-    The shadow runner accepts common flags and positional inputs needed to build
-    a deterministic ExecutionPlan.
     """
 
     issue_id: str | None
@@ -31,7 +31,7 @@ class CLIArgs:
     patch_input: str | None
 
     finalize_message: str | None
-    finalize_workspace_issue_id: str | None
+    finalize_workspace: bool | None
 
     config_path: str | None
     verbosity: str | None
@@ -54,3 +54,29 @@ class ExecutionPlan:
     config_sources: tuple[str, ...]
     phases: tuple[Phase, ...]
     parameters: Mapping[str, object]
+
+
+@dataclass(frozen=True)
+class PhaseResult:
+    phase: Phase
+    ok: bool
+    detail: str = ""
+
+
+class RunnerError(RuntimeError):
+    """Base error for the root runner."""
+
+
+class PhaseFailed(RunnerError):
+    def __init__(self, phase: Phase, message: str) -> None:
+        super().__init__(message)
+        self.phase = phase
+
+
+@dataclass(frozen=True)
+class RunResult:
+    ok: bool
+    exit_code: int
+    phase_results: tuple[PhaseResult, ...]
+    events: tuple[str, ...]
+    log_path: Path | None = None
