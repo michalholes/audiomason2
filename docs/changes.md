@@ -2,7 +2,18 @@
 
 -   Issue 416: import: Support file-based book units (archives + single audio) in PHASE 2 jobs.
 -   tests: Add unit coverage for import job file sources.
--   spec: Document file-based import units and bump specification version to 1.0.56.
+-   spec: Document file-based import units and bump specification version to 1.0.57.
+
+
+## 2026-02-13T14:35:00+01:00
+
+-   core.jobs: Emit operation.start/operation.end for jobs.update_state and jobs.fail with required summary fields.
+-   spec: Document jobs.fail operation lifecycle events.
+
+## 2026-02-13T14:05:00+01:00
+
+-   file_io: Avoid duplicate file_io.resolve envelopes by not re-wrapping resolve_abs_path; add file_io.move operation (alias of rename) with start/end diagnostics and Core logger summaries.
+-   spec: Document file_io.move operation and de-dup resolve envelope behavior.
 
 ## 2026-02-13T14:00:00+01:00
 

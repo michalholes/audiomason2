@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.56
+Specification Version: 1.0.57
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -205,6 +205,7 @@ Jobs MUST emit lifecycle diagnostics through the authoritative EventBus.
 Minimum events:
 
 - operation.start / operation.end with operation one of: jobs.create, jobs.get, jobs.list, jobs.update_state
+- operation.start / operation.end with operation one of: jobs.fail
 - jobs.create, jobs.get, jobs.list
 - jobs.update_state on state or progress changes
 - jobs.fail when a job fails, including error_type, error_message, and a shortened traceback if available
