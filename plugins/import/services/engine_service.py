@@ -134,8 +134,32 @@ class ImportEngineService:
         return job.to_dict()
 
     def retry_failed_jobs(self, *, run_id: str) -> list[str]:
-        """Create new jobs for failed import jobs in the run."""
+        """Create new jobs for failed import jobs in the run.
+
+        Resume is supported only in stage mode.
+        """
         _emit_diag("boundary.start", operation="retry_failed_jobs", data={"run_id": run_id})
+
+        state = self._run_store.get(run_id)
+        if state is None:
+            _emit_diag(
+                "boundary.end",
+                operation="retry_failed_jobs",
+                data={"status": "succeeded", "jobs_n": 0, "reason": "missing_run_state"},
+            )
+            return []
+        if str(state.source_handling_mode) != "stage":
+            _emit_diag(
+                "boundary.end",
+                operation="retry_failed_jobs",
+                data={
+                    "status": "succeeded",
+                    "jobs_n": 0,
+                    "reason": "resume_not_supported_in_mode",
+                    "mode": str(state.source_handling_mode),
+                },
+            )
+            return []
 
         new_jobs: list[str] = []
         for job in self._jobs.list_jobs():
@@ -176,32 +200,59 @@ class ImportEngineService:
             data={"from": state.mode, "to": "running"},
         )
 
-    def run_pending(self, *, limit: int = 1) -> list[str]:
+    def run_pending(self, *, limit: int = 2) -> list[str]:
         """Run up to N pending import jobs if queue is running.
 
         This method is sync and deterministic and is intended to be called by
         CLI or a daemon.
+
+        Issue 503 mode contract:
+        - stage: per-run limit is 2 (resume supported)
+        - inplace: per-run limit is 1 (no resume)
         """
         q = self._queue.load()
         if q.mode != "running":
             return []
 
+        try:
+            global_limit = int(limit)
+        except Exception:
+            global_limit = 1
+        if global_limit <= 0:
+            global_limit = 1
+
         ran: list[str] = []
+        run_counts: dict[str, int] = {}
+
         for job in self._jobs.list_jobs():
-            if len(ran) >= limit:
+            if len(ran) >= global_limit:
                 break
             if job.meta.get("kind") != "import":
                 continue
             if job.state != JobState.PENDING:
                 continue
 
-            run_id = job.meta.get("run_id", "")
+            run_id = str(job.meta.get("run_id", ""))
             state = self._run_store.get(run_id)
             if state is None:
                 # Cannot run without persisted state.
                 job.error = "Missing ImportRunState"
                 job.state = JobState.FAILED
                 self._jobs.store.save_job(job)
+                continue
+
+            mode = str(state.source_handling_mode)
+            per_run_limit = 1 if mode == "inplace" else 2
+            try:
+                per_run_limit = min(
+                    per_run_limit,
+                    max(1, int(getattr(state, "parallelism_n", 1) or 1)),
+                )
+            except Exception:
+                per_run_limit = min(per_run_limit, 1)
+
+            ran_for_run = run_counts.get(run_id, 0)
+            if ran_for_run >= per_run_limit:
                 continue
 
             source_root = RootName(str(job.meta.get("source_root", RootName.INBOX.value)))
@@ -219,7 +270,7 @@ class ImportEngineService:
                     "job_id": job.job_id,
                     "run_id": run_id,
                     "book_rel_path": book_rel_path,
-                    "mode": str(state.source_handling_mode),
+                    "mode": mode,
                 },
             )
             try:
@@ -267,6 +318,8 @@ class ImportEngineService:
                         "duration_ms": dur_ms,
                     },
                 )
+
             ran.append(job.job_id)
+            run_counts[run_id] = ran_for_run + 1
 
         return ran

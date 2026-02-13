@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.60
+Specification Version: 1.0.61
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -895,6 +895,18 @@ Issue 416 extension (file-based book units):
   - stage mode: MUST stage the file deterministically under stage/import/stage/<job_id>/<book_stem>/<filename>.
     Extraction/unpacking is not performed by default.
   - inplace mode: MUST treat file units as valid inputs and MUST NOT write into inbox.
+
+Issue 503 extension (stage/in-place modes, resume, conflicts, delete source):
+
+- Mode contract:
+  - stage: resume is supported and parallelism_n MUST default to 2.
+  - inplace: resume is not supported and parallelism_n MUST be 1.
+- Conflict policy contract (PHASE 1 owned):
+  - Default conflict policy is ask.
+  - PHASE 2 job creation MUST require a resolved non-interactive policy; unresolved ask MUST not start jobs.
+- Optional delete source contract:
+  - Deleting source inputs is allowed only when explicitly enabled by user options.
+  - Deletion MUST be guarded by a fingerprint identity check immediately before deletion to prevent TOCTOU.
 
 Import foundation MAY include a "hybrid" mode in the data model only. Behavior is reserved.
 

@@ -238,6 +238,41 @@ def run_import_job(
         else:
             raise ValueError(f"Unsupported handling mode: {run_state.source_handling_mode}")
 
+        # Optional destructive action: delete source after successful staging, guarded by
+        # fingerprint identity to avoid TOCTOU behavior.
+        delete_source = bool((run_state.global_options or {}).get("delete_source"))
+        if run_state.source_handling_mode == "stage" and delete_source:
+            try:
+                current_key = _fingerprint_identity_key(
+                    fs,
+                    source_root=source_root,
+                    book_rel_path=book_rel_path,
+                    unit_type=unit_type,
+                )
+            except Exception as e:
+                job_service.append_log_line(
+                    job_id,
+                    f"delete_source_fingerprint_failed: {type(e).__name__}: {e}",
+                )
+                current_key = None
+
+            if current_key is None or current_key != identity_key:
+                job_service.append_log_line(
+                    job_id,
+                    f"delete_source_guard_mismatch: expected={identity_key} got={current_key}",
+                )
+            else:
+                try:
+                    if unit_type == "dir":
+                        fs.rmtree(source_root, book_rel_path)
+                    else:
+                        fs.delete_file(source_root, book_rel_path)
+                    job_service.append_log_line(job_id, f"deleted_source: {book_rel_path}")
+                except Exception as e:
+                    job_service.append_log_line(
+                        job_id,
+                        f"delete_source_failed: {type(e).__name__}: {e}",
+                    )
         job.set_progress(1.0)
         job.transition(JobState.SUCCEEDED)
         job.finished_at = _utcnow_iso()

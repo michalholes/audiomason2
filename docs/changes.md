@@ -1,3 +1,10 @@
+## 2026-02-14T00:05:00+01:00
+
+-   import: Enforce stage vs inplace mode contract (resume + parallelism defaults).
+-   import_wizard: Default conflict policy is ask, but block PHASE 2 job creation until conflicts are resolved.
+-   import: Allow optional delete_source after successful staging, guarded by fingerprint identity.
+-   spec: Document stage/in-place mode contract and bump specification version to 1.0.61.
+
 ## 2026-02-13T22:45:00+01:00
 
 -   Issue 502: import_wizard: Add processed registry integration keyed by book fingerprint (algo:value).

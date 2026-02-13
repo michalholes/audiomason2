@@ -460,7 +460,8 @@ def mount_import_wizard(app: FastAPI) -> None:
         path = payload.get("path", ".")
         book_rel = payload.get("book_rel_path")
         mode = payload.get("mode", "stage")
-        parallelism_n = payload.get("parallelism_n", 1)
+        conflict_policy = payload.get("conflict_policy")
+        options = payload.get("options")
 
         if not isinstance(root, str) or not root:
             raise HTTPException(status_code=400, detail="root is required")
@@ -471,8 +472,25 @@ def mount_import_wizard(app: FastAPI) -> None:
         mode = mode.strip().lower()
         if mode not in {"stage", "inplace", "hybrid"}:
             raise HTTPException(status_code=400, detail="invalid mode")
-        if not isinstance(parallelism_n, int) or parallelism_n <= 0:
-            parallelism_n = 1
+        # Conflict policy is PHASE 1 owned. Default is ask, but PHASE 2 job creation
+        # requires a resolved policy (non-interactive).
+        if not isinstance(conflict_policy, dict):
+            conflict_policy = {"mode": "ask"}
+        mode_val = str(conflict_policy.get("mode", "ask")).strip().lower()
+        if mode_val == "ask":
+            raise HTTPException(
+                status_code=409,
+                detail={"error": "conflict_policy_unresolved", "conflict_policy": conflict_policy},
+            )
+
+        # Mode-driven parallelism contract (Issue 503).
+        # - stage: parallelism=2
+        # - inplace: parallelism=1
+        parallelism_n = 2 if mode == "stage" else 1
+
+        # Options are a free-form dict, stored in the run state for PHASE 2.
+        if not isinstance(options, dict):
+            options = {}
 
         fs = _get_file_service(request)
         r = _parse_root(root)
@@ -491,8 +509,26 @@ def mount_import_wizard(app: FastAPI) -> None:
         selected = [b for b in preflight.books if b.rel_path == book_rel]
         if not selected:
             raise HTTPException(status_code=404, detail="book not found in preflight")
-
         run_id = _run_id_for(root, rel, book_rel, mode)
+
+        engine = _engine(request)
+        existing_job_ids: list[str] = []
+        try:
+            for job in engine.jobs.list_jobs():
+                if job.meta.get("kind") != "import":
+                    continue
+                if job.meta.get("run_id") != run_id:
+                    continue
+                existing_job_ids.append(str(job.job_id))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=_error_detail("status", e)) from e
+
+        if existing_job_ids:
+            existing_job_ids.sort()
+            if mode == "stage":
+                # Resume is supported only in stage mode.
+                return {"run_id": run_id, "job_ids": existing_job_ids, "resumed": True}
+            raise HTTPException(status_code=409, detail="resume_not_supported_in_inplace")
 
         state = import_run_state_cls(
             source_selection_snapshot={
@@ -502,7 +538,8 @@ def mount_import_wizard(app: FastAPI) -> None:
             },
             source_handling_mode=mode,
             parallelism_n=int(parallelism_n),
-            global_options={},
+            global_options=options,
+            conflict_policy=conflict_policy,
         )
 
         preflight_one = preflight_result_cls(
@@ -511,8 +548,6 @@ def mount_import_wizard(app: FastAPI) -> None:
             books=selected,
             skipped=[],
         )
-
-        engine = _engine(request)
         decisions = engine.resolve_book_decisions(preflight=preflight_one, state=state)
         try:
             job_ids = engine.start_import_job(
@@ -567,7 +602,7 @@ def mount_import_wizard(app: FastAPI) -> None:
         request: Request, payload: dict[str, Any] | None = None
     ) -> dict[str, Any]:
         _emit_import_action("import.run", operation="run_pending", data={"status": "start"})
-        limit = 1
+        limit = 2
         if isinstance(payload, dict) and isinstance(payload.get("limit"), int):
             limit = int(payload["limit"]) or 1
         if limit <= 0:
