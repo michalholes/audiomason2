@@ -78,6 +78,33 @@ def _copy_tree(
     return copied
 
 
+def _copy_file(
+    fs: FileService,
+    *,
+    src_root: RootName,
+    src_rel: str,
+    dst_root: RootName,
+    dst_rel: str,
+) -> int:
+    """Copy a single file deterministically.
+
+    Returns number of copied files (always 1).
+    """
+    with fs.open_read(src_root, src_rel) as r:
+        data = r.read()
+    with fs.open_write(dst_root, dst_rel, overwrite=True, mkdir_parents=True) as w:
+        w.write(data)
+    return 1
+
+
+def _file_stem(name: str) -> str:
+    base = name.rsplit("/", 1)[-1]
+    if "." not in base:
+        return base
+    # Strip the last suffix only.
+    return base.rsplit(".", 1)[0]
+
+
 def run_import_job(
     *,
     job_id: str,
@@ -101,6 +128,18 @@ def run_import_job(
 
     job = job_service.get_job(job_id)
 
+    # unit_type is carried from preflight through the engine into job meta.
+    unit_type_meta = job.meta.get("unit_type")
+    unit_type = str(unit_type_meta) if unit_type_meta in ("dir", "file") else ""
+
+    # Best-effort fallback: derive from filesystem if meta is missing.
+    if not unit_type:
+        try:
+            st = fs.stat(source_root, book_rel_path)
+            unit_type = "dir" if st.is_dir else "file"
+        except Exception:
+            unit_type = "dir"
+
     try:
         if registry.is_processed(book_rel_path):
             job_service.append_log_line(job_id, f"already processed: {book_rel_path}")
@@ -116,18 +155,37 @@ def run_import_job(
             return
 
         if run_state.source_handling_mode == "stage":
-            dst_base = f"import/stage/{job_id}/{book_rel_path}"
             fs.mkdir(RootName.STAGE, f"import/stage/{job_id}", parents=True, exist_ok=True)
-            copied = _copy_tree(
-                fs,
-                src_root=source_root,
-                src_rel=book_rel_path,
-                dst_root=RootName.STAGE,
-                dst_rel=dst_base,
-            )
-            job_service.append_log_line(job_id, f"staged files: {copied}")
+            if unit_type == "dir":
+                dst_base = f"import/stage/{job_id}/{book_rel_path}"
+                copied = _copy_tree(
+                    fs,
+                    src_root=source_root,
+                    src_rel=book_rel_path,
+                    dst_root=RootName.STAGE,
+                    dst_rel=dst_base,
+                )
+                job_service.append_log_line(
+                    job_id, f"staged unit=dir files={copied} dst={dst_base}"
+                )
+            else:
+                # Stage file units into a directory named after the file without extension.
+                book_stem = _file_stem(book_rel_path)
+                dst_folder = f"import/stage/{job_id}/{book_stem}"
+                dst_file = book_rel_path.rsplit("/", 1)[-1]
+                dst_rel = f"{dst_folder}/{dst_file}"
+                copied = _copy_file(
+                    fs,
+                    src_root=source_root,
+                    src_rel=book_rel_path,
+                    dst_root=RootName.STAGE,
+                    dst_rel=dst_rel,
+                )
+                job_service.append_log_line(
+                    job_id, f"staged unit=file files={copied} dst={dst_rel}"
+                )
         elif run_state.source_handling_mode == "inplace":
-            job_service.append_log_line(job_id, f"inplace source: {book_rel_path}")
+            job_service.append_log_line(job_id, f"inplace unit={unit_type} source={book_rel_path}")
         else:
             raise ValueError(f"Unsupported handling mode: {run_state.source_handling_mode}")
 

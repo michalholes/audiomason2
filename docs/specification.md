@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.55
+Specification Version: 1.0.56
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -868,6 +868,14 @@ Issue 403 extension (PHASE 2 processing engine):
   - resume_queue()
 - engine processing MUST be non-interactive and MUST survive restart via persisted job state.
 - engine MAY provide a deterministic queue runner entrypoint (sync) to execute pending import jobs.
+
+Issue 416 extension (file-based book units):
+
+- Import preflight MAY surface single-file book units (unit_type="file") such as archives and single audio files.
+- PHASE 2 handling for file units:
+  - stage mode: MUST stage the file deterministically under stage/import/stage/<job_id>/<book_stem>/<filename>.
+    Extraction/unpacking is not performed by default.
+  - inplace mode: MUST treat file units as valid inputs and MUST NOT write into inbox.
 
 Import foundation MAY include a "hybrid" mode in the data model only. Behavior is reserved.
 

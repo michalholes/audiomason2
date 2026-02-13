@@ -1,3 +1,9 @@
+## 2026-02-13T19:00:00+01:00
+
+-   Issue 416: import: Support file-based book units (archives + single audio) in PHASE 2 jobs.
+-   tests: Add unit coverage for import job file sources.
+-   spec: Document file-based import units and bump specification version to 1.0.56.
+
 ## 2026-02-13T14:00:00+01:00
 
 -   Issue 703: import: Emit contracted step-level runtime diagnostics envelopes for import wizard steps (preflight/scan/select_source/finish), including duration, safe aggregate summaries, and short tracebacks on failures.

@@ -18,6 +18,11 @@ class BookDecision:
     """Resolved non-interactive decision for a single book."""
 
     book_rel_path: str
+    # Unit type: "dir" for a discovered book directory, "file" for a single file unit.
+    unit_type: str
+    # Convenience for file units; lowercased suffix including the leading dot.
+    # For non-file units, this MUST be None.
+    source_ext: str | None
     author: str
     title: str
     handling_mode: str

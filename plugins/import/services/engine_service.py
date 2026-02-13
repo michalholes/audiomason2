@@ -66,9 +66,17 @@ class ImportEngineService:
 
         decisions: list[BookDecision] = []
         for b in preflight.books:
+            unit_type = str(b.unit_type or "dir")
+            source_ext: str | None = None
+            if unit_type == "file":
+                name = str(b.rel_path).rstrip("/").split("/")[-1].lower()
+                if "." in name:
+                    source_ext = "." + name.split(".")[-1]
             decisions.append(
                 BookDecision(
                     book_rel_path=b.rel_path,
+                    unit_type=unit_type,
+                    source_ext=source_ext,
                     author=b.suggested_author or b.author,
                     title=b.suggested_title or b.book,
                     handling_mode=state.source_handling_mode,
@@ -104,6 +112,8 @@ class ImportEngineService:
                     "run_id": request.run_id,
                     "source_root": request.source_root,
                     "book_rel_path": dec.book_rel_path,
+                    "unit_type": dec.unit_type,
+                    "source_ext": dec.source_ext or "",
                     "mode": str(request.state.source_handling_mode),
                     "decision_json": json.dumps(
                         asdict(dec), ensure_ascii=True, separators=(",", ":"), sort_keys=True
