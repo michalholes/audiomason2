@@ -14,6 +14,8 @@ from plugins.file_io.service.types import RootName
 
 _IMPORT_MODS: dict[str, Any] | None = None
 
+BOOK_ONLY_LABEL = "<book-only>"
+
 
 def _import_plugin() -> dict[str, Any]:
     """Import the import plugin modules.
@@ -58,6 +60,14 @@ def _emit_import_action(event_name: str, *, operation: str, data: dict[str, Any]
         get_event_bus().publish(event_name, env)
     except Exception:
         return
+
+
+def _error_detail(operation: str, exc: Exception) -> dict[str, Any]:
+    return {
+        "operation": operation,
+        "error_type": type(exc).__name__,
+        "message": str(exc),
+    }
 
 
 def _get_resolver(request: Request) -> ConfigResolver:
@@ -108,37 +118,15 @@ def _engine(request: Request) -> Any:
 
 
 def mount_import_wizard(app: FastAPI) -> None:
-    @app.get("/api/import_wizard/preflight")
-    def import_preflight(request: Request, root: str, path: str = ".") -> dict[str, Any]:
-        _emit_import_action(
-            "import.preflight",
-            operation="preflight",
-            data={"status": "start", "root": root, "path": path},
-        )
-        mods = _mods()
-        preflight_service_cls = mods["PreflightService"]
-        fs = _get_file_service(request)
-        r = _parse_root(root)
-        rel = _norm_rel_path(path)
-        svc = preflight_service_cls(fs)
-        try:
-            res = svc.run(r, rel)
-        except Exception as e:
-            _emit_import_action(
-                "import.preflight",
-                operation="preflight",
-                data={"status": "failed", "error_type": type(e).__name__, "error": str(e)},
-            )
-            raise
+    def _serialize_preflight(res: Any) -> dict[str, Any]:
+        authors = list(res.authors)
+        has_book_only = any(getattr(b, "author", "") == "" for b in res.books)
+        if has_book_only and BOOK_ONLY_LABEL not in authors:
+            authors.append(BOOK_ONLY_LABEL)
 
-        _emit_import_action(
-            "import.preflight",
-            operation="preflight",
-            data={"status": "succeeded", "authors_n": len(res.authors), "books_n": len(res.books)},
-        )
         return {
             "source_root_rel_path": res.source_root_rel_path,
-            "authors": list(res.authors),
+            "authors": authors,
             "books": [
                 {
                     "author": b.author,
@@ -150,7 +138,70 @@ def mount_import_wizard(app: FastAPI) -> None:
                 }
                 for b in res.books
             ],
+            "skipped": [
+                {
+                    "rel_path": s.rel_path,
+                    "entry_type": s.entry_type,
+                    "reason": s.reason,
+                }
+                for s in getattr(res, "skipped", []) or []
+            ],
         }
+
+    def _run_preflight(request: Request, *, root: str, path: str) -> dict[str, Any]:
+        _emit_import_action(
+            "import.preflight",
+            operation="preflight",
+            data={"status": "start", "root": root, "path": path},
+        )
+        mods = _mods()
+        preflight_service_cls = mods["PreflightService"]
+        fs = _get_file_service(request)
+        r = _parse_root(root)
+        rel = _norm_rel_path(path)
+        svc = preflight_service_cls(fs)
+
+        try:
+            res = svc.run(r, rel)
+        except HTTPException as e:
+            _emit_import_action(
+                "import.preflight",
+                operation="preflight",
+                data={
+                    "status": "failed",
+                    "http_status": int(getattr(e, "status_code", 0) or 0),
+                    "detail": getattr(e, "detail", None),
+                },
+            )
+            raise
+        except Exception as e:
+            _emit_import_action(
+                "import.preflight",
+                operation="preflight",
+                data={"status": "failed", **_error_detail("preflight", e)},
+            )
+            raise HTTPException(status_code=500, detail=_error_detail("preflight", e)) from e
+
+        _emit_import_action(
+            "import.preflight",
+            operation="preflight",
+            data={"status": "succeeded", "authors_n": len(res.authors), "books_n": len(res.books)},
+        )
+        return _serialize_preflight(res)
+
+    @app.get("/api/import_wizard/preflight")
+    def import_preflight_get(request: Request, root: str, path: str = ".") -> dict[str, Any]:
+        return _run_preflight(request, root=root, path=path)
+
+    @app.post("/api/import_wizard/preflight")
+    def import_preflight_post(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
+        root = payload.get("root")
+        path = payload.get("path", ".")
+        if not isinstance(root, str) or not root:
+            raise HTTPException(status_code=400, detail="root is required")
+        if not isinstance(path, str):
+            path = "."
+        return _run_preflight(request, root=root, path=path)
 
     @app.post("/api/import_wizard/start")
     def import_start(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
@@ -181,7 +232,16 @@ def mount_import_wizard(app: FastAPI) -> None:
         fs = _get_file_service(request)
         r = _parse_root(root)
         rel = _norm_rel_path(str(path))
-        preflight = preflight_service_cls(fs).run(r, rel)
+
+        try:
+            preflight = preflight_service_cls(fs).run(r, rel)
+        except Exception as e:
+            _emit_import_action(
+                "import.queue",
+                operation="queue",
+                data={"status": "failed", **_error_detail("preflight", e)},
+            )
+            raise HTTPException(status_code=500, detail=_error_detail("preflight", e)) from e
 
         selected = [b for b in preflight.books if b.rel_path == book_rel]
         if not selected:
@@ -204,6 +264,7 @@ def mount_import_wizard(app: FastAPI) -> None:
             source_root_rel_path=preflight.source_root_rel_path,
             authors=[selected[0].author],
             books=selected,
+            skipped=[],
         )
 
         engine = _engine(request)
@@ -221,9 +282,9 @@ def mount_import_wizard(app: FastAPI) -> None:
             _emit_import_action(
                 "import.queue",
                 operation="queue",
-                data={"status": "failed", "error_type": type(e).__name__, "error": str(e)},
+                data={"status": "failed", **_error_detail("start_import_job", e)},
             )
-            raise
+            raise HTTPException(status_code=500, detail=_error_detail("start_import_job", e)) from e
 
         _emit_import_action(
             "import.queue",
@@ -231,6 +292,30 @@ def mount_import_wizard(app: FastAPI) -> None:
             data={"status": "succeeded", "run_id": run_id, "job_ids_n": len(job_ids)},
         )
         return {"run_id": run_id, "job_ids": job_ids}
+
+    @app.get("/api/import_wizard/status")
+    def import_status(request: Request, run_id: str) -> dict[str, Any]:
+        if not isinstance(run_id, str) or not run_id.strip():
+            raise HTTPException(status_code=400, detail="run_id is required")
+
+        engine = _engine(request)
+        job_ids: list[str] = []
+        counts: dict[str, int] = {}
+
+        try:
+            for job in engine.jobs.list_jobs():
+                if job.meta.get("kind") != "import":
+                    continue
+                if job.meta.get("run_id") != run_id:
+                    continue
+                job_ids.append(str(job.job_id))
+                st = str(job.state)
+                counts[st] = counts.get(st, 0) + 1
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=_error_detail("status", e)) from e
+
+        job_ids.sort()
+        return {"run_id": run_id, "job_ids": job_ids, "counts": counts}
 
     @app.post("/api/import_wizard/run_pending")
     def import_run_pending(
@@ -250,9 +335,9 @@ def mount_import_wizard(app: FastAPI) -> None:
             _emit_import_action(
                 "import.run",
                 operation="run_pending",
-                data={"status": "failed", "error_type": type(e).__name__, "error": str(e)},
+                data={"status": "failed", **_error_detail("run_pending", e)},
             )
-            raise
+            raise HTTPException(status_code=500, detail=_error_detail("run_pending", e)) from e
 
         _emit_import_action(
             "import.run",
@@ -271,9 +356,9 @@ def mount_import_wizard(app: FastAPI) -> None:
             _emit_import_action(
                 "import.pause",
                 operation="pause_queue",
-                data={"status": "failed", "error_type": type(e).__name__, "error": str(e)},
+                data={"status": "failed", **_error_detail("pause_queue", e)},
             )
-            raise
+            raise HTTPException(status_code=500, detail=_error_detail("pause_queue", e)) from e
         _emit_import_action("import.pause", operation="pause_queue", data={"status": "succeeded"})
         return {"ok": True}
 
@@ -287,8 +372,8 @@ def mount_import_wizard(app: FastAPI) -> None:
             _emit_import_action(
                 "import.resume",
                 operation="resume_queue",
-                data={"status": "failed", "error_type": type(e).__name__, "error": str(e)},
+                data={"status": "failed", **_error_detail("resume_queue", e)},
             )
-            raise
+            raise HTTPException(status_code=500, detail=_error_detail("resume_queue", e)) from e
         _emit_import_action("import.resume", operation="resume_queue", data={"status": "succeeded"})
         return {"ok": True}

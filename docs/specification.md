@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.49
+Specification Version: 1.0.50
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -1073,10 +1073,16 @@ Rules:
   - Select a book (auto-start).
 - The UI MUST show a minimal async indicator while API calls are running.
 
+
+- The UI SHOULD auto-load preflight on page open and whenever root/path changes
+  (debounced, e.g. ~350ms). A manual refresh button may remain.
+- If preflight discovers author-less books (author == ""), the UI MUST expose a
+  selectable synthetic author entry labeled "<book-only>" and show those books.
 Backend API contract:
 
 - Preflight listing:
   - `GET /api/import_wizard/preflight?root=<root>&path=<rel_path>`
+  - `POST /api/import_wizard/preflight` with JSON body `{root: str, path?: str}`
   - Returns `authors[]` and `books[]` (each book includes `rel_path`).
 - Start import processing for a selected book:
   - `POST /api/import_wizard/start` with JSON body:
@@ -1085,6 +1091,13 @@ Backend API contract:
     - `book_rel_path` (required)
     - `mode` (optional: stage|inplace|hybrid, default: stage)
   - The backend MUST create persisted import Jobs via ImportEngineService.
+- Run status:
+  - `GET /api/import_wizard/status?run_id=<id>`
+  - Returns `job_ids[]` and minimal `counts{}` by job state.
+- Error discipline:
+  - On invalid input, endpoints MUST return HTTP 400 with a human-readable `detail`.
+  - Unexpected failures MUST return HTTP 500 with actionable `detail` (no silent 500).
+
 - Queue runner hook (optional, for web-triggered execution):
   - `POST /api/import_wizard/run_pending` with JSON body `{ "limit": <n> }`.
 

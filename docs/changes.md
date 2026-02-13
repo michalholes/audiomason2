@@ -1,3 +1,11 @@
+## 2026-02-13T00:15:00+01:00
+
+-   web_interface: Import wizard preflight auto-load (debounced) and improved error detail rendering.
+-   web_interface: Import wizard preflight includes synthetic "<book-only>" author group when author-less books exist.
+-   web_interface: Fix import_wizard/start 500 by constructing PreflightResult correctly; add import_wizard/status endpoint.
+-   tests: Add unit coverage for web import wizard preflight grouping and start validation.
+-   spec: Document web import wizard auto-load, book-only group, status endpoint; bump specification version to 1.0.50.
+
 ## 2026-02-13T00:00:00+01:00
 
 -   import_cli: Fix silent exits during interactive selection and support mixed

@@ -27,9 +27,29 @@ window.onerror = function(msg, src, line, col, err){
 };
 (async function () {
   const API = {
+    async _readErrorDetail(r) {
+      const status = r && typeof r.status === "number" ? r.status : 0;
+      let raw = "";
+      try { raw = (await r.text()).slice(0, 800); } catch {}
+      raw = (raw || "").trim();
+      if (!raw) return `${status}`;
+      // Prefer {"detail": "..."} or {"detail": {...}} from FastAPI
+      try {
+        const obj = JSON.parse(raw);
+        if (obj && typeof obj === "object" && "detail" in obj) {
+          const d = obj.detail;
+          if (typeof d === "string") return `${status} ${d}`;
+          return `${status} ${JSON.stringify(d)}`;
+        }
+      } catch {}
+      return `${status} ${raw}`;
+    },
     async getJson(path) {
       const r = await fetch(path, { headers: { "Accept": "application/json" } });
-      if (!r.ok) throw new Error(`GET ${path} -> ${r.status}`);
+      if (!r.ok) {
+        const d = await API._readErrorDetail(r);
+        throw new Error(`GET ${path} -> ${d}`);
+      }
       return await r.json();
     },
     async sendJson(method, path, body) {
@@ -39,9 +59,8 @@ window.onerror = function(msg, src, line, col, err){
         body: body === undefined ? undefined : JSON.stringify(body),
       });
       if (!r.ok) {
-        let detail = "";
-        try { detail = (await r.text()).slice(0, 400); } catch {}
-        throw new Error(`${method} ${path} -> ${r.status} ${detail}`);
+        const d = await API._readErrorDetail(r);
+        throw new Error(`${method} ${path} -> ${d}`);
       }
       const ct = r.headers.get("content-type") || "";
       if (ct.includes("application/json")) return await r.json();
@@ -403,6 +422,9 @@ async function renderImportWizard(content, notify) {
   let jobIds = [];
   let pollTimer = null;
   let dotsTimer = null;
+  const BOOK_ONLY_LABEL = "<book-only>";
+  let preflightTimer = null;
+
 
   async function loadRoots() {
     const data = await API.getJson("/api/roots");
@@ -455,7 +477,14 @@ async function renderImportWizard(content, notify) {
   function renderBooks() {
     clear(booksBox);
     const books = preflight && Array.isArray(preflight.books) ? preflight.books : [];
-    const filtered = selectedAuthor ? books.filter((b) => b && b.author === selectedAuthor) : [];
+    const isBookOnly = selectedAuthor === BOOK_ONLY_LABEL;
+    const filtered = selectedAuthor
+      ? books.filter((b) => {
+          const a = b && typeof b.author === "string" ? b.author : "";
+          if (isBookOnly) return !a;
+          return a === selectedAuthor;
+        })
+      : [];
     if (!selectedAuthor) {
       booksBox.appendChild(el("div", { class: "hint", text: "Select an author." }));
       return;
@@ -565,10 +594,12 @@ async function renderImportWizard(content, notify) {
   run1Btn.addEventListener("click", () => { void doRunPending(1); });
   run5Btn.addEventListener("click", () => { void doRunPending(5); });
 
-  loadBtn.addEventListener("click", async () => {
+  async function loadPreflight(trigger) {
     try {
       setBusy(true);
-      preflight = await API.getJson(`/api/import_wizard/preflight?root=${encodeURIComponent(rootSel.value)}&path=${encodeURIComponent(pathInp.value)}`);
+      const body = { root: rootSel.value, path: pathInp.value };
+      // Prefer POST to allow structured error detail.
+      preflight = await API.sendJson("POST", "/api/import_wizard/preflight", body);
       selectedAuthor = "";
       jobIds = [];
       statusBox.textContent = "Preflight loaded. Select author.";
@@ -577,12 +608,24 @@ async function renderImportWizard(content, notify) {
       renderBooks();
     } catch (e) {
       notify(String(e));
+      statusBox.textContent = String(e);
     } finally {
       setBusy(false);
     }
-  });
+  }
+
+  function schedulePreflight() {
+    if (preflightTimer) { clearTimeout(preflightTimer); preflightTimer = null; }
+    preflightTimer = setTimeout(() => { void loadPreflight("auto"); }, 350);
+  }
+
+  rootSel.addEventListener("change", schedulePreflight);
+  pathInp.addEventListener("input", schedulePreflight);
+
+  loadBtn.addEventListener("click", () => { void loadPreflight("manual"); });
 
   await loadRoots();
+  void loadPreflight("auto");
   return root;
 }
 
