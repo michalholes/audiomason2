@@ -93,6 +93,20 @@ window.onerror = function(msg, src, line, col, err){
     return d.toLocaleString();
   }
 
+  function fpKeyForBook(book) {
+    // Backward/forward compatible fingerprint key extraction.
+    // Prefer fingerprint if present; fall back to rel_path for legacy payloads.
+    if (book && typeof book === "object") {
+      if (typeof book.fingerprint === "string" && book.fingerprint) return book.fingerprint;
+      if (typeof book.fp === "string" && book.fp) return book.fp;
+      const meta = book.meta && typeof book.meta === "object" ? book.meta : null;
+      if (meta && typeof meta.fingerprint === "string" && meta.fingerprint) return meta.fingerprint;
+      if (typeof book.rel_path === "string" && book.rel_path) return book.rel_path;
+      if (typeof book.path === "string" && book.path) return book.path;
+    }
+    return "";
+  }
+
   async function renderStatList(content) {
     const box = el("div", { class: "statList" });
     const src = content.source;
