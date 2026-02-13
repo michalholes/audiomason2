@@ -106,7 +106,7 @@ diagnostics:
         ]
     )
 
-    syslog_path = cfg_root / "logs" / "system.log"
+    syslog_path = stage / "logs" / "system.log"
     raw = syslog_path.read_text(encoding="utf-8", errors="replace")
 
     # The syslog sink stores LogBus records; import_cli emits a debug log line

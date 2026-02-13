@@ -2,6 +2,9 @@
 
 This module provides a thin wrapper over the file_io capability.
 All filesystem operations MUST go through FileService.
+
+The syslog file is stored under the STAGE root, configured by
+logging.system_log_path (relative).
 """
 
 from __future__ import annotations
@@ -26,7 +29,7 @@ class SyslogConfig:
 
 
 class SyslogService:
-    """Append/read/tail/follow syslog file under the file_io CONFIG root."""
+    """Append/read/tail/follow syslog file under the file_io STAGE root."""
 
     def __init__(self, fs: FileService, *, filename: str, disk_format: str) -> None:
         self._fs = fs
@@ -42,15 +45,15 @@ class SyslogService:
         return self._disk_format
 
     def exists(self) -> bool:
-        return self._fs.exists(RootName.CONFIG, self._filename)
+        return self._fs.exists(RootName.STAGE, self._filename)
 
     def append_record(self, record: LogRecord) -> None:
         line = self._encode_record(record)
-        with self._fs.open_append(RootName.CONFIG, self._filename, mkdir_parents=True) as f:
+        with self._fs.open_append(RootName.STAGE, self._filename, mkdir_parents=True) as f:
             f.write(line)
 
     def read_all_raw(self) -> str:
-        with self._fs.open_read(RootName.CONFIG, self._filename) as f:
+        with self._fs.open_read(RootName.STAGE, self._filename) as f:
             data = f.read()
         if not isinstance(data, (bytes, bytearray)):
             raise TypeError("syslog read returned non-bytes")
@@ -63,7 +66,7 @@ class SyslogService:
         # Read at most N lines from the end by tailing bytes with a conservative cap.
         # This is a best-effort tail that avoids reading full files for very large logs.
         max_bytes = max(4096, n * 512)
-        raw = self._fs.tail_bytes(RootName.CONFIG, self._filename, max_bytes=max_bytes)
+        raw = self._fs.tail_bytes(RootName.STAGE, self._filename, max_bytes=max_bytes)
         text = raw.decode("utf-8", errors="replace")
         lines = text.splitlines()
         return lines[-n:]
@@ -76,7 +79,7 @@ class SyslogService:
         """
         offset = 0
         while True:
-            with self._fs.open_read(RootName.CONFIG, self._filename) as f:
+            with self._fs.open_read(RootName.STAGE, self._filename) as f:
                 data = f.read()
 
             if not isinstance(data, (bytes, bytearray)):

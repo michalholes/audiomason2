@@ -1,7 +1,7 @@
 """syslog plugin.
 
 This plugin subscribes to the Core LogBus and persists log records via the
-file_io capability (CONFIG root). It also provides a CLI command:
+file_io capability (STAGE root). It also provides a CLI command:
 
   audiomason syslog
 
@@ -22,6 +22,7 @@ from audiomason.core.events import get_event_bus
 from audiomason.core.log_bus import LogRecord, get_log_bus
 from audiomason.core.logging import get_logger
 from plugins.file_io.service.service import FileService
+from plugins.file_io.service.types import RootName
 
 from .service import SyslogConfig, SyslogService
 
@@ -174,21 +175,66 @@ class SyslogPlugin:
             )
             return
 
-        # Fail-safe: if file_io rejects absolute paths, keep subscription disabled.
-        if self._cfg.filename.startswith("/"):
-            _LOG.warning(f"syslog disabled: absolute paths are not allowed: {self._cfg.filename!r}")
+        # Validate and preflight the configured path deterministically.
+        filename = self._cfg.filename.strip()
+
+        # Absolute paths are forbidden: syslog must be under STAGE root.
+        if filename.startswith("/"):
+            msg = (
+                "absolute paths not allowed for logging.system_log_path: "
+                f"{filename!r}. Use a relative path under the stage root (e.g. 'logs/system.log')."
+            )
+            _LOG.error(msg)
+            print(msg, file=sys.stderr)
             _emit_diag(
                 "FAIL",
                 operation="plugin_init",
                 data={
                     "status": "failed",
                     "error_type": "ConfigError",
-                    "error_message": "absolute paths are not allowed",
+                    "error_message": msg,
                 },
             )
             self._cfg = SyslogConfig(
                 enabled=False,
-                filename=self._cfg.filename,
+                filename=filename,
+                disk_format=self._cfg.disk_format,
+                cli_default_command=self._cfg.cli_default_command,
+                cli_default_follow=self._cfg.cli_default_follow,
+            )
+            return
+
+        self._cfg = SyslogConfig(
+            enabled=self._cfg.enabled,
+            filename=filename,
+            disk_format=self._cfg.disk_format,
+            cli_default_command=self._cfg.cli_default_command,
+            cli_default_follow=self._cfg.cli_default_follow,
+        )
+
+        # Preflight: ensure the file is writable and within roots (creates file if missing).
+        try:
+            with self._fs.open_append(RootName.STAGE, filename, mkdir_parents=True):
+                pass
+        except Exception as e:
+            msg = (
+                "syslog disabled: logging.system_log_path is not writable or is outside roots: "
+                f"{filename!r} ({type(e).__name__}: {e})"
+            )
+            _LOG.error(msg)
+            print(msg, file=sys.stderr)
+            _emit_diag(
+                "FAIL",
+                operation="plugin_init",
+                data={
+                    "status": "failed",
+                    "error_type": "ConfigError",
+                    "error_message": msg,
+                },
+            )
+            self._cfg = SyslogConfig(
+                enabled=False,
+                filename=filename,
                 disk_format=self._cfg.disk_format,
                 cli_default_command=self._cfg.cli_default_command,
                 cli_default_follow=self._cfg.cli_default_follow,
@@ -235,9 +281,6 @@ class SyslogPlugin:
 
         if plugin_ns_present:
             enabled = self._try_resolve_bool(resolver, "plugins.syslog.enabled", default=False)
-            filename = self._try_resolve_str(
-                resolver, "plugins.syslog.filename", default="logs/system.log"
-            )
             disk_format = self._try_resolve_str(
                 resolver, "plugins.syslog.disk_format", default="jsonl"
             )
@@ -247,14 +290,46 @@ class SyslogPlugin:
             cli_default_follow = self._try_resolve_bool(
                 resolver, "plugins.syslog.cli_default_follow", default=True
             )
+
+            # Single source of truth: logging.system_log_path.
+            system_log_path = self._try_resolve_str(resolver, "logging.system_log_path", default="")
+            legacy_filename = self._try_resolve_str(resolver, "plugins.syslog.filename", default="")
+
+            if system_log_path:
+                filename = system_log_path
+                # Deprecated: keep deterministic behavior, but warn when mismatch is detected.
+                if legacy_filename and legacy_filename != system_log_path:
+                    _LOG.warning(
+                        "plugins.syslog.filename is deprecated and ignored because "
+                        "logging.system_log_path is set"
+                    )
+                    _emit_diag(
+                        "FAIL",
+                        operation="config",
+                        data={
+                            "status": "failed",
+                            "error_type": "ConfigError",
+                            "error_message": (
+                                "plugins.syslog.filename is deprecated; use logging.system_log_path"
+                            ),
+                        },
+                    )
+            else:
+                filename = legacy_filename or "logs/system.log"
+                if legacy_filename:
+                    _LOG.warning(
+                        "plugins.syslog.filename is deprecated; use logging.system_log_path"
+                    )
+
         else:
             enabled = self._try_resolve_bool(resolver, "logging.system_log_enabled", default=False)
 
-            # Legacy alias name in handoff: logging.system_log_filename.
-            filename = self._try_resolve_str(resolver, "logging.system_log_filename", default="")
+            filename = self._try_resolve_str(resolver, "logging.system_log_path", default="")
             if not filename:
-                # Backward compatibility with existing resolver keys.
-                filename = self._try_resolve_str(resolver, "logging.system_log_path", default="")
+                # Legacy alias name: logging.system_log_filename.
+                filename = self._try_resolve_str(
+                    resolver, "logging.system_log_filename", default=""
+                )
             if not filename:
                 filename = "logs/system.log"
 
@@ -359,7 +434,10 @@ class SyslogPlugin:
         print("  audiomason syslog tail [--lines N] [--follow|--no-follow] [--raw]")
         print("")
         print("Notes:")
-        print("  - Log file path is relative to the file_io CONFIG root.")
+        print(
+            "  - Log file path comes from logging.system_log_path and is relative to "
+            "the file_io STAGE root."
+        )
         print("  - tail follow mode is quiet when no new data arrives.")
 
     def _cmd_status(self, _argv: list[str]) -> int:
@@ -370,6 +448,8 @@ class SyslogPlugin:
             )
             exists = svc.exists()
             print(f"enabled = {'true' if self._cfg.enabled else 'false'}")
+            print("root = stage")
+            print("path_key = logging.system_log_path")
             print(f"filename = {self._cfg.filename}")
             print(f"disk_format = {self._cfg.disk_format}")
             print(f"file_exists = {'true' if exists else 'false'}")
