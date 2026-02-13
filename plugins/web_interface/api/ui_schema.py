@@ -104,7 +104,55 @@ def _default_pages() -> dict[str, dict[str, Any]]:
             "title": "Logs",
             "layout": {
                 "type": "grid",
-                "children": [{"type": "jobs_log_viewer"}],
+                "children": [
+                    {
+                        "type": "card",
+                        "title": "Debug bundle",
+                        "content": {
+                            "type": "button_row",
+                            "buttons": [
+                                {
+                                    "label": "Download debug bundle",
+                                    "action": {
+                                        "type": "download",
+                                        "href": "/api/debug/bundle",
+                                    },
+                                }
+                            ],
+                        },
+                    },
+                    {
+                        "type": "card",
+                        "title": "EventBus (diagnostics)",
+                        "content": {
+                            "type": "log_stream",
+                            "tail_source": {
+                                "type": "api",
+                                "path": "/api/logs/tail?lines=200",
+                            },
+                            "source": {
+                                "type": "sse",
+                                "path": "/api/logs/stream?since_id=0",
+                            },
+                        },
+                    },
+                    {
+                        "type": "card",
+                        "title": "LogBus (core logs)",
+                        "content": {
+                            "type": "log_stream",
+                            "tail_source": {
+                                "type": "api",
+                                "path": "/api/logbus/tail?lines=200",
+                            },
+                            "source": {
+                                "type": "sse",
+                                "path": "/api/logbus/stream?since_id=0",
+                            },
+                        },
+                    },
+                    {"type": "jobs_log_viewer"},
+                ],
             },
         },
         "ui_config": {

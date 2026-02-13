@@ -147,6 +147,25 @@ window.onerror = function(msg, src, line, col, err){
             const body = a.body;
             await API.sendJson(method, a.path, body);
             notify("Action executed.");
+          } else if (a.type === "download" && a.href) {
+            const r = await fetch(String(a.href));
+            if (!r.ok) {
+              const t = await r.text();
+              throw new Error(r.status + " " + r.statusText + ": " + t);
+            }
+            const blob = await r.blob();
+            let filename = "audiomason_debug_bundle.zip";
+            const cd = r.headers.get("Content-Disposition") || "";
+            const m = cd.match(/filename=\"([^\"]+)\"/);
+            if (m && m[1]) filename = m[1];
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = filename;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
           } else {
             notify("Unsupported action type.");
           }

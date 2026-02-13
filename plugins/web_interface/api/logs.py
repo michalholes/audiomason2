@@ -12,6 +12,9 @@ from audiomason.core.config import ConfigError, ConfigResolver
 from audiomason.core.diagnostics import is_diagnostics_enabled
 
 from ..util.diag_stream import snapshot, stream
+from ..util.log_stream import install_log_tap
+from ..util.log_stream import stream as logbus_iter
+from ..util.log_stream import tail_text as logbus_tail_text
 
 
 def _get_resolver(request: Request) -> ConfigResolver:
@@ -38,6 +41,10 @@ def _tail_jsonl(path: Path, lines: int) -> str:
 
 
 def mount_logs(app: FastAPI) -> None:
+    # Tap LogBus once per process so the Logs UI can stream core log records
+    # without tailing files.
+    install_log_tap()
+
     @app.get("/api/logs/tail")
     def logs_tail(request: Request, lines: int = 200) -> dict[str, Any]:
         # Primary source: in-process EventBus tap (no tailing web logs).
@@ -66,6 +73,30 @@ def mount_logs(app: FastAPI) -> None:
             for eid, payload in stream(since_id=last):
                 # Emit a JSON string as SSE data.
                 data = payload.replace("\n", "\\n")
+                if eid is None:
+                    yield (f"event: heartbeat\ndata: {data}\n\n").encode()
+                    continue
+                last = int(eid)
+                yield (f"id: {eid}\ndata: {data}\n\n").encode()
+
+        return StreamingResponse(gen(), media_type="text/event-stream")
+
+    @app.get("/api/logbus/tail")
+    def logbus_tail(lines: int = 200) -> dict[str, Any]:
+        # In-process LogBus tap (no tailing any files).
+        n = max(1, min(int(lines), 2000))
+        return {"path": "log_bus", "text": logbus_tail_text(lines=n)}
+
+    @app.get("/api/logbus/stream")
+    def logbus_stream(since_id: int = 0) -> StreamingResponse:
+        if since_id < 0:
+            since_id = 0
+
+        def gen() -> Iterator[bytes]:
+            last = int(since_id)
+            for eid, line in logbus_iter(since_id=last):
+                # Keep one record per SSE message. No embedded newlines.
+                data = line.replace("\n", "\\n")
                 if eid is None:
                     yield (f"event: heartbeat\ndata: {data}\n\n").encode()
                     continue
