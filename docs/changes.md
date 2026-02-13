@@ -1,6 +1,10 @@
 ## 2026-02-13T00:30:00+01:00
 
 -   web_interface: Add "/api/debug/bundle" ZIP endpoint and Import page "Download debug info" action.
+-   web_interface: Keep uvicorn access logs disabled (even in debug); rely on boundary diagnostics instead.
+-   import_cli: Emit explicit preflight boundary diagnostics with duration and route DIAG envelopes through debug LogBus.
+-   import: Emit per-job import job boundary diagnostics (duration_ms + traceback) from the engine service.
+-   tests: Add integration coverage for import CLI diagnostics stdout and syslog persistence.
 
 ## 2026-02-13T00:15:00+01:00
 

@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.50
+Specification Version: 1.0.51
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -959,8 +959,11 @@ Uvicorn log settings MUST map from AM verbosity as follows:
 
 - QUIET: log_level=error, access_log=False
 - NORMAL: log_level=info, access_log=False
-- VERBOSE: log_level=info, access_log=True
-- DEBUG: log_level=debug, access_log=True
+- VERBOSE: log_level=info, access_log=False
+- DEBUG: log_level=debug, access_log=False
+
+In all modes, route-level visibility MUST be provided via deterministic boundary
+diagnostics events (boundary.start/boundary.end) rather than access log spam.
 
 ### 9.1 Web Interface Configuration Surface
 

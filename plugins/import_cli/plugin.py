@@ -21,6 +21,8 @@ import hashlib
 import importlib
 import json
 import sys
+import time
+from contextlib import suppress
 from dataclasses import dataclass
 from typing import Any
 
@@ -30,9 +32,7 @@ from plugins.file_io.service.types import RootName
 from audiomason.core.config import ConfigResolver
 from audiomason.core.diagnostics import build_envelope
 from audiomason.core.events import get_event_bus
-from audiomason.core.logging import get_logger
-
-log = get_logger(__name__)
+from audiomason.core.log_bus import LogRecord, get_log_bus
 
 
 def _emit_diag(event: str, *, operation: str, data: dict[str, Any]) -> None:
@@ -44,6 +44,17 @@ def _emit_diag(event: str, *, operation: str, data: dict[str, Any]) -> None:
             data=data,
         )
         get_event_bus().publish(event, env)
+
+        # Duplicate diagnostics envelopes onto the existing LogBus.
+        # This allows system log persistence via the syslog plugin without
+        # introducing a separate, parallel diagnostics logging system.
+        try:
+            line = json.dumps(env, ensure_ascii=True, separators=(",", ":"), sort_keys=True)
+            get_log_bus().publish(
+                LogRecord(level_name="DIAG", plain=f"DIAG {line}", logger_name="import_cli")
+            )
+        except Exception:
+            return
     except Exception:
         return
 
@@ -87,12 +98,50 @@ def _install_console_diag_subscriber(*, enabled: bool) -> None:
     if not enabled:
         return
 
+    # Best-effort boundary duration tracking for human-readable output.
+    starts_ms: dict[tuple[str, str], int] = {}
+
     def _on_any_event(event: str, data: dict[str, Any]) -> None:
         if not isinstance(data, dict):
             return
         comp = data.get("component")
-        if comp not in ("import_cli", "import.preflight", "import.engine"):
+        if comp not in ("import_cli", "import.preflight", "import.engine", "import.engine.service"):
             return
+
+        op = str(data.get("operation") or "")
+
+        data_payload = data.get("data")
+        payload: dict[str, Any] = data_payload if isinstance(data_payload, dict) else {}
+
+        if event == "boundary.start":
+            # Track starts for computing duration when missing.
+            with suppress(Exception):
+                starts_ms[(str(comp), op)] = int(time.monotonic() * 1000)
+            print(f"DIAG boundary.start component={comp} operation={op}")
+            return
+
+        if event in ("boundary.end", "boundary.fail"):
+            status = str(payload.get("status") or "")
+            dur_ms = payload.get("duration_ms")
+            if not isinstance(dur_ms, int):
+                t0 = starts_ms.get((str(comp), op))
+                if isinstance(t0, int):
+                    with suppress(Exception):
+                        dur_ms = int(time.monotonic() * 1000) - t0
+            extra = ""
+            if isinstance(dur_ms, int):
+                extra = f" duration_ms={dur_ms}"
+            print(f"DIAG {event} component={comp} operation={op} status={status}{extra}")
+            if payload.get("traceback"):
+                try:
+                    tb = str(payload.get("traceback"))
+                    if tb.strip():
+                        print(tb.rstrip("\n"))
+                except Exception:
+                    pass
+            return
+
+        # Fallback: raw envelope.
         try:
             line = json.dumps(data, ensure_ascii=True, separators=(",", ":"), sort_keys=True)
         except Exception:
@@ -319,7 +368,48 @@ class ImportCLIPlugin:
             return
 
         preflight_svc = mods["PreflightService"](fs)
-        preflight = preflight_svc.run(args.root, args.path)
+
+        t0 = __import__("time").monotonic()
+        _emit_diag(
+            "boundary.start",
+            operation="preflight",
+            data={"root": str(args.root.value), "path": str(args.path)},
+        )
+        try:
+            preflight = preflight_svc.run(args.root, args.path)
+        except Exception as e:
+            dur_ms = int((__import__("time").monotonic() - t0) * 1000)
+            tb: str | None
+            try:
+                import traceback
+
+                tb = traceback.format_exc()
+            except Exception:
+                tb = None
+            _emit_diag(
+                "boundary.end",
+                operation="preflight",
+                data={
+                    "status": "failed",
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                    "traceback": tb,
+                    "duration_ms": dur_ms,
+                },
+            )
+            raise
+
+        dur_ms = int((__import__("time").monotonic() - t0) * 1000)
+        _emit_diag(
+            "boundary.end",
+            operation="preflight",
+            data={
+                "status": "succeeded",
+                "authors_n": len(getattr(preflight, "authors", []) or []),
+                "books_n": len(getattr(preflight, "books", []) or []),
+                "duration_ms": dur_ms,
+            },
+        )
 
         if not preflight.books:
             print("No books detected under the selected source root.")

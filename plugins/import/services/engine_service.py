@@ -201,15 +201,62 @@ class ImportEngineService:
             job.transition(JobState.RUNNING)
             self._jobs.store.save_job(job)
 
-            run_import_job(
-                job_id=job.job_id,
-                job_service=self._jobs,
-                fs=self._fs,
-                registry=self._registry,
-                run_state=state,
-                source_root=source_root,
-                book_rel_path=book_rel_path,
+            t0 = __import__("time").monotonic()
+            _emit_diag(
+                "boundary.start",
+                operation="run_import_job",
+                data={
+                    "job_id": job.job_id,
+                    "run_id": run_id,
+                    "book_rel_path": book_rel_path,
+                    "mode": str(state.source_handling_mode),
+                },
             )
+            try:
+                run_import_job(
+                    job_id=job.job_id,
+                    job_service=self._jobs,
+                    fs=self._fs,
+                    registry=self._registry,
+                    run_state=state,
+                    source_root=source_root,
+                    book_rel_path=book_rel_path,
+                )
+            except Exception as e:
+                dur_ms = int((__import__("time").monotonic() - t0) * 1000)
+                tb: str | None
+                try:
+                    import traceback
+
+                    tb = traceback.format_exc()
+                except Exception:
+                    tb = None
+                _emit_diag(
+                    "boundary.end",
+                    operation="run_import_job",
+                    data={
+                        "status": "failed",
+                        "job_id": job.job_id,
+                        "run_id": run_id,
+                        "error_type": type(e).__name__,
+                        "error": str(e),
+                        "traceback": tb,
+                        "duration_ms": dur_ms,
+                    },
+                )
+                raise
+            else:
+                dur_ms = int((__import__("time").monotonic() - t0) * 1000)
+                _emit_diag(
+                    "boundary.end",
+                    operation="run_import_job",
+                    data={
+                        "status": "succeeded",
+                        "job_id": job.job_id,
+                        "run_id": run_id,
+                        "duration_ms": dur_ms,
+                    },
+                )
             ran.append(job.job_id)
 
         return ran

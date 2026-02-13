@@ -30,13 +30,14 @@ def _uvicorn_log_settings(verbosity: int) -> tuple[str, bool]:
     Returns:
         (log_level, access_log)
     """
+    # Access logs are intentionally kept off even in debug mode.
+    # Debug visibility is provided via deterministic diagnostics emission
+    # (boundary.start / boundary.end) instead of GET spam.
     if verbosity <= 0:
         return ("error", False)
-    if verbosity == 1:
+    if verbosity <= 2:
         return ("info", False)
-    if verbosity == 2:
-        return ("info", True)
-    return ("debug", True)
+    return ("debug", False)
 
 
 def _silence_uvicorn_loggers() -> None:
@@ -87,6 +88,13 @@ class WebInterfacePlugin:
                 response = await call_next(request)
             except Exception as e:
                 dur_ms = int((__import__("time").monotonic() - t0) * 1000)
+                tb: str | None
+                try:
+                    import traceback
+
+                    tb = traceback.format_exc()
+                except Exception:
+                    tb = None
                 fail_env = build_envelope(
                     event="boundary.end",
                     component="web_interface",
@@ -95,6 +103,7 @@ class WebInterfacePlugin:
                         "status": "failed",
                         "error_type": type(e).__name__,
                         "error": str(e),
+                        "traceback": tb,
                         "duration_ms": dur_ms,
                     },
                 )
