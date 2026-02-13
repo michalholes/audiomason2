@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import json
 import re
+import socket
 import zipfile
 from dataclasses import asdict, is_dataclass
 from datetime import UTC, datetime
@@ -13,8 +14,13 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
 from audiomason.core.config import ConfigResolver
+from audiomason.core.orchestration import Orchestrator
+from audiomason.core.wizard_service import WizardService
 from plugins.file_io.service.service import FileService
 from plugins.file_io.service.types import RootName
+
+from ..util.status import build_status
+from .roots import _resolve_show_jobs_root
 
 _FIXED_ZIP_DT = (2000, 1, 1, 0, 0, 0)
 
@@ -76,6 +82,10 @@ def _zip_add_bytes(z: zipfile.ZipFile, path: str, data: bytes) -> None:
     z.writestr(zi, data)
 
 
+def _zip_add_text(z: zipfile.ZipFile, path: str, text: str) -> None:
+    _zip_add_bytes(z, path, text.encode("utf-8"))
+
+
 def _tail_lines_from_bytes(data: bytes, *, max_lines: int) -> bytes:
     if max_lines <= 0:
         return b""
@@ -84,6 +94,59 @@ def _tail_lines_from_bytes(data: bytes, *, max_lines: int) -> bytes:
     lines = text.splitlines()
     tail = lines[-max_lines:]
     return ("\n".join(tail) + "\n").encode("utf-8")
+
+
+def _try_find_git_sha() -> str | None:
+    # Best-effort only; no subprocess.
+    # Walk up from this file looking for .git/HEAD.
+    here = Path(__file__).resolve()
+    for p in [here, *here.parents[:8]]:
+        head = p / ".git" / "HEAD"
+        if not head.exists():
+            continue
+        try:
+            head_text = head.read_text(encoding="utf-8").strip()
+        except Exception:
+            return None
+        if head_text.startswith("ref: "):
+            ref = head_text.split("ref: ", 1)[1].strip()
+            ref_path = p / ".git" / ref
+            try:
+                return ref_path.read_text(encoding="utf-8").strip()[:40] or None
+            except Exception:
+                return None
+        return head_text[:40] or None
+    return None
+
+
+def _api_roots(request: Request, resolver: ConfigResolver) -> dict[str, Any]:
+    show_jobs = _resolve_show_jobs_root(resolver)
+    items: list[dict[str, str]] = [
+        {"id": "inbox", "label": "Inbox"},
+        {"id": "stage", "label": "Stage"},
+    ]
+    if show_jobs:
+        items.append({"id": "jobs", "label": "Jobs"})
+    items.append({"id": "outbox", "label": "Outbox"})
+    return {"items": items}
+
+
+def _api_wizards() -> dict[str, Any]:
+    svc = WizardService()
+    items: list[dict[str, Any]] = []
+    for w in svc.list_wizards():
+        item: dict[str, Any] = {"name": w.name}
+        items.append(item)
+    items.sort(key=lambda x: x.get("name") or "")
+    return {"items": items}
+
+
+def _api_jobs() -> dict[str, Any]:
+    orch = Orchestrator()
+    jobs = [j.to_dict() for j in orch.list_jobs()]
+    # stable ordering
+    jobs.sort(key=lambda x: x.get("job_id") or "")
+    return {"items": jobs}
 
 
 def _try_include_abs_file(
@@ -159,36 +222,39 @@ def mount_debug_bundle(app: FastAPI) -> None:
     def api_debug_bundle(
         request: Request,
         logs_tail_lines: int = 2000,
-        jobs_n: int = 50,
     ) -> StreamingResponse:
         """Download a deterministic debug bundle as a ZIP."""
-        if logs_tail_lines < 0 or jobs_n < 0:
+        if logs_tail_lines < 0:
             raise HTTPException(status_code=400, detail="invalid params")
 
         resolver = _get_resolver(request)
         fs = _get_file_service(request)
 
+        now = datetime.now(tz=UTC)
+
         # Collect content.
-        meta: dict[str, Any] = {
-            "logs_tail_lines": int(logs_tail_lines),
-            "jobs_n": int(jobs_n),
+        manifest: dict[str, Any] = {
+            "version": 1,
+            "timestamp_utc": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "hostname": socket.gethostname(),
+            "stage_dir": str(fs.root_dir(RootName.STAGE)),
+            "git_sha": _try_find_git_sha(),
+            "params": {"logs_tail_lines": int(logs_tail_lines)},
             "included": {},
             "omitted": {},
         }
 
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, mode="w", compression=zipfile.ZIP_DEFLATED) as z:
-            _zip_add_bytes(
-                z,
-                "debug_bundle/config/effective_config.json",
-                _effective_config_json(resolver).encode("utf-8"),
-            )
+            _zip_add_text(z, "config/effective_config.json", _effective_config_json(resolver))
+            manifest["included"]["effective_config"] = {"path": "config/effective_config.json"}
 
-            _zip_add_bytes(
+            _zip_add_text(
                 z,
-                "debug_bundle/plugins/plugins.json",
-                json.dumps(_plugin_info(request), indent=2, sort_keys=True).encode("utf-8") + b"\n",
+                "plugins/plugins.json",
+                json.dumps(_plugin_info(request), indent=2, sort_keys=True) + "\n",
             )
+            manifest["included"]["plugins"] = {"path": "plugins/plugins.json"}
 
             # UI overrides (config root)
             ui_rel = "web_interface_ui.json"
@@ -200,18 +266,16 @@ def mount_debug_bundle(app: FastAPI) -> None:
                         obj = json.loads(raw.decode("utf-8"))
                     except Exception:
                         obj = {"raw": raw.decode("utf-8", errors="replace")[:200000]}
-                    _zip_add_bytes(
+                    _zip_add_text(
                         z,
-                        "debug_bundle/ui/ui_overrides.json",
-                        (json.dumps(_sanitize(obj), indent=2, sort_keys=True) + "\n").encode(
-                            "utf-8"
-                        ),
+                        "ui/ui_overrides.json",
+                        json.dumps(_sanitize(obj), indent=2, sort_keys=True) + "\n",
                     )
-                    meta["included"]["ui_overrides"] = {"root": "config", "rel": ui_rel}
+                    manifest["included"]["ui_overrides"] = {"root": "config", "rel": ui_rel}
                 else:
-                    meta["omitted"]["ui_overrides"] = "not_found"
+                    manifest["omitted"]["ui_overrides"] = "not_found"
             except Exception as e:
-                meta["omitted"]["ui_overrides"] = f"error:{type(e).__name__}"
+                manifest["omitted"]["ui_overrides"] = f"error:{type(e).__name__}"
 
             # Logs: system log (path may live under a root)
             try:
@@ -221,7 +285,7 @@ def mount_debug_bundle(app: FastAPI) -> None:
             ok, detail = _try_include_abs_file(
                 fs,
                 abs_path=sys_path if isinstance(sys_path, str) else None,
-                name_in_zip="debug_bundle/logs/system.log.tail",
+                name_in_zip="logs/system.log",
                 max_lines=int(logs_tail_lines),
                 max_bytes=2_000_000,
             )
@@ -232,9 +296,9 @@ def mount_debug_bundle(app: FastAPI) -> None:
                 _zip_add_bytes(
                     z, info["zip"], _tail_lines_from_bytes(raw, max_lines=int(logs_tail_lines))
                 )
-                meta["included"]["system_log"] = info
+                manifest["included"]["system_log"] = info
             else:
-                meta["omitted"]["system_log"] = detail
+                manifest["omitted"]["system_log"] = detail
 
             # Logs: diagnostics.jsonl (stage root)
             diag_rel = "diagnostics/diagnostics.jsonl"
@@ -243,62 +307,70 @@ def mount_debug_bundle(app: FastAPI) -> None:
                     raw = fs.tail_bytes(RootName.STAGE, diag_rel, max_bytes=2_000_000)
                     _zip_add_bytes(
                         z,
-                        "debug_bundle/logs/diagnostics.jsonl.tail",
+                        "diagnostics/diagnostics.jsonl",
                         _tail_lines_from_bytes(raw, max_lines=int(logs_tail_lines)),
                     )
-                    meta["included"]["diagnostics_jsonl"] = {"root": "stage", "rel": diag_rel}
+                    manifest["included"]["diagnostics_jsonl"] = {"root": "stage", "rel": diag_rel}
                 else:
-                    meta["omitted"]["diagnostics_jsonl"] = "not_found"
+                    manifest["omitted"]["diagnostics_jsonl"] = "not_found"
             except Exception as e:
-                meta["omitted"]["diagnostics_jsonl"] = f"error:{type(e).__name__}"
+                manifest["omitted"]["diagnostics_jsonl"] = f"error:{type(e).__name__}"
 
-            # Jobs snapshot (jobs root)
-            job_entries = []
+            # API snapshots
             try:
-                for ent in fs.list_dir(RootName.JOBS, ".", recursive=True):
-                    if ent.is_dir:
-                        continue
-                    if ent.rel_path.endswith(".json") and not ent.rel_path.endswith(".tmp"):
-                        job_entries.append(ent)
-            except Exception:
-                job_entries = []
+                _zip_add_text(
+                    z,
+                    "api/status.json",
+                    json.dumps(build_status(), indent=2, sort_keys=True) + "\n",
+                )
+                manifest["included"]["api_status"] = {"path": "api/status.json"}
+            except Exception as e:
+                manifest["omitted"]["api_status"] = f"error:{type(e).__name__}"
 
-            # newest first (mtime desc), then rel_path for tie stability
-            job_entries.sort(key=lambda e: (-(e.mtime or 0.0), e.rel_path))
-            selected = job_entries[: int(jobs_n)]
-            meta["included"]["jobs"] = {"count": len(selected)}
+            try:
+                _zip_add_text(
+                    z,
+                    "api/roots.json",
+                    json.dumps(_api_roots(request, resolver), indent=2, sort_keys=True) + "\n",
+                )
+                manifest["included"]["api_roots"] = {"path": "api/roots.json"}
+            except Exception as e:
+                manifest["omitted"]["api_roots"] = f"error:{type(e).__name__}"
 
-            for ent in selected:
-                base = ent.rel_path.split("/")[-1]
-                zip_name = f"debug_bundle/jobs/{base}"
-                try:
-                    with fs.open_read(RootName.JOBS, ent.rel_path) as f:
-                        data = f.read()
-                    _zip_add_bytes(z, zip_name, data)
-                except Exception:
-                    # best-effort: skip file
-                    continue
+            try:
+                _zip_add_text(
+                    z,
+                    "api/wizards.json",
+                    json.dumps(_api_wizards(), indent=2, sort_keys=True) + "\n",
+                )
+                manifest["included"]["api_wizards"] = {"path": "api/wizards.json"}
+            except Exception as e:
+                manifest["omitted"]["api_wizards"] = f"error:{type(e).__name__}"
 
-                # job log next to json (same stem + .log)
-                if base.endswith(".json"):
-                    log_rel = ent.rel_path[: -len(".json")] + ".log"
-                    if fs.exists(RootName.JOBS, log_rel):
-                        try:
-                            with fs.open_read(RootName.JOBS, log_rel) as f:
-                                log_data = f.read()
-                            _zip_add_bytes(z, f"debug_bundle/jobs/{Path(log_rel).name}", log_data)
-                        except Exception:
-                            pass
+            try:
+                _zip_add_text(
+                    z, "api/jobs.json", json.dumps(_api_jobs(), indent=2, sort_keys=True) + "\n"
+                )
+                manifest["included"]["api_jobs"] = {"path": "api/jobs.json"}
+            except Exception as e:
+                manifest["omitted"]["api_jobs"] = f"error:{type(e).__name__}"
 
-            _zip_add_bytes(
-                z,
-                "debug_bundle/meta.json",
-                (json.dumps(meta, indent=2, sort_keys=True) + "\n").encode("utf-8"),
+            # Notes
+            notes = (
+                "Repro notes\n"
+                "\n"
+                "1) Start the web interface (audiomason web).\n"
+                "2) Download the bundle: GET /api/debug/bundle\n"
+                "   - logs_tail_lines: number of tail lines for log-like files (default 2000).\n"
+                "\n"
+                "Bundle contents are best-effort; missing system.log is not an error.\n"
             )
+            _zip_add_text(z, "notes.txt", notes)
+            manifest["included"]["notes"] = {"path": "notes.txt"}
+
+            _zip_add_text(z, "manifest.json", json.dumps(manifest, indent=2, sort_keys=True) + "\n")
 
         buf.seek(0)
 
-        ts = datetime.now(tz=UTC).strftime("%Y%m%dT%H%M%SZ")
-        filename = f"audiomason_debug_bundle_{ts}.zip"
-        headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+        headers = {"Content-Disposition": 'attachment; filename="audiomason_debug_bundle.zip"'}
         return StreamingResponse(buf, media_type="application/zip", headers=headers)
