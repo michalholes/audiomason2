@@ -1,6 +1,4 @@
 from __future__ import annotations
-
-import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -37,7 +35,7 @@ def create_workspace(repo_root: Path, issue_id: str | None, deps: Deps, *, updat
                 ignore.add(n)
         return ignore
 
-    shutil.copytree(repo_root, ws_repo, ignore=_ignore, dirs_exist_ok=False)
+    deps.fs.copytree(repo_root, ws_repo, ignore=_ignore, dirs_exist_ok=False)
     return Workspace(path=ws_repo, existed=existed)
 
 

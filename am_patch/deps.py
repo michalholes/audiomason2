@@ -19,7 +19,14 @@ class CommandRunner(Protocol):
 
 
 class FileOps(Protocol):
-    def copytree(self, src: Path, dst: Path) -> None: ...
+    def copytree(
+        self,
+        src: Path,
+        dst: Path,
+        *,
+        ignore: object | None = None,
+        dirs_exist_ok: bool = False,
+    ) -> None: ...
     def rmtree(self, path: Path) -> None: ...
     def mkdir(self, path: Path) -> None: ...
     def exists(self, path: Path) -> bool: ...
@@ -57,8 +64,15 @@ class SubprocessRunner:
 
 
 class OSFileOps:
-    def copytree(self, src: Path, dst: Path) -> None:
-        shutil.copytree(src, dst, dirs_exist_ok=False)
+    def copytree(
+        self,
+        src: Path,
+        dst: Path,
+        *,
+        ignore: object | None = None,
+        dirs_exist_ok: bool = False,
+    ) -> None:
+        shutil.copytree(src, dst, ignore=ignore, dirs_exist_ok=dirs_exist_ok)
 
     def rmtree(self, path: Path) -> None:
         shutil.rmtree(path, ignore_errors=False)
