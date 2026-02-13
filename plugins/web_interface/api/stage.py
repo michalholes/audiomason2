@@ -8,6 +8,8 @@ from audiomason.core.config import ConfigResolver
 from plugins.file_io.service.service import FileService
 from plugins.file_io.service.types import RootName
 
+from ..util.web_observability import web_operation
+
 
 def _resolver(request: Request) -> ConfigResolver:
     r = getattr(request.app.state, "config_resolver", None)
@@ -32,20 +34,24 @@ def _debug(request: Request) -> bool:
 
 def mount_stage(app: FastAPI) -> None:
     # Backward-compatible stage endpoints implemented via FileService.
+
     @app.get("/api/stage")
     def list_stage(request: Request) -> dict[str, Any]:
         fs = _fs(request)
         items: list[dict[str, Any]] = []
-        for e in fs.list_dir(RootName.STAGE, ".", recursive=True):
-            if e.is_dir:
-                continue
-            items.append(
-                {
-                    "name": e.rel_path,
-                    "size": e.size,
-                    "mtime_ts": int(e.mtime) if e.mtime is not None else None,
-                }
-            )
+        with web_operation(
+            request, name="stage.list", ctx={"root": RootName.STAGE.value, "path": "."}
+        ):
+            for e in fs.list_dir(RootName.STAGE, ".", recursive=True):
+                if e.is_dir:
+                    continue
+                items.append(
+                    {
+                        "name": e.rel_path,
+                        "size": e.size,
+                        "mtime_ts": int(e.mtime) if e.mtime is not None else None,
+                    }
+                )
         out: dict[str, Any] = {"items": items, "dir": str(fs.root_dir(RootName.STAGE))}
         if _debug(request):
             out["root"] = RootName.STAGE.value
@@ -56,7 +62,12 @@ def mount_stage(app: FastAPI) -> None:
         fs = _fs(request)
         rel = name.lstrip("/")
         try:
-            fs.delete_file(RootName.STAGE, rel)
+            with web_operation(
+                request,
+                name="stage.delete",
+                ctx={"root": RootName.STAGE.value, "path": rel},
+            ):
+                fs.delete_file(RootName.STAGE, rel)
         except FileNotFoundError as e:
             raise HTTPException(status_code=404, detail="not found") from e
         return {"ok": True}
@@ -74,16 +85,22 @@ def mount_stage(app: FastAPI) -> None:
             raise HTTPException(status_code=400, detail="relpaths length mismatch")
 
         saved = 0
-        for up, rel in zip(files, relpaths, strict=True):
-            rel = rel.lstrip("/")
-            parent = rel.rsplit("/", 1)[0] if "/" in rel else ""
-            if parent:
-                fs.mkdir(RootName.STAGE, parent, parents=True, exist_ok=True)
-            with fs.open_write(RootName.STAGE, rel, overwrite=True) as out:
-                while True:
-                    chunk = await up.read(1024 * 1024)
-                    if not chunk:
-                        break
-                    out.write(chunk)
-            saved += 1
-        return {"ok": True, "saved": saved}
+        with web_operation(
+            request,
+            name="stage.upload",
+            ctx={"root": RootName.STAGE.value, "count": len(files)},
+        ):
+            for up, rel in zip(files, relpaths, strict=True):
+                rel = rel.lstrip("/")
+                parent = rel.rsplit("/", 1)[0] if "/" in rel else ""
+                if parent:
+                    fs.mkdir(RootName.STAGE, parent, parents=True, exist_ok=True)
+                with fs.open_write(RootName.STAGE, rel, overwrite=True) as out:
+                    while True:
+                        chunk = await up.read(1024 * 1024)
+                        if not chunk:
+                            break
+                        out.write(chunk)
+                saved += 1
+
+        return {"saved": saved}

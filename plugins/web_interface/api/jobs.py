@@ -13,6 +13,7 @@ from plugins.file_io.service.service import FileService
 from plugins.file_io.service.types import RootName
 
 from ..util.fs import find_repo_root
+from ..util.web_observability import web_operation
 
 
 def _user_plugins_root() -> Path:
@@ -78,37 +79,47 @@ def mount_jobs(app: FastAPI) -> None:
     orch = Orchestrator()
 
     @app.get("/api/jobs")
-    def list_jobs() -> dict[str, Any]:
-        jobs = [_serialize_job(j) for j in orch.list_jobs()]
-        return {"items": jobs}
+    def list_jobs(request: Request) -> dict[str, Any]:
+        with web_operation(request, name="jobs.list", ctx={}):
+            jobs = [_serialize_job(j) for j in orch.list_jobs()]
+            return {"items": jobs}
 
     @app.get("/api/jobs/{job_id}")
-    def get_job(job_id: str) -> dict[str, Any]:
-        try:
-            job = orch.get_job(job_id)
-        except Exception as e:
-            raise HTTPException(status_code=404, detail=str(e)) from e
-        return {"item": _serialize_job(job)}
+    def get_job(request: Request, job_id: str) -> dict[str, Any]:
+        with web_operation(request, name="jobs.get", ctx={"job_id": job_id}):
+            try:
+                job = orch.get_job(job_id)
+            except Exception as e:
+                raise HTTPException(status_code=404, detail=str(e)) from e
+            return {"item": _serialize_job(job)}
 
     @app.post("/api/jobs/{job_id}/cancel")
-    def cancel_job(job_id: str) -> dict[str, Any]:
-        try:
-            orch.cancel(job_id)
-            job = orch.get_job(job_id)
-        except Exception as e:
-            raise HTTPException(status_code=404, detail=str(e)) from e
-        return {"item": _serialize_job(job)}
+    def cancel_job(request: Request, job_id: str) -> dict[str, Any]:
+        with web_operation(request, name="jobs.cancel", ctx={"job_id": job_id}):
+            try:
+                orch.cancel(job_id)
+                job = orch.get_job(job_id)
+            except Exception as e:
+                raise HTTPException(status_code=404, detail=str(e)) from e
+            return {"item": _serialize_job(job)}
 
     @app.get("/api/jobs/{job_id}/log")
-    def read_job_log(job_id: str, offset: int = 0, limit_bytes: int = 64 * 1024) -> dict[str, Any]:
-        try:
-            text, next_offset = orch.read_log(job_id, offset=offset, limit_bytes=limit_bytes)
-        except Exception as e:
-            raise HTTPException(status_code=404, detail=str(e)) from e
-        return {"text": text, "next_offset": next_offset}
+    def read_job_log(
+        request: Request, job_id: str, offset: int = 0, limit_bytes: int = 64 * 1024
+    ) -> dict[str, Any]:
+        with web_operation(
+            request,
+            name="jobs.log",
+            ctx={"job_id": job_id, "offset": int(offset), "limit_bytes": int(limit_bytes)},
+        ):
+            try:
+                text, next_offset = orch.read_log(job_id, offset=offset, limit_bytes=limit_bytes)
+            except Exception as e:
+                raise HTTPException(status_code=404, detail=str(e)) from e
+            return {"text": text, "next_offset": next_offset}
 
     @app.post("/api/jobs/process")
-    def create_process_job(payload: dict[str, Any]) -> dict[str, Any]:
+    def create_process_job(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
         pipeline_path = payload.get("pipeline_path")
         sources = payload.get("sources")
         if not isinstance(pipeline_path, str) or not pipeline_path:
@@ -117,15 +128,20 @@ def mount_jobs(app: FastAPI) -> None:
             raise HTTPException(status_code=400, detail="sources must be a non-empty list")
         srcs: list[str] = [str(x) for x in sources]
 
-        job = orch.jobs.create_job(
-            JobType.PROCESS,
-            meta={
-                "pipeline_path": pipeline_path,
-                "sources_json": json.dumps(
-                    srcs, ensure_ascii=True, separators=(",", ":"), sort_keys=True
-                ),
-            },
-        )
+        with web_operation(
+            request,
+            name="jobs.create_process",
+            ctx={"pipeline_path": pipeline_path, "sources_count": len(srcs)},
+        ):
+            job = orch.jobs.create_job(
+                JobType.PROCESS,
+                meta={
+                    "pipeline_path": pipeline_path,
+                    "sources_json": json.dumps(
+                        srcs, ensure_ascii=True, separators=(",", ":"), sort_keys=True
+                    ),
+                },
+            )
         return {"job_id": job.job_id, "item": _serialize_job(job)}
 
     @app.post("/api/jobs/wizard")

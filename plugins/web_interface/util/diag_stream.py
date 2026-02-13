@@ -63,7 +63,7 @@ def snapshot(*, since_id: int = 0, limit: int = 200) -> list[tuple[int, str]]:
     return items
 
 
-def stream(*, since_id: int = 0, heartbeat_s: float = 15.0) -> Iterator[tuple[int, str]]:
+def stream(*, since_id: int = 0, heartbeat_s: float = 15.0) -> Iterator[tuple[int | None, str]]:
     """Yield (id, payload) tuples from the ring buffer, blocking for new items."""
     last = since_id
     while True:
@@ -78,11 +78,13 @@ def stream(*, since_id: int = 0, heartbeat_s: float = 15.0) -> Iterator[tuple[in
         with _COND:
             _COND.wait(timeout=max(0.1, float(heartbeat_s)))
 
-        # Heartbeat to keep SSE alive.
+        # Heartbeat to keep SSE alive. Do not emit an SSE id for heartbeat.
         now = time.time()
         yield (
-            last,
+            None,
             json.dumps(
-                {"event": "heartbeat", "data": {"ts": now}}, separators=(",", ":"), sort_keys=True
+                {"event": "heartbeat", "data": {"ts": now}},
+                separators=(",", ":"),
+                sort_keys=True,
             ),
         )

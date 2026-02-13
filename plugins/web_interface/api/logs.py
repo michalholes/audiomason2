@@ -32,7 +32,7 @@ def _diagnostics_jsonl_path(resolver: ConfigResolver) -> Path | None:
 def _tail_jsonl(path: Path, lines: int) -> str:
     if not path.exists():
         return ""
-    data = path.read_text(encoding="utf-8", errors="replace")
+    data = path.read_text(errors="replace")
     parts = data.splitlines()[-lines:]
     return "\n".join(parts) + ("\n" if parts else "")
 
@@ -64,9 +64,12 @@ def mount_logs(app: FastAPI) -> None:
         def gen() -> Iterator[bytes]:
             last = int(since_id)
             for eid, payload in stream(since_id=last):
-                last = eid
                 # Emit a JSON string as SSE data.
                 data = payload.replace("\n", "\\n")
+                if eid is None:
+                    yield (f"event: heartbeat\ndata: {data}\n\n").encode()
+                    continue
+                last = int(eid)
                 yield (f"id: {eid}\ndata: {data}\n\n").encode()
 
         return StreamingResponse(gen(), media_type="text/event-stream")

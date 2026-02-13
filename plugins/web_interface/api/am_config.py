@@ -3,13 +3,13 @@ from __future__ import annotations
 from typing import Any
 
 import yaml
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import BaseModel
 
 from audiomason.core.config_service import ConfigService
 from audiomason.core.errors import ConfigError
 
-from ..util.paths import debug_enabled
+from ..util.web_observability import web_operation
 
 
 class SetConfigValue(BaseModel):
@@ -44,15 +44,15 @@ def mount_am_config(app: FastAPI) -> None:
     svc = ConfigService()
 
     @app.get("/api/am/config")
-    def get_am_config() -> dict[str, Any]:
-        snapshot_yaml = svc.get_effective_config_snapshot()
-        out: dict[str, Any] = {
-            "config": svc.get_config(),
-            "effective_snapshot": _parse_effective_snapshot(snapshot_yaml),
-        }
-        if debug_enabled():
-            out["path"] = str(svc.user_config_path)
-        return out
+    def get_am_config(request: Request) -> dict[str, Any]:
+        with web_operation(request, name="am.config.get", ctx={}):
+            snapshot_yaml = svc.get_effective_config_snapshot()
+            out: dict[str, Any] = {
+                "config": svc.get_config(),
+                "effective_snapshot": _parse_effective_snapshot(snapshot_yaml),
+                "effective_snapshot_yaml": snapshot_yaml,
+            }
+            return out
 
     @app.post("/api/am/config/set")
     def set_am_config_value(body: SetConfigValue) -> dict[str, Any]:

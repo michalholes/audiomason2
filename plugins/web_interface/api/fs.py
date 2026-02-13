@@ -12,6 +12,8 @@ from audiomason.core.config import ConfigResolver
 from plugins.file_io.service.service import FileService
 from plugins.file_io.service.types import RootName
 
+from ..util.web_observability import web_operation
+
 
 def _get_resolver(request: Request) -> ConfigResolver:
     resolver = getattr(request.app.state, "config_resolver", None)
@@ -30,6 +32,11 @@ def _get_file_service(request: Request) -> FileService:
     return fs
 
 
+def _read_all(fs: FileService, root: RootName, rel_path: str) -> bytes:
+    with fs.open_read(root, rel_path) as f:
+        return f.read()
+
+
 def _parse_root(root: str) -> RootName:
     try:
         return RootName(root)
@@ -38,7 +45,7 @@ def _parse_root(root: str) -> RootName:
 
 
 def _norm_rel_path(p: str) -> str:
-    # Allow Unicode names. Only normalize obvious unsafe leading slashes.
+    # Allow Unicode names. Only normalize obvious unsafe leading slash.
     p = p.strip()
     if not p:
         return "."
@@ -54,38 +61,48 @@ def mount_fs(app: FastAPI) -> None:
     def fs_list(request: Request, root: str, path: str = ".", recursive: int = 0) -> dict[str, Any]:
         fs = _get_file_service(request)
         r = _parse_root(root)
-        entries = fs.list_dir(r, _norm_rel_path(path), recursive=bool(recursive))
-        items: list[dict[str, Any]] = []
-        for e in entries:
-            items.append(
-                {
-                    "path": e.rel_path,
-                    "is_dir": e.is_dir,
-                    "size": e.size,
-                    "mtime_ts": int(e.mtime) if e.mtime is not None else None,
-                }
-            )
-        return {"items": items}
+        rel = _norm_rel_path(path)
+        with web_operation(
+            request,
+            name="fs.list",
+            ctx={"root": r.value, "path": rel, "recursive": int(bool(recursive))},
+        ):
+            entries = fs.list_dir(r, rel, recursive=bool(recursive))
+            items: list[dict[str, Any]] = []
+            for e in entries:
+                items.append(
+                    {
+                        "path": e.rel_path,
+                        "is_dir": e.is_dir,
+                        "size": e.size,
+                        "mtime_ts": int(e.mtime) if e.mtime is not None else None,
+                    }
+                )
+            return {"items": items}
 
     @app.get("/api/fs/stat")
     def fs_stat(request: Request, root: str, path: str) -> dict[str, Any]:
         fs = _get_file_service(request)
         r = _parse_root(root)
-        st = fs.stat(r, _norm_rel_path(path))
-        return {
-            "item": {
-                "path": st.rel_path,
-                "is_dir": st.is_dir,
-                "size": st.size,
-                "mtime_ts": int(st.mtime),
+        rel = _norm_rel_path(path)
+        with web_operation(request, name="fs.stat", ctx={"root": r.value, "path": rel}):
+            st = fs.stat(r, rel)
+            return {
+                "item": {
+                    "path": st.rel_path,
+                    "is_dir": st.is_dir,
+                    "size": st.size,
+                    "mtime_ts": int(st.mtime),
+                }
             }
-        }
 
     @app.get("/api/fs/exists")
     def fs_exists(request: Request, root: str, path: str) -> dict[str, Any]:
         fs = _get_file_service(request)
         r = _parse_root(root)
-        return {"exists": fs.exists(r, _norm_rel_path(path))}
+        rel = _norm_rel_path(path)
+        with web_operation(request, name="fs.exists", ctx={"root": r.value, "path": rel}):
+            return {"exists": fs.exists(r, rel)}
 
     @app.post("/api/fs/mkdir")
     def fs_mkdir(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
@@ -95,7 +112,14 @@ def mount_fs(app: FastAPI) -> None:
         if not isinstance(root, str) or not isinstance(path, str):
             raise HTTPException(status_code=400, detail="root and path are required")
         fs = _get_file_service(request)
-        fs.mkdir(_parse_root(root), _norm_rel_path(path), parents=parents, exist_ok=True)
+        r = _parse_root(root)
+        rel = _norm_rel_path(path)
+        with web_operation(
+            request,
+            name="fs.mkdir",
+            ctx={"root": r.value, "path": rel, "parents": int(parents)},
+        ):
+            fs.mkdir(r, rel, parents=parents, exist_ok=True)
         return {"ok": True}
 
     @app.post("/api/fs/rename")
@@ -107,7 +131,15 @@ def mount_fs(app: FastAPI) -> None:
         if not isinstance(root, str) or not isinstance(src, str) or not isinstance(dst, str):
             raise HTTPException(status_code=400, detail="root, src, dst are required")
         fs = _get_file_service(request)
-        fs.rename(_parse_root(root), _norm_rel_path(src), _norm_rel_path(dst), overwrite=overwrite)
+        r = _parse_root(root)
+        src_rel = _norm_rel_path(src)
+        dst_rel = _norm_rel_path(dst)
+        with web_operation(
+            request,
+            name="fs.rename",
+            ctx={"root": r.value, "src": src_rel, "dst": dst_rel, "overwrite": int(overwrite)},
+        ):
+            fs.rename(r, src_rel, dst_rel, overwrite=overwrite)
         return {"ok": True}
 
     @app.post("/api/fs/copy")
@@ -119,7 +151,15 @@ def mount_fs(app: FastAPI) -> None:
         if not isinstance(root, str) or not isinstance(src, str) or not isinstance(dst, str):
             raise HTTPException(status_code=400, detail="root, src, dst are required")
         fs = _get_file_service(request)
-        fs.copy(_parse_root(root), _norm_rel_path(src), _norm_rel_path(dst), overwrite=overwrite)
+        r = _parse_root(root)
+        src_rel = _norm_rel_path(src)
+        dst_rel = _norm_rel_path(dst)
+        with web_operation(
+            request,
+            name="fs.copy",
+            ctx={"root": r.value, "src": src_rel, "dst": dst_rel, "overwrite": int(overwrite)},
+        ):
+            fs.copy(r, src_rel, dst_rel, overwrite=overwrite)
         return {"ok": True}
 
     @app.post("/api/fs/delete_file")
@@ -129,7 +169,10 @@ def mount_fs(app: FastAPI) -> None:
         if not isinstance(root, str) or not isinstance(path, str):
             raise HTTPException(status_code=400, detail="root and path are required")
         fs = _get_file_service(request)
-        fs.delete_file(_parse_root(root), _norm_rel_path(path))
+        r = _parse_root(root)
+        rel = _norm_rel_path(path)
+        with web_operation(request, name="fs.delete_file", ctx={"root": r.value, "path": rel}):
+            fs.delete_file(r, rel)
         return {"ok": True}
 
     @app.post("/api/fs/rmdir")
@@ -139,142 +182,83 @@ def mount_fs(app: FastAPI) -> None:
         if not isinstance(root, str) or not isinstance(path, str):
             raise HTTPException(status_code=400, detail="root and path are required")
         fs = _get_file_service(request)
-        fs.rmdir(_parse_root(root), _norm_rel_path(path))
+        r = _parse_root(root)
+        rel = _norm_rel_path(path)
+        with web_operation(request, name="fs.rmdir", ctx={"root": r.value, "path": rel}):
+            fs.rmdir(r, rel)
         return {"ok": True}
 
-    @app.post("/api/fs/rmtree")
-    def fs_rmtree(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
-        root = payload.get("root")
-        path = payload.get("path")
-        if not isinstance(root, str) or not isinstance(path, str):
-            raise HTTPException(status_code=400, detail="root and path are required")
-        fs = _get_file_service(request)
-        fs.rmtree(_parse_root(root), _norm_rel_path(path))
-        return {"ok": True}
-
-    @app.get("/api/fs/checksum")
-    def fs_checksum(request: Request, root: str, path: str, algo: str = "sha256") -> dict[str, Any]:
+    @app.get("/api/fs/read_bytes")
+    def fs_read_bytes(request: Request, root: str, path: str) -> StreamingResponse:
         fs = _get_file_service(request)
         r = _parse_root(root)
-        digest = fs.checksum(r, _norm_rel_path(path), algo=algo)
-        return {"algo": algo, "digest": digest}
+        rel = _norm_rel_path(path)
+        with (
+            web_operation(request, name="fs.read_bytes", ctx={"root": r.value, "path": rel}),
+            fs.open_read(r, rel) as f,
+        ):
+            data = f.read()
+        return StreamingResponse(io.BytesIO(data), media_type="application/octet-stream")
 
-    @app.post("/api/fs/upload_file")
-    async def fs_upload_file(
+    @app.post("/api/fs/write_bytes")
+    async def fs_write_bytes(
         request: Request,
-        root: str = Form(...),  # noqa: B008
-        path: str = Form(...),  # noqa: B008
-        overwrite: int = Form(0),  # noqa: B008
+        root: str = Form(...),
+        path: str = Form(...),
+        overwrite: int = Form(1),
         file: UploadFile = File(...),  # noqa: B008
     ) -> dict[str, Any]:
+        if file is None:
+            raise HTTPException(status_code=400, detail="file is required")
         fs = _get_file_service(request)
         r = _parse_root(root)
         rel = _norm_rel_path(path)
-        if fs.exists(r, rel) and not bool(overwrite):
-            raise HTTPException(status_code=409, detail="exists")
-        with fs.open_write(r, rel, overwrite=bool(overwrite)) as out:
-            while True:
-                chunk = await file.read(1024 * 1024)
-                if not chunk:
-                    break
-                out.write(chunk)
-        return {"ok": True, "path": rel}
+        data = await file.read()
+        with (
+            web_operation(
+                request,
+                name="fs.write_bytes",
+                ctx={"root": r.value, "path": rel, "overwrite": int(bool(overwrite))},
+            ),
+            fs.open_write(r, rel, overwrite=bool(overwrite)) as f,
+        ):
+            f.write(data)
+        return {"ok": True}
 
-    @app.post("/api/fs/upload_dir")
-    async def fs_upload_dir(
-        request: Request,
-        root: str = Form(...),  # noqa: B008
-        base_path: str = Form("."),  # noqa: B008
-        overwrite: int = Form(0),  # noqa: B008
-        files: list[UploadFile] = File(...),  # noqa: B008
-        relpaths: list[str] | None = Form(None),  # noqa: B008
-    ) -> dict[str, Any]:
-        fs = _get_file_service(request)
-        r = _parse_root(root)
-        base = _norm_rel_path(base_path)
-        if relpaths is None:
-            relpaths = [(f.filename or "upload.bin") for f in files]
-        if len(relpaths) != len(files):
-            raise HTTPException(status_code=400, detail="relpaths length mismatch")
-
-        saved = 0
-        for up, rel in zip(files, relpaths, strict=True):
-            rel = _norm_rel_path(rel)
-            target = rel if base in {".", ""} else f"{base.rstrip('/')}/{rel}"
-            parent = target.rsplit("/", 1)[0] if "/" in target else ""
-            if parent:
-                fs.mkdir(r, parent, parents=True, exist_ok=True)
-            if fs.exists(r, target) and not bool(overwrite):
-                raise HTTPException(status_code=409, detail=f"exists: {target}")
-            with fs.open_write(r, target, overwrite=bool(overwrite)) as out:
-                while True:
-                    chunk = await up.read(1024 * 1024)
-                    if not chunk:
-                        break
-                    out.write(chunk)
-            saved += 1
-
-        return {"ok": True, "saved": saved}
-
-    @app.get("/api/fs/download_file")
-    def fs_download_file(request: Request, root: str, path: str) -> StreamingResponse:
-        fs = _get_file_service(request)
-        r = _parse_root(root)
-        rel = _norm_rel_path(path)
-
-        def _iter() -> Any:
-            with fs.open_read(r, rel) as f:
-                while True:
-                    chunk = f.read(1024 * 1024)
-                    if not chunk:
-                        break
-                    yield chunk
-
-        filename = rel.split("/")[-1] or "download.bin"
-        return StreamingResponse(
-            _iter(),
-            media_type="application/octet-stream",
-            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-        )
-
-    @app.get("/api/fs/download_dir_archive")
-    def fs_download_dir_archive(
-        request: Request, root: str, path: str, format: str = "zip"
+    @app.get("/api/fs/archive")
+    def fs_archive(
+        request: Request, root: str, path: str = ".", fmt: str = "zip"
     ) -> StreamingResponse:
         fs = _get_file_service(request)
         r = _parse_root(root)
         rel = _norm_rel_path(path)
+        fmt = (fmt or "zip").lower().strip()
+        if fmt not in {"zip", "tar"}:
+            raise HTTPException(status_code=400, detail="invalid fmt")
 
-        entries = fs.list_dir(r, rel, recursive=True)
-        files = [e for e in entries if not e.is_dir]
-        files.sort(key=lambda e: e.rel_path)
-
-        if format not in {"zip", "tar"}:
-            raise HTTPException(status_code=400, detail="format must be zip or tar")
-
-        buf = io.BytesIO()
-        if format == "zip":
-            with zipfile.ZipFile(buf, mode="w", compression=zipfile.ZIP_DEFLATED) as zf:
-                for e in files:
-                    arcname = e.rel_path
-                    with fs.open_read(r, e.rel_path) as f:
-                        zf.writestr(arcname, f.read())
-            media = "application/zip"
-            out_name = (rel.rstrip("/").split("/")[-1] or "dir") + ".zip"
-        else:
+        with web_operation(
+            request,
+            name="fs.archive",
+            ctx={"root": r.value, "path": rel, "fmt": fmt},
+        ):
+            entries = fs.list_dir(r, rel, recursive=True)
+            buf = io.BytesIO()
+            if fmt == "zip":
+                with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+                    for e in entries:
+                        if e.is_dir:
+                            continue
+                        zf.writestr(e.rel_path, (_read_all(fs, r, e.rel_path)))
+                buf.seek(0)
+                return StreamingResponse(buf, media_type="application/zip")
+            # tar
             with tarfile.open(fileobj=buf, mode="w") as tf:
-                for e in files:
-                    with fs.open_read(r, e.rel_path) as f:
-                        data = f.read()
-                    info = tarfile.TarInfo(name=e.rel_path)
-                    info.size = len(data)
-                    tf.addfile(info, io.BytesIO(data))
-            media = "application/x-tar"
-            out_name = (rel.rstrip("/").split("/")[-1] or "dir") + ".tar"
-
-        buf.seek(0)
-        return StreamingResponse(
-            buf,
-            media_type=media,
-            headers={"Content-Disposition": f'attachment; filename="{out_name}"'},
-        )
+                for e in entries:
+                    if e.is_dir:
+                        continue
+                    data = _read_all(fs, r, e.rel_path)
+                    ti = tarfile.TarInfo(name=e.rel_path)
+                    ti.size = len(data)
+                    tf.addfile(ti, io.BytesIO(data))
+            buf.seek(0)
+            return StreamingResponse(buf, media_type="application/x-tar")

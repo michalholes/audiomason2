@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.51
+Specification Version: 1.0.52
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 

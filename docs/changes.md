@@ -1,3 +1,9 @@
+## 2026-02-13T12:00:00+01:00
+
+-   Issue 333: web_interface: Emit operational logs via Core logger (LogBus) for request and handler operations; include traceback on failures.
+-   Issue 333: web_interface: fs API uses FileService open_read/open_write (no read_bytes/write_bytes).
+-   Issue 333: web_interface: logs API removes redundant UTF-8 encoding argument to satisfy linting.
+
 ## 2026-02-13T00:30:00+01:00
 
 -   web_interface: Add "/api/debug/bundle" ZIP endpoint and Import page "Download debug info" action.

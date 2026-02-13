@@ -12,6 +12,8 @@ from audiomason.core.events import get_event_bus
 from plugins.file_io.service.service import FileService
 from plugins.file_io.service.types import RootName
 
+from ..util.web_observability import web_operation
+
 _IMPORT_MODS: dict[str, Any] | None = None
 
 BOOK_ONLY_LABEL = "<book-only>"
@@ -191,7 +193,13 @@ def mount_import_wizard(app: FastAPI) -> None:
 
     @app.get("/api/import_wizard/preflight")
     def import_preflight_get(request: Request, root: str, path: str = ".") -> dict[str, Any]:
-        return _run_preflight(request, root=root, path=path)
+        with web_operation(
+            request,
+            name="import_wizard.preflight",
+            ctx={"root": root, "path": path},
+            component="web_interface.import_wizard",
+        ):
+            return _run_preflight(request, root=root, path=path)
 
     @app.post("/api/import_wizard/preflight")
     def import_preflight_post(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
@@ -201,7 +209,13 @@ def mount_import_wizard(app: FastAPI) -> None:
             raise HTTPException(status_code=400, detail="root is required")
         if not isinstance(path, str):
             path = "."
-        return _run_preflight(request, root=root, path=path)
+        with web_operation(
+            request,
+            name="import_wizard.preflight",
+            ctx={"root": root, "path": path},
+            component="web_interface.import_wizard",
+        ):
+            return _run_preflight(request, root=root, path=path)
 
     @app.post("/api/import_wizard/start")
     def import_start(request: Request, payload: dict[str, Any]) -> dict[str, Any]:

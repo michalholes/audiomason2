@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import traceback
 from contextlib import suppress
 from typing import Any
 
@@ -8,6 +9,7 @@ from fastapi import FastAPI, Request
 
 from audiomason.core.diagnostics import build_envelope
 from audiomason.core.events import get_event_bus
+from audiomason.core.logging import get_logger
 
 from .api.am_config import mount_am_config
 from .api.fs import mount_fs
@@ -64,70 +66,86 @@ class WebInterfacePlugin:
         app.state.config_resolver = config_resolver
         app.state.plugin_loader = plugin_loader
         app.state.verbosity = int(verbosity)
+        app.state.web_logger = get_logger("web_interface")
         # Tap the core EventBus once per process so the Logs UI can stream
         # diagnostics/events without tailing a web-specific log file.
         install_event_tap()
 
         @app.middleware("http")
         async def _emit_route_boundary(request: Request, call_next: Any) -> Any:
-            # Emit deterministic call-boundary diagnostics for each API route.
+            # Emit deterministic call-boundary diagnostics for each HTTP route.
             path = request.url.path
             method = request.method
             op = f"{method} {path}"
+
+            def _ascii(text: str) -> str:
+                return (text or "").encode("ascii", "backslashreplace").decode("ascii")
+
+            logger = getattr(request.app.state, "web_logger", get_logger("web_interface"))
+
+            start_data: dict[str, Any] = {"path": path, "method": method}
+            if int(getattr(request.app.state, "verbosity", 1)) >= 3:
+                with suppress(Exception):
+                    start_data["query"] = dict(request.query_params)
+
             start_env = build_envelope(
                 event="boundary.start",
                 component="web_interface",
                 operation=op,
-                data={"path": path, "method": method},
+                data=start_data,
             )
             with suppress(Exception):
                 get_event_bus().publish("boundary.start", start_env)
+            with suppress(Exception):
+                logger.info(_ascii(f"{op}: start {start_data}"))
 
-            t0 = __import__("time").monotonic()
+            import time as _time
+
+            t0 = _time.monotonic()
             try:
                 response = await call_next(request)
             except Exception as e:
-                dur_ms = int((__import__("time").monotonic() - t0) * 1000)
-                tb: str | None
+                dur_ms = int((_time.monotonic() - t0) * 1000)
                 try:
-                    import traceback
-
                     tb = traceback.format_exc()
                 except Exception:
                     tb = None
+
+                fail_data: dict[str, Any] = {
+                    "status": "failed",
+                    "error_type": type(e).__name__,
+                    "error": str(e),
+                    "traceback": tb,
+                    "duration_ms": dur_ms,
+                }
                 fail_env = build_envelope(
                     event="boundary.end",
                     component="web_interface",
                     operation=op,
-                    data={
-                        "status": "failed",
-                        "error_type": type(e).__name__,
-                        "error": str(e),
-                        "traceback": tb,
-                        "duration_ms": dur_ms,
-                    },
+                    data=fail_data,
                 )
                 with suppress(Exception):
                     get_event_bus().publish("boundary.end", fail_env)
+                with suppress(Exception):
+                    logger.error(_ascii(f"{op}: failed {fail_data}"))
                 raise
 
-            dur_ms = int((__import__("time").monotonic() - t0) * 1000)
+            dur_ms = int((_time.monotonic() - t0) * 1000)
+            end_data: dict[str, Any] = {
+                "status": "succeeded",
+                "status_code": int(getattr(response, "status_code", 200)),
+                "duration_ms": dur_ms,
+            }
             end_env = build_envelope(
                 event="boundary.end",
                 component="web_interface",
                 operation=op,
-                data={
-                    "status": "succeeded",
-                    "status_code": int(getattr(response, "status_code", 200)),
-                    "duration_ms": dur_ms,
-                },
+                data=end_data,
             )
-            # In debug verbosity, include a small amount of extra data.
-            if int(getattr(request.app.state, "verbosity", 1)) >= 3:
-                with suppress(Exception):
-                    end_env["data"]["query"] = dict(request.query_params)
             with suppress(Exception):
                 get_event_bus().publish("boundary.end", end_env)
+            with suppress(Exception):
+                logger.info(_ascii(f"{op}: end {end_data}"))
 
             return response
 
