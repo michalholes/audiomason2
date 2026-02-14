@@ -303,6 +303,13 @@ def mount_import_wizard(app: FastAPI) -> None:
                     "suggested_author": b.suggested_author,
                     "suggested_title": b.suggested_title,
                     "cover_candidates": b.cover_candidates or [],
+                    "rename_preview": b.rename_preview or None,
+                    "fingerprint": ""
+                    if b.fingerprint is None
+                    else _mods()["fingerprint_key"](
+                        algo=b.fingerprint.algo,
+                        value=b.fingerprint.value,
+                    ),
                 }
                 for b in res.books
             ],

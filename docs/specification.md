@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.76
+Specification Version: 1.0.77
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -1215,7 +1215,11 @@ Backend API contract:
 - Optional preflight listing (deep, may be heavier than index):
   - `GET /api/import_wizard/preflight?root=<root>&path=<rel_path>`
   - `POST /api/import_wizard/preflight` with JSON body `{root: str, path?: str}`
-  - Returns `authors[]` and `books[]` (each book includes `rel_path`).
+  - Returns `authors[]` and `books[]`.
+  - Each `books[]` item MUST include:
+    - `rel_path`: source-relative book path
+    - `fingerprint`: string identity key in the form `<algo>:<value>` (empty string if not available yet)
+    - `rename_preview`: rename preview dict produced by preflight enrichment (or null)
 
 - Start import processing for a selected book:
   - `POST /api/import_wizard/start` with JSON body:

@@ -1,3 +1,8 @@
+## 2026-02-14T23:31:10+01:00
+
+-   Issue 516: import_wizard API: Ensure preflight books include fingerprint and rename_preview when available (schema parity with index).
+-   spec: Document preflight schema parity and bump specification version to 1.0.77.
+
 ## 2026-02-14T23:59:30+01:00
 
 -   Issue 515: import_wizard UI: After successful Start (HTTP 200/202), auto-advance selection to the next actionable book (deterministic author/book order).
