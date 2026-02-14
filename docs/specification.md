@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.68
+Specification Version: 1.0.69
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -1182,6 +1182,9 @@ Backend API contract:
   - `GET /api/import_wizard/index?root=<root>&path=<rel_path>`
   - Returns `signature`, `changed`, `deep_scan_state`, `root_items[]`, `authors[]`, `books[]`.
   - MUST be PHASE 0 only and MUST NOT perform deep reads (no recursive scan, no checksums).
+  - Each `books[]` item MUST include:
+    - `fingerprint`: string identity key in the form `<algo>:<value>` (empty string if not available yet)
+    - `rename_preview`: rename preview dict produced by preflight enrichment (or null)
 - Background deep enrichment status:
   - `GET /api/import_wizard/enrichment_status?root=<root>&path=<rel_path>`
   - Returns `{state, scanned_items, total_items, last_error?}`.

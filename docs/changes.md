@@ -1,4 +1,10 @@
 
+
+## 2026-02-14T21:30:00+01:00
+
+-   Issue 507: import_wizard: Export book fingerprint identity key and rename_preview in the index API for the start screen.
+-   spec: Document index books[] fingerprint/rename_preview fields and bump specification version to 1.0.69.
+
 ## 2026-02-14T18:10:00+01:00
 
 -   web_interface: Add Import Wizard visual editor for PHASE 1 config (conflict policy + audio toggles) and persist per-mode defaults.

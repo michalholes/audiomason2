@@ -271,13 +271,12 @@ def _serialize_index(res: Any) -> dict[str, Any]:
                 "suggested_title": b.suggested_title,
                 "cover_candidates": b.cover_candidates or [],
                 "rename_preview": b.rename_preview or None,
-                "fingerprint": None
+                "fingerprint": ""
                 if b.fingerprint is None
-                else {
-                    "algo": b.fingerprint.algo,
-                    "value": b.fingerprint.value,
-                    "strength": b.fingerprint.strength,
-                },
+                else _mods()["fingerprint_key"](
+                    algo=b.fingerprint.algo,
+                    value=b.fingerprint.value,
+                ),
                 "meta": b.meta or None,
             }
             for b in res.books
