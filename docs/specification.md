@@ -865,7 +865,8 @@ Deep enrichment requirements (PHASE 0):
 - ID3 majority vote (MP3): suggested author/title MAY be derived from ID3v2 tags via majority vote over non-empty values.
   Normalization MUST be deterministic and configurable (strip, whitespace collapse, casefold).
 - Cover candidates MUST include both directory image files and embedded APIC images (represented as stable markers).
-- Fingerprints MUST include a basic fingerprint (stat-based) and a stronger fingerprint (content checksums + enrichment inputs).
+- Fingerprints MUST include exactly one canonical unit fingerprint (stat-based: path + size + mtime).
+- PHASE 2 processing MUST use the identical fingerprint builder as PHASE 0 and MUST NOT perform full-file hashing.
 - Rename preview ordering MUST be deterministic and MUST use the following precedence for ordering/numbering:
   1) ID3 track number (TRCK)
   2) filename number prefix

@@ -20,6 +20,7 @@ from audiomason.core.events import get_event_bus
 from plugins.file_io.service.service import FileService
 from plugins.file_io.service.types import FileEntry, RootName
 
+from ..processed_registry.service import build_import_identity_key
 from .types import (
     BookFingerprint,
     BookPreflight,
@@ -31,6 +32,14 @@ from .types import (
     PreflightResult,
     SkippedEntry,
 )
+
+
+def _book_fingerprint_from_identity_key(identity_key: str) -> BookFingerprint:
+    algo, _, value = str(identity_key or "").partition(":")
+    algo = algo.strip() or "unknown"
+    value = value.strip()
+    return BookFingerprint(algo=algo, value=value, strength="basic")
+
 
 _AUDIO_EXT = {".mp3", ".m4a", ".m4b", ".flac", ".wav", ".ogg", ".opus"}
 _ARCHIVE_EXT = {".zip", ".rar", ".7z"}
@@ -891,16 +900,13 @@ class PreflightService:
 
         rename_preview = self._build_rename_preview(root, audio_files)
 
-        fp_basic = self._fingerprint_stat_based_dir(root, book_rel)
-        fp_strong = self._fingerprint_dir(
-            root,
-            book_rel,
-            extra={
-                "id3_majority": id3,
-                "apic_markers": apic_markers,
-                "rename_preview": rename_preview,
-            },
+        identity_key = build_import_identity_key(
+            self._fs,
+            source_root=root,
+            book_rel_path=book_rel,
+            unit_type="dir",
         )
+        fp_basic = _book_fingerprint_from_identity_key(identity_key)
 
         meta: dict[str, Any] = {
             "id3_majority": id3,
@@ -919,7 +925,7 @@ class PreflightService:
             "suggested_title": suggested_title,
             "cover_candidates": cover_candidates,
             "rename_preview": rename_preview,
-            "fingerprint": _fingerprint_to_dict(fp_strong),
+            "fingerprint": _fingerprint_to_dict(fp_basic),
             "meta": meta,
         }
 
@@ -932,16 +938,13 @@ class PreflightService:
             self._build_rename_preview(root, audio_files) if audio_files else {file_rel: file_rel}
         )
 
-        fp_basic = self._fingerprint_stat_based_file(root, file_rel)
-        fp_strong = self._fingerprint_file(
-            root,
-            file_rel,
-            extra={
-                "id3_majority": id3,
-                "apic_markers": apic_markers,
-                "rename_preview": rename_preview,
-            },
+        identity_key = build_import_identity_key(
+            self._fs,
+            source_root=root,
+            book_rel_path=file_rel,
+            unit_type="file",
         )
+        fp_basic = _book_fingerprint_from_identity_key(identity_key)
         meta: dict[str, Any] = {
             "id3_majority": id3,
             "fingerprint_basic": _fingerprint_to_dict(fp_basic),
@@ -957,41 +960,9 @@ class PreflightService:
             "suggested_title": suggested_title,
             "cover_candidates": sorted(set(apic_markers)),
             "rename_preview": rename_preview,
-            "fingerprint": _fingerprint_to_dict(fp_strong),
+            "fingerprint": _fingerprint_to_dict(fp_basic),
             "meta": meta,
         }
-
-    def _fingerprint_stat_based_dir(self, root: RootName, book_rel: str) -> BookFingerprint:
-        entries = self._fs.list_dir(root, book_rel, recursive=True)
-        items: list[tuple[str, int, float]] = []
-        for e in entries:
-            if e.is_dir:
-                continue
-            ext = _ext(e.rel_path)
-            if ext not in _AUDIO_EXT and ext not in _IMG_EXT:
-                continue
-            items.append((e.rel_path, int(e.size or 0), float(e.mtime or 0.0)))
-
-        h = hashlib.sha256()
-        for rel, size, mtime in sorted(items):
-            h.update(rel.encode("utf-8"))
-            h.update(b"\n")
-            h.update(str(size).encode("utf-8"))
-            h.update(b"\n")
-            h.update(f"{mtime:.6f}".encode())
-            h.update(b"\n")
-        return BookFingerprint(algo="sha256", value=h.hexdigest(), strength="basic")
-
-    def _fingerprint_stat_based_file(self, root: RootName, file_rel: str) -> BookFingerprint:
-        st = self._fs.stat(root, file_rel)
-        h = hashlib.sha256()
-        h.update(file_rel.encode("utf-8"))
-        h.update(b"\n")
-        h.update(str(int(st.size)).encode("utf-8"))
-        h.update(b"\n")
-        h.update(f"{float(st.mtime):.6f}".encode())
-        h.update(b"\n")
-        return BookFingerprint(algo="sha256", value=h.hexdigest(), strength="basic")
 
     def _preflight_dir(
         self,
@@ -1229,55 +1200,6 @@ class PreflightService:
             if ext in _IMG_EXT:
                 imgs.append(rel)
         return sorted(imgs)
-
-    def _fingerprint_dir(
-        self,
-        root: RootName,
-        book_rel: str,
-        *,
-        extra: dict[str, Any] | None = None,
-    ) -> BookFingerprint:
-        entries = self._fs.list_dir(root, book_rel, recursive=True)
-        files = [e.rel_path for e in entries if not e.is_dir]
-        items: list[tuple[str, str]] = []
-        for rel in sorted(files):
-            ext = _ext(rel)
-            if ext not in _AUDIO_EXT and ext not in _IMG_EXT:
-                continue
-            chk = self._fs.checksum(root, rel, algo="sha256")
-            items.append((rel, chk))
-
-        h = hashlib.sha256()
-        for rel, chk in items:
-            h.update(rel.encode("utf-8"))
-            h.update(b"\n")
-            h.update(chk.encode("utf-8"))
-            h.update(b"\n")
-
-        if extra is not None:
-            payload = json.dumps(extra, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
-            h.update(payload.encode("utf-8"))
-            h.update(b"\n")
-        return BookFingerprint(algo="sha256", value=h.hexdigest(), strength="strong")
-
-    def _fingerprint_file(
-        self,
-        root: RootName,
-        file_rel: str,
-        *,
-        extra: dict[str, Any] | None = None,
-    ) -> BookFingerprint:
-        chk = self._fs.checksum(root, file_rel, algo="sha256")
-        h = hashlib.sha256()
-        h.update(file_rel.encode("utf-8"))
-        h.update(b"\n")
-        h.update(chk.encode("utf-8"))
-        h.update(b"\n")
-        if extra is not None:
-            payload = json.dumps(extra, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
-            h.update(payload.encode("utf-8"))
-            h.update(b"\n")
-        return BookFingerprint(algo="sha256", value=h.hexdigest(), strength="strong")
 
 
 def _opt_str(v: Any) -> str | None:

@@ -22,7 +22,7 @@ from plugins.file_io.service.paths import resolve_path
 from plugins.file_io.service.service import FileService
 from plugins.file_io.service.types import RootName
 
-from ..processed_registry.service import ProcessedRegistry, fingerprint_key
+from ..processed_registry.service import ProcessedRegistry, build_import_identity_key
 from ..session_store.types import ImportRunState
 
 
@@ -114,45 +114,6 @@ def _ext(rel_path: str) -> str:
     if "." not in name:
         return ""
     return "." + name.split(".")[-1]
-
-
-def _fingerprint_identity_key(
-    fs: FileService,
-    *,
-    source_root: RootName,
-    book_rel_path: str,
-    unit_type: str,
-) -> str:
-    """Compute the canonical processed identity key for a book unit.
-
-    The algorithm matches Import Wizard preflight strong fingerprint.
-    """
-    if unit_type == "file":
-        chk = fs.checksum(source_root, book_rel_path, algo="sha256")
-        h = hashlib.sha256()
-        h.update(book_rel_path.encode("utf-8"))
-        h.update(b"\n")
-        h.update(chk.encode("utf-8"))
-        h.update(b"\n")
-        return fingerprint_key(algo="sha256", value=h.hexdigest())
-
-    entries = fs.list_dir(source_root, book_rel_path, recursive=True)
-    files = [e.rel_path for e in entries if not e.is_dir]
-    items: list[tuple[str, str]] = []
-    for rel in sorted(files):
-        ext = _ext(rel)
-        if ext not in _AUDIO_EXT and ext not in _IMG_EXT:
-            continue
-        chk = fs.checksum(source_root, rel, algo="sha256")
-        items.append((rel, chk))
-
-    h = hashlib.sha256()
-    for rel, chk in items:
-        h.update(rel.encode("utf-8"))
-        h.update(b"\n")
-        h.update(chk.encode("utf-8"))
-        h.update(b"\n")
-    return fingerprint_key(algo="sha256", value=h.hexdigest())
 
 
 def _copy_tree(
@@ -247,7 +208,7 @@ def run_import_job(
             unit_type = "dir"
 
     try:
-        identity_key = _fingerprint_identity_key(
+        identity_key = build_import_identity_key(
             fs,
             source_root=source_root,
             book_rel_path=book_rel_path,
@@ -382,7 +343,7 @@ def run_import_job(
         delete_source = bool((run_state.global_options or {}).get("delete_source"))
         if run_state.source_handling_mode == "stage" and delete_source:
             try:
-                current_key = _fingerprint_identity_key(
+                current_key = build_import_identity_key(
                     fs,
                     source_root=source_root,
                     book_rel_path=book_rel_path,

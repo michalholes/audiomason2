@@ -1,4 +1,7 @@
 
+## 2026-02-14T22:00:00+01:00
+
+-   Issue 508: import_wizard: Unify PHASE 0 and PHASE 2 identity fingerprint builder (stat-based) and remove full-file hashing from processing.
 
 ## 2026-02-14T21:30:00+01:00
 
