@@ -145,6 +145,9 @@ from am_patch.repo_root import is_under, resolve_repo_root
 from am_patch.scope import blessed_gate_outputs_in, changed_paths, enforce_scope_delta
 from am_patch.state import load_state, save_state, update_union
 from am_patch.status import StatusReporter
+
+# NOTE: Any change that alters runner behavior MUST bump RUNNER_VERSION and MUST update
+# the runner specification under scripts/ (e.g., scripts/am_patch_specification.md).
 from am_patch.version import RUNNER_VERSION
 from am_patch.workspace import (
     create_checkpoint,
@@ -1265,6 +1268,10 @@ def main(argv: list[str]) -> int:
         logger.line(f"dirty_blessed={dirty_blessed}")
         logger.line(f"files_to_promote={to_promote}")
 
+        # Issue diff bundle context (used by posthook to build patches/artifacts).
+        issue_diff_base_sha = ws.base_sha
+        issue_diff_paths = list(to_promote)
+
         promote_files(
             logger=logger,
             workspace_repo=ws.repo,
@@ -1524,6 +1531,9 @@ def main(argv: list[str]) -> int:
                         name = f"{name}.zip"
                     zip_path = paths.patch_dir / name
                     git_ops.git_archive(logger, repo_root, zip_path, treeish="HEAD")
+
+                    logger.line(f"issue_diff_base_sha={issue_diff_base_sha}")
+                    logger.line(f"issue_diff_paths_count={len(issue_diff_paths)}")
 
                     if issue_diff_base_sha is None:
                         raise RunnerError("POSTHOOK", "DIFF", "missing issue_diff_base_sha")

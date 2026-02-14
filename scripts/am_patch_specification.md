@@ -89,6 +89,11 @@ Example:
 am_patch RUNNER_VERSION=4.2.24
 ```
 
+Version discipline:
+- Any change that alters runner behavior MUST bump `RUNNER_VERSION`.
+- Any change that alters runner behavior MUST update this specification under `scripts/`.
+
+
 ---
 
 
@@ -470,6 +475,30 @@ Unified patch mode (`--unified-patch`):
 - The primary log records the discovered patch list and the apply result for each patch.
 
 ---
+
+
+## 7.5 Issue diff bundle (artifacts)
+
+On SUCCESS (in `workspace`, `--finalize-live`, and `-w` / `--finalize-workspace` modes; excluding `--test-mode`),
+the runner creates an issue diff bundle zip under `patches/artifacts/`.
+
+Naming:
+- If ISSUE_ID is provided: `issue_<issue>_diff.zip` (with `_v2`, `_v3`, ... suffixes on collision).
+- If ISSUE_ID is not provided (finalize pseudo-issue): `issue_FINALIZE_<ts>_diff.zip`.
+
+Contents (high level):
+- A deterministic diff between `base_sha` and the final live repo state for the selected file set.
+- The relevant run log(s).
+
+Required inputs:
+- `base_sha` MUST be set before posthook runs and MUST NOT be missing on SUCCESS.
+- `files_to_promote` MUST be the deterministic file set used for promotion/commit.
+
+Base SHA by mode:
+- `workspace` and `-w` / `--finalize-workspace`: `base_sha = workspace_base_sha`.
+- `--finalize-live`: `base_sha = head_sha` captured at the start of finalize.
+
+The runner MUST log the resolved `issue_diff_base_sha` and `issue_diff_paths_count` on SUCCESS before writing the diff bundle.
 
 ## 8. Git Behavior
 
