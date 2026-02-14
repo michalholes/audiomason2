@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.63
+Specification Version: 1.0.64
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -920,6 +920,8 @@ The CLI MUST expose an AM1-like import entrypoint:
 
 Behavioral requirements:
 
+- Interactive wizard flow MUST continue after book selection to collect remaining PHASE 1 decisions (for example: mode selection, destructive options, and explicit start confirmation).
+- After PHASE 1 decisions are collected, the CLI MUST create persisted import Jobs via ImportEngineService and MUST NOT prompt during PHASE 2.
 - The command MUST use the Import foundation and engine services under `plugins/import/`.
 - PHASE 0 (preflight) MUST be deterministic and read-only.
 - PHASE 1 MUST collect all decisions (interactive prompts unless explicitly disabled).

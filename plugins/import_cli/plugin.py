@@ -315,14 +315,22 @@ def _print_help() -> None:
     print("\n".join(lines))
 
 
-def _prompt_select(prompt: str, options: list[str]) -> str | None:
+def _prompt_select(prompt: str, options: list[str], *, default: str | None = None) -> str | None:
     if not options:
         return None
-    print(prompt)
+    if default is not None and default not in options:
+        default = None
+
+    if default is not None:
+        print(f"{prompt} [default: {default}]")
+    else:
+        print(prompt)
     for i, opt in enumerate(options, start=1):
         print(f"  [{i}] {opt}")
     while True:
         raw = input("> ").strip()
+        if raw == "" and default is not None:
+            return default
         if raw.lower() in {"q", "quit", "exit"}:
             return None
         try:
@@ -333,6 +341,26 @@ def _prompt_select(prompt: str, options: list[str]) -> str | None:
         if 1 <= idx <= len(options):
             return options[idx - 1]
         print("Invalid choice")
+
+
+def _prompt_yes_no(prompt: str, *, default: bool | None = None) -> bool | None:
+    if default is True:
+        suffix = " [Y/n]"
+    elif default is False:
+        suffix = " [y/N]"
+    else:
+        suffix = " [y/n]"
+    while True:
+        raw = input(f"{prompt}{suffix} ").strip().lower()
+        if raw == "" and default is not None:
+            return default
+        if raw in {"q", "quit", "exit"}:
+            return None
+        if raw in {"y", "yes"}:
+            return True
+        if raw in {"n", "no"}:
+            return False
+        print("Enter y, n, or q to quit")
 
 
 def _global_options_from_flags(args: ImportCLIArgs) -> dict[str, Any]:
@@ -631,8 +659,138 @@ class ImportCLIPlugin:
             },
         )
 
+        # PHASE 1 continued: collect user decisions before starting processing.
+        # Keep prompts minimal and deterministic (defaults are explicit).
+        eff_mode = args.mode
+        eff_wipe_id3 = args.wipe_id3
+        eff_delete_source = args.delete_source
+        prompted = False
+
+        config_t0 = time.monotonic()
+        _emit_diag(
+            "operation.start",
+            operation="import.configure",
+            data={"wizard": "import", "step": "configure", "status": "running"},
+        )
+
+        if not args.non_interactive and not args.yes:
+            prompted = True
+            chosen_mode = _prompt_select(
+                "Select mode:",
+                ["stage", "inplace"],
+                default=args.mode if args.mode in {"stage", "inplace"} else "stage",
+            )
+            if chosen_mode is None:
+                config_t1 = time.monotonic()
+                _emit_diag(
+                    "operation.end",
+                    operation="import.configure",
+                    data={
+                        "wizard": "import",
+                        "step": "configure",
+                        "status": "cancelled",
+                        "duration_ms": _duration_ms(config_t0, config_t1),
+                    },
+                )
+                _emit_diag(
+                    "boundary.end",
+                    operation="import_cmd",
+                    data={"status": "succeeded", "reason": "user_quit"},
+                )
+                return
+            eff_mode = chosen_mode
+
+            wipe_default = False if args.wipe_id3 is None else bool(args.wipe_id3)
+            chosen_wipe = _prompt_yes_no("Wipe ID3 tags?", default=wipe_default)
+            if chosen_wipe is None:
+                config_t1 = time.monotonic()
+                _emit_diag(
+                    "operation.end",
+                    operation="import.configure",
+                    data={
+                        "wizard": "import",
+                        "step": "configure",
+                        "status": "cancelled",
+                        "duration_ms": _duration_ms(config_t0, config_t1),
+                    },
+                )
+                _emit_diag(
+                    "boundary.end",
+                    operation="import_cmd",
+                    data={"status": "succeeded", "reason": "user_quit"},
+                )
+                return
+            eff_wipe_id3 = bool(chosen_wipe)
+
+            delete_default = bool(args.delete_source)
+            chosen_delete = _prompt_yes_no("Delete source after success?", default=delete_default)
+            if chosen_delete is None:
+                config_t1 = time.monotonic()
+                _emit_diag(
+                    "operation.end",
+                    operation="import.configure",
+                    data={
+                        "wizard": "import",
+                        "step": "configure",
+                        "status": "cancelled",
+                        "duration_ms": _duration_ms(config_t0, config_t1),
+                    },
+                )
+                _emit_diag(
+                    "boundary.end",
+                    operation="import_cmd",
+                    data={"status": "succeeded", "reason": "user_quit"},
+                )
+                return
+            eff_delete_source = bool(chosen_delete)
+
+            start_now = _prompt_yes_no("Start processing now?", default=False)
+            if start_now is None or start_now is False:
+                config_t1 = time.monotonic()
+                _emit_diag(
+                    "operation.end",
+                    operation="import.configure",
+                    data={
+                        "wizard": "import",
+                        "step": "configure",
+                        "status": "cancelled",
+                        "duration_ms": _duration_ms(config_t0, config_t1),
+                    },
+                )
+                _emit_diag(
+                    "boundary.end",
+                    operation="import_cmd",
+                    data={"status": "succeeded", "reason": "not_started"},
+                )
+                return
+
+        config_t1 = time.monotonic()
+        _emit_diag(
+            "operation.end",
+            operation="import.configure",
+            data={
+                "wizard": "import",
+                "step": "configure",
+                "status": "succeeded",
+                "duration_ms": _duration_ms(config_t0, config_t1),
+                "mode": eff_mode,
+                "wipe_id3": bool(eff_wipe_id3) if eff_wipe_id3 is not None else False,
+                "delete_source": bool(eff_delete_source),
+            },
+        )
+
+        eff_global_options = _global_options_from_flags(args)
+        if prompted or args.wipe_id3 is not None:
+            eff_global_options["wipe_id3"] = (
+                bool(eff_wipe_id3) if eff_wipe_id3 is not None else False
+            )
+        if bool(eff_delete_source):
+            eff_global_options["delete_source"] = True
+        else:
+            eff_global_options.pop("delete_source", None)
+
         run_id = _run_id_for(
-            str(args.root.value), args.path, ",".join(selected_rel_paths), args.mode
+            str(args.root.value), args.path, ",".join(selected_rel_paths), eff_mode
         )
 
         state = mods["ImportRunState"](
@@ -641,9 +799,9 @@ class ImportCLIPlugin:
                 "source_root_rel_path": args.path,
                 "selected_book_rel_paths": selected_rel_paths,
             },
-            source_handling_mode=args.mode,
+            source_handling_mode=eff_mode,
             parallelism_n=int(args.parallelism_n),
-            global_options=_global_options_from_flags(args),
+            global_options=eff_global_options,
         )
 
         preflight_subset = mods["PreflightResult"](

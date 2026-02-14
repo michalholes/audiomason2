@@ -1,3 +1,8 @@
+## 2026-02-14T17:20:00+01:00
+
+-   import_cli: Extend interactive CLI import wizard to continue after book selection and collect PHASE 1 decisions before starting processing.
+-   spec: Document CLI import wizard continuation and bump specification version to 1.0.64.
+
 ## 2026-02-14T14:52:20+01:00
 
 -   web_interface: In debug mode, surface non-2xx HTTP responses as client-side debug records in the Logs UI, including response body (truncated) and callsite stack.

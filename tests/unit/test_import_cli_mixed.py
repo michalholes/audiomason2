@@ -79,7 +79,7 @@ def test_import_cli_interactive_book_only_layout_prompts_for_book(
     # Book-only layout: source/BookSolo.
     _write(inbox / "source" / "BookSolo" / "01.m4a", b"b")
 
-    inputs = iter(["1"])  # select the only discovered book
+    inputs = iter(["1", "", "", "", "y"])  # select book, accept defaults, confirm start
 
     monkeypatch.setattr("builtins.input", lambda _p="": next(inputs))
 
@@ -111,7 +111,7 @@ def test_import_cli_interactive_mixed_layout_includes_book_only_bucket(
 
     # Author options should include AuthorA and <book-only>.
     # Select <book-only> (2), then select BookSolo (1).
-    inputs = iter(["2", "1"])
+    inputs = iter(["2", "1", "", "", "", "y"])
     monkeypatch.setattr("builtins.input", lambda _p="": next(inputs))
 
     cli = ImportCLIPlugin()
