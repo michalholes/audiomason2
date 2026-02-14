@@ -115,7 +115,8 @@ CLI:
 
 Status indicator:
 - TTY: single-line overwrite on stderr: `STATUS: <STAGE>  ELAPSED: <mm:ss>`
-- non-TTY: periodic heartbeat on stderr: `HEARTBEAT: <STAGE> elapsed=<mm:ss>`
+- non-TTY: periodic heartbeat on stderr (1s interval): `HEARTBEAT: <STAGE> elapsed=<mm:ss>`
+- Before printing any normal stdout line (e.g., `DO:`, `OK:`, `FAIL:`, `RUN:`, `LOG:`), the runner MUST first terminate any active TTY status line with a newline, so output never concatenates onto the status line.
 - disabled in `quiet`
 
 Final summary (always printed at the end):

@@ -412,6 +412,7 @@ def main(argv: list[str]) -> int:
     color_enabled = stdout_color_enabled(getattr(policy, "console_color", "auto"))
 
     def _screen_line(line: str) -> None:
+        status.break_line()
         sys.stdout.write(line + "\n")
         sys.stdout.flush()
 
