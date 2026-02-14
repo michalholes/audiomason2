@@ -125,6 +125,7 @@ from am_patch.config import (
 )
 from am_patch.console import stdout_color_enabled, wrap_green, wrap_red, wrap_yellow
 from am_patch.errors import RunnerError, fingerprint
+from am_patch.fs_junk import fs_junk_ignore_partition
 from am_patch.gates import run_badguys, run_gates
 from am_patch.issue_diff import (
     collect_issue_logs,
@@ -134,10 +135,13 @@ from am_patch.issue_diff import (
 from am_patch.lock import FileLock
 from am_patch.log import Logger, new_log_file
 from am_patch.manifest import load_files
+from am_patch.patch_archive_select import select_latest_issue_patch
 from am_patch.patch_exec import precheck_patch_script, run_patch, run_unified_patch_bundle
 from am_patch.patch_select import PatchSelectError, choose_default_patch_input, decide_unified_mode
 from am_patch.paths import default_paths, ensure_dirs
+from am_patch.post_success_audit import run_post_success_audit
 from am_patch.promote import promote_files
+from am_patch.repo_root import is_under, resolve_repo_root
 from am_patch.scope import blessed_gate_outputs_in, changed_paths, enforce_scope_delta
 from am_patch.state import load_state, save_state, update_union
 from am_patch.status import StatusReporter
@@ -150,6 +154,12 @@ from am_patch.workspace import (
     open_existing_workspace,
     rollback_to_checkpoint,
 )
+from am_patch.workspace_history import (
+    rotate_current_dir,
+    workspace_history_dirs,
+    workspace_store_current_log,
+    workspace_store_current_patch,
+)
 
 
 def _fs_junk_ignore_partition(
@@ -159,153 +169,28 @@ def _fs_junk_ignore_partition(
     ignore_suffixes: tuple[str, ...] | list[str],
     ignore_contains: tuple[str, ...] | list[str],
 ) -> tuple[list[str], list[str]]:
-    """Partition paths into (kept, ignored) for workspace->live promotion hygiene."""
-    prefixes = tuple(ignore_prefixes)
-    suffixes = tuple(ignore_suffixes)
-    contains = tuple(ignore_contains)
-    kept: list[str] = []
-    ignored: list[str] = []
-    for p in paths:
-        pp = p.strip()
-        if not pp:
-            continue
-        is_ignored = False
-        for pre in prefixes:
-            if pp == pre.rstrip("/") or pp.startswith(pre):
-                is_ignored = True
-                break
-        if not is_ignored and any(c in pp for c in contains):
-            is_ignored = True
-        if not is_ignored:
-            for suf in suffixes:
-                if pp.endswith(suf):
-                    is_ignored = True
-                    break
-        if is_ignored:
-            ignored.append(pp)
-        else:
-            kept.append(pp)
-
-    # unique preserve order
-    def _uniq(xs: list[str]) -> list[str]:
-        out: list[str] = []
-        seen: set[str] = set()
-        for x in xs:
-            if x in seen:
-                continue
-            seen.add(x)
-            out.append(x)
-        return out
-
-    return _uniq(kept), _uniq(ignored)
+    return fs_junk_ignore_partition(
+        paths,
+        ignore_prefixes=ignore_prefixes,
+        ignore_suffixes=ignore_suffixes,
+        ignore_contains=ignore_contains,
+    )
 
 
 def _run_post_success_audit(logger: Logger, repo_root: Path, policy: Policy) -> None:
-    """Run audit/audit_report.py after a successful push (best effort, deterministic)."""
-    logger.section("AUDIT")
-    if not policy.post_success_audit:
-        logger.line("audit_report=SKIP (post_success_audit=false)")
-        return
-
-    r = logger.run_logged([sys.executable, "-u", "audit/audit_report.py"], cwd=repo_root)
-    if r.returncode != 0:
-        raise RunnerError("AUDIT", "AUDIT_REPORT_FAILED", "audit/audit_report.py failed")
+    return run_post_success_audit(logger, repo_root, policy)
 
 
 def _resolve_repo_root() -> Path:
-    import subprocess
-
-    p = subprocess.run(["git", "rev-parse", "--show-toplevel"], text=True, capture_output=True)
-    if p.returncode == 0 and p.stdout.strip():
-        return Path(p.stdout.strip())
-    return Path.cwd()
+    return resolve_repo_root()
 
 
 def _is_under(child: Path, parent: Path) -> bool:
-    try:
-        child.resolve().relative_to(parent.resolve())
-        return True
-    except Exception:
-        return False
+    return is_under(child, parent)
 
 
 def _select_latest_issue_patch(*, patch_dir: Path, issue_id: str, hint_name: str | None) -> Path:
-    """Select the most recent patch script for ISSUE_ID from patches/, patches/successful/,
-    patches/unsuccessful/.
-
-    If hint_name is provided, it is treated as a filename hint (basename). The selection
-    prefers that exact name and its archive variants (stem_vN.py). If no hint is provided,
-    any script starting with "issue_<id>" is eligible.
-
-    Selection order: newest mtime wins; ties broken by lexical path.
-    """
-    dirs = [patch_dir, patch_dir / "successful", patch_dir / "unsuccessful"]
-
-    def iter_files(d: Path) -> list[Path]:
-        """Return candidate archived patch inputs for -l.
-
-        Supported inputs:
-        - *.py   (patch script)
-        - *.patch (unified diff)
-        - *.zip  (bundle containing at least one *.patch entry)
-        """
-        import zipfile
-
-        try:
-            out: list[Path] = []
-            for p in d.iterdir():
-                if not p.is_file():
-                    continue
-                if p.suffix in (".py", ".patch"):
-                    out.append(p)
-                    continue
-                if p.suffix == ".zip":
-                    try:
-                        with zipfile.ZipFile(p, "r") as z:
-                            if any(n.endswith(".patch") for n in z.namelist()):
-                                out.append(p)
-                    except zipfile.BadZipFile:
-                        # Ignore invalid zip files in archive dirs (deterministic: not candidates).
-                        continue
-            return out
-        except FileNotFoundError:
-            return []
-
-    issue_prefix = f"issue_{issue_id}"
-    hint_stem: str | None = None
-    if hint_name:
-        bn = Path(hint_name).name
-        hint_stem = Path(bn).stem
-
-    cands: list[Path] = []
-    for d in dirs:
-        for p in iter_files(d):
-            name = p.name
-            # If a hint_name was provided (explicit patch filename), select by basename
-            # (and its _vN archive variants) regardless of ISSUE_ID prefix.
-            if hint_stem is not None:
-                if p.stem == hint_stem:
-                    cands.append(p)
-                    continue
-                if p.stem.startswith(f"{hint_stem}_v"):
-                    tail = p.stem[len(hint_stem) + 2 :]
-                    if tail.isdigit():
-                        cands.append(p)
-                        continue
-                continue
-
-            # Otherwise (no hint), select by ISSUE_ID prefix.
-            if not name.startswith(issue_prefix):
-                continue
-            cands.append(p)
-
-    if not cands:
-        raise RunnerError(
-            "PREFLIGHT", "MANIFEST", f"-l: no archived patch scripts found for issue_id={issue_id}"
-        )
-
-    cands.sort(key=lambda p: (p.stat().st_mtime, str(p)), reverse=True)
-    return cands[0]
+    return select_latest_issue_patch(patch_dir=patch_dir, issue_id=issue_id, hint_name=hint_name)
 
 
 def _workspace_history_dirs(
@@ -316,24 +201,17 @@ def _workspace_history_dirs(
     history_patches_dir: str = "patches",
     history_oldpatches_dir: str = "oldpatches",
 ) -> tuple[Path, Path, Path, Path]:
-    logs_dir = ws_root / history_logs_dir
-    oldlogs_dir = ws_root / history_oldlogs_dir
-    patches_dir = ws_root / history_patches_dir
-    oldpatches_dir = ws_root / history_oldpatches_dir
-    for d in [logs_dir, oldlogs_dir, patches_dir, oldpatches_dir]:
-        d.mkdir(parents=True, exist_ok=True)
-    return logs_dir, oldlogs_dir, patches_dir, oldpatches_dir
+    return workspace_history_dirs(
+        ws_root,
+        history_logs_dir=history_logs_dir,
+        history_oldlogs_dir=history_oldlogs_dir,
+        history_patches_dir=history_patches_dir,
+        history_oldpatches_dir=history_oldpatches_dir,
+    )
 
 
 def _rotate_current_dir(cur_dir: Path, old_dir: Path, prev_attempt: int) -> None:
-    if prev_attempt <= 0:
-        return
-    old_dir.mkdir(parents=True, exist_ok=True)
-    for p in sorted(cur_dir.glob("*")):
-        if not p.is_file():
-            continue
-        new_name = f"{p.stem}_[attempt{prev_attempt}]{p.suffix}"
-        p.replace(old_dir / new_name)
+    return rotate_current_dir(cur_dir, old_dir, prev_attempt)
 
 
 def _workspace_store_current_patch(
@@ -345,22 +223,14 @@ def _workspace_store_current_patch(
     history_patches_dir: str,
     history_oldpatches_dir: str,
 ) -> None:
-    logs_dir, oldlogs_dir, patches_dir, oldpatches_dir = _workspace_history_dirs(
-        ws.root,
+    return workspace_store_current_patch(
+        ws,
+        patch_script,
         history_logs_dir=history_logs_dir,
         history_oldlogs_dir=history_oldlogs_dir,
         history_patches_dir=history_patches_dir,
         history_oldpatches_dir=history_oldpatches_dir,
     )
-    _ = logs_dir
-    _ = oldlogs_dir
-
-    prev_attempt = int(ws.attempt) - 1
-    _rotate_current_dir(patches_dir, oldpatches_dir, prev_attempt)
-
-    # Keep the current patch under its original filename (no suffix).
-    dst = patches_dir / patch_script.name
-    shutil.copy2(patch_script, dst)
 
 
 def _workspace_store_current_log(
@@ -372,22 +242,14 @@ def _workspace_store_current_log(
     history_patches_dir: str,
     history_oldpatches_dir: str,
 ) -> None:
-    logs_dir, oldlogs_dir, patches_dir, oldpatches_dir = _workspace_history_dirs(
-        ws.root,
+    return workspace_store_current_log(
+        ws,
+        log_path,
         history_logs_dir=history_logs_dir,
         history_oldlogs_dir=history_oldlogs_dir,
         history_patches_dir=history_patches_dir,
         history_oldpatches_dir=history_oldpatches_dir,
     )
-    _ = patches_dir
-    _ = oldpatches_dir
-
-    prev_attempt = int(ws.attempt) - 1
-    _rotate_current_dir(logs_dir, oldlogs_dir, prev_attempt)
-
-    # Keep the current log under its original filename (no suffix).
-    dst = logs_dir / log_path.name
-    shutil.copy2(log_path, dst)
 
 
 def main(argv: list[str]) -> int:
