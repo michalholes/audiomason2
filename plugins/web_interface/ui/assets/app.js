@@ -1085,6 +1085,40 @@ async function renderImportWizard(content, notify) {
   actionsRow.appendChild(run5Btn);
   right.appendChild(actionsRow);
 
+  // PHASE 1 audio processing decisions (Issue 504).
+  const audioBox = el("div", { class: "row" });
+  audioBox.style.flexWrap = "wrap";
+  audioBox.style.gap = "10px";
+
+  const loudCb = el("input", { type: "checkbox" });
+  const loudLbl = el("label", { class: "hint", text: "Loudnorm" });
+  loudLbl.style.display = "flex";
+  loudLbl.style.alignItems = "center";
+  loudLbl.style.gap = "6px";
+  loudLbl.prepend(loudCb);
+
+  const brCb = el("input", { type: "checkbox" });
+  const brLbl = el("label", { class: "hint", text: "Bitrate" });
+  brLbl.style.display = "flex";
+  brLbl.style.alignItems = "center";
+  brLbl.style.gap = "6px";
+  brLbl.prepend(brCb);
+
+  const brInp = el("input", { type: "number", value: "96", min: "8", max: "512" });
+  brInp.style.width = "90px";
+  const brUnit = el("span", { class: "hint", text: "kbps" });
+
+  const brModeSel = el("select");
+  ["cbr", "vbr"].forEach((m) => brModeSel.appendChild(el("option", { value: m, text: m.toUpperCase() })));
+
+  audioBox.appendChild(el("span", { class: "hint", text: "Audio:" }));
+  audioBox.appendChild(loudLbl);
+  audioBox.appendChild(brLbl);
+  audioBox.appendChild(brInp);
+  audioBox.appendChild(brUnit);
+  audioBox.appendChild(brModeSel);
+  right.appendChild(audioBox);
+
   const statusBox = el("div", { class: "hint", text: "No jobs started." });
   const jobsTableWrap = el("div");
   right.appendChild(statusBox);
@@ -1164,6 +1198,66 @@ function showConflictPolicyModal() {
 
     row.appendChild(skipBtn);
     row.appendChild(overBtn);
+    row.appendChild(cancelBtn);
+    box.appendChild(row);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+  });
+}
+
+
+function showAudioProcessingConfirmModal(ap) {
+  return new Promise((resolve) => {
+    const overlay = el("div", { class: "modalOverlay" });
+    overlay.style.position = "fixed";
+    overlay.style.left = "0";
+    overlay.style.top = "0";
+    overlay.style.right = "0";
+    overlay.style.bottom = "0";
+    overlay.style.background = "rgba(0,0,0,0.55)";
+    overlay.style.display = "flex";
+    overlay.style.alignItems = "center";
+    overlay.style.justifyContent = "center";
+    overlay.style.zIndex = "9999";
+
+    const box = el("div", { class: "modalBox" });
+    box.style.background = "#1b2230";
+    box.style.border = "1px solid rgba(255,255,255,0.15)";
+    box.style.borderRadius = "12px";
+    box.style.padding = "16px";
+    box.style.minWidth = "340px";
+    box.style.maxWidth = "560px";
+    box.style.color = "#fff";
+    box.style.boxShadow = "0 10px 30px rgba(0,0,0,0.35)";
+
+    box.appendChild(el("div", { class: "subTitle", text: "Confirm audio processing" }));
+    const lines = [];
+    if (ap && ap.loudnorm) lines.push("Loudness normalization (loudnorm)");
+    if (ap && ap.bitrate_kbps) {
+      const mode = (ap.bitrate_mode || "cbr").toUpperCase();
+      lines.push(`Re-encode MP3 at ${ap.bitrate_kbps} kbps (${mode})`);
+    }
+    if (!lines.length) lines.push("No audio processing selected.");
+    box.appendChild(el("div", { class: "hint", text: lines.join("\n") }));
+
+    const row = el("div", { class: "buttonRow" });
+    row.style.gap = "8px";
+
+    const okBtn = el("button", { class: "btn", text: "Confirm" });
+    const cancelBtn = el("button", { class: "btn danger", text: "Cancel" });
+
+    function close(v) {
+      try { document.body.removeChild(overlay); } catch {}
+      resolve(v);
+    }
+
+    okBtn.addEventListener("click", () => close(true));
+    cancelBtn.addEventListener("click", () => close(false));
+    overlay.addEventListener("click", (ev) => {
+      if (ev.target === overlay) close(false);
+    });
+
+    row.appendChild(okBtn);
     row.appendChild(cancelBtn);
     box.appendChild(row);
     overlay.appendChild(box);
@@ -1313,11 +1407,35 @@ async function startImportWithConflictAsk(body) {
           statusBox.textContent = "Starting import...";
           jobsTableWrap.textContent = "";
           jobIds = [];
+
+          // Collect PHASE 1 options.
+          const audioEnabled = !!(loudCb.checked || brCb.checked);
+          const options = {};
+          if (audioEnabled) {
+            let kbps = 96;
+            try { kbps = parseInt(String(brInp.value || "96"), 10); } catch {}
+            if (!isFinite(kbps) || kbps <= 0) kbps = 96;
+            const ap = {
+              enabled: true,
+              loudnorm: !!loudCb.checked,
+              bitrate_kbps: kbps,
+              bitrate_mode: String(brModeSel.value || "cbr").toLowerCase(),
+            };
+            const ok = await showAudioProcessingConfirmModal(ap);
+            if (!ok) {
+              statusBox.textContent = "Canceled.";
+              return;
+            }
+            ap.confirmed = true;
+            options.audio_processing = ap;
+          }
+
           const body = {
             root: rootSel.value,
             path: pathInp.value,
             book_rel_path: relPath,
             mode: modeSel.value,
+            options: options,
           };
           const r = await startImportWithConflictAsk(body);
           jobIds = Array.isArray(r.job_ids) ? r.job_ids : [];

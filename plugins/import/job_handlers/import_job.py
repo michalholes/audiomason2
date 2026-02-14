@@ -8,13 +8,17 @@ ASCII-only.
 from __future__ import annotations
 
 import hashlib
+import os
+import subprocess
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 from audiomason.core.diagnostics import build_envelope
 from audiomason.core.events import get_event_bus
 from audiomason.core.jobs.api import JobService
 from audiomason.core.jobs.model import JobState
+from plugins.file_io.service.paths import resolve_path
 from plugins.file_io.service.service import FileService
 from plugins.file_io.service.types import RootName
 
@@ -28,6 +32,68 @@ def _utcnow_iso() -> str:
 
 _AUDIO_EXT = {".mp3", ".m4a", ".m4b", ".flac", ".wav", ".ogg", ".opus"}
 _IMG_EXT = {".jpg", ".jpeg", ".png", ".webp"}
+
+
+def _abs_path(fs: FileService, root: RootName, rel_path: str) -> Path:
+    roots = getattr(fs, "_roots", None)
+    if not isinstance(roots, dict) or root not in roots:
+        raise RuntimeError(f"Missing FileService root mapping for: {root}")
+    return resolve_path(roots[root], rel_path)
+
+
+def _safe_temp_name(rel_path: str) -> str:
+    h = hashlib.sha256(rel_path.encode("utf-8")).hexdigest()[:12]
+    base = rel_path.rstrip("/").split("/")[-1]
+    stem = base.rsplit(".", 1)[0] if "." in base else base
+    return f"{stem}.am2tmp.{h}.mp3"
+
+
+def _ffmpeg_reencode_mp3(
+    *,
+    src: Path,
+    dst: Path,
+    bitrate_kbps: int,
+    bitrate_mode: str,
+    loudnorm: bool,
+) -> None:
+    bitrate = f"{int(bitrate_kbps)}k"
+    cmd: list[str] = [
+        "ffmpeg",
+        "-nostdin",
+        "-hide_banner",
+        "-y",
+        "-i",
+        str(src),
+        "-vn",
+        "-map_metadata",
+        "0",
+    ]
+
+    filters: list[str] = []
+    if loudnorm:
+        filters.append("loudnorm=I=-16:TP=-1.5:LRA=11")
+    if filters:
+        cmd.extend(["-af", ",".join(filters)])
+
+    cmd.extend(["-codec:a", "libmp3lame"])
+
+    mode = str(bitrate_mode or "cbr").strip().lower()
+    if mode == "vbr":
+        # Deterministic VBR: keep a bounded bitrate target while allowing LAME quality mode.
+        cmd.extend(["-b:a", bitrate, "-q:a", "4"])
+    else:
+        # Deterministic CBR.
+        cmd.extend(["-b:a", bitrate])
+        cmd.extend(["-minrate", bitrate, "-maxrate", bitrate, "-bufsize", "192k"])
+
+    cmd.extend(["-loglevel", "error", str(dst)])
+
+    res = subprocess.run(cmd, capture_output=True, text=True)
+    if res.returncode != 0:
+        msg = (res.stderr or res.stdout or "").strip()
+        raise RuntimeError(f"ffmpeg failed: rc={res.returncode} {msg}")
+    if not dst.exists():
+        raise RuntimeError("ffmpeg did not create output")
 
 
 def _emit_diag(event: str, *, operation: str, data: dict[str, Any]) -> None:
@@ -203,6 +269,9 @@ def run_import_job(
             )
             return
 
+        target_root: RootName
+        target_rel: str
+
         if run_state.source_handling_mode == "stage":
             fs.mkdir(RootName.STAGE, f"import/stage/{job_id}", parents=True, exist_ok=True)
             if unit_type == "dir":
@@ -217,6 +286,8 @@ def run_import_job(
                 job_service.append_log_line(
                     job_id, f"staged unit=dir files={copied} dst={dst_base}"
                 )
+                target_root = RootName.STAGE
+                target_rel = dst_base
             else:
                 # Stage file units into a directory named after the file without extension.
                 book_stem = _file_stem(book_rel_path)
@@ -233,10 +304,78 @@ def run_import_job(
                 job_service.append_log_line(
                     job_id, f"staged unit=file files={copied} dst={dst_rel}"
                 )
+                target_root = RootName.STAGE
+                target_rel = dst_folder
         elif run_state.source_handling_mode == "inplace":
             job_service.append_log_line(job_id, f"inplace unit={unit_type} source={book_rel_path}")
+            target_root = source_root
+            # For file units, process the file itself; for directories, process within the folder.
+            target_rel = book_rel_path
         else:
             raise ValueError(f"Unsupported handling mode: {run_state.source_handling_mode}")
+
+        # Optional PHASE 2 audio processing (Issue 504).
+        ap = (run_state.global_options or {}).get("audio_processing")
+        if isinstance(ap, dict) and ap.get("enabled") and ap.get("confirmed"):
+            bitrate_kbps = int(ap.get("bitrate_kbps") or 96)
+            bitrate_mode = str(ap.get("bitrate_mode") or "cbr").strip().lower()
+            loudnorm = bool(ap.get("loudnorm"))
+
+            # Build deterministic file list.
+            audio_files: list[str] = []
+            if unit_type == "file":
+                # In stage mode, target_rel is the staged folder.
+                # In inplace mode, target_rel is the file.
+                if run_state.source_handling_mode == "stage":
+                    # Find the single staged audio file.
+                    entries = fs.list_dir(target_root, target_rel, recursive=True)
+                    for e in entries:
+                        if e.is_dir:
+                            continue
+                        if _ext(e.rel_path) in _AUDIO_EXT:
+                            audio_files.append(e.rel_path)
+                else:
+                    if _ext(target_rel) in _AUDIO_EXT:
+                        audio_files.append(target_rel)
+            else:
+                entries = fs.list_dir(target_root, target_rel, recursive=True)
+                audio_files = [
+                    e.rel_path for e in entries if not e.is_dir and _ext(e.rel_path) in _AUDIO_EXT
+                ]
+
+            audio_files = sorted(set(audio_files))
+            job_service.append_log_line(
+                job_id,
+                (
+                    "audio_processing start "
+                    f"files={len(audio_files)} "
+                    f"bitrate_kbps={bitrate_kbps} "
+                    f"mode={bitrate_mode} "
+                    f"loudnorm={int(loudnorm)}"
+                ),
+            )
+
+            for rel_audio in audio_files:
+                ext = _ext(rel_audio)
+                if ext != ".mp3":
+                    job_service.append_log_line(
+                        job_id, f"audio_processing skip ext={ext} rel={rel_audio}"
+                    )
+                    continue
+
+                src_abs = _abs_path(fs, target_root, rel_audio)
+                tmp_abs = src_abs.with_name(_safe_temp_name(rel_audio))
+                _ffmpeg_reencode_mp3(
+                    src=src_abs,
+                    dst=tmp_abs,
+                    bitrate_kbps=bitrate_kbps,
+                    bitrate_mode=bitrate_mode,
+                    loudnorm=loudnorm,
+                )
+                os.replace(str(tmp_abs), str(src_abs))
+                job_service.append_log_line(job_id, f"audio_processing ok rel={rel_audio}")
+
+            job_service.append_log_line(job_id, "audio_processing end")
 
         # Optional destructive action: delete source after successful staging, guarded by
         # fingerprint identity to avoid TOCTOU behavior.

@@ -114,6 +114,56 @@ def _norm_rel_path(p: str) -> str:
     return "/".join(parts) if parts else "."
 
 
+def _normalize_audio_processing_options(options: dict[str, Any]) -> dict[str, Any]:
+    """Normalize PHASE 1 audio processing options.
+
+    This produces a deterministic shape for PHASE 2 consumption.
+    Missing or invalid values are replaced with safe defaults.
+    """
+
+    ap = options.get("audio_processing")
+    if not isinstance(ap, dict):
+        return {}
+
+    enabled = bool(ap.get("enabled"))
+    if not enabled:
+        return {}
+
+    # Explicit PHASE 1 confirmation is required for any destructive processing.
+    confirmed = bool(ap.get("confirmed"))
+
+    bitrate_kbps_raw: object | None = ap.get("bitrate_kbps")
+    try:
+        if isinstance(bitrate_kbps_raw, int):
+            bitrate_kbps_i = bitrate_kbps_raw
+        elif isinstance(bitrate_kbps_raw, str):
+            bitrate_kbps_i = int(bitrate_kbps_raw.strip())
+        elif bitrate_kbps_raw is None:
+            raise TypeError
+        else:
+            bitrate_kbps_i = int(str(bitrate_kbps_raw).strip())
+    except (TypeError, ValueError):
+        bitrate_kbps_i = 96
+    if bitrate_kbps_i <= 0:
+        bitrate_kbps_i = 96
+
+    mode = str(ap.get("bitrate_mode") or "cbr").strip().lower()
+    if mode not in {"cbr", "vbr"}:
+        mode = "cbr"
+
+    loudnorm = bool(ap.get("loudnorm"))
+
+    return {
+        "audio_processing": {
+            "enabled": True,
+            "confirmed": bool(confirmed),
+            "bitrate_kbps": int(bitrate_kbps_i),
+            "bitrate_mode": mode,
+            "loudnorm": bool(loudnorm),
+        }
+    }
+
+
 def _run_id_for(root: str, rel: str, book_rel: str, mode: str) -> str:
     h = hashlib.sha256()
     for part in (root, "\n", rel, "\n", book_rel, "\n", mode):
@@ -489,8 +539,27 @@ def mount_import_wizard(app: FastAPI) -> None:
         parallelism_n = 2 if mode == "stage" else 1
 
         # Options are a free-form dict, stored in the run state for PHASE 2.
+        # Normalize known option groups for deterministic PHASE 2 consumption.
         if not isinstance(options, dict):
             options = {}
+        norm_opts: dict[str, Any] = {}
+        norm_opts.update(_normalize_audio_processing_options(options))
+        # If audio processing was enabled but not explicitly confirmed, block PHASE 2.
+        ap = norm_opts.get("audio_processing")
+        if isinstance(ap, dict) and ap.get("enabled") and not ap.get("confirmed"):
+            raise HTTPException(
+                status_code=409,
+                detail={
+                    "error": "audio_processing_unconfirmed",
+                    "audio_processing": ap,
+                },
+            )
+        # Preserve remaining caller-provided options for future extension.
+        for k, v in options.items():
+            if k in norm_opts:
+                continue
+            norm_opts[k] = v
+        options = norm_opts
 
         fs = _get_file_service(request)
         r = _parse_root(root)

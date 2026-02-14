@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.65
+Specification Version: 1.0.66
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -907,6 +907,15 @@ Issue 503 extension (stage/in-place modes, resume, conflicts, delete source):
 - Optional delete source contract:
   - Deleting source inputs is allowed only when explicitly enabled by user options.
   - Deletion MUST be guarded by a fingerprint identity check immediately before deletion to prevent TOCTOU.
+
+Issue 504 extension (PHASE 1 audio processing decisions):
+
+- PHASE 1 MAY collect audio processing options for PHASE 2.
+- Audio processing MUST be disabled by default.
+- Any re-encode or loudness normalization MUST require an explicit PHASE 1 confirmation flag in options.
+- Default bitrate (when enabled) MUST be 96 kbps.
+- Bitrate mode MUST be configurable (CBR or VBR).
+- PHASE 2 processing MUST remain non-interactive and deterministic.
 
 Import foundation MAY include a "hybrid" mode in the data model only. Behavior is reserved.
 
