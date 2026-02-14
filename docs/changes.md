@@ -1,3 +1,9 @@
+## 2026-02-14T10:38:00+01:00
+
+-   web_interface: Add debug-only "Debug JS" page that shows in-session JS errors (window.onerror + unhandledrejection) with filter/pause/clear/export.
+-   web_interface: Ensure global JS error handlers never overwrite the UI.
+-   spec: Document debug-only Debug JS page and bump specification version to 1.0.62.
+
 ## 2026-02-14T00:05:00+01:00
 
 -   import: Enforce stage vs inplace mode contract (resume + parallelism defaults).

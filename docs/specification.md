@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.61
+Specification Version: 1.0.62
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -1046,6 +1046,12 @@ Additional LogBus endpoints:
 Developer endpoints:
 
 - `/api/ui/schema`: returns the current default UI schema and the configuration hooks above.
+
+Debug JS page (debug-only):
+
+- When `WEB_INTERFACE_DEBUG` is enabled, the web UI MAY expose a Debug JS page at route `/debug-js`.
+- The page is UI-only and displays JavaScript errors captured in-session from `window.onerror` and `unhandledrejection`.
+- Error capture MUST be fail-safe and MUST NOT replace or overwrite the UI when an error occurs.
 
 ### 9.2 Root browsing and "Run wizard here"
 

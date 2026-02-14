@@ -10,7 +10,7 @@ from .debug_bundle import mount_debug_bundle
 
 
 def _default_nav() -> list[dict[str, Any]]:
-    return [
+    nav: list[dict[str, Any]] = [
         {"title": "Dashboard", "route": "/", "page_id": "dashboard"},
         {"title": "Import", "route": "/import", "page_id": "import_wizard"},
         {"title": "Config", "route": "/config", "page_id": "config"},
@@ -21,9 +21,14 @@ def _default_nav() -> list[dict[str, Any]]:
         {"title": "UI Config", "route": "/ui-config", "page_id": "ui_config"},
     ]
 
+    if debug_enabled():
+        nav.append({"title": "Debug JS", "route": "/debug-js", "page_id": "debug_js"})
+
+    return nav
+
 
 def _default_pages() -> dict[str, dict[str, Any]]:
-    return {
+    pages: dict[str, dict[str, Any]] = {
         "dashboard": {
             "id": "dashboard",
             "title": "Dashboard",
@@ -179,6 +184,24 @@ def _default_pages() -> dict[str, dict[str, Any]]:
             },
         },
     }
+
+    if debug_enabled():
+        pages["debug_js"] = {
+            "id": "debug_js",
+            "title": "Debug JS",
+            "layout": {
+                "type": "grid",
+                "children": [
+                    {
+                        "type": "card",
+                        "title": "JavaScript errors",
+                        "content": {"type": "js_error_feed"},
+                    }
+                ],
+            },
+        }
+
+    return pages
 
 
 def _load_overrides() -> dict[str, Any]:

@@ -13,17 +13,52 @@ async function fetchJSON(url, opts) {
 }
 
 window.__AM_APP_LOADED__ = true;
-window.addEventListener('unhandledrejection', function(ev){
-  try{
-    var el=document.getElementById('app')||document.body;
-    el.innerHTML='<pre style="white-space:pre-wrap;color:#fff;background:#600;padding:12px;font-family:monospace">PROMISE REJECTION: '+(ev.reason?String(ev.reason):'')+'</pre>';
-  }catch(e){}
+
+function _amEnsureJsErrorBuffer() {
+  if (!window.__AM_JS_ERRORS__ || !Array.isArray(window.__AM_JS_ERRORS__)) {
+    window.__AM_JS_ERRORS__ = [];
+  }
+  return window.__AM_JS_ERRORS__;
+}
+
+function _amPushJsError(rec) {
+  try {
+    const buf = _amEnsureJsErrorBuffer();
+    buf.push(rec);
+    // Prevent unbounded growth.
+    if (buf.length > 2000) buf.splice(0, buf.length - 2000);
+  } catch (e) {
+    // Error capture must be fail-safe.
+  }
+}
+
+window.addEventListener("unhandledrejection", function (ev) {
+  const r = ev ? ev.reason : null;
+  const isErr = r && typeof r === "object" && "stack" in r;
+  const msg = r && typeof r === "object" && "message" in r ? String(r.message) : String(r ?? "");
+  _amPushJsError({
+    ts: new Date().toISOString(),
+    kind: "unhandledrejection",
+    message: msg,
+    stack: isErr ? String(r.stack || "") : null,
+    source: null,
+    line: null,
+    col: null,
+  });
 });
-window.onerror = function(msg, src, line, col, err){
-  try{
-    var el=document.getElementById('app')||document.body;
-    el.innerHTML='<pre style="white-space:pre-wrap;color:#fff;background:#600;padding:12px;font-family:monospace">JS ERROR: '+msg+'\n'+(err&&err.stack?err.stack:'')+'</pre>';
-  }catch(e){}
+
+window.onerror = function (msg, src, line, col, err) {
+  const e = err && typeof err === "object" ? err : null;
+  _amPushJsError({
+    ts: new Date().toISOString(),
+    kind: "error",
+    message: String(msg ?? ""),
+    stack: e && e.stack ? String(e.stack) : null,
+    source: src ? String(src) : null,
+    line: typeof line === "number" ? line : null,
+    col: typeof col === "number" ? col : null,
+  });
+  return false;
 };
 (async function () {
   const API = {
@@ -281,6 +316,177 @@ window.onerror = function(msg, src, line, col, err){
 
     return wrap;
   }
+
+
+async function renderJsErrorFeed(content, notify) {
+  // UI-only, in-memory view over window.__AM_JS_ERRORS__.
+  _amEnsureJsErrorBuffer();
+
+  let paused = false;
+  let filterText = "";
+
+  const root = el("div");
+
+  const controls = el("div", { class: "row" });
+  const filterInput = el("input", { class: "input", type: "text", placeholder: "Filter..." });
+  filterInput.style.maxWidth = "420px";
+  const pauseBtn = el("button", { class: "btn", text: "Pause" });
+  const clearBtn = el("button", { class: "btn danger", text: "Clear" });
+  const exportBtn = el("button", { class: "btn", text: "Export JSONL" });
+  controls.appendChild(filterInput);
+  controls.appendChild(pauseBtn);
+  controls.appendChild(clearBtn);
+  controls.appendChild(exportBtn);
+  root.appendChild(controls);
+
+  const hint = el("div", { class: "hint", text: "Captures window.onerror and unhandledrejection (session-local)." });
+  root.appendChild(hint);
+
+  const box = el("div", { class: "logBox" });
+  box.style.height = "420px";
+  box.style.whiteSpace = "normal";
+  root.appendChild(box);
+
+  function recordMatches(rec, f) {
+    if (!f) return true;
+    const hay = [
+      rec && typeof rec.ts === "string" ? rec.ts : "",
+      rec && typeof rec.kind === "string" ? rec.kind : "",
+      rec && typeof rec.message === "string" ? rec.message : "",
+      rec && typeof rec.stack === "string" ? rec.stack : "",
+      rec && typeof rec.source === "string" ? rec.source : "",
+    ].join("\n").toLowerCase();
+    return hay.includes(f);
+  }
+
+  function snapshotFiltered() {
+    const buf = _amEnsureJsErrorBuffer();
+    const f = String(filterText || "").trim().toLowerCase();
+    const out = [];
+    for (let i = buf.length - 1; i >= 0; i--) {
+      const rec = buf[i];
+      if (recMatches(rec, f)) out.push(rec);
+    }
+    return out;
+  }
+
+  async function copyText(text) {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch {
+      // ignore
+    }
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = text;
+      ta.style.position = "fixed";
+      ta.style.left = "-1000px";
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      const ok = document.execCommand("copy");
+      ta.remove();
+      return ok;
+    } catch {
+      return false;
+    }
+  }
+
+  function renderOnce() {
+    const items = snapshotFiltered();
+    clear(box);
+    if (!items.length) {
+      box.appendChild(el("div", { class: "hint", text: "No errors captured." }));
+      return;
+    }
+
+    for (const rec of items) {
+      const row = el("div");
+      row.style.borderBottom = "1px solid rgba(255,255,255,0.06)";
+      row.style.padding = "8px 0";
+
+      const top = el("div", { class: "row" });
+      top.style.margin = "0 0 6px 0";
+      const meta = el("div", { class: "hint", text: `${rec.ts || ""}  ${rec.kind || ""}` });
+      meta.style.flex = "1";
+      const copyBtn = el("button", { class: "btn", text: "Copy" });
+      copyBtn.addEventListener("click", async () => {
+        const txt = JSON.stringify(rec, null, 2);
+        const ok = await copyText(txt);
+        notify(ok ? "Copied." : "Copy failed.");
+      });
+      top.appendChild(meta);
+      top.appendChild(copyBtn);
+
+      const pre = el("pre");
+      pre.style.margin = "0";
+      pre.style.whiteSpace = "pre-wrap";
+      pre.style.fontFamily = "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace";
+      pre.style.fontSize = "12px";
+      const parts = [];
+      if (rec.message) parts.push(String(rec.message));
+      if (rec.source) parts.push(`source: ${rec.source}`);
+      if (rec.line !== null || rec.col !== null) parts.push(`loc: ${rec.line ?? ""}:${rec.col ?? ""}`);
+      if (rec.stack) parts.push(String(rec.stack));
+      pre.textContent = parts.join("\n");
+
+      row.appendChild(top);
+      row.appendChild(pre);
+      box.appendChild(row);
+    }
+  }
+
+  filterInput.addEventListener("input", () => {
+    filterText = String(filterInput.value || "");
+    renderOnce();
+  });
+
+  pauseBtn.addEventListener("click", () => {
+    paused = !paused;
+    pauseBtn.textContent = paused ? "Resume" : "Pause";
+    if (!paused) renderOnce();
+  });
+
+  clearBtn.addEventListener("click", () => {
+    try {
+      const buf = _amEnsureJsErrorBuffer();
+      buf.length = 0;
+    } catch {
+      // ignore
+    }
+    renderOnce();
+  });
+
+  exportBtn.addEventListener("click", () => {
+    try {
+      const items = snapshotFiltered();
+      const jsonl = items.map((r) => JSON.stringify(r)).join("\n") + "\n";
+      const blob = new Blob([jsonl], { type: "application/x-ndjson" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "am_js_errors.jsonl";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e) {
+      notify(String(e));
+    }
+  });
+
+  renderOnce();
+  const timer = setInterval(() => {
+    if (!paused) renderOnce();
+  }, 500);
+  // Best-effort cleanup when route changes.
+  window.addEventListener("popstate", () => clearInterval(timer), { once: true });
+
+  return root;
+}
 
 
 async function renderJobsLogViewer(content, notify) {
@@ -2029,6 +2235,7 @@ async function renderContent(content, notify) {
     if (t === "stat_list") return await renderStatList(content);
     if (t === "table") return await renderTable(content);
     if (t === "log_stream") return await renderLogStream(content);
+    if (t === "js_error_feed") return await renderJsErrorFeed(content, notify);
     if (t === "button_row") return await renderButtonRow(content, notify);
     if (t === "json_editor") return await renderJsonEditor(content, notify);
     if (t === "yaml_editor") return await renderYamlEditor(content, notify);
