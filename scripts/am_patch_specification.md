@@ -175,7 +175,7 @@ Priority rule (normative):
 
 Workspace cleanup:
 - In test mode, the workspace is deleted on exit ALWAYS (SUCCESS or FAILURE).
-- `-k` is ignored in test mode.
+- `--keep-workspace` is ignored in test mode.
 - `delete_workspace_on_success` does not apply in test mode.
 
 ---
@@ -563,3 +563,123 @@ Controls:
 - Env: NO_COLOR forces never
 
 Precedence: NO_COLOR > CLI > config > default.
+
+---
+
+## Appendix A. Implementovaný povrch CLI a policy (coverage)
+Tento dodatok enumeruje položky, ktoré existujú v implementácii (`scripts/am_patch/cli.py`, `scripts/am_patch/config.py`), ale neboli explicitne pomenované v hlavných častiach tejto špecifikácie v čase auditu.
+
+### A.1 CLI flags – položky chýbajúce v texte špecifikácie
+
+### artifacts/logging
+- `--current-log-symlink` — mení názvy/umiestnenie logov a artefaktov
+- `--current-log-symlink-name` — mení názvy/umiestnenie logov a artefaktov
+- `--failure-zip-log-dir` — mení názvy/umiestnenie logov a artefaktov
+- `--failure-zip-name` — mení názvy/umiestnenie logov a artefaktov
+- `--failure-zip-patch-dir` — mení názvy/umiestnenie logov a artefaktov
+- `--log-template-finalize` — mení názvy/umiestnenie logov a artefaktov
+- `--log-template-issue` — mení názvy/umiestnenie logov a artefaktov
+- `--no-current-log-symlink` — mení názvy/umiestnenie logov a artefaktov
+
+### core-behavior
+- `--allow-undeclared-paths` — mení výsledok/bezpečnosť patchovania alebo gate logiku
+- `--allow-untouched-files` — mení výsledok/bezpečnosť patchovania alebo gate logiku
+- `--enforce-allowed-files` — mení výsledok/bezpečnosť patchovania alebo gate logiku
+- `--gates-on-partial-apply` — mení výsledok/bezpečnosť patchovania alebo gate logiku
+- `--gates-on-zero-apply` — mení výsledok/bezpečnosť patchovania alebo gate logiku
+- `--gates-order` — mení výsledok/bezpečnosť patchovania alebo gate logiku
+- `--live-repo-guard` — mení výsledok/bezpečnosť patchovania alebo gate logiku
+- `--live-repo-guard-scope` — mení výsledok/bezpečnosť patchovania alebo gate logiku
+- `--no-rollback-on-commit-push-failure` — mení výsledok/bezpečnosť patchovania alebo gate logiku
+- `--no-rollback-workspace-on-fail` — mení výsledok/bezpečnosť patchovania alebo gate logiku
+
+### misc
+- `--blessed-gate-output` — doplnkový prepínač
+- `--patch-dir-name` — doplnkový prepínač
+- `--patch-layout-logs-dir` — doplnkový prepínač
+- `--patch-layout-successful-dir` — doplnkový prepínač
+- `--patch-layout-unsuccessful-dir` — doplnkový prepínač
+- `--patch-layout-workspaces-dir` — doplnkový prepínač
+- `--post-success-audit` — doplnkový prepínač
+- `--pytest-use-venv` — doplnkový prepínač
+- `--require-push-success` — doplnkový prepínač
+- `--rerun-latest` — doplnkový prepínač
+- `--ruff-autofix-legalize-outside` — doplnkový prepínač
+- `--ruff-format` — doplnkový prepínač
+- `--scope-ignore-contains` — doplnkový prepínač
+- `--scope-ignore-prefix` — doplnkový prepínač
+- `--scope-ignore-suffix` — doplnkový prepínač
+- `--soft-reset-workspace` — doplnkový prepínač
+- `--success-archive-name` — doplnkový prepínač
+- `--venv-bootstrap-mode` — doplnkový prepínač
+- `--venv-bootstrap-python` — doplnkový prepínač
+- `--version` — doplnkový prepínač
+- `--workspace-history-logs-dir` — doplnkový prepínač
+- `--workspace-history-oldlogs-dir` — doplnkový prepínač
+- `--workspace-history-oldpatches-dir` — doplnkový prepínač
+- `--workspace-history-patches-dir` — doplnkový prepínač
+- `--workspace-issue-dir-template` — doplnkový prepínač
+- `--workspace-meta-filename` — doplnkový prepínač
+- `--workspace-repo-dir-name` — doplnkový prepínač
+
+### sandbox
+- `--patch-jail` — mení izoláciu a bezpečnostné hranice
+- `--patch-jail-unshare-net` — mení izoláciu a bezpečnostné hranice
+
+### A.2 Policy kľúče – položky chýbajúce v texte špecifikácie
+
+### gates
+- `gates_allow_fail` — mení ktoré gates bežia a v akom poradí
+- `gates_order` — mení ktoré gates bežia a v akom poradí
+- `gates_skip_mypy` — mení ktoré gates bežia a v akom poradí
+- `gates_skip_pytest` — mení ktoré gates bežia a v akom poradí
+- `gates_skip_ruff` — mení ktoré gates bežia a v akom poradí
+- `mypy_targets` — mení ktoré gates bežia a v akom poradí
+- `pytest_targets` — mení ktoré gates bežia a v akom poradí
+- `pytest_use_venv` — mení ktoré gates bežia a v akom poradí
+- `run_all_tests` — mení ktoré gates bežia a v akom poradí
+
+### git-safety
+- `allow_non_main` — mení bezpečnostné predpoklady (branch/up-to-date)
+- `enforce_main_branch` — mení bezpečnostné predpoklady (branch/up-to-date)
+- `require_up_to_date` — mení bezpečnostné predpoklady (branch/up-to-date)
+- `skip_up_to_date` — mení bezpečnostné predpoklady (branch/up-to-date)
+
+### misc
+- `audit_rubric_guard` — doplnkový policy kľúč
+- `default_branch` — doplnkový policy kľúč
+- `live_repo_guard` — doplnkový policy kľúč
+- `live_repo_guard_scope` — doplnkový policy kľúč
+- `repo_root` — doplnkový policy kľúč
+- `ruff_autofix` — doplnkový policy kľúč
+- `ruff_autofix_legalize_outside` — doplnkový policy kľúč
+- `ruff_format` — doplnkový policy kľúč
+
+### patch-format
+- `ascii_only_patch` — mení spôsob aplikácie patchov
+- `unified_patch` — mení spôsob aplikácie patchov
+- `unified_patch_continue` — mení spôsob aplikácie patchov
+- `unified_patch_strip` — mení spôsob aplikácie patchov
+- `unified_patch_touch_on_fail` — mení spôsob aplikácie patchov
+
+### sandbox
+- `patch_jail` — mení izoláciu behu
+- `patch_jail_unshare_net` — mení izoláciu behu
+
+### scope/promotion
+- `allow_declared_untouched` — mení pravidlá scope/rollback/promotion
+- `allow_no_op` — mení pravidlá scope/rollback/promotion
+- `allow_outside_files` — mení pravidlá scope/rollback/promotion
+- `allow_push_fail` — mení pravidlá scope/rollback/promotion
+- `declared_untouched_fail` — mení pravidlá scope/rollback/promotion
+- `enforce_allowed_files` — mení pravidlá scope/rollback/promotion
+- `no_op_fail` — mení pravidlá scope/rollback/promotion
+- `no_rollback` — mení pravidlá scope/rollback/promotion
+
+### workflow
+- `post_success_audit` — mení workflow runnera
+- `soft_reset_workspace` — mení workflow runnera
+- `test_mode` — mení workflow runnera
+- `test_mode_isolate_patch_dir` — mení workflow runnera
+- `update_workspace` — mení workflow runnera
+
