@@ -37,6 +37,8 @@ def fingerprint_key(*, algo: str, value: str) -> str:
 _AUDIO_EXT = {".mp3", ".m4a", ".m4b", ".flac", ".wav", ".ogg", ".opus"}
 _IMG_EXT = {".jpg", ".jpeg", ".png", ".webp"}
 
+_FINGERPRINT_ALGO = "sha256"
+
 
 def _ext(rel_path: str) -> str:
     name = rel_path.rstrip("/").split("/")[-1].lower()
@@ -68,7 +70,7 @@ def build_import_identity_key(
         h.update(b"\n")
         h.update(f"{float(st.mtime):.6f}".encode())
         h.update(b"\n")
-        return fingerprint_key(algo="sha256", value=h.hexdigest())
+        return fingerprint_key(algo=_FINGERPRINT_ALGO, value=h.hexdigest())
 
     entries = fs.list_dir(source_root, book_rel_path, recursive=True)
     items: list[tuple[str, int, float]] = []
@@ -88,7 +90,7 @@ def build_import_identity_key(
         h.update(b"\n")
         h.update(f"{mtime:.6f}".encode())
         h.update(b"\n")
-    return fingerprint_key(algo="sha256", value=h.hexdigest())
+    return fingerprint_key(algo=_FINGERPRINT_ALGO, value=h.hexdigest())
 
 
 def _emit_diag(event: str, *, operation: str, data: dict[str, Any]) -> None:

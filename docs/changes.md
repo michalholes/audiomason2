@@ -1,3 +1,8 @@
+## 2026-02-14T23:55:00+01:00
+
+-   Issue 513: import: Ensure PHASE 2 import identity keys never rely on full-file hashing and remain unified with PHASE 0 preflight fingerprints and processed_registry keys (single stat-based builder).
+-   spec: Clarify fingerprint key form `<algo>:<value>` and that `sha256` refers to the stat signature (not file contents); bump specification version to 1.0.74.
+
 ## 2026-02-14T23:40:00+01:00
 
 -   Issue 512: import_wizard API: Make processed_registry response schema stable and UI-compatible by always returning keys: list[str] of processed fingerprint keys (items/count remain for compatibility).
