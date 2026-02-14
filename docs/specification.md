@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.62
+Specification Version: 1.0.63
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -1052,6 +1052,13 @@ Debug JS page (debug-only):
 - When `WEB_INTERFACE_DEBUG` is enabled, the web UI MAY expose a Debug JS page at route `/debug-js`.
 - The page is UI-only and displays JavaScript errors captured in-session from `window.onerror` and `unhandledrejection`.
 - Error capture MUST be fail-safe and MUST NOT replace or overwrite the UI when an error occurs.
+
+Debug mode UI transparency (debug-only):
+
+- When `WEB_INTERFACE_DEBUG` is enabled, the web UI MUST surface browser-side debug information through the UI.
+- In debug mode, HTTP requests that receive a non-2xx response MUST emit a client-side debug record that includes at least: timestamp, method, URL/path, HTTP status, response body (truncated), and a callsite stack trace.
+- The Logs UI MUST include a client-side debug feed in debug mode, so a user can diagnose HTTP conflicts/errors without using browser DevTools.
+- In debug mode, non-2xx HTTP responses MUST trigger an immediate UI notification (toast or modal) with the status and basic context.
 
 ### 9.2 Root browsing and "Run wizard here"
 

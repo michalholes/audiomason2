@@ -14,6 +14,23 @@ async function fetchJSON(url, opts) {
 
 window.__AM_APP_LOADED__ = true;
 
+function _amEnsureUiLogBuffer() {
+  if (!window.__AM_UI_LOGS__ || !Array.isArray(window.__AM_UI_LOGS__)) {
+    window.__AM_UI_LOGS__ = [];
+  }
+  return window.__AM_UI_LOGS__;
+}
+
+function _amPushUiLog(rec) {
+  try {
+    const buf = _amEnsureUiLogBuffer();
+    buf.push(rec);
+    if (buf.length > 4000) buf.splice(0, buf.length - 4000);
+  } catch {
+    // fail-safe
+  }
+}
+
 function _amEnsureJsErrorBuffer() {
   if (!window.__AM_JS_ERRORS__ || !Array.isArray(window.__AM_JS_ERRORS__)) {
     window.__AM_JS_ERRORS__ = [];
@@ -27,6 +44,9 @@ function _amPushJsError(rec) {
     buf.push(rec);
     // Prevent unbounded growth.
     if (buf.length > 2000) buf.splice(0, buf.length - 2000);
+
+    // Mirror into the unified UI debug log buffer.
+    _amPushUiLog({ ...rec, channel: "js" });
   } catch (e) {
     // Error capture must be fail-safe.
   }
@@ -46,6 +66,200 @@ function _amPushAnyJsError(rec) {
   } catch {
     // fail-safe
   }
+}
+
+function _amFormatHeaders(h) {
+  try {
+    const out = {};
+    if (!h) return out;
+    // Fast path for fetch Headers.
+    if (typeof h.forEach === "function") {
+      h.forEach((v, k) => { out[String(k)] = String(v); });
+      return out;
+    }
+    // Plain object.
+    if (typeof h === "object") {
+      for (const [k, v] of Object.entries(h)) out[String(k)] = String(v);
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+function _amShowDebugModal(title, detailsText, notify) {
+  try {
+    const overlay = document.createElement("div");
+    overlay.style.position = "fixed";
+    overlay.style.left = "0";
+    overlay.style.top = "0";
+    overlay.style.right = "0";
+    overlay.style.bottom = "0";
+    overlay.style.background = "rgba(0,0,0,0.55)";
+    overlay.style.display = "flex";
+    overlay.style.alignItems = "center";
+    overlay.style.justifyContent = "center";
+    overlay.style.zIndex = "10000";
+
+    const box = document.createElement("div");
+    box.className = "modalBox";
+    box.style.background = "#1b2230";
+    box.style.border = "1px solid rgba(255,255,255,0.15)";
+    box.style.borderRadius = "12px";
+    box.style.padding = "16px";
+    box.style.minWidth = "340px";
+    box.style.maxWidth = "760px";
+    box.style.color = "#fff";
+    box.style.boxShadow = "0 10px 30px rgba(0,0,0,0.35)";
+
+    const t = document.createElement("div");
+    t.className = "subTitle";
+    t.textContent = String(title || "Debug");
+    box.appendChild(t);
+
+    const pre = document.createElement("pre");
+    pre.style.whiteSpace = "pre-wrap";
+    pre.style.wordBreak = "break-word";
+    pre.style.maxHeight = "360px";
+    pre.style.overflow = "auto";
+    pre.style.border = "1px solid rgba(255,255,255,0.08)";
+    pre.style.borderRadius = "10px";
+    pre.style.padding = "10px";
+    pre.style.marginTop = "10px";
+    pre.textContent = String(detailsText || "");
+    box.appendChild(pre);
+
+    const row = document.createElement("div");
+    row.className = "buttonRow";
+    row.style.gap = "8px";
+    row.style.marginTop = "12px";
+
+    const closeBtn = document.createElement("button");
+    closeBtn.className = "btn";
+    closeBtn.textContent = "Close";
+
+    const copyBtn = document.createElement("button");
+    copyBtn.className = "btn";
+    copyBtn.textContent = "Copy";
+
+    closeBtn.addEventListener("click", () => {
+      try { document.body.removeChild(overlay); } catch {}
+    });
+    overlay.addEventListener("click", (ev) => {
+      if (ev.target === overlay) {
+        try { document.body.removeChild(overlay); } catch {}
+      }
+    });
+    copyBtn.addEventListener("click", async () => {
+      try {
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          await navigator.clipboard.writeText(String(detailsText || ""));
+          if (typeof notify === "function") notify("Copied.");
+          return;
+        }
+      } catch {
+        // ignore
+      }
+      if (typeof notify === "function") notify("Copy failed.");
+    });
+
+    row.appendChild(copyBtn);
+    row.appendChild(closeBtn);
+    box.appendChild(row);
+
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+  } catch {
+    // ignore
+  }
+}
+
+function _amInstallDebugFetchCapture(notify) {
+  if (window.__AM_FETCH_CAPTURE_INSTALLED__) return;
+  window.__AM_FETCH_CAPTURE_INSTALLED__ = true;
+  const orig = window.fetch;
+  if (typeof orig !== "function") return;
+
+  window.fetch = async function (input, init) {
+    const ts = new Date().toISOString();
+    let url = "";
+    let method = "GET";
+    let reqHeaders = {};
+    let reqBody = null;
+    try {
+      if (typeof input === "string") url = input;
+      else if (input && typeof input === "object" && "url" in input) url = String(input.url || "");
+      if (init && typeof init === "object") {
+        method = init.method ? String(init.method) : method;
+        reqHeaders = _amFormatHeaders(init.headers);
+        if (typeof init.body === "string") reqBody = init.body.slice(0, 4000);
+      } else if (input && typeof input === "object" && "method" in input) {
+        method = input.method ? String(input.method) : method;
+      }
+    } catch {
+      // ignore
+    }
+
+    // Best-effort callsite capture.
+    let stack = null;
+    try { stack = String(new Error().stack || ""); } catch { stack = null; }
+
+    try {
+      const r = await orig(input, init);
+      if (r && r.ok) return r;
+
+      const status = r && typeof r.status === "number" ? r.status : 0;
+      const statusText = r && typeof r.statusText === "string" ? r.statusText : "";
+      const respHeaders = r && r.headers ? _amFormatHeaders(r.headers) : {};
+
+      // Read response body from a clone so the caller can still consume it.
+      let respText = "";
+      try {
+        const c = r && typeof r.clone === "function" ? r.clone() : null;
+        if (c) respText = (await c.text()).slice(0, 8000);
+      } catch {
+        respText = "";
+      }
+
+      const rec = {
+        ts,
+        channel: "http",
+        kind: "response_not_ok",
+        method,
+        url,
+        status,
+        status_text: statusText,
+        request_headers: reqHeaders,
+        request_body: reqBody,
+        response_headers: respHeaders,
+        response_text: (respText || "").trim(),
+        stack,
+      };
+      rec.message = `${method} ${url} -> ${status} ${statusText}`.trim();
+      _amPushUiLog(rec);
+
+      if (typeof notify === "function") notify(`HTTP ${status} ${statusText}`.trim());
+      _amShowDebugModal(`HTTP ${status} ${statusText}`.trim(), JSON.stringify(rec, null, 2), notify);
+      return r;
+    } catch (e) {
+      const msg = e && typeof e === "object" && "message" in e ? String(e.message) : String(e);
+      const rec = {
+        ts,
+        channel: "http",
+        kind: "fetch_exception",
+        method,
+        url,
+        message: msg,
+        request_headers: reqHeaders,
+        request_body: reqBody,
+        stack,
+      };
+      _amPushUiLog(rec);
+      if (typeof notify === "function") notify("HTTP request failed.");
+      _amShowDebugModal("HTTP request failed", JSON.stringify(rec, null, 2), notify);
+      throw e;
+    }
+  };
 }
 
 window.addEventListener("unhandledrejection", function (ev) {
@@ -500,6 +714,161 @@ async function renderJsErrorFeed(content, notify) {
   }, 500);
   // Best-effort cleanup when route changes.
   window.addEventListener("popstate", () => clearInterval(timer), { once: true });
+
+  return root;
+}
+
+
+async function renderUiDebugFeed(content, notify) {
+  // UI-only unified view over window.__AM_UI_LOGS__ (debug mode).
+  _amEnsureUiLogBuffer();
+
+  let paused = false;
+  let filterText = "";
+
+  const root = el("div");
+
+  const controls = el("div", { class: "row" });
+  const filterInput = el("input", { class: "input", type: "text", placeholder: "Filter..." });
+  filterInput.style.maxWidth = "420px";
+  const pauseBtn = el("button", { class: "btn", text: "Pause" });
+  const clearBtn = el("button", { class: "btn danger", text: "Clear" });
+  const exportBtn = el("button", { class: "btn", text: "Export JSONL" });
+  controls.appendChild(filterInput);
+  controls.appendChild(pauseBtn);
+  controls.appendChild(clearBtn);
+  controls.appendChild(exportBtn);
+  root.appendChild(controls);
+
+  const hint = el("div", { class: "hint", text: "Debug mode: browser-side errors and HTTP failures (session-local)." });
+  root.appendChild(hint);
+
+  const box = el("div", { class: "logBox" });
+  box.style.height = "520px";
+  box.style.whiteSpace = "normal";
+  root.appendChild(box);
+
+  function recordMatches(rec, f) {
+    if (!f) return true;
+    const hay = [
+      rec && typeof rec.ts === "string" ? rec.ts : "",
+      rec && typeof rec.channel === "string" ? rec.channel : "",
+      rec && typeof rec.kind === "string" ? rec.kind : "",
+      rec && typeof rec.message === "string" ? rec.message : "",
+      rec && typeof rec.url === "string" ? rec.url : "",
+      rec && typeof rec.method === "string" ? rec.method : "",
+      rec && typeof rec.response_text === "string" ? rec.response_text : "",
+    ].join("\n").toLowerCase();
+    return hay.includes(f);
+  }
+
+  function snapshotFiltered() {
+    const buf = _amEnsureUiLogBuffer();
+    const f = String(filterText || "").trim().toLowerCase();
+    const out = [];
+    for (let i = buf.length - 1; i >= 0; i--) {
+      const rec = buf[i];
+      if (recordMatches(rec, f)) out.push(rec);
+    }
+    return out;
+  }
+
+  async function copyText(text) {
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+    } catch {
+      // ignore
+    }
+    return false;
+  }
+
+  function renderOnce() {
+    const items = snapshotFiltered();
+    clear(box);
+    if (!items.length) {
+      box.appendChild(el("div", { class: "hint", text: "No debug records captured." }));
+      return;
+    }
+
+    for (const rec of items) {
+      const row = el("div");
+      row.style.borderBottom = "1px solid rgba(255,255,255,0.06)";
+      row.style.padding = "8px 0";
+
+      const top = el("div", { class: "row" });
+      top.style.margin = "0 0 6px 0";
+      const channel = rec.channel || "";
+      const kind = rec.kind || "";
+      const meta = el("div", { class: "hint", text: `${rec.ts || ""}  ${channel} ${kind}`.trim() });
+      meta.style.flex = "1";
+      const detailsBtn = el("button", { class: "btn", text: "Details" });
+      const copyBtn = el("button", { class: "btn", text: "Copy" });
+      detailsBtn.addEventListener("click", () => {
+        _amShowDebugModal(`${channel} ${kind}`.trim(), JSON.stringify(rec, null, 2), notify);
+      });
+      copyBtn.addEventListener("click", async () => {
+        const txt = JSON.stringify(rec, null, 2);
+        const ok = await copyText(txt);
+        if (typeof notify === "function") notify(ok ? "Copied." : "Copy failed.");
+      });
+      top.appendChild(meta);
+      top.appendChild(detailsBtn);
+      top.appendChild(copyBtn);
+      row.appendChild(top);
+
+      const msg = rec.message || (rec.status ? `${rec.method || ""} ${rec.url || ""} -> ${rec.status}` : "");
+      row.appendChild(el("div", { class: "mono", text: String(msg || "") }));
+
+      if (rec.response_text) {
+        const pre = el("pre");
+        pre.style.marginTop = "6px";
+        pre.style.whiteSpace = "pre-wrap";
+        pre.style.wordBreak = "break-word";
+        pre.textContent = String(rec.response_text);
+        row.appendChild(pre);
+      }
+
+      box.appendChild(row);
+    }
+
+    // Auto-scroll to end.
+    try { box.scrollTop = box.scrollHeight; } catch {}
+  }
+
+  filterInput.addEventListener("input", () => {
+    filterText = String(filterInput.value || "");
+    if (!paused) renderOnce();
+  });
+  pauseBtn.addEventListener("click", () => {
+    paused = !paused;
+    pauseBtn.textContent = paused ? "Resume" : "Pause";
+    if (!paused) renderOnce();
+  });
+  clearBtn.addEventListener("click", () => {
+    const buf = _amEnsureUiLogBuffer();
+    buf.splice(0, buf.length);
+    renderOnce();
+  });
+  exportBtn.addEventListener("click", () => {
+    const buf = _amEnsureUiLogBuffer();
+    const lines = buf.map((r) => JSON.stringify(r));
+    const blob = new Blob([lines.join("\n") + "\n"], { type: "application/x-ndjson" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "audiomason_ui_debug.jsonl";
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2500);
+  });
+
+  // Live refresh.
+  renderOnce();
+  const timer = setInterval(() => {
+    if (!paused) renderOnce();
+  }, 500);
+  root.addEventListener("DOMNodeRemoved", () => { try { clearInterval(timer); } catch {} });
 
   return root;
 }
@@ -2252,6 +2621,7 @@ async function renderContent(content, notify) {
     if (t === "table") return await renderTable(content);
     if (t === "log_stream") return await renderLogStream(content);
     if (t === "js_error_feed") return await renderJsErrorFeed(content, notify);
+    if (t === "ui_debug_feed") return await renderUiDebugFeed(content, notify);
     if (t === "button_row") return await renderButtonRow(content, notify);
     if (t === "json_editor") return await renderJsonEditor(content, notify);
     if (t === "yaml_editor") return await renderYamlEditor(content, notify);
@@ -2341,6 +2711,12 @@ async function loadNav() {
     };
 
     const navItems = await loadNav();
+
+    // Debug mode should expose everything through the UI (no DevTools required).
+    const debugEnabled = Array.isArray(navItems) && navItems.some((i) => i && (i.page_id === "debug_js" || i.route === "/debug-js"));
+    if (debugEnabled) {
+      _amInstallDebugFetchCapture(notify);
+    }
 
     const sidebar = el("div", { class: "sidebar" });
     sidebar.appendChild(el("div", { class: "brand", text: "AudioMason" }));

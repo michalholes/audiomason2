@@ -186,6 +186,20 @@ def _default_pages() -> dict[str, dict[str, Any]]:
     }
 
     if debug_enabled():
+        # In debug mode, surface browser-side debug information in the same place
+        # as all other logs (no DevTools required).
+        logs_children = pages.get("logs", {}).get("layout", {}).get("children")
+        if isinstance(logs_children, list):
+            logs_children.insert(
+                0,
+                {
+                    "type": "card",
+                    "title": "Browser debug (client-side)",
+                    "content": {"type": "ui_debug_feed"},
+                },
+            )
+
+    if debug_enabled():
         pages["debug_js"] = {
             "id": "debug_js",
             "title": "Debug JS",

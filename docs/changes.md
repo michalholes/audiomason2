@@ -1,3 +1,9 @@
+## 2026-02-14T14:52:20+01:00
+
+-   web_interface: In debug mode, surface non-2xx HTTP responses as client-side debug records in the Logs UI, including response body (truncated) and callsite stack.
+-   web_interface: In debug mode, show an immediate toast/modal for non-2xx HTTP responses so conflicts are not hidden in DevTools.
+-   spec: Document debug-mode UI transparency for HTTP failures and bump specification version to 1.0.63.
+
 ## 2026-02-14T10:38:00+01:00
 
 -   web_interface: Add debug-only "Debug JS" page that shows in-session JS errors (window.onerror + unhandledrejection) with filter/pause/clear/export.
