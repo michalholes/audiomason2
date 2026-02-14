@@ -1,4 +1,10 @@
 
+## 2026-02-14T21:10:57+00:00
+
+-   Issue 510: import_wizard UI: Drive processed state strictly from fingerprint keys in processed_registry (gray-out, disable Start, Unmark).
+-   Issue 510: import_wizard UI: Unmark refreshes processed state immediately.
+-   spec: Clarify processed_registry UI matching (fingerprint-only) and bump specification version to 1.0.71.
+
 ## 2026-02-14T20:57:03+00:00
 
 -   Issue 509: import_wizard: Enable best-effort external metadata lookup by default during PHASE 0 deep enrichment (fail-safe).

@@ -15,17 +15,20 @@ async function fetchJSON(url, opts) {
 window.__AM_APP_LOADED__ = true;
 
 function _amFpKeyForBook(book) {
-  // Backward/forward compatible fingerprint key extraction.
-  // Prefer fingerprint if present; fall back to rel_path for legacy payloads.
+  // Fingerprint key extraction for processed_registry matching.
+  // processed_registry is defined to use fingerprint keys only.
   if (book && typeof book === "object") {
     if (typeof book.fingerprint === "string" && book.fingerprint) return book.fingerprint;
     if (typeof book.fp === "string" && book.fp) return book.fp;
     const meta = book.meta && typeof book.meta === "object" ? book.meta : null;
     if (meta && typeof meta.fingerprint === "string" && meta.fingerprint) return meta.fingerprint;
-    if (typeof book.rel_path === "string" && book.rel_path) return book.rel_path;
-    if (typeof book.path === "string" && book.path) return book.path;
   }
   return "";
+}
+
+function _amNormalizeFpKey(key) {
+  if (typeof key !== "string") return "";
+  return key.trim();
 }
 
 function _amEnsureUiLogBuffer() {
@@ -1156,7 +1159,7 @@ actionsRow.appendChild(run5Btn);
     try {
       const r = await API.getJson("/api/import_wizard/processed_registry");
       const keys = (r && Array.isArray(r.keys)) ? r.keys : [];
-      processedKeys = new Set(keys.filter((k) => typeof k === "string" && k));
+      processedKeys = new Set(keys.map(_amNormalizeFpKey).filter((k) => k));
     } catch {
       processedKeys = new Set();
     }
@@ -1496,7 +1499,7 @@ const body2 = Object.assign({}, body, { conflict_policy: { mode: choice } });
     filtered.forEach((b) => {
       const title = (b && b.book) ? String(b.book) : (b && b.rel_path ? String(b.rel_path) : "(book)");
       const relPath = String((b && b.rel_path) ? b.rel_path : "");
-      const key = _amFpKeyForBook(b);
+      const key = _amNormalizeFpKey(_amFpKeyForBook(b));
       const isProcessed = !!(key && processedKeys && processedKeys.has(key));
 
       const row = el("div", { class: "row", style: "gap:8px;align-items:center" });
@@ -1576,7 +1579,11 @@ if (cpMode === "skip" || cpMode === "overwrite") {
           try {
             if (!key) throw new Error("Missing fingerprint key.");
             await API.sendJson("POST", "/api/import_wizard/unmark_processed", { key: key });
-            await loadProcessedRegistry();
+            // Immediate UI refresh: optimistically clear local processed state.
+            try { processedKeys && processedKeys.delete(key); } catch {}
+            renderBooks();
+            // Sync from registry (fail-safe).
+            try { await loadProcessedRegistry(); } catch {}
             renderBooks();
             statusBox.textContent = "Unmarked. You can start again.";
           } catch (e) {
