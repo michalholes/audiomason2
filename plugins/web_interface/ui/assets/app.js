@@ -508,6 +508,106 @@ async function renderImportWizard(content, notify) {
   }
 
 
+function showConflictPolicyModal() {
+  return new Promise((resolve) => {
+    const overlay = el("div", { class: "modalOverlay" });
+    overlay.style.position = "fixed";
+    overlay.style.left = "0";
+    overlay.style.top = "0";
+    overlay.style.right = "0";
+    overlay.style.bottom = "0";
+    overlay.style.background = "rgba(0,0,0,0.55)";
+    overlay.style.display = "flex";
+    overlay.style.alignItems = "center";
+    overlay.style.justifyContent = "center";
+    overlay.style.zIndex = "9999";
+
+    const box = el("div", { class: "modalBox" });
+    box.style.background = "#1b2230";
+    box.style.border = "1px solid rgba(255,255,255,0.15)";
+    box.style.borderRadius = "12px";
+    box.style.padding = "16px";
+    box.style.minWidth = "320px";
+    box.style.maxWidth = "520px";
+    box.style.color = "#fff";
+    box.style.boxShadow = "0 10px 30px rgba(0,0,0,0.35)";
+
+    box.appendChild(el("div", { class: "subTitle", text: "Conflict detected" }));
+    box.appendChild(el("div", {
+      class: "hint",
+      text: "Import requires conflict resolution. Choose how to continue:",
+    }));
+
+    const row = el("div", { class: "buttonRow" });
+    row.style.gap = "8px";
+
+    const skipBtn = el("button", { class: "btn", text: "Skip" });
+    const overBtn = el("button", { class: "btn", text: "Overwrite" });
+    const cancelBtn = el("button", { class: "btn danger", text: "Cancel" });
+
+    function close(v) {
+      try { document.body.removeChild(overlay); } catch {}
+      resolve(v);
+    }
+
+    skipBtn.addEventListener("click", () => close("skip"));
+    overBtn.addEventListener("click", () => close("overwrite"));
+    cancelBtn.addEventListener("click", () => close(null));
+    overlay.addEventListener("click", (ev) => {
+      if (ev.target === overlay) close(null);
+    });
+
+    row.appendChild(skipBtn);
+    row.appendChild(overBtn);
+    row.appendChild(cancelBtn);
+    box.appendChild(row);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+  });
+}
+
+async function startImportWithConflictAsk(body) {
+  const path = "/api/import_wizard/start";
+
+  async function doPost(payload) {
+    const r = await fetch(path, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "Accept": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    if (r.ok) {
+      return { ok: true, data: await r.json() };
+    }
+    const status = r.status;
+    let text = "";
+    try { text = (await r.text()).slice(0, 1200); } catch {}
+    text = (text || "").trim();
+    let obj = null;
+    try { obj = text ? JSON.parse(text) : null; } catch { obj = null; }
+    return { ok: false, status, text, obj };
+  }
+
+  let res = await doPost(body);
+  if (res.ok) return res.data;
+
+  if (res.status === 409 && res.obj && res.obj.error === "conflict_policy_unresolved") {
+    const pol = res.obj.conflict_policy || {};
+    if (pol && pol.mode === "ask") {
+      const choice = await showConflictPolicyModal();
+      if (!choice) {
+        throw new Error("POST /api/import_wizard/start -> 409 conflict unresolved (canceled)");
+      }
+      const body2 = Object.assign({}, body, { conflict_policy: { mode: choice } });
+      res = await doPost(body2);
+      if (res.ok) return res.data;
+    }
+  }
+
+  const suffix = res.text ? ` ${res.text}` : "";
+  throw new Error(`POST ${path} -> ${res.status}${suffix}`);
+}
+
+
   function stopEnrichmentPolling() {
     if (enrichTimer) { clearInterval(enrichTimer); enrichTimer = null; }
   }
@@ -610,7 +710,7 @@ async function renderImportWizard(content, notify) {
             book_rel_path: relPath,
             mode: modeSel.value,
           };
-          const r = await API.sendJson("POST", "/api/import_wizard/start", body);
+          const r = await startImportWithConflictAsk(body);
           jobIds = Array.isArray(r.job_ids) ? r.job_ids : [];
           if (!jobIds.length) {
             statusBox.textContent = "No jobs created.";
