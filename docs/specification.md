@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.64
+Specification Version: 1.0.65
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -899,7 +899,7 @@ Issue 416 extension (file-based book units):
 Issue 503 extension (stage/in-place modes, resume, conflicts, delete source):
 
 - Mode contract:
-  - stage: resume is supported and parallelism_n MUST default to 2.
+  - stage: resume is supported and parallelism_n MUST be 2.
   - inplace: resume is not supported and parallelism_n MUST be 1.
 - Conflict policy contract (PHASE 1 owned):
   - Default conflict policy is ask.

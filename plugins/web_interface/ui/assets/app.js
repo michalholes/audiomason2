@@ -14,6 +14,20 @@ async function fetchJSON(url, opts) {
 
 window.__AM_APP_LOADED__ = true;
 
+function _amFpKeyForBook(book) {
+  // Backward/forward compatible fingerprint key extraction.
+  // Prefer fingerprint if present; fall back to rel_path for legacy payloads.
+  if (book && typeof book === "object") {
+    if (typeof book.fingerprint === "string" && book.fingerprint) return book.fingerprint;
+    if (typeof book.fp === "string" && book.fp) return book.fp;
+    const meta = book.meta && typeof book.meta === "object" ? book.meta : null;
+    if (meta && typeof meta.fingerprint === "string" && meta.fingerprint) return meta.fingerprint;
+    if (typeof book.rel_path === "string" && book.rel_path) return book.rel_path;
+    if (typeof book.path === "string" && book.path) return book.path;
+  }
+  return "";
+}
+
 function _amEnsureUiLogBuffer() {
   if (!window.__AM_UI_LOGS__ || !Array.isArray(window.__AM_UI_LOGS__)) {
     window.__AM_UI_LOGS__ = [];
@@ -1279,7 +1293,7 @@ async function startImportWithConflictAsk(body) {
     filtered.forEach((b) => {
       const title = (b && b.book) ? String(b.book) : (b && b.rel_path ? String(b.rel_path) : "(book)");
       const relPath = String((b && b.rel_path) ? b.rel_path : "");
-      const key = fpKeyForBook(b);
+      const key = _amFpKeyForBook(b);
       const isProcessed = !!(key && processedKeys && processedKeys.has(key));
 
       const row = el("div", { class: "row", style: "gap:8px;align-items:center" });
@@ -1345,7 +1359,7 @@ async function startImportWithConflictAsk(body) {
 
     // Auto-next: if there is only one unprocessed book, start it immediately.
     const unprocessed = filtered.filter((b) => {
-      const k = fpKeyForBook(b);
+      const k = _amFpKeyForBook(b);
       return !(k && processedKeys && processedKeys.has(k));
     });
     if (unprocessed.length === 1) {

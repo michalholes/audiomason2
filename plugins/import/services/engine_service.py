@@ -101,7 +101,25 @@ class ImportEngineService:
         )
 
         # Persist state for later CLI/Web access.
-        self._run_store.put(request.run_id, request.state)
+        #
+        # Issue 503 contract: mode drives parallelism.
+        # - stage: parallelism=2
+        # - inplace: parallelism=1
+        mode = str(request.state.source_handling_mode)
+        contract_parallelism = 2 if mode == "stage" else 1
+        if (
+            int(
+                getattr(request.state, "parallelism_n", contract_parallelism)
+                or contract_parallelism
+            )
+            != contract_parallelism
+        ):
+            data = asdict(request.state)
+            data["parallelism_n"] = int(contract_parallelism)
+            state = ImportRunState(**data)
+        else:
+            state = request.state
+        self._run_store.put(request.run_id, state)
 
         created: list[str] = []
         for dec in sorted(request.decisions, key=lambda d: d.book_rel_path):
@@ -114,7 +132,7 @@ class ImportEngineService:
                     "book_rel_path": dec.book_rel_path,
                     "unit_type": dec.unit_type,
                     "source_ext": dec.source_ext or "",
-                    "mode": str(request.state.source_handling_mode),
+                    "mode": str(state.source_handling_mode),
                     "decision_json": json.dumps(
                         asdict(dec), ensure_ascii=True, separators=(",", ":"), sort_keys=True
                     ),
@@ -242,14 +260,8 @@ class ImportEngineService:
                 continue
 
             mode = str(state.source_handling_mode)
-            per_run_limit = 1 if mode == "inplace" else 2
-            try:
-                per_run_limit = min(
-                    per_run_limit,
-                    max(1, int(getattr(state, "parallelism_n", 1) or 1)),
-                )
-            except Exception:
-                per_run_limit = min(per_run_limit, 1)
+            # Issue 503 contract: mode drives parallelism.
+            per_run_limit = 2 if mode == "stage" else 1
 
             ran_for_run = run_counts.get(run_id, 0)
             if ran_for_run >= per_run_limit:

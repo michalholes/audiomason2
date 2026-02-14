@@ -1,3 +1,9 @@
+## 2026-02-14T09:00:00+01:00
+
+-   web_interface: Fix Import Wizard UI runtime error (fpKeyForBook undefined) by using a global fingerprint-key helper.
+-   import: Enforce Issue 503 mode contract in engine (stage parallelism=2, inplace parallelism=1) regardless of caller-provided run state.
+-   spec: Clarify stage parallelism is enforced and bump specification version to 1.0.65.
+
 ## 2026-02-14T17:20:00+01:00
 
 -   import_cli: Extend interactive CLI import wizard to continue after book selection and collect PHASE 1 decisions before starting processing.
