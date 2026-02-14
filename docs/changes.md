@@ -1,3 +1,8 @@
+## 2026-02-15T00:25:00+01:00
+
+-   Issue 521: import: Ensure PHASE 0/2/processed_registry use a single canonical fingerprint key builder name and explicitly forbid full-file hashing for identity (stat-signature only).
+-   spec: Add explicit implementation note for the shared fingerprint builder and bump specification version to 1.0.79.
+
 ## 2026-02-15T00:10:00+01:00
 
 -   Issue 520: import_wizard API: Ensure processed_registry always returns keys: list[str] for UI compatibility, including when registry outputs are dict-shaped (defensive compatibility).

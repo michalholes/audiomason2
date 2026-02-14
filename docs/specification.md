@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.78
+Specification Version: 1.0.79
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -868,6 +868,7 @@ Deep enrichment requirements (PHASE 0):
 - Fingerprints MUST include exactly one canonical unit fingerprint (stat-based: path + size + mtime) and it MUST be represented as a single key string in the form `<algo>:<value>`.
 - The current canonical algorithm is `sha256` computed over the stat signature (not file contents).
 - PHASE 2 processing MUST use the identical fingerprint builder as PHASE 0 and MUST NOT perform full-file hashing.
+  - Implementation note: use a single shared builder (e.g. `build_book_fingerprint_key(...)`) across PHASE 0/2 and processed_registry.
 - Rename preview ordering MUST be deterministic and MUST use the following precedence for ordering/numbering:
   1) ID3 track number (TRCK)
   2) filename number prefix

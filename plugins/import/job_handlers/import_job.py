@@ -22,7 +22,7 @@ from plugins.file_io.service.paths import resolve_path
 from plugins.file_io.service.service import FileService
 from plugins.file_io.service.types import RootName
 
-from ..processed_registry.service import ProcessedRegistry, build_import_identity_key
+from ..processed_registry.service import ProcessedRegistry, build_book_fingerprint_key
 from ..session_store.types import ImportRunState
 
 
@@ -208,7 +208,7 @@ def run_import_job(
             unit_type = "dir"
 
     try:
-        identity_key = build_import_identity_key(
+        identity_key = build_book_fingerprint_key(
             fs,
             source_root=source_root,
             book_rel_path=book_rel_path,
@@ -343,7 +343,7 @@ def run_import_job(
         delete_source = bool((run_state.global_options or {}).get("delete_source"))
         if run_state.source_handling_mode == "stage" and delete_source:
             try:
-                current_key = build_import_identity_key(
+                current_key = build_book_fingerprint_key(
                     fs,
                     source_root=source_root,
                     book_rel_path=book_rel_path,

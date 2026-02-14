@@ -47,18 +47,20 @@ def _ext(rel_path: str) -> str:
     return "." + name.split(".")[-1]
 
 
-def build_import_identity_key(
+def build_book_fingerprint_key(
     fs: FileService,
     *,
     source_root: RootName,
     book_rel_path: str,
     unit_type: str,
 ) -> str:
-    """Build the canonical import identity key (fingerprint).
+    """Build the canonical book fingerprint key.
 
-    This builder is shared by PHASE 0 (preflight) and PHASE 2 (processing).
+    This builder is shared by PHASE 0 (preflight), PHASE 2 (processing), and the
+    processed registry.
 
-    It is stat-based (path + size + mtime) and MUST NOT perform full-file hashing.
+    It is stat-based (path + size + mtime) and MUST NOT perform full-file hashing
+    (no sha256 over file bytes).
     """
     unit = str(unit_type or "").strip().lower()
     if unit == "file":
@@ -91,6 +93,22 @@ def build_import_identity_key(
         h.update(f"{mtime:.6f}".encode())
         h.update(b"\n")
     return fingerprint_key(algo=_FINGERPRINT_ALGO, value=h.hexdigest())
+
+
+def build_import_identity_key(
+    fs: FileService,
+    *,
+    source_root: RootName,
+    book_rel_path: str,
+    unit_type: str,
+) -> str:
+    """Backwards-compatible alias for build_book_fingerprint_key."""
+    return build_book_fingerprint_key(
+        fs,
+        source_root=source_root,
+        book_rel_path=book_rel_path,
+        unit_type=unit_type,
+    )
 
 
 def _emit_diag(event: str, *, operation: str, data: dict[str, Any]) -> None:

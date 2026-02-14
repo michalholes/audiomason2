@@ -20,7 +20,7 @@ from audiomason.core.events import get_event_bus
 from plugins.file_io.service.service import FileService
 from plugins.file_io.service.types import FileEntry, RootName
 
-from ..processed_registry.service import build_import_identity_key
+from ..processed_registry.service import build_book_fingerprint_key
 from .types import (
     BookFingerprint,
     BookPreflight,
@@ -900,7 +900,7 @@ class PreflightService:
 
         rename_preview = self._build_rename_preview(root, audio_files)
 
-        identity_key = build_import_identity_key(
+        identity_key = build_book_fingerprint_key(
             self._fs,
             source_root=root,
             book_rel_path=book_rel,
@@ -938,7 +938,7 @@ class PreflightService:
             self._build_rename_preview(root, audio_files) if audio_files else {file_rel: file_rel}
         )
 
-        identity_key = build_import_identity_key(
+        identity_key = build_book_fingerprint_key(
             self._fs,
             source_root=root,
             book_rel_path=file_rel,
