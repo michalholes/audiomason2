@@ -32,11 +32,27 @@ function _amPushJsError(rec) {
   }
 }
 
+
+// Back-compat: older code used _amPushJSError (capital S).
+window._amPushJsError = _amPushJsError;
+window._amPushJSError = _amPushJsError;
+
+function _amPushAnyJsError(rec) {
+  try {
+    const fn = typeof window._amPushJSError === "function"
+      ? window._amPushJSError
+      : (typeof window._amPushJsError === "function" ? window._amPushJsError : null);
+    if (fn) fn(rec);
+  } catch {
+    // fail-safe
+  }
+}
+
 window.addEventListener("unhandledrejection", function (ev) {
   const r = ev ? ev.reason : null;
   const isErr = r && typeof r === "object" && "stack" in r;
   const msg = r && typeof r === "object" && "message" in r ? String(r.message) : String(r ?? "");
-  _amPushJsError({
+  _amPushAnyJsError({
     ts: new Date().toISOString(),
     kind: "unhandledrejection",
     message: msg,
@@ -49,7 +65,7 @@ window.addEventListener("unhandledrejection", function (ev) {
 
 window.onerror = function (msg, src, line, col, err) {
   const e = err && typeof err === "object" ? err : null;
-  _amPushJsError({
+  _amPushAnyJsError({
     ts: new Date().toISOString(),
     kind: "error",
     message: String(msg ?? ""),
@@ -365,7 +381,7 @@ async function renderJsErrorFeed(content, notify) {
     const out = [];
     for (let i = buf.length - 1; i >= 0; i--) {
       const rec = buf[i];
-      if (recMatches(rec, f)) out.push(rec);
+      if (recordMatches(rec, f)) out.push(rec);
     }
     return out;
   }
