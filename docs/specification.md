@@ -4,7 +4,6 @@
 Specification Version: 1.0.62
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
-
 Author: Michal Holes  
 Status: **AUTHORITATIVE / BINDING**  
 Applies to: AudioMason2 core, plugins, tooling, UI, tests, documentation  
