@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.67
+Specification Version: 1.0.68
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -874,6 +874,9 @@ Deep enrichment requirements (PHASE 0):
 - processed_registry: Book-folder processed registry under the file_io JOBS root.
   - Registry keys MUST be book fingerprints (algo:value) and MUST be marked only on successful PHASE 2 completion.
   - Web UI MUST gray-out processed books, disable Start, and provide an Unmark action.
+  - Web API (Import Wizard) MUST expose processed registry keys for UI.
+    - GET /api/import_wizard/processed_registry MUST return JSON with field keys: [<fingerprint strings>].
+    - For backward compatibility it MAY also include items/count, but keys is the authoritative field.
 
 Issue 403 extension (PHASE 2 processing engine):
 

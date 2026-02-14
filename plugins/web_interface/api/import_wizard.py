@@ -517,7 +517,9 @@ def mount_import_wizard(app: FastAPI) -> None:
                 raise HTTPException(
                     status_code=500, detail=_error_detail("processed_registry", e)
                 ) from e
-            return {"items": items, "count": len(items)}
+            # Backwards/forwards compatible schema: UI expects "keys".
+            # Keep "items" for any existing callers.
+            return {"keys": items, "items": items, "count": len(items)}
 
     @app.post("/api/import_wizard/unmark_processed")
     def import_unmark_processed(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
