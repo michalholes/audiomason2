@@ -336,7 +336,9 @@ def mount_import_wizard(app: FastAPI) -> None:
             return
 
         async def _runner() -> None:
-            svc = _mods()["PreflightService"](fs)
+            # Deep enrichment in the Web Import Wizard context enables external
+            # lookup by default, but remains strictly best-effort and fail-safe.
+            svc = _mods()["PreflightService"](fs, enable_lookup=True)
             try:
                 await asyncio.to_thread(svc.run_deep_enrichment_if_needed, root, rel)
             finally:

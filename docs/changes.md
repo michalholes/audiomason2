@@ -1,3 +1,9 @@
+## 2026-02-14T23:59:00+01:00
+
+-   Issue 514: import_wizard: Ensure PHASE 0 deep enrichment enables external lookup by default in the Web Import Wizard context (explicit flag), while remaining strictly best-effort and fail-safe.
+-   import: Default external lookup to OFF outside the Web Import Wizard context.
+-   spec: Clarify lookup defaults and bump specification version to 1.0.75.
+
 ## 2026-02-14T23:55:00+01:00
 
 -   Issue 513: import: Ensure PHASE 2 import identity keys never rely on full-file hashing and remain unified with PHASE 0 preflight fingerprints and processed_registry keys (single stat-based builder).

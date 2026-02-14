@@ -90,7 +90,7 @@ class PreflightService:
         fs: FileService,
         *,
         id3_majority: Id3MajorityConfig | None = None,
-        enable_lookup: bool = True,
+        enable_lookup: bool = False,
     ) -> None:
         self._fs = fs
         self._id3_majority = id3_majority or Id3MajorityConfig()
