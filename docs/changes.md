@@ -1,4 +1,9 @@
 
+## 2026-02-14T20:57:03+00:00
+
+-   Issue 509: import_wizard: Enable best-effort external metadata lookup by default during PHASE 0 deep enrichment (fail-safe).
+-   spec: Document lookup default and bump specification version to 1.0.70.
+
 ## 2026-02-14T22:00:00+01:00
 
 -   Issue 508: import_wizard: Unify PHASE 0 and PHASE 2 identity fingerprint builder (stat-based) and remove full-file hashing from processing.

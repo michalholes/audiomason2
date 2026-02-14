@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.69
+Specification Version: 1.0.70
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -871,7 +871,10 @@ Deep enrichment requirements (PHASE 0):
   1) ID3 track number (TRCK)
   2) filename number prefix
   3) natural sort of filenames
-- Lookup/metadata integration MAY be implemented as a best-effort opt-in enrichment step and MUST be disabled by default to preserve determinism.
+- Lookup/metadata integration MAY be implemented as a best-effort enrichment step for PHASE 0 suggestions.
+  - It MUST be fail-safe (lookup errors must not abort preflight).
+  - It MUST NOT affect fingerprints, processed tracking, or PHASE 2 behavior unless explicitly confirmed by the user in PHASE 1.
+  - In the Web Import Wizard context it MUST be enabled by default.
 - processed_registry: Book-folder processed registry under the file_io JOBS root.
   - Registry keys MUST be book fingerprints (algo:value) and MUST be marked only on successful PHASE 2 completion.
   - Web UI MUST gray-out processed books, disable Start, and provide an Unmark action.

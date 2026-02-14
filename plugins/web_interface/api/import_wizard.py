@@ -233,7 +233,8 @@ def _effective_defaults_for(request: Request, mode: str) -> dict[str, Any]:
 def _preflight_service(request: Request) -> Any:
     mods = _mods()
     fs = _get_file_service(request)
-    return mods["PreflightService"](fs)
+    # Web Import Wizard deep enrichment uses best-effort external lookup by default.
+    return mods["PreflightService"](fs, enable_lookup=True)
 
 
 def _serialize_index(res: Any) -> dict[str, Any]:

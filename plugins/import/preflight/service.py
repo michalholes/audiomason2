@@ -90,7 +90,7 @@ class PreflightService:
         fs: FileService,
         *,
         id3_majority: Id3MajorityConfig | None = None,
-        enable_lookup: bool = False,
+        enable_lookup: bool = True,
     ) -> None:
         self._fs = fs
         self._id3_majority = id3_majority or Id3MajorityConfig()
@@ -913,7 +913,7 @@ class PreflightService:
             "fingerprint_basic": _fingerprint_to_dict(fp_basic),
         }
 
-        # Optional lookup integration (best-effort, opt-in).
+        # Optional lookup integration (best-effort, fail-safe).
         if self._enable_lookup:
             meta["lookup"] = self._lookup_best_effort(id3)
 
@@ -1160,7 +1160,7 @@ class PreflightService:
         return res
 
     def _lookup_best_effort(self, id3_majority: dict[str, Any] | None) -> dict[str, Any] | None:
-        # Best-effort integration point. This is opt-in only.
+        # Best-effort integration point. Fail-safe by contract.
         if not id3_majority:
             return None
         author = _opt_str(id3_majority.get("author"))
