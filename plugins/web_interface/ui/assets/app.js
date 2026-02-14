@@ -590,8 +590,12 @@ async function startImportWithConflictAsk(body) {
   let res = await doPost(body);
   if (res.ok) return res.data;
 
-  if (res.status === 409 && res.obj && res.obj.error === "conflict_policy_unresolved") {
-    const pol = res.obj.conflict_policy || {};
+  const detail = (res.obj && typeof res.obj === "object" && res.obj !== null && "detail" in res.obj)
+    ? res.obj.detail
+    : res.obj;
+
+  if (res.status === 409 && detail && typeof detail === "object" && detail.error === "conflict_policy_unresolved") {
+    const pol = detail.conflict_policy || {};
     if (pol && pol.mode === "ask") {
       const choice = await showConflictPolicyModal();
       if (!choice) {
