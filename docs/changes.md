@@ -1,3 +1,9 @@
+## 2026-02-14T23:59:30+01:00
+
+-   Issue 515: import_wizard UI: After successful Start (HTTP 200/202), auto-advance selection to the next actionable book (deterministic author/book order).
+-   Issue 515: import_wizard UI: Do not auto-advance when Start is not successful (including 409 conflicts requiring user action).
+-   spec: Clarify success-only auto-advance trigger and bump specification version to 1.0.76.
+
 ## 2026-02-14T23:59:00+01:00
 
 -   Issue 514: import_wizard: Ensure PHASE 0 deep enrichment enables external lookup by default in the Web Import Wizard context (explicit flag), while remaining strictly best-effort and fail-safe.

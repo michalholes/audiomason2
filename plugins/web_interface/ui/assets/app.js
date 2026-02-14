@@ -1148,6 +1148,7 @@ actionsRow.appendChild(run5Btn);
   let enrichRefreshCounter = 0;
   let processedKeys = new Set();
   let startedRelPaths = new Set();
+  let pendingAutoAdvanceRelPath = "";
 
 
   async function loadProcessedRegistry() {
@@ -1197,6 +1198,16 @@ function _amSelectAuthor(authorLabel) {
   selectedAuthor = String(authorLabel || "");
   renderBooks();
   try { booksBox.scrollIntoView({ block: "nearest" }); } catch {}
+}
+
+function _amQueueAutoAdvanceFocus(nextBook) {
+  try {
+    pendingAutoAdvanceRelPath = nextBook ? _amBookRelPath(nextBook) : "";
+    const nextAuthor = nextBook ? _amBookAuthorLabel(nextBook) : "";
+    if (nextAuthor) _amSelectAuthor(nextAuthor);
+  } catch {
+    pendingAutoAdvanceRelPath = "";
+  }
 }
 
 function _amFindNextActionableBook(currentBookRelPath, currentAuthorLabel) {
@@ -1617,10 +1628,10 @@ async function startBookFlow(b) {
     if (autoAdvanceCb && autoAdvanceCb.checked) {
       const nextBook = _amFindNextActionableBook(relPath, authorLabel);
       if (nextBook) {
-        _amSelectAuthor(_amBookAuthorLabel(nextBook));
-        setTimeout(() => {
-          try { void startBookFlow(nextBook); } catch {}
-        }, 0);
+        _amQueueAutoAdvanceFocus(nextBook);
+        statusBox.textContent = "Started. Next book selected.";
+      } else {
+        statusBox.textContent = "Done. No unprocessed books remain.";
       }
     } else {
       // Refresh UI to reflect processed marking.
@@ -1664,6 +1675,7 @@ async function startBookFlow(b) {
       const btn = el("button", { class: "btn", text: title });
       btn.style.flex = "1";
       btn.style.width = "100%";
+      try { btn.dataset.relPath = relPath; } catch {}
       if (isProcessed) {
         btn.disabled = true;
         btn.style.opacity = "0.55";
@@ -1672,60 +1684,7 @@ async function startBookFlow(b) {
 
       btn.addEventListener("click", async () => {
         if (isProcessed) return;
-        try {
-          setBusy(true);
-          statusBox.textContent = "Starting import...";
-          jobsTableWrap.textContent = "";
-          jobIds = [];
-
-          // Collect PHASE 1 options.
-          const audioEnabled = !!(loudCb.checked || brCb.checked);
-          const options = {};
-          if (audioEnabled) {
-            let kbps = 96;
-            try { kbps = parseInt(String(brInp.value || "96"), 10); } catch {}
-            if (!isFinite(kbps) || kbps <= 0) kbps = 96;
-            const ap = {
-              enabled: true,
-              loudnorm: !!loudCb.checked,
-              bitrate_kbps: kbps,
-              bitrate_mode: String(brModeSel.value || "cbr").toLowerCase(),
-            };
-            const ok = await showAudioProcessingConfirmModal(ap);
-            if (!ok) {
-              statusBox.textContent = "Canceled.";
-              return;
-            }
-            ap.confirmed = true;
-            options.audio_processing = ap;
-          }
-
-
-const body = {
-  root: rootSel.value,
-  path: pathInp.value,
-  book_rel_path: relPath,
-  mode: modeSel.value,
-  options: options,
-};
-const cpMode = String(conflictSel.value || "ask").toLowerCase();
-if (cpMode === "skip" || cpMode === "overwrite") {
-  body.conflict_policy = { mode: cpMode };
-}
-          const r = await startImportWithConflictAsk(body);
-          jobIds = Array.isArray(r.job_ids) ? r.job_ids : [];
-          if (!jobIds.length) {
-            statusBox.textContent = "No jobs created.";
-          } else {
-            statusBox.textContent = `Jobs created: ${jobIds.join(", ")}`;
-            startPolling();
-          }
-        } catch (e) {
-          notify(String(e));
-          statusBox.textContent = String(e);
-        } finally {
-          setBusy(false);
-        }
+        try { void startBookFlow(b); } catch {}
       });
 
       row.appendChild(btn);
@@ -1755,11 +1714,21 @@ if (cpMode === "skip" || cpMode === "overwrite") {
       booksBox.appendChild(row);
     });
 
-// Auto-next: if there is only one unprocessed book, start it immediately.
-const unprocessed = filtered.filter((b) => !_amIsBookProcessed(b));
-if (unprocessed.length === 1) {
-  try { void startBookFlow(unprocessed[0]); } catch {}
-}
+    // Apply any pending auto-advance focus after render.
+    if (pendingAutoAdvanceRelPath) {
+      try {
+        const selector = `button[data-rel-path="${CSS.escape(pendingAutoAdvanceRelPath)}"]`;
+        const nextBtn = booksBox.querySelector(selector);
+        if (nextBtn) {
+          nextBtn.focus({ preventScroll: true });
+          nextBtn.scrollIntoView({ block: "center" });
+        }
+      } catch {
+        // ignore
+      } finally {
+        pendingAutoAdvanceRelPath = "";
+      }
+    }
   }
 
   function renderJobsTable(items) {
