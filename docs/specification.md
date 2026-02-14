@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.66
+Specification Version: 1.0.67
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -1147,6 +1147,22 @@ Rules:
   - Select an author (auto-next to books).
   - Select a book (auto-start).
 - The UI MUST show a minimal async indicator while API calls are running.
+
+
+Visual editor and defaults memory (Issue 505):
+
+- The UI MUST expose a minimal visual editor for PHASE 1 import configuration
+  (conflict policy and option toggles).
+- The UI MUST persist user-selected defaults per wizard and per handling mode
+  (stage|inplace|hybrid).
+- The UI MUST provide a one-click "Reset" action that clears saved defaults and
+  restores the preset defaults.
+
+Backend defaults API contract:
+
+- `GET /api/import_wizard/defaults?mode=<mode>` returns `{preset, saved, effective}`.
+- `POST /api/import_wizard/defaults/save` with `{mode, defaults}` stores defaults.
+- `POST /api/import_wizard/defaults/reset` with `{mode}` clears stored defaults.
 
 Start-screen performance rule:
 

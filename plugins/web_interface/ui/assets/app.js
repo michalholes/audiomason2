@@ -1077,12 +1077,28 @@ async function renderImportWizard(content, notify) {
   const actionsRow = el("div", { class: "row" });
   const modeSel = el("select");
   ["stage", "inplace", "hybrid"].forEach((m) => modeSel.appendChild(el("option", { value: m, text: m })));
+
+
+const conflictSel = el("select");
+[
+  ["ask", "Ask"],
+  ["skip", "Skip"],
+  ["overwrite", "Overwrite"],
+].forEach(([v, t]) => conflictSel.appendChild(el("option", { value: v, text: t })));
+
+const saveDefaultsBtn = el("button", { class: "btn", text: "Save defaults" });
+const resetDefaultsBtn = el("button", { class: "btn", text: "Reset" });
   const run1Btn = el("button", { class: "btn", text: "Run 1 pending" });
   const run5Btn = el("button", { class: "btn", text: "Run 5 pending" });
-  actionsRow.appendChild(el("span", { class: "hint", text: "Mode:" }));
-  actionsRow.appendChild(modeSel);
-  actionsRow.appendChild(run1Btn);
-  actionsRow.appendChild(run5Btn);
+
+actionsRow.appendChild(el("span", { class: "hint", text: "Mode:" }));
+actionsRow.appendChild(modeSel);
+actionsRow.appendChild(el("span", { class: "hint", text: "Conflicts:" }));
+actionsRow.appendChild(conflictSel);
+actionsRow.appendChild(saveDefaultsBtn);
+actionsRow.appendChild(resetDefaultsBtn);
+actionsRow.appendChild(run1Btn);
+actionsRow.appendChild(run5Btn);
   right.appendChild(actionsRow);
 
   // PHASE 1 audio processing decisions (Issue 504).
@@ -1145,6 +1161,92 @@ async function renderImportWizard(content, notify) {
       processedKeys = new Set();
     }
   }
+
+
+let applyingDefaults = false;
+let defaultsSaveTimer = null;
+
+async function loadDefaultsForMode(mode) {
+  const m = String(mode || "stage");
+  const url = `/api/import_wizard/defaults?mode=${encodeURIComponent(m)}`;
+  return await API.getJson(url);
+}
+
+async function saveDefaultsForMode(mode, defaults) {
+  return await API.sendJson("POST", "/api/import_wizard/defaults/save", {
+    mode: String(mode || "stage"),
+    defaults: defaults || {},
+  });
+}
+
+async function resetDefaultsForMode(mode) {
+  return await API.sendJson("POST", "/api/import_wizard/defaults/reset", {
+    mode: String(mode || "stage"),
+  });
+}
+
+function collectDefaults() {
+  const apEnabled = !!(loudCb.checked || brCb.checked);
+  const ap = {
+    enabled: apEnabled,
+    confirmed: false,
+    loudnorm: !!loudCb.checked,
+    bitrate_kbps: Number(brInp.value || 96) || 96,
+    bitrate_mode: String(brModeSel.value || "cbr").toLowerCase(),
+  };
+  return {
+    conflict_policy: { mode: String(conflictSel.value || "ask").toLowerCase() },
+    options: { audio_processing: ap },
+  };
+}
+
+function applyDefaults(effective) {
+  applyingDefaults = true;
+  try {
+    const cp = effective && effective.conflict_policy ? effective.conflict_policy : null;
+    const m = cp && typeof cp.mode === "string" ? cp.mode : "ask";
+    conflictSel.value = (m === "skip" || m === "overwrite") ? m : "ask";
+
+    const opt = effective && effective.options ? effective.options : null;
+    const ap = opt && opt.audio_processing ? opt.audio_processing : null;
+    const enabled = !!(ap && ap.enabled);
+    const loud = !!(ap && ap.loudnorm);
+    const kbps = ap && ap.bitrate_kbps ? Number(ap.bitrate_kbps) : 96;
+    const brMode = ap && ap.bitrate_mode ? String(ap.bitrate_mode).toLowerCase() : "cbr";
+
+    loudCb.checked = enabled && loud;
+    brCb.checked = enabled && (!!kbps || brCb.checked);
+    brInp.value = String((isFinite(kbps) && kbps > 0) ? kbps : 96);
+    brModeSel.value = (brMode === "vbr") ? "vbr" : "cbr";
+  } finally {
+    applyingDefaults = false;
+  }
+}
+
+function scheduleSaveDefaults() {
+  if (applyingDefaults) return;
+  if (defaultsSaveTimer) {
+    clearTimeout(defaultsSaveTimer);
+    defaultsSaveTimer = null;
+  }
+  defaultsSaveTimer = setTimeout(async () => {
+    try {
+      await saveDefaultsForMode(modeSel.value, collectDefaults());
+    } catch {
+      // ignore
+    }
+  }, 500);
+}
+
+async function loadAndApplyDefaults() {
+  try {
+    const r = await loadDefaultsForMode(modeSel.value);
+    const eff = r && r.effective ? r.effective : null;
+    if (eff) applyDefaults(eff);
+  } catch {
+    // ignore
+  }
+}
 
 
 function showConflictPolicyModal() {
@@ -1296,11 +1398,18 @@ async function startImportWithConflictAsk(body) {
   if (res.status === 409 && detail && typeof detail === "object" && detail.error === "conflict_policy_unresolved") {
     const pol = detail.conflict_policy || {};
     if (pol && pol.mode === "ask") {
-      const choice = await showConflictPolicyModal();
-      if (!choice) {
-        throw new Error("POST /api/import_wizard/start -> 409 conflict unresolved (canceled)");
-      }
-      const body2 = Object.assign({}, body, { conflict_policy: { mode: choice } });
+
+const choice = await showConflictPolicyModal();
+if (!choice) {
+  throw new Error("POST /api/import_wizard/start -> 409 conflict unresolved (canceled)");
+}
+try {
+  conflictSel.value = String(choice);
+  scheduleSaveDefaults();
+} catch {
+  // ignore
+}
+const body2 = Object.assign({}, body, { conflict_policy: { mode: choice } });
       res = await doPost(body2);
       if (res.ok) return res.data;
     }
@@ -1430,13 +1539,18 @@ async function startImportWithConflictAsk(body) {
             options.audio_processing = ap;
           }
 
-          const body = {
-            root: rootSel.value,
-            path: pathInp.value,
-            book_rel_path: relPath,
-            mode: modeSel.value,
-            options: options,
-          };
+
+const body = {
+  root: rootSel.value,
+  path: pathInp.value,
+  book_rel_path: relPath,
+  mode: modeSel.value,
+  options: options,
+};
+const cpMode = String(conflictSel.value || "ask").toLowerCase();
+if (cpMode === "skip" || cpMode === "overwrite") {
+  body.conflict_policy = { mode: cpMode };
+}
           const r = await startImportWithConflictAsk(body);
           jobIds = Array.isArray(r.job_ids) ? r.job_ids : [];
           if (!jobIds.length) {
@@ -1601,7 +1715,37 @@ async function startImportWithConflictAsk(body) {
   run1Btn.addEventListener("click", () => { void doRunPending(1); });
   run5Btn.addEventListener("click", () => { void doRunPending(5); });
 
-  
+
+saveDefaultsBtn.addEventListener("click", async () => {
+  try {
+    await saveDefaultsForMode(modeSel.value, collectDefaults());
+    notify("Defaults saved.");
+  } catch (e) {
+    notify(String(e));
+  }
+});
+
+resetDefaultsBtn.addEventListener("click", async () => {
+  try {
+    await resetDefaultsForMode(modeSel.value);
+    await loadAndApplyDefaults();
+    notify("Defaults reset.");
+  } catch (e) {
+    notify(String(e));
+  }
+});
+
+modeSel.addEventListener("change", async () => {
+  await loadAndApplyDefaults();
+});
+
+conflictSel.addEventListener("change", scheduleSaveDefaults);
+loudCb.addEventListener("change", scheduleSaveDefaults);
+brCb.addEventListener("change", scheduleSaveDefaults);
+brInp.addEventListener("input", scheduleSaveDefaults);
+brModeSel.addEventListener("change", scheduleSaveDefaults);
+
+
   async function loadIndex(trigger) {
     try {
       setBusy(true);
@@ -1649,7 +1793,7 @@ async function startImportWithConflictAsk(body) {
   return root;
 }
 
-  
+
 async function renderPluginManager(content, notify) {
   const wrap = el("div");
   const header = el("div", { class: "row" });

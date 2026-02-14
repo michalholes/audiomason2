@@ -1,3 +1,10 @@
+
+## 2026-02-14T18:10:00+01:00
+
+-   web_interface: Add Import Wizard visual editor for PHASE 1 config (conflict policy + audio toggles) and persist per-mode defaults.
+-   import: Add WizardDefaultsStore (JOBS root) to persist wizard defaults per wizard+mode and expose import_wizard defaults API endpoints.
+-   spec: Document Import Wizard defaults memory and bump specification version to 1.0.67.
+
 ## 2026-02-14T17:50:25+01:00
 
 -   import_wizard: Add PHASE 1 Loudness/Bitrate step options with explicit confirmation and default bitrate 96 kbps.

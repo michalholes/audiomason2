@@ -42,6 +42,9 @@ def _import_plugin() -> dict[str, Any]:
         "ImportRunState": importlib.import_module(
             "plugins.import.session_store.types"
         ).ImportRunState,
+        "WizardDefaultsStore": importlib.import_module(
+            "plugins.import.session_store.service"
+        ).WizardDefaultsStore,
         "ProcessedRegistry": importlib.import_module(
             "plugins.import.processed_registry.service"
         ).ProcessedRegistry,
@@ -179,6 +182,52 @@ def _engine(request: Request) -> Any:
 def _registry(request: Request) -> Any:
     fs = _get_file_service(request)
     return _mods()["ProcessedRegistry"](fs)
+
+
+IMPORT_WIZARD_NAME = "import_wizard"
+
+
+def _defaults_store(request: Request) -> Any:
+    fs = _get_file_service(request)
+    return _mods()["WizardDefaultsStore"](fs)
+
+
+def _preset_defaults_for(mode: str) -> dict[str, Any]:
+    # Preset defaults are conservative and non-destructive.
+    # Conflict policy remains "ask" by default.
+    return {
+        "conflict_policy": {"mode": "ask"},
+        "options": {
+            "audio_processing": {
+                "enabled": False,
+                "confirmed": False,
+                "bitrate_kbps": 96,
+                "bitrate_mode": "cbr",
+                "loudnorm": False,
+            }
+        },
+    }
+
+
+def _merge_dict(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+    from typing import cast
+
+    out: dict[str, Any] = dict(base)
+    for k, v in override.items():
+        existing = out.get(k)
+        if isinstance(v, dict) and isinstance(existing, dict):
+            out[k] = _merge_dict(cast(dict[str, Any], existing), cast(dict[str, Any], v))
+        else:
+            out[k] = v
+    return out
+
+
+def _effective_defaults_for(request: Request, mode: str) -> dict[str, Any]:
+    preset = _preset_defaults_for(mode)
+    saved = _defaults_store(request).get(IMPORT_WIZARD_NAME, mode)
+    if isinstance(saved, dict):
+        return _merge_dict(preset, saved)
+    return preset
 
 
 def _preflight_service(request: Request) -> Any:
@@ -496,6 +545,80 @@ def mount_import_wizard(app: FastAPI) -> None:
                 raise HTTPException(
                     status_code=500, detail=_error_detail("unmark_processed", e)
                 ) from e
+            return {"ok": True}
+
+    @app.get("/api/import_wizard/defaults")
+    def import_defaults_get(request: Request, mode: str = "stage") -> dict[str, Any]:
+        if not isinstance(mode, str) or not mode.strip():
+            mode = "stage"
+        mode = mode.strip().lower()
+        if mode not in {"stage", "inplace", "hybrid"}:
+            raise HTTPException(status_code=400, detail="invalid mode")
+
+        with web_operation(
+            request,
+            name="import_wizard.defaults_get",
+            ctx={"mode": mode},
+            component="web_interface.import_wizard",
+        ):
+            store = _defaults_store(request)
+            preset = _preset_defaults_for(mode)
+            saved = store.get(IMPORT_WIZARD_NAME, mode)
+            effective = _merge_dict(preset, saved) if isinstance(saved, dict) else preset
+            return {
+                "wizard": IMPORT_WIZARD_NAME,
+                "mode": mode,
+                "preset": preset,
+                "saved": saved,
+                "effective": effective,
+            }
+
+    @app.post("/api/import_wizard/defaults/save")
+    def import_defaults_save(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
+        mode = payload.get("mode", "stage")
+        defaults = payload.get("defaults")
+        if not isinstance(mode, str) or not mode.strip():
+            mode = "stage"
+        mode = mode.strip().lower()
+        if mode not in {"stage", "inplace", "hybrid"}:
+            raise HTTPException(status_code=400, detail="invalid mode")
+        if not isinstance(defaults, dict):
+            raise HTTPException(status_code=400, detail="defaults is required")
+
+        # Only accept the known top-level keys for now.
+        out: dict[str, Any] = {}
+        if isinstance(defaults.get("conflict_policy"), dict):
+            out["conflict_policy"] = defaults["conflict_policy"]
+        if isinstance(defaults.get("options"), dict):
+            out["options"] = defaults["options"]
+
+        with web_operation(
+            request,
+            name="import_wizard.defaults_save",
+            ctx={"mode": mode},
+            component="web_interface.import_wizard",
+        ):
+            _defaults_store(request).put(IMPORT_WIZARD_NAME, mode, out)
+            return {"ok": True}
+
+    @app.post("/api/import_wizard/defaults/reset")
+    def import_defaults_reset(
+        request: Request, payload: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
+        mode = "stage"
+        if isinstance(payload, dict) and isinstance(payload.get("mode"), str):
+            mode = str(payload.get("mode") or "stage")
+        mode = mode.strip().lower()
+        if mode not in {"stage", "inplace", "hybrid"}:
+            raise HTTPException(status_code=400, detail="invalid mode")
+
+        with web_operation(
+            request,
+            name="import_wizard.defaults_reset",
+            ctx={"mode": mode},
+            component="web_interface.import_wizard",
+        ):
+            _defaults_store(request).reset(IMPORT_WIZARD_NAME, mode)
             return {"ok": True}
 
     @app.post("/api/import_wizard/start")
