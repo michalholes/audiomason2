@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.71
+Specification Version: 1.0.72
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -1154,6 +1154,16 @@ Rules:
   - Select the source root/path.
   - Select an author (auto-next to books).
   - Select a book (auto-start).
+Auto-advance rule (Issue 511):
+
+- After a successful Start for a selected book, the UI MUST automatically advance to the next actionable book.
+- The next-selection rule MUST be deterministic:
+  - Next unprocessed book within the same author (in the stable books[] order).
+  - If none, the next author (in the stable authors[] order) that has an unprocessed book, selecting the first unprocessed book in that author.
+  - If no unprocessed books remain, the wizard MUST stop advancing.
+- Auto-advance MUST be enabled by default and MUST be toggleable in UI state.
+
+
 - The UI MUST show a minimal async indicator while API calls are running.
 
 

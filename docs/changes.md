@@ -1,3 +1,7 @@
+## 2026-02-14T21:20:00+00:00
+
+-   Issue 511: import_wizard UI: After successful Start, auto-advance to next actionable book (deterministic author/book order), default ON with UI toggle.
+-   spec: Document Import Wizard auto-advance rule and bump specification version to 1.0.72.
 
 ## 2026-02-14T21:10:57+00:00
 

@@ -435,40 +435,7 @@ window.onerror = function (msg, src, line, col, err) {
     const buttons = Array.isArray(content.buttons) ? content.buttons : [];
     buttons.forEach((b) => {
       const btn = el("button", { class: "btn", text: b.label || "Action" });
-      btn.addEventListener("click", async () => {
-        try {
-          const a = b.action || {};
-          if (a.type === "api") {
-            const method = (a.method || "POST").toUpperCase();
-            const body = a.body;
-            await API.sendJson(method, a.path, body);
-            notify("Action executed.");
-          } else if (a.type === "download" && a.href) {
-            const r = await fetch(String(a.href));
-            if (!r.ok) {
-              const t = await r.text();
-              throw new Error(r.status + " " + r.statusText + ": " + t);
-            }
-            const blob = await r.blob();
-            let filename = "audiomason_debug_bundle.zip";
-            const cd = r.headers.get("Content-Disposition") || "";
-            const m = cd.match(/filename=\"([^\"]+)\"/);
-            if (m && m[1]) filename = m[1];
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement("a");
-            link.href = url;
-            link.download = filename;
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
-            setTimeout(() => URL.revokeObjectURL(url), 1000);
-          } else {
-            notify("Unsupported action type.");
-          }
-        } catch (e) {
-          notify(String(e));
-        }
-      });
+            btn.addEventListener("click", () => { void startBookFlow(b); });
       wrap.appendChild(btn);
     });
     return wrap;
@@ -1091,6 +1058,31 @@ const conflictSel = el("select");
 
 const saveDefaultsBtn = el("button", { class: "btn", text: "Save defaults" });
 const resetDefaultsBtn = el("button", { class: "btn", text: "Reset" });
+const autoAdvanceCb = el("input", { type: "checkbox" });
+const autoAdvanceLbl = el("label", { class: "hint", text: "Auto-advance" });
+autoAdvanceLbl.style.display = "flex";
+autoAdvanceLbl.style.alignItems = "center";
+autoAdvanceLbl.style.gap = "6px";
+autoAdvanceLbl.prepend(autoAdvanceCb);
+
+function loadAutoAdvanceSetting() {
+  try {
+    const v = localStorage.getItem("am2_importwiz_auto_advance");
+    if (v === null) return true;
+    return String(v) === "1";
+  } catch {
+    return true;
+  }
+}
+
+function saveAutoAdvanceSetting(v) {
+  try { localStorage.setItem("am2_importwiz_auto_advance", v ? "1" : "0"); } catch {}
+}
+
+autoAdvanceCb.checked = loadAutoAdvanceSetting();
+autoAdvanceCb.addEventListener("change", () => {
+  saveAutoAdvanceSetting(!!autoAdvanceCb.checked);
+});
   const run1Btn = el("button", { class: "btn", text: "Run 1 pending" });
   const run5Btn = el("button", { class: "btn", text: "Run 5 pending" });
 
@@ -1100,6 +1092,7 @@ actionsRow.appendChild(el("span", { class: "hint", text: "Conflicts:" }));
 actionsRow.appendChild(conflictSel);
 actionsRow.appendChild(saveDefaultsBtn);
 actionsRow.appendChild(resetDefaultsBtn);
+actionsRow.appendChild(autoAdvanceLbl);
 actionsRow.appendChild(run1Btn);
 actionsRow.appendChild(run5Btn);
   right.appendChild(actionsRow);
@@ -1154,6 +1147,8 @@ actionsRow.appendChild(run5Btn);
   let lastEnrichKey = "";
   let enrichRefreshCounter = 0;
   let processedKeys = new Set();
+  let startedRelPaths = new Set();
+
 
   async function loadProcessedRegistry() {
     try {
@@ -1164,6 +1159,84 @@ actionsRow.appendChild(run5Btn);
       processedKeys = new Set();
     }
   }
+
+
+function _amBookRelPath(b) {
+  return String((b && b.rel_path) ? b.rel_path : "");
+}
+
+function _amBookAuthorLabel(b) {
+  const a = (b && typeof b.author === "string") ? b.author : "";
+  return a ? a : BOOK_ONLY_LABEL;
+}
+
+function _amIsBookProcessed(b) {
+  const rel = _amBookRelPath(b);
+  const k = _amNormalizeFpKey(_amFpKeyForBook(b));
+  if (k && processedKeys && processedKeys.has(k)) return true;
+  if (rel && startedRelPaths && startedRelPaths.has(rel)) return true;
+  return false;
+}
+
+function _amFindBookByRelPath(relPath) {
+  const books = indexData && Array.isArray(indexData.books) ? indexData.books : [];
+  const rp = String(relPath || "");
+  return books.find((b) => _amBookRelPath(b) === rp) || null;
+}
+
+function _amFirstUnprocessedBookForAuthor(authorLabel) {
+  const books = indexData && Array.isArray(indexData.books) ? indexData.books : [];
+  for (const b of books) {
+    if (_amBookAuthorLabel(b) !== String(authorLabel || "")) continue;
+    if (!_amIsBookProcessed(b)) return b;
+  }
+  return null;
+}
+
+function _amSelectAuthor(authorLabel) {
+  selectedAuthor = String(authorLabel || "");
+  renderBooks();
+  try { booksBox.scrollIntoView({ block: "nearest" }); } catch {}
+}
+
+function _amFindNextActionableBook(currentBookRelPath, currentAuthorLabel) {
+  const authors = indexData && Array.isArray(indexData.authors) ? indexData.authors : [];
+  const books = indexData && Array.isArray(indexData.books) ? indexData.books : [];
+
+  const curRel = String(currentBookRelPath || "");
+  const curAuthor = String(currentAuthorLabel || "");
+
+  // 1) Next unprocessed book within current author, scanning forward from current position.
+  const within = [];
+  for (const b of books) {
+    if (_amBookAuthorLabel(b) === curAuthor) within.push(b);
+  }
+  if (within.length) {
+    let idx = within.findIndex((b) => _amBookRelPath(b) === curRel);
+    if (idx < 0) idx = -1;
+    for (let i = idx + 1; i < within.length; i += 1) {
+      if (!_amIsBookProcessed(within[i])) return within[i];
+    }
+  }
+
+  // 2) Next author with an unprocessed book.
+  const curAIdx = authors.findIndex((a) => String(a) === curAuthor);
+  const startIdx = curAIdx >= 0 ? curAIdx + 1 : 0;
+
+  for (let pass = 0; pass < 2; pass += 1) {
+    const from = (pass === 0) ? startIdx : 0;
+    const to = (pass === 0) ? authors.length : startIdx;
+    for (let i = from; i < to; i += 1) {
+      const a = String(authors[i] || "");
+      if (!a) continue;
+      const b = _amFirstUnprocessedBookForAuthor(a);
+      if (b) return b;
+    }
+  }
+
+  // Nothing left.
+  return null;
+}
 
 
 let applyingDefaults = false;
@@ -1476,6 +1549,91 @@ const body2 = Object.assign({}, body, { conflict_policy: { mode: choice } });
     });
   }
 
+async function startBookFlow(b) {
+  const relPath = _amBookRelPath(b);
+  const key = _amNormalizeFpKey(_amFpKeyForBook(b));
+  const authorLabel = _amBookAuthorLabel(b);
+
+  if (_amIsBookProcessed(b)) return;
+
+  try {
+    setBusy(true);
+    statusBox.textContent = "Starting import...";
+    jobsTableWrap.textContent = "";
+    jobIds = [];
+
+    // Collect PHASE 1 options.
+    const audioEnabled = !!(loudCb.checked || brCb.checked);
+    const options = {};
+    if (audioEnabled) {
+      let kbps = 96;
+      try { kbps = parseInt(String(brInp.value || "96"), 10); } catch {}
+      if (!isFinite(kbps) || kbps <= 0) kbps = 96;
+      const ap = {
+        enabled: true,
+        loudnorm: !!loudCb.checked,
+        bitrate_kbps: kbps,
+        bitrate_mode: String(brModeSel.value || "cbr").toLowerCase(),
+      };
+      const ok = await showAudioProcessingConfirmModal(ap);
+      if (!ok) {
+        statusBox.textContent = "Canceled.";
+        return;
+      }
+      ap.confirmed = true;
+      options.audio_processing = ap;
+    }
+
+    const body = {
+      root: rootSel.value,
+      path: pathInp.value,
+      book_rel_path: relPath,
+      mode: modeSel.value,
+      options: options,
+    };
+    const cpMode = String(conflictSel.value || "ask").toLowerCase();
+    if (cpMode === "skip" || cpMode === "overwrite") {
+      body.conflict_policy = { mode: cpMode };
+    }
+
+    const r = await startImportWithConflictAsk(body);
+
+    // Optimistic processed marking for deterministic UI behavior.
+    if (key) {
+      try { processedKeys.add(key); } catch {}
+    } else if (relPath) {
+      try { startedRelPaths.add(relPath); } catch {}
+    }
+
+    jobIds = Array.isArray(r.job_ids) ? r.job_ids : [];
+    if (!jobIds.length) {
+      statusBox.textContent = "No jobs created.";
+    } else {
+      statusBox.textContent = `Jobs created: ${jobIds.join(", ")}`;
+      startPolling();
+    }
+
+    // Auto-advance to next actionable book (deterministic order).
+    if (autoAdvanceCb && autoAdvanceCb.checked) {
+      const nextBook = _amFindNextActionableBook(relPath, authorLabel);
+      if (nextBook) {
+        _amSelectAuthor(_amBookAuthorLabel(nextBook));
+        setTimeout(() => {
+          try { void startBookFlow(nextBook); } catch {}
+        }, 0);
+      }
+    } else {
+      // Refresh UI to reflect processed marking.
+      renderBooks();
+    }
+  } catch (e) {
+    notify(String(e));
+    statusBox.textContent = String(e);
+  } finally {
+    setBusy(false);
+  }
+}
+
   function renderBooks() {
     clear(booksBox);
     const books = indexData && Array.isArray(indexData.books) ? indexData.books : [];
@@ -1500,7 +1658,7 @@ const body2 = Object.assign({}, body, { conflict_policy: { mode: choice } });
       const title = (b && b.book) ? String(b.book) : (b && b.rel_path ? String(b.rel_path) : "(book)");
       const relPath = String((b && b.rel_path) ? b.rel_path : "");
       const key = _amNormalizeFpKey(_amFpKeyForBook(b));
-      const isProcessed = !!(key && processedKeys && processedKeys.has(key));
+      const isProcessed = _amIsBookProcessed(b);
 
       const row = el("div", { class: "row", style: "gap:8px;align-items:center" });
       const btn = el("button", { class: "btn", text: title });
@@ -1580,7 +1738,8 @@ if (cpMode === "skip" || cpMode === "overwrite") {
             if (!key) throw new Error("Missing fingerprint key.");
             await API.sendJson("POST", "/api/import_wizard/unmark_processed", { key: key });
             // Immediate UI refresh: optimistically clear local processed state.
-            try { processedKeys && processedKeys.delete(key); } catch {}
+                        try { processedKeys && processedKeys.delete(key); } catch {}
+            try { startedRelPaths && startedRelPaths.delete(relPath); } catch {}
             renderBooks();
             // Sync from registry (fail-safe).
             try { await loadProcessedRegistry(); } catch {}
@@ -1596,18 +1755,11 @@ if (cpMode === "skip" || cpMode === "overwrite") {
       booksBox.appendChild(row);
     });
 
-    // Auto-next: if there is only one unprocessed book, start it immediately.
-    const unprocessed = filtered.filter((b) => {
-      const k = _amFpKeyForBook(b);
-      return !(k && processedKeys && processedKeys.has(k));
-    });
-    if (unprocessed.length === 1) {
-      try {
-        const buttons = booksBox.querySelectorAll("button");
-        // first button in the row is the start button
-        if (buttons && buttons[0]) buttons[0].click();
-      } catch {}
-    }
+// Auto-next: if there is only one unprocessed book, start it immediately.
+const unprocessed = filtered.filter((b) => !_amIsBookProcessed(b));
+if (unprocessed.length === 1) {
+  try { void startBookFlow(unprocessed[0]); } catch {}
+}
   }
 
   function renderJobsTable(items) {
