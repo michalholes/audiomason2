@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.77
+Specification Version: 1.0.78
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -890,6 +890,7 @@ Deep enrichment requirements (PHASE 0):
         "count": 1
       }
     - For backward compatibility it MAY also include items/count, but keys is the authoritative field.
+    - Issue 520: keys is the authoritative field consumed by UI loaders.
 
 Issue 403 extension (PHASE 2 processing engine):
 

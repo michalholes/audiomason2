@@ -3,7 +3,8 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import importlib
-from typing import Any
+from collections.abc import Iterable
+from typing import Any, cast
 
 from fastapi import FastAPI, HTTPException, Request
 
@@ -530,20 +531,30 @@ def mount_import_wizard(app: FastAPI) -> None:
             # Stable schema: UI consumes "keys" (list[str]) of processed fingerprint keys.
             # Keep "items" for backwards compatibility.
             keys_set: set[str] = set()
-            if isinstance(raw_items, (list, tuple, set)):
-                for v in raw_items:
-                    if isinstance(v, str):
-                        s = v.strip()
+
+            # reg.list_processed() is expected to return a collection of key strings,
+            # but older/alternate implementations may return dict-shaped outputs.
+            iterable: Iterable[object]
+            if isinstance(raw_items, dict):
+                iterable = raw_items.keys()
+            elif raw_items is None:
+                iterable = ()
+            else:
+                iterable = cast(Iterable[object], raw_items)
+
+            for v in iterable:
+                if isinstance(v, str):
+                    s = v.strip()
+                    if s:
+                        keys_set.add(s)
+                elif isinstance(v, dict):
+                    # Defensive compatibility: accept objects like {"key": "..."}.
+                    cand = v.get("key") or v.get("identity_key") or v.get("fingerprint_key")
+                    if isinstance(cand, str):
+                        s = cand.strip()
                         if s:
                             keys_set.add(s)
-                    elif isinstance(v, dict):
-                        # Defensive compatibility: accept objects like {"key": "..."}.
-                        # Supports older code paths that returned dicts instead of strings.
-                        cand = v.get("key") or v.get("identity_key") or v.get("fingerprint_key")
-                        if isinstance(cand, str):
-                            s = cand.strip()
-                            if s:
-                                keys_set.add(s)
+
             keys = sorted(keys_set)
             return {"keys": keys, "items": keys, "count": len(keys)}
 

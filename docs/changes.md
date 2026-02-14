@@ -1,3 +1,8 @@
+## 2026-02-15T00:10:00+01:00
+
+-   Issue 520: import_wizard API: Ensure processed_registry always returns keys: list[str] for UI compatibility, including when registry outputs are dict-shaped (defensive compatibility).
+-   spec: Clarify processed_registry keys as authoritative field for UI loaders and bump specification version to 1.0.78.
+
 ## 2026-02-14T23:31:10+01:00
 
 -   Issue 516: import_wizard API: Ensure preflight books include fingerprint and rename_preview when available (schema parity with index).
