@@ -512,14 +512,31 @@ def mount_import_wizard(app: FastAPI) -> None:
         ):
             reg = _registry(request)
             try:
-                items = reg.list_processed()
+                raw_items = reg.list_processed()
             except Exception as e:
                 raise HTTPException(
                     status_code=500, detail=_error_detail("processed_registry", e)
                 ) from e
-            # Backwards/forwards compatible schema: UI expects "keys".
-            # Keep "items" for any existing callers.
-            return {"keys": items, "items": items, "count": len(items)}
+
+            # Stable schema: UI consumes "keys" (list[str]) of processed fingerprint keys.
+            # Keep "items" for backwards compatibility.
+            keys_set: set[str] = set()
+            if isinstance(raw_items, (list, tuple, set)):
+                for v in raw_items:
+                    if isinstance(v, str):
+                        s = v.strip()
+                        if s:
+                            keys_set.add(s)
+                    elif isinstance(v, dict):
+                        # Defensive compatibility: accept objects like {"key": "..."}.
+                        # Supports older code paths that returned dicts instead of strings.
+                        cand = v.get("key") or v.get("identity_key") or v.get("fingerprint_key")
+                        if isinstance(cand, str):
+                            s = cand.strip()
+                            if s:
+                                keys_set.add(s)
+            keys = sorted(keys_set)
+            return {"keys": keys, "items": keys, "count": len(keys)}
 
     @app.post("/api/import_wizard/unmark_processed")
     def import_unmark_processed(request: Request, payload: dict[str, Any]) -> dict[str, Any]:

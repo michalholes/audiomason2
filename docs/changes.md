@@ -1,3 +1,8 @@
+## 2026-02-14T23:40:00+01:00
+
+-   Issue 512: import_wizard API: Make processed_registry response schema stable and UI-compatible by always returning keys: list[str] of processed fingerprint keys (items/count remain for compatibility).
+-   spec: Document processed_registry response example and bump specification version to 1.0.73.
+
 ## 2026-02-14T21:20:00+00:00
 
 -   Issue 511: import_wizard UI: After successful Start, auto-advance to next actionable book (deterministic author/book order), default ON with UI toggle.
