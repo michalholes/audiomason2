@@ -994,7 +994,9 @@ class CLIPlugin:
         preflight_mod = importlib.import_module("plugins.import.preflight.service")
         preflight_service_cls = preflight_mod.PreflightService
         engine_mod = importlib.import_module("plugins.import.services.engine_service")
-        import_engine_service_cls = engine_mod.import_engine_service_cls
+        import_engine_service_cls = getattr(engine_mod, "import_engine_service_cls", None)
+        if import_engine_service_cls is None:
+            import_engine_service_cls = engine_mod.ImportEngineService
         types_mod = importlib.import_module("plugins.import.engine.types")
         book_decision_t = types_mod.book_decision_t
         import_job_request_t = types_mod.import_job_request_t
