@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AM Patch Web</title>
+  <link rel="stylesheet" href="/static/app.css" />
+</head>
+<body>
+  <header class="bar">
+    <div class="title">AM Patch Web</div>
+    <div class="actions">
+      <a class="link" href="/debug">Debug</a>
+    </div>
+  </header>
+
+  <main class="grid">
+    <section class="card">
+      <h2>Upload patch</h2>
+      <div id="uploadZone" class="dropzone">Drop file here (.zip/.patch/.diff) or click to select</div>
+      <input id="uploadInput" type="file" style="display:none" />
+      <pre id="uploadResult" class="pre"></pre>
+    </section>
+
+    <section class="card">
+      <h2>File manager</h2>
+      <div class="row">
+        <input id="fsPath" class="input" value="" />
+        <button id="fsRefresh" class="btn">Refresh</button>
+      </div>
+      <div id="fsList" class="scroll"></div>
+    </section>
+
+    <section class="card">
+      <h2>Run</h2>
+      <div class="row">
+        <label class="lbl">Mode</label>
+        <select id="mode" class="input">
+          <option value="patch">patch</option>
+          <option value="repair">repair</option>
+          <option value="finalize_live">finalize_live (-f)</option>
+          <option value="finalize_workspace">finalize_workspace (-w)</option>
+          <option value="rerun_latest">rerun_latest (-l)</option>
+        </select>
+      </div>
+
+      <textarea id="rawCommand" class="textarea" rows="4" placeholder="Paste canonical runner command here (optional)"></textarea>
+
+      <div class="row">
+        <input id="issueId" class="input" placeholder="issue id (optional for patch)" />
+        <input id="commitMsg" class="input" placeholder="commit message" />
+      </div>
+      <div class="row">
+        <input id="patchPath" class="input" placeholder="patch path (e.g. patches/issue_1000.zip)" />
+        <button id="parseBtn" class="btn">Parse</button>
+      </div>
+
+      <div class="row">
+        <button id="enqueueBtn" class="btn" disabled>Enqueue</button>
+        <span id="enqueueHint" class="muted"></span>
+      </div>
+
+      <h3>Preview</h3>
+      <pre id="preview" class="pre"></pre>
+    </section>
+
+    <section class="card">
+      <h2>Runs</h2>
+      <div class="row">
+        <input id="runsIssue" class="input" placeholder="issue filter" />
+        <select id="runsResult" class="input">
+          <option value="">(any)</option>
+          <option value="success">success</option>
+          <option value="fail">fail</option>
+          <option value="unknown">unknown</option>
+        </select>
+        <button id="runsRefresh" class="btn">Refresh</button>
+      </div>
+      <div id="runsList" class="scroll"></div>
+    </section>
+
+    <section class="card">
+      <h2>Stats</h2>
+      <pre id="stats" class="pre"></pre>
+    </section>
+
+    <section class="card">
+      <h2>Runner tail</h2>
+      <div class="row">
+        <button id="tailRefresh" class="btn">Refresh</button>
+        <button id="tailMore" class="btn">More</button>
+      </div>
+      <pre id="tail" class="pre pre-tall"></pre>
+    </section>
+
+    <section class="card">
+      <h2>Jobs</h2>
+      <div class="row">
+        <button id="jobsRefresh" class="btn">Refresh</button>
+      </div>
+      <div id="jobsList" class="scroll"></div>
+    </section>
+
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>

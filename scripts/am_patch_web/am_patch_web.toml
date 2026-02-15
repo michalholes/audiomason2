@@ -1,0 +1,29 @@
+[server]
+host = "0.0.0.0"
+port = 8099
+
+[runner]
+command = ["python3", "scripts/am_patch.py"]
+default_verbosity = "normal"
+queue_enabled = true
+runner_config_toml = "scripts/am_patch/am_patch.toml"
+
+[paths]
+patches_root = "patches"
+upload_dir = "patches/incoming"
+allow_crud = true
+crud_allowlist = ["", "incoming", "artifacts", "logs", "successful", "unsuccessful"]
+
+[upload]
+max_bytes = 200000000
+allowed_extensions = [".zip", ".patch", ".diff"]
+ascii_only_names = true
+
+[issue]
+default_regex = "issue_(\\d+)"
+allocation_start = 1
+allocation_max = 99999
+
+[indexing]
+log_filename_regex = "am_patch_issue_(\\d+)_"
+stats_windows_days = [7, 30]

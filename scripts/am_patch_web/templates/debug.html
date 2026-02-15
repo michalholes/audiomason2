@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AM Patch Web - Debug</title>
+  <link rel="stylesheet" href="/static/app.css" />
+</head>
+<body>
+  <header class="bar">
+    <div class="title">AM Patch Web - Debug</div>
+    <div class="actions">
+      <a class="link" href="/">Home</a>
+    </div>
+  </header>
+
+  <main class="grid">
+    <section class="card">
+      <h2>Client errors</h2>
+      <pre id="clientErrors" class="pre pre-tall"></pre>
+    </section>
+
+    <section class="card">
+      <h2>Client network</h2>
+      <pre id="clientNet" class="pre pre-tall"></pre>
+    </section>
+
+    <section class="card">
+      <h2>Server diagnostics</h2>
+      <div class="row">
+        <button id="diagRefresh" class="btn">Refresh</button>
+      </div>
+      <pre id="serverDiag" class="pre pre-tall"></pre>
+    </section>
+
+    <section class="card">
+      <h2>Parser inspector</h2>
+      <textarea id="raw" class="textarea" rows="4" placeholder="Paste runner command"></textarea>
+      <div class="row">
+        <button id="parse" class="btn">Parse</button>
+      </div>
+      <pre id="parsed" class="pre pre-tall"></pre>
+    </section>
+
+    <section class="card">
+      <h2>Runner tail</h2>
+      <div class="row">
+        <button id="tailRefresh" class="btn">Refresh</button>
+      </div>
+      <pre id="tail" class="pre pre-tall"></pre>
+    </section>
+  </main>
+
+  <script src="/static/debug.js"></script>
+</body>
+</html>
