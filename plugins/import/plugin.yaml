@@ -1,0 +1,23 @@
+name: import
+version: 1.0.0
+description: Import plugin CLI command and job orchestration.
+author: "Michal Holes <michal@holes.sk>"
+license: MIT
+
+entrypoint: plugin:ImportPlugin
+
+interfaces:
+  - ICLICommands
+
+hooks: []
+
+dependencies:
+  python: ">=3.11"
+  system: []
+
+config_schema: {}
+
+test_level: basic
+
+cli_commands:
+  - import
