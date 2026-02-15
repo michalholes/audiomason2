@@ -68,7 +68,6 @@ Final summary (at the end of each run):
   - `REASON: <one path>`
   - `LOG: <path>`
 
-
 - **Workspace mode (default)**: runner creates/uses an issue workspace, runs patch + gates there, then promotes results to the live repo.
 - **Finalize mode (-f)**: runner works directly on the live repo (no workspace). Use only when you intentionally want a direct/live operation.
 - **Finalize-workspace mode (--finalize-workspace)**: runner finalizes an existing issue workspace (gates in workspace, promote to live, gates in live, commit+push). Commit message is read from workspace `meta.json`.
