@@ -1058,7 +1058,7 @@ CLI and Web UI:
 
 PHASE 0 — Preflight (Read-Only)
 - Deterministic
-- No mutations
+- No source mutations (detection only); best-effort JOBS cache writes are allowed for performance (user-approved)
 - Provides suggestions and diagnostics
 - Fast index + background enrichment allowed
 
@@ -1122,7 +1122,7 @@ Hybrid:
 
 External lookup:
 - Enabled by default
-- Non-blocking
+- Non-blocking (preflight must not wait for network)
 - Configurable
 
 6. Filename Normalization

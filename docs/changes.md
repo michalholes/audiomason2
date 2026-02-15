@@ -1,3 +1,8 @@
+## 2026-02-15T20:13:00+01:00
+
+-   import: Make external lookup non-blocking in preflight (background lookup; no asyncio.run).
+-   spec: Clarify PHASE 0 rule: no source mutations, but best-effort JOBS cache writes are allowed (user-approved).
+
 
 ---------------------------------------------------------------------
 2026-02-15 — Import Wizard Specification Refactor

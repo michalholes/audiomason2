@@ -11,7 +11,9 @@ from __future__ import annotations
 import contextlib
 import hashlib
 import json
+import queue
 import re
+import threading
 import time
 import traceback
 from typing import Any
@@ -98,6 +100,12 @@ class PreflightService:
         self._fs = fs
         self._id3_majority = id3_majority or Id3MajorityConfig()
         self._enable_lookup = bool(enable_lookup)
+
+        # Non-blocking external lookup: background worker (fail-safe).
+        self._lookup_q: queue.Queue[tuple[str, str, str]] = queue.Queue()
+        self._lookup_inflight: set[str] = set()
+        self._lookup_lock = threading.Lock()
+        self._lookup_thread: threading.Thread | None = None
 
     def run(self, root: RootName, source_root_rel_path: str) -> PreflightResult:
         t0 = time.monotonic()
@@ -1266,12 +1274,66 @@ class PreflightService:
             return None
         return res
 
-    def _lookup_best_effort(self, id3_majority: dict[str, Any] | None) -> dict[str, Any] | None:
-        # Best-effort integration point. Fail-safe by contract.
-        if not id3_majority:
+    def _ensure_lookup_worker(self) -> None:
+        with self._lookup_lock:
+            if self._lookup_thread and self._lookup_thread.is_alive():
+                return
+            t = threading.Thread(target=self._run_lookup_worker, name="import.lookup", daemon=True)
+            self._lookup_thread = t
+            t.start()
+
+    def _lookup_cache_key(self, *, author: str, title: str) -> str:
+        a = (author or "").strip().casefold()
+        t = (title or "").strip().casefold()
+        return f"a:{a}\nt:{t}"
+
+    def _lookup_from_cache(self, key: str) -> dict[str, Any] | None:
+        try:
+            cache = self._load_cache()
+            lr = cache.get("lookup_results")
+            if isinstance(lr, dict):
+                v = lr.get(key)
+                if isinstance(v, dict) and v:
+                    return v
+        except Exception:
             return None
-        author = _opt_str(id3_majority.get("author"))
-        title = _opt_str(id3_majority.get("album")) or _opt_str(id3_majority.get("title"))
+        return None
+
+    def _schedule_lookup(self, *, key: str, author: str, title: str) -> None:
+        # Fail-safe: scheduling failure must not affect behavior.
+        try:
+            self._ensure_lookup_worker()
+            with self._lookup_lock:
+                if key in self._lookup_inflight:
+                    return
+                self._lookup_inflight.add(key)
+            self._lookup_q.put((key, author or "", title or ""))
+        except Exception:
+            return
+
+    def _run_lookup_worker(self) -> None:
+        while True:
+            key, author, title = self._lookup_q.get()
+            try:
+                md = self._fetch_lookup_sync(author=author, title=title)
+                if isinstance(md, dict) and md:
+                    # Persist to JOBS cache (best-effort).
+                    try:
+                        cache = self._load_cache()
+                        lr = cache.get("lookup_results")
+                        if not isinstance(lr, dict):
+                            lr = {}
+                        lr[str(key)] = md
+                        cache["lookup_results"] = lr
+                        self._save_cache(cache)
+                    except Exception:
+                        pass
+            finally:
+                with self._lookup_lock:
+                    self._lookup_inflight.discard(key)
+
+    def _fetch_lookup_sync(self, *, author: str, title: str) -> dict[str, Any] | None:
+        # Executes external plugin lookups in a background thread.
         if not author and not title:
             return None
         try:
@@ -1281,33 +1343,45 @@ class PreflightService:
             from plugins.metadata_openlibrary.plugin import OpenLibraryPlugin
 
             query = {"author": author or "", "title": title or ""}
-            md: dict[str, Any] | None = None
 
-            for plugin_cls in (GoogleBooksPlugin, OpenLibraryPlugin):
-                try:
-                    plugin = plugin_cls(config={"verbosity": 0})
-                    md = asyncio.run(plugin.fetch(query))
-                    break
-                except Exception:
-                    md = None
-
-            if not md:
+            async def _try_plugins() -> dict[str, Any] | None:
+                for plugin_cls in (GoogleBooksPlugin, OpenLibraryPlugin):
+                    try:
+                        plugin = plugin_cls(config={"verbosity": 0})
+                        md = await plugin.fetch(query)
+                        if md:
+                            return md
+                    except Exception:
+                        continue
                 return None
 
-            # Stable dict shape.
-            d = {
-                "title": md.get("title"),
-                "author": md.get("author"),
-                "year": md.get("year"),
-                "publisher": md.get("publisher"),
-                "isbn": md.get("isbn"),
-                "description": md.get("description"),
-                "cover_url": md.get("cover_url"),
-                "source": md.get("source"),
-            }
-            return {k: v for k, v in d.items() if v is not None}
+            loop = asyncio.new_event_loop()
+            try:
+                return loop.run_until_complete(_try_plugins())
+            finally:
+                with contextlib.suppress(Exception):
+                    loop.close()
         except Exception:
             return None
+
+    def _lookup_best_effort(self, id3_majority: dict[str, Any] | None) -> dict[str, Any] | None:
+        # Best-effort integration point. Fail-safe by contract.
+        # Non-blocking by specification: returns cached results if present;
+        # otherwise schedules a background lookup.
+        if not id3_majority:
+            return None
+        author = _opt_str(id3_majority.get("author"))
+        title = _opt_str(id3_majority.get("album")) or _opt_str(id3_majority.get("title"))
+        if not author and not title:
+            return None
+
+        key = self._lookup_cache_key(author=author or "", title=title or "")
+        cached = self._lookup_from_cache(key)
+        if cached:
+            return cached
+
+        self._schedule_lookup(key=key, author=author or "", title=title or "")
+        return None
 
     def _find_cover_candidates(self, root: RootName, book_rel: str) -> list[str]:
         entries = self._fs.list_dir(root, book_rel, recursive=True)
