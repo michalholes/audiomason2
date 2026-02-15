@@ -13,13 +13,19 @@ hooks: []
 
 dependencies:
   python: ">=3.11"
-  system:
-    - curl
 
 config_schema:
   api_key:
     type: string
     default: null
     description: "Google Books API key (optional, increases rate limit)"
+  timeout_seconds:
+    type: number
+    default: 10.0
+    description: "HTTP request timeout (seconds)"
+  max_response_bytes:
+    type: integer
+    default: 2097152
+    description: "Max HTTP response size (bytes)"
 
 test_level: basic

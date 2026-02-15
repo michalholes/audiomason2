@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import asyncio
 import json
+from functools import partial
 from typing import Any
+from urllib.error import HTTPError, URLError
 from urllib.parse import quote_plus
+from urllib.request import Request, urlopen
 
 from audiomason.core.errors import MetadataError
 
@@ -15,6 +18,9 @@ class GoogleBooksPlugin:
 
     API_URL = "https://www.googleapis.com/books/v1/volumes"
 
+    DEFAULT_TIMEOUT_SECONDS = 10.0
+    DEFAULT_MAX_RESPONSE_BYTES = 2 * 1024 * 1024
+
     def __init__(self, config: dict | None = None) -> None:
         """Initialize plugin.
 
@@ -23,6 +29,19 @@ class GoogleBooksPlugin:
         """
         self.config = config or {}
         self.api_key = self.config.get("api_key")
+
+        timeout = self.config.get("timeout_seconds", self.DEFAULT_TIMEOUT_SECONDS)
+        max_bytes = self.config.get("max_response_bytes", self.DEFAULT_MAX_RESPONSE_BYTES)
+
+        try:
+            self.timeout_seconds = float(timeout)
+        except (TypeError, ValueError):
+            self.timeout_seconds = self.DEFAULT_TIMEOUT_SECONDS
+
+        try:
+            self.max_response_bytes = int(max_bytes)
+        except (TypeError, ValueError):
+            self.max_response_bytes = self.DEFAULT_MAX_RESPONSE_BYTES
 
     async def fetch(self, query: dict[str, Any]) -> dict[str, Any]:
         """Fetch metadata from Google Books.
@@ -55,7 +74,7 @@ class GoogleBooksPlugin:
         if isbn:
             search_query = f"isbn:{isbn}"
         else:
-            parts = []
+            parts: list[str] = []
             if author:
                 parts.append(f"inauthor:{author}")
             if title:
@@ -108,28 +127,40 @@ class GoogleBooksPlugin:
         if self.api_key:
             url += f"&key={self.api_key}"
 
-        # Use curl (no network access, but structure is ready)
-        cmd = ["curl", "-s", url]
+        return await asyncio.to_thread(
+            partial(
+                self._http_get_json,
+                url=url,
+                timeout_seconds=self.timeout_seconds,
+                max_response_bytes=self.max_response_bytes,
+            )
+        )
+
+    @staticmethod
+    def _http_get_json(
+        *, url: str, timeout_seconds: float, max_response_bytes: int
+    ) -> dict[str, Any]:
+        req = Request(url, headers={"User-Agent": "AudioMason2/metadata_googlebooks"})
 
         try:
-            proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
-            )
-
-            stdout, stderr = await proc.communicate()
-
-            if proc.returncode != 0:
-                raise MetadataError("API request failed")
-
-            data = json.loads(stdout.decode())
-            return data
-
-        except json.JSONDecodeError as e:
-            raise MetadataError(f"Invalid API response: {e}") from e
+            with urlopen(req, timeout=timeout_seconds) as resp:
+                data = resp.read(max_response_bytes + 1)
+        except HTTPError as e:
+            raise MetadataError(f"API request failed: HTTP {e.code}") from e
+        except URLError as e:
+            raise MetadataError(f"API request failed: {e.reason}") from e
+        except TimeoutError as e:
+            raise MetadataError("API request failed: timeout") from e
         except Exception as e:
             raise MetadataError(f"API request failed: {e}") from e
+
+        if len(data) > max_response_bytes:
+            raise MetadataError("API request failed: response too large")
+
+        try:
+            return json.loads(data.decode("utf-8"))
+        except json.JSONDecodeError as e:
+            raise MetadataError(f"Invalid API response: {e}") from e
 
     def _extract_year(self, date_str: str | None) -> int | None:
         """Extract year from date string.
