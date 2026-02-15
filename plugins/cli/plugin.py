@@ -994,14 +994,15 @@ class CLIPlugin:
         preflight_mod = importlib.import_module("plugins.import.preflight.service")
         preflight_service_cls = preflight_mod.PreflightService
         engine_mod = importlib.import_module("plugins.import.services.engine_service")
-        import_engine_service_cls = getattr(engine_mod, "import_engine_service_cls", None)
-        if import_engine_service_cls is None:
-            import_engine_service_cls = engine_mod.ImportEngineService
+        # Prefer the concrete class names exported by the module.
+        import_engine_service_cls = engine_mod.ImportEngineService
+
         types_mod = importlib.import_module("plugins.import.engine.types")
-        book_decision_t = types_mod.book_decision_t
-        import_job_request_t = types_mod.import_job_request_t
+        book_decision_t = types_mod.BookDecision
+        import_job_request_t = types_mod.ImportJobRequest
+
         session_types_mod = importlib.import_module("plugins.import.session_store.types")
-        import_run_state_t = session_types_mod.import_run_state_t
+        import_run_state_t = session_types_mod.ImportRunState
 
         # Minimal flag parsing (deterministic, no argparse dependency here).
         root = RootName.INBOX

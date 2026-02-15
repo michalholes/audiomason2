@@ -2,6 +2,7 @@
 
 -   Issue 700: CLI import wizard: Fast Index first (immediate authors/books), then mandatory plan/preview after book selection (author/title confirmation + rename preview) before Start.
 -   Issue 700: Fix CLI import dynamic service import to accept `ImportEngineService` (compat) when module does not expose `import_engine_service_cls`.
+-   Issue 700: Fix CLI import dynamic type lookup to use exported classes (`BookDecision`, `ImportJobRequest`, `ImportRunState`).
 -   spec: Document fast-index-first + plan/preview CLI flow and bump specification version to 1.0.82.
 
 ## 2026-02-15T07:50:00+01:00
