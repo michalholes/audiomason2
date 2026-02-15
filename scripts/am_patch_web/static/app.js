@@ -38,6 +38,27 @@
 
   function el(id) { return document.getElementById(id); }
 
+  var fsSelected = "";
+
+  function joinRel(base, name) {
+    base = (base || "").replace(/^\/+/, "").replace(/\/+$/, "");
+    name = (name || "").replace(/^\/+/, "");
+    if (!base) return name;
+    if (!name) return base;
+    return base + "/" + name;
+  }
+
+  function parentRel(p) {
+    p = (p || "").replace(/^\/+/, "").replace(/\/+$/, "");
+    if (!p) return "";
+    var idx = p.lastIndexOf("/");
+    return idx >= 0 ? p.slice(0, idx) : "";
+  }
+
+  function setFsHint(msg) {
+    el("fsHint").textContent = msg || "";
+  }
+
   function setPre(id, obj) {
     el(id).textContent = typeof obj === "string" ? obj : JSON.stringify(obj, null, 2);
   }
@@ -53,9 +74,38 @@
       var html = items.map(function (it) {
         var name = it.name;
         var isDir = it.is_dir;
-        return "<div class=\"item\"><span>" + (isDir ? "[d] " : "[f] ") + name + "</span><span class=\"muted\">" + it.size + "</span></div>";
+        var rel = joinRel(path, name);
+        var sel = (fsSelected === rel) ? "*" : "";
+        var act = "";
+        if (!isDir) {
+          act += "<a class=\"linklike\" href=\"/api/fs/download?path=" + encodeURIComponent(rel) + "\" title=\"Download\">dl</a>";
+        }
+        return (
+          "<div class=\"item\" data-rel=\"" + rel + "\" data-isdir=\"" + (isDir ? "1" : "0") + "\">" +
+          "<span class=\"name\">" + (isDir ? "[d] " : "[f] ") + name + " " + sel + "</span>" +
+          "<span class=\"actions\"><span class=\"muted\">" + it.size + "</span>" + act + "</span>" +
+          "</div>"
+        );
       }).join("");
       el("fsList").innerHTML = html || "<div class=\"muted\">(empty)</div>";
+
+      Array.from(el("fsList").querySelectorAll(".item .name")).forEach(function (node) {
+        node.addEventListener("click", function () {
+          var item = node.parentElement;
+          var rel = item.getAttribute("data-rel") || "";
+          var isDir = (item.getAttribute("data-isdir") || "0") === "1";
+          if (isDir) {
+            el("fsPath").value = rel;
+            fsSelected = "";
+            setFsHint("");
+            refreshFs();
+            return;
+          }
+          fsSelected = rel;
+          setFsHint("selected: " + rel);
+          refreshFs();
+        });
+      });
     });
   }
 
@@ -70,7 +120,9 @@
       if (!r.ok) { setPre("runsList", r); return; }
       var runs = r.runs || [];
       var html = runs.map(function (x) {
-        return "<div class=\"item\"><span>#" + x.issue_id + " " + x.result + "</span><span class=\"muted\">" + x.mtime_utc + "</span></div>";
+        var log = x.log_rel_path || "";
+        var link = log ? "<a class=\"linklike\" href=\"/api/fs/download?path=" + encodeURIComponent(log) + "\">log</a>" : "";
+        return "<div class=\"item\"><span>#" + x.issue_id + " " + x.result + " " + link + "</span><span class=\"muted\">" + x.mtime_utc + "</span></div>";
       }).join("");
       el("runsList").innerHTML = html || "<div class=\"muted\">(none)</div>";
     });
@@ -85,7 +137,27 @@
 
   function refreshStats() {
     apiGet("/api/debug/diagnostics").then(function (r) {
-      setPre("stats", r);
+      if (!r || r.ok === false) {
+        el("stats").textContent = JSON.stringify(r, null, 2);
+        return;
+      }
+      var s = (r.stats || {});
+      var all = s.all_time || {};
+      var lines = [];
+      lines.push({ k: "all_time.total", v: String(all.total || 0) });
+      lines.push({ k: "all_time.success", v: String(all.success || 0) });
+      lines.push({ k: "all_time.fail", v: String(all.fail || 0) });
+      lines.push({ k: "all_time.unknown", v: String(all.unknown || 0) });
+      (s.windows || []).forEach(function (w) {
+        var d = w.days;
+        lines.push({ k: "" + d + "d.total", v: String(w.total || 0) });
+        lines.push({ k: "" + d + "d.success", v: String(w.success || 0) });
+        lines.push({ k: "" + d + "d.fail", v: String(w.fail || 0) });
+        lines.push({ k: "" + d + "d.unknown", v: String(w.unknown || 0) });
+      });
+      el("stats").innerHTML = lines.map(function (x) {
+        return "<div class=\"rowline\"><span class=\"k\">" + x.k + "</span><span class=\"v\">" + x.v + "</span></div>";
+      }).join("");
     });
   }
 
@@ -177,6 +249,11 @@
           setPre("uploadResult", j);
           if (j && j.stored_rel_path) {
             el("patchPath").value = j.stored_rel_path;
+            var up = (j.stored_rel_path || "");
+            var parent = parentRel(up.replace(/^patches\//, ""));
+            if (el("fsPath").value === "") {
+              el("fsPath").value = parent;
+            }
           }
           refreshFs();
         })
@@ -200,6 +277,50 @@
     setupUpload();
 
     el("fsRefresh").addEventListener("click", refreshFs);
+    el("fsUp").addEventListener("click", function () {
+      var p = el("fsPath").value || "";
+      el("fsPath").value = parentRel(p);
+      fsSelected = "";
+      setFsHint("");
+      refreshFs();
+    });
+    el("fsMkdir").addEventListener("click", function () {
+      var base = el("fsPath").value || "";
+      var name = window.prompt("mkdir name (ASCII)", "new_dir");
+      if (!name) return;
+      apiPost("/api/fs/mkdir", { path: joinRel(base, name) }).then(function (r) {
+        setFsHint(r.ok ? "mkdir ok" : (r.error || "mkdir failed"));
+        refreshFs();
+      });
+    });
+    el("fsRename").addEventListener("click", function () {
+      if (!fsSelected) { setFsHint("select a file or dir"); return; }
+      var dst = window.prompt("rename to (relative to patches root)", fsSelected);
+      if (!dst) return;
+      apiPost("/api/fs/rename", { src: fsSelected, dst: dst }).then(function (r) {
+        setFsHint(r.ok ? "rename ok" : (r.error || "rename failed"));
+        if (r.ok) fsSelected = dst;
+        refreshFs();
+      });
+    });
+    el("fsDelete").addEventListener("click", function () {
+      if (!fsSelected) { setFsHint("select a file or dir"); return; }
+      if (!window.confirm("delete " + fsSelected + " ?")) return;
+      apiPost("/api/fs/delete", { path: fsSelected }).then(function (r) {
+        setFsHint(r.ok ? "delete ok" : (r.error || "delete failed"));
+        fsSelected = "";
+        refreshFs();
+      });
+    });
+    el("fsUnzip").addEventListener("click", function () {
+      if (!fsSelected) { setFsHint("select a zip file"); return; }
+      var dest = window.prompt("unzip dest dir (relative)", parentRel(fsSelected) || "");
+      if (dest === null) return;
+      apiPost("/api/fs/unzip", { zip_path: fsSelected, dest_dir: dest }).then(function (r) {
+        setFsHint(r.ok ? "unzip ok" : (r.error || "unzip failed"));
+        refreshFs();
+      });
+    });
     el("runsRefresh").addEventListener("click", refreshRuns);
     el("tailRefresh").addEventListener("click", function () { refreshTail(200); });
     el("tailMore").addEventListener("click", function () { refreshTail(1200); });

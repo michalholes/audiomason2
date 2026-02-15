@@ -25,8 +25,16 @@
     <section class="card">
       <h2>File manager</h2>
       <div class="row">
-        <input id="fsPath" class="input" value="" />
-        <button id="fsRefresh" class="btn">Refresh</button>
+        <button id="fsUp" class="btn btn-small" title="Up">Up</button>
+        <input id="fsPath" class="input" value="" placeholder="path under patches/ (e.g. incoming, logs)" />
+        <button id="fsRefresh" class="btn btn-small">Refresh</button>
+      </div>
+      <div class="row">
+        <button id="fsMkdir" class="btn btn-small">Mkdir</button>
+        <button id="fsRename" class="btn btn-small">Rename</button>
+        <button id="fsDelete" class="btn btn-small">Delete</button>
+        <button id="fsUnzip" class="btn btn-small">Unzip</button>
+        <span id="fsHint" class="muted"></span>
       </div>
       <div id="fsList" class="scroll"></div>
     </section>
@@ -74,14 +82,14 @@
           <option value="fail">fail</option>
           <option value="unknown">unknown</option>
         </select>
-        <button id="runsRefresh" class="btn">Refresh</button>
+        <button id="runsRefresh" class="btn btn-small">Refresh</button>
       </div>
       <div id="runsList" class="scroll"></div>
     </section>
 
     <section class="card">
       <h2>Stats</h2>
-      <pre id="stats" class="pre"></pre>
+      <div id="stats" class="stats"></div>
     </section>
 
     <section class="card">
