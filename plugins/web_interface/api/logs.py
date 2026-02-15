@@ -2,19 +2,22 @@ from __future__ import annotations
 
 import json
 from collections.abc import Iterator
-from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 
-from audiomason.core.config import ConfigError, ConfigResolver
+from audiomason.core.config import ConfigResolver
 from audiomason.core.diagnostics import is_diagnostics_enabled
+from plugins.file_io.service.service import FileService
+from plugins.file_io.service.types import RootName
 
 from ..util.diag_stream import snapshot, stream
 from ..util.log_stream import install_log_tap
 from ..util.log_stream import stream as logbus_iter
 from ..util.log_stream import tail_text as logbus_tail_text
+
+DIAGNOSTICS_REL_PATH = "diagnostics/diagnostics.jsonl"
 
 
 def _get_resolver(request: Request) -> ConfigResolver:
@@ -24,19 +27,61 @@ def _get_resolver(request: Request) -> ConfigResolver:
     return ConfigResolver()
 
 
-def _diagnostics_jsonl_path(resolver: ConfigResolver) -> Path | None:
+def _get_file_service(resolver: ConfigResolver) -> FileService | None:
     try:
-        stage_dir, _src = resolver.resolve("stage_dir")
-    except ConfigError:
+        return FileService.from_resolver(resolver)
+    except Exception:
         return None
-    return Path(str(stage_dir)) / "diagnostics" / "diagnostics.jsonl"
 
 
-def _tail_jsonl(path: Path, lines: int) -> str:
-    if not path.exists():
+def _tail_jsonl(fs: FileService, lines: int) -> str:
+    # Tail a JSONL file without reading it fully into memory.
+    # All filesystem access is routed via the file_io capability.
+    n = max(0, int(lines))
+    if n <= 0:
         return ""
-    data = path.read_text(errors="replace")
-    parts = data.splitlines()[-lines:]
+
+    try:
+        with fs.open_read(root=RootName.STAGE, rel_path=DIAGNOSTICS_REL_PATH) as f:
+            try:
+                f.seek(0, 2)
+                end = int(f.tell())
+            except Exception:
+                # Non-seekable stream: fall back to reading linearly.
+                end = -1
+
+            if end >= 0:
+                # Read backwards in chunks until we have enough newlines.
+                chunk_size = 8192
+                pos = end
+                buf = bytearray()
+                newlines = 0
+
+                while pos > 0 and newlines <= n:
+                    read_size = chunk_size if pos >= chunk_size else pos
+                    pos -= read_size
+                    f.seek(pos)
+                    chunk = f.read(read_size)
+                    if not chunk:
+                        break
+                    buf[:0] = chunk
+                    newlines = buf.count(b"\n")
+                    # Cap memory usage.
+                    if len(buf) > 2_000_000:
+                        buf = buf[-2_000_000:]
+                        break
+
+                text = bytes(buf).decode("utf-8", errors="replace")
+            else:
+                # Linear fallback (bounded in practice by file size).
+                text = f.read().decode("utf-8", errors="replace")
+
+    except FileNotFoundError:
+        return ""
+    except Exception:
+        return ""
+
+    parts = text.splitlines()[-n:]
     return "\n".join(parts) + ("\n" if parts else "")
 
 
@@ -54,9 +99,9 @@ def mount_logs(app: FastAPI) -> None:
         # Secondary (optional): core diagnostics JSONL sink file.
         resolver = _get_resolver(request)
         if is_diagnostics_enabled(resolver):
-            p = _diagnostics_jsonl_path(resolver)
-            if p is not None:
-                txt_file = _tail_jsonl(p, max(1, min(int(lines), 2000)))
+            fs = _get_file_service(resolver)
+            if fs is not None:
+                txt_file = _tail_jsonl(fs, max(1, min(int(lines), 2000)))
                 if txt_file:
                     txt = txt + txt_file
 
@@ -111,25 +156,29 @@ def mount_logs(app: FastAPI) -> None:
         if not is_diagnostics_enabled(resolver):
             raise HTTPException(status_code=404, detail="diagnostics not enabled")
 
-        p = _diagnostics_jsonl_path(resolver)
-        if p is None:
+        fs = _get_file_service(resolver)
+        if fs is None:
             raise HTTPException(status_code=404, detail="stage_dir not configured")
 
-        return {"path": str(p), "text": _tail_jsonl(p, max(1, min(int(lines), 5000)))}
+        return {
+            "path": f"{RootName.STAGE.value}:{DIAGNOSTICS_REL_PATH}",
+            "text": _tail_jsonl(fs, max(1, min(int(lines), 5000))),
+        }
 
     @app.get("/api/logs/diagnostics_jsonl_stream")
     def logs_diagnostics_jsonl_stream(request: Request) -> StreamingResponse:
         resolver = _get_resolver(request)
         if not is_diagnostics_enabled(resolver):
             raise HTTPException(status_code=404, detail="diagnostics not enabled")
-        p = _diagnostics_jsonl_path(resolver)
-        if p is None:
+
+        fs = _get_file_service(resolver)
+        if fs is None:
             raise HTTPException(status_code=404, detail="stage_dir not configured")
 
         def gen() -> Iterator[bytes]:
             last = ""
             while True:
-                txt = _tail_jsonl(p, 200)
+                txt = _tail_jsonl(fs, 200)
                 if txt != last:
                     last = txt
                     payload = json.dumps(
