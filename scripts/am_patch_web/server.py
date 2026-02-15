@@ -192,12 +192,17 @@ class WebHandler(BaseHTTPRequestHandler):
             self._send_json({"ok": False, "error": "Expected multipart/form-data"}, status=400)
             return
 
+        clen = self.headers.get("Content-Length")
+        if clen is None:
+            clen = "0"
+
         form = cgi.FieldStorage(
             fp=cast(IO[Any], self.rfile),
             headers=self.headers,
             environ={
                 "REQUEST_METHOD": "POST",
                 "CONTENT_TYPE": ctype,
+                "CONTENT_LENGTH": clen,
             },
         )
         if "file" not in form:

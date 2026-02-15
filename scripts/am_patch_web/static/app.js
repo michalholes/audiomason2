@@ -3,73 +3,94 @@
 
   function el(id) { return document.getElementById(id); }
 
-  var netlog = [];
-  function logNet(entry) {
-    netlog.push(entry);
-    if (netlog.length > 200) netlog.shift();
+  function setPre(id, obj) {
+    var node = el(id);
+    if (!node) return;
+    if (typeof obj === "string") {
+      node.textContent = obj;
+      return;
+    }
+    try {
+      node.textContent = JSON.stringify(obj, null, 2);
+    } catch (e) {
+      node.textContent = String(obj);
+    }
   }
 
-  function apiGet(url) {
-    var started = Date.now();
-    return fetch(url, { headers: { "Accept": "application/json" } })
+  function apiGet(path) {
+    return fetch(path, { headers: { "Accept": "application/json" } })
       .then(function (r) {
         return r.text().then(function (t) {
-          logNet({ method: "GET", url: url, status: r.status, ms: Date.now() - started });
-          try { return JSON.parse(t); } catch (e) { return { ok: false, error: "bad json", raw: t }; }
+          try { return JSON.parse(t); } catch (e) { return { ok: false, error: "bad json", raw: t, status: r.status }; }
         });
-      })
-      .catch(function (e) {
-        logNet({ method: "GET", url: url, status: 0, ms: Date.now() - started, error: String(e) });
-        throw e;
       });
   }
 
-  function apiPost(url, obj) {
-    var started = Date.now();
-    return fetch(url, {
+  function apiPost(path, body) {
+    return fetch(path, {
       method: "POST",
       headers: { "Content-Type": "application/json", "Accept": "application/json" },
-      body: JSON.stringify(obj)
+      body: JSON.stringify(body || {})
     }).then(function (r) {
       return r.text().then(function (t) {
-        logNet({ method: "POST", url: url, status: r.status, ms: Date.now() - started });
-        try { return JSON.parse(t); } catch (e) { return { ok: false, error: "bad json", raw: t }; }
+        try { return JSON.parse(t); } catch (e) { return { ok: false, error: "bad json", raw: t, status: r.status }; }
       });
     });
   }
 
-  function setPre(id, obj) {
-    el(id).textContent = typeof obj === "string" ? obj : JSON.stringify(obj, null, 2);
-  }
-
-  function joinRel(base, name) {
-    base = (base || "").replace(/^\/+/, "").replace(/\/+$/, "");
-    name = (name || "").replace(/^\/+/, "");
-    if (!base) return name;
-    if (!name) return base;
-    return base + "/" + name;
+  function joinRel(a, b) {
+    a = String(a || "").replace(/\/+$/, "");
+    b = String(b || "").replace(/^\/+/, "");
+    if (!a) return b;
+    if (!b) return a;
+    return a + "/" + b;
   }
 
   function parentRel(p) {
-    p = (p || "").replace(/^\/+/, "").replace(/\/+$/, "");
-    if (!p) return "";
+    p = String(p || "").replace(/\/+$/, "");
     var idx = p.lastIndexOf("/");
-    return idx >= 0 ? p.slice(0, idx) : "";
+    if (idx < 0) return "";
+    return p.slice(0, idx);
+  }
+
+  function escapeHtml(s) {
+    return String(s || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/\"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  var cfg = null;
+  var issueRegex = null;
+  var fsSelected = "";
+  var runsCache = [];
+  var selectedRun = null;
+  var tailLines = 200;
+
+  function patchesRootRel() {
+    var p = (cfg && cfg.paths && cfg.paths.patches_root) ? String(cfg.paths.patches_root) : "patches";
+    return p.replace(/\/+$/, "");
+  }
+
+  function stripPatchesPrefix(path) {
+    var pfx = patchesRootRel();
+    var p = String(path || "").replace(/^\/+/, "");
+    if (p === pfx) return "";
+    if (p.indexOf(pfx + "/") === 0) return p.slice(pfx.length + 1);
+    return p;
   }
 
   function normalizePatchPath(p) {
-    p = (p || "").trim();
+    p = String(p || "").trim().replace(/^\/+/, "");
     if (!p) return "";
-    if (p.indexOf("patches/") === 0) return p;
-    return "patches/" + p.replace(/^\/+/, "");
+
+    var pfx = patchesRootRel();
+    if (p === pfx) return pfx;
+    if (p.indexOf(pfx + "/") === 0) return p;
+    return joinRel(pfx, p);
   }
-
-  var fsSelected = "";
-  var cfg = null;
-  var issueRegex = null;
-  var runsCache = [];
-  var selectedRun = null;
-
 
   function setFsHint(msg) {
     var h = el("fsHint");
@@ -79,27 +100,28 @@
   function refreshFs() {
     var path = el("fsPath").value || "";
     apiGet("/api/fs/list?path=" + encodeURIComponent(path)).then(function (r) {
-      if (!r.ok) {
+      if (!r || r.ok === false) {
         setPre("fsList", r);
         return;
       }
       var items = r.items || [];
       var html = items.map(function (it) {
         var name = it.name;
-        var isDir = it.is_dir;
+        var isDir = !!it.is_dir;
         var rel = joinRel(path, name);
-        var sel = (fsSelected === rel) ? "*" : "";
+        var sel = (fsSelected === rel) ? " *" : "";
         var act = "";
         if (!isDir) {
           act += "<a class=\"linklike\" href=\"/api/fs/download?path=" + encodeURIComponent(rel) + "\" title=\"Download\">dl</a>";
         }
         return (
-          "<div class=\"item\" data-rel=\"" + rel + "\" data-isdir=\"" + (isDir ? "1" : "0") + "\">" +
-          "<span class=\"name\">" + (isDir ? "[d] " : "[f] ") + name + " " + sel + "</span>" +
-          "<span class=\"actions\"><span class=\"muted\">" + it.size + "</span>" + act + "</span>" +
+          "<div class=\"item\" data-rel=\"" + escapeHtml(rel) + "\" data-isdir=\"" + (isDir ? "1" : "0") + "\">" +
+          "<span class=\"name\">" + (isDir ? "[d] " : "[f] ") + escapeHtml(name) + sel + "</span>" +
+          "<span class=\"actions\"><span class=\"muted\">" + String(it.size || 0) + "</span>" + act + "</span>" +
           "</div>"
         );
       }).join("");
+
       el("fsList").innerHTML = html || "<div class=\"muted\">(empty)</div>";
 
       Array.from(el("fsList").querySelectorAll(".item .name")).forEach(function (node) {
@@ -116,23 +138,23 @@
           }
           fsSelected = rel;
           setFsHint("selected: " + rel);
-          // If it's a plausible patch file, prefill patchPath.
+
           if (/\.(zip|patch|diff)$/i.test(rel)) {
             el("patchPath").value = normalizePatchPath(rel);
-            // Try to auto-extract issue id.
+
             var m = null;
             if (issueRegex) {
               try { m = issueRegex.exec(rel); } catch (e) { m = null; }
             }
             if (!m) {
-              var m2 = /(?:issue_|#)(\d+)/i.exec(rel) || /(\d{3,6})/.exec(rel);
-              m = m2;
+              m = /(?:issue_|#)(\d+)/i.exec(rel) || /(\d{3,6})/.exec(rel);
             }
-            if (m && m[1] && !el("issueId").value.trim()) {
+            if (m && m[1] && !String(el("issueId").value || "").trim()) {
               el("issueId").value = String(m[1]);
             }
             validateAndPreview();
           }
+
           refreshFs();
         });
       });
@@ -141,26 +163,32 @@
 
   function refreshRuns() {
     var q = [];
-    var issue = el("runsIssue").value.trim();
-    var res = el("runsResult").value;
+    var issue = String(el("runsIssue").value || "").trim();
+    var res = String(el("runsResult").value || "");
     if (issue) q.push("issue_id=" + encodeURIComponent(issue));
     if (res) q.push("result=" + encodeURIComponent(res));
     q.push("limit=80");
+
     apiGet("/api/runs?" + q.join("&")).then(function (r) {
-      if (!r.ok) { setPre("runsList", r); return; }
+      if (!r || r.ok === false) {
+        setPre("runsList", r);
+        return;
+      }
       runsCache = r.runs || [];
+
       var html = runsCache.map(function (x, idx) {
         var log = x.log_rel_path || "";
-        var link = log ? "<a class="linklike" href="/api/fs/download?path=" + encodeURIComponent(log) + "">log</a>" : "";
+        var link = log ? "<a class=\"linklike\" href=\"/api/fs/download?path=" + encodeURIComponent(log) + "\">log</a>" : "";
         var sel = (selectedRun && selectedRun.issue_id === x.issue_id && selectedRun.mtime_utc === x.mtime_utc) ? " *" : "";
         return (
-          "<div class="item runitem" data-idx="" + String(idx) + "">" +
-          "<span class="name">#" + x.issue_id + " " + x.result + sel + "</span>" +
-          "<span class="actions">" + link + " <span class="muted">" + x.mtime_utc + "</span></span>" +
+          "<div class=\"item runitem\" data-idx=\"" + String(idx) + "\">" +
+          "<span class=\"name\">#" + String(x.issue_id) + " " + escapeHtml(String(x.result || "")) + sel + "</span>" +
+          "<span class=\"actions\">" + link + " <span class=\"muted\">" + String(x.mtime_utc || "") + "</span></span>" +
           "</div>"
         );
       }).join("");
-      el("runsList").innerHTML = html || "<div class="muted">(none)</div>";
+
+      el("runsList").innerHTML = html || "<div class=\"muted\">(none)</div>";
 
       Array.from(el("runsList").querySelectorAll(".runitem .name")).forEach(function (node) {
         node.addEventListener("click", function () {
@@ -176,12 +204,13 @@
     });
   }
 
-  function refreshTail(lines);
-  }
-
   function refreshTail(lines) {
-    apiGet("/api/runner/tail?lines=" + encodeURIComponent(String(lines || 200))).then(function (r) {
-      if (!r.ok) { setPre("tail", r); return; }
+    tailLines = lines || tailLines || 200;
+    apiGet("/api/runner/tail?lines=" + encodeURIComponent(String(tailLines))).then(function (r) {
+      if (!r || r.ok === false) {
+        setPre("tail", r);
+        return;
+      }
       var t = r.tail || "";
       setPre("tail", t);
       updateShortProgressFromTail(t);
@@ -189,12 +218,10 @@
   }
 
   function updateShortProgressFromTail(tailText) {
-    var lines = String(tailText || "").split(/
-?
-/);
+    var lines = String(tailText || "").split(/\r?\n/);
     var stage = "(idle)";
     for (var i = lines.length - 1; i >= 0; i--) {
-      var s = (lines[i] || "").trim();
+      var s = String(lines[i] || "").trim();
       if (!s) continue;
       if (s.indexOf("RESULT:") === 0) { stage = s; break; }
       if (s.indexOf("STATUS:") === 0) { stage = s; break; }
@@ -203,12 +230,10 @@
     if (el("progress")) el("progress").textContent = stage;
   }
 
-  function refreshStats()
-
   function refreshStats() {
     apiGet("/api/debug/diagnostics").then(function (r) {
       if (!r || r.ok === false) {
-        el("stats").textContent = JSON.stringify(r, null, 2);
+        setPre("stats", r);
         return;
       }
       var s = (r.stats || {});
@@ -218,15 +243,19 @@
       lines.push({ k: "all_time.success", v: String(all.success || 0) });
       lines.push({ k: "all_time.fail", v: String(all.fail || 0) });
       lines.push({ k: "all_time.unknown", v: String(all.unknown || 0) });
+      lines.push({ k: "all_time.canceled", v: String(all.canceled || 0) });
+
       (s.windows || []).forEach(function (w) {
         var d = w.days;
-        lines.push({ k: "" + d + "d.total", v: String(w.total || 0) });
-        lines.push({ k: "" + d + "d.success", v: String(w.success || 0) });
-        lines.push({ k: "" + d + "d.fail", v: String(w.fail || 0) });
-        lines.push({ k: "" + d + "d.unknown", v: String(w.unknown || 0) });
+        lines.push({ k: String(d) + "d.total", v: String(w.total || 0) });
+        lines.push({ k: String(d) + "d.success", v: String(w.success || 0) });
+        lines.push({ k: String(d) + "d.fail", v: String(w.fail || 0) });
+        lines.push({ k: String(d) + "d.unknown", v: String(w.unknown || 0) });
+        lines.push({ k: String(d) + "d.canceled", v: String(w.canceled || 0) });
       });
+
       el("stats").innerHTML = lines.map(function (x) {
-        return "<div class=\"rowline\"><span class=\"k\">" + x.k + "</span><span class=\"v\">" + x.v + "</span></div>";
+        return "<div class=\"rowline\"><span class=\"k\">" + escapeHtml(x.k) + "</span><span class=\"v\">" + escapeHtml(x.v) + "</span></div>";
       }).join("");
     });
   }
@@ -236,190 +265,134 @@
     var queued = (jobs || []).filter(function (j) { return j.status === "queued"; });
 
     var box = el("activeJob");
-    var prog = el("progress");
-
     if (!box) return;
 
-    if (!active) {
-      box.textContent = queued.length ? ("queued: " + queued.length) : "(none)";
-      if (prog) prog.textContent = queued.length ? "queued" : "(idle)";
+    if (!active && queued.length === 0) {
+      box.innerHTML = "<div class=\"muted\">(none)</div>";
       return;
     }
 
-    var msg = "job " + active.job_id;
-    if (active.issue_id) msg += " (issue " + active.issue_id + ")";
-    msg += " / " + active.mode;
-    box.textContent = msg;
-    if (prog) prog.textContent = "running";
+    var html = "";
+    if (active) {
+      html += "<div><b>running</b> " + escapeHtml(active.job_id || "") + "</div>";
+      html += "<div class=\"muted\">mode=" + escapeHtml(active.mode || "") + " issue=" + escapeHtml(active.issue_id || "") + "</div>";
+      html += "<div class=\"row\"><button class=\"btn btn-small\" id=\"cancelActive\">Cancel</button>";
+      html += "<a class=\"linklike\" href=\"/api/jobs/log_tail?job_id=" + encodeURIComponent(active.job_id || "") + "\">log</a></div>";
+    }
+
+    if (queued.length) {
+      html += "<div style=\"margin-top:6px\"><b>queued</b>: " + String(queued.length) + "</div>";
+    }
+
+    box.innerHTML = html;
+
+    var cancelBtn = el("cancelActive");
+    if (cancelBtn && active && active.job_id) {
+      cancelBtn.addEventListener("click", function () {
+        apiPost("/api/jobs/cancel", { job_id: active.job_id }).then(function () {
+          refreshJobs();
+        });
+      });
+    }
   }
 
   function refreshJobs() {
     apiGet("/api/jobs").then(function (r) {
-      if (!r.ok) { setPre("jobsList", r); return; }
+      if (!r || r.ok === false) {
+        setPre("jobsList", r);
+        renderActiveJob([]);
+        return;
+      }
       var jobs = r.jobs || [];
       renderActiveJob(jobs);
 
       var html = jobs.map(function (j) {
-        var cancel = (j.status === "queued" || j.status === "running") ? "<button class=\"btn btn-small\" data-cancel=\"" + j.job_id + "\">Cancel</button>" : "";
-        var tail = "<button class=\"btn btn-small\" data-tail=\"" + j.job_id + "\">Tail</button>";
-        return "<div class=\"item\"><span>" + j.job_id + " " + j.status + "</span><span>" + tail + " " + cancel + "</span></div>";
+        var line = "<div class=\"item\">";
+        line += "<span class=\"name\">" + escapeHtml(j.status || "") + " " + escapeHtml(j.job_id || "") + "</span>";
+        line += "<span class=\"actions\"><span class=\"muted\">" + escapeHtml(j.mode || "") + "</span></span>";
+        line += "</div>";
+        return line;
       }).join("");
+
       el("jobsList").innerHTML = html || "<div class=\"muted\">(none)</div>";
-
-      Array.from(el("jobsList").querySelectorAll("button[data-cancel]"))
-        .forEach(function (b) {
-          b.addEventListener("click", function () {
-            var id = b.getAttribute("data-cancel");
-            apiPost("/api/jobs/" + id + "/cancel", {}).then(function () {
-              refreshJobs();
-            });
-          });
-        });
-
-      Array.from(el("jobsList").querySelectorAll("button[data-tail]"))
-        .forEach(function (b) {
-          b.addEventListener("click", function () {
-            var id = b.getAttribute("data-tail");
-            apiGet("/api/jobs/" + id + "/log_tail?lines=200").then(function (x) {
-              setPre("preview", x.tail || "");
-            });
-          });
-        });
     });
   }
 
-  function renderIssueDetail() {
-    var title = el("issueDetailTitle");
-    var tabs = el("issueTabs");
-    var content = el("issueTabContent");
-    var links = el("issueTabLinks");
-    var body = el("issueTabBody");
+  function computeCanonicalPreview(mode, issueId, commitMsg, patchPath) {
+    var prefix = (cfg && cfg.runner && cfg.runner.command) ? cfg.runner.command : ["python3", "scripts/am_patch.py"];
+    var argv = prefix.slice();
 
-    if (!selectedRun) {
-      if (title) title.textContent = "Select a run on the left.";
-      if (tabs) tabs.style.display = "none";
-      if (content) content.style.display = "none";
-      return;
+    if (mode === "finalize_live") {
+      argv.push("-f");
+      return argv;
+    }
+    if (mode === "finalize_workspace") {
+      argv.push("-w");
+      return argv;
+    }
+    if (mode === "rerun_latest") {
+      argv.push("-l");
+      return argv;
     }
 
-    if (title) title.textContent = "Issue " + selectedRun.issue_id + " / " + selectedRun.result + " / " + selectedRun.mtime_utc;
-    if (tabs) tabs.style.display = "flex";
-    if (content) content.style.display = "block";
-
-    function link(label, rel) {
-      if (!rel) return "";
-      return "<a class="linklike" href="/api/fs/download?path=" + encodeURIComponent(rel) + "">" + label + "</a>";
-    }
-
-    function setTab(name) {
-      ["Overview", "Logs", "Patch", "Diff", "Files"].forEach(function (n) {
-        var b = el("tab" + n);
-        if (!b) return;
-        if (n === name) b.classList.add("active");
-        else b.classList.remove("active");
-      });
-
-      if (!links || !body) return;
-
-      var logRel = selectedRun.log_rel_path || "";
-      var archived = selectedRun.archived_patch_rel_path || "";
-      var diffb = selectedRun.diff_bundle_rel_path || "";
-      var successZip = selectedRun.success_zip_rel_path || (cfg && cfg.runner ? cfg.runner.success_archive_rel : "");
-
-      if (name === "Overview") {
-        links.innerHTML = [
-          link("log", logRel),
-          link("archived patch", archived),
-          link("issue diff", diffb),
-          link("latest success zip", successZip)
-        ].filter(Boolean).join(" | ");
-        body.textContent = JSON.stringify(selectedRun, null, 2);
-        return;
-      }
-
-      if (name === "Logs") {
-        links.innerHTML = [link("download log", logRel)].filter(Boolean).join(" | ");
-        body.textContent = "Log is downloadable via link above.
-
-For live runner tail, use the right panel.";
-        return;
-      }
-
-      if (name === "Patch") {
-        links.innerHTML = [link("download archived patch", archived)].filter(Boolean).join(" | ");
-        body.textContent = archived ? ("Archived patch: " + archived) : "No archived patch found.";
-        return;
-      }
-
-      if (name === "Diff") {
-        links.innerHTML = [link("download issue diff bundle", diffb)].filter(Boolean).join(" | ");
-        body.textContent = diffb ? ("Issue diff bundle: " + diffb) : "No issue diff bundle found.";
-        return;
-      }
-
-      if (name === "Files") {
-        links.innerHTML = "";
-        body.textContent = "Use the Files panel above to browse patches/.";
-        return;
-      }
-    }
-
-    setTab("Overview");
-
-    if (el("tabOverview")) el("tabOverview").onclick = function () { setTab("Overview"); };
-    if (el("tabLogs")) el("tabLogs").onclick = function () { setTab("Logs"); };
-    if (el("tabPatch")) el("tabPatch").onclick = function () { setTab("Patch"); };
-    if (el("tabDiff")) el("tabDiff").onclick = function () { setTab("Diff"); };
-    if (el("tabFiles")) el("tabFiles").onclick = function () { setTab("Files"); };
+    argv.push(String(issueId || ""));
+    argv.push(String(commitMsg || ""));
+    argv.push(String(patchPath || ""));
+    return argv;
   }
 
-  function rawLooksLikeRunnerCommand(raw) {
-    raw = (raw || "").trim();
-    if (!raw) return false;
-    if (raw.indexOf("scripts/am_patch.py") >= 0) return true;
-    if (/\bam_patch\.py\b/.test(raw)) return true;
-    return false;
+  function setStartFormEnabled(enabled) {
+    el("issueId").disabled = !enabled;
+    el("commitMsg").disabled = !enabled;
+    el("patchPath").disabled = !enabled;
+    var browse = el("browsePatch");
+    if (browse) browse.disabled = !enabled;
   }
 
   function validateAndPreview() {
-    var mode = el("mode").value;
-    var raw = el("rawCommand") ? el("rawCommand").value.trim() : "";
-
-    if (raw && rawLooksLikeRunnerCommand(raw)) {
-      apiPost("/api/parse_command", { raw: raw }).then(function (r) {
-        setPre("preview", r);
-        el("enqueueBtn").disabled = !r.ok;
-        var hint = el("enqueueHint");
-        if (hint) hint.textContent = r.ok ? "" : (r.error || "invalid");
-      });
-      return;
-    }
-
-    var issueId = el("issueId").value.trim();
-    var commitMsg = el("commitMsg").value.trim();
-    var patchPath = normalizePatchPath(el("patchPath").value);
+    var mode = String(el("mode").value || "patch");
+    var issueId = String(el("issueId").value || "").trim();
+    var commitMsg = String(el("commitMsg").value || "").trim();
+    var patchPath = normalizePatchPath(String(el("patchPath").value || ""));
     el("patchPath").value = patchPath;
 
+    var needsFields = (mode === "patch" || mode === "repair");
+    setStartFormEnabled(needsFields);
+
     var ok = true;
-    if (mode === "patch" || mode === "repair") {
+    if (needsFields) {
       ok = !!commitMsg && !!patchPath;
     }
 
-    var preview = { mode: mode, issue_id: issueId, commit_message: commitMsg, patch_path: patchPath };
+    var canonical = computeCanonicalPreview(mode, issueId, commitMsg, patchPath);
+    var preview = {
+      mode: mode,
+      issue_id: issueId,
+      commit_message: commitMsg,
+      patch_path: patchPath,
+      canonical_argv: canonical
+    };
+
     setPre("preview", preview);
     el("enqueueBtn").disabled = !ok;
+
     var hint2 = el("enqueueHint");
     if (hint2) hint2.textContent = ok ? "" : "missing fields";
   }
 
   function enqueue() {
+    var mode = String(el("mode").value || "patch");
     var body = {
-      mode: el("mode").value,
-      issue_id: el("issueId").value.trim(),
-      commit_message: el("commitMsg").value.trim(),
-      patch_path: normalizePatchPath(el("patchPath").value.trim()),
-      raw_command: (el("rawCommand") ? el("rawCommand").value.trim() : "")
+      mode: mode,
+      raw_command: (el("rawCommand") ? String(el("rawCommand").value || "").trim() : "")
     };
+
+    if (mode === "patch" || mode === "repair") {
+      body.issue_id = String(el("issueId").value || "").trim();
+      body.commit_message = String(el("commitMsg").value || "").trim();
+      body.patch_path = normalizePatchPath(String(el("patchPath").value || "").trim());
+    }
+
     apiPost("/api/jobs/enqueue", body).then(function (r) {
       setPre("preview", r);
       refreshJobs();
@@ -436,26 +409,35 @@ For live runner tail, use the right panel.";
       fetch("/api/upload/patch", { method: "POST", body: fd, headers: { "Accept": "application/json" } })
         .then(function (r) {
           return r.text().then(function (t) {
-            try { return JSON.parse(t); } catch (e) { return { ok: false, error: "bad json", raw: t }; }
+            try { return JSON.parse(t); } catch (e) { return { ok: false, error: "bad json", raw: t, status: r.status }; }
           });
         })
         .then(function (j) {
           setPre("uploadResult", j);
           if (j && j.stored_rel_path) {
-            el("patchPath").value = String(j.stored_rel_path);
-            var up = String(j.stored_rel_path || "");
-            var parent = parentRel(up.replace(/^patches\//, ""));
-            if ((el("fsPath").value || "") === "") {
+            var stored = String(j.stored_rel_path);
+            el("patchPath").value = stored;
+
+            // For file manager path input we need a path under patches root.
+            var relUnderRoot = stripPatchesPrefix(stored);
+            var parent = parentRel(relUnderRoot);
+            if (String(el("fsPath").value || "") === "") {
               el("fsPath").value = parent;
             }
           }
           refreshFs();
           validateAndPreview();
         })
-        .catch(function (e) { setPre("uploadResult", String(e)); });
+        .catch(function (e) {
+          setPre("uploadResult", String(e));
+        });
     }
 
-    zone.addEventListener("click", function () { input.click(); });
+    zone.addEventListener("click", function () {
+      input.value = "";
+      input.click();
+    });
+
     input.addEventListener("change", function () {
       if (input.files && input.files[0]) doUpload(input.files[0]);
     });
@@ -475,7 +457,6 @@ For live runner tail, use the right panel.";
       if (f) doUpload(f);
     });
 
-    // Prevent the browser from opening the file when dropped outside the zone.
     window.addEventListener("dragover", function (e) { e.preventDefault(); });
     window.addEventListener("drop", function (e) { e.preventDefault(); });
   }
@@ -486,13 +467,12 @@ For live runner tail, use the right panel.";
       if (cfg && cfg.issue && cfg.issue.default_regex) {
         try { issueRegex = new RegExp(cfg.issue.default_regex); } catch (e) { issueRegex = null; }
       }
-      if (cfg && cfg.server && cfg.server.host && cfg.server.port) {
-        var meta = "server: " + cfg.server.host + ":" + cfg.server.port;
-        if (cfg.paths && cfg.paths.patches_root) meta += " | patches: " + cfg.paths.patches_root;
-        if (el("hdrMeta")) el("hdrMeta").textContent = meta;
-      }
+      refreshHeader();
       return cfg;
-    }).catch(function () { return null; });
+    }).catch(function () {
+      cfg = null;
+      return null;
+    });
   }
 
   function refreshHeader() {
@@ -500,6 +480,7 @@ For live runner tail, use the right panel.";
     if (cfg && cfg.server && cfg.server.host && cfg.server.port) {
       base = "server: " + cfg.server.host + ":" + cfg.server.port;
     }
+
     apiGet("/api/debug/diagnostics").then(function (d) {
       if (!d || d.ok === false) return;
       var lock = d.lock || {};
@@ -509,12 +490,124 @@ For live runner tail, use the right panel.";
       if (disk.total && disk.used) {
         pct = "disk:" + String(Math.round((disk.used / disk.total) * 100)) + "%";
       }
+
       var meta = base;
       if (cfg && cfg.paths && cfg.paths.patches_root) meta += " | patches: " + cfg.paths.patches_root;
       meta += " | " + held;
       if (pct) meta += " | " + pct;
+
       if (el("hdrMeta")) el("hdrMeta").textContent = meta;
     });
+  }
+
+  function setTabActive(which) {
+    var tabs = ["Overview", "Logs", "Patch", "Diff", "Files"];
+    tabs.forEach(function (t) {
+      var btn = el("tab" + t);
+      if (btn) {
+        if (t === which) btn.classList.add("active");
+        else btn.classList.remove("active");
+      }
+    });
+  }
+
+  function renderIssueDetail() {
+    var cardTitle = el("issueDetailTitle");
+    var tabs = el("issueTabs");
+    var content = el("issueTabContent");
+    var links = el("issueTabLinks");
+    var body = el("issueTabBody");
+
+    if (!selectedRun) {
+      if (cardTitle) cardTitle.textContent = "Select a run on the left.";
+      if (tabs) tabs.style.display = "none";
+      if (content) content.style.display = "none";
+      return;
+    }
+
+    if (cardTitle) {
+      cardTitle.textContent = "Issue #" + String(selectedRun.issue_id) + " (" + String(selectedRun.result || "") + ")";
+    }
+    if (tabs) tabs.style.display = "flex";
+    if (content) content.style.display = "block";
+
+    function renderLinks() {
+      var parts = [];
+
+      function add(label, rel) {
+        if (!rel) return;
+        parts.push("<a class=\"linklike\" href=\"/api/fs/download?path=" + encodeURIComponent(rel) + "\">" + escapeHtml(label) + "</a>");
+      }
+
+      add("log", selectedRun.log_rel_path);
+      add("archived patch", selectedRun.archived_patch_rel_path);
+      add("diff bundle", selectedRun.diff_bundle_rel_path);
+      add("latest success zip", selectedRun.success_zip_rel_path);
+
+      links.innerHTML = parts.join(" ");
+    }
+
+    function renderOverview() {
+      setTabActive("Overview");
+      renderLinks();
+      setPre("issueTabBody", selectedRun);
+    }
+
+    function renderLogs() {
+      setTabActive("Logs");
+      renderLinks();
+      if (selectedRun.log_rel_path) {
+        setPre("issueTabBody", "Download: /api/fs/download?path=" + selectedRun.log_rel_path);
+      } else {
+        setPre("issueTabBody", "(no log path)");
+      }
+    }
+
+    function renderPatch() {
+      setTabActive("Patch");
+      renderLinks();
+      if (selectedRun.archived_patch_rel_path) {
+        setPre("issueTabBody", "Download: /api/fs/download?path=" + selectedRun.archived_patch_rel_path);
+      } else {
+        setPre("issueTabBody", "(no archived patch)");
+      }
+    }
+
+    function renderDiff() {
+      setTabActive("Diff");
+      renderLinks();
+      if (selectedRun.diff_bundle_rel_path) {
+        setPre("issueTabBody", "Download: /api/fs/download?path=" + selectedRun.diff_bundle_rel_path);
+      } else {
+        setPre("issueTabBody", "(no diff bundle)");
+      }
+    }
+
+    function renderFiles() {
+      setTabActive("Files");
+      renderLinks();
+      // Convenience: jump file manager to the issue directory if possible.
+      var p = "";
+      if (selectedRun.log_rel_path) {
+        p = parentRel(stripPatchesPrefix(selectedRun.log_rel_path));
+      }
+      if (p) {
+        el("fsPath").value = p;
+        fsSelected = "";
+        setFsHint("");
+        refreshFs();
+      }
+      setPre("issueTabBody", "File manager path set to: " + String(el("fsPath").value || ""));
+    }
+
+    el("tabOverview").onclick = renderOverview;
+    el("tabLogs").onclick = renderLogs;
+    el("tabPatch").onclick = renderPatch;
+    el("tabDiff").onclick = renderDiff;
+    el("tabFiles").onclick = renderFiles;
+
+    // Default to overview when switching run.
+    renderOverview();
   }
 
   function wireButtons() {
@@ -526,70 +619,25 @@ For live runner tail, use the right panel.";
       setFsHint("");
       refreshFs();
     });
-    el("fsMkdir").addEventListener("click", function () {
-      var base = el("fsPath").value || "";
-      var name = window.prompt("mkdir name (ASCII)", "new_dir");
-      if (!name) return;
-      apiPost("/api/fs/mkdir", { path: joinRel(base, name) }).then(function (r) {
-        setFsHint(r.ok ? "mkdir ok" : (r.error || "mkdir failed"));
-        refreshFs();
-      });
-    });
-    el("fsRename").addEventListener("click", function () {
-      if (!fsSelected) { setFsHint("select a file or dir"); return; }
-      var dst = window.prompt("rename to (relative to patches root)", fsSelected);
-      if (!dst) return;
-      apiPost("/api/fs/rename", { src: fsSelected, dst: dst }).then(function (r) {
-        setFsHint(r.ok ? "rename ok" : (r.error || "rename failed"));
-        if (r.ok) fsSelected = dst;
-        refreshFs();
-      });
-    });
-    el("fsDelete").addEventListener("click", function () {
-      if (!fsSelected) { setFsHint("select a file or dir"); return; }
-      if (!window.confirm("delete " + fsSelected + " ?")) return;
-      apiPost("/api/fs/delete", { path: fsSelected }).then(function (r) {
-        setFsHint(r.ok ? "delete ok" : (r.error || "delete failed"));
-        fsSelected = "";
-        refreshFs();
-      });
-    });
-    el("fsUnzip").addEventListener("click", function () {
-      if (!fsSelected) { setFsHint("select a zip file"); return; }
-      var dest = window.prompt("unzip dest dir (relative)", parentRel(fsSelected) || "");
-      if (dest === null) return;
-      apiPost("/api/fs/unzip", { zip_path: fsSelected, dest_dir: dest }).then(function (r) {
-        setFsHint(r.ok ? "unzip ok" : (r.error || "unzip failed"));
-        refreshFs();
-      });
-    });
 
     el("runsRefresh").addEventListener("click", refreshRuns);
-    el("tailRefresh").addEventListener("click", function () { refreshTail(200); });
-    el("tailMore").addEventListener("click", function () { refreshTail(el("toggleVerbose") && el("toggleVerbose").checked ? 5000 : 1200); });
-    el("jobsRefresh").addEventListener("click", refreshJobs);
 
-    if (el("parseBtn")) el("parseBtn").addEventListener("click", validateAndPreview);
+    el("jobsRefresh").addEventListener("click", refreshJobs);
+    el("tailRefresh").addEventListener("click", function () { refreshTail(tailLines); });
+    el("tailMore").addEventListener("click", function () { refreshTail((tailLines || 200) + 200); });
+
     el("enqueueBtn").addEventListener("click", enqueue);
 
-    ["mode", "issueId", "commitMsg", "patchPath"].forEach(function (id) {
-      el(id).addEventListener("input", validateAndPreview);
-      el(id).addEventListener("change", validateAndPreview);
-    });
+    el("mode").addEventListener("change", validateAndPreview);
+    el("issueId").addEventListener("input", validateAndPreview);
+    el("commitMsg").addEventListener("input", validateAndPreview);
+    el("patchPath").addEventListener("input", validateAndPreview);
 
-    if (el("rawCommand")) {
-      el("rawCommand").addEventListener("input", validateAndPreview);
-      el("rawCommand").addEventListener("change", validateAndPreview);
-    }
-
-    if (el("browsePatch")) {
-      el("browsePatch").addEventListener("click", function () {
+    var browse = el("browsePatch");
+    if (browse) {
+      browse.addEventListener("click", function () {
         if (!fsSelected) {
-          setFsHint("select a patch file in file manager first");
-          return;
-        }
-        if (!/\.(zip|patch|diff)$/i.test(fsSelected)) {
-          setFsHint("selected file is not .zip/.patch/.diff");
+          setFsHint("select a patch file first");
           return;
         }
         el("patchPath").value = normalizePatchPath(fsSelected);
@@ -606,6 +654,7 @@ For live runner tail, use the right panel.";
         refreshTail(200);
         refreshHeader();
         renderIssueDetail();
+        validateAndPreview();
       });
     }
 
