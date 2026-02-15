@@ -1275,24 +1275,35 @@ class PreflightService:
         if not author and not title:
             return None
         try:
-            from plugins.metadata_sync.plugin import MetadataSync
+            import asyncio
 
-            plugin = MetadataSync(config={"verbosity": 0})
-            md = plugin.fetch_from_googlebooks(
-                author=author, title=title
-            ) or plugin.fetch_from_openlibrary(author=author, title=title)
-            if md is None:
+            from plugins.metadata_googlebooks.plugin import GoogleBooksPlugin
+            from plugins.metadata_openlibrary.plugin import OpenLibraryPlugin
+
+            query = {"author": author or "", "title": title or ""}
+            md: dict[str, Any] | None = None
+
+            for plugin_cls in (GoogleBooksPlugin, OpenLibraryPlugin):
+                try:
+                    plugin = plugin_cls(config={"verbosity": 0})
+                    md = asyncio.run(plugin.fetch(query))
+                    break
+                except Exception:
+                    md = None
+
+            if not md:
                 return None
+
             # Stable dict shape.
             d = {
-                "title": md.title,
-                "author": md.author,
-                "year": md.year,
-                "publisher": md.publisher,
-                "isbn": md.isbn,
-                "description": md.description,
-                "cover_url": md.cover_url,
-                "source": md.source,
+                "title": md.get("title"),
+                "author": md.get("author"),
+                "year": md.get("year"),
+                "publisher": md.get("publisher"),
+                "isbn": md.get("isbn"),
+                "description": md.get("description"),
+                "cover_url": md.get("cover_url"),
+                "source": md.get("source"),
             }
             return {k: v for k, v in d.items() if v is not None}
         except Exception:
