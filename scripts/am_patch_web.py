@@ -9,12 +9,12 @@ def main() -> int:
     ap = argparse.ArgumentParser(prog="am_patch_web")
     ap.add_argument(
         "--config",
-        default="am_patch_web/am_patch_web.toml",
+        default="scripts/am_patch_web/am_patch_web.toml",
         help="Path to am_patch_web.toml",
     )
     args = ap.parse_args()
 
-    repo_root = Path(__file__).resolve().parent
+    repo_root = Path(__file__).resolve().parent.parent
     scripts_dir = repo_root / "scripts"
     sys.path.insert(0, str(scripts_dir))
 
