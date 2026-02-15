@@ -48,6 +48,18 @@ def _find_plugins_dir() -> Path:
     return Path.cwd() / "plugins"
 
 
+def _run_main() -> None:
+    """Run the async main() entry point without using asyncio.run."""
+    loop = asyncio.new_event_loop()
+    try:
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(main())
+        loop.run_until_complete(loop.shutdown_asyncgens())
+    finally:
+        asyncio.set_event_loop(None)
+        loop.close()
+
+
 async def main() -> None:
     """Main entry point."""
     plugins_dir = _find_plugins_dir()
@@ -68,4 +80,4 @@ async def main() -> None:
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    _run_main()

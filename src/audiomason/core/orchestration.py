@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+from collections.abc import Coroutine
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -107,6 +108,21 @@ def _duration_ms(start: float, end: float) -> int:
     return int((end - start) * 1000)
 
 
+def _run_coro_sync(coro: Coroutine[Any, Any, Any]) -> None:
+    """Run a coroutine to completion in a dedicated event loop.
+
+    This is used only when no running event loop exists (e.g., CLI code paths).
+    """
+    loop = asyncio.new_event_loop()
+    try:
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(coro)
+        loop.run_until_complete(loop.shutdown_asyncgens())
+    finally:
+        asyncio.set_event_loop(None)
+        loop.close()
+
+
 class Orchestrator:
     """Orchestration facade for Phase 2+."""
 
@@ -156,7 +172,7 @@ class Orchestrator:
             loop = asyncio.get_running_loop()
         except RuntimeError:
             # No loop; run synchronously.
-            asyncio.run(self._run_process_job(job.job_id, request))
+            _run_coro_sync(self._run_process_job(job.job_id, request))
         else:
             loop.create_task(self._run_process_job(job.job_id, request))
 
@@ -206,7 +222,7 @@ class Orchestrator:
         try:
             loop = asyncio.get_running_loop()
         except RuntimeError:
-            asyncio.run(self._run_wizard_job(job.job_id, request))
+            _run_coro_sync(self._run_wizard_job(job.job_id, request))
         else:
             loop.create_task(self._run_wizard_job(job.job_id, request))
 
@@ -264,7 +280,7 @@ class Orchestrator:
             try:
                 loop = asyncio.get_running_loop()
             except RuntimeError:
-                asyncio.run(self._run_process_job(job.job_id, process_request))
+                _run_coro_sync(self._run_process_job(job.job_id, process_request))
             else:
                 loop.create_task(self._run_process_job(job.job_id, process_request))
             return
@@ -314,7 +330,7 @@ class Orchestrator:
             try:
                 loop = asyncio.get_running_loop()
             except RuntimeError:
-                asyncio.run(self._run_wizard_job(job.job_id, wizard_request))
+                _run_coro_sync(self._run_wizard_job(job.job_id, wizard_request))
             else:
                 loop.create_task(self._run_wizard_job(job.job_id, wizard_request))
             return

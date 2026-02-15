@@ -115,6 +115,17 @@ def main():
     import sys
     from pathlib import Path
 
+    def _run_cli(coro) -> None:
+        """Run a coroutine in a dedicated event loop."""
+        loop = asyncio.new_event_loop()
+        try:
+            asyncio.set_event_loop(loop)
+            loop.run_until_complete(coro)
+            loop.run_until_complete(loop.shutdown_asyncgens())
+        finally:
+            asyncio.set_event_loop(None)
+            loop.close()
+
     # FIX BUG 6: Use proper method to find project root
     # Try multiple strategies to locate plugins directory
 
@@ -172,7 +183,7 @@ def main():
         cli_plugin_cls = cli_module.CLIPlugin
 
         cli = cli_plugin_cls()
-        asyncio.run(cli.run())
+        _run_cli(cli.run())
 
     except ImportError as e:
         print(f"Error: Failed to load CLI plugin: {e}")
