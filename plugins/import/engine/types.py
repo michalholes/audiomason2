@@ -26,6 +26,9 @@ class BookDecision:
     author: str
     title: str
     handling_mode: str
+    # Planned rename mapping (best-effort preview from PHASE 1).
+    # When provided, PHASE 2 must not prompt; it may apply this mapping deterministically.
+    rename_preview: dict[str, str] | None = None
     options: dict[str, Any] | None = None
 
 

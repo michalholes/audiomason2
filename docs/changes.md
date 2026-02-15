@@ -1,3 +1,8 @@
+## 2026-02-15T08:10:00+01:00
+
+-   Issue 700: CLI import wizard: Fast Index first (immediate authors/books), then mandatory plan/preview after book selection (author/title confirmation + rename preview) before Start.
+-   spec: Document fast-index-first + plan/preview CLI flow and bump specification version to 1.0.82.
+
 ## 2026-02-15T07:50:00+01:00
 
 -   Issue 523: import_wizard UI: Auto-advance after Start only when the Start call succeeds without conflict resolution (no HTTP 409 in the Start attempt).

@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.81
+Specification Version: 1.0.82
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -943,18 +943,23 @@ Import foundation MAY include a "hybrid" mode in the data model only. Behavior i
 The CLI MUST expose an AM1-like import entrypoint:
 
 - Command: `audiomason import`
-- The command MUST be implemented as a plugin-provided CLI command via `ICLICommands`.
-- The providing built-in plugin MUST be named `import_cli`.
+- The command MUST be implemented as a stable CLI entry that uses Import Wizard services
+  under `plugins/import/` (not YAML wizard definitions).
 
 Behavioral requirements:
 
-- Interactive wizard flow MUST continue after book selection to collect remaining PHASE 1 decisions (for example: mode selection, destructive options, and explicit start confirmation).
-- After PHASE 1 decisions are collected, the CLI MUST create persisted import Jobs via ImportEngineService and MUST NOT prompt during PHASE 2.
-- The command MUST use the Import foundation and engine services under `plugins/import/`.
-- PHASE 0 (preflight) MUST be deterministic and read-only.
-- PHASE 1 MUST collect all decisions (interactive prompts unless explicitly disabled).
+- PHASE 0 must use a Fast Index-only call for the initial selection screen (authors/books).
+  The first screen MUST be immediate and MUST NOT block on deep enrichment.
+- After selecting a specific book, the CLI MUST run mandatory plan/preview (best-effort deep
+  enrichment) and MUST render:
+  - proposed author and title,
+  - lookup status (matched/unknown/error; best-effort),
+  - rename preview that will be used for PHASE 2.
+- The CLI MUST prompt the user to confirm/override the effective author and title before Start.
+- After PHASE 1 decisions are collected, the CLI MUST create persisted import Jobs via
+  ImportEngineService and MUST NOT prompt during PHASE 2.
 - PHASE 2 MUST be implemented exclusively via persisted Jobs created by ImportEngineService.
-- Non-interactive operation MUST be possible via explicit CLI flags.
+- Non-interactive operation MUST remain possible via explicit CLI flags.
 
 CLI import UX stability requirements:
 

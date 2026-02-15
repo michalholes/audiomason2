@@ -142,3 +142,35 @@ class IndexResult:
     root_items: list[IndexItem]
     authors: list[str]
     books: list[IndexBook]
+
+
+@dataclass(frozen=True)
+class LookupStatus:
+    """Best-effort metadata lookup status for plan/preview."""
+
+    status: str  # matched | unknown | error | disabled
+    source: str | None = None
+    error: str | None = None
+
+
+@dataclass(frozen=True)
+class PlanPreview:
+    """Deterministic plan/preview output for a selected book unit.
+
+    Produced in PHASE 1 after selection. Deep enrichment is best-effort.
+    """
+
+    book_ref: str
+    unit_type: str  # dir | file
+    rel_path: str
+
+    proposed_author: str
+    proposed_title: str
+
+    lookup: LookupStatus
+    rename_preview: dict[str, str]
+
+    # Optional enrichment fields.
+    cover_candidates: list[str] | None = None
+    fingerprint: BookFingerprint | None = None
+    meta: dict[str, Any] | None = None

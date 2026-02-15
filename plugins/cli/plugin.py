@@ -300,6 +300,7 @@ class CLIPlugin:
         lines.append("")
         lines.append("Usage:")
         lines.append("  audiomason process <file(s)>   Process audiobook file(s)")
+        lines.append("  audiomason import              Run import wizard (CLI)")
         lines.append("  audiomason wizard [name]       Run wizard (interactive)")
         lines.append("  audiomason tui                 Terminal UI (ncurses)")
         lines.append("  audiomason web [--port PORT]   Start web server")
@@ -333,6 +334,7 @@ class CLIPlugin:
         lines.append("Examples:")
         lines.append("  audiomason wizard              List available wizards")
         lines.append("  audiomason wizard quick_import Run quick import wizard")
+        lines.append("  audiomason import              Run import wizard")
         lines.append("  audiomason process book.m4a")
         lines.append('  audiomason process book.m4a --author "George Orwell" --title "1984"')
         lines.append("  audiomason web --port 8080")
@@ -371,6 +373,9 @@ class CLIPlugin:
         # Core commands are executed unchanged.
         if command == "process":
             await self._process_command(argv[2:])
+            return 0
+        if command == "import":
+            await self._import_command(argv[2:])
             return 0
         if command == "wizard":
             await self._wizard_command(argv[2:])
@@ -971,6 +976,208 @@ class CLIPlugin:
 
             deleted = manager.cleanup_old_checkpoints(days=days)
             print(f"Deleted {deleted} checkpoint(s) older than {days} days")
+
+    async def _import_command(self, args: list[str]) -> None:
+        """Run import wizard via Import services (non-YAML).
+
+        Contract (Issue 700):
+        - First screen must be fast-index-only (immediate).
+        - After selecting a specific book, plan/preview is mandatory before start.
+        - PHASE 2 remains non-interactive (Jobs only).
+        """
+
+        import importlib
+
+        from plugins.file_io.service.service import FileService
+        from plugins.file_io.service.types import RootName
+
+        preflight_mod = importlib.import_module("plugins.import.preflight.service")
+        preflight_service_cls = preflight_mod.PreflightService
+        engine_mod = importlib.import_module("plugins.import.services.engine_service")
+        import_engine_service_cls = engine_mod.import_engine_service_cls
+        types_mod = importlib.import_module("plugins.import.engine.types")
+        book_decision_t = types_mod.book_decision_t
+        import_job_request_t = types_mod.import_job_request_t
+        session_types_mod = importlib.import_module("plugins.import.session_store.types")
+        import_run_state_t = session_types_mod.import_run_state_t
+
+        # Minimal flag parsing (deterministic, no argparse dependency here).
+        root = RootName.INBOX
+        source_root_rel_path = "."
+        mode = "stage"
+
+        i = 0
+        while i < len(args):
+            arg = str(args[i])
+            if arg in ("--root",):
+                if i + 1 < len(args):
+                    i += 1
+                    try:
+                        root = RootName(str(args[i]))
+                    except Exception:
+                        root = RootName.INBOX
+            elif arg in ("--path",):
+                if i + 1 < len(args):
+                    i += 1
+                    source_root_rel_path = str(args[i] or ".")
+            elif arg in ("--mode",):
+                if i + 1 < len(args):
+                    i += 1
+                    m = str(args[i] or "stage").strip().lower()
+                    if m in {"stage", "inplace"}:
+                        mode = m
+            elif arg in ("--help", "-h"):
+                print("Usage: audiomason import [--root ROOT] [--path PATH] [--mode stage|inplace]")
+                return
+            i += 1
+
+        # ConfigResolver is used by FileService via process-level config.
+        cli_args = self._parse_cli_args()
+        resolver = ConfigResolver(cli_args=cli_args)
+        fs = FileService.from_resolver(resolver)
+
+        preflight = preflight_service_cls(fs)
+
+        # PHASE 0: Fast Index only (must be immediate).
+        idx = preflight.fast_index(root, source_root_rel_path)
+        if not idx.books:
+            print("No books detected under the selected source root.")
+            return
+
+        # Selection (single book).
+        authors = list(idx.authors)
+        has_book_only = any(b.author == "" for b in idx.books)
+        book_only_label = "<book-only>"
+        if has_book_only and book_only_label not in authors:
+            authors = authors + [book_only_label] if authors else [book_only_label]
+
+        def _prompt_select(prompt: str, options: list[str]) -> str | None:
+            if not options:
+                return None
+            while True:
+                print("\n" + prompt)
+                for n, opt in enumerate(options, 1):
+                    print(f"  {n}. {opt}")
+                raw = input("Select (q to quit): ").strip()
+                if raw.lower() in {"q", "quit", "exit"}:
+                    return None
+                if raw.isdigit():
+                    k = int(raw)
+                    if 1 <= k <= len(options):
+                        return options[k - 1]
+                print("Invalid selection")
+
+        selected_author = ""
+        if authors:
+            selected_author_opt = _prompt_select("Select author:", authors)
+            if selected_author_opt is None:
+                return
+            selected_author = "" if selected_author_opt == book_only_label else selected_author_opt
+
+        books_for_author = [b for b in idx.books if b.author == selected_author]
+        if not books_for_author:
+            print("No books detected for the selected author.")
+            return
+
+        book_options = [b.rel_path for b in books_for_author]
+        rel = _prompt_select("Select book:", book_options)
+        if rel is None:
+            return
+
+        selected = [b for b in books_for_author if b.rel_path == rel]
+        if not selected:
+            print("No book selected.")
+            return
+        b = selected[0]
+
+        # PHASE 1: Plan/preview is mandatory after selection.
+        plan = preflight.plan_preview_for_book(
+            root,
+            source_root_rel_path,
+            book_ref=b.book_ref,
+            rel_path=b.rel_path,
+            unit_type=b.unit_type,
+            author=b.author,
+            book=b.book,
+        )
+
+        print("\nPlan/Preview:")
+        print(f"  Proposed author: {plan.proposed_author}")
+        print(f"  Proposed title:  {plan.proposed_title}")
+        print(f"  Lookup status:   {plan.lookup.status}")
+        if plan.lookup.source:
+            print(f"  Lookup source:   {plan.lookup.source}")
+        if plan.lookup.error:
+            print(f"  Lookup error:    {plan.lookup.error}")
+
+        # Rename preview (deterministic order).
+        print("\nRename preview:")
+        items = sorted(plan.rename_preview.items(), key=lambda kv: (kv[0], kv[1]))
+        if not items:
+            print("  (none)")
+        else:
+            for src, dst in items[:200]:
+                print(f"  {src} -> {dst}")
+            if len(items) > 200:
+                print(f"  ... ({len(items) - 200} more)")
+
+        def _prompt_text(prompt: str, default: str) -> str:
+            raw = input(f"{prompt} [{default}]: ").strip()
+            return raw if raw else default
+
+        eff_author = _prompt_text("Effective author", plan.proposed_author)
+        eff_title = _prompt_text("Effective title", plan.proposed_title)
+
+        start = input("Start processing now? [y/N]: ").strip().lower() in {"y", "yes"}
+        if not start:
+            print("Not started.")
+            return
+
+        # Start (PHASE 2 via Jobs; non-interactive).
+        engine = import_engine_service_cls(fs=fs)
+
+        run_id = "run_import_" + uuid.uuid4().hex[:12]
+        state = import_run_state_t(
+            source_selection_snapshot={
+                "root": str(root.value),
+                "source_root_rel_path": source_root_rel_path,
+                "selected_book_rel_paths": [b.rel_path],
+            },
+            source_handling_mode=mode,
+            parallelism_n=2 if mode == "stage" else 1,
+            global_options={
+                "effective_author": eff_author,
+                "effective_title": eff_title,
+                "rename_preview": dict(plan.rename_preview),
+            },
+        )
+
+        dec = book_decision_t(
+            book_rel_path=b.rel_path,
+            unit_type=str(b.unit_type or "dir"),
+            source_ext=None,
+            author=eff_author,
+            title=eff_title,
+            handling_mode=mode,
+            rename_preview=dict(plan.rename_preview),
+            options=state.global_options,
+        )
+
+        req = import_job_request_t(
+            run_id=run_id,
+            source_root=str(root.value),
+            state=state,
+            decisions=[dec],
+        )
+
+        job_ids = engine.start_import_job(req)
+        ran = engine.run_pending(limit=state.parallelism_n)
+
+        print(f"Created {len(job_ids)} job(s) for run_id={run_id}")
+        if ran:
+            print(f"Ran {len(ran)} job(s)")
+        for jid in job_ids:
+            print(f"  {jid}")
 
     async def _wizard_command(self, args: list[str]) -> None:
         """Run wizard command.

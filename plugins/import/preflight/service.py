@@ -8,6 +8,7 @@ ASCII-only.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import re
@@ -29,6 +30,8 @@ from .types import (
     IndexBook,
     IndexItem,
     IndexResult,
+    LookupStatus,
+    PlanPreview,
     PreflightResult,
     SkippedEntry,
 )
@@ -90,7 +93,7 @@ class PreflightService:
         fs: FileService,
         *,
         id3_majority: Id3MajorityConfig | None = None,
-        enable_lookup: bool = False,
+        enable_lookup: bool = True,
     ) -> None:
         self._fs = fs
         self._id3_majority = id3_majority or Id3MajorityConfig()
@@ -397,6 +400,110 @@ class PreflightService:
         )
         _emit_diag("boundary.end", operation="fast_index", data={"status": "succeeded"})
         return res
+
+    def plan_preview_for_book(
+        self,
+        root: RootName,
+        source_root_rel_path: str,
+        *,
+        book_ref: str,
+        rel_path: str,
+        unit_type: str,
+        author: str,
+        book: str,
+    ) -> PlanPreview:
+        """Build plan/preview for a selected unit.
+
+        This method is intended for CLI PHASE 1 after selection. Deep enrichment is
+        best-effort and MUST NOT block the initial selection screen.
+        """
+
+        # Best-effort: ensure cache exists for the current signature.
+        with contextlib.suppress(Exception):
+            self.fast_index(root, source_root_rel_path)
+
+        proposed_author = str(author or "").strip() or ""
+        proposed_title = str(book or "").strip() or ""
+
+        lookup = LookupStatus(status="disabled")
+        rename_preview: dict[str, str] = {str(rel_path): str(rel_path)}
+        cover_candidates: list[str] | None = None
+        fingerprint = None
+        meta: dict[str, Any] | None = None
+
+        try:
+            enriched = self._enrich_book(
+                root,
+                source_root_rel_path,
+                rel_path,
+                unit_type=str(unit_type or "dir"),
+            )
+            if isinstance(enriched, dict):
+                proposed_author = (
+                    str(enriched.get("suggested_author") or "").strip() or proposed_author
+                )
+                proposed_title = (
+                    str(enriched.get("suggested_title") or "").strip() or proposed_title
+                )
+
+                rp = enriched.get("rename_preview")
+                if isinstance(rp, dict) and rp:
+                    rename_preview = {str(k): str(v) for k, v in rp.items()}
+
+                cc = enriched.get("cover_candidates")
+                if isinstance(cc, list):
+                    cover_candidates = [str(x) for x in cc if str(x)]
+
+                fingerprint = _fingerprint_from_dict(enriched.get("fingerprint"))
+                meta = enriched.get("meta") if isinstance(enriched.get("meta"), dict) else None
+
+                # Lookup status is best-effort.
+                if not self._enable_lookup:
+                    lookup = LookupStatus(status="disabled")
+                else:
+                    lk = None
+                    if isinstance(meta, dict):
+                        lk = meta.get("lookup")
+                    if isinstance(lk, dict) and lk:
+                        lookup = LookupStatus(status="matched", source=str(lk.get("source") or ""))
+                    else:
+                        lookup = LookupStatus(status="unknown")
+
+                # Persist enrichment into the cache (best-effort) so subsequent calls are fast.
+                try:
+                    cache = self._load_cache()
+                    enrichment = (
+                        cache.get("enrichment", {})
+                        if isinstance(cache.get("enrichment"), dict)
+                        else {}
+                    )
+                    book_sig = self._book_signature(
+                        root, rel_path, unit_type=str(unit_type or "dir")
+                    )
+                    enriched2 = dict(enriched)
+                    enriched2["_sig"] = book_sig
+                    enrichment[str(book_ref)] = enriched2
+                    cache["enrichment"] = enrichment
+                    self._save_cache(cache)
+                except Exception:
+                    pass
+
+        except Exception as e:
+            if self._enable_lookup:
+                lookup = LookupStatus(status="error", error=f"{type(e).__name__}: {e}")
+
+        return PlanPreview(
+            book_ref=str(book_ref),
+            unit_type=str(unit_type or "dir"),
+            rel_path=str(rel_path),
+            proposed_author=str(proposed_author or ""),
+            proposed_title=str(proposed_title or ""),
+            lookup=lookup,
+            rename_preview=rename_preview,
+            cover_candidates=cover_candidates,
+            fingerprint=fingerprint,
+            meta=meta,
+        )
 
     def get_deep_scan_state(self) -> DeepScanState:
         cache = self._load_cache()
