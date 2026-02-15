@@ -1,6 +1,6 @@
 
 # AUDIOMASON2_PROJECT_CONTRACT.md
-Version: 1.2
+Version: 1.3
 
 Status: AUTHORITATIVE / IMMUTABLE BASE CONTRACT  
 Applies to: Entire AudioMason2 project (core, plugins, UI, tests, tooling, docs)  
@@ -132,7 +132,7 @@ Diagnostics are non-functional and fail-safe:
 
 All work follows exactly these phases:
 
-- PHASE 0: Preflight (detection only, read-only)
+- PHASE 0: Preflight (detection)
 - PHASE 1: User Input (interactive, UI-owned)
 - PHASE 2: Processing (strictly non-interactive)
 

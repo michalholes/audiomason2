@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.83
+Specification Version: 1.0.84
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -131,23 +131,21 @@ Synchronous shortcuts are forbidden except for trivial operations.
 
 ## 4. Execution Model (Strict Contract)
 
-### 4.1 Three?Phase Model
+### 4.1 Three-phase Model
 
 All processing follows **exactly** these phases:
 
 1. **PHASE 0 - Preflight**
-   - Detection only
-   - Read?only
-   - No side effects
+   - Detection 
    - No user interaction
 
 2. **PHASE 1 - User Input**
    - Interactive
-   - UI?controlled (CLI/Web)
+   - UI=controlled (CLI/Web)
    - All decisions are collected here
 
 3. **PHASE 2 - Processing**
-   - **STRICTLY NON?INTERACTIVE**
+   - **STRICTLY NON-INTERACTIVE**
    - Async background execution
    - No prompts, no questions, no UI calls
 
@@ -1056,7 +1054,7 @@ CLI and Web UI:
 
 2. Three-Phase Contract
 
-PHASE 0 — Preflight (Read-Only)
+PHASE 0 — Preflight
 - Deterministic
 - No source mutations (detection only); best-effort JOBS cache writes are allowed for performance (user-approved)
 - Provides suggestions and diagnostics
