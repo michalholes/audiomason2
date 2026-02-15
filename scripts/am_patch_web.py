@@ -9,7 +9,7 @@ def main() -> int:
     ap = argparse.ArgumentParser(prog="am_patch_web")
     ap.add_argument(
         "--config",
-        default="scripts/am_patch_web/am_patch_web.toml",
+        default="am_patch_web/am_patch_web.toml",
         help="Path to am_patch_web.toml",
     )
     args = ap.parse_args()
