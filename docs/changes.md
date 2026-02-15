@@ -1,3 +1,8 @@
+## 2026-02-15T00:35:00+01:00
+
+-   Issue 522: import_wizard API: Ensure PHASE 0 deep enrichment uses best-effort external lookup by default across all wizard entrypoints (/preflight and /start), not only the background deep scan.
+-   spec: Clarify that Web Import Wizard lookup default applies to all preflight/deep enrichment API paths and bump specification version to 1.0.80.
+
 ## 2026-02-15T00:25:00+01:00
 
 -   Issue 521: import: Ensure PHASE 0/2/processed_registry use a single canonical fingerprint key builder name and explicitly forbid full-file hashing for identity (stat-signature only).

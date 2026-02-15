@@ -361,12 +361,11 @@ def mount_import_wizard(app: FastAPI) -> None:
             operation="preflight",
             data={"status": "start", "root": root, "path": path},
         )
-        mods = _mods()
-        preflight_service_cls = mods["PreflightService"]
-        fs = _get_file_service(request)
         r = _parse_root(root)
         rel = _norm_rel_path(path)
-        svc = preflight_service_cls(fs)
+        # Web Import Wizard context: external lookup MUST be enabled by default
+        # (best-effort, fail-safe).
+        svc = _preflight_service(request)
 
         try:
             res = svc.run(r, rel)
@@ -664,7 +663,6 @@ def mount_import_wizard(app: FastAPI) -> None:
     def import_start(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
         _emit_import_action("import.queue", operation="queue", data={"status": "start"})
         mods = _mods()
-        preflight_service_cls = mods["PreflightService"]
         preflight_result_cls = mods["PreflightResult"]
         import_run_state_cls = mods["ImportRunState"]
         import_job_request_cls = mods["ImportJobRequest"]
@@ -723,12 +721,13 @@ def mount_import_wizard(app: FastAPI) -> None:
             norm_opts[k] = v
         options = norm_opts
 
-        fs = _get_file_service(request)
         r = _parse_root(root)
         rel = _norm_rel_path(str(path))
 
         try:
-            preflight = preflight_service_cls(fs).run(r, rel)
+            # Web Import Wizard context: external lookup MUST be enabled by default
+            # (best-effort, fail-safe).
+            preflight = _preflight_service(request).run(r, rel)
         except Exception as e:
             _emit_import_action(
                 "import.queue",
