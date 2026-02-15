@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.82
+Specification Version: 1.0.83
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -889,6 +889,21 @@ Uvicorn log settings MUST map from AM verbosity as follows:
 
 In all modes, route-level visibility MUST be provided via deterministic boundary
 diagnostics events (boundary.start/boundary.end) rather than access log spam.
+
+### 9.0.2 Web plugin selection (CLI contract)
+
+When starting web mode, the CLI MUST NOT eager-load all plugins.
+
+Web plugin selection MUST be deterministic and manifest-only:
+
+- Enumerate only the built-in plugin directories under the repository `plugins/` package.
+- Traverse candidate directories in a stable order (sorted by directory name).
+- Read `plugin.yaml` using manifest-only loading (no plugin code import/execution).
+- Select `web_interface` if present; otherwise fall back to `web_server`.
+
+If the selected web plugin fails to load at the call boundary, the CLI MUST emit a
+`plugin.load_failed` diagnostics envelope via the Core event bus and also print a
+human-readable CLI error.
 
 ### 9.1 Web Interface Configuration Surface
 

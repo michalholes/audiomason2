@@ -845,39 +845,74 @@ class CLIPlugin:
 
         if self.verbosity >= VerbosityLevel.DEBUG:
             log.debug(f"Plugins directory: {plugins_dir}")
-            log.debug("Loading all plugins...")
 
-        # Load all plugins first (so web UI can list them)
-        plugin_dirs = [
-            d for d in plugins_dir.iterdir() if d.is_dir() and (d / "plugin.yaml").exists()
-        ]
+        # Deterministic manifest-only selection (no eager load-all).
+        candidate_names = ["web_interface", "web_server"]
+        plugin_dirs = sorted(
+            [d for d in plugins_dir.iterdir() if d.is_dir() and (d / "plugin.yaml").exists()],
+            key=lambda p: p.name,
+        )
 
-        if self.verbosity >= VerbosityLevel.DEBUG:
-            log.debug(f"Found {len(plugin_dirs)} plugin directories")
+        selected_dir: Path | None = None
+        selected_name: str | None = None
 
         for plugin_dir in plugin_dirs:
             try:
-                if self.verbosity >= VerbosityLevel.DEBUG:
-                    log.debug(f"Loading: {plugin_dir.name}...")
-                loader.load_plugin(plugin_dir, validate=False)
-                if self.verbosity >= VerbosityLevel.DEBUG:
-                    log.debug("OK Loaded")
+                manifest = loader.load_manifest_only(plugin_dir)
             except Exception as e:
                 if self.verbosity >= VerbosityLevel.DEBUG:
-                    log.debug(f"X Failed: {e}")
+                    log.debug(
+                        f"Manifest load failed for {plugin_dir.name}: {type(e).__name__}: {e}"
+                    )
+                continue
 
-        if self.verbosity >= VerbosityLevel.DEBUG:
-            loaded = loader.list_plugins()
-            log.debug(f"Successfully loaded {len(loaded)} plugins: {loaded}")
+            if manifest.name not in candidate_names:
+                continue
 
-        # Get web_server plugin
-        web_plugin = loader.get_plugin("web_interface")
-        # Backward-compatibility fallback (older name)
-        if not web_plugin:
-            web_plugin = loader.get_plugin("web_server")
-        if not web_plugin:
+            # Prefer web_interface over web_server.
+            if manifest.name == "web_interface":
+                selected_dir = plugin_dir
+                selected_name = manifest.name
+                break
+
+            if selected_dir is None:
+                selected_dir = plugin_dir
+                selected_name = manifest.name
+
+        if selected_dir is None or selected_name is None:
             self._error("X Web server plugin not found")
             return
+
+        try:
+            web_plugin = loader.load_plugin(selected_dir, validate=False)
+        except Exception as e:
+            # Mandatory call-boundary diagnostics (fail-safe).
+            try:
+                from audiomason.core.diagnostics import build_envelope
+                from audiomason.core.events import get_event_bus
+
+                get_event_bus().publish(
+                    "plugin.load_failed",
+                    build_envelope(
+                        event="plugin.load_failed",
+                        component="cli",
+                        operation="web.startup",
+                        data={
+                            "plugin_id": selected_name or selected_dir.name,
+                            "error_type": type(e).__name__,
+                            "error_message": str(e),
+                        },
+                    ),
+                )
+            except Exception as diag_exc:
+                if self.verbosity >= VerbosityLevel.DEBUG:
+                    log.debug(
+                        "Diagnostics emission failed for web plugin load: "
+                        f"{type(diag_exc).__name__}: {diag_exc}"
+                    )
+
+            self._error(f"X Error loading web server plugin: {e}")
+            raise SystemExit(1) from e
 
         exit_code = 0
         reason = "normal exit"
