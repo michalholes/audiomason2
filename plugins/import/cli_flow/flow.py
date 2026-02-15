@@ -162,6 +162,73 @@ async def run_import_cli_flow(argv: list[str], ui) -> int:
     eff_author = ui.prompt_text("Effective author", plan.proposed_author)
     eff_title = ui.prompt_text("Effective title", plan.proposed_title)
 
+    # ===========================================
+    # PHASE 1: Additional required wizard options
+    # ===========================================
+
+    # 1) Filename normalization options
+    filename_normalization_enabled = ui.confirm(
+        "Enable filename normalization?",
+        default=True,
+    )
+    filename_normalization_policy = {
+        "enabled": bool(filename_normalization_enabled),
+        "strategy": "basic",
+    }
+
+    # 2) Audio processing configuration (explicit confirmation)
+    audio_processing_enabled = ui.confirm(
+        "Enable audio processing?",
+        default=True,
+    )
+    audio_processing_profile = ui.select(
+        "Select audio processing profile:",
+        [
+            "default",
+            "passthrough",
+        ],
+    )
+    if audio_processing_profile is None:
+        return 0
+    audio_processing = {
+        "enabled": bool(audio_processing_enabled),
+        "profile": str(audio_processing_profile),
+    }
+    if not ui.confirm("Confirm audio processing configuration?", default=True):
+        ui.print("Not started.")
+        return 0
+
+    # 3) Delete source + guard toggle
+    delete_source = ui.confirm("Delete source after import?", default=False)
+    delete_guard_enabled = ui.confirm("Enable delete guard?", default=True)
+    delete_policy = {
+        "enabled": bool(delete_source),
+        "guard_enabled": bool(delete_guard_enabled),
+    }
+
+    # 4) Conflict policy
+    conflict_policy = ui.select(
+        "Select conflict policy:",
+        [
+            "overwrite",
+            "skip",
+            "version_suffix",
+        ],
+    )
+    if conflict_policy is None:
+        return 0
+
+    # 5) Optional parallelism override (stored only; enforcement unchanged)
+    par_raw = ui.prompt_text("Parallelism override (empty = auto)", "")
+    par_override: int | None = None
+    if str(par_raw or "").strip():
+        try:
+            n = int(str(par_raw).strip())
+            if n >= 1:
+                par_override = n
+        except Exception:
+            par_override = None
+
     if not ui.confirm("Start processing now?", default=False):
         ui.print("Not started.")
         return 0
@@ -190,6 +257,11 @@ async def run_import_cli_flow(argv: list[str], ui) -> int:
             "effective_author": eff_author,
             "effective_title": eff_title,
             "rename_preview": dict(plan.rename_preview),
+            "filename_normalization_policy": filename_normalization_policy,
+            "audio_processing": audio_processing,
+            "delete_source": delete_policy,
+            "conflict_policy": str(conflict_policy),
+            "parallelism_override": par_override,
         },
     )
 
