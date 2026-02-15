@@ -5,6 +5,7 @@ from typing import Any, Literal
 
 JobMode = Literal["patch", "repair", "finalize_live", "finalize_workspace", "rerun_latest"]
 JobStatus = Literal["queued", "running", "success", "fail", "canceled", "unknown"]
+RunResult = Literal["success", "fail", "unknown", "canceled"]
 
 
 @dataclass
@@ -31,9 +32,14 @@ class JobRecord:
 class RunEntry:
     issue_id: int
     log_rel_path: str
-    result: Literal["success", "fail", "unknown"]
+    result: RunResult
     result_line: str | None
     mtime_utc: str
+
+    # Linked artifacts (may be empty when not found)
+    archived_patch_rel_path: str | None = None
+    diff_bundle_rel_path: str | None = None
+    success_zip_rel_path: str | None = None
 
 
 @dataclass

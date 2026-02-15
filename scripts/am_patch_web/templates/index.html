@@ -34,6 +34,7 @@
             <option value="success">success</option>
             <option value="fail">fail</option>
             <option value="unknown">unknown</option>
+            <option value="canceled">canceled</option>
           </select>
         </div>
         <div class="row">
@@ -133,9 +134,20 @@
         <div id="fsList" class="scroll scroll-tall"></div>
       </section>
 
-      <section class="card">
-        <h2>Issue detail (placeholder)</h2>
-        <div class="muted">Select a run on the left to add overview/logs/artifacts tabs.</div>
+      <section class="card" id="issueDetailCard">
+        <h2>C) Issue detail</h2>
+        <div id="issueDetailTitle" class="muted">Select a run on the left.</div>
+        <div class="tabs" id="issueTabs" style="display:none">
+          <button class="tabbtn" id="tabOverview">Overview</button>
+          <button class="tabbtn" id="tabLogs">Logs</button>
+          <button class="tabbtn" id="tabPatch">Patch</button>
+          <button class="tabbtn" id="tabDiff">Diff bundle</button>
+          <button class="tabbtn" id="tabFiles">Files</button>
+        </div>
+        <div id="issueTabContent" class="tabcontent" style="display:none">
+          <div id="issueTabLinks" class="row"></div>
+          <pre id="issueTabBody" class="pre"></pre>
+        </div>
       </section>
     </section>
 

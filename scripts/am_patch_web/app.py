@@ -6,14 +6,14 @@ import shutil
 import zipfile
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Literal, cast
+from typing import Any, cast
 
 from .command_parse import CommandParseError, build_canonical_command, parse_runner_command
 from .config import AppConfig
 from .fs_jail import FsJail, FsJailError, list_dir, safe_rename
 from .indexing import compute_stats, iter_runs
 from .issue_alloc import allocate_next_issue_id
-from .models import JobMode, JobRecord
+from .models import JobMode, JobRecord, RunEntry
 from .queue import JobQueue, new_job_id
 
 
@@ -85,6 +85,115 @@ def compute_success_archive_rel(
     if not name.endswith(".zip"):
         name = f"{name}.zip"
     return str(Path(patches_root_rel) / name)
+
+
+def _utc_iso(ts: float) -> str:
+    return datetime.fromtimestamp(ts, tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _find_latest_artifact_rel(patches_root: Path, dir_name: str, contains: str) -> str | None:
+    d = patches_root / dir_name
+    if not d.exists() or not d.is_dir():
+        return None
+    best = None
+    best_m = -1.0
+    for p in d.iterdir():
+        if not p.is_file():
+            continue
+        name = p.name
+        if contains not in name:
+            continue
+        try:
+            st = p.stat()
+        except Exception:
+            continue
+        if st.st_mtime > best_m:
+            best_m = st.st_mtime
+            best = name
+    if not best:
+        return None
+    return str(Path(dir_name) / best)
+
+
+def _decorate_run(
+    run: RunEntry,
+    *,
+    patches_root: Path,
+    success_zip_rel: str,
+) -> RunEntry:
+    run.success_zip_rel_path = success_zip_rel
+    issue_key = f"issue_{run.issue_id}"
+
+    # Archived patch: try result-specific dir first, then both.
+    if run.result == "success":
+        run.archived_patch_rel_path = _find_latest_artifact_rel(
+            patches_root, "successful", issue_key
+        )
+    elif run.result in ("fail", "canceled"):
+        run.archived_patch_rel_path = _find_latest_artifact_rel(
+            patches_root, "unsuccessful", issue_key
+        )
+
+    if not run.archived_patch_rel_path:
+        run.archived_patch_rel_path = _find_latest_artifact_rel(
+            patches_root, "successful", issue_key
+        ) or _find_latest_artifact_rel(patches_root, "unsuccessful", issue_key)
+
+    run.diff_bundle_rel_path = _find_latest_artifact_rel(
+        patches_root, "artifacts", f"issue_{run.issue_id}_diff"
+    )
+    return run
+
+
+def _iter_canceled_runs(patches_root: Path) -> list[RunEntry]:
+    jobs_root = patches_root / "artifacts" / "web_jobs"
+    if not jobs_root.exists() or not jobs_root.is_dir():
+        return []
+
+    out: list[RunEntry] = []
+    for d in jobs_root.iterdir():
+        if not d.is_dir():
+            continue
+        job_json = d / "job.json"
+        if not job_json.exists() or not job_json.is_file():
+            continue
+        try:
+            raw = json.loads(job_json.read_text(encoding="utf-8", errors="replace"))
+        except Exception:
+            continue
+        if not isinstance(raw, dict):
+            continue
+        if str(raw.get("status", "")) != "canceled":
+            continue
+        issue_s = str(raw.get("issue_id", ""))
+        try:
+            issue_id = int(issue_s)
+        except Exception:
+            continue
+
+        log_path = d / "runner.log"
+        rel = str(
+            Path("artifacts")
+            / "web_jobs"
+            / d.name
+            / ("runner.log" if log_path.exists() else "job.json")
+        )
+        try:
+            st = (log_path if log_path.exists() else job_json).stat()
+        except Exception:
+            continue
+        out.append(
+            RunEntry(
+                issue_id=issue_id,
+                log_rel_path=rel,
+                result="canceled",
+                result_line="RESULT: CANCELED",
+                mtime_utc=_utc_iso(st.st_mtime),
+            )
+        )
+
+    out.sort(key=lambda r: (r.mtime_utc, r.issue_id), reverse=True)
+    return out
 
 
 class App:
@@ -246,6 +355,17 @@ class App:
 
     def api_runs(self, qs: dict[str, str]) -> tuple[int, bytes]:
         runs = iter_runs(self.patches_root, self.cfg.indexing.log_filename_regex)
+        runs.extend(_iter_canceled_runs(self.patches_root))
+
+        runner_cfg_path = (self.repo_root / self.cfg.runner.runner_config_toml).resolve()
+        success_rel = compute_success_archive_rel(
+            self.repo_root, runner_cfg_path, self.cfg.paths.patches_root
+        )
+
+        runs = [
+            _decorate_run(r, patches_root=self.patches_root, success_zip_rel=success_rel)
+            for r in runs
+        ]
 
         issue_id = qs.get("issue_id")
         result = qs.get("result")
@@ -260,17 +380,9 @@ class App:
         if result:
             if result not in ("success", "fail", "unknown", "canceled"):
                 return _err("Invalid result filter", status=400)
+            runs = [r for r in runs if r.result == result]
 
-            runs = (
-                []
-                if result == "canceled"
-                else [
-                    r
-                    for r in runs
-                    if r.result == cast(Literal["success", "fail", "unknown"], result)
-                ]
-            )
-
+        runs.sort(key=lambda r: (r.mtime_utc, r.issue_id), reverse=True)
         runs = runs[: max(1, min(limit, 500))]
         return _ok({"runs": [r.__dict__ for r in runs]})
 

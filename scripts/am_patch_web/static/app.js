@@ -67,6 +67,9 @@
   var fsSelected = "";
   var cfg = null;
   var issueRegex = null;
+  var runsCache = [];
+  var selectedRun = null;
+
 
   function setFsHint(msg) {
     var h = el("fsHint");
@@ -145,22 +148,62 @@
     q.push("limit=80");
     apiGet("/api/runs?" + q.join("&")).then(function (r) {
       if (!r.ok) { setPre("runsList", r); return; }
-      var runs = r.runs || [];
-      var html = runs.map(function (x) {
+      runsCache = r.runs || [];
+      var html = runsCache.map(function (x, idx) {
         var log = x.log_rel_path || "";
-        var link = log ? "<a class=\"linklike\" href=\"/api/fs/download?path=" + encodeURIComponent(log) + "\">log</a>" : "";
-        return "<div class=\"item\"><span>#" + x.issue_id + " " + x.result + " " + link + "</span><span class=\"muted\">" + x.mtime_utc + "</span></div>";
+        var link = log ? "<a class="linklike" href="/api/fs/download?path=" + encodeURIComponent(log) + "">log</a>" : "";
+        var sel = (selectedRun && selectedRun.issue_id === x.issue_id && selectedRun.mtime_utc === x.mtime_utc) ? " *" : "";
+        return (
+          "<div class="item runitem" data-idx="" + String(idx) + "">" +
+          "<span class="name">#" + x.issue_id + " " + x.result + sel + "</span>" +
+          "<span class="actions">" + link + " <span class="muted">" + x.mtime_utc + "</span></span>" +
+          "</div>"
+        );
       }).join("");
-      el("runsList").innerHTML = html || "<div class=\"muted\">(none)</div>";
+      el("runsList").innerHTML = html || "<div class="muted">(none)</div>";
+
+      Array.from(el("runsList").querySelectorAll(".runitem .name")).forEach(function (node) {
+        node.addEventListener("click", function () {
+          var item = node.parentElement;
+          var idx = parseInt(item.getAttribute("data-idx") || "-1", 10);
+          if (idx >= 0 && idx < runsCache.length) {
+            selectedRun = runsCache[idx];
+            renderIssueDetail();
+            refreshRuns();
+          }
+        });
+      });
     });
+  }
+
+  function refreshTail(lines);
   }
 
   function refreshTail(lines) {
     apiGet("/api/runner/tail?lines=" + encodeURIComponent(String(lines || 200))).then(function (r) {
       if (!r.ok) { setPre("tail", r); return; }
-      setPre("tail", r.tail || "");
+      var t = r.tail || "";
+      setPre("tail", t);
+      updateShortProgressFromTail(t);
     });
   }
+
+  function updateShortProgressFromTail(tailText) {
+    var lines = String(tailText || "").split(/
+?
+/);
+    var stage = "(idle)";
+    for (var i = lines.length - 1; i >= 0; i--) {
+      var s = (lines[i] || "").trim();
+      if (!s) continue;
+      if (s.indexOf("RESULT:") === 0) { stage = s; break; }
+      if (s.indexOf("STATUS:") === 0) { stage = s; break; }
+      if (s.indexOf("DO:") === 0) { stage = s; break; }
+    }
+    if (el("progress")) el("progress").textContent = stage;
+  }
+
+  function refreshStats()
 
   function refreshStats() {
     apiGet("/api/debug/diagnostics").then(function (r) {
@@ -243,6 +286,91 @@
           });
         });
     });
+  }
+
+  function renderIssueDetail() {
+    var title = el("issueDetailTitle");
+    var tabs = el("issueTabs");
+    var content = el("issueTabContent");
+    var links = el("issueTabLinks");
+    var body = el("issueTabBody");
+
+    if (!selectedRun) {
+      if (title) title.textContent = "Select a run on the left.";
+      if (tabs) tabs.style.display = "none";
+      if (content) content.style.display = "none";
+      return;
+    }
+
+    if (title) title.textContent = "Issue " + selectedRun.issue_id + " / " + selectedRun.result + " / " + selectedRun.mtime_utc;
+    if (tabs) tabs.style.display = "flex";
+    if (content) content.style.display = "block";
+
+    function link(label, rel) {
+      if (!rel) return "";
+      return "<a class="linklike" href="/api/fs/download?path=" + encodeURIComponent(rel) + "">" + label + "</a>";
+    }
+
+    function setTab(name) {
+      ["Overview", "Logs", "Patch", "Diff", "Files"].forEach(function (n) {
+        var b = el("tab" + n);
+        if (!b) return;
+        if (n === name) b.classList.add("active");
+        else b.classList.remove("active");
+      });
+
+      if (!links || !body) return;
+
+      var logRel = selectedRun.log_rel_path || "";
+      var archived = selectedRun.archived_patch_rel_path || "";
+      var diffb = selectedRun.diff_bundle_rel_path || "";
+      var successZip = selectedRun.success_zip_rel_path || (cfg && cfg.runner ? cfg.runner.success_archive_rel : "");
+
+      if (name === "Overview") {
+        links.innerHTML = [
+          link("log", logRel),
+          link("archived patch", archived),
+          link("issue diff", diffb),
+          link("latest success zip", successZip)
+        ].filter(Boolean).join(" | ");
+        body.textContent = JSON.stringify(selectedRun, null, 2);
+        return;
+      }
+
+      if (name === "Logs") {
+        links.innerHTML = [link("download log", logRel)].filter(Boolean).join(" | ");
+        body.textContent = "Log is downloadable via link above.
+
+For live runner tail, use the right panel.";
+        return;
+      }
+
+      if (name === "Patch") {
+        links.innerHTML = [link("download archived patch", archived)].filter(Boolean).join(" | ");
+        body.textContent = archived ? ("Archived patch: " + archived) : "No archived patch found.";
+        return;
+      }
+
+      if (name === "Diff") {
+        links.innerHTML = [link("download issue diff bundle", diffb)].filter(Boolean).join(" | ");
+        body.textContent = diffb ? ("Issue diff bundle: " + diffb) : "No issue diff bundle found.";
+        return;
+      }
+
+      if (name === "Files") {
+        links.innerHTML = "";
+        body.textContent = "Use the Files panel above to browse patches/.";
+        return;
+      }
+    }
+
+    setTab("Overview");
+
+    if (el("tabOverview")) el("tabOverview").onclick = function () { setTab("Overview"); };
+    if (el("tabLogs")) el("tabLogs").onclick = function () { setTab("Logs"); };
+    if (el("tabPatch")) el("tabPatch").onclick = function () { setTab("Patch"); };
+    if (el("tabDiff")) el("tabDiff").onclick = function () { setTab("Diff"); };
+    if (el("tabFiles")) el("tabFiles").onclick = function () { setTab("Files"); };
   }
 
   function rawLooksLikeRunnerCommand(raw) {
@@ -367,6 +495,28 @@
     }).catch(function () { return null; });
   }
 
+  function refreshHeader() {
+    var base = "";
+    if (cfg && cfg.server && cfg.server.host && cfg.server.port) {
+      base = "server: " + cfg.server.host + ":" + cfg.server.port;
+    }
+    apiGet("/api/debug/diagnostics").then(function (d) {
+      if (!d || d.ok === false) return;
+      var lock = d.lock || {};
+      var disk = d.disk || {};
+      var held = lock.held ? "LOCK:held" : "LOCK:free";
+      var pct = "";
+      if (disk.total && disk.used) {
+        pct = "disk:" + String(Math.round((disk.used / disk.total) * 100)) + "%";
+      }
+      var meta = base;
+      if (cfg && cfg.paths && cfg.paths.patches_root) meta += " | patches: " + cfg.paths.patches_root;
+      meta += " | " + held;
+      if (pct) meta += " | " + pct;
+      if (el("hdrMeta")) el("hdrMeta").textContent = meta;
+    });
+  }
+
   function wireButtons() {
     el("fsRefresh").addEventListener("click", refreshFs);
     el("fsUp").addEventListener("click", function () {
@@ -454,6 +604,8 @@
         refreshStats();
         refreshJobs();
         refreshTail(200);
+        refreshHeader();
+        renderIssueDetail();
       });
     }
 
@@ -480,11 +632,17 @@
       refreshTail(200);
       refreshStats();
       refreshJobs();
+      refreshHeader();
+      renderIssueDetail();
       validateAndPreview();
 
       setInterval(function () {
         refreshJobs();
       }, 2000);
+
+      setInterval(function () {
+        refreshHeader();
+      }, 5000);
     });
   }
 
