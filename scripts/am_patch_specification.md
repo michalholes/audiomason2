@@ -131,7 +131,8 @@ Final summary (always printed at the end):
     D path3
 
   - `COMMIT: <sha>` or `(none)`
-  - `PUSH: OK|FAIL|UNKNOWN` (when commit/push is enabled)
+  - `PUSH: OK|FAIL` (when commit/push is enabled)
+    NOTE: 'PUSH: UNKNOWN' is forbidden; if it appears, it indicates a runner defect.
   - `LOG: <path>`
 - FAIL:
   - `RESULT: FAIL`

@@ -736,6 +736,16 @@ def main(argv: list[str]) -> int:
                 )
                 final_commit_sha = sha
 
+                # Wire live results into the unified end-of-run summary.
+                push_ok_for_posthook = push_ok
+                if push_ok is True and sha:
+                    try:
+                        ns = git_ops.commit_changed_files_name_status(logger, repo_root, sha)
+                        final_pushed_files = [f"{st} {p}" for (st, p) in ns]
+                    except Exception:
+                        # Best-effort only; never override SUCCESS contract.
+                        final_pushed_files = None
+
             logger.section("SUCCESS")
             if policy.commit_and_push:
                 logger.line(f"commit_sha={sha}")
