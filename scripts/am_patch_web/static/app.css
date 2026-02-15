@@ -1,20 +1,33 @@
 body { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; margin: 0; background: #0b0b0b; color: #eaeaea; }
-.bar { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: #141414; border-bottom: 1px solid #2a2a2a; }
-.title { font-size: 16px; font-weight: 700; }
+.bar { display: flex; justify-content: space-between; align-items: center; padding: 10px 12px; background: #141414; border-bottom: 1px solid #2a2a2a; gap: 10px; }
+.title { font-size: 16px; font-weight: 700; white-space: nowrap; }
+.hdrmeta { flex: 1; text-align: center; color: #aaa; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .actions .link { color: #9ad; text-decoration: none; }
-.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 10px; padding: 10px; }
+
+.layout { display: grid; grid-template-columns: 360px 1fr 360px; gap: 10px; padding: 10px; align-items: start; }
+.panel { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.panel-left, .panel-right { position: sticky; top: 10px; max-height: calc(100vh - 20px); overflow: auto; padding-right: 4px; }
+
 .card { background: #121212; border: 1px solid #2a2a2a; border-radius: 8px; padding: 10px; }
+.card-tight { padding: 8px; }
 .card h2 { margin: 0 0 8px 0; font-size: 14px; }
 .card h3 { margin: 10px 0 6px 0; font-size: 13px; }
 .row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
-.input, .textarea, select { width: 100%; background: #0b0b0b; color: #eaeaea; border: 1px solid #2a2a2a; border-radius: 6px; padding: 6px; font-family: inherit; font-size: 12px; }
-.btn { background: #1b1b1b; color: #eaeaea; border: 1px solid #2a2a2a; border-radius: 6px; padding: 6px 10px; font-size: 12px; cursor: pointer; }
+.input, .textarea, select { width: 100%; background: #0b0b0b; color: #eaeaea; border: 1px solid #2a2a2a; border-radius: 6px; padding: 6px; font-family: inherit; font-size: 12px; min-width: 0; }
+.btn { background: #1b1b1b; color: #eaeaea; border: 1px solid #2a2a2a; border-radius: 6px; padding: 6px 10px; font-size: 12px; cursor: pointer; white-space: nowrap; }
 .btn-small { padding: 4px 8px; font-size: 11px; }
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
-.dropzone { border: 2px dashed #2a2a2a; border-radius: 8px; padding: 16px; text-align: center; cursor: pointer; background: #0b0b0b; }
+
+.dropzone { border: 2px dashed #2a2a2a; border-radius: 8px; padding: 16px; text-align: center; cursor: pointer; background: #0b0b0b; user-select: none; }
+.dropzone-big { min-height: 220px; display: flex; flex-direction: column; justify-content: center; gap: 6px; }
+.dropzone.dragover { border-color: #9ad; }
+.dz-title { font-size: 16px; font-weight: 700; }
+.dz-sub { font-size: 12px; color: #aaa; }
+
 .pre { white-space: pre-wrap; background: #0b0b0b; border: 1px solid #2a2a2a; border-radius: 6px; padding: 8px; font-size: 12px; min-height: 60px; }
-.pre-tall { min-height: 260px; }
+.pre-tall { min-height: 320px; }
 .scroll { border: 1px solid #2a2a2a; border-radius: 6px; padding: 6px; background: #0b0b0b; max-height: 280px; overflow: auto; font-size: 12px; }
+.scroll-tall { max-height: 420px; }
 .item { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; }
 .item .name { cursor: pointer; user-select: none; }
 .item .name:hover { text-decoration: underline; }
@@ -27,3 +40,10 @@ body { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Libe
 .linklike:hover { text-decoration: underline; }
 .muted { color: #aaa; font-size: 12px; }
 .lbl { width: 52px; color: #aaa; font-size: 12px; }
+.lbl-wide { width: 72px; }
+.details { margin-bottom: 8px; }
+
+@media (max-width: 1200px) {
+  .layout { grid-template-columns: 1fr; }
+  .panel-left, .panel-right { position: static; max-height: none; overflow: visible; padding-right: 0; }
+}

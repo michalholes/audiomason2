@@ -1,6 +1,8 @@
 (function () {
   "use strict";
 
+  function el(id) { return document.getElementById(id); }
+
   var netlog = [];
   function logNet(entry) {
     netlog.push(entry);
@@ -36,9 +38,9 @@
     });
   }
 
-  function el(id) { return document.getElementById(id); }
-
-  var fsSelected = "";
+  function setPre(id, obj) {
+    el(id).textContent = typeof obj === "string" ? obj : JSON.stringify(obj, null, 2);
+  }
 
   function joinRel(base, name) {
     base = (base || "").replace(/^\/+/, "").replace(/\/+$/, "");
@@ -55,12 +57,20 @@
     return idx >= 0 ? p.slice(0, idx) : "";
   }
 
-  function setFsHint(msg) {
-    el("fsHint").textContent = msg || "";
+  function normalizePatchPath(p) {
+    p = (p || "").trim();
+    if (!p) return "";
+    if (p.indexOf("patches/") === 0) return p;
+    return "patches/" + p.replace(/^\/+/, "");
   }
 
-  function setPre(id, obj) {
-    el(id).textContent = typeof obj === "string" ? obj : JSON.stringify(obj, null, 2);
+  var fsSelected = "";
+  var cfg = null;
+  var issueRegex = null;
+
+  function setFsHint(msg) {
+    var h = el("fsHint");
+    if (h) h.textContent = msg || "";
   }
 
   function refreshFs() {
@@ -103,6 +113,23 @@
           }
           fsSelected = rel;
           setFsHint("selected: " + rel);
+          // If it's a plausible patch file, prefill patchPath.
+          if (/\.(zip|patch|diff)$/i.test(rel)) {
+            el("patchPath").value = normalizePatchPath(rel);
+            // Try to auto-extract issue id.
+            var m = null;
+            if (issueRegex) {
+              try { m = issueRegex.exec(rel); } catch (e) { m = null; }
+            }
+            if (!m) {
+              var m2 = /(?:issue_|#)(\d+)/i.exec(rel) || /(\d{3,6})/.exec(rel);
+              m = m2;
+            }
+            if (m && m[1] && !el("issueId").value.trim()) {
+              el("issueId").value = String(m[1]);
+            }
+            validateAndPreview();
+          }
           refreshFs();
         });
       });
@@ -115,7 +142,7 @@
     var res = el("runsResult").value;
     if (issue) q.push("issue_id=" + encodeURIComponent(issue));
     if (res) q.push("result=" + encodeURIComponent(res));
-    q.push("limit=50");
+    q.push("limit=80");
     apiGet("/api/runs?" + q.join("&")).then(function (r) {
       if (!r.ok) { setPre("runsList", r); return; }
       var runs = r.runs || [];
@@ -161,13 +188,37 @@
     });
   }
 
+  function renderActiveJob(jobs) {
+    var active = (jobs || []).find(function (j) { return j.status === "running"; }) || null;
+    var queued = (jobs || []).filter(function (j) { return j.status === "queued"; });
+
+    var box = el("activeJob");
+    var prog = el("progress");
+
+    if (!box) return;
+
+    if (!active) {
+      box.textContent = queued.length ? ("queued: " + queued.length) : "(none)";
+      if (prog) prog.textContent = queued.length ? "queued" : "(idle)";
+      return;
+    }
+
+    var msg = "job " + active.job_id;
+    if (active.issue_id) msg += " (issue " + active.issue_id + ")";
+    msg += " / " + active.mode;
+    box.textContent = msg;
+    if (prog) prog.textContent = "running";
+  }
+
   function refreshJobs() {
     apiGet("/api/jobs").then(function (r) {
       if (!r.ok) { setPre("jobsList", r); return; }
       var jobs = r.jobs || [];
+      renderActiveJob(jobs);
+
       var html = jobs.map(function (j) {
-        var cancel = (j.status === "queued" || j.status === "running") ? "<button class=\"btn\" data-cancel=\"" + j.job_id + "\">Cancel</button>" : "";
-        var tail = "<button class=\"btn\" data-tail=\"" + j.job_id + "\">Tail</button>";
+        var cancel = (j.status === "queued" || j.status === "running") ? "<button class=\"btn btn-small\" data-cancel=\"" + j.job_id + "\">Cancel</button>" : "";
+        var tail = "<button class=\"btn btn-small\" data-tail=\"" + j.job_id + "\">Tail</button>";
         return "<div class=\"item\"><span>" + j.job_id + " " + j.status + "</span><span>" + tail + " " + cancel + "</span></div>";
       }).join("");
       el("jobsList").innerHTML = html || "<div class=\"muted\">(none)</div>";
@@ -194,22 +245,32 @@
     });
   }
 
+  function rawLooksLikeRunnerCommand(raw) {
+    raw = (raw || "").trim();
+    if (!raw) return false;
+    if (raw.indexOf("scripts/am_patch.py") >= 0) return true;
+    if (/\bam_patch\.py\b/.test(raw)) return true;
+    return false;
+  }
+
   function validateAndPreview() {
     var mode = el("mode").value;
-    var raw = el("rawCommand").value.trim();
+    var raw = el("rawCommand") ? el("rawCommand").value.trim() : "";
 
-    if (raw) {
+    if (raw && rawLooksLikeRunnerCommand(raw)) {
       apiPost("/api/parse_command", { raw: raw }).then(function (r) {
         setPre("preview", r);
         el("enqueueBtn").disabled = !r.ok;
-        el("enqueueHint").textContent = r.ok ? "" : (r.error || "invalid");
+        var hint = el("enqueueHint");
+        if (hint) hint.textContent = r.ok ? "" : (r.error || "invalid");
       });
       return;
     }
 
     var issueId = el("issueId").value.trim();
     var commitMsg = el("commitMsg").value.trim();
-    var patchPath = el("patchPath").value.trim();
+    var patchPath = normalizePatchPath(el("patchPath").value);
+    el("patchPath").value = patchPath;
 
     var ok = true;
     if (mode === "patch" || mode === "repair") {
@@ -219,7 +280,8 @@
     var preview = { mode: mode, issue_id: issueId, commit_message: commitMsg, patch_path: patchPath };
     setPre("preview", preview);
     el("enqueueBtn").disabled = !ok;
-    el("enqueueHint").textContent = ok ? "" : "missing fields";
+    var hint2 = el("enqueueHint");
+    if (hint2) hint2.textContent = ok ? "" : "missing fields";
   }
 
   function enqueue() {
@@ -227,8 +289,8 @@
       mode: el("mode").value,
       issue_id: el("issueId").value.trim(),
       commit_message: el("commitMsg").value.trim(),
-      patch_path: el("patchPath").value.trim(),
-      raw_command: el("rawCommand").value.trim()
+      patch_path: normalizePatchPath(el("patchPath").value.trim()),
+      raw_command: (el("rawCommand") ? el("rawCommand").value.trim() : "")
     };
     apiPost("/api/jobs/enqueue", body).then(function (r) {
       setPre("preview", r);
@@ -243,19 +305,24 @@
     function doUpload(file) {
       var fd = new FormData();
       fd.append("file", file);
-      fetch("/api/upload/patch", { method: "POST", body: fd })
-        .then(function (r) { return r.json(); })
+      fetch("/api/upload/patch", { method: "POST", body: fd, headers: { "Accept": "application/json" } })
+        .then(function (r) {
+          return r.text().then(function (t) {
+            try { return JSON.parse(t); } catch (e) { return { ok: false, error: "bad json", raw: t }; }
+          });
+        })
         .then(function (j) {
           setPre("uploadResult", j);
           if (j && j.stored_rel_path) {
-            el("patchPath").value = j.stored_rel_path;
-            var up = (j.stored_rel_path || "");
+            el("patchPath").value = String(j.stored_rel_path);
+            var up = String(j.stored_rel_path || "");
             var parent = parentRel(up.replace(/^patches\//, ""));
-            if (el("fsPath").value === "") {
+            if ((el("fsPath").value || "") === "") {
               el("fsPath").value = parent;
             }
           }
           refreshFs();
+          validateAndPreview();
         })
         .catch(function (e) { setPre("uploadResult", String(e)); });
     }
@@ -265,17 +332,42 @@
       if (input.files && input.files[0]) doUpload(input.files[0]);
     });
 
-    zone.addEventListener("dragover", function (e) { e.preventDefault(); });
+    function setDrag(on) {
+      if (on) zone.classList.add("dragover");
+      else zone.classList.remove("dragover");
+    }
+
+    zone.addEventListener("dragenter", function (e) { e.preventDefault(); setDrag(true); });
+    zone.addEventListener("dragleave", function (e) { e.preventDefault(); setDrag(false); });
+    zone.addEventListener("dragover", function (e) { e.preventDefault(); setDrag(true); });
     zone.addEventListener("drop", function (e) {
       e.preventDefault();
-      var f = e.dataTransfer.files && e.dataTransfer.files[0];
+      setDrag(false);
+      var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
       if (f) doUpload(f);
     });
+
+    // Prevent the browser from opening the file when dropped outside the zone.
+    window.addEventListener("dragover", function (e) { e.preventDefault(); });
+    window.addEventListener("drop", function (e) { e.preventDefault(); });
   }
 
-  function init() {
-    setupUpload();
+  function loadConfig() {
+    return apiGet("/api/config").then(function (r) {
+      cfg = r || null;
+      if (cfg && cfg.issue && cfg.issue.default_regex) {
+        try { issueRegex = new RegExp(cfg.issue.default_regex); } catch (e) { issueRegex = null; }
+      }
+      if (cfg && cfg.server && cfg.server.host && cfg.server.port) {
+        var meta = "server: " + cfg.server.host + ":" + cfg.server.port;
+        if (cfg.paths && cfg.paths.patches_root) meta += " | patches: " + cfg.paths.patches_root;
+        if (el("hdrMeta")) el("hdrMeta").textContent = meta;
+      }
+      return cfg;
+    }).catch(function () { return null; });
+  }
 
+  function wireButtons() {
     el("fsRefresh").addEventListener("click", refreshFs);
     el("fsUp").addEventListener("click", function () {
       var p = el("fsPath").value || "";
@@ -321,29 +413,79 @@
         refreshFs();
       });
     });
+
     el("runsRefresh").addEventListener("click", refreshRuns);
     el("tailRefresh").addEventListener("click", function () { refreshTail(200); });
-    el("tailMore").addEventListener("click", function () { refreshTail(1200); });
+    el("tailMore").addEventListener("click", function () { refreshTail(el("toggleVerbose") && el("toggleVerbose").checked ? 5000 : 1200); });
     el("jobsRefresh").addEventListener("click", refreshJobs);
 
-    el("parseBtn").addEventListener("click", validateAndPreview);
+    if (el("parseBtn")) el("parseBtn").addEventListener("click", validateAndPreview);
     el("enqueueBtn").addEventListener("click", enqueue);
 
-    ["mode", "rawCommand", "issueId", "commitMsg", "patchPath"].forEach(function (id) {
+    ["mode", "issueId", "commitMsg", "patchPath"].forEach(function (id) {
       el(id).addEventListener("input", validateAndPreview);
       el(id).addEventListener("change", validateAndPreview);
     });
 
-    refreshFs();
-    refreshRuns();
-    refreshTail(200);
-    refreshStats();
-    refreshJobs();
-    validateAndPreview();
+    if (el("rawCommand")) {
+      el("rawCommand").addEventListener("input", validateAndPreview);
+      el("rawCommand").addEventListener("change", validateAndPreview);
+    }
 
-    setInterval(function () {
+    if (el("browsePatch")) {
+      el("browsePatch").addEventListener("click", function () {
+        if (!fsSelected) {
+          setFsHint("select a patch file in file manager first");
+          return;
+        }
+        if (!/\.(zip|patch|diff)$/i.test(fsSelected)) {
+          setFsHint("selected file is not .zip/.patch/.diff");
+          return;
+        }
+        el("patchPath").value = normalizePatchPath(fsSelected);
+        validateAndPreview();
+      });
+    }
+
+    if (el("refreshAll")) {
+      el("refreshAll").addEventListener("click", function () {
+        refreshFs();
+        refreshRuns();
+        refreshStats();
+        refreshJobs();
+        refreshTail(200);
+      });
+    }
+
+    function quickOpen(path) {
+      el("fsPath").value = path;
+      fsSelected = "";
+      setFsHint("");
+      refreshFs();
+    }
+
+    if (el("qaIncoming")) el("qaIncoming").addEventListener("click", function () { quickOpen("incoming"); });
+    if (el("qaLogs")) el("qaLogs").addEventListener("click", function () { quickOpen("logs"); });
+    if (el("qaSuccessful")) el("qaSuccessful").addEventListener("click", function () { quickOpen("successful"); });
+    if (el("qaArtifacts")) el("qaArtifacts").addEventListener("click", function () { quickOpen("artifacts"); });
+  }
+
+  function init() {
+    setupUpload();
+    wireButtons();
+
+    loadConfig().then(function () {
+      refreshFs();
+      refreshRuns();
+      refreshTail(200);
+      refreshStats();
       refreshJobs();
-    }, 2000);
+      validateAndPreview();
+
+      setInterval(function () {
+        refreshJobs();
+      }, 2000);
+    });
   }
 
   window.addEventListener("load", init);

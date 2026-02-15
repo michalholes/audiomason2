@@ -8,107 +8,164 @@
 </head>
 <body>
   <header class="bar">
-    <div class="title">AM Patch Web</div>
+    <div class="title">AM Patch Runner Web</div>
+    <div id="hdrMeta" class="hdrmeta"></div>
     <div class="actions">
       <a class="link" href="/debug">Debug</a>
     </div>
   </header>
 
-  <main class="grid">
-    <section class="card">
-      <h2>Upload patch</h2>
-      <div id="uploadZone" class="dropzone">Drop file here (.zip/.patch/.diff) or click to select</div>
-      <input id="uploadInput" type="file" style="display:none" />
-      <pre id="uploadResult" class="pre"></pre>
+  <main class="layout">
+    <aside class="panel panel-left">
+      <section class="card card-tight">
+        <h2>Active job</h2>
+        <div id="activeJob" class="muted">(none)</div>
+        <div class="row">
+          <button id="refreshAll" class="btn btn-small">Refresh all</button>
+        </div>
+      </section>
+
+      <section class="card card-tight">
+        <h2>Runs</h2>
+        <div class="row">
+          <input id="runsIssue" class="input" placeholder="issue filter" />
+          <select id="runsResult" class="input">
+            <option value="">(any)</option>
+            <option value="success">success</option>
+            <option value="fail">fail</option>
+            <option value="unknown">unknown</option>
+          </select>
+        </div>
+        <div class="row">
+          <button id="runsRefresh" class="btn btn-small">Refresh</button>
+        </div>
+        <div id="runsList" class="scroll scroll-tall"></div>
+      </section>
+
+      <section class="card card-tight">
+        <h2>Stats</h2>
+        <div id="stats" class="stats"></div>
+      </section>
+
+      <section class="card card-tight">
+        <h2>Quick actions</h2>
+        <div class="row">
+          <button id="qaIncoming" class="btn btn-small">Open incoming</button>
+          <button id="qaLogs" class="btn btn-small">Open logs</button>
+        </div>
+        <div class="row">
+          <button id="qaSuccessful" class="btn btn-small">Open successful</button>
+          <button id="qaArtifacts" class="btn btn-small">Open artifacts</button>
+        </div>
+      </section>
+    </aside>
+
+    <section class="panel panel-center">
+      <section class="card">
+        <h2>A) Upload patch</h2>
+        <div id="uploadZone" class="dropzone dropzone-big">
+          <div class="dz-title">Drop patch here</div>
+          <div class="dz-sub">.zip / .patch / .diff (or click to select)</div>
+        </div>
+        <input id="uploadInput" type="file" style="display:none" />
+        <pre id="uploadResult" class="pre"></pre>
+      </section>
+
+      <section class="card">
+        <h2>B) Start run</h2>
+        <div class="row">
+          <label class="lbl">Mode</label>
+          <select id="mode" class="input">
+            <option value="patch">patch</option>
+            <option value="repair">repair</option>
+            <option value="finalize_live">finalize_live (-f)</option>
+            <option value="finalize_workspace">finalize_workspace (-w)</option>
+            <option value="rerun_latest">rerun_latest (-l)</option>
+          </select>
+          <label class="lbl lbl-wide">Verbosity</label>
+          <select id="verbosity" class="input">
+            <option value="normal">normal</option>
+            <option value="verbose">verbose</option>
+          </select>
+        </div>
+
+        <div class="row">
+          <input id="issueId" class="input" placeholder="issue id (auto if empty for patch/repair)" />
+          <input id="commitMsg" class="input" placeholder="commit message (required for patch/repair)" />
+        </div>
+
+        <div class="row">
+          <input id="patchPath" class="input" placeholder="patch path (e.g. patches/incoming/issue_1000.zip)" />
+          <button id="browsePatch" class="btn btn-small">From file manager</button>
+        </div>
+
+        <details class="details">
+          <summary>Advanced: paste canonical runner command</summary>
+          <textarea id="rawCommand" class="textarea" rows="3" placeholder="python3 scripts/am_patch.py 1000 \"msg\" patches/issue_1000.zip"></textarea>
+          <div class="row">
+            <button id="parseBtn" class="btn btn-small">Parse</button>
+            <span id="enqueueHint" class="muted"></span>
+          </div>
+        </details>
+
+        <div class="row">
+          <button id="enqueueBtn" class="btn" disabled>Start</button>
+        </div>
+
+        <h3>Preview</h3>
+        <pre id="preview" class="pre"></pre>
+      </section>
+
+      <section class="card">
+        <h2>C) Files</h2>
+        <div class="row">
+          <button id="fsUp" class="btn btn-small" title="Up">Up</button>
+          <input id="fsPath" class="input" value="" placeholder="path under patches/ (e.g. incoming, logs)" />
+          <button id="fsRefresh" class="btn btn-small">Refresh</button>
+        </div>
+        <div class="row">
+          <button id="fsMkdir" class="btn btn-small">Mkdir</button>
+          <button id="fsRename" class="btn btn-small">Rename</button>
+          <button id="fsDelete" class="btn btn-small">Delete</button>
+          <button id="fsUnzip" class="btn btn-small">Unzip</button>
+          <span id="fsHint" class="muted"></span>
+        </div>
+        <div id="fsList" class="scroll scroll-tall"></div>
+      </section>
+
+      <section class="card">
+        <h2>Issue detail (placeholder)</h2>
+        <div class="muted">Select a run on the left to add overview/logs/artifacts tabs.</div>
+      </section>
     </section>
 
-    <section class="card">
-      <h2>File manager</h2>
-      <div class="row">
-        <button id="fsUp" class="btn btn-small" title="Up">Up</button>
-        <input id="fsPath" class="input" value="" placeholder="path under patches/ (e.g. incoming, logs)" />
-        <button id="fsRefresh" class="btn btn-small">Refresh</button>
-      </div>
-      <div class="row">
-        <button id="fsMkdir" class="btn btn-small">Mkdir</button>
-        <button id="fsRename" class="btn btn-small">Rename</button>
-        <button id="fsDelete" class="btn btn-small">Delete</button>
-        <button id="fsUnzip" class="btn btn-small">Unzip</button>
-        <span id="fsHint" class="muted"></span>
-      </div>
-      <div id="fsList" class="scroll"></div>
-    </section>
+    <aside class="panel panel-right">
+      <section class="card card-tight">
+        <h2>Progress</h2>
+        <div id="progress" class="muted">(idle)</div>
+        <div class="row">
+          <label class="lbl lbl-wide">Verbose</label>
+          <input id="toggleVerbose" type="checkbox" />
+        </div>
+      </section>
 
-    <section class="card">
-      <h2>Run</h2>
-      <div class="row">
-        <label class="lbl">Mode</label>
-        <select id="mode" class="input">
-          <option value="patch">patch</option>
-          <option value="repair">repair</option>
-          <option value="finalize_live">finalize_live (-f)</option>
-          <option value="finalize_workspace">finalize_workspace (-w)</option>
-          <option value="rerun_latest">rerun_latest (-l)</option>
-        </select>
-      </div>
+      <section class="card card-tight">
+        <h2>Live log tail</h2>
+        <div class="row">
+          <button id="tailRefresh" class="btn btn-small">Refresh</button>
+          <button id="tailMore" class="btn btn-small">More</button>
+        </div>
+        <pre id="tail" class="pre pre-tall"></pre>
+      </section>
 
-      <textarea id="rawCommand" class="textarea" rows="4" placeholder="Paste canonical runner command here (optional)"></textarea>
-
-      <div class="row">
-        <input id="issueId" class="input" placeholder="issue id (optional for patch)" />
-        <input id="commitMsg" class="input" placeholder="commit message" />
-      </div>
-      <div class="row">
-        <input id="patchPath" class="input" placeholder="patch path (e.g. patches/issue_1000.zip)" />
-        <button id="parseBtn" class="btn">Parse</button>
-      </div>
-
-      <div class="row">
-        <button id="enqueueBtn" class="btn" disabled>Enqueue</button>
-        <span id="enqueueHint" class="muted"></span>
-      </div>
-
-      <h3>Preview</h3>
-      <pre id="preview" class="pre"></pre>
-    </section>
-
-    <section class="card">
-      <h2>Runs</h2>
-      <div class="row">
-        <input id="runsIssue" class="input" placeholder="issue filter" />
-        <select id="runsResult" class="input">
-          <option value="">(any)</option>
-          <option value="success">success</option>
-          <option value="fail">fail</option>
-          <option value="unknown">unknown</option>
-        </select>
-        <button id="runsRefresh" class="btn btn-small">Refresh</button>
-      </div>
-      <div id="runsList" class="scroll"></div>
-    </section>
-
-    <section class="card">
-      <h2>Stats</h2>
-      <div id="stats" class="stats"></div>
-    </section>
-
-    <section class="card">
-      <h2>Runner tail</h2>
-      <div class="row">
-        <button id="tailRefresh" class="btn">Refresh</button>
-        <button id="tailMore" class="btn">More</button>
-      </div>
-      <pre id="tail" class="pre pre-tall"></pre>
-    </section>
-
-    <section class="card">
-      <h2>Jobs</h2>
-      <div class="row">
-        <button id="jobsRefresh" class="btn">Refresh</button>
-      </div>
-      <div id="jobsList" class="scroll"></div>
-    </section>
-
+      <section class="card card-tight">
+        <h2>Jobs</h2>
+        <div class="row">
+          <button id="jobsRefresh" class="btn btn-small">Refresh</button>
+        </div>
+        <div id="jobsList" class="scroll"></div>
+      </section>
+    </aside>
   </main>
 
   <script src="/static/app.js"></script>
