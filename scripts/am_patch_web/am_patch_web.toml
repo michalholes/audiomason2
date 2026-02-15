@@ -9,9 +9,8 @@ queue_enabled = true
 runner_config_toml = "scripts/am_patch/am_patch.toml"
 
 [paths]
-# NOTE: In this repository layout, patches live under scripts/patches.
-patches_root = "scripts/patches"
-upload_dir = "scripts/patches/incoming"
+patches_root = "patches"
+upload_dir = "patches/incoming"
 allow_crud = true
 crud_allowlist = ["", "incoming", "artifacts", "logs", "successful", "unsuccessful"]
 
