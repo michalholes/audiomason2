@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from plugins.cli.plugin import CLIPlugin
+from plugins.cmd_interface.plugin import CLIPlugin
 
 
 def _test_all_plugin_dir() -> Path:

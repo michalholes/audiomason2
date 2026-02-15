@@ -1,4 +1,4 @@
-name: cli
+name: cmd_interface
 version: 1.0.0
 description: "Command-line interface for AudioMason"
 author: "Michal Holes <michal@holes.sk>"

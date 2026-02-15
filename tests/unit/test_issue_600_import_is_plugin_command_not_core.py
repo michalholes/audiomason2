@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from plugins.cli.plugin import CLIPlugin
+from plugins.cmd_interface.plugin import CLIPlugin
 
 
 def _repo_root() -> Path:
@@ -14,7 +14,7 @@ def _repo_root() -> Path:
 def test_import_is_plugin_command_not_core() -> None:
     repo_root = _repo_root()
 
-    cli_plugin_py = repo_root / "plugins" / "cli" / "plugin.py"
+    cli_plugin_py = repo_root / "plugins" / "cmd_interface" / "plugin.py"
     assert cli_plugin_py.exists()
     text = cli_plugin_py.read_text(encoding="utf-8")
 

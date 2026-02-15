@@ -1,3 +1,8 @@
+## 2026-02-16T00:30:00+01:00
+
+-   Issue 399: Rename built-in CLI host plugin from `cli` to `cmd_interface` (breaking; no config migration).
+-   spec: Document cmd_interface as the built-in CLI host plugin and bump specification version to 1.0.85.
+
 ## 2026-02-15T20:13:00+01:00
 
 -   import: Make external lookup non-blocking in preflight (background lookup; no asyncio.run).

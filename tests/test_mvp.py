@@ -26,7 +26,7 @@ def test_cli_help():
     print("-" * 50)
 
     # Import here after path is set
-    sys.path.insert(0, str(Path(__file__).parent.parent / "plugins/cli"))
+    sys.path.insert(0, str(Path(__file__).parent.parent / "plugins/cmd_interface"))
     from plugin import CLIPlugin
 
     # Simulate: ./audiomason
@@ -49,7 +49,7 @@ def test_version():
     print("[TEST] Test 2: Version Command")
     print("-" * 50)
 
-    sys.path.insert(0, str(Path(__file__).parent.parent / "plugins/cli"))
+    sys.path.insert(0, str(Path(__file__).parent.parent / "plugins/cmd_interface"))
     from plugin import CLIPlugin
 
     sys.argv = ["audiomason", "version"]
@@ -87,7 +87,7 @@ def test_plugin_loading():
         print("OK file_io loaded")
 
     # Load CLI
-    cli_dir = plugins_dir / "cli"
+    cli_dir = plugins_dir / "cmd_interface"
     if cli_dir.exists():
         loader.load_plugin(cli_dir, validate=False)
         print("OK cli loaded")

@@ -13,7 +13,7 @@ import pytest
 
 
 def test_help_lists_diag_command_with_origin(tmp_path: Path) -> None:
-    from plugins.cli.plugin import CLIPlugin
+    from plugins.cmd_interface.plugin import CLIPlugin
 
     pdir = tmp_path / "diagnostics_console"
     pdir.mkdir(parents=True, exist_ok=True)

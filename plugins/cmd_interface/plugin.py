@@ -891,7 +891,7 @@ class CLIPlugin:
                     "plugin.load_failed",
                     build_envelope(
                         event="plugin.load_failed",
-                        component="cli",
+                        component="cmd_interface",
                         operation="web.startup",
                         data={
                             "plugin_id": selected_name or selected_dir.name,

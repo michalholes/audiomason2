@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.84
+Specification Version: 1.0.85
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -573,6 +573,9 @@ Debug/trace support:
 ---
 
 ### 7.5 CLI Plugin Command Extension
+
+Note: The built-in CLI host is implemented as a plugin with manifest name `cmd_interface`.
+
 
 This section defines the contract for extending the AudioMason2 CLI with plugin-provided commands.
 

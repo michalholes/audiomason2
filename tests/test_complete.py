@@ -23,7 +23,7 @@ def test_all_plugins():
     expected = [
         "audio_processor",
         "file_io",
-        "cli",
+        "cmd_interface",
         "text_utils",
         "metadata_googlebooks",
         "metadata_openlibrary",

@@ -128,7 +128,7 @@ def test_enhanced_cli():
 
     import importlib.util
 
-    plugin_file = Path(__file__).parent.parent / "plugins/cli/plugin.py"
+    plugin_file = Path(__file__).parent.parent / "plugins/cmd_interface/plugin.py"
     spec = importlib.util.spec_from_file_location("cli_plugin", plugin_file)
     if spec and spec.loader:
         module = importlib.util.module_from_spec(spec)

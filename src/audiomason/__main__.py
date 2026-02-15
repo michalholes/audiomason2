@@ -30,7 +30,7 @@ def _find_plugins_dir() -> Path:
         p = start.resolve()
         for _ in range(8):
             cand = p / "plugins"
-            if (cand / "cli").exists():
+            if (cand / "cmd_interface").exists():
                 return cand
             if p.parent == p:
                 break
@@ -65,7 +65,7 @@ async def main() -> None:
     plugins_dir = _find_plugins_dir()
     loader = PluginLoader(builtin_plugins_dir=plugins_dir)
 
-    cli_plugin_dir = plugins_dir / "cli"
+    cli_plugin_dir = plugins_dir / "cmd_interface"
     if not cli_plugin_dir.exists():
         print("Error: CLI plugin not found")
         print(f"Expected: {cli_plugin_dir}")

@@ -163,7 +163,7 @@ def main():
         sys.exit(1)
 
     # FIX BUG 1: Use importlib instead of manipulating sys.path with generic "plugin" name
-    cli_plugin_file = plugins_dir / "cli" / "plugin.py"
+    cli_plugin_file = plugins_dir / "cmd_interface" / "plugin.py"
 
     if not cli_plugin_file.exists():
         print(f"Error: CLI plugin not found at {cli_plugin_file}")

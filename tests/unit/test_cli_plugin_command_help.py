@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from plugins.cli.plugin import CLIPlugin
+from plugins.cmd_interface.plugin import CLIPlugin
 
 from audiomason.core.errors import PluginError
 
@@ -87,7 +87,7 @@ def test_registry_does_not_globally_sort_discovered_across_sources(
     plugin directory list across sources (builtin/user/system).
     """
 
-    import plugins.cli.plugin as cli_mod
+    import plugins.cmd_interface.plugin as cli_mod
 
     calls: list[Path] = []
 

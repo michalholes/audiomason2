@@ -78,7 +78,7 @@ class TestAllPluginsLoadable:
         plugin_names = {p.name for p in plugin_dirs}
 
         # Core plugins that must exist
-        core_plugins = {"cli", "tui", "daemon", "web_server"}
+        core_plugins = {"cmd_interface", "tui", "daemon", "web_server"}
 
         for plugin_name in core_plugins:
             assert plugin_name in plugin_names, f"Core plugin '{plugin_name}' not found"

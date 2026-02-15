@@ -17,7 +17,7 @@ async def main() -> None:
     plugins_dir = Path(__file__).parent / "plugins"
     loader = PluginLoader(builtin_plugins_dir=plugins_dir)
 
-    cli_plugin_dir = plugins_dir / "cli"
+    cli_plugin_dir = plugins_dir / "cmd_interface"
     if not cli_plugin_dir.exists():
         print("Error: CLI plugin not found")
         print(f"Expected: {cli_plugin_dir}")
