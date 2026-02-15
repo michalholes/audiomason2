@@ -38,7 +38,13 @@ def _abs_path(fs: FileService, root: RootName, rel_path: str) -> Path:
     roots = getattr(fs, "_roots", None)
     if not isinstance(roots, dict) or root not in roots:
         raise RuntimeError(f"Missing FileService root mapping for: {root}")
-    return resolve_path(roots[root], rel_path)
+
+    cfg = roots[root]
+    root_dir = getattr(cfg, "dir_path", None)
+    if not isinstance(root_dir, Path):
+        raise RuntimeError(f"Invalid FileService root config for: {root}")
+
+    return resolve_path(root_dir, rel_path, root_name=root)
 
 
 def _safe_temp_name(rel_path: str) -> str:
@@ -116,6 +122,61 @@ def _ext(rel_path: str) -> str:
     return "." + name.split(".")[-1]
 
 
+def _is_true(v: Any) -> bool:
+    return v is True
+
+
+_ALLOWED_CONFLICT_POLICIES = {"overwrite", "skip", "version_suffix"}
+
+
+def _normalize_conflict_policy(run_state: ImportRunState) -> str:
+    # Primary source: Phase 1 options stored in run_state.global_options.
+    raw: Any = (run_state.global_options or {}).get("conflict_policy")
+
+    # Backwards-compatible fallback: run_state.conflict_policy dict.
+    if raw is None:
+        cp = run_state.conflict_policy
+        if isinstance(cp, dict):
+            raw = cp.get("policy") or cp.get("mode") or cp.get("name")
+
+    policy = str(raw or "overwrite").strip().lower()
+    if policy not in _ALLOWED_CONFLICT_POLICIES:
+        raise ValueError(f"Invalid conflict_policy: {policy!r}")
+    return policy
+
+
+def _version_suffix_name(name: str, n: int) -> str:
+    base = name.rsplit("/", 1)[-1]
+    parent = name[: -len(base)] if base and name.endswith(base) else ""
+    if "." in base:
+        stem, ext = base.rsplit(".", 1)
+        return f"{parent}{stem}.v{n}.{ext}"
+    return f"{parent}{base}.v{n}"
+
+
+def _resolve_dst_for_conflict(
+    fs: FileService,
+    *,
+    root: RootName,
+    rel_path: str,
+    policy: str,
+) -> str | None:
+    if policy == "overwrite":
+        return rel_path
+    if not fs.exists(root, rel_path):
+        return rel_path
+    if policy == "skip":
+        return None
+
+    # version_suffix
+    n = 1
+    while True:
+        candidate = _version_suffix_name(rel_path, n)
+        if not fs.exists(root, candidate):
+            return candidate
+        n += 1
+
+
 def _copy_tree(
     fs: FileService,
     *,
@@ -123,6 +184,7 @@ def _copy_tree(
     src_rel: str,
     dst_root: RootName,
     dst_rel: str,
+    conflict_policy: str,
 ) -> int:
     """Copy a directory tree deterministically.
 
@@ -136,9 +198,23 @@ def _copy_tree(
         suffix = rel[len(src_rel.rstrip("/")) :].lstrip("/")
         dst_file_rel = f"{dst_rel.rstrip('/')}/{suffix}" if suffix else dst_rel
 
+        dst_final = _resolve_dst_for_conflict(
+            fs,
+            root=dst_root,
+            rel_path=dst_file_rel,
+            policy=conflict_policy,
+        )
+        if dst_final is None:
+            continue
+
         with fs.open_read(src_root, rel) as r:
             data = r.read()
-        with fs.open_write(dst_root, dst_file_rel, overwrite=True, mkdir_parents=True) as w:
+        with fs.open_write(
+            dst_root,
+            dst_final,
+            overwrite=(conflict_policy == "overwrite"),
+            mkdir_parents=True,
+        ) as w:
             w.write(data)
 
         copied += 1
@@ -152,14 +228,29 @@ def _copy_file(
     src_rel: str,
     dst_root: RootName,
     dst_rel: str,
+    conflict_policy: str,
 ) -> int:
     """Copy a single file deterministically.
 
     Returns number of copied files (always 1).
     """
+    dst_final = _resolve_dst_for_conflict(
+        fs,
+        root=dst_root,
+        rel_path=dst_rel,
+        policy=conflict_policy,
+    )
+    if dst_final is None:
+        return 0
+
     with fs.open_read(src_root, src_rel) as r:
         data = r.read()
-    with fs.open_write(dst_root, dst_rel, overwrite=True, mkdir_parents=True) as w:
+    with fs.open_write(
+        dst_root,
+        dst_final,
+        overwrite=(conflict_policy == "overwrite"),
+        mkdir_parents=True,
+    ) as w:
         w.write(data)
     return 1
 
@@ -208,6 +299,7 @@ def run_import_job(
             unit_type = "dir"
 
     try:
+        conflict_policy = _normalize_conflict_policy(run_state)
         identity_key = build_book_fingerprint_key(
             fs,
             source_root=source_root,
@@ -243,6 +335,7 @@ def run_import_job(
                     src_rel=book_rel_path,
                     dst_root=RootName.STAGE,
                     dst_rel=dst_base,
+                    conflict_policy=conflict_policy,
                 )
                 job_service.append_log_line(
                     job_id, f"staged unit=dir files={copied} dst={dst_base}"
@@ -261,6 +354,7 @@ def run_import_job(
                     src_rel=book_rel_path,
                     dst_root=RootName.STAGE,
                     dst_rel=dst_rel,
+                    conflict_policy=conflict_policy,
                 )
                 job_service.append_log_line(
                     job_id, f"staged unit=file files={copied} dst={dst_rel}"
@@ -277,7 +371,7 @@ def run_import_job(
 
         # Optional PHASE 2 audio processing (Issue 504).
         ap = (run_state.global_options or {}).get("audio_processing")
-        if isinstance(ap, dict) and ap.get("enabled") and ap.get("confirmed"):
+        if isinstance(ap, dict) and _is_true(ap.get("enabled")) and _is_true(ap.get("confirmed")):
             bitrate_kbps = int(ap.get("bitrate_kbps") or 96)
             bitrate_mode = str(ap.get("bitrate_mode") or "cbr").strip().lower()
             loudnorm = bool(ap.get("loudnorm"))
@@ -338,29 +432,55 @@ def run_import_job(
 
             job_service.append_log_line(job_id, "audio_processing end")
 
-        # Optional destructive action: delete source after successful staging, guarded by
-        # fingerprint identity to avoid TOCTOU behavior.
-        delete_source = bool((run_state.global_options or {}).get("delete_source"))
-        if run_state.source_handling_mode == "stage" and delete_source:
-            try:
-                current_key = build_book_fingerprint_key(
-                    fs,
-                    source_root=source_root,
-                    book_rel_path=book_rel_path,
-                    unit_type=unit_type,
-                )
-            except Exception as e:
-                job_service.append_log_line(
-                    job_id,
-                    f"delete_source_fingerprint_failed: {type(e).__name__}: {e}",
-                )
-                current_key = None
+        # Optional destructive action: delete source after successful staging.
+        # Guarding is controlled by delete_source_guard_fingerprint (default True).
+        delete_opt = (run_state.global_options or {}).get("delete_source")
+        delete_enabled = False
+        guard_enabled = True
+        if isinstance(delete_opt, dict):
+            delete_enabled = _is_true(delete_opt.get("enabled"))
+            if "guard_enabled" in delete_opt:
+                guard_enabled = _is_true(delete_opt.get("guard_enabled"))
+        else:
+            delete_enabled = _is_true(delete_opt)
 
-            if current_key is None or current_key != identity_key:
-                job_service.append_log_line(
-                    job_id,
-                    f"delete_source_guard_mismatch: expected={identity_key} got={current_key}",
-                )
+        guard_raw = (run_state.global_options or {}).get("delete_source_guard_fingerprint")
+        if guard_raw is not None:
+            guard_enabled = _is_true(guard_raw)
+
+        if run_state.source_handling_mode == "stage" and delete_enabled:
+            if guard_enabled:
+                try:
+                    current_key = build_book_fingerprint_key(
+                        fs,
+                        source_root=source_root,
+                        book_rel_path=book_rel_path,
+                        unit_type=unit_type,
+                    )
+                except Exception as e:
+                    job_service.append_log_line(
+                        job_id,
+                        f"delete_source_fingerprint_failed: {type(e).__name__}: {e}",
+                    )
+                    current_key = None
+
+                if current_key is None or current_key != identity_key:
+                    job_service.append_log_line(
+                        job_id,
+                        f"delete_source_guard_mismatch: expected={identity_key} got={current_key}",
+                    )
+                else:
+                    try:
+                        if unit_type == "dir":
+                            fs.rmtree(source_root, book_rel_path)
+                        else:
+                            fs.delete_file(source_root, book_rel_path)
+                        job_service.append_log_line(job_id, f"deleted_source: {book_rel_path}")
+                    except Exception as e:
+                        job_service.append_log_line(
+                            job_id,
+                            f"delete_source_failed: {type(e).__name__}: {e}",
+                        )
             else:
                 try:
                     if unit_type == "dir":
@@ -373,7 +493,9 @@ def run_import_job(
                         job_id,
                         f"delete_source_failed: {type(e).__name__}: {e}",
                     )
+
         job.set_progress(1.0)
+
         job.transition(JobState.SUCCEEDED)
         job.finished_at = _utcnow_iso()
         job_service.store.save_job(job)
