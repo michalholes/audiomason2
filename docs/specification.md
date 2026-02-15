@@ -463,7 +463,6 @@ Multiple parallel plugin state mechanisms are forbidden.
 - Installation mechanism must be abstracted.
 
 
-
 ### 7.3.1 Built-in Plugin Import Path Rules (Loader Responsibility)
 
 - Built-in plugin loading MUST work without requiring the user to set PYTHONPATH.
@@ -569,7 +568,6 @@ Debug/trace support:
 
 - The archive capability must be able to emit a structured operation trace, including planned and ok/error phases,
   when explicitly enabled by configuration or request parameters.
-
 
 
 ---
@@ -837,143 +835,6 @@ Async execution rules:
 ---
 
 
-
-### 8.3 Import Wizard Foundation (Infrastructure Only)
-
-The Import Wizard is implemented as a WizardSystem-anchored workflow.
-
-Rules:
-
-- Wizard definition remains the single source of truth (WizardService / WizardEngine).
-- Import runtime state is a wizard-run scoped artifact keyed by wizard job id (run id).
-- PHASE 0 preflight is deterministic and read-only.
-- PHASE 0 start-screen discovery is split into:
-  - fast index (2-level listing, cache-first, no deep reads)
-  - background deep enrichment (read-only, delta-only, signature-triggered; no TTL)
-- PHASE 0 cache for index/enrichment MUST live under file_io JOBS root (not inbox).
-- Processed tracking is performed by a book-folder registry (no inbox markers, no inbox writes).
-
-The foundational infrastructure for Import Wizard MUST live in plugins/import/ and MUST use file_io capability only.
-
-Required components:
-
-- session_store: Persist ImportRunState under the file_io JOBS root.
-- preflight: Deterministic read-only detection producing a list of discovered book units (mixed inbox layout support), cover candidates, rename preview map, a stable book_ref per unit, explicit skipped entries (with reason), and a basic unit fingerprint.
-
-Deep enrichment requirements (PHASE 0):
-
-- ID3 majority vote (MP3): suggested author/title MAY be derived from ID3v2 tags via majority vote over non-empty values.
-  Normalization MUST be deterministic and configurable (strip, whitespace collapse, casefold).
-- Cover candidates MUST include both directory image files and embedded APIC images (represented as stable markers).
-- Fingerprints MUST include exactly one canonical unit fingerprint (stat-based: path + size + mtime) and it MUST be represented as a single key string in the form `<algo>:<value>`.
-- The current canonical algorithm is `sha256` computed over the stat signature (not file contents).
-- PHASE 2 processing MUST use the identical fingerprint builder as PHASE 0 and MUST NOT perform full-file hashing.
-  - Implementation note: use a single shared builder (e.g. `build_book_fingerprint_key(...)`) across PHASE 0/2 and processed_registry.
-- Rename preview ordering MUST be deterministic and MUST use the following precedence for ordering/numbering:
-  1) ID3 track number (TRCK)
-  2) filename number prefix
-  3) natural sort of filenames
-- Lookup/metadata integration MAY be implemented as a best-effort enrichment step for PHASE 0 suggestions.
-  - It MUST be fail-safe (lookup errors must not abort preflight).
-  - It MUST NOT affect fingerprints, processed tracking, or PHASE 2 behavior unless explicitly confirmed by the user in PHASE 1.
-  - In the Web Import Wizard context it MUST be enabled by default.
-    - This includes all wizard API paths that invoke preflight/deep enrichment (index-triggered deep scan, /preflight, /start).
-  - Outside the Web Import Wizard context it SHOULD default to OFF unless explicitly enabled.
-- processed_registry: Book-folder processed registry under the file_io JOBS root.
-  - Registry keys MUST be book fingerprints (algo:value) and MUST be marked only on successful PHASE 2 completion.
-  - Web UI MUST gray-out processed books, disable Start, and provide an Unmark action.
-  - Web UI MUST determine processed state by exact fingerprint-key presence in the registry (no rel_path/path fallback).
-  - Web API (Import Wizard) MUST expose processed registry keys for UI.
-    - GET /api/import_wizard/processed_registry MUST return JSON with field keys: [<fingerprint strings>].
-      Example:
-      {
-        "keys": ["sha256:..."],
-        "items": ["sha256:..."],
-        "count": 1
-      }
-    - For backward compatibility it MAY also include items/count, but keys is the authoritative field.
-    - Issue 520: keys is the authoritative field consumed by UI loaders.
-
-Issue 403 extension (PHASE 2 processing engine):
-
-- import engine MUST create persisted Jobs for PHASE 2 processing (no UI dependency).
-- engine MUST expose a stable service API callable from CLI and Web:
-  - resolve_book_decisions()
-  - start_import_job()
-  - get_job_status()
-  - retry_failed_jobs()
-  - pause_queue()
-  - resume_queue()
-- engine processing MUST be non-interactive and MUST survive restart via persisted job state.
-- engine MAY provide a deterministic queue runner entrypoint (sync) to execute pending import jobs.
-
-Issue 416 extension (file-based book units):
-
-- Import preflight MAY surface single-file book units (unit_type="file") such as archives and single audio files.
-- PHASE 2 handling for file units:
-  - stage mode: MUST stage the file deterministically under stage/import/stage/<job_id>/<book_stem>/<filename>.
-    Extraction/unpacking is not performed by default.
-  - inplace mode: MUST treat file units as valid inputs and MUST NOT write into inbox.
-
-Issue 503 extension (stage/in-place modes, resume, conflicts, delete source):
-
-- Mode contract:
-  - stage: resume is supported and parallelism_n MUST be 2.
-  - inplace: resume is not supported and parallelism_n MUST be 1.
-- Conflict policy contract (PHASE 1 owned):
-  - Default conflict policy is ask.
-  - PHASE 2 job creation MUST require a resolved non-interactive policy; unresolved ask MUST not start jobs.
-- Optional delete source contract:
-  - Deleting source inputs is allowed only when explicitly enabled by user options.
-  - Deletion MUST be guarded by a fingerprint identity check immediately before deletion to prevent TOCTOU.
-
-Issue 504 extension (PHASE 1 audio processing decisions):
-
-- PHASE 1 MAY collect audio processing options for PHASE 2.
-- Audio processing MUST be disabled by default.
-- Any re-encode or loudness normalization MUST require an explicit PHASE 1 confirmation flag in options.
-- Default bitrate (when enabled) MUST be 96 kbps.
-- Bitrate mode MUST be configurable (CBR or VBR).
-- PHASE 2 processing MUST remain non-interactive and deterministic.
-
-Import foundation MAY include a "hybrid" mode in the data model only. Behavior is reserved.
-
-### 8.4 CLI Import Command (AM1-like)
-
-The CLI MUST expose an AM1-like import entrypoint:
-
-- Command: `audiomason import`
-- The command MUST be implemented as a stable CLI entry that uses Import Wizard services
-  under `plugins/import/` (not YAML wizard definitions).
-
-Behavioral requirements:
-
-- PHASE 0 must use a Fast Index-only call for the initial selection screen (authors/books).
-  The first screen MUST be immediate and MUST NOT block on deep enrichment.
-- After selecting a specific book, the CLI MUST run mandatory plan/preview (best-effort deep
-  enrichment) and MUST render:
-  - proposed author and title,
-  - lookup status (matched/unknown/error; best-effort),
-  - rename preview that will be used for PHASE 2.
-- The CLI MUST prompt the user to confirm/override the effective author and title before Start.
-- After PHASE 1 decisions are collected, the CLI MUST create persisted import Jobs via
-  ImportEngineService and MUST NOT prompt during PHASE 2.
-- PHASE 2 MUST be implemented exclusively via persisted Jobs created by ImportEngineService.
-- Non-interactive operation MUST remain possible via explicit CLI flags.
-
-CLI import UX stability requirements:
-
-- Interactive selection MUST NOT silently exit when an author has no books.
-  The CLI must re-prompt or emit an explicit message before returning.
-- The CLI MUST support mixed inbox layouts from import preflight:
-  - author/book directories
-  - single-level book directories
-  - single-file units (archives/audio files)
-- When debug verbosity is enabled (`-d` / `--debug`), the CLI MUST surface
-  import-related runtime diagnostics envelopes on stdout.
-- In non-interactive mode, unresolved selection/policy MUST fail loudly
-  (non-zero exit) rather than silently returning.
-
 ## 9. Web Interface Rules
 
 - Web interface is **UI only**.
@@ -1156,495 +1017,168 @@ The editor may store future-facing condition data under `step.when` without requ
 
 ---
 
-### 9.3 Web Import Wizard UX
-
-The web interface MUST expose a dedicated Import Wizard UX that mirrors the
-guided author -> book selection flow from AM1.
-
-Rules:
-
-- The web interface MUST NOT implement import logic.
-- All import detection and job creation MUST be delegated to the Import plugin
-  services (plugins/import/), which are the single source of truth.
-- The UX MUST be a simple guided flow:
-  - Select the source root/path.
-  - Select an author (auto-next to books).
-  - Select a book (auto-start).
-Auto-advance rule (Issue 511):
-
-- After a successful Start for a selected book (HTTP 200/202), the UI MUST automatically advance selection to the next actionable book.
-- Auto-advance MUST NOT fire if Start returns any non-success status, or if Start required conflict resolution (HTTP 409 at any point).
-- The next-selection rule MUST be deterministic:
-  - Next unprocessed book within the same author (in the stable books[] order).
-  - If none, the next author (in the stable authors[] order) that has an unprocessed book, selecting the first unprocessed book in that author.
-  - If no unprocessed books remain, the wizard MUST stop advancing.
-- Auto-advance MUST be enabled by default and MUST be toggleable in UI state.
-
-
-- The UI MUST show a minimal async indicator while API calls are running.
-
-
-Visual editor and defaults memory (Issue 505):
-
-- The UI MUST expose a minimal visual editor for PHASE 1 import configuration
-  (conflict policy and option toggles).
-- The UI MUST persist user-selected defaults per wizard and per handling mode
-  (stage|inplace|hybrid).
-- The UI MUST provide a one-click "Reset" action that clears saved defaults and
-  restores the preset defaults.
+### 9.3 Web 
+=====================================================================
+IMPORT WIZARD (CANONICAL BEHAVIORAL SPECIFICATION)
+Integrated: 2026-02-15
+=====================================================================
+
+1. Ownership Model
+
+The Import plugin defines:
+- Wizard steps and ordering
+- Applicability rules
+- Default values
+- Validation rules
+- Run-state structure
+- PHASE 2 execution behavior
+
+CLI and Web UI:
+- Render wizard steps
+- Collect user decisions
+- Exchange explicit run-state
+- Differ only in presentation
+
+2. Three-Phase Contract
+
+PHASE 0 — Preflight (Read-Only)
+- Deterministic
+- No mutations
+- Provides suggestions and diagnostics
+- Fast index + background enrichment allowed
+
+PHASE 1 — Wizard Interaction
+- Interactive
+- Collects all decisions
+- No processing
+- All destructive actions require explicit confirmation
+
+PHASE 2 — Processing
+- Non-interactive
+- Executes strictly from run-state
+- Deterministic
+
+3. Run-State (Authoritative)
+
+Run-state contains all decisions required for PHASE 2:
+
+- source_handling_mode
+- parallelism_n
+- conflict_policy
+- delete_source_flag
+- rename_strategy
+- rename_padding
+- rename_strictness
+- loudness_enabled
+- bitrate_conversion_enabled
+- bitrate_mode
+- fingerprint_strength
+- external_lookup_enabled
+- author/title overrides
+- multi-select scope
+- defaults_memory_scope
+
+PHASE 2 requires no additional input.
+
+4. Source Handling Modes
+
+Stage:
+- Working copy
+- Resume supported
+- Default parallelism: 2
+
+In-place:
+- Direct modification of source
+- Destructive operations allowed
+- No resume
+- Default parallelism: 1
+
+Hybrid:
+- Reserved mode
+
+5. Preflight Responsibilities
+
+- Detect authors and books
+- Provide author/title suggestions
+- Detect cover (embedded + folder images)
+- Generate fingerprint
+- Provide rename preview
+- Indicate processed state
+
+External lookup:
+- Enabled by default
+- Non-blocking
+- Configurable
+
+6. Filename Normalization
+
+Ordering priority:
+1) ID3 track
+2) Filename numeric index
+3) Natural sort
+
+Strategies:
+- numeric-only
+- numeric+suffix
+- keep original
 
-Backend defaults API contract:
+Padding:
+- auto
+- fixed width
 
-- `GET /api/import_wizard/defaults?mode=<mode>` returns `{preset, saved, effective}`.
-- `POST /api/import_wizard/defaults/save` with `{mode, defaults}` stores defaults.
-- `POST /api/import_wizard/defaults/reset` with `{mode}` clears stored defaults.
+Strictness:
+- warn/best effort
+- strict fail
+- silent best effort
 
-Start-screen performance rule:
+Preview must match actual output.
 
-- The UI SHOULD auto-load a fast index on page open and whenever root/path changes
-  (debounced, e.g. ~350ms). A manual refresh button may remain.
-- If the source signature changes, the backend MUST trigger background deep
-  enrichment (non-blocking) and the UI SHOULD poll a status endpoint.
-- If discovery finds author-less books (author == ""), the UI MUST expose a
-  selectable synthetic author entry labeled "<book-only>" and show those books.
+7. Processed Registry
 
-Backend API contract:
+- Unit: Book folder
+- Marked only on successful completion
+- No inbox marker files
+- UI shows processed state
+- Manual unmark supported
 
-- Fast index (start screen):
-  - `GET /api/import_wizard/index?root=<root>&path=<rel_path>`
-  - Returns `signature`, `changed`, `deep_scan_state`, `root_items[]`, `authors[]`, `books[]`.
-  - MUST be PHASE 0 only and MUST NOT perform deep reads (no recursive scan, no checksums).
-  - Each `books[]` item MUST include:
-    - `fingerprint`: string identity key in the form `<algo>:<value>` (empty string if not available yet)
-    - `rename_preview`: rename preview dict produced by preflight enrichment (or null)
-- Background deep enrichment status:
-  - `GET /api/import_wizard/enrichment_status?root=<root>&path=<rel_path>`
-  - Returns `{state, scanned_items, total_items, last_error?}`.
-- Optional preflight listing (deep, may be heavier than index):
-  - `GET /api/import_wizard/preflight?root=<root>&path=<rel_path>`
-  - `POST /api/import_wizard/preflight` with JSON body `{root: str, path?: str}`
-  - Returns `authors[]` and `books[]`.
-  - Each `books[]` item MUST include:
-    - `rel_path`: source-relative book path
-    - `fingerprint`: string identity key in the form `<algo>:<value>` (empty string if not available yet)
-    - `rename_preview`: rename preview dict produced by preflight enrichment (or null)
+8. Conflict & Safety Policies
 
-- Start import processing for a selected book:
-  - `POST /api/import_wizard/start` with JSON body:
-    - `root` (required)
-    - `path` (optional, default: ".")
-    - `book_rel_path` (required)
-    - `mode` (optional: stage|inplace|hybrid, default: stage)
-  - The backend MUST create persisted import Jobs via ImportEngineService.
-- Run status:
-  - `GET /api/import_wizard/status?run_id=<id>`
-  - Returns `job_ids[]` and minimal `counts{}` by job state.
-- Error discipline:
-  - On invalid input, endpoints MUST return HTTP 400 with a human-readable `detail`.
-  - Unexpected failures MUST return HTTP 500 with actionable `detail` (no silent 500).
+Configurable conflict handling:
+- overwrite
+- skip
+- version suffix
+- ask (PHASE 1)
 
-- Queue runner hook (optional, for web-triggered execution):
-  - `POST /api/import_wizard/run_pending` with JSON body `{ "limit": <n> }`.
+Delete source:
+- Default OFF
+- Explicit decision
 
-The UI MAY offer a manual "run pending" trigger using the endpoint above.
+9. Loudness & Bitrate
 
----
+- Loudness normalization configurable
+- Bitrate conversion configurable
+- Deterministic execution
 
-### 9.4 Web File Management API
+10. Defaults Memory
 
-The web interface provides a UI surface for filesystem operations, but it MUST NOT implement filesystem logic itself.
-All filesystem operations MUST be delegated to the File I/O Capability (file_io plugin / FileService).
+- Remember last used defaults
+- Applied after success
+- Reset supported
+- Configurable scope
 
-Requirements:
-- All operations are restricted to configured roots (jail): inbox, stage, jobs, outbox.
-- Directory listings must be stable-ordered (deterministic).
-- Upload supports:
-  - file upload (including .rar as a regular file),
-  - directory upload as a directory tree (relative paths preserved).
-- Download supports:
-  - file download (streamed),
-  - directory download either as a bulk set of file downloads or as a streamed archive (zip or tar).
-- File names in inbox may contain non-ASCII characters; the UI/API must preserve them as UTF-8 and MUST NOT apply ASCII sanitization.
+11. Multi-Select
 
+- Multi-author and multi-book supported
+- Governed by wizard-step model
 
-## 10. Logging & Observability
+12. Guardrails
 
-Observability in AudioMason2 consists of two mandatory and distinct layers:
+- Core infrastructure-only
+- Import logic inside Import plugin
+- Strict phase separation
+- No hidden behavior
+- No silent destructive actions
 
-1) Human-readable logging (core logger based)
-2) Structured runtime diagnostic events (authoritative diagnostic emission entry point)
-
-These layers are complementary and non-substitutable.
-
----
-
-### 10.1 Human-Readable Logging (Mandatory)
-
-Human-readable logs MUST go through the Core-provided logger.
-
-Plugins, Jobs, Wizards, CLI and Web layers:
-
-- MUST NOT use print() for runtime logging.
-- MUST NOT use stdlib logging directly.
-- MUST use the Core-provided logger exclusively.
-
-Minimum logging requirement:
-
-Any component that performs work or participates in a call boundary MUST log:
-
-- start of the operation,
-- end of the operation (succeeded or failed).
-
-Logs MUST be deterministic, concise, and suitable for human debugging.
-
-Logging does NOT substitute structured diagnostic event emission.
-
----
-
-### 10.2 Structured Runtime Diagnostic Events (Mandatory)
-
-Authoritative diagnostic emission entry point:
-
-audiomason.core.events.get_event_bus().publish(event, data)
-
-Async variant:
-
-audiomason.core.events.get_event_bus().publish_async(event, data)
-
-All structured runtime diagnostic lifecycle and call-boundary events MUST be emitted exclusively via the above entry point.
-
-Forbidden:
-
-- Direct instantiation of EventBus for diagnostic emission.
-- Creating alternate diagnostic emission paths or global buses.
-- Bypassing audiomason.core.events.get_event_bus() for emission.
-
-Minimum emission requirement:
-
-Any component that performs work or participates in a call boundary MUST:
-
-- emit a start event,
-- emit a terminal event (succeeded or failed).
-
-Failure handling rule:
-
-- Errors MUST NOT be silently swallowed.
-- If an invoked component fails, the invoking component MUST emit a failure diagnostic event preserving sufficient context to identify:
-  - the component or operation,
-  - the boundary invocation,
-  - and the failure reason (minimum: error type and message).
-
-Non-substitution rule:
-
-- Logging, exceptions, or return values do NOT substitute mandatory diagnostic event emission.
-
-Fail-safe requirement:
-
-- Failure of the diagnostic emission mechanism MUST NOT crash or block processing.
-
-
-### 10.3 Runtime Diagnostics (Envelope + JSONL Sink)
-
-The runtime diagnostics layer has a canonical envelope schema and a central JSONL sink.
-
-#### 10.3.1 File I/O Observability
-
-The `file_io` plugin MUST emit observable diagnostics and logs from within the File I/O capability layer.
-
-Requirements:
-
-- Each public File I/O operation MUST emit `operation.start` and `operation.end` diagnostics envelopes.
-- Envelope fields:
-  - component: `file_io`
-  - operation: `file_io.<op>` (examples: file_io.resolve, file_io.list, file_io.delete, file_io.open_read, file_io.open_write)
-- Minimum data fields:
-  - root, rel_path
-  - resolved_path (when resolution occurs)
-  - status (succeeded|failed) and duration_ms (on operation.end)
-- Optional summary fields:
-  - list: items_count, files_count, dirs_count
-  - delete: deleted
-  - read/write: bytes (count)
-- On failure, operation.end MUST include: error_type, error_message, and a short traceback string.
-
-In addition to diagnostics, the File I/O capability MUST emit an equivalent summary via the Core logger.
-
-
-#### 10.3.2 Import Observability
-
-The Import wizard MUST emit step-level runtime diagnostics envelopes so that a single log stream
-is sufficient to reconstruct the wizard progression.
-
-Requirements:
-
-- Each import step MUST emit `operation.start` and `operation.end` diagnostics envelopes.
-- The envelope "operation" field MUST be one of:
-  - import.preflight
-  - import.scan
-  - import.select_source
-  - import.finish
-- The component field SHOULD identify the emitting component (examples: import.preflight, import_cli).
-
-Minimum data fields (all steps):
-
-- wizard: "import"
-- step: a stable step name (examples: preflight, scan, select_source, finish)
-- inputs_summary: a dict of safe aggregates only (counts, root names, mode strings)
-- status: running for start events; succeeded/failed/cancelled for terminal events
-
-Terminal event requirements (operation.end):
-
-- duration_ms: integer
-- On failure, include:
-  - error_type
-  - error_message
-  - traceback: short traceback string (last N lines; ASCII-only)
-
-Optional summary fields (allowed):
-
-- scan: items_count, skipped_count
-- select_source: available_sources_n, selected_source (identifier), selected_books_n
-- finish: run_id, jobs_n, ran_n
-
-Envelope schema (mandatory):
-
-
-- "event": string
-- "component": string
-- "operation": string
-- "timestamp": ISO8601 UTC string ending with "Z" (example: 2026-02-11T12:34:56Z)
-- "data": object (JSON dict)
-
-No keys outside this schema are allowed for envelope events.
-
-Enablement key (canonical):
-
-- diagnostics.enabled
-
-Enablement sources and priority (mandatory):
-
-1) CLI args
-2) ENV: AUDIOMASON_DIAGNOSTICS_ENABLED
-3) config files
-4) defaults (disabled)
-
-ENV values are strings and are normalized as:
-
-- true: "1", "true", "yes", "on" (case-insensitive)
-- false: "0", "false", "no", "off" (case-insensitive)
-
-Unknown values MUST be treated as disabled.
-
-Examples (mandatory):
-
-Config:
-
-diagnostics:
-  enabled: true
-
-ENV:
-
-export AUDIOMASON_DIAGNOSTICS_ENABLED=1
-
-CLI:
-
-audiomason process book.m4a --diagnostics
-audiomason process book.m4a --no-diagnostics
-
-Diagnostics console (CLI plugin):
-
-- audiomason diag [--mode events|log|both]
-- audiomason diag tail [--max-events N] [--no-follow] [--mode events|log|both]
-- audiomason diag status
-- audiomason diag on
-- audiomason diag off
-
-Diagnostics console config:
-
-- diagnostics.console.wait_status_repeat: bool (default false)
-  - false: print waiting status once
-  - true: repeat waiting status periodically
-
-JSONL sink (mandatory):
-
-- The sink MUST be registered once per process and MUST receive ALL published events.
-- A CLI diagnostics console may tail this sink to provide live visibility; this must not change emission semantics.
-- Implementation MUST use EventBus.subscribe_all(callback).
-- Sink path (append-only): <stage_dir>/diagnostics/diagnostics.jsonl
-- The sink MUST be installed unconditionally; disabled mode means no writes.
-- When diagnostics are disabled, the sink MUST perform no file IO.
-- When enabled, the sink MUST append exactly one JSON object per published event.
-  - If the event payload is already the canonical envelope, write it as-is.
-  - Otherwise, wrap it into the envelope using component="unknown" and operation="unknown".
-
-Fail-safe requirement:
-
-- Any sink write failure MUST be caught and logged as warning; it MUST NOT crash runtime.
-
-
-### 10.4 Runtime Diagnostics Event Set (Mandatory)
-
-All events below MUST be published via EventBus using the canonical envelope schema.
-The EventBus event name MUST equal the envelope "event" value.
-
-Required status values:
-- "running" for start events
-- "succeeded" / "failed" / "cancelled" for terminal events
-
-Required events (minimum):
-
-Orchestration (component="orchestration")
-- diag.job.start
-  - operation: "run_job"
-  - data: {job_id, job_type, status}
-- diag.job.end
-  - operation: "run_job"
-  - data: {job_id, job_type, status, duration_ms, error_type?, error_message?}
-- diag.ctx.start
-  - operation: "context_lifecycle"
-  - data: {job_id, context_index, context_total, source}
-- diag.ctx.end
-  - operation: "context_lifecycle"
-  - data: {job_id, context_index, context_total, source, status}
-- diag.boundary.start
-  - operation: "execute_pipeline" or "run_wizard"
-  - data: {job_id, pipeline_path?/wizard_id?, source}
-- diag.boundary.end
-  - operation: "execute_pipeline" or "run_wizard"
-  - data: {job_id, pipeline_path?/wizard_id?, source, status, error_type?, error_message?}
-- diag.boundary.fail
-  - operation: "execute_pipeline" / "run_wizard" / "plugin_call"
-  - data: {job_id?, pipeline_path?/wizard_id?/step_id?, error_type, error_message}
-
-Pipeline (component="pipeline")
-- diag.pipeline.start
-  - operation: "execute_from_yaml"
-  - data: {pipeline_path, source, status}
-- diag.pipeline.end
-  - operation: "execute_from_yaml"
-  - data: {pipeline_path, source, status, duration_ms, error_type?, error_message?}
-- diag.pipeline.step.start
-  - operation: "step"
-  - data: {step_id, plugin, interface, source}
-- diag.pipeline.step.end
-  - operation: "step"
-  - data: {step_id, plugin, interface, source, status, duration_ms, error_type?, error_message?}
-
-Wizard (component="wizard")
-- diag.wizard.start
-  - operation: "run_wizard"
-  - data: {wizard_id, step_count, source, status}
-- diag.wizard.end
-  - operation: "run_wizard"
-  - data: {wizard_id, status, duration_ms, error_type?, error_message?}
-
-Compatibility rule:
-- Existing event names may continue to be emitted (e.g. diag.wizard.run.*) but MUST also use the canonical envelope.
-
-
-## 11. Testing Requirements
-
-- MyPy strict typing is mandatory.
-- Ruff must pass with zero warnings.
-- Pytest coverage must remain high.
-- New functionality must include tests.
-
-Untested features are invalid features.
-
----
-
-
-## 12. Documentation & Governance (MANDATORY)
-
-### 12.1 Documentation Obligation (Creation **and Update**)
-
-Every implementation **must**:
-
-- deliver **new documentation** for any newly introduced behavior, API, or user-facing feature,
-- **update existing documentation** if the implementation changes, extends, or invalidates it,
-- ensure that no documentation becomes stale or misleading as a result of the change.
-
-Adding code **without updating affected documentation is invalid**.
-
-Documentation is not an optional artifact.
-Documentation is part of the implementation contract.
-
----
-
-### 12.2 Specification as Primary Source of Truth
-
-This specification is the **primary and authoritative source of truth** for the entire project.
-
-Consequences:
-
-- If documentation conflicts with this specification, **the specification wins**.
-- If code conflicts with this specification, **the code is invalid**.
-- Existing documentation **must be updated** to reflect this specification where discrepancies exist.
-
-No document, README, comment, or implementation may redefine behavior already specified here.
-
----
-
-### 12.3 Mandatory Specification Updates
-
-If an implementation changes behavior, architecture, contracts, or invariants:
-
-- **this specification MUST be updated first or in the same change set**,
-- the update must be explicit and reviewable,
-- implementation without a corresponding specification update is invalid.
-
-The specification defines the rules.
-The code merely implements them.
-
----
-
-### 12.4 Mandatory Implementation Plan
-
-Before **any** non-trivial implementation:
-
-- a **qualified implementation plan** must be provided,
-- the plan must explain:
-  - scope
-  - affected components
-  - phase impact
-  - reversibility
-  - risks
-- implementation may start **only after approval**.
-
-Skipping the plan phase is a violation of project rules.
-
-
-## 13. Change Management Rules
-
-- No "quick fixes".
-- No silent behavior changes.
-- No architectural shortcuts.
-
-If a rule blocks progress:
--> update the specification first.
-
----
-
-## 14. Authority
-
-This document has higher authority than:
-
-- individual commits
-- patches
-- chat discussions
-- temporary workarounds
-
-If something conflicts with this specification, the specification wins.
-
----
-
-## 15. Closing Statement
-
-AudioMason2 is a long?term project.
-
-This specification exists to ensure that:
-- progress is sustainable,
-- mistakes are reversible,
-- and the system does not collapse under its own complexity.
-
-**Code follows specification, not the other way around.**
+=====================================================================
+END OF IMPORT WIZARD SPECIFICATION
+=====================================================================

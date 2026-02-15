@@ -1,3 +1,14 @@
+
+---------------------------------------------------------------------
+2026-02-15 — Import Wizard Specification Refactor
+
+- Consolidated full Import Wizard definition into docs/specification.md.
+- Removed legacy CLI-specific and AM1-like wizard sections.
+- Eliminated duplicate wizard behavior definitions.
+- Established single canonical source of truth for Import Wizard.
+- Cleaned specification to remove implementation-layout references.
+
+---------------------------------------------------------------------
 ## 2026-02-15T08:10:00+01:00
 
 -   Issue 700: CLI import wizard: Fast Index first (immediate authors/books), then mandatory plan/preview after book selection (author/title confirmation + rename preview) before Start.
