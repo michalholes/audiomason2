@@ -1457,6 +1457,8 @@ function showAudioProcessingConfirmModal(ap) {
 async function startImportWithConflictAsk(body) {
   const path = "/api/import_wizard/start";
 
+  let conflictSeen = false;
+
   async function doPost(payload) {
     const r = await fetch(path, {
       method: "POST",
@@ -1476,13 +1478,14 @@ async function startImportWithConflictAsk(body) {
   }
 
   let res = await doPost(body);
-  if (res.ok) return res.data;
+  if (res.ok) return { data: res.data, conflict_seen: false };
 
   const detail = (res.obj && typeof res.obj === "object" && res.obj !== null && "detail" in res.obj)
     ? res.obj.detail
     : res.obj;
 
   if (res.status === 409 && detail && typeof detail === "object" && detail.error === "conflict_policy_unresolved") {
+    conflictSeen = true;
     const pol = detail.conflict_policy || {};
     if (pol && pol.mode === "ask") {
 
@@ -1498,7 +1501,7 @@ try {
 }
 const body2 = Object.assign({}, body, { conflict_policy: { mode: choice } });
       res = await doPost(body2);
-      if (res.ok) return res.data;
+      if (res.ok) return { data: res.data, conflict_seen: conflictSeen };
     }
   }
 
@@ -1607,7 +1610,9 @@ async function startBookFlow(b) {
       body.conflict_policy = { mode: cpMode };
     }
 
-    const r = await startImportWithConflictAsk(body);
+    const startRes = await startImportWithConflictAsk(body);
+    const r = (startRes && typeof startRes === "object" && startRes.data) ? startRes.data : startRes;
+    const conflictSeen = !!(startRes && typeof startRes === "object" && startRes.conflict_seen);
 
     // Optimistic processed marking for deterministic UI behavior.
     if (key) {
@@ -1625,7 +1630,7 @@ async function startBookFlow(b) {
     }
 
     // Auto-advance to next actionable book (deterministic order).
-    if (autoAdvanceCb && autoAdvanceCb.checked) {
+    if (autoAdvanceCb && autoAdvanceCb.checked && !conflictSeen) {
       const nextBook = _amFindNextActionableBook(relPath, authorLabel);
       if (nextBook) {
         _amQueueAutoAdvanceFocus(nextBook);

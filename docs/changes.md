@@ -1,3 +1,8 @@
+## 2026-02-15T07:50:00+01:00
+
+-   Issue 523: import_wizard UI: Auto-advance after Start only when the Start call succeeds without conflict resolution (no HTTP 409 in the Start attempt).
+-   spec: Clarify conflict-sensitive auto-advance trigger and bump specification version to 1.0.81.
+
 ## 2026-02-15T00:35:00+01:00
 
 -   Issue 522: import_wizard API: Ensure PHASE 0 deep enrichment uses best-effort external lookup by default across all wizard entrypoints (/preflight and /start), not only the background deep scan.

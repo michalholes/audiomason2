@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.80
+Specification Version: 1.0.81
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -1168,7 +1168,7 @@ Rules:
 Auto-advance rule (Issue 511):
 
 - After a successful Start for a selected book (HTTP 200/202), the UI MUST automatically advance selection to the next actionable book.
-- Auto-advance MUST NOT fire when Start returns a non-success status (including 409 conflict prompting a user decision).
+- Auto-advance MUST NOT fire if Start returns any non-success status, or if Start required conflict resolution (HTTP 409 at any point).
 - The next-selection rule MUST be deterministic:
   - Next unprocessed book within the same author (in the stable books[] order).
   - If none, the next author (in the stable authors[] order) that has an unprocessed book, selecting the first unprocessed book in that author.
