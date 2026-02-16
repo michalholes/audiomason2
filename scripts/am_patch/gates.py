@@ -332,6 +332,7 @@ def run_gates(
     order = _norm_gates_order(gates_order)
     if not order:
         logger.section("GATES: SKIPPED (gates_order empty)")
+        logger.warning_core("GATES: SKIPPED (gates_order empty)")
         return
 
     def _run_gate(name: str) -> bool:

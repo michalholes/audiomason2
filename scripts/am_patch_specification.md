@@ -41,6 +41,7 @@ The following keys are normative (defaults shown):
 - lockfile_name = "am_patch.lock"
 - current_log_symlink_name = "am_patch.log"
 - current_log_symlink_enabled = true
+- log_level = "verbose"  (allowed: quiet|normal|warning|verbose|debug)
 - log_ts_format = "%Y%m%d_%H%M%S"
 - log_template_issue = "am_patch_issue_{issue}_{ts}.log"
 - log_template_finalize = "am_patch_finalize_{ts}.log"
@@ -64,6 +65,11 @@ Note: Zip artifacts written by the runner (patched.zip and the success archive z
 - venv_bootstrap_mode = "auto"  (allowed: auto|always|never)
 - venv_bootstrap_python = ".venv/bin/python"
 - rollback_workspace_on_fail = "none-applied"  (allowed: none-applied|always|never)
+
+Log filtering policy:
+- log_level is a config key (same allowed values as verbosity: quiet|normal|warning|verbose|debug).
+- Meaning: filters what is written to the file log, using the same semantics table as verbosity.
+- Default: verbose.
 
 These keys affect concrete behavior:
 - filesystem locations (patch dir layout and workspace layout),

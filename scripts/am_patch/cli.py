@@ -199,8 +199,11 @@ CORE / INFO
       Print runner version and exit.
 
   -q, -v, -n, -d, --verbosity {{debug, verbose, normal, warning, quiet}}
-  --log-level {{debug, verbose, normal, warning, quiet}}
       Control screen output amount.
+      [default: verbose]
+
+  --log-level {{debug, verbose, normal, warning, quiet}}
+      Control what is written to the file log (independent from screen output).
       [default: verbose]
 
 WORKFLOW / MODES

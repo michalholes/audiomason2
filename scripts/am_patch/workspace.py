@@ -230,7 +230,7 @@ def drop_checkpoint(logger: Logger, repo: Path, ckpt: WorkspaceCheckpoint | None
 def rollback_to_checkpoint(logger: Logger, repo: Path, ckpt: WorkspaceCheckpoint | None) -> None:
     if not ckpt:
         logger.section("WORKSPACE ROLLBACK")
-        logger.warning_core("rollback=SKIP (no checkpoint)")
+        logger.info_core("rollback=SKIP (no checkpoint)")
         return
 
     logger.section("WORKSPACE ROLLBACK")
