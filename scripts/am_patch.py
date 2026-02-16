@@ -403,6 +403,7 @@ def main(argv: list[str]) -> int:
         symlink_path=paths.symlink_path,
         screen_level=verbosity,
         log_level=log_level,
+        console_color=getattr(policy, "console_color", "auto"),
         symlink_enabled=policy.current_log_symlink_enabled,
         symlink_target_rel=Path(policy.patch_layout_logs_dir) / log_path.name,
     )

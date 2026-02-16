@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+import contextlib
 import subprocess
 import sys
 import time
 from dataclasses import dataclass
 from pathlib import Path
+
+from .console import colorize_console_message, stdout_color_enabled
 
 
 @dataclass
@@ -88,6 +91,7 @@ class Logger:
         symlink_path: Path,
         screen_level: str,
         log_level: str,
+        console_color: str = "auto",
         symlink_enabled: bool = True,
         symlink_target_rel: Path | None = None,
     ) -> None:
@@ -97,6 +101,9 @@ class Logger:
         self.log_level = str(log_level or "").strip().lower() or "verbose"
         self.symlink_enabled = symlink_enabled
         self.symlink_target_rel = symlink_target_rel
+
+        self.console_color = str(console_color or "").strip().lower() or "auto"
+        self._console_color_enabled = stdout_color_enabled(self.console_color)
 
         log_path.parent.mkdir(parents=True, exist_ok=True)
         symlink_path.parent.mkdir(parents=True, exist_ok=True)
@@ -125,6 +132,9 @@ class Logger:
         self._fp.flush()
 
     def _write_screen(self, s: str) -> None:
+        if self._console_color_enabled:
+            with contextlib.suppress(Exception):
+                s = colorize_console_message(s, enabled=True)
         sys.stdout.write(s)
         sys.stdout.flush()
 
