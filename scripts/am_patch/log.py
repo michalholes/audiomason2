@@ -27,19 +27,23 @@ _CHANNELS = ("CORE", "DETAIL")
 def _allowed(level: str, severity: Severity, channel: Channel, *, summary: bool) -> bool:
     """Return whether a message is allowed at a given level.
 
-    Semantics are defined by the issue handoff (shared for screen and log):
+    Semantics are defined by the issue 999 handoff (shared for screen and log).
 
     Levels are inherited (each higher includes everything from the lower):
-    - quiet: only START + FINAL SUMMARY (summary=True)
-    - normal: quiet + INFO (non-CORE; intended for "clean" info)
-    - warning: normal + WARNING + ERROR (non-CORE)
-    - verbose: warning + CORE(INFO/WARNING/ERROR)
-    - debug: everything (CORE+DETAIL, all severities)
 
-    Implementation note:
-    - This logger only has CORE and DETAIL channels.
-    - "START" and "FINAL SUMMARY" are emitted with summary=True (bypass).
-    - Non-CORE output is represented by DETAIL.
+    - quiet:
+        * START + RESULT only (summary=True bypass)
+    - normal:
+        * quiet + legacy concise flow lines (CORE)
+    - warning:
+        * normal + warnings (DETAIL+WARNING)
+    - verbose:
+        * warning + diagnostic sections (DETAIL+INFO)
+    - debug:
+        * verbose + DEBUG metadata (DETAIL+DEBUG)
+
+    Full error detail (stdout/stderr) bypasses filtering and is handled
+    via Logger.emit(..., error_detail=True).
     """
 
     lvl = (level or "").strip().lower()
@@ -60,15 +64,17 @@ def _allowed(level: str, severity: Severity, channel: Channel, *, summary: bool)
         return False
 
     if lvl == "normal":
-        return ch == "DETAIL" and sev == "INFO"
+        return ch == "CORE" and sev in ("INFO", "WARNING", "ERROR")
 
     if lvl == "warning":
-        return ch == "DETAIL" and sev in ("INFO", "WARNING", "ERROR")
+        if ch == "CORE":
+            return sev in ("INFO", "WARNING", "ERROR")
+        return sev == "WARNING"
 
     if lvl == "verbose":
         if ch == "CORE":
             return sev in ("INFO", "WARNING", "ERROR")
-        return sev in ("INFO", "WARNING", "ERROR")
+        return sev in ("INFO", "WARNING")
 
     # debug
     return True
@@ -129,13 +135,18 @@ class Logger:
         channel: Channel,
         message: str,
         summary: bool = False,
+        error_detail: bool = False,
         to_screen: bool = True,
         to_log: bool = True,
     ) -> None:
         # One-line discipline: caller controls newlines.
-        if to_log and _allowed(self.log_level, severity, channel, summary=summary):
+        if to_log and (
+            error_detail or _allowed(self.log_level, severity, channel, summary=summary)
+        ):
             self._write_file(message)
-        if to_screen and _allowed(self.screen_level, severity, channel, summary=summary):
+        if to_screen and (
+            error_detail or _allowed(self.screen_level, severity, channel, summary=summary)
+        ):
             self._write_screen(message)
 
     # Convenience methods
@@ -162,10 +173,15 @@ class Logger:
         self.write(s + "\n")
 
     def section(self, title: str) -> None:
-        self.line("")
-        self.line("=" * 80)
-        self.line(title)
-        self.line("=" * 80)
+        # Diagnostic section banners must not appear in normal/warning.
+        self.emit(severity="INFO", channel="DETAIL", message="\n")
+        self.emit(severity="INFO", channel="DETAIL", message=("=" * 80) + "\n")
+        self.emit(severity="INFO", channel="DETAIL", message=title + "\n")
+        self.emit(severity="INFO", channel="DETAIL", message=("=" * 80) + "\n")
+
+    def emit_error_detail(self, s: str) -> None:
+        # Full error detail must bypass filtering (visible even in quiet).
+        self.emit(severity="ERROR", channel="CORE", message=s, error_detail=True)
 
     def run_logged(
         self,
@@ -187,32 +203,19 @@ class Logger:
             capture_output=True,
         )
 
-        if p.stdout or p.stderr:
-            self.emit(
-                severity="DEBUG",
-                channel="DETAIL",
-                message="\n" + ("=" * 80) + "\nRUN (captured stdout+stderr)\n" + ("=" * 80) + "\n",
-            )
+        if p.returncode != 0:
+            # Full error detail must always be visible (stdout+stderr), even in quiet.
+            self.emit_error_detail("\n" + ("=" * 80) + "\nFAILED STEP OUTPUT\n" + ("=" * 80) + "\n")
             if p.stdout:
-                for line in p.stdout.rstrip("\n").splitlines():
-                    self.emit(severity="DEBUG", channel="DETAIL", message=line + "\n")
+                self.emit_error_detail("[stdout]\n")
+                self.emit_error_detail(p.stdout)
+                if not p.stdout.endswith("\n"):
+                    self.emit_error_detail("\n")
             if p.stderr:
-                for line in p.stderr.rstrip("\n").splitlines():
-                    self.emit(severity="DEBUG", channel="DETAIL", message=line + "\n")
-
-        if p.returncode == 0:
-            self.emit(
-                severity="DEBUG",
-                channel="DETAIL",
-                message=f"returncode={p.returncode}\n",
-            )
-        else:
-            # Failure must be visible at warning+ (CORE+ERROR). Quiet gets it via FINAL SUMMARY.
-            self.emit(
-                severity="ERROR",
-                channel="CORE",
-                message=f"returncode={p.returncode}\n",
-            )
+                self.emit_error_detail("[stderr]\n")
+                self.emit_error_detail(p.stderr)
+                if not p.stderr.endswith("\n"):
+                    self.emit_error_detail("\n")
 
         return RunResult(argv=argv, returncode=p.returncode, stdout=p.stdout, stderr=p.stderr)
 

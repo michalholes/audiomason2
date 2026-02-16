@@ -29,52 +29,71 @@ def _mk_logger(tmp_path: Path, *, screen_level: str, log_level: str):
     )
 
 
-def test_logger_filters_screen_warning_level(capsys: pytest.CaptureFixture[str], tmp_path: Path):
-    # warning: shows non-CORE INFO/WARNING/ERROR; hides CORE.
-    logger = _mk_logger(tmp_path, screen_level="warning", log_level="verbose")
+def test_normal_shows_core_hides_detail_and_matches_log(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path
+):
+    logger = _mk_logger(tmp_path, screen_level="normal", log_level="normal")
     try:
-        logger.info_core("CORE_INFO")
-        logger.warning_core("CORE_WARN")
-        logger.error_core("CORE_ERR")
-        logger.write("DETAIL_INFO\n")
-        logger.emit(severity="WARNING", channel="DETAIL", message="DETAIL_WARN\n")
-        logger.emit(severity="ERROR", channel="DETAIL", message="DETAIL_ERR\n")
+        logger.emit(severity="INFO", channel="CORE", message="DO: STAGE\n")
+        logger.emit(severity="INFO", channel="DETAIL", message="DIAG\n")
     finally:
         logger.close()
 
     out = capsys.readouterr().out
-    assert "DETAIL_INFO" in out
-    assert "DETAIL_WARN" in out
-    assert "DETAIL_ERR" in out
-    assert "CORE_INFO" not in out
-    assert "CORE_WARN" not in out
-    assert "CORE_ERR" not in out
+    data = (tmp_path / "am_patch.log").read_text(encoding="utf-8")
+
+    assert "DO: STAGE" in out
+    assert "DIAG" not in out
+
+    assert out == data
 
 
-def test_logger_filters_file_quiet_keeps_summary(tmp_path: Path):
-    # quiet: only summary=True output is kept.
+def test_error_detail_is_visible_even_in_quiet(capsys: pytest.CaptureFixture[str], tmp_path: Path):
     logger = _mk_logger(tmp_path, screen_level="quiet", log_level="quiet")
     try:
-        logger.info_core("CORE_INFO")
-        logger.warning_core("CORE_WARN")
-        logger.error_core("CORE_ERR")
-        logger.write("DETAIL_INFO\n")
+        logger.emit(severity="INFO", channel="CORE", message="CORE\n")
+        logger.emit(severity="INFO", channel="DETAIL", message="DETAIL\n")
         logger.emit(
-            severity="INFO",
+            severity="ERROR",
             channel="CORE",
-            message="SUMMARY_LINE\n",
-            summary=True,
-            to_screen=False,
+            message="[stdout]\nhello\n",
+            error_detail=True,
         )
     finally:
         logger.close()
 
+    out = capsys.readouterr().out
     data = (tmp_path / "am_patch.log").read_text(encoding="utf-8")
-    assert "SUMMARY_LINE" in data
-    assert "CORE_INFO" not in data
-    assert "CORE_WARN" not in data
-    assert "CORE_ERR" not in data
-    assert "DETAIL_INFO" not in data
+
+    assert "CORE" not in out
+    assert "DETAIL" not in out
+    assert "hello" in out
+
+    assert "CORE" not in data
+    assert "DETAIL" not in data
+    assert "hello" in data
+
+
+def test_run_metadata_only_in_debug(capsys: pytest.CaptureFixture[str], tmp_path: Path):
+    # verbose: debug metadata must be hidden
+    logger_v = _mk_logger(tmp_path / "v", screen_level="verbose", log_level="verbose")
+    try:
+        _ = logger_v.run_logged([sys.executable, "-c", "print('ok')"], cwd=None)
+    finally:
+        logger_v.close()
+
+    out_v = capsys.readouterr().out
+    assert "cmd=" not in out_v
+
+    # debug: debug metadata must be visible
+    logger_d = _mk_logger(tmp_path / "d", screen_level="debug", log_level="debug")
+    try:
+        _ = logger_d.run_logged([sys.executable, "-c", "print('ok')"], cwd=None)
+    finally:
+        logger_d.close()
+
+    out_d = capsys.readouterr().out
+    assert "cmd=" in out_d
 
 
 def test_cli_accepts_warning_and_log_level():

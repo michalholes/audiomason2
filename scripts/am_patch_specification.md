@@ -110,11 +110,36 @@ Runner supports 5 verbosity modes for screen output (and the same level names fo
 
 Levels are inherited: each higher mode includes everything from the lower mode.
 
-- quiet: START + FINAL SUMMARY only (no status bar)
-- normal: quiet + INFO (no CORE; no DEBUG; no status bar)
-- warning: normal + WARNING + ERROR (no CORE; no DEBUG; no status bar)
-- verbose: warning + CORE (INFO/WARNING/ERROR) + status bar
-- debug: verbose + DETAIL + DEBUG (everything) + status bar
+- quiet:
+  - START
+  - RESULT
+  - On FAIL: full stdout + stderr of the failed step(s)
+
+- normal:
+  - quiet + legacy concise flow format:
+    - RUN
+    - LOG
+    - DO
+    - STATUS (elapsed format)
+    - OK / FAIL
+    - RESULT
+    - FILES
+    - COMMIT
+    - PUSH
+  - On FAIL: full stdout + stderr of the failed step(s)
+
+- warning:
+  - normal + warnings (if any)
+  - On FAIL: full stdout + stderr
+
+- verbose:
+  - warning + diagnostic sections (config, workspace meta, gate summaries, patch summary, etc.)
+  - On FAIL: full stdout + stderr
+
+- debug:
+  - verbose + full internal command metadata (RUN cmd=..., cwd=..., returncode=...)
+  - verbose + full diagnostic dumps
+  - On FAIL: full stdout + stderr
 
 Verbosity inheritance (contract):
 - Verbosity modes are cumulative. Each higher mode MUST include all guaranteed outputs of the next lower mode,
@@ -128,17 +153,21 @@ CLI:
 
 Both use the same semantics table (severity+channel filtering):
 
-- `quiet`: allow START + FINAL SUMMARY only (summary=True)
-- `normal`: `quiet` + allow `DETAIL(INFO)`; deny all `CORE`, deny `DEBUG`
-- `warning`: `normal` + allow `DETAIL(WARNING/ERROR)`; deny all `CORE`, deny `DEBUG`
-- `verbose`: `warning` + allow `CORE(INFO/WARNING/ERROR)`; deny `DEBUG`
-- `debug`: allow all `CORE(...)` + allow all `DETAIL(...)` including `DEBUG`
+- `quiet`: allow only summary=True (START/RESULT). All other messages are denied.
+- `normal`: allow CORE(INFO/WARNING/ERROR). Deny DETAIL and DEBUG.
+- `warning`: normal + allow DETAIL(WARNING). Deny DETAIL(INFO/ERROR) and DEBUG.
+- `verbose`: warning + allow DETAIL(INFO). Deny DEBUG.
+- `debug`: allow everything.
+
+Full error detail bypass (non-filterable):
+- Full stdout/stderr of a failed step MUST be emitted with a bypass flag so it is visible
+  even in quiet.
 
 Status indicator:
 - TTY: single-line overwrite on stderr: `STATUS: <STAGE>  ELAPSED: <mm:ss>`
 - non-TTY: periodic heartbeat on stderr (1s interval): `HEARTBEAT: <STAGE> elapsed=<mm:ss>`
 - Before printing any normal stdout line (e.g., `DO:`, `OK:`, `FAIL:`, `RUN:`, `LOG:`), the runner MUST first terminate any active TTY status line with a newline, so output never concatenates onto the status line.
-- enabled only in `verbose` and `debug`
+- enabled in `normal`, `warning`, `verbose`, `debug`
 
 Final summary (always printed at the end):
 - SUCCESS:
@@ -162,6 +191,10 @@ Final summary (always printed at the end):
     with a comma-separated list of all known failing stages (deterministic order).
   - `REASON: <one line>`
   - `LOG: <path>`
+
+Quiet sinks:
+- If `--verbosity quiet`, the console prints only START + RESULT (plus error detail on FAIL).
+- If `--log-level quiet`, the log file contains only START + RESULT (plus error detail on FAIL).
 
 Priority rule (normative):
 - If patch application fails (e.g., `git apply` fails in unified patch mode), the final FAIL summary MUST report `STAGE: PATCH_APPLY`.

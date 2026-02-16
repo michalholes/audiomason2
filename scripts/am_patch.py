@@ -417,7 +417,7 @@ def main(argv: list[str]) -> int:
         summary=True,
     )
 
-    status = StatusReporter(enabled=verbosity in ("verbose", "debug"))
+    status = StatusReporter(enabled=verbosity in ("normal", "warning", "verbose", "debug"))
     status.start()
 
     def _emit_core(*, severity: str, line: str) -> None:
@@ -1676,6 +1676,8 @@ def main(argv: list[str]) -> int:
 
         # Final summary must always be present in the log file (even at log_level=quiet).
         try:
+            screen_quiet = str(verbosity or "").strip().lower() == "quiet"
+            log_quiet = str(log_level or "").strip().lower() == "quiet"
             if exit_code == 0:
                 logger.emit(
                     severity="INFO",
@@ -1690,7 +1692,8 @@ def main(argv: list[str]) -> int:
                         channel="CORE",
                         message="FILES:\n\n",
                         summary=True,
-                        to_screen=True,
+                        to_screen=not screen_quiet,
+                        to_log=not log_quiet,
                     )
                     for line in final_pushed_files:
                         logger.emit(
@@ -1698,14 +1701,16 @@ def main(argv: list[str]) -> int:
                             channel="CORE",
                             message=f"{line}\n",
                             summary=True,
-                            to_screen=True,
+                            to_screen=not screen_quiet,
+                            to_log=not log_quiet,
                         )
                 logger.emit(
                     severity="INFO",
                     channel="CORE",
                     message=f"COMMIT: {final_commit_sha or '(none)'}\n",
                     summary=True,
-                    to_screen=True,
+                    to_screen=not screen_quiet,
+                    to_log=not log_quiet,
                 )
                 if policy.commit_and_push:
                     if push_ok_for_posthook is True:
@@ -1719,18 +1724,18 @@ def main(argv: list[str]) -> int:
                         channel="CORE",
                         message=f"PUSH: {push_txt}\n",
                         summary=True,
-                        to_screen=True,
+                        to_screen=not screen_quiet,
+                        to_log=not log_quiet,
                     )
                 logger.emit(
                     severity="INFO",
                     channel="CORE",
                     message=f"LOG: {log_path}\n",
                     summary=True,
-                    to_screen=True,
+                    to_screen=not screen_quiet,
+                    to_log=not log_quiet,
                 )
             else:
-                stage = final_fail_stage or "INTERNAL"
-                reason = final_fail_reason or "unexpected error"
                 logger.emit(
                     severity="INFO",
                     channel="CORE",
@@ -1738,26 +1743,31 @@ def main(argv: list[str]) -> int:
                     summary=True,
                     to_screen=True,
                 )
+                stage = final_fail_stage or "INTERNAL"
+                reason = final_fail_reason or "unexpected error"
                 logger.emit(
                     severity="INFO",
                     channel="CORE",
                     message=f"STAGE: {stage}\n",
                     summary=True,
-                    to_screen=True,
+                    to_screen=not screen_quiet,
+                    to_log=not log_quiet,
                 )
                 logger.emit(
                     severity="INFO",
                     channel="CORE",
                     message=f"REASON: {reason}\n",
                     summary=True,
-                    to_screen=True,
+                    to_screen=not screen_quiet,
+                    to_log=not log_quiet,
                 )
                 logger.emit(
                     severity="INFO",
                     channel="CORE",
                     message=f"LOG: {log_path}\n",
                     summary=True,
-                    to_screen=True,
+                    to_screen=not screen_quiet,
+                    to_log=not log_quiet,
                 )
         except Exception:
             pass
