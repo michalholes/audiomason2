@@ -99,11 +99,12 @@ Version discipline:
 
 ## 1.1 Verbosity and status output
 
-Runner supports 4 verbosity modes for screen output:
+Runner supports 5 verbosity modes for screen output:
 
 - debug: maximum screen output + status bar
 - verbose: current (legacy) behavior + status bar
 - normal: only DO/OK/FAIL lines for executed steps + status bar
+- warning: same as normal, but additionally prints warnings/errors
 - quiet: no progress output and no status bar; only final summary
 
 Verbosity inheritance (contract):
@@ -111,7 +112,18 @@ Verbosity inheritance (contract):
   and MAY add additional detail.
 
 CLI:
-- `-q`/`-v`/`-n`/`-d` / `--verbosity {debug,verbose,normal,quiet}` (default: `verbose`)
+- `-q`/`-v`/`-n`/`-d` / `--verbosity {debug,verbose,normal,warning,quiet}` (default: `verbose`)
+- `--log-level {debug,verbose,normal,warning,quiet}` (default: `verbose`)
+
+`--verbosity` controls screen output. `--log-level` controls what is written into the file log.
+
+Both use the same semantics table (severity+channel filtering):
+
+- `quiet`: allow `CORE(ERROR)` + final summary; deny all `DETAIL`
+- `normal`: allow `CORE(INFO)` + `CORE(ERROR)` + final summary; deny warnings and all `DETAIL`
+- `warning`: allow `CORE(INFO)` + `CORE(WARNING)` + `CORE(ERROR)` + final summary; deny all `DETAIL`
+- `verbose`: allow all `CORE(INFO/WARNING/ERROR)` + final summary; allow `DETAIL(INFO/WARNING/ERROR)`; deny `DEBUG`
+- `debug`: allow all `CORE(...)` + final summary; allow all `DETAIL(...)` including `DEBUG`
 
 Status indicator:
 - TTY: single-line overwrite on stderr: `STATUS: <STAGE>  ELAPSED: <mm:ss>`

@@ -102,7 +102,7 @@ def push(logger: Logger, repo: Path, branch: str, *, allow_fail: bool = True) ->
     if r.returncode == 0:
         return True
     if allow_fail:
-        logger.line("WARNING: git push failed (allowed); local commit remains")
+        logger.warning_core("git_push=FAIL (allowed); local commit remains")
         return False
     raise RunnerError("PROMOTION", "GIT", "git push failed")
 

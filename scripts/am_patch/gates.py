@@ -338,7 +338,7 @@ def run_gates(
         if name == "compile":
             if not compile_check:
                 skipped.append("compile")
-                logger.line("gate_compile=SKIP (disabled_by_policy)")
+                logger.warning_core("gate_compile=SKIP (disabled_by_policy)")
                 return True
             return run_compile_check(
                 logger,
@@ -351,7 +351,7 @@ def run_gates(
         if name == "ruff":
             if skip_ruff:
                 skipped.append("ruff")
-                logger.line("gate_ruff=SKIP (skipped_by_user)")
+                logger.warning_core("gate_ruff=SKIP (skipped_by_user)")
                 return True
             return run_ruff(
                 logger,
@@ -365,7 +365,7 @@ def run_gates(
         if name == "pytest":
             if skip_pytest:
                 skipped.append("pytest")
-                logger.line("gate_pytest=SKIP (skipped_by_user)")
+                logger.warning_core("gate_pytest=SKIP (skipped_by_user)")
                 return True
             return run_pytest(
                 logger,
@@ -378,14 +378,14 @@ def run_gates(
         if name == "mypy":
             if skip_mypy:
                 skipped.append("mypy")
-                logger.line("gate_mypy=SKIP (skipped_by_user)")
+                logger.warning_core("gate_mypy=SKIP (skipped_by_user)")
                 return True
             return run_mypy(logger, cwd, repo_root=repo_root, targets=mypy_targets)
 
         if name == "docs":
             if skip_docs:
                 skipped.append("docs")
-                logger.line("gate_docs=SKIP (skipped_by_user)")
+                logger.warning_core("gate_docs=SKIP (skipped_by_user)")
                 return True
             ok, missing, trigger = check_docs_gate(
                 decision_paths,
@@ -397,9 +397,9 @@ def run_gates(
                 logger.line("gate_docs=OK")
                 return True
             trig = trigger or "unknown"
-            logger.line("gate_docs=FAIL")
-            logger.line("gate_docs_trigger=" + trig)
-            logger.line("gate_docs_missing=" + ",".join(missing))
+            logger.error_core("gate_docs=FAIL")
+            logger.error_core("gate_docs_trigger=" + trig)
+            logger.error_core("gate_docs_missing=" + ",".join(missing))
             return False
 
         return True
@@ -407,7 +407,7 @@ def run_gates(
     for gate in ("compile", "ruff", "pytest", "mypy", "docs"):
         if gate not in order:
             skipped.append(gate)
-            logger.line(f"gate_{gate}=SKIP (not in gates_order)")
+            logger.warning_core(f"gate_{gate}=SKIP (not in gates_order)")
 
     for gate in order:
         stage = f"GATE_{gate.upper()}"
@@ -427,5 +427,5 @@ def run_gates(
         raise RunnerError("GATES", "GATES", "gates failed: " + ", ".join(failures))
 
     if failures and allow_fail:
-        logger.line("gates_failed_allowed=true")
-        logger.line("gates_failed=" + ",".join(failures))
+        logger.warning_core("gates_failed_allowed=true")
+        logger.warning_core("gates_failed=" + ",".join(failures))

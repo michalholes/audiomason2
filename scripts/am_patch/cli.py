@@ -57,6 +57,8 @@ class CliArgs:
 
     verbosity: str | None
 
+    log_level: str | None
+
     console_color: str | None
 
     run_all_tests: bool | None
@@ -131,7 +133,7 @@ Options:
       Use PATH as config file (CLI only; not a config key).
       [default: scripts/am_patch/am_patch.toml]
 
-  -q, -v, -n, -d, --verbosity {{debug, verbose, normal, quiet}}
+  -q, -v, -n, -d, --verbosity {{debug, verbose, normal, warning, quiet}}
       Control screen output amount. [default: verbose]
 
   -a, --allow-undeclared-paths
@@ -196,7 +198,8 @@ CORE / INFO
   --version
       Print runner version and exit.
 
-  -q, -v, -n, -d, --verbosity {{debug, verbose, normal, quiet}}
+  -q, -v, -n, -d, --verbosity {{debug, verbose, normal, warning, quiet}}
+  --log-level {{debug, verbose, normal, warning, quiet}}
       Control screen output amount.
       [default: verbose]
 
@@ -698,8 +701,16 @@ def parse_args(argv: list[str]) -> CliArgs:
     vg.add_argument(
         "--verbosity",
         dest="verbosity",
-        choices=["debug", "verbose", "normal", "quiet"],
+        choices=["debug", "verbose", "normal", "warning", "quiet"],
         default=None,
+    )
+
+    p.add_argument(
+        "--log-level",
+        dest="log_level",
+        choices=["debug", "verbose", "normal", "warning", "quiet"],
+        default=None,
+        help="File log level (independent from --verbosity; same semantics).",
     )
 
     p.add_argument(
@@ -866,6 +877,7 @@ def parse_args(argv: list[str]) -> CliArgs:
             message=None,
             config_path=ns.config_path,
             verbosity=ns.verbosity,
+            log_level=getattr(ns, "log_level", None),
             console_color=getattr(ns, "console_color", None),
             run_all_tests=ns.run_all_tests,
             allow_no_op=ns.allow_no_op,
@@ -950,6 +962,7 @@ def parse_args(argv: list[str]) -> CliArgs:
         message=message,
         config_path=ns.config_path,
         verbosity=ns.verbosity,
+        log_level=getattr(ns, "log_level", None),
         console_color=getattr(ns, "console_color", None),
         run_all_tests=ns.run_all_tests,
         allow_no_op=ns.allow_no_op,

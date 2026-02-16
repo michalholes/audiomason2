@@ -81,6 +81,7 @@ def archive_patch(logger: Logger, patch_script: Path, dest_dir: Path) -> Path:
 
     logger.section("ARCHIVE PATCH")
     logger.line(f"archived patch script ({action}) to: {dest}")
+    logger.info_core(f"archive_patch={dest}")
     return dest
 
 
@@ -105,6 +106,7 @@ def make_failure_zip(
       individual failed .patch files).
     """
     logger.section("FAILURE ZIP")
+    logger.info_core(f"failure_zip=CREATE path={zip_path}")
     zip_path.parent.mkdir(parents=True, exist_ok=True)
 
     # De-dup, keep deterministic order.
@@ -166,3 +168,4 @@ def make_failure_zip(
             tmp_path.unlink()
 
     logger.line(f"created failure zip: {zip_path}")
+    logger.info_core(f"failure_zip=OK path={zip_path}")

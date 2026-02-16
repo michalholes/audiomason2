@@ -37,12 +37,19 @@ Notes:
 
 
 
-The runner supports 4 verbosity modes for console output:
+The runner supports 5 verbosity modes for console output:
 
 - debug: maximum information printed to the console + status bar
 - verbose: current behavior (full console output) + status bar
 - normal: only information about what is being executed / was executed (DO/OK/FAIL) + status bar
+- warning: same as normal, but additionally prints warnings/errors (e.g., skipped gates)
 - quiet: no incremental output; no status bar; final summary only
+
+The runner supports an independent file log filter:
+
+- `--log-level {quiet,normal,warning,verbose,debug}`
+
+Both `--verbosity` and `--log-level` use the same level names and meanings, but may be set to different values.
 
 Inheritance rule (contract):
 
@@ -171,6 +178,10 @@ Short-help options (have short aliases):
 - `-g` / `--allow-gates-fail` : allow gates to fail (continue)
 - `-c` / `--show-config` : print the effective config/policy and exit
 - `-f` / `--finalize-live MESSAGE` : finalize live repo (gates + promotion by commit/push)
+
+Logging / output:
+
+- `--log-level {quiet,normal,warning,verbose,debug}` : filter what is written to the log file (independent from `--verbosity`).
 
 Long-only options (no short alias):
 

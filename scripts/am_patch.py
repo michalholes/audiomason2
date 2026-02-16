@@ -268,6 +268,7 @@ def main(argv: list[str]) -> int:
         {
             "run_all_tests": cli.run_all_tests,
             "verbosity": getattr(cli, "verbosity", None),
+            "log_level": getattr(cli, "log_level", None),
             "console_color": getattr(cli, "console_color", None),
             "allow_no_op": cli.allow_no_op,
             "skip_up_to_date": cli.skip_up_to_date,
@@ -397,16 +398,17 @@ def main(argv: list[str]) -> int:
         finalize_template=policy.log_template_finalize,
     )
     verbosity = getattr(policy, "verbosity", "verbose")
-    tee_to_screen = verbosity in ("verbose", "debug")
+    log_level = getattr(policy, "log_level", "verbose")
     logger = Logger(
         log_path=log_path,
         symlink_path=paths.symlink_path,
-        tee_to_screen=tee_to_screen,
+        screen_level=verbosity,
+        log_level=log_level,
         symlink_enabled=policy.current_log_symlink_enabled,
         symlink_target_rel=Path(policy.patch_layout_logs_dir) / log_path.name,
     )
 
-    status = StatusReporter(enabled=verbosity in ("normal", "verbose", "debug"))
+    status = StatusReporter(enabled=verbosity in ("normal", "warning", "verbose", "debug"))
     status.start()
 
     color_enabled = stdout_color_enabled(getattr(policy, "console_color", "auto"))
@@ -418,15 +420,15 @@ def main(argv: list[str]) -> int:
 
     def _stage_do(stage: str) -> None:
         status.set_stage(stage)
-        if verbosity == "normal":
+        if verbosity in ("normal", "warning"):
             _screen_line(f"DO: {stage}")
 
     def _stage_ok(stage: str) -> None:
-        if verbosity == "normal":
+        if verbosity in ("normal", "warning"):
             _screen_line(f"{wrap_green('OK', color_enabled)}: {stage}")
 
     def _stage_fail(stage: str) -> None:
-        if verbosity == "normal":
+        if verbosity in ("normal", "warning"):
             _screen_line(f"{wrap_red('FAIL', color_enabled)}: {stage}")
 
     def _gate_progress(token: str) -> None:
@@ -434,7 +436,7 @@ def main(argv: list[str]) -> int:
         if not stage:
             return
         status.set_stage(stage)
-        if verbosity != "normal":
+        if verbosity not in ("normal", "warning"):
             return
         if kind in ("DO", "OK", "FAIL"):
             label = kind
@@ -549,8 +551,10 @@ def main(argv: list[str]) -> int:
         if not ok:
             raise RunnerError("GATES", "GATES", "gate failed: badguys")
 
-    if verbosity == "normal":
-        _screen_line(f"RUN: issue={cli.issue_id or 'unknown'} mode={cli.mode} verbosity=normal")
+    if verbosity in ("normal", "warning"):
+        _screen_line(
+            f"RUN: issue={cli.issue_id or 'unknown'} mode={cli.mode} verbosity={verbosity}"
+        )
         _screen_line(f"LOG: {log_path}")
 
     lock = FileLock(paths.lock_path)
@@ -1674,6 +1678,95 @@ def main(argv: list[str]) -> int:
             status.stop()
         with suppress(Exception):
             lock.release()
+
+        # Final summary must always be present in the log file (even at log_level=quiet).
+        try:
+            if exit_code == 0:
+                logger.emit(
+                    severity="INFO",
+                    channel="CORE",
+                    message="RESULT: SUCCESS\n",
+                    summary=True,
+                    to_screen=False,
+                )
+                if push_ok_for_posthook is True and final_pushed_files is not None:
+                    logger.emit(
+                        severity="INFO",
+                        channel="CORE",
+                        message="FILES:\n\n",
+                        summary=True,
+                        to_screen=False,
+                    )
+                    for line in final_pushed_files:
+                        logger.emit(
+                            severity="INFO",
+                            channel="CORE",
+                            message=f"{line}\n",
+                            summary=True,
+                            to_screen=False,
+                        )
+                logger.emit(
+                    severity="INFO",
+                    channel="CORE",
+                    message=f"COMMIT: {final_commit_sha or '(none)'}\n",
+                    summary=True,
+                    to_screen=False,
+                )
+                if policy.commit_and_push:
+                    if push_ok_for_posthook is True:
+                        push_txt = "OK"
+                    elif push_ok_for_posthook is False:
+                        push_txt = "FAIL"
+                    else:
+                        push_txt = "UNKNOWN"
+                    logger.emit(
+                        severity="INFO",
+                        channel="CORE",
+                        message=f"PUSH: {push_txt}\n",
+                        summary=True,
+                        to_screen=False,
+                    )
+                logger.emit(
+                    severity="INFO",
+                    channel="CORE",
+                    message=f"LOG: {log_path}\n",
+                    summary=True,
+                    to_screen=False,
+                )
+            else:
+                stage = final_fail_stage or "INTERNAL"
+                reason = final_fail_reason or "unexpected error"
+                logger.emit(
+                    severity="INFO",
+                    channel="CORE",
+                    message="RESULT: FAIL\n",
+                    summary=True,
+                    to_screen=False,
+                )
+                logger.emit(
+                    severity="INFO",
+                    channel="CORE",
+                    message=f"STAGE: {stage}\n",
+                    summary=True,
+                    to_screen=False,
+                )
+                logger.emit(
+                    severity="INFO",
+                    channel="CORE",
+                    message=f"REASON: {reason}\n",
+                    summary=True,
+                    to_screen=False,
+                )
+                logger.emit(
+                    severity="INFO",
+                    channel="CORE",
+                    message=f"LOG: {log_path}\n",
+                    summary=True,
+                    to_screen=False,
+                )
+        except Exception:
+            pass
+
         logger.close()
 
         # Final on-screen summary (contract).

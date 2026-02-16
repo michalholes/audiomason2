@@ -19,6 +19,7 @@ def promote_files(
     live_changed_resolution: str,
 ) -> None:
     logger.section("PROMOTION")
+    logger.info_core(f"promotion=START base_sha={base_sha} files={len(files_to_promote)}")
     logger.line(f"base_sha={base_sha}")
     logger.line(f"files_to_promote={files_to_promote}")
 
@@ -27,6 +28,7 @@ def promote_files(
         changed_live = git_ops.files_changed_since(logger, live_repo, base_sha, files_to_promote)
 
     if changed_live:
+        logger.warning_core(f"promotion_live_changed={changed_live}")
         if live_changed_resolution == "overwrite_workspace":
             logger.line(
                 "live repo changed since base_sha for some files; dropping from promotion: "
@@ -70,3 +72,7 @@ def promote_files(
     # Stage promoted files
     if files_to_promote:
         logger.run_logged(["git", "add", "--"] + files_to_promote, cwd=live_repo)
+
+    logger.info_core(
+        f"promotion=OK promoted={len(files_to_promote)} live_changed={len(changed_live)}"
+    )

@@ -124,6 +124,9 @@ class Policy:
     # Screen output verbosity (default: verbose = today's behavior)
     verbosity: str = "verbose"
 
+    # File log level (default: verbose to preserve today's detailed log output)
+    log_level: str = "verbose"
+
     # Console output coloring for OK/FAIL tokens.
     # auto: enable colors only when stdout is a TTY
     # always: always enable
@@ -505,13 +508,24 @@ def build_policy(defaults: Policy, cfg: dict[str, Any]) -> Policy:
 
     p.ascii_only_patch = _as_bool(cfg, "ascii_only_patch", p.ascii_only_patch)
     _mark_cfg(p, cfg, "ascii_only_patch")
+    allowed_levels = ("debug", "verbose", "normal", "warning", "quiet")
+
     p.verbosity = str(cfg.get("verbosity", p.verbosity))
     _mark_cfg(p, cfg, "verbosity")
-    if p.verbosity not in ("debug", "verbose", "normal", "quiet"):
+    if p.verbosity not in allowed_levels:
         raise RunnerError(
             "CONFIG",
             "INVALID_VERBOSITY",
-            f"invalid verbosity={p.verbosity!r}; allowed: debug|verbose|normal|quiet",
+            f"invalid verbosity={p.verbosity!r}; allowed: debug|verbose|normal|warning|quiet",
+        )
+
+    p.log_level = str(cfg.get("log_level", p.log_level))
+    _mark_cfg(p, cfg, "log_level")
+    if p.log_level not in allowed_levels:
+        raise RunnerError(
+            "CONFIG",
+            "INVALID_LOG_LEVEL",
+            f"invalid log_level={p.log_level!r}; allowed: debug|verbose|normal|warning|quiet",
         )
 
     p.console_color = str(cfg.get("console_color", p.console_color))

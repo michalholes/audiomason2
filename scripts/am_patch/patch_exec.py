@@ -106,10 +106,12 @@ def run_patch(
     logger.section("PATCH SOURCE")
     logger.line(f"patch_source_path={src}")
     logger.line(f"patch_source_sha256={digest}")
+    logger.info_core(f"patch_source_path={src}")
 
     logger.section("PATCH EXEC (PREP)")
     logger.line(f"patch_exec_path={exec_path}")
     logger.line(f"patch_jail={getattr(policy, 'patch_jail', False)}")
+    logger.info_core(f"patch_exec_path={exec_path}")
 
     # Build command (optionally inside a jail).
     if getattr(policy, "patch_jail", False):
@@ -123,9 +125,11 @@ def run_patch(
         )
         logger.section("PATCH EXEC (JAILED)")
         logger.line("cmd=" + " ".join(cmd))
+        logger.info_core("patch_exec=JAILED")
         r = logger.run_logged(cmd, cwd=workspace_repo)
     else:
         logger.section("PATCH EXEC")
+        logger.info_core("patch_exec=RUN")
         r = logger.run_logged([sys.executable, str(exec_path)], cwd=workspace_repo)
 
     if r.returncode != 0:

@@ -114,6 +114,7 @@ def ensure_workspace(
 
     if not repo_dir.exists():
         logger.section("WORKSPACE CREATE")
+        logger.info_core(f"workspace=create issue={issue_id} base_sha={base_sha}")
         ws_root.mkdir(parents=True, exist_ok=True)
         r = logger.run_logged(["git", "clone", str(live_repo), str(repo_dir)])
         if r.returncode != 0:
@@ -126,6 +127,7 @@ def ensure_workspace(
         _write_meta(meta_path, meta)
     else:
         logger.section("WORKSPACE REUSE")
+        logger.info_core(f"workspace=reuse issue={issue_id} base_sha={base_sha}")
         meta.setdefault("message", meta.get("message"))
         persisted = meta.get("base_sha") or base_sha
 
@@ -163,13 +165,14 @@ def ensure_workspace(
 
 def delete_workspace(logger: Logger, ws: Workspace) -> None:
     logger.section("WORKSPACE DELETE")
+    logger.info_core(f"workspace=delete root={ws.root}")
     shutil.rmtree(ws.root, ignore_errors=True)
 
 
 def create_checkpoint(logger: Logger, repo: Path, *, enabled: bool) -> WorkspaceCheckpoint | None:
     if not enabled:
         logger.section("WORKSPACE CHECKPOINT")
-        logger.line("checkpoint=SKIP (disabled)")
+        logger.warning_core("checkpoint=SKIP (disabled)")
         return None
 
     logger.section("WORKSPACE CHECKPOINT")
@@ -180,6 +183,7 @@ def create_checkpoint(logger: Logger, repo: Path, *, enabled: bool) -> Workspace
         raise RunnerError("PREFLIGHT", "GIT", "failed to read workspace status for checkpoint")
     if not (r0.stdout or "").strip():
         logger.line("checkpoint=CLEAN (workspace clean; no stash)")
+        logger.info_core("checkpoint=CLEAN")
         return WorkspaceCheckpoint(kind="clean")
 
     # Workspace is dirty: capture complete state including untracked; then immediately
@@ -210,6 +214,7 @@ def create_checkpoint(logger: Logger, repo: Path, *, enabled: bool) -> Workspace
         raise RunnerError("PREFLIGHT", "GIT", "failed to re-apply workspace checkpoint stash")
 
     logger.line(f"checkpoint_stash_ref={stash_ref}")
+    logger.info_core(f"checkpoint=STASH ref={stash_ref}")
     return WorkspaceCheckpoint(kind="stash", stash_ref=stash_ref)
 
 
@@ -225,11 +230,12 @@ def drop_checkpoint(logger: Logger, repo: Path, ckpt: WorkspaceCheckpoint | None
 def rollback_to_checkpoint(logger: Logger, repo: Path, ckpt: WorkspaceCheckpoint | None) -> None:
     if not ckpt:
         logger.section("WORKSPACE ROLLBACK")
-        logger.line("rollback=SKIP (no checkpoint)")
+        logger.warning_core("rollback=SKIP (no checkpoint)")
         return
 
     logger.section("WORKSPACE ROLLBACK")
     logger.line(f"rollback_kind={ckpt.kind!r}")
+    logger.info_core(f"rollback_kind={ckpt.kind}")
 
     r1 = logger.run_logged(["git", "reset", "--hard"], cwd=repo)
     if r1.returncode != 0:
