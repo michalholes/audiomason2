@@ -330,3 +330,9 @@
     requirements.
 -   spec: Bump specification version to 1.0.33.
 -   web_interface: Stream and tail diagnostics/events via Core EventBus tap; emit API route boundary diagnostics; emit import action events (preflight/queue/run/pause/resume).
+
+## 2026-02-16T07:00:00+01:00
+
+-   Issue 600: Wizard platform migration — remove legacy Core wizard runtime; wizard authority moved to Import plugin.
+-   Docs: Update specification to v1.0.88 and document breaking change in changes log.
+-   Wizard definitions remain at `wizards/definitions/*.yaml` under file_io root `wizards` (storage unchanged; runtime/authority updated).
