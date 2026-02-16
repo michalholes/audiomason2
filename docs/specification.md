@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.86
+Specification Version: 1.0.88
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -771,7 +771,6 @@ Plugins MUST NOT override or shadow core commands.
 
 Reserved core command names (plugins MUST NOT provide these names):
 - process
-- wizard
 - web
 - daemon
 - checkpoints
@@ -779,6 +778,12 @@ Reserved core command names (plugins MUST NOT provide these names):
 - help
 
 Note: `tui` is not reserved and may be provided by plugins.
+
+Wizard command ownership note:
+- Core does not define a `wizard` command.
+- The `wizard` command name is reserved for the Import-owned Wizard Platform.
+- Other plugins MUST NOT provide or shadow the `wizard` command.
+
 
 ### 7.5.16 Reference Plugin: test_all_plugin
 
@@ -793,39 +798,176 @@ Location:
 
 - `plugins/test_all_plugin/`
 
-Required properties:
+Required p## 8. Wizard Platform (Import-owned)
 
-- Deterministic and non-interactive.
-- Declares multiple interfaces (IProcessor, IEnricher, IProvider, IUI, ICLICommands).
-- Declares `cli_commands` and provides handlers via `get_cli_commands()`.
+This section replaces the legacy "Wizard System" (WizardService + WizardEngine).
+The legacy core wizard runtime is forbidden and MUST NOT exist.
 
-## 8. Wizard System
+Authoritative ownership:
+- The Import plugin provides the only Wizard Platform implementation.
+- Core provides infrastructure only and MUST NOT implement wizard business logic.
 
-### 8.1 Wizard Service
+### 8.1 Wizard Platform Service (Import plugin)
 
-- All wizard access goes through **WizardService API**.
-- UI must not manipulate wizard files directly.
+Location:
+- The Wizard Platform Service MUST be implemented inside the Import plugin.
+- Core MUST NOT contain wizard runtime code.
 
-Wizard storage rules:
+Responsibility:
+- Definition CRUD
+- Definition validation
+- Wizard execution
+- Step lifecycle diagnostics
+- Run-state shaping
+- Job creation
 
+Single Source of Truth Rule:
+- Exactly one Wizard Platform Service MUST exist in the system.
+- Any parallel implementation constitutes a contract violation.
+
+### 8.2 Wizard Definition Storage (YAML)
+
+Wizard YAML definitions remain the single source of truth.
+
+Storage rules:
 - All wizard definitions are stored under the file_io root `wizards`.
-- WizardService MUST store definitions under: `definitions/<name>.yaml`.
+- Definitions are stored at: `definitions/<name>.yaml`.
 - No component may read/write wizard YAML definitions using direct filesystem calls
-  (no pathlib, no open()); all CRUD must go through the file_io capability.
+  (no pathlib, no open()); all CRUD MUST go through the file_io capability.
 
----
+Authority rules:
+- The Import-owned Wizard Platform Service is the only component allowed to perform
+  wizard definition CRUD.
+- UI (CLI/Web) MUST NOT manipulate wizard files directly.
 
-### 8.2 Wizard Execution
+### 8.3 Wizard API Contract (Authoritative)
 
-- Wizard execution produces jobs.
+The following logical API MUST exist and MUST be backed exclusively
+by the Import-owned Wizard Platform Service.
+
+List Wizards:
+  GET /api/wizards
+    Returns:
+      {
+        "items": [
+          {
+            "name": string,
+            "step_count": integer
+          }
+        ]
+      }
+
+Read Wizard:
+  GET /api/wizards/{name}
+    Returns:
+      {
+        "name": string,
+        "model": object,
+        "yaml": string
+      }
+
+Validate Wizard:
+  POST /api/wizards/validate
+    Body:
+      {
+        "yaml"?: string,
+        "model"?: object
+      }
+    Returns:
+      {
+        "ok": true,
+        "yaml": string,
+        "model": object
+      }
+    On validation error:
+      HTTP 400
+
+Save Wizard:
+  PUT /api/wizards/{name}
+    Body:
+      {
+        "model": object
+      }
+
+Execute Wizard (Phase 1 interaction step):
+  POST /api/wizards/{name}/step
+    Body:
+      {
+        "state": object,
+        "input": object
+      }
+    Returns:
+      {
+        "next_step": object | null,
+        "state": object,
+        "completed": boolean
+      }
+
+Create Job (Phase 2 boundary):
+  POST /api/wizards/{name}/create_job
+    Body:
+      {
+        "state": object
+      }
+    Returns:
+      {
+        "job_id": string
+      }
+
+Authority rule:
+- These endpoints MUST NOT call any legacy core wizard implementation.
+
+### 8.4 Wizard Execution Contract
+
+- Wizard execution produces Jobs.
 - Wizard UI interaction happens only in PHASE 1.
-- Processing follows standard pipeline rules.
+- PHASE 2 is strictly non-interactive and runs from an explicit run-state payload.
 
-Async execution rule:
+Async execution rules:
+- Wizard execution MUST be async-safe (no nested event loops, no asyncio.run() inside a running loop).
+- It is a BUG to call async plugin methods through sync wrappers.
 
-- WizardEngine is async-only.
-- It is a BUG for wizard execution to call async plugin methods through sync wrappers
-  (e.g., nested `asyncio.run` within an existing event loop). Such violations MUST be
+### 8.5 Routing Rules (Hard)
+
+Web:
+- The web_interface plugin MUST route all wizard endpoints to the Import-owned Wizard Platform Service.
+- The web_interface plugin MUST NOT contain wizard execution logic.
+
+CLI:
+- The `wizard` command MUST delegate to the Import-owned Wizard Platform Service.
+- The `import` command MAY internally use the Wizard Platform Service but MUST NOT implement
+  a parallel hardcoded flow.
+
+### 8.6 Diagnostics and Audit (Mandatory)
+
+- Wizard step lifecycle MUST emit diagnostics via the single authoritative Core diagnostics entry point.
+- Each step MUST emit start and end (succeeded/failed).
+- Wizard diagnostics MUST be fail-safe and MUST NOT alter functional behavior.
+
+### 8.7 Legacy Wizard System Removal (Hard Requirement)
+
+The following MUST NOT exist after this migration:
+- `src/audiomason/core/wizard_service.py`
+- `src/audiomason/wizard_engine.py`
+- any "Wizard API" implementation that reads YAML via direct filesystem calls
+  (e.g., open()/pathlib) outside file_io
+- any core or web endpoints that route wizard CRUD/execution to legacy code
+
+Detection rule:
+- Presence of multiple wizard runtime implementations MUST be treated as a build-time violation.
+
+Test requirement:
+- A system test MUST assert that wizard execution for a given definition
+  produces identical Job creation behavior when invoked via:
+    - CLI
+    - Web API
+
+Non-duplication invariant:
+- Wizard definition interpretation logic MUST exist in exactly one place.
+- CLI and Web MUST NOT interpret wizard step graphs independently.
+
+
+ng event loop). Such violations MUST be
   made explicit by failing fast.
 
 Async execution rules:
@@ -992,6 +1134,14 @@ Implementation note (web job creation):
 - If the UI request omits `source_path` or provides an empty string, the backend MUST set `source_path` to the selected `target_path` before the job is queued.
 - If the UI provides a non-empty `source_path`, the backend MUST NOT overwrite it.
 
+Authority note:
+- The "Run wizard here" feature MUST create wizard jobs via the Import-owned Wizard Platform Service.
+- The platform MUST be the only source of truth for:
+  - wizard step graph interpretation
+  - validation rules
+  - run-state shaping
+  - job creation
+
 
 Wizard listing contract:
 
@@ -1015,7 +1165,7 @@ The web interface MUST allow editing wizard definitions visually (no YAML editin
 
 Rules:
 
-- Wizard YAML remains the single source of truth and is saved only via WizardService.
+- Wizard YAML remains the single source of truth and is saved only via the Import-owned Wizard Platform Service.
 - The UI MUST use the model-based API (`PUT /api/wizards/{name}` with `model`).
 - The backend MUST perform server-side validation before saving:
   - Reject duplicate step ids.
@@ -1048,6 +1198,9 @@ The Import plugin defines:
 - Validation rules
 - Run-state structure
 - PHASE 2 execution behavior
+
+This section is authoritative and MUST be implemented via the Import-owned Wizard Platform
+defined in Section 8. Legacy wizard runtime MUST NOT interpret or execute the Import wizard.
 
 CLI and Web UI:
 - Render wizard steps
