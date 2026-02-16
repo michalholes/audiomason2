@@ -134,7 +134,7 @@ ascii_only_patch = true
 # NOTE: present in your file; not part of runner Policy surface (keep only if used elsewhere).
 block_subprocess_network_best_effort = true
 
-patch_jail = false
+patch_jail = true
 patch_jail_unshare_net = true
 live_repo_guard = true
 live_repo_guard_scope = "patch"
