@@ -105,13 +105,16 @@ Version discipline:
 
 ## 1.1 Verbosity and status output
 
-Runner supports 5 verbosity modes for screen output:
 
-- debug: maximum screen output + status bar
-- verbose: current (legacy) behavior + status bar
-- normal: only DO/OK/FAIL lines for executed steps + status bar
-- warning: same as normal, but additionally prints warnings/errors
-- quiet: no progress output and no status bar; only final summary
+Runner supports 5 verbosity modes for screen output (and the same level names for the file log filter).
+
+Levels are inherited: each higher mode includes everything from the lower mode.
+
+- quiet: START + FINAL SUMMARY only (no status bar)
+- normal: quiet + INFO (no CORE; no DEBUG; no status bar)
+- warning: normal + WARNING + ERROR (no CORE; no DEBUG; no status bar)
+- verbose: warning + CORE (INFO/WARNING/ERROR) + status bar
+- debug: verbose + DETAIL + DEBUG (everything) + status bar
 
 Verbosity inheritance (contract):
 - Verbosity modes are cumulative. Each higher mode MUST include all guaranteed outputs of the next lower mode,
@@ -125,17 +128,17 @@ CLI:
 
 Both use the same semantics table (severity+channel filtering):
 
-- `quiet`: allow `CORE(ERROR)` + final summary; deny all `DETAIL`
-- `normal`: allow `CORE(INFO)` + `CORE(ERROR)` + final summary; deny warnings and all `DETAIL`
-- `warning`: allow `CORE(INFO)` + `CORE(WARNING)` + `CORE(ERROR)` + final summary; deny all `DETAIL`
-- `verbose`: allow all `CORE(INFO/WARNING/ERROR)` + final summary; allow `DETAIL(INFO/WARNING/ERROR)`; deny `DEBUG`
-- `debug`: allow all `CORE(...)` + final summary; allow all `DETAIL(...)` including `DEBUG`
+- `quiet`: allow START + FINAL SUMMARY only (summary=True)
+- `normal`: `quiet` + allow `DETAIL(INFO)`; deny all `CORE`, deny `DEBUG`
+- `warning`: `normal` + allow `DETAIL(WARNING/ERROR)`; deny all `CORE`, deny `DEBUG`
+- `verbose`: `warning` + allow `CORE(INFO/WARNING/ERROR)`; deny `DEBUG`
+- `debug`: allow all `CORE(...)` + allow all `DETAIL(...)` including `DEBUG`
 
 Status indicator:
 - TTY: single-line overwrite on stderr: `STATUS: <STAGE>  ELAPSED: <mm:ss>`
 - non-TTY: periodic heartbeat on stderr (1s interval): `HEARTBEAT: <STAGE> elapsed=<mm:ss>`
 - Before printing any normal stdout line (e.g., `DO:`, `OK:`, `FAIL:`, `RUN:`, `LOG:`), the runner MUST first terminate any active TTY status line with a newline, so output never concatenates onto the status line.
-- disabled in `quiet`
+- enabled only in `verbose` and `debug`
 
 Final summary (always printed at the end):
 - SUCCESS:

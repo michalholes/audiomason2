@@ -30,26 +30,35 @@ def _mk_logger(tmp_path: Path, *, screen_level: str, log_level: str):
 
 
 def test_logger_filters_screen_warning_level(capsys: pytest.CaptureFixture[str], tmp_path: Path):
+    # warning: shows non-CORE INFO/WARNING/ERROR; hides CORE.
     logger = _mk_logger(tmp_path, screen_level="warning", log_level="verbose")
     try:
         logger.info_core("CORE_INFO")
         logger.warning_core("CORE_WARN")
+        logger.error_core("CORE_ERR")
         logger.write("DETAIL_INFO\n")
+        logger.emit(severity="WARNING", channel="DETAIL", message="DETAIL_WARN\n")
+        logger.emit(severity="ERROR", channel="DETAIL", message="DETAIL_ERR\n")
     finally:
         logger.close()
 
     out = capsys.readouterr().out
-    assert "CORE_INFO" in out
-    assert "CORE_WARN" in out
-    assert "DETAIL_INFO" not in out
+    assert "DETAIL_INFO" in out
+    assert "DETAIL_WARN" in out
+    assert "DETAIL_ERR" in out
+    assert "CORE_INFO" not in out
+    assert "CORE_WARN" not in out
+    assert "CORE_ERR" not in out
 
 
 def test_logger_filters_file_quiet_keeps_summary(tmp_path: Path):
+    # quiet: only summary=True output is kept.
     logger = _mk_logger(tmp_path, screen_level="quiet", log_level="quiet")
     try:
         logger.info_core("CORE_INFO")
         logger.warning_core("CORE_WARN")
         logger.error_core("CORE_ERR")
+        logger.write("DETAIL_INFO\n")
         logger.emit(
             severity="INFO",
             channel="CORE",
@@ -61,10 +70,11 @@ def test_logger_filters_file_quiet_keeps_summary(tmp_path: Path):
         logger.close()
 
     data = (tmp_path / "am_patch.log").read_text(encoding="utf-8")
-    assert "CORE_ERR" in data
     assert "SUMMARY_LINE" in data
     assert "CORE_INFO" not in data
     assert "CORE_WARN" not in data
+    assert "CORE_ERR" not in data
+    assert "DETAIL_INFO" not in data
 
 
 def test_cli_accepts_warning_and_log_level():

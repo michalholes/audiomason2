@@ -28,15 +28,24 @@ def _allowed(level: str, severity: Severity, channel: Channel, *, summary: bool)
     """Return whether a message is allowed at a given level.
 
     Semantics are defined by the issue handoff (shared for screen and log):
-    - quiet: CORE(ERROR) + final summary
-    - normal: CORE(INFO/ERROR) + final summary
-    - warning: CORE(INFO/WARNING/ERROR) + final summary
-    - verbose: CORE(*) + final summary, DETAIL(INFO/WARNING/ERROR)
-    - debug: all CORE + final summary, all DETAIL including DEBUG
+
+    Levels are inherited (each higher includes everything from the lower):
+    - quiet: only START + FINAL SUMMARY (summary=True)
+    - normal: quiet + INFO (non-CORE; intended for "clean" info)
+    - warning: normal + WARNING + ERROR (non-CORE)
+    - verbose: warning + CORE(INFO/WARNING/ERROR)
+    - debug: everything (CORE+DETAIL, all severities)
+
+    Implementation note:
+    - This logger only has CORE and DETAIL channels.
+    - "START" and "FINAL SUMMARY" are emitted with summary=True (bypass).
+    - Non-CORE output is represented by DETAIL.
     """
+
     lvl = (level or "").strip().lower()
     sev = (severity or "").strip().upper()
     ch = (channel or "").strip().upper()
+
     if lvl not in _LEVELS:
         lvl = "verbose"
     if sev not in _SEVERITIES:
@@ -48,16 +57,19 @@ def _allowed(level: str, severity: Severity, channel: Channel, *, summary: bool)
         return True
 
     if lvl == "quiet":
-        return ch == "CORE" and sev == "ERROR"
+        return False
+
     if lvl == "normal":
-        return ch == "CORE" and sev in ("INFO", "ERROR")
+        return ch == "DETAIL" and sev == "INFO"
+
     if lvl == "warning":
-        return ch == "CORE" and sev in ("INFO", "WARNING", "ERROR")
+        return ch == "DETAIL" and sev in ("INFO", "WARNING", "ERROR")
+
     if lvl == "verbose":
         if ch == "CORE":
             return sev in ("INFO", "WARNING", "ERROR")
-        # DETAIL
         return sev in ("INFO", "WARNING", "ERROR")
+
     # debug
     return True
 
@@ -161,14 +173,12 @@ class Logger:
         cwd: Path | None = None,
         env: dict[str, str] | None = None,
     ) -> RunResult:
-        # CORE metadata (must be present at log_level=normal)
-        self.info_core("RUN")
-        self.info_core(f"cmd={argv}")
+        # RUN metadata must not appear in normal/warning/verbose; keep it in DETAIL+DEBUG.
+        self.emit(severity="DEBUG", channel="DETAIL", message="RUN\n")
+        self.emit(severity="DEBUG", channel="DETAIL", message=f"cmd={argv}\n")
         if cwd is not None:
-            self.info_core(f"cwd={str(cwd)}")
+            self.emit(severity="DEBUG", channel="DETAIL", message=f"cwd={str(cwd)}\n")
 
-        # DETAIL capture output
-        self.section("RUN (captured stdout+stderr)")
         p = subprocess.run(
             argv,
             cwd=str(cwd) if cwd else None,
@@ -176,12 +186,34 @@ class Logger:
             text=True,
             capture_output=True,
         )
-        if p.stdout:
-            self.line(p.stdout.rstrip("\n"))
-        if p.stderr:
-            self.line(p.stderr.rstrip("\n"))
 
-        self.info_core(f"returncode={p.returncode}")
+        if p.stdout or p.stderr:
+            self.emit(
+                severity="DEBUG",
+                channel="DETAIL",
+                message="\n" + ("=" * 80) + "\nRUN (captured stdout+stderr)\n" + ("=" * 80) + "\n",
+            )
+            if p.stdout:
+                for line in p.stdout.rstrip("\n").splitlines():
+                    self.emit(severity="DEBUG", channel="DETAIL", message=line + "\n")
+            if p.stderr:
+                for line in p.stderr.rstrip("\n").splitlines():
+                    self.emit(severity="DEBUG", channel="DETAIL", message=line + "\n")
+
+        if p.returncode == 0:
+            self.emit(
+                severity="DEBUG",
+                channel="DETAIL",
+                message=f"returncode={p.returncode}\n",
+            )
+        else:
+            # Failure must be visible at warning+ (CORE+ERROR). Quiet gets it via FINAL SUMMARY.
+            self.emit(
+                severity="ERROR",
+                channel="CORE",
+                message=f"returncode={p.returncode}\n",
+            )
+
         return RunResult(argv=argv, returncode=p.returncode, stdout=p.stdout, stderr=p.stderr)
 
 

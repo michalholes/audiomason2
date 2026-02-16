@@ -37,13 +37,15 @@ Notes:
 
 
 
-The runner supports 5 verbosity modes for console output:
+The runner supports 5 verbosity modes for console output (and the same level names for the file log filter).
 
-- debug: maximum information printed to the console + status bar
-- verbose: current behavior (full console output) + status bar
-- normal: only information about what is being executed / was executed (DO/OK/FAIL) + status bar
-- warning: same as normal, but additionally prints warnings/errors (e.g., skipped gates)
-- quiet: no incremental output; no status bar; final summary only
+Levels are inherited: each higher mode includes everything from the lower mode.
+
+- quiet: START + FINAL SUMMARY only (no status bar)
+- normal: quiet + INFO (no CORE; no DEBUG; no status bar)
+- warning: normal + WARNING + ERROR (no CORE; no DEBUG; no status bar)
+- verbose: warning + CORE (INFO/WARNING/ERROR) + status bar
+- debug: verbose + DETAIL + DEBUG (everything) + status bar
 
 The runner supports an independent file log filter:
 
