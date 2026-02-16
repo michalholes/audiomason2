@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.85
+Specification Version: 1.0.86
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -1093,6 +1093,36 @@ Run-state contains all decisions required for PHASE 2:
 - author/title overrides
 - multi-select scope
 - defaults_memory_scope
+
+CLI PHASE 1 persists additional structured options in ImportRunState.global_options
+(authoritative for wizard decisions; PHASE 2 consumes the subset it supports):
+
+- mode: "stage" | "inplace" (mirrors source_handling_mode)
+- lookup_enabled: bool (best-effort external lookup toggle)
+- filename_normalization: dict with keys:
+  - strategy: "numeric_only" | "numeric_suffix" | "keep_original"
+  - padding: "auto" | "fixed_2" | "fixed_3" | "fixed_4"
+  - strictness: "warn_best_effort" | "strict_fail" | "silent_best_effort"
+  - char_policy: "allow_unicode" | "ascii_only"
+- covers: dict with keys:
+  - policy: "keep_existing" | "prefer_embedded" | "prefer_external" | "remove_covers"
+  - confirmed_remove: bool
+- id3: dict with keys:
+  - wipe: bool
+  - confirmed_wipe: bool
+- audio_processing: dict with keys:
+  - enabled: bool
+  - confirmed: bool
+  - loudnorm: bool
+  - bitrate_change_enabled: bool
+  - bitrate_kbps: int | null
+  - bitrate_mode: "cbr" | "vbr" | null
+- publish: dict with keys:
+  - enabled: bool
+- delete_source: dict with keys:
+  - enabled: bool
+  - guard_enabled: bool
+- conflict_policy: "overwrite" | "skip" | "version_suffix"
 
 PHASE 2 requires no additional input.
 

@@ -1,3 +1,11 @@
+## 2026-02-16T01:10:00+01:00
+
+-   Issue 603: Fix import CLI wizard PHASE 1 completeness and branching (mode selection,
+    lookup toggle, filename/covers/ID3/audio/publish/delete/conflict options).
+-   Issue 603: Default CLI run is quiet (prompts + summaries only).
+-   tests: Add unit coverage for Issue 603 PHASE 1 prompt order and audio branching.
+-   spec: Document import CLI PHASE 1 global_options keys; bump specification version to 1.0.86.
+
 ## 2026-02-16T00:30:00+01:00
 
 -   Issue 399: Rename built-in CLI host plugin from `cli` to `cmd_interface` (breaking; no config migration).

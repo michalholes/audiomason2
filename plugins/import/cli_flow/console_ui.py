@@ -17,18 +17,27 @@ class ConsoleUI:
     def print(self, text: str = "") -> None:
         print(text)
 
-    def select(self, prompt: str, options: list[str]) -> str | None:
+    def select(self, prompt: str, options: list[str], default_index: int = 1) -> str | None:
         if not options:
             return None
+
+        # Clamp default into range; default selection is deterministic.
+        if default_index < 1:
+            default_index = 1
+        if default_index > len(options):
+            default_index = len(options)
 
         while True:
             self.print("\n" + prompt)
             for n, opt in enumerate(options, 1):
                 self.print(f"  {n}. {opt}")
 
-            raw = input("Select (q to quit): ").strip()
+            raw = input(f"Select (default {default_index}; q to quit): ").strip()
             if raw.lower() in {"q", "quit", "exit"}:
                 return None
+
+            if not raw:
+                return options[default_index - 1]
 
             if raw.isdigit():
                 k = int(raw)
