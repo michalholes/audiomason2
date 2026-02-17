@@ -68,14 +68,15 @@ def test_web_emits_route_boundary_diagnostics(tmp_path: Path, monkeypatch: Any) 
     assert e0.get("event") == "boundary.end"
     assert e0.get("component") == "web_interface"
     assert e0.get("data", {}).get("status") == "succeeded"
+
     # debug verbosity includes query params (best-effort)
-    assert e0.get("data", {}).get("query", {}).get("x") == "1"
+    assert s0.get("data", {}).get("query", {}).get("x") == "1"
 
     bus.unsubscribe("boundary.start", on_start)
     bus.unsubscribe("boundary.end", on_end)
 
 
-def test_web_emits_import_pause_resume_events(tmp_path: Path, monkeypatch: Any) -> None:
+def test_web_has_no_import_pause_resume_endpoints(tmp_path: Path, monkeypatch: Any) -> None:
     # Minimal File IO roots so ImportEngineService can initialize.
     inbox = tmp_path / "inbox"
     inbox.mkdir(parents=True)
@@ -103,14 +104,11 @@ def test_web_emits_import_pause_resume_events(tmp_path: Path, monkeypatch: Any) 
     client = _make_client(app)
 
     resp = client.post("/api/import_wizard/pause_queue")
-    assert resp.status_code == 200
+    assert resp.status_code == 404
     resp = client.post("/api/import_wizard/resume_queue")
-    assert resp.status_code == 200
+    assert resp.status_code == 404
 
-    assert "pause:start" in seen
-    assert "pause:succeeded" in seen
-    assert "resume:start" in seen
-    assert "resume:succeeded" in seen
+    assert not seen
 
     bus.unsubscribe("import.pause", on_pause)
     bus.unsubscribe("import.resume", on_resume)

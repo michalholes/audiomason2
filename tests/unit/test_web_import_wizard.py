@@ -27,9 +27,7 @@ def _make_client(app: Any) -> Any:
     return TestClient(app)
 
 
-def test_web_import_wizard_preflight_includes_book_only_group(
-    tmp_path: Path, monkeypatch: Any
-) -> None:
+def test_web_has_no_import_wizard_preflight_endpoint(tmp_path: Path, monkeypatch: Any) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("AUDIOMASON_FILE_IO_ROOTS_INBOX_DIR", str(tmp_path / "inbox"))
     monkeypatch.setenv("AUDIOMASON_FILE_IO_ROOTS_STAGE_DIR", str(tmp_path / "stage"))
@@ -46,20 +44,10 @@ def test_web_import_wizard_preflight_includes_book_only_group(
     client = _make_client(app)
 
     resp = client.post("/api/import_wizard/preflight", json={"root": "inbox", "path": "."})
-    assert resp.status_code == 200
-    data = resp.json()
-
-    authors = data.get("authors", [])
-    assert "AuthorA" in authors
-    assert "<book-only>" in authors
-
-    books = data.get("books", [])
-    assert any((b.get("author") == "" and b.get("book") == "BookOnly1") for b in books)
+    assert resp.status_code == 404
 
 
-def test_web_import_wizard_start_creates_jobs_and_validates(
-    tmp_path: Path, monkeypatch: Any
-) -> None:
+def test_web_has_no_import_wizard_start_endpoint(tmp_path: Path, monkeypatch: Any) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.setenv("AUDIOMASON_FILE_IO_ROOTS_INBOX_DIR", str(tmp_path / "inbox"))
     monkeypatch.setenv("AUDIOMASON_FILE_IO_ROOTS_STAGE_DIR", str(tmp_path / "stage"))
@@ -73,24 +61,17 @@ def test_web_import_wizard_start_creates_jobs_and_validates(
     app = web_interface_plugin_cls().create_app()
     client = _make_client(app)
 
-    # Start should return job ids (no 500).
     resp = client.post(
         "/api/import_wizard/start",
         json={"root": "inbox", "path": ".", "book_rel_path": "BookOnly1", "mode": "stage"},
     )
-    assert resp.status_code == 200
-    job_ids = resp.json().get("job_ids", [])
-    assert isinstance(job_ids, list)
-    assert len(job_ids) == 1
-    assert isinstance(job_ids[0], str) and job_ids[0]
+    assert resp.status_code == 404
 
-    # Validation errors should be 400 with a message.
     resp = client.post("/api/import_wizard/start", json={"book_rel_path": "BookOnly1"})
-    assert resp.status_code == 400
-    assert "root" in str(resp.json().get("detail"))
+    assert resp.status_code == 404
 
 
-def test_web_ui_schema_has_import_nav_entry(tmp_path: Path, monkeypatch: Any) -> None:
+def test_web_ui_schema_has_no_import_nav_entry(tmp_path: Path, monkeypatch: Any) -> None:
     monkeypatch.setenv("HOME", str(tmp_path))
 
     web_interface_plugin_cls = _get_web_interface_plugin_cls()
@@ -100,6 +81,6 @@ def test_web_ui_schema_has_import_nav_entry(tmp_path: Path, monkeypatch: Any) ->
     resp = client.get("/api/ui/nav")
     assert resp.status_code == 200
     items = resp.json().get("items", [])
-    assert any(
+    assert not any(
         (it.get("route") == "/import" and it.get("page_id") == "import_wizard") for it in items
     )

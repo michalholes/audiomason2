@@ -1,3 +1,9 @@
+## 2026-02-17T13:00:00+01:00
+
+-   Issue 601: Remove Import Wizard (API + UI) from web_interface plugin.
+-   tests: Update web tests to expect no import endpoints and no Import nav entry.
+-   spec: Remove Web Import Wizard canonical specification (web import is not implemented).
+
 ## 2026-02-16T01:10:00+01:00
 
 -   Issue 603: Fix import CLI wizard PHASE 1 completeness and branching (mode selection,

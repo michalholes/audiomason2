@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.89
+Specification Version: 1.0.90
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -1187,82 +1187,13 @@ The editor may store future-facing condition data under `step.when` without requ
 
 ---
 
-### 9.3 Web 
-=====================================================================
-IMPORT WIZARD (CANONICAL BEHAVIORAL SPECIFICATION)
-Integrated: 2026-02-15
-=====================================================================
+### 9.3 Web
 
-1. Ownership Model
+The web_interface plugin does not implement Import Wizard.
 
-The Import plugin defines:
-- Wizard steps and ordering
-- Applicability rules
-- Default values
-- Validation rules
-- Run-state structure
-- PHASE 2 execution behavior
-
-This section is authoritative and MUST be implemented via the Import-owned Wizard Platform
-defined in Section 8. Legacy wizard runtime MUST NOT interpret or execute the Import wizard.
-
-CLI and Web UI:
-- Render wizard steps
-- Collect user decisions
-- Exchange explicit run-state
-- Differ only in presentation
-
-2. Three-Phase Contract
-
-PHASE 0 — Preflight
-- Deterministic
-- No source mutations (detection only); best-effort JOBS cache writes are allowed for performance (user-approved)
-- Provides suggestions and diagnostics
-- Fast index + background enrichment allowed
-
-PHASE 1 — Wizard Interaction
-- Interactive
-- Collects all decisions
-- No processing
-- All destructive actions require explicit confirmation
-
-PHASE 2 — Processing
-- Non-interactive
-- Executes strictly from run-state
-- Deterministic
-
-3. Run-State (Authoritative)
-
-Run-state contains all decisions required for PHASE 2:
-
-- source_handling_mode
-- parallelism_n
-- conflict_policy
-- delete_source_flag
-- rename_strategy
-- rename_padding
-- rename_strictness
-- loudness_enabled
-- bitrate_conversion_enabled
-- bitrate_mode
-- fingerprint_strength
-- external_lookup_enabled
-- author/title overrides
-- multi-select scope
-- defaults_memory_scope
-
-CLI PHASE 1 persists additional structured options in ImportRunState.global_options
-(authoritative for wizard decisions; PHASE 2 consumes the subset it supports):
-
-- mode: "stage" | "inplace" (mirrors source_handling_mode)
-- lookup_enabled: bool (best-effort external lookup toggle)
-- filename_normalization: dict with keys:
-  - strategy: "numeric_only" | "numeric_suffix" | "keep_original"
-  - padding: "auto" | "fixed_2" | "fixed_3" | "fixed_4"
-  - strictness: "warn_best_effort" | "strict_fail" | "silent_best_effort"
-  - char_policy: "allow_unicode" | "ascii_only"
-- covers: dict with keys:
-  - policy: "keep_existing" | "prefer_embedded" | "prefer_external" | "remove_covers"
+The `/api/import_wizard/*` API namespace is not mounted by web_interface.
+No UI navigation entry or content renderer for Import Wizard exists in web_interface.
+Import functionality is out of scope for web_interface.
   - confirmed_remove: bool
 - id3: dict with keys:
   - wipe: bool
@@ -1382,6 +1313,4 @@ Delete source:
 - No hidden behavior
 - No silent destructive actions
 
-=====================================================================
-END OF IMPORT WIZARD SPECIFICATION
-=====================================================================
+

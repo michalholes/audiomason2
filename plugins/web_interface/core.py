@@ -6,6 +6,7 @@ from contextlib import suppress
 from typing import Any
 
 from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 
 from audiomason.core.diagnostics import build_envelope
 from audiomason.core.events import get_event_bus
@@ -13,7 +14,6 @@ from audiomason.core.logging import get_logger
 
 from .api.am_config import mount_am_config
 from .api.fs import mount_fs
-from .api.import_wizard import mount_import_wizard
 from .api.jobs import mount_jobs
 from .api.logs import mount_logs
 from .api.plugins_mgmt import mount_plugins_mgmt
@@ -157,9 +157,18 @@ class WebInterfacePlugin:
         mount_fs(app)
         mount_stage(app)
         mount_wizards(app)
-        mount_import_wizard(app)
         mount_logs(app)
         mount_jobs(app)
+
+        # Import Wizard is explicitly not implemented in web_interface.
+        # Provide a deterministic 404 for all HTTP methods under /api/import_wizard/*
+        # to avoid SPA fallback producing 405 for POST/PUT/etc.
+        @app.api_route(
+            "/api/import_wizard/{rest:path}",
+            methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS", "HEAD"],
+        )
+        def api_import_wizard_removed(rest: str) -> JSONResponse:  # noqa: ARG001
+            return JSONResponse(status_code=404, content={"detail": "Not Found"})
 
         @app.get("/api/health")
         def api_health() -> dict[str, Any]:

@@ -12,7 +12,6 @@ from .debug_bundle import mount_debug_bundle
 def _default_nav() -> list[dict[str, Any]]:
     nav: list[dict[str, Any]] = [
         {"title": "Dashboard", "route": "/", "page_id": "dashboard"},
-        {"title": "Import", "route": "/import", "page_id": "import_wizard"},
         {"title": "Config", "route": "/config", "page_id": "config"},
         {"title": "Plugins", "route": "/plugins", "page_id": "plugins"},
         {"title": "Stage", "route": "/stage", "page_id": "stage"},
@@ -52,29 +51,6 @@ def _default_pages() -> dict[str, dict[str, Any]]:
                         "title": "Run wizard here",
                         "content": {"type": "root_browser"},
                     },
-                ],
-            },
-        },
-        "import_wizard": {
-            "id": "import_wizard",
-            "title": "Import",
-            "layout": {
-                "type": "grid",
-                "children": [
-                    {
-                        "type": "card",
-                        "title": "Import wizard",
-                        "content": {
-                            "type": "import_wizard",
-                            "actions": [
-                                {
-                                    "type": "download",
-                                    "label": "Download debug info",
-                                    "href": "/api/debug/bundle",
-                                }
-                            ],
-                        },
-                    }
                 ],
             },
         },
