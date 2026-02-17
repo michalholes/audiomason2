@@ -144,61 +144,6 @@ def mount_jobs(app: FastAPI) -> None:
             )
         return {"job_id": job.job_id, "item": _serialize_job(job)}
 
-    @app.post("/api/jobs/wizard")
-    def create_wizard_job(request: Request, payload: dict[str, Any]) -> dict[str, Any]:
-        wizard_id = payload.get("wizard_id")
-        wizard_path = payload.get("wizard_path")
-        target_root = payload.get("target_root")
-        target_path = payload.get("target_path")
-        targets = payload.get("targets")
-        wizard_payload = payload.get("payload", {})
-        if not isinstance(wizard_id, str) or not wizard_id:
-            raise HTTPException(status_code=400, detail="wizard_id is required")
-        if not isinstance(wizard_payload, dict):
-            raise HTTPException(status_code=400, detail="payload must be a dict")
-
-        resolved_targets: list[str] = []
-        if isinstance(targets, list) and targets:
-            for t in targets:
-                if not isinstance(t, dict):
-                    raise HTTPException(status_code=400, detail="targets must be a list of objects")
-                r = t.get("root")
-                p = t.get("path")
-                if not isinstance(r, str) or not isinstance(p, str):
-                    raise HTTPException(status_code=400, detail="targets require root and path")
-                fs = _get_file_service(request)
-                abs_p = fs.resolve_abs_path(_parse_root_name(r), _norm_rel_path(p))
-                resolved_targets.append(str(abs_p))
-        elif isinstance(target_root, str) and isinstance(target_path, str):
-            fs = _get_file_service(request)
-            abs_p = fs.resolve_abs_path(_parse_root_name(target_root), _norm_rel_path(target_path))
-            resolved_targets.append(str(abs_p))
-        elif isinstance(wizard_path, str) and wizard_path:
-            # Backwards compatible: accept absolute path (trusted UI input).
-            resolved_targets.append(str(Path(wizard_path)))
-        else:
-            raise HTTPException(status_code=400, detail="wizard_path or targets are required")
-
-        wizard_payload_norm = dict(wizard_payload)
-        sp = wizard_payload_norm.get("source_path")
-        if not isinstance(sp, str) or not sp.strip():
-            wizard_payload_norm["source_path"] = resolved_targets[0]
-
-        job = orch.jobs.create_job(
-            JobType.WIZARD,
-            meta={
-                "wizard_id": wizard_id,
-                "wizard_path": resolved_targets[0],
-                "wizard_paths_json": json.dumps(
-                    resolved_targets, ensure_ascii=True, separators=(",", ":"), sort_keys=True
-                ),
-                "payload_json": json.dumps(
-                    wizard_payload_norm, ensure_ascii=True, separators=(",", ":"), sort_keys=True
-                ),
-            },
-        )
-        return {"job_id": job.job_id, "item": _serialize_job(job)}
-
     @app.post("/api/jobs/{job_id}/run")
     def run_job(request: Request, job_id: str, bg: BackgroundTasks) -> dict[str, Any]:
         try:

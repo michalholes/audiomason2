@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.90
+Specification Version: 1.0.91
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -842,8 +842,12 @@ Authority rules:
 
 ### 8.3 Wizard API Contract (Authoritative)
 
-The following logical API MUST exist and MUST be backed exclusively
-by the Import-owned Wizard Platform Service.
+If the Import-owned Wizard Platform Service is enabled, the following logical API MUST exist
+and MUST be backed exclusively by that service.
+
+If the Import-owned Wizard Platform Service is not enabled or not present, these routes MAY
+be absent. In that case, UIs MUST treat wizard features as unavailable and MUST NOT rely on
+any web_interface-provided legacy endpoints.
 
 List Wizards:
   GET /api/wizards
@@ -1132,11 +1136,11 @@ When creating a wizard job from the web UI, the selected filesystem target MUST 
 - For each wizard execution target, orchestration MUST create a `ProcessingContext` with `source=<target_path>`.
 - Batch mode is permitted: a single wizard job may execute the same wizard for multiple targets in a deterministic order.
 
-Implementation note (web job creation):
+Implementation note (wizard job creation):
 
-- When the web backend creates a wizard job for a selected target, it MUST ensure the wizard payload contains a non-empty `source_path`.
-- If the UI request omits `source_path` or provides an empty string, the backend MUST set `source_path` to the selected `target_path` before the job is queued.
-- If the UI provides a non-empty `source_path`, the backend MUST NOT overwrite it.
+- The wizard platform MUST ensure the wizard payload contains a non-empty `source_path`.
+- If the UI request omits `source_path` or provides an empty string, the platform MUST set `source_path` to the selected `target_path` before the job is queued.
+- If the UI provides a non-empty `source_path`, the platform MUST NOT overwrite it.
 
 Authority note:
 - The "Run wizard here" feature MUST create wizard jobs via the Import-owned Wizard Platform Service.

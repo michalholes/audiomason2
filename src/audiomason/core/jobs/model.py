@@ -7,7 +7,6 @@ from typing import Any
 
 class JobType(StrEnum):
     PROCESS = "process"
-    WIZARD = "wizard"
     DAEMON = "daemon"
 
 

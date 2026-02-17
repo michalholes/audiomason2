@@ -347,4 +347,6 @@
 -   Issue 600: Remove legacy Core wizard runtime and all legacy UI surfaces (CLI `wizard`, TUI wizard actions, web_interface wizard endpoints).
 -   web_interface: Keep mount_wizards import hook as a no-op to preserve plugin import graph.
 -   tests: Remove unit coverage for legacy wizard orchestration; keep Jobs deterministic ordering coverage.
--   spec: Clarify that wizard routing/command rules are conditional and bump specification version to 1.0.89.
+-   Issue 600: Remove remaining legacy wizard residues: remove `JobType.WIZARD` and remove `POST /api/jobs/wizard`.
+-   tests: Remove remaining unit coverage for legacy wizard endpoints and wizard job creation.
+-   spec: Clarify that wizard routing/command rules are conditional and bump specification version to 1.0.91.
