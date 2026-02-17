@@ -95,7 +95,7 @@ class ImportWizardEngine:
         flow_overrides: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         # 1) Load models
-        _emit("import.model.load", "model.load", {"root": root, "relative_path": relative_path})
+        _emit("model.load", "model.load", {"root": root, "relative_path": relative_path})
         catalog_dict = read_json(self._fs, RootName.WIZARDS, "import/catalog/catalog.json")
         flow_dict = read_json(self._fs, RootName.WIZARDS, "import/flow/current.json")
         if flow_overrides:
@@ -108,7 +108,7 @@ class ImportWizardEngine:
         flow = FlowModel.from_dict(flow_dict)
 
         _emit(
-            "import.model.validate",
+            "model.validate",
             "model.validate",
             {"root": root, "relative_path": relative_path},
         )
@@ -152,7 +152,7 @@ class ImportWizardEngine:
         if self._fs.exists(RootName.WIZARDS, state_path):
             loaded_state = read_json(self._fs, RootName.WIZARDS, state_path)
             _emit(
-                "import.session.resume",
+                "session.resume",
                 "session.resume",
                 {
                     "session_id": session_id,
@@ -169,7 +169,7 @@ class ImportWizardEngine:
 
         # 5) Persist frozen artifacts
         _emit(
-            "import.session.start",
+            "session.start",
             "session.start",
             {
                 "session_id": session_id,
@@ -302,6 +302,15 @@ class ImportWizardEngine:
         if not isinstance(catalog_any, dict):
             raise ValueError("effective model missing catalog")
         catalog = CatalogModel.from_dict(cast(dict[str, Any], catalog_any))
+
+        _emit(
+            "step.view",
+            "step.view",
+            {
+                "session_id": session_id,
+                "step_id": step_id,
+            },
+        )
         for step in catalog.steps:
             sid = step.get("step_id")
             if sid == step_id:
@@ -314,7 +323,7 @@ class ImportWizardEngine:
             raise StepSubmissionError("session is not in progress")
 
         _emit(
-            "import.step.submit",
+            "step.submit",
             "step.submit",
             {
                 "session_id": session_id,
@@ -472,7 +481,7 @@ class ImportWizardEngine:
         state = self._load_state(session_id)
 
         _emit(
-            "import.plan.compute",
+            "plan.compute",
             "plan.compute",
             {
                 "session_id": session_id,
@@ -517,7 +526,7 @@ class ImportWizardEngine:
         confirm = inputs.get("final_summary_confirm")
         if not (isinstance(confirm, dict) and confirm.get("confirm") is True):
             _emit(
-                "import.validation.fail",
+                "validation.fail",
                 "finalize.validate",
                 {"session_id": session_id, "reason": "final_summary_confirm missing"},
             )
@@ -535,7 +544,7 @@ class ImportWizardEngine:
 
         if present and policy == "ask" and not resolved:
             _emit(
-                "import.validation.fail",
+                "validation.fail",
                 "finalize.validate",
                 {"session_id": session_id, "reason": "conflicts present"},
             )
@@ -549,7 +558,7 @@ class ImportWizardEngine:
             raise FinalizeError("conflicts must be resolved before finalize")
 
         _emit(
-            "import.finalize.request",
+            "finalize.request",
             "finalize.request",
             {
                 "session_id": session_id,
@@ -610,11 +619,21 @@ class ImportWizardEngine:
         self._persist_state(session_id, state)
 
         _emit(
-            "import.job.persist",
-            "job.persist",
+            "job.create",
+            "job.create",
             {
                 "session_id": session_id,
                 "jobs": 1,
+                **diagnostics_context,
+            },
+        )
+
+        _emit(
+            "session.end",
+            "session.end",
+            {
+                "session_id": session_id,
+                "status": "finalized",
                 **diagnostics_context,
             },
         )

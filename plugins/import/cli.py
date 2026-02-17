@@ -164,15 +164,21 @@ def import_cli_main(argv: list[str], *, engine: ImportWizardEngine) -> int:
                 if ns.ed_cmd == "validate":
                     res = validate_catalog(engine)
                     _dump(res.data)
-                    return 0 if res.ok else 1
+                    if not res.ok:
+                        raise SystemExit(1) from None
+                    return 0
                 if ns.ed_cmd == "save":
                     res = save_catalog_validated(engine)
                     _dump(res.data)
-                    return 0 if res.ok else 1
+                    if not res.ok:
+                        raise SystemExit(1) from None
+                    return 0
                 if ns.ed_cmd == "edit":
                     res = edit_catalog_interactive(engine)
                     _dump(res.data)
-                    return 0 if res.ok else 1
+                    if not res.ok:
+                        raise SystemExit(1) from None
+                    return 0
 
             if ns.ed_area == "flow":
                 if ns.ed_cmd == "show":
@@ -182,20 +188,28 @@ def import_cli_main(argv: list[str], *, engine: ImportWizardEngine) -> int:
                 if ns.ed_cmd == "validate":
                     res = validate_flow(engine)
                     _dump(res.data)
-                    return 0 if res.ok else 1
+                    if not res.ok:
+                        raise SystemExit(1) from None
+                    return 0
                 if ns.ed_cmd == "save":
                     res = save_flow_validated(engine)
                     _dump(res.data)
-                    return 0 if res.ok else 1
+                    if not res.ok:
+                        raise SystemExit(1) from None
+                    return 0
                 if ns.ed_cmd == "edit":
                     res = edit_flow_interactive(engine)
                     _dump(res.data)
-                    return 0 if res.ok else 1
+                    if not res.ok:
+                        raise SystemExit(1) from None
+                    return 0
 
             if ns.ed_area == "effective-model" and ns.ed_cmd == "preview":
                 res = preview_effective_model(engine)
                 _dump(res.data)
-                return 0 if res.ok else 1
+                if not res.ok:
+                    raise SystemExit(1) from None
+                return 0
 
             _print_help()
             raise SystemExit(1)

@@ -8,6 +8,7 @@ ASCII-only.
 
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass
 from typing import Any
 
@@ -50,6 +51,7 @@ class CatalogModel:
         for i, step in enumerate(steps):
             if not isinstance(step, dict):
                 raise ModelLoadError(f"Catalog step[{i}] must be an object")
+            _validate_step_schema(step, i)
             normalized_steps.append(step)
         return cls(version=version, steps=normalized_steps)
 
@@ -152,3 +154,71 @@ def validate_models(catalog: CatalogModel, flow: FlowModel) -> None:
             raise ModelValidationError(
                 f"Flow node '{n.step_id}' references missing prev_step_id '{n.prev_step_id}'"
             )
+
+    reachable = _reachable_step_ids(flow)
+    if "final_summary_confirm" not in reachable:
+        raise ModelValidationError("Flow must reach final_summary_confirm from entry_step_id")
+
+
+def _require_ascii_str(value: Any, *, field: str, step_index: int) -> str:
+    if not isinstance(value, str) or not value:
+        raise ModelValidationError(
+            f"Catalog step[{step_index}] missing valid '{field}' (non-empty string)"
+        )
+    try:
+        value.encode("ascii")
+    except UnicodeEncodeError as e:
+        raise ModelValidationError(
+            f"Catalog step[{step_index}] field '{field}' must be ASCII-only"
+        ) from e
+    return value
+
+
+def _validate_step_schema(step: dict[str, Any], step_index: int) -> None:
+    _ = _require_ascii_str(step.get("step_id"), field="step_id", step_index=step_index)
+    _ = _require_ascii_str(step.get("message_id"), field="message_id", step_index=step_index)
+    _ = _require_ascii_str(step.get("default_text"), field="default_text", step_index=step_index)
+
+    fields = step.get("fields")
+    if not isinstance(fields, (list, dict)):
+        raise ModelValidationError(
+            f"Catalog step[{step_index}] missing valid 'fields' (list or object)"
+        )
+
+    allowed_actions = step.get("allowed_actions")
+    if not isinstance(allowed_actions, list) or not all(
+        isinstance(a, str) for a in allowed_actions
+    ):
+        raise ModelValidationError(
+            f"Catalog step[{step_index}] missing valid 'allowed_actions' (list[str])"
+        )
+
+    validation = step.get("validation")
+    if not isinstance(validation, (list, dict)):
+        raise ModelValidationError(
+            f"Catalog step[{step_index}] missing valid 'validation' (list or object)"
+        )
+
+    state_effects = step.get("state_effects")
+    if not isinstance(state_effects, (list, dict)):
+        raise ModelValidationError(
+            f"Catalog step[{step_index}] missing valid 'state_effects' (list or object)"
+        )
+
+
+def _reachable_step_ids(flow: FlowModel) -> set[str]:
+    node_map = flow.node_map()
+    start = flow.entry_step_id
+    visited: set[str] = set()
+    queue: deque[str] = deque([start])
+    while queue:
+        cur = queue.popleft()
+        if cur in visited:
+            continue
+        visited.add(cur)
+        node = node_map.get(cur)
+        if node is None:
+            continue
+        if node.next_step_id is not None and node.next_step_id not in visited:
+            queue.append(node.next_step_id)
+    return visited
