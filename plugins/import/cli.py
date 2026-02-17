@@ -98,11 +98,11 @@ def import_cli_main(argv: list[str], *, engine: ImportWizardEngine) -> int:
         ns = parser.parse_args(argv)
     except SystemExit:
         _print_help()
-        return 1
+        raise SystemExit(1) from None
 
     if ns.cmd != "wizard":
         _print_help()
-        return 1
+        raise SystemExit(1)
 
     if ns.wiz_cmd in (None, "help"):
         _print_help()
@@ -145,7 +145,7 @@ def import_cli_main(argv: list[str], *, engine: ImportWizardEngine) -> int:
                     details={"error": str(e)},
                 )
                 _dump(env)
-                return 1
+                raise SystemExit(1) from None
             if not isinstance(payload, dict):
                 env = _error_envelope(
                     code="invalid_payload",
@@ -154,7 +154,7 @@ def import_cli_main(argv: list[str], *, engine: ImportWizardEngine) -> int:
                     details={"type": type(payload).__name__},
                 )
                 _dump(env)
-                return 1
+                raise SystemExit(1)
 
             state = engine.submit_step(ns.session_id, ns.step_id, payload)
             out = {
@@ -176,7 +176,7 @@ def import_cli_main(argv: list[str], *, engine: ImportWizardEngine) -> int:
             return 0
 
         _print_help()
-        return 1
+        raise SystemExit(1)
 
     except ImportWizardError as e:
         env = _error_envelope(
@@ -186,7 +186,7 @@ def import_cli_main(argv: list[str], *, engine: ImportWizardEngine) -> int:
             details={"type": e.__class__.__name__},
         )
         _dump(env)
-        return 1
+        raise SystemExit(1) from None
     except Exception as e:
         env = _error_envelope(
             code="unexpected_error",
@@ -195,4 +195,4 @@ def import_cli_main(argv: list[str], *, engine: ImportWizardEngine) -> int:
             details={"type": e.__class__.__name__},
         )
         _dump(env)
-        return 1
+        raise SystemExit(1) from None
