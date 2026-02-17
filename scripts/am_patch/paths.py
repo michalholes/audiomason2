@@ -9,6 +9,7 @@ class Paths:
     repo_root: Path
     patch_dir: Path
     logs_dir: Path
+    json_dir: Path
     workspaces_dir: Path
     successful_dir: Path
     unsuccessful_dir: Path
@@ -21,6 +22,7 @@ def ensure_dirs(paths: Paths) -> None:
     for d in [
         paths.patch_dir,
         paths.logs_dir,
+        paths.json_dir,
         paths.workspaces_dir,
         paths.successful_dir,
         paths.unsuccessful_dir,
@@ -34,6 +36,7 @@ def default_paths(
     patch_dir: Path,
     *,
     logs_dir_name: str = "logs",
+    json_dir_name: str = "logs_json",
     workspaces_dir_name: str = "workspaces",
     successful_dir_name: str = "successful",
     unsuccessful_dir_name: str = "unsuccessful",
@@ -41,6 +44,7 @@ def default_paths(
     current_log_symlink_name: str = "am_patch.log",
 ) -> Paths:
     logs_dir = patch_dir / logs_dir_name
+    json_dir = patch_dir / json_dir_name
     workspaces_dir = patch_dir / workspaces_dir_name
     successful_dir = patch_dir / successful_dir_name
     unsuccessful_dir = patch_dir / unsuccessful_dir_name
@@ -51,6 +55,7 @@ def default_paths(
         repo_root=repo_root,
         patch_dir=patch_dir,
         logs_dir=logs_dir,
+        json_dir=json_dir,
         workspaces_dir=workspaces_dir,
         successful_dir=successful_dir,
         unsuccessful_dir=unsuccessful_dir,

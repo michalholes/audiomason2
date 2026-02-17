@@ -33,6 +33,7 @@ The following keys are normative (defaults shown):
 
 -   patch_dir_name = "patches"
 -   patch_layout_logs_dir = "logs"
+-   patch_layout_json_dir = "logs_json"
 -   patch_layout_workspaces_dir = "workspaces"
 -   patch_layout_successful_dir = "successful"
 -   patch_layout_unsuccessful_dir = "unsuccessful"
@@ -44,6 +45,7 @@ The following keys are normative (defaults shown):
 -   log_ts_format = "%Y%m%d\_%H%M%S"
 -   log_template_issue = "am_patch_issue\_{issue}\_{ts}.log"
 -   log_template_finalize = "am_patch_finalize\_{ts}.log"
+-   json_out = false (when true, write debug-complete NDJSON event log)
 -   failure_zip_name = "patched.zip"
 -   failure_zip_log_dir = "logs"
 -   failure_zip_patch_dir = "patches"
@@ -858,3 +860,23 @@ explicitne pomenovan v hlavnch astiach tejto pecifikcie v ase auditu.
 -   `test_mode` changes runner workflow
 -   `test_mode_isolate_patch_dir` changes runner workflow
 -   `update_workspace` changes runner workflow
+
+## NDJSON event log
+
+When json_out is enabled, the runner writes a debug-complete NDJSON (JSONL) event log.
+This is an additional render of the same log emission events (it does not replace diagnostics).
+
+Location:
+- The NDJSON file is written under patch_layout_json_dir (under patch_dir).
+- The NDJSON filename is derived from the regular log filename by replacing the .log suffix with .jsonl.
+
+Behavior:
+- The NDJSON sink is debug-complete: it records every Logger.emit(...) call (no filtering by verbosity/log_level).
+- Full error detail (failed step stdout/stderr) must be included and must bypass filtering.
+- The JSON sink is best-effort; failures to write NDJSON must not change runner behavior.
+
+Format:
+- One JSON object per line (NDJSON).
+- Event types: hello, log, result.
+- log events include: seq, ts_mono_ms, stage, kind, sev, ch, summary, bypass, msg.
+- Failed step detail may include stdout and stderr fields.

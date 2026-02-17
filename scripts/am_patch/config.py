@@ -47,6 +47,7 @@ class Policy:
 
     # Layout names under patch_dir.
     patch_layout_logs_dir: str = "logs"
+    patch_layout_json_dir: str = "logs_json"
     patch_layout_workspaces_dir: str = "workspaces"
     patch_layout_successful_dir: str = "successful"
     patch_layout_unsuccessful_dir: str = "unsuccessful"
@@ -126,6 +127,9 @@ class Policy:
 
     # File log level (default: verbose to preserve today's detailed log output)
     log_level: str = "verbose"
+
+    # Optional NDJSON debug-complete event log sink.
+    json_out: bool = False
 
     # Console output coloring for OK/FAIL tokens.
     # auto: enable colors only when stdout is a TTY

@@ -268,6 +268,7 @@ def main(argv: list[str]) -> int:
             "run_all_tests": cli.run_all_tests,
             "verbosity": getattr(cli, "verbosity", None),
             "log_level": getattr(cli, "log_level", None),
+            "json_out": getattr(cli, "json_out", None),
             "console_color": getattr(cli, "console_color", None),
             "allow_no_op": cli.allow_no_op,
             "skip_up_to_date": cli.skip_up_to_date,
@@ -381,6 +382,7 @@ def main(argv: list[str]) -> int:
         repo_root=repo_root,
         patch_dir=patch_root,
         logs_dir_name=policy.patch_layout_logs_dir,
+        json_dir_name=policy.patch_layout_json_dir,
         workspaces_dir_name=policy.patch_layout_workspaces_dir,
         successful_dir_name=policy.patch_layout_successful_dir,
         unsuccessful_dir_name=policy.patch_layout_unsuccessful_dir,
@@ -398,6 +400,16 @@ def main(argv: list[str]) -> int:
     )
     verbosity = getattr(policy, "verbosity", "verbose")
     log_level = getattr(policy, "log_level", "verbose")
+    status = StatusReporter(enabled=(verbosity != "quiet"))
+    json_path: Path | None = None
+    if getattr(policy, "json_out", False):
+        json_name = log_path.name
+        if json_name.endswith(".log"):
+            json_name = json_name[:-4] + ".jsonl"
+        else:
+            json_name = json_name + ".jsonl"
+        json_path = paths.json_dir / json_name
+
     logger = Logger(
         log_path=log_path,
         symlink_path=paths.symlink_path,
@@ -406,6 +418,9 @@ def main(argv: list[str]) -> int:
         console_color=getattr(policy, "console_color", "auto"),
         symlink_enabled=policy.current_log_symlink_enabled,
         symlink_target_rel=Path(policy.patch_layout_logs_dir) / log_path.name,
+        json_enabled=getattr(policy, "json_out", False),
+        json_path=json_path,
+        stage_provider=status.get_stage,
     )
 
     logger.emit(
@@ -416,25 +431,28 @@ def main(argv: list[str]) -> int:
             f"verbosity={verbosity} log_level={log_level}\n"
         ),
         summary=True,
+        kind="START",
+    )
+    logger.emit_json_hello(
+        issue_id=cli.issue_id, mode=cli.mode, verbosity=verbosity, log_level=log_level
     )
 
-    status = StatusReporter(enabled=verbosity in ("normal", "warning", "verbose", "debug"))
     status.start()
 
-    def _emit_core(*, severity: str, line: str) -> None:
+    def _emit_core(*, severity: str, line: str, kind: str | None = None) -> None:
         # Keep screen/log semantics identical: all normal output goes through Logger.
         status.break_line()
-        logger.emit(severity=severity, channel="CORE", message=line + "\n")
+        logger.emit(severity=severity, channel="CORE", message=line + "\n", kind=kind)
 
     def _stage_do(stage: str) -> None:
         status.set_stage(stage)
-        _emit_core(severity="INFO", line=f"DO: {stage}")
+        _emit_core(severity="INFO", line=f"DO: {stage}", kind="DO")
 
     def _stage_ok(stage: str) -> None:
-        _emit_core(severity="INFO", line=f"OK: {stage}")
+        _emit_core(severity="INFO", line=f"OK: {stage}", kind="OK")
 
     def _stage_fail(stage: str) -> None:
-        _emit_core(severity="ERROR", line=f"FAIL: {stage}")
+        _emit_core(severity="ERROR", line=f"FAIL: {stage}", kind="FAIL")
 
     def _gate_progress(token: str) -> None:
         kind, _, stage = token.partition(":")
@@ -442,11 +460,11 @@ def main(argv: list[str]) -> int:
             return
         status.set_stage(stage)
         if kind == "DO":
-            _emit_core(severity="INFO", line=f"DO: {stage}")
+            _emit_core(severity="INFO", line=f"DO: {stage}", kind="DO")
         elif kind == "OK":
-            _emit_core(severity="INFO", line=f"OK: {stage}")
+            _emit_core(severity="INFO", line=f"OK: {stage}", kind="OK")
         else:
-            _emit_core(severity="ERROR", line=f"FAIL: {stage}")
+            _emit_core(severity="ERROR", line=f"FAIL: {stage}", kind="FAIL")
 
     def _is_runner_path(rel: str) -> bool:
         p = (rel or "").strip().replace("\\", "/").lstrip("/")
@@ -1679,11 +1697,15 @@ def main(argv: list[str]) -> int:
         try:
             screen_quiet = str(verbosity or "").strip().lower() == "quiet"
             log_quiet = str(log_level or "").strip().lower() == "quiet"
+            logger.emit_json_result(
+                ok=(exit_code == 0), return_code=exit_code, log_path=log_path, json_path=json_path
+            )
             if exit_code == 0:
                 logger.emit(
                     severity="INFO",
                     channel="CORE",
                     message="RESULT: SUCCESS\n",
+                    kind="RESULT",
                     summary=True,
                     to_screen=True,
                 )
@@ -1692,6 +1714,7 @@ def main(argv: list[str]) -> int:
                         severity="INFO",
                         channel="CORE",
                         message="FILES:\n\n",
+                        kind="FILES",
                         summary=True,
                         to_screen=not screen_quiet,
                         to_log=not log_quiet,
@@ -1709,6 +1732,7 @@ def main(argv: list[str]) -> int:
                     severity="INFO",
                     channel="CORE",
                     message=f"COMMIT: {final_commit_sha or '(none)'}\n",
+                    kind="COMMIT",
                     summary=True,
                     to_screen=not screen_quiet,
                     to_log=not log_quiet,
@@ -1724,6 +1748,7 @@ def main(argv: list[str]) -> int:
                         severity="INFO",
                         channel="CORE",
                         message=f"PUSH: {push_txt}\n",
+                        kind="PUSH",
                         summary=True,
                         to_screen=not screen_quiet,
                         to_log=not log_quiet,
@@ -1732,6 +1757,7 @@ def main(argv: list[str]) -> int:
                     severity="INFO",
                     channel="CORE",
                     message=f"LOG: {log_path}\n",
+                    kind="TEXT",
                     summary=True,
                     to_screen=not screen_quiet,
                     to_log=not log_quiet,
@@ -1741,6 +1767,7 @@ def main(argv: list[str]) -> int:
                     severity="INFO",
                     channel="CORE",
                     message="RESULT: FAIL\n",
+                    kind="RESULT",
                     summary=True,
                     to_screen=True,
                 )
@@ -1750,6 +1777,7 @@ def main(argv: list[str]) -> int:
                     severity="INFO",
                     channel="CORE",
                     message=f"STAGE: {stage}\n",
+                    kind="STAGE",
                     summary=True,
                     to_screen=not screen_quiet,
                     to_log=not log_quiet,
@@ -1758,6 +1786,7 @@ def main(argv: list[str]) -> int:
                     severity="INFO",
                     channel="CORE",
                     message=f"REASON: {reason}\n",
+                    kind="REASON",
                     summary=True,
                     to_screen=not screen_quiet,
                     to_log=not log_quiet,
@@ -1766,6 +1795,7 @@ def main(argv: list[str]) -> int:
                     severity="INFO",
                     channel="CORE",
                     message=f"LOG: {log_path}\n",
+                    kind="TEXT",
                     summary=True,
                     to_screen=not screen_quiet,
                     to_log=not log_quiet,

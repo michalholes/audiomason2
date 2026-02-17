@@ -66,6 +66,10 @@ class StatusReporter:
         with self._lock:
             self._state.stage = stage
 
+    def get_stage(self) -> str:
+        with self._lock:
+            return self._state.stage
+
     def break_line(self) -> None:
         """Terminate an active TTY status line with a newline.
 

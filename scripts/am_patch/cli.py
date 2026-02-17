@@ -717,6 +717,15 @@ def parse_args(argv: list[str]) -> CliArgs:
     )
 
     p.add_argument(
+        "--json-out",
+        dest="json_out",
+        action="store_const",
+        const=True,
+        default=None,
+        help="Write a debug-complete NDJSON event log to the JSON logs directory.",
+    )
+
+    p.add_argument(
         "--color",
         dest="console_color",
         choices=["auto", "always", "never"],

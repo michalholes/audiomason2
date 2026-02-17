@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import contextlib
+import json
 import subprocess
 import sys
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from .console import colorize_console_message, stdout_color_enabled
 
@@ -94,6 +97,9 @@ class Logger:
         console_color: str = "auto",
         symlink_enabled: bool = True,
         symlink_target_rel: Path | None = None,
+        json_enabled: bool = False,
+        json_path: Path | None = None,
+        stage_provider: Callable[[], str] | None = None,
     ) -> None:
         self.log_path = log_path
         self.symlink_path = symlink_path
@@ -102,6 +108,13 @@ class Logger:
         self.symlink_enabled = symlink_enabled
         self.symlink_target_rel = symlink_target_rel
 
+        self.json_enabled = bool(json_enabled)
+        self.json_path = json_path
+        self._stage_provider = stage_provider
+        self._json_fp = None
+        self._json_seq = 0
+        self._mono_start = time.monotonic()
+
         self.console_color = str(console_color or "").strip().lower() or "auto"
         self._console_color_enabled = stdout_color_enabled(self.console_color)
 
@@ -109,6 +122,10 @@ class Logger:
         symlink_path.parent.mkdir(parents=True, exist_ok=True)
 
         self._fp = open(log_path, "w", encoding="utf-8", errors="replace")  # noqa: SIM115
+
+        if self.json_enabled and self.json_path is not None:
+            self.json_path.parent.mkdir(parents=True, exist_ok=True)
+            self._json_fp = open(self.json_path, "w", encoding="utf-8", errors="replace")  # noqa: SIM115
 
         if self.symlink_enabled:
             try:
@@ -138,6 +155,25 @@ class Logger:
         sys.stdout.write(s)
         sys.stdout.flush()
 
+    def _now_mono_ms(self) -> int:
+        return int((time.monotonic() - self._mono_start) * 1000)
+
+    def _get_stage(self) -> str:
+        if self._stage_provider is None:
+            return "PREFLIGHT"
+        with contextlib.suppress(Exception):
+            s = str(self._stage_provider() or "").strip()
+            if s:
+                return s
+        return "PREFLIGHT"
+
+    def _write_json(self, obj: dict[str, Any]) -> None:
+        if self._json_fp is None:
+            return
+        line = json.dumps(obj, ensure_ascii=True, separators=(",", ":"))
+        self._json_fp.write(line + "\n")
+        self._json_fp.flush()
+
     def emit(
         self,
         *,
@@ -146,10 +182,31 @@ class Logger:
         message: str,
         summary: bool = False,
         error_detail: bool = False,
+        kind: str | None = None,
         to_screen: bool = True,
         to_log: bool = True,
     ) -> None:
         # One-line discipline: caller controls newlines.
+        if self.json_enabled and self._json_fp is not None:
+            self._json_seq += 1
+            msg = message
+            if msg.endswith("\n"):
+                msg = msg[:-1]
+            evt = {
+                "type": "log",
+                "seq": self._json_seq,
+                "ts_mono_ms": self._now_mono_ms(),
+                "stage": self._get_stage(),
+                "kind": kind or "TEXT",
+                "sev": str(severity or "").strip().upper() or "INFO",
+                "ch": str(channel or "").strip().upper() or "DETAIL",
+                "summary": bool(summary),
+                "bypass": bool(error_detail),
+                "msg": msg,
+            }
+            with contextlib.suppress(Exception):
+                self._write_json(evt)
+
         if to_log and (
             error_detail or _allowed(self.log_level, severity, channel, summary=summary)
         ):
@@ -158,6 +215,64 @@ class Logger:
             error_detail or _allowed(self.screen_level, severity, channel, summary=summary)
         ):
             self._write_screen(message)
+
+    def emit_json_hello(
+        self, *, issue_id: str | None, mode: str, verbosity: str, log_level: str
+    ) -> None:
+        if not self.json_enabled or self._json_fp is None:
+            return
+        self._json_seq += 1
+        evt = {
+            "type": "hello",
+            "protocol": "am_patch_ndjson/1",
+            "seq": self._json_seq,
+            "ts_mono_ms": self._now_mono_ms(),
+            "runner_mode": str(mode or ""),
+            "issue_id": issue_id,
+            "screen_level": str(verbosity or ""),
+            "log_level": str(log_level or ""),
+        }
+        with contextlib.suppress(Exception):
+            self._write_json(evt)
+
+    def emit_json_result(
+        self, *, ok: bool, return_code: int, log_path: Path, json_path: Path | None
+    ) -> None:
+        if not self.json_enabled or self._json_fp is None:
+            return
+        self._json_seq += 1
+        evt = {
+            "type": "result",
+            "seq": self._json_seq,
+            "ts_mono_ms": self._now_mono_ms(),
+            "ok": bool(ok),
+            "return_code": int(return_code),
+            "log_path": str(log_path),
+            "json_path": str(json_path) if json_path is not None else None,
+        }
+        with contextlib.suppress(Exception):
+            self._write_json(evt)
+
+    def emit_json_failed_step_detail(self, *, stdout: str, stderr: str) -> None:
+        if not self.json_enabled or self._json_fp is None:
+            return
+        self._json_seq += 1
+        evt = {
+            "type": "log",
+            "seq": self._json_seq,
+            "ts_mono_ms": self._now_mono_ms(),
+            "stage": self._get_stage(),
+            "kind": "TEXT",
+            "sev": "ERROR",
+            "ch": "CORE",
+            "summary": False,
+            "bypass": True,
+            "msg": "FAILED STEP OUTPUT",
+            "stdout": stdout,
+            "stderr": stderr,
+        }
+        with contextlib.suppress(Exception):
+            self._write_json(evt)
 
     # Convenience methods
     def debug_detail(self, s: str) -> None:
@@ -214,6 +329,7 @@ class Logger:
         )
 
         if p.returncode != 0:
+            self.emit_json_failed_step_detail(stdout=p.stdout or "", stderr=p.stderr or "")
             # Full error detail must always be visible (stdout+stderr), even in quiet.
             self.emit_error_detail("\n" + ("=" * 80) + "\nFAILED STEP OUTPUT\n" + ("=" * 80) + "\n")
             if p.stdout:
