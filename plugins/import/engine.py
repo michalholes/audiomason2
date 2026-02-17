@@ -219,6 +219,22 @@ class ImportWizardEngine:
         state = self._load_state(session_id)
         return state
 
+    def get_step_definition(self, session_id: str, step_id: str) -> dict[str, Any]:
+        """Return the catalog step definition for step_id.
+
+        This is a UI helper. It does not perform any state transitions.
+        """
+        effective_model = self._load_effective_model(session_id)
+        catalog_any = effective_model.get("catalog")
+        if not isinstance(catalog_any, dict):
+            raise ValueError("effective model missing catalog")
+        catalog = CatalogModel.from_dict(cast(dict[str, Any], catalog_any))
+        for step in catalog.steps:
+            sid = step.get("step_id")
+            if sid == step_id:
+                return dict(step)
+        raise ValueError("unknown step_id")
+
     def submit_step(self, session_id: str, step_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         state = self._load_state(session_id)
         if state.get("status") != "in_progress":
