@@ -178,6 +178,36 @@ def import_cli_main(argv: list[str], *, engine: ImportWizardEngine) -> int:
         _print_help()
         raise SystemExit(1)
 
+    except FileNotFoundError as e:
+        missing_path = getattr(e, "filename", None) or str(e)
+        if ns.wiz_cmd in ("start", "resume"):
+            env = _error_envelope(
+                code="missing_wizard_model",
+                message_id="cli.import.missing_wizard_model",
+                default_message=(
+                    "Missing Import Wizard model files under the wizards root. "
+                    "Create catalog/catalog.json and flow/current.json."
+                ),
+                details={
+                    "missing_path": missing_path,
+                    "expected_rel_paths": [
+                        "import/catalog/catalog.json",
+                        "import/flow/current.json",
+                    ],
+                },
+            )
+            _dump(env)
+            raise SystemExit(1) from None
+
+        env = _error_envelope(
+            code="unexpected_error",
+            message_id="cli.unexpected_error",
+            default_message=str(e) or e.__class__.__name__,
+            details={"type": e.__class__.__name__},
+        )
+        _dump(env)
+        raise SystemExit(1) from None
+
     except ImportWizardError as e:
         env = _error_envelope(
             code=e.__class__.__name__,
