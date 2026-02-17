@@ -34,7 +34,7 @@ def compute_plan(
     }
 
     return {
-        "version": "0.1.0",
+        "version": 1,
         "session_id": session_id,
         "source": {"root": root, "relative_path": relative_path},
         "summary": {

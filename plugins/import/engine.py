@@ -10,7 +10,8 @@ ASCII-only.
 
 from __future__ import annotations
 
-from typing import Any
+from datetime import UTC, datetime
+from typing import Any, cast
 
 from audiomason.core.config import ConfigResolver
 from audiomason.core.diagnostics import build_envelope
@@ -42,10 +43,16 @@ def _emit(event: str, operation: str, data: dict[str, Any]) -> None:
         return
 
 
+def _iso_utc_now() -> str:
+    # RFC3339 / ISO-8601 in UTC (Z suffix).
+    return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
 class ImportWizardEngine:
     """Data-defined import wizard engine."""
 
     def __init__(self, *, resolver: ConfigResolver | None = None) -> None:
+        # Fallback resolver is for tests only. Real hosts must provide a resolver.
         self._resolver = resolver or ConfigResolver(cli_args={})
         self._fs = FileService.from_resolver(self._resolver)
 
@@ -77,7 +84,7 @@ class ImportWizardEngine:
         validate_models(catalog, flow)
 
         effective_model: dict[str, Any] = {
-            "version": "0.1.0",
+            "version": 1,
             "catalog": catalog_dict,
             "flow": flow_dict,
         }
@@ -89,7 +96,7 @@ class ImportWizardEngine:
 
         # 3) Effective config snapshot (only keys engine uses)
         effective_config: dict[str, Any] = {
-            "version": "0.1.0",
+            "version": 1,
             "diagnostics_enabled": bool(self._resolver.resolve("diagnostics.enabled")[0])
             if self._has_key("diagnostics.enabled")
             else False,
@@ -164,27 +171,39 @@ class ImportWizardEngine:
             effective_config_fingerprint + "\n",
         )
 
+        created_at = _iso_utc_now()
+
         state: dict[str, Any] = {
             "session_id": session_id,
-            "source": {"root": root, "relative_path": relative_path},
+            "created_at": created_at,
+            "updated_at": created_at,
             "model_fingerprint": model_fingerprint,
+            "phase": 1,
+            "source": {"root": root, "relative_path": relative_path},
             "current_step_id": flow.entry_step_id,
+            "completed_step_ids": [],
             "inputs": {},
             "derived": {
                 "discovery_fingerprint": discovery_fingerprint,
                 "effective_config_fingerprint": effective_config_fingerprint,
             },
-            "conflicts": [],
-            "status": "active",
-            "decisions_seq": 0,
+            "conflicts": {
+                "present": False,
+                "items": [],
+                "resolved": True,
+                "policy": "ask",
+            },
+            "status": "in_progress",
+            "errors": [],
         }
 
         atomic_write_json(self._fs, RootName.WIZARDS, state_path, state)
-        append_jsonl(
-            self._fs,
-            RootName.WIZARDS,
-            f"{session_dir}/decisions.jsonl",
-            {"seq": 0, "event": "session.created", "session_id": session_id},
+        self._append_decision(
+            session_id,
+            step_id="__system__",
+            payload={"event": "session.created", "root": root, "relative_path": relative_path},
+            result="accepted",
+            error=None,
         )
 
         return state
@@ -201,12 +220,9 @@ class ImportWizardEngine:
         return state
 
     def submit_step(self, session_id: str, step_id: str, payload: dict[str, Any]) -> dict[str, Any]:
-        if not isinstance(payload, dict):
-            raise StepSubmissionError("payload must be a dict")
-
         state = self._load_state(session_id)
-        if state.get("status") != "active":
-            raise StepSubmissionError("session is not active")
+        if state.get("status") != "in_progress":
+            raise StepSubmissionError("session is not in progress")
 
         _emit(
             "import.step.submit",
@@ -222,18 +238,102 @@ class ImportWizardEngine:
             },
         )
 
+        if not isinstance(payload, dict):
+            self._append_decision(
+                session_id,
+                step_id=step_id,
+                payload=payload if isinstance(payload, dict) else {"_invalid_payload": True},
+                result="rejected",
+                error={"type": "StepSubmissionError", "message": "payload must be a dict"},
+            )
+            raise StepSubmissionError("payload must be a dict")
+
+        effective_model = self._load_effective_model(session_id)
+        catalog_dict_any = effective_model.get("catalog")
+        flow_dict_any = effective_model.get("flow")
+
+        if not isinstance(catalog_dict_any, dict) or not isinstance(flow_dict_any, dict):
+            missing: list[str] = []
+            if not isinstance(catalog_dict_any, dict):
+                missing.append("catalog")
+            if not isinstance(flow_dict_any, dict):
+                missing.append("flow")
+            self._append_decision(
+                session_id,
+                step_id=step_id,
+                payload=payload,
+                result="rejected",
+                error={
+                    "type": "StepSubmissionError",
+                    "message": "effective model missing required section(s): " + ", ".join(missing),
+                },
+            )
+            raise StepSubmissionError(
+                "effective model missing required section(s): " + ", ".join(missing)
+            )
+
+        catalog_dict = cast(dict[str, Any], catalog_dict_any)
+        flow_dict = cast(dict[str, Any], flow_dict_any)
+        catalog = CatalogModel.from_dict(catalog_dict)
+        flow = FlowModel.from_dict(flow_dict)
+
+        if step_id not in catalog.step_ids():
+            self._append_decision(
+                session_id,
+                step_id=step_id,
+                payload=payload,
+                result="rejected",
+                error={
+                    "type": "StepSubmissionError",
+                    "message": "step_id does not exist in catalog",
+                },
+            )
+            raise StepSubmissionError("unknown step_id")
+
+        current = str(state.get("current_step_id") or flow.entry_step_id)
+        if step_id != current:
+            self._append_decision(
+                session_id,
+                step_id=step_id,
+                payload=payload,
+                result="rejected",
+                error={
+                    "type": "StepSubmissionError",
+                    "message": "step_id must match current_step_id",
+                },
+            )
+            raise StepSubmissionError("step_id must match current_step_id")
+
         inputs = dict(state.get("inputs") or {})
         inputs[step_id] = payload
         state["inputs"] = inputs
-        state["current_step_id"] = step_id
 
-        self._bump_decision(state, session_id, {"event": "step.submitted", "step_id": step_id})
+        completed = list(state.get("completed_step_ids") or [])
+        if step_id not in completed:
+            completed.append(step_id)
+        state["completed_step_ids"] = completed
+
+        # Move to next step deterministically.
+        node = flow.node_map().get(step_id)
+        if node is not None and node.next_step_id is not None:
+            state["current_step_id"] = node.next_step_id
+        else:
+            state["current_step_id"] = step_id
+
+        state["updated_at"] = _iso_utc_now()
+        self._append_decision(
+            session_id,
+            step_id=step_id,
+            payload=payload,
+            result="accepted",
+            error=None,
+        )
         self._persist_state(session_id, state)
         return state
 
     def apply_action(self, session_id: str, action: str) -> dict[str, Any]:
         state = self._load_state(session_id)
-        if state.get("status") != "active":
+        if state.get("status") != "in_progress":
             return state
 
         action = str(action)
@@ -241,8 +341,15 @@ class ImportWizardEngine:
             raise StepSubmissionError("invalid action")
 
         if action == "cancel":
-            state["status"] = "cancelled"
-            self._bump_decision(state, session_id, {"event": "session.cancelled"})
+            state["status"] = "aborted"
+            state["updated_at"] = _iso_utc_now()
+            self._append_decision(
+                session_id,
+                step_id="__system__",
+                payload={"action": "cancel"},
+                result="accepted",
+                error=None,
+            )
             self._persist_state(session_id, state)
             return state
 
@@ -261,7 +368,14 @@ class ImportWizardEngine:
             elif action == "back" and node.prev_step_id is not None:
                 state["current_step_id"] = node.prev_step_id
 
-        self._bump_decision(state, session_id, {"event": f"action.{action}", "from": current})
+        state["updated_at"] = _iso_utc_now()
+        self._append_decision(
+            session_id,
+            step_id="__system__",
+            payload={"action": action, "from": current, "to": state.get("current_step_id")},
+            result="accepted",
+            error=None,
+        )
         self._persist_state(session_id, state)
         return state
 
@@ -284,21 +398,30 @@ class ImportWizardEngine:
         session_dir = f"import/sessions/{session_id}"
         discovery = read_json(self._fs, RootName.WIZARDS, f"{session_dir}/discovery.json")
         src = state.get("source") or {}
+        src_root = str(src.get("root") or "")
+        src_rel = str(src.get("relative_path") or "")
         plan = compute_plan(
             session_id=session_id,
-            root=str(src.get("root") or ""),
-            relative_path=str(src.get("relative_path") or ""),
+            root=src_root,
+            relative_path=src_rel,
             discovery=discovery,
             inputs=dict(state.get("inputs") or {}),
         )
         atomic_write_json(self._fs, RootName.WIZARDS, f"{session_dir}/plan.json", plan)
-        self._bump_decision(state, session_id, {"event": "plan.computed"})
+        state["updated_at"] = _iso_utc_now()
+        self._append_decision(
+            session_id,
+            step_id="__system__",
+            payload={"event": "plan.computed"},
+            result="accepted",
+            error=None,
+        )
         self._persist_state(session_id, state)
         return plan
 
     def finalize(self, session_id: str) -> dict[str, Any]:
         state = self._load_state(session_id)
-        if state.get("status") != "active":
+        if state.get("status") != "in_progress":
             raise FinalizeError("session is not active")
 
         inputs = dict(state.get("inputs") or {})
@@ -311,11 +434,28 @@ class ImportWizardEngine:
             )
             raise FinalizeError("final_summary_confirm must be submitted with confirm=true")
 
-        if state.get("conflicts"):
+        conflicts = state.get("conflicts")
+        if isinstance(conflicts, dict):
+            present = bool(conflicts.get("present"))
+            policy = str(conflicts.get("policy") or "")
+            resolved = bool(conflicts.get("resolved"))
+        else:
+            present = False
+            policy = ""
+            resolved = True
+
+        if present and policy == "ask" and not resolved:
             _emit(
                 "import.validation.fail",
                 "finalize.validate",
                 {"session_id": session_id, "reason": "conflicts present"},
+            )
+            self._append_decision(
+                session_id,
+                step_id="__system__",
+                payload={"event": "finalize"},
+                result="rejected",
+                error={"type": "FinalizeError", "message": "conflicts must be resolved"},
             )
             raise FinalizeError("conflicts must be resolved before finalize")
 
@@ -342,6 +482,9 @@ class ImportWizardEngine:
             plan = self.compute_plan(session_id)
 
         src = state.get("source") or {}
+        src_root = str(src.get("root") or "")
+        src_rel = str(src.get("relative_path") or "")
+        created_at = _iso_utc_now()
         diagnostics_context = {
             "model_fingerprint": str(state.get("model_fingerprint") or ""),
             "discovery_fingerprint": str(
@@ -354,10 +497,12 @@ class ImportWizardEngine:
 
         job_requests = build_job_requests(
             session_id=session_id,
-            root=str(src.get("root") or ""),
-            relative_path=str(src.get("relative_path") or ""),
+            root=src_root,
+            relative_path=src_rel,
+            created_at=created_at,
             diagnostics_context=diagnostics_context,
             plan=plan,
+            inputs=inputs,
         )
 
         atomic_write_json(
@@ -365,7 +510,14 @@ class ImportWizardEngine:
         )
 
         state["status"] = "finalized"
-        self._bump_decision(state, session_id, {"event": "session.finalized"})
+        state["updated_at"] = _iso_utc_now()
+        self._append_decision(
+            session_id,
+            step_id="__system__",
+            payload={"event": "finalize"},
+            result="accepted",
+            error=None,
+        )
         self._persist_state(session_id, state)
 
         _emit(
@@ -373,7 +525,7 @@ class ImportWizardEngine:
             "job.persist",
             {
                 "session_id": session_id,
-                "jobs": len(job_requests),
+                "jobs": 1,
                 **diagnostics_context,
             },
         )
@@ -381,7 +533,7 @@ class ImportWizardEngine:
         return {
             "session_id": session_id,
             "status": state.get("status"),
-            "jobs": len(job_requests),
+            "jobs": 1,
         }
 
     def _load_state(self, session_id: str) -> dict[str, Any]:
@@ -399,11 +551,22 @@ class ImportWizardEngine:
         session_dir = f"import/sessions/{session_id}"
         return read_json(self._fs, RootName.WIZARDS, f"{session_dir}/effective_model.json")
 
-    def _bump_decision(self, state: dict[str, Any], session_id: str, entry: dict[str, Any]) -> None:
-        seq = int(state.get("decisions_seq") or 0) + 1
-        state["decisions_seq"] = seq
+    def _append_decision(
+        self,
+        session_id: str,
+        *,
+        step_id: str,
+        payload: dict[str, Any],
+        result: str,
+        error: dict[str, Any] | None,
+    ) -> None:
         session_dir = f"import/sessions/{session_id}"
-        append = dict(entry)
-        append["seq"] = seq
-        append["session_id"] = session_id
-        append_jsonl(self._fs, RootName.WIZARDS, f"{session_dir}/decisions.jsonl", append)
+        entry: dict[str, Any] = {
+            "at": _iso_utc_now(),
+            "step_id": step_id,
+            "payload": dict(payload),
+            "result": result,
+        }
+        if error is not None:
+            entry["error"] = dict(error)
+        append_jsonl(self._fs, RootName.WIZARDS, f"{session_dir}/decisions.jsonl", entry)

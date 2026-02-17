@@ -15,21 +15,23 @@ def build_job_requests(
     session_id: str,
     root: str,
     relative_path: str,
+    created_at: str,
     diagnostics_context: dict[str, str],
     plan: dict[str, Any],
-) -> list[dict[str, Any]]:
-    return [
-        {
-            "job_type": "import.process",
-            "job_version": "0.1.0",
-            "session_id": session_id,
-            "actions": [
-                {
-                    "type": "noop",
-                    "source": {"root": root, "relative_path": relative_path},
-                    "plan_summary": plan.get("summary", {}),
-                }
-            ],
-            "diagnostics_context": dict(diagnostics_context),
-        }
-    ]
+    inputs: dict[str, Any],
+) -> dict[str, Any]:
+    return {
+        "job_type": "import.process",
+        "job_version": 1,
+        "session_id": session_id,
+        "created_at": created_at,
+        "inputs": dict(inputs),
+        "actions": [
+            {
+                "type": "noop",
+                "source": {"root": root, "relative_path": relative_path},
+                "plan_summary": plan.get("summary", {}),
+            }
+        ],
+        "diagnostics_context": dict(diagnostics_context),
+    }

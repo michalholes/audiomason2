@@ -15,8 +15,9 @@ from .engine import ImportWizardEngine
 class ImportPlugin:
     """Import plugin providing the ImportWizardEngine."""
 
-    def __init__(self) -> None:
-        self._resolver = ConfigResolver(cli_args={})
+    def __init__(self, resolver: ConfigResolver | None = None) -> None:
+        # Fallback resolver is for tests only. Real hosts must provide a resolver.
+        self._resolver = resolver or ConfigResolver(cli_args={})
         self.engine = ImportWizardEngine(resolver=self._resolver)
 
     def get_engine(self) -> ImportWizardEngine:

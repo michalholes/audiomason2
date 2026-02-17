@@ -33,7 +33,7 @@ _REQUIRED_STEP_IDS = {
 
 @dataclass(frozen=True)
 class CatalogModel:
-    version: str
+    version: int
     steps: list[dict[str, Any]]
 
     @classmethod
@@ -42,8 +42,8 @@ class CatalogModel:
             raise ModelLoadError("Catalog must be an object")
         version = data.get("version")
         steps = data.get("steps")
-        if not isinstance(version, str) or not version:
-            raise ModelLoadError("Catalog missing valid 'version'")
+        if not isinstance(version, int):
+            raise ModelLoadError("Catalog missing valid 'version' (int)")
         if not isinstance(steps, list):
             raise ModelLoadError("Catalog missing valid 'steps' list")
         normalized_steps: list[dict[str, Any]] = []
@@ -71,7 +71,7 @@ class FlowNode:
 
 @dataclass(frozen=True)
 class FlowModel:
-    version: str
+    version: int
     entry_step_id: str
     nodes: list[FlowNode]
 
@@ -82,8 +82,8 @@ class FlowModel:
         version = data.get("version")
         entry = data.get("entry_step_id")
         nodes_raw = data.get("nodes")
-        if not isinstance(version, str) or not version:
-            raise ModelLoadError("Flow missing valid 'version'")
+        if not isinstance(version, int):
+            raise ModelLoadError("Flow missing valid 'version' (int)")
         if not isinstance(entry, str) or not entry:
             raise ModelLoadError("Flow missing valid 'entry_step_id'")
         if not isinstance(nodes_raw, list):

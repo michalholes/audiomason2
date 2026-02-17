@@ -30,11 +30,14 @@ def atomic_write_json(
     rel_path: str,
     obj: Any,
 ) -> None:
-    data = json.dumps(
-        obj,
-        ensure_ascii=True,
-        separators=(",", ":"),
-        sort_keys=True,
+    data = (
+        json.dumps(
+            obj,
+            ensure_ascii=True,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        + "\n"
     ).encode("utf-8")
     _atomic_write_bytes(fs, root, rel_path, data)
 
