@@ -6,7 +6,11 @@ license: "MIT"
 
 entrypoint: plugin:ImportPlugin
 
-interfaces: []
+interfaces:
+  - ICLICommands
+
+cli_commands:
+  - import
 
 hooks: []
 
