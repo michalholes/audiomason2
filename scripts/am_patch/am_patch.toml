@@ -126,7 +126,7 @@ no_rollback = false
 [logging]
 # NOTE: present in your file; not part of runner Policy surface (keep only if used elsewhere).
 log_retention = 20
-
+log_level= 'normal'
 
 [security]
 ascii_only_patch = true
