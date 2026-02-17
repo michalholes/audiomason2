@@ -131,6 +131,7 @@ lower mode.
 -   verbose:
     -   warning + diagnostic sections (config, workspace meta, gate
         summaries, patch summary, etc.)
+        -   Unified patch application progress (UNIFIED_PATCH ...) is part of the patch summary and appears only in verbose+ unless it represents a failure.
     -   On FAIL: full stdout + stderr
 -   debug:
     -   verbose + full internal command metadata (RUN cmd=..., cwd=...,

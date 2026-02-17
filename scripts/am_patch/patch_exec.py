@@ -106,12 +106,10 @@ def run_patch(
     logger.section("PATCH SOURCE")
     logger.line(f"patch_source_path={src}")
     logger.line(f"patch_source_sha256={digest}")
-    logger.info_core(f"patch_source_path={src}")
 
     logger.section("PATCH EXEC (PREP)")
     logger.line(f"patch_exec_path={exec_path}")
     logger.line(f"patch_jail={getattr(policy, 'patch_jail', False)}")
-    logger.info_core(f"patch_exec_path={exec_path}")
 
     # Build command (optionally inside a jail).
     if getattr(policy, "patch_jail", False):
@@ -125,11 +123,11 @@ def run_patch(
         )
         logger.section("PATCH EXEC (JAILED)")
         logger.line("cmd=" + " ".join(cmd))
-        logger.info_core("patch_exec=JAILED")
+        logger.line("patch_exec=JAILED")
         r = logger.run_logged(cmd, cwd=workspace_repo)
     else:
         logger.section("PATCH EXEC")
-        logger.info_core("patch_exec=RUN")
+        logger.line("patch_exec=RUN")
         r = logger.run_logged([sys.executable, str(exec_path)], cwd=workspace_repo)
 
     if r.returncode != 0:
@@ -337,7 +335,7 @@ def run_unified_patch_bundle(
             "PREFLIGHT", "PATCH_PATH", f"unified patch input must be .patch or .zip: {src}"
         )
 
-    logger.info_core(f"UNIFIED_PATCH bundle_start input={src.name}")
+    logger.line(f"UNIFIED_PATCH bundle_start input={src.name}")
 
     patch_entries: list[tuple[str, bytes]] = []
     if src.suffix == ".patch":
@@ -374,7 +372,7 @@ def run_unified_patch_bundle(
 
         logger.section("UNIFIED PATCH (attempt)")
         logger.line(f"patch_name={name}")
-        logger.info_core(f"UNIFIED_PATCH attempt_start name={name}")
+        logger.line(f"UNIFIED_PATCH attempt_start name={name}")
         if strip_cfg is not None:
             strip: int | None = int(strip_cfg)
             logger.line(f"patch_strip={strip} (config)")
@@ -388,7 +386,7 @@ def run_unified_patch_bundle(
         if strip is None:
             logger.error_core(f"UNIFIED_PATCH strip=AMBIGUOUS name={name}")
         else:
-            logger.info_core(f"UNIFIED_PATCH strip={strip} name={name}")
+            logger.line(f"UNIFIED_PATCH strip={strip} name={name}")
         touched_resolved = _resolve_touched_best_effort(
             workspace_repo, raw_paths, strip=(strip if isinstance(strip, int) else None)
         )
@@ -428,13 +426,13 @@ def run_unified_patch_bundle(
 
         applied_ok += 1
         logger.line("result=OK")
-        logger.info_core(f"UNIFIED_PATCH result=OK name={name}")
+        logger.line(f"UNIFIED_PATCH result=OK name={name}")
 
     declared_files = sorted({p for p in declared_all if p and p != "/dev/null"})
     touched_files = sorted({p for p in touched_all if p and p != "/dev/null"})
 
     logger.section("UNIFIED PATCH (summary)")
-    logger.info_core(f"UNIFIED_PATCH summary applied_ok={applied_ok} applied_fail={applied_fail}")
+    logger.line(f"UNIFIED_PATCH summary applied_ok={applied_ok} applied_fail={applied_fail}")
     logger.line(f"applied_ok={applied_ok}")
     logger.line(f"applied_fail={applied_fail}")
     logger.line("declared_files=" + ",".join(declared_files))
