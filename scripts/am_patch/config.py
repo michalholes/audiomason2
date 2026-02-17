@@ -636,6 +636,18 @@ def build_policy(defaults: Policy, cfg: dict[str, Any]) -> Policy:
     p.gates_skip_mypy = _as_bool(cfg, "gates_skip_mypy", p.gates_skip_mypy)
     _mark_cfg(p, cfg, "gates_skip_mypy")
 
+    p.gates_skip_docs = _as_bool(cfg, "gates_skip_docs", p.gates_skip_docs)
+    _mark_cfg(p, cfg, "gates_skip_docs")
+
+    p.gate_docs_include = _as_list_str(cfg, "gate_docs_include", p.gate_docs_include)
+    _mark_cfg(p, cfg, "gate_docs_include")
+    p.gate_docs_exclude = _as_list_str(cfg, "gate_docs_exclude", p.gate_docs_exclude)
+    _mark_cfg(p, cfg, "gate_docs_exclude")
+    p.gate_docs_required_files = _as_list_str(
+        cfg, "gate_docs_required_files", p.gate_docs_required_files
+    )
+    _mark_cfg(p, cfg, "gate_docs_required_files")
+
     p.gates_order = _as_list_str(cfg, "gates_order", p.gates_order)
     _mark_cfg(p, cfg, "gates_order")
 
