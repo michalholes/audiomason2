@@ -1,3 +1,9 @@
+## 2026-02-18T00:00:00+01:00
+
+-   plugins: Define canonical host config key-space for per-plugin configuration and materialize missing schema defaults during plugin load without overwriting user values.
+-   api: Stop using "~/.config/audiomason/plugins.yaml" for plugin state/config; use PluginRegistry and host config only.
+-   spec: Document plugin config normalization behavior and mark plugins.yaml obsolete; bump specification version to 1.1.1.
+
 ## 2026-02-17T16:29:35+01:00
 
 -   spec: Integrate consolidated Import Wizard model (data-defined Step

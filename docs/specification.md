@@ -1,6 +1,6 @@
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.1.0 Specification Versioning Policy: Start at
+Specification Version: 1.1.1 Specification Versioning Policy: Start at
 1.0.0. Patch version increments by +1 for every change.
 
 Author: Michal Holes\
@@ -424,10 +424,37 @@ free. - No numeric levels and no coupling to any logging library.
 -   It is the only source of truth for:
     -   discovery
     -   enable/disable state
-    -   plugin configuration
+    -   plugin configuration stored in host config under the canonical key-space
     -   metadata
 
 Multiple parallel plugin state mechanisms are forbidden.
+
+#### 7.1.1 Canonical plugin configuration key-space (host config)
+
+Plugin configuration is host configuration and MUST be stored under:
+
+-   plugins.<plugin_id>.config.<key>
+
+#### 7.1.2 Plugin config default normalization (deterministic)
+
+During plugin load, the host performs an explicit normalization step:
+
+-   Inputs:
+    -   plugin_id
+    -   plugin manifest config_schema
+-   Behavior:
+    -   For each schema key missing under plugins.<plugin_id>.config:
+        -   If the schema entry defines a default value (field "default"), write that default.
+    -   Existing user values are never overwritten.
+    -   If no keys are missing, no write occurs.
+    -   Deterministic iteration order: lexicographic by schema key.
+-   Storage:
+    -   All writes go through ConfigService (no direct YAML access).
+
+#### 7.1.3 Obsolete plugins.yaml
+
+The legacy file "~/.config/audiomason/plugins.yaml" is obsolete/unsupported and MUST NOT be used
+for plugin state or plugin configuration.
 
 ------------------------------------------------------------------------
 

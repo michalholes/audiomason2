@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 from audiomason.core.config_service import ConfigService
 
@@ -23,7 +24,6 @@ class PluginRegistry:
         plugins.disabled: ["plugin_a", "plugin_b", ...]          (legacy fallback)
 
     Writes always go to plugin_registry.disabled.
-
     """
 
     def __init__(self, config: ConfigService) -> None:
@@ -67,3 +67,62 @@ class PluginRegistry:
             if plugin_id not in disabled:
                 disabled.append(plugin_id)
         self._config.set_value("plugin_registry.disabled", disabled)
+
+    def get_plugin_config(self, plugin_id: str) -> dict[str, Any]:
+        """Return the effective plugin config mapping.
+
+        Reads from host user config under: plugins.<plugin_id>.config
+        """
+        try:
+            cfg = self._config.get_config()
+        except Exception:
+            return {}
+
+        plugins = cfg.get("plugins")
+        if not isinstance(plugins, dict):
+            return {}
+
+        plugin_node = plugins.get(plugin_id)
+        if not isinstance(plugin_node, dict):
+            return {}
+
+        cfg_node = plugin_node.get("config")
+        if not isinstance(cfg_node, dict):
+            return {}
+
+        return dict(cfg_node)
+
+    def set_plugin_config(self, plugin_id: str, config: dict[str, Any]) -> None:
+        """Write plugin config mapping into host user config."""
+        if not isinstance(config, dict):
+            raise TypeError("config must be a dict")
+        self._config.set_value(f"plugins.{plugin_id}.config", dict(config))
+
+    def ensure_plugin_config_defaults(self, plugin_id: str, config_schema: dict[str, Any]) -> bool:
+        """Materialize missing defaulted config keys into host user config.
+
+        For each schema key with a 'default' field, write the default value to:
+            plugins.<plugin_id>.config.<key>
+
+        Existing user values are never overwritten.
+
+        Returns True if any write occurred, else False.
+        """
+        if not isinstance(config_schema, dict) or config_schema == {}:
+            return False
+
+        existing = self.get_plugin_config(plugin_id)
+        changed = False
+
+        for key in sorted(config_schema.keys()):
+            meta = config_schema.get(key)
+            if not isinstance(meta, dict):
+                continue
+            if "default" not in meta:
+                continue
+            if key in existing:
+                continue
+            self._config.set_value(f"plugins.{plugin_id}.config.{key}", meta["default"])
+            changed = True
+
+        return changed

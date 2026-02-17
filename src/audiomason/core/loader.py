@@ -142,6 +142,14 @@ class PluginLoader:
         if self._registry is not None and not self._registry.is_enabled(manifest.name):
             raise PluginError(f"Plugin is disabled: {manifest.name}")
 
+        # Plugin config default normalization (host config)
+        if (
+            self._registry is not None
+            and isinstance(manifest.config_schema, dict)
+            and manifest.config_schema
+        ):
+            self._registry.ensure_plugin_config_defaults(manifest.name, manifest.config_schema)
+
         # Validate if requested
         if validate and manifest.test_level != "none":
             self._validate_plugin(plugin_dir, manifest)
