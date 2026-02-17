@@ -1,7 +1,7 @@
 
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.0.88
+Specification Version: 1.0.89
 Specification Versioning Policy: Start at 1.0.0. Patch version increments by +1 for every change.
 
 
@@ -930,11 +930,11 @@ Async execution rules:
 ### 8.5 Routing Rules (Hard)
 
 Web:
-- The web_interface plugin MUST route all wizard endpoints to the Import-owned Wizard Platform Service.
+- If the web_interface plugin exposes any wizard endpoints, it MUST route them to the Import-owned Wizard Platform Service.
 - The web_interface plugin MUST NOT contain wizard execution logic.
 
 CLI:
-- The `wizard` command MUST delegate to the Import-owned Wizard Platform Service.
+- If a `wizard` command exists, it MUST be owned by the Import plugin (or delegate to the Import-owned Wizard Platform Service).
 - The `import` command MAY internally use the Wizard Platform Service but MUST NOT implement
   a parallel hardcoded flow.
 
@@ -945,6 +945,10 @@ CLI:
 - Wizard diagnostics MUST be fail-safe and MUST NOT alter functional behavior.
 
 ### 8.7 Legacy Wizard System Removal (Hard Requirement)
+
+Implementation note (Issue 600):
+- Legacy wizard command and TUI/web legacy wizard surfaces were removed.
+- Any future wizard UI must be provided by the Import plugin.
 
 The following MUST NOT exist after this migration:
 - `src/audiomason/core/wizard_service.py`

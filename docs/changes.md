@@ -336,3 +336,9 @@
 -   Issue 600: Wizard platform migration — remove legacy Core wizard runtime; wizard authority moved to Import plugin.
 -   Docs: Update specification to v1.0.88 and document breaking change in changes log.
 -   Wizard definitions remain at `wizards/definitions/*.yaml` under file_io root `wizards` (storage unchanged; runtime/authority updated).
+## 2026-02-17T12:00:00+01:00
+
+-   Issue 600: Remove legacy Core wizard runtime and all legacy UI surfaces (CLI `wizard`, TUI wizard actions, web_interface wizard endpoints).
+-   web_interface: Keep mount_wizards import hook as a no-op to preserve plugin import graph.
+-   tests: Remove unit coverage for legacy wizard orchestration; keep Jobs deterministic ordering coverage.
+-   spec: Clarify that wizard routing/command rules are conditional and bump specification version to 1.0.89.

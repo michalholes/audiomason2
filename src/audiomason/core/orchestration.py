@@ -18,9 +18,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-import yaml
-
-from audiomason.checkpoint import CheckpointManager
 from audiomason.core.config import ConfigResolver
 from audiomason.core.context import ProcessingContext
 from audiomason.core.diagnostics import build_envelope
@@ -35,10 +32,9 @@ from audiomason.core.logging import (
     set_log_sink,
     set_verbosity,
 )
-from audiomason.core.orchestration_models import ProcessRequest, WizardRequest
+from audiomason.core.orchestration_models import ProcessRequest
 from audiomason.core.phase import PhaseContractError, PhaseGuard
 from audiomason.core.pipeline import PipelineExecutor
-from audiomason.wizard_engine import WizardEngine
 
 
 def _utcnow_iso() -> str:
@@ -52,7 +48,6 @@ COMPONENT = "orchestration"
 OP_RUN_JOB = "run_job"
 OP_CTX = "context_lifecycle"
 OP_EXECUTE_PIPELINE = "execute_pipeline"
-OP_RUN_WIZARD = "run_wizard"
 
 
 def _emit_diag(event: str, *, operation: str, data: dict[str, Any]) -> None:
@@ -178,56 +173,6 @@ class Orchestrator:
 
         return job.job_id
 
-    def start_wizard(self, request: WizardRequest) -> str:
-        targets = request.wizard_paths or [request.wizard_path]
-        job = self._jobs.create_job(
-            JobType.WIZARD,
-            meta={
-                "wizard_id": request.wizard_id,
-                "wizard_path": str(request.wizard_path),
-                "wizard_paths_json": json.dumps(
-                    [str(p) for p in targets],
-                    ensure_ascii=True,
-                    separators=(",", ":"),
-                    sort_keys=True,
-                ),
-                "payload_json": json.dumps(
-                    request.payload, ensure_ascii=True, separators=(",", ":"), sort_keys=True
-                ),
-            },
-        )
-
-        job.transition(JobState.RUNNING)
-        job.started_at = _utcnow_iso()
-        self._jobs.store.save_job(job)
-
-        _emit_diag(
-            "diag.job.start",
-            operation=OP_RUN_JOB,
-            data={
-                "job_id": job.job_id,
-                "job_type": "wizard",
-                "wizard_id": request.wizard_id,
-                "status": "running",
-            },
-        )
-
-        prev_sink = get_log_sink()
-        set_log_sink(lambda line: self._jobs.append_log_line(job.job_id, line))
-        try:
-            _LOGGER.info("started")
-        finally:
-            set_log_sink(prev_sink)
-
-        try:
-            loop = asyncio.get_running_loop()
-        except RuntimeError:
-            _run_coro_sync(self._run_wizard_job(job.job_id, request))
-        else:
-            loop.create_task(self._run_wizard_job(job.job_id, request))
-
-        return job.job_id
-
     def run_job(self, job_id: str, *, plugin_loader: Any, verbosity: int = 1) -> None:
         """Run an existing PENDING job.
 
@@ -283,56 +228,6 @@ class Orchestrator:
                 _run_coro_sync(self._run_process_job(job.job_id, process_request))
             else:
                 loop.create_task(self._run_process_job(job.job_id, process_request))
-            return
-
-        if job.type == JobType.WIZARD:
-            wizard_id = job.meta.get("wizard_id", "")
-            wizard_path = job.meta.get("wizard_path", "")
-            wizard_paths_json = job.meta.get("wizard_paths_json", "")
-            payload_json = job.meta.get("payload_json", "{}")
-            try:
-                data = json.loads(payload_json)
-            except Exception:
-                data = {}
-            if not isinstance(data, dict):
-                data = {}
-
-            targets: list[Path] | None = None
-            if isinstance(wizard_paths_json, str) and wizard_paths_json:
-                try:
-                    raw = json.loads(wizard_paths_json)
-                except Exception:
-                    raw = None
-                if isinstance(raw, list) and raw:
-                    targets = [Path(str(x)) for x in raw]
-
-            wizard_request = WizardRequest(
-                wizard_id=str(wizard_id),
-                wizard_path=Path(str(wizard_path)),
-                wizard_paths=targets,
-                plugin_loader=plugin_loader,
-                payload=data,
-                verbosity=verbosity,
-            )
-
-            job.transition(JobState.RUNNING)
-            job.started_at = _utcnow_iso()
-            job.meta["verbosity_override"] = str(int(verbosity))
-            self._jobs.store.save_job(job)
-
-            prev_sink = get_log_sink()
-            set_log_sink(lambda line: self._jobs.append_log_line(job.job_id, line))
-            try:
-                _LOGGER.info("started")
-            finally:
-                set_log_sink(prev_sink)
-
-            try:
-                loop = asyncio.get_running_loop()
-            except RuntimeError:
-                _run_coro_sync(self._run_wizard_job(job.job_id, wizard_request))
-            else:
-                loop.create_task(self._run_wizard_job(job.job_id, wizard_request))
             return
 
         raise RuntimeError(f"unsupported job type: {job.type}")
@@ -530,200 +425,6 @@ class Orchestrator:
             data={
                 "job_id": job_id,
                 "job_type": "process",
-                "status": "succeeded",
-                "duration_ms": _duration_ms(start_time, time.monotonic()),
-            },
-        )
-        _LOGGER.info("succeeded")
-
-    async def _run_wizard_job(self, job_id: str, request: WizardRequest) -> None:
-        prev_sink = get_log_sink()
-        set_log_sink(lambda line: self._jobs.append_log_line(job_id, line))
-        set_verbosity(_resolve_effective_verbosity())
-        start_time = time.monotonic()
-        try:
-            job = self._jobs.get_job(job_id)
-            override = job.meta.get("verbosity_override")
-            if isinstance(override, str) and override.isdigit():
-                set_verbosity(_parse_verbosity(int(override)))
-
-            with PhaseGuard.processing():
-                try:
-                    await self._run_wizard_job_impl(job_id, request, start_time=start_time)
-                except PhaseContractError as e:
-                    self._save_wizard_checkpoint(job_id, request, e)
-                    job = self._jobs.get_job(job_id)
-                    job.transition(JobState.FAILED)
-                    job.error = str(e)
-                    job.finished_at = _utcnow_iso()
-                    self._jobs.store.save_job(job)
-                    _emit_diag(
-                        "diag.job.end",
-                        operation=OP_RUN_JOB,
-                        data={
-                            "job_id": job_id,
-                            "job_type": "wizard",
-                            "status": "failed",
-                            "duration_ms": _duration_ms(start_time, time.monotonic()),
-                            "error_type": type(e).__name__,
-                            "error_message": str(e),
-                        },
-                    )
-                    _LOGGER.error(f"failed: {e}")
-                except Exception as e:
-                    job = self._jobs.get_job(job_id)
-                    job.transition(JobState.FAILED)
-                    job.error = str(e)
-                    job.finished_at = _utcnow_iso()
-                    self._jobs.store.save_job(job)
-                    _emit_diag(
-                        "diag.job.end",
-                        operation=OP_RUN_JOB,
-                        data={
-                            "job_id": job_id,
-                            "job_type": "wizard",
-                            "status": "failed",
-                            "duration_ms": _duration_ms(start_time, time.monotonic()),
-                            "error_type": type(e).__name__,
-                            "error_message": str(e),
-                        },
-                    )
-                    _LOGGER.error(f"failed: {e}")
-        finally:
-            set_log_sink(prev_sink)
-
-    def _save_wizard_checkpoint(self, job_id: str, request: WizardRequest, err: Exception) -> None:
-        ck = CheckpointManager()
-        try:
-            p = ck.save_job_failure_checkpoint(
-                job_id,
-                kind="wizard",
-                error=str(err),
-                meta=self._jobs.get_job(job_id).meta,
-            )
-            _LOGGER.info(f"checkpoint saved: {p}")
-        except Exception as ck_e:
-            _LOGGER.warning(f"checkpoint save failed: {ck_e}")
-
-    async def _run_wizard_job_impl(
-        self, job_id: str, request: WizardRequest, *, start_time: float
-    ) -> None:
-        _LOGGER.info(f"wizard: {request.wizard_id}")
-
-        def _payload_input(_prompt: str, options: dict[str, Any]) -> str:
-            step_id = options.get("step_id")
-            if isinstance(step_id, str) and step_id in request.payload:
-                value = request.payload[step_id]
-                return "" if value is None else str(value)
-
-            key = options.get("key")
-            if isinstance(key, str) and key in request.payload:
-                value = request.payload[key]
-                return "" if value is None else str(value)
-
-            raise RuntimeError(f"missing wizard input for step: {step_id or key}")
-
-        from audiomason.core.wizard_service import WizardService
-
-        engine = WizardEngine(loader=request.plugin_loader, verbosity=request.verbosity)
-        engine.set_input_handler(_payload_input)
-
-        svc = WizardService()
-        text = svc.get_wizard_text(request.wizard_id)
-        try:
-            wizard_def = yaml.safe_load(text)
-        except Exception as e:
-            raise RuntimeError(f"invalid wizard yaml: {e}") from e
-
-        targets = request.wizard_paths or [request.wizard_path]
-        total = max(1, len(targets))
-
-        for i, target in enumerate(targets, 1):
-            job = self._jobs.get_job(job_id)
-            if job.cancel_requested:
-                job.transition(JobState.CANCELLED)
-                job.finished_at = _utcnow_iso()
-                self._jobs.store.save_job(job)
-                _emit_diag(
-                    "diag.job.end",
-                    operation=OP_RUN_JOB,
-                    data={
-                        "job_id": job_id,
-                        "job_type": "wizard",
-                        "status": "cancelled",
-                        "duration_ms": _duration_ms(start_time, time.monotonic()),
-                    },
-                )
-                _LOGGER.warning("cancelled")
-                return
-
-            ctx = ProcessingContext(id=f"wizard_{i}", source=target)
-            _LOGGER.info(f"wizard_target: {target}")
-
-            _emit_diag(
-                "diag.boundary.start",
-                operation=OP_RUN_WIZARD,
-                data={
-                    "job_id": job_id,
-                    "wizard_id": request.wizard_id,
-                    "context_index": i,
-                    "context_total": total,
-                    "source": str(target),
-                },
-            )
-            try:
-                await engine.run_wizard(wizard_def, context=ctx)
-            except Exception as e:
-                _emit_diag(
-                    "diag.boundary.fail",
-                    operation=OP_RUN_WIZARD,
-                    data={
-                        "job_id": job_id,
-                        "wizard_id": request.wizard_id,
-                        "error_type": type(e).__name__,
-                        "error_message": str(e),
-                    },
-                )
-                _emit_diag(
-                    "diag.boundary.end",
-                    operation=OP_RUN_WIZARD,
-                    data={
-                        "job_id": job_id,
-                        "wizard_id": request.wizard_id,
-                        "source": str(target),
-                        "status": "failed",
-                        "error_type": type(e).__name__,
-                        "error_message": str(e),
-                    },
-                )
-                raise
-            else:
-                _emit_diag(
-                    "diag.boundary.end",
-                    operation=OP_RUN_WIZARD,
-                    data={
-                        "job_id": job_id,
-                        "wizard_id": request.wizard_id,
-                        "source": str(target),
-                        "status": "succeeded",
-                    },
-                )
-
-            job = self._jobs.get_job(job_id)
-            job.progress = float(i) / float(total)
-            self._jobs.store.save_job(job)
-
-        job = self._jobs.get_job(job_id)
-        job.progress = 1.0
-        job.transition(JobState.SUCCEEDED)
-        job.finished_at = _utcnow_iso()
-        self._jobs.store.save_job(job)
-        _emit_diag(
-            "diag.job.end",
-            operation=OP_RUN_JOB,
-            data={
-                "job_id": job_id,
-                "job_type": "wizard",
                 "status": "succeeded",
                 "duration_ms": _duration_ms(start_time, time.monotonic()),
             },

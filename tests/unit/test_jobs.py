@@ -39,7 +39,7 @@ def test_list_jobs_is_deterministic(jobs_home: Path) -> None:
     service = JobService(store=store)
 
     j1 = service.create_job(JobType.PROCESS)
-    j2 = service.create_job(JobType.WIZARD)
+    j2 = service.create_job(JobType.DAEMON)
     jobs = service.list_jobs()
 
     assert [j.job_id for j in jobs] == sorted([j1.job_id, j2.job_id])

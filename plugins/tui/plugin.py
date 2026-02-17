@@ -512,38 +512,32 @@ class TUIPlugin:
                 description="Manage plugins",
             ),
             MenuItem(
-                id="wizards",
-                label="2. Wizards",
-                submenu=self._build_wizards_menu(),
-                description="Run and manage wizards",
-            ),
-            MenuItem(
                 id="config",
-                label="3. Configuration",
+                label="2. Configuration",
                 submenu=self._build_config_menu(),
                 description="View configuration",
             ),
             MenuItem(
                 id="jobs",
-                label="4. Jobs",
+                label="3. Jobs",
                 submenu=self._build_jobs_menu(),
                 description="View and manage jobs",
             ),
             MenuItem(
                 id="files",
-                label="5. Files",
+                label="4. Files",
                 submenu=self._build_files_menu(),
                 description="Browse files",
             ),
             MenuItem(
                 id="logs",
-                label="6. System Log",
+                label="5. System Log",
                 submenu=self._build_logs_menu(),
                 description="View system log",
             ),
             MenuItem(
                 id="exit",
-                label="7. Exit",
+                label="6. Exit",
                 action=self._action_exit,
                 description="Exit TUI",
             ),
@@ -796,347 +790,6 @@ class TUIPlugin:
     # WIZARDS
     # =========================================================================
 
-    def _build_wizards_menu(self) -> list[MenuItem]:
-        """Build wizards submenu."""
-        return [
-            MenuItem(id="list_wizards", label="1. List Wizards", action=self._action_list_wizards),
-            MenuItem(id="run_wizard", label="2. Run Wizard", action=self._action_run_wizard_menu),
-            MenuItem(
-                id="delete_wizard", label="3. Delete Wizard", action=self._action_delete_wizard_menu
-            ),
-            MenuItem(id="back", label="4. Back to Main Menu", action=self._action_back),
-        ]
-
-    def _action_list_wizards(self) -> str | None:
-        """List all wizards."""
-        if not self._engine:
-            return "Services not initialized"
-
-        try:
-            from audiomason.core.wizard_service import WizardService
-
-            svc = WizardService()
-            wizards = svc.list_wizards()
-
-            if not wizards:
-                return "No wizards found"
-
-            items: list[MenuItem] = []
-            for w in wizards:
-                items.append(MenuItem(id=w.name, label=w.name))
-
-            items.append(MenuItem(id="back", label="<< Back", action=self._action_back))
-            self._engine.push_menu("Wizards List", items)
-            return None
-
-        except Exception as e:
-            logger.error(f"Failed to list wizards: {e}")
-            return f"Error: {e}"
-
-    def _action_run_wizard_menu(self) -> str | None:
-        """Show run wizard menu."""
-        if not self._engine:
-            return "Services not initialized"
-
-        try:
-            from audiomason.core.wizard_service import WizardService
-
-            svc = WizardService()
-            wizards = svc.list_wizards()
-
-            if not wizards:
-                return "No wizards found"
-
-            items: list[MenuItem] = []
-            for w in wizards:
-                wizard_name = w.name
-
-                def make_run(name: str) -> Any:
-                    def run() -> str | None:
-                        return self._run_wizard(name)
-
-                    return run
-
-                items.append(
-                    MenuItem(id=w.name, label=f"Run: {w.name}", action=make_run(wizard_name))
-                )
-
-            items.append(MenuItem(id="back", label="<< Back", action=self._action_back))
-            self._engine.push_menu("Run Wizard", items)
-            return None
-
-        except Exception as e:
-            logger.error(f"Failed to list wizards: {e}")
-            return f"Error: {e}"
-
-    def _run_wizard(self, wizard_name: str) -> str | None:
-        """Run a wizard by creating a job."""
-        if not self._orchestrator or not self._engine or not self._plugin_loader:
-            return "Services not initialized"
-
-        try:
-            from audiomason.core.orchestration_models import WizardRequest
-            from audiomason.core.wizard_service import WizardService
-
-            if not self._engine.confirm_dialog(f"Run wizard '{wizard_name}'?"):
-                return "Cancelled"
-
-            svc = WizardService()
-            wizard_path = svc.wizards_dir / "definitions" / f"{wizard_name}.yaml"
-
-            # Create wizard request with empty payload (non-interactive)
-            request = WizardRequest(
-                wizard_id=wizard_name,
-                wizard_path=wizard_path,
-                plugin_loader=self._plugin_loader,
-                payload={},
-                verbosity=self._verbosity,
-            )
-
-            job_id = self._orchestrator.start_wizard(request)
-            logger.info(f"Started wizard job: {job_id}")
-
-            return f"Started job: {job_id[:8]}..."
-
-        except Exception as e:
-            logger.error(f"Failed to run wizard {wizard_name}: {e}")
-            return f"Error: {e}"
-
-    def _action_delete_wizard_menu(self) -> str | None:
-        """Show delete wizard menu."""
-        if not self._engine:
-            return "Services not initialized"
-
-        try:
-            from audiomason.core.wizard_service import WizardService
-
-            svc = WizardService()
-            wizards = svc.list_wizards()
-
-            if not wizards:
-                return "No wizards found"
-
-            items: list[MenuItem] = []
-            for w in wizards:
-                wizard_name = w.name
-
-                def make_delete(name: str) -> Any:
-                    def delete() -> str | None:
-                        return self._delete_wizard(name)
-
-                    return delete
-
-                items.append(
-                    MenuItem(id=w.name, label=f"Delete: {w.name}", action=make_delete(wizard_name))
-                )
-
-            items.append(MenuItem(id="back", label="<< Back", action=self._action_back))
-            self._engine.push_menu("Delete Wizard", items)
-            return None
-
-        except Exception as e:
-            logger.error(f"Failed to list wizards: {e}")
-            return f"Error: {e}"
-
-    def _delete_wizard(self, wizard_name: str) -> str | None:
-        """Delete a wizard."""
-        if not self._engine:
-            return "Services not initialized"
-
-        try:
-            from audiomason.core.wizard_service import WizardService
-
-            if not self._engine.confirm_dialog(f"Delete wizard '{wizard_name}'?"):
-                return "Cancelled"
-
-            svc = WizardService()
-            svc.delete_wizard(wizard_name)
-            logger.info(f"Deleted wizard: {wizard_name}")
-
-            self._engine.pop_menu()
-            self._action_delete_wizard_menu()
-
-            return f"Deleted: {wizard_name}"
-
-        except Exception as e:
-            logger.error(f"Failed to delete wizard {wizard_name}: {e}")
-            return f"Error: {e}"
-
-    # =========================================================================
-    # JOBS
-    # =========================================================================
-
-    def _build_jobs_menu(self) -> list[MenuItem]:
-        """Build jobs submenu."""
-        return [
-            MenuItem(id="list_jobs", label="1. List Jobs", action=self._action_list_jobs),
-            MenuItem(id="view_job", label="2. View Job Details", action=self._action_view_job_menu),
-            MenuItem(id="cancel_job", label="3. Cancel Job", action=self._action_cancel_job_menu),
-            MenuItem(id="back", label="4. Back to Main Menu", action=self._action_back),
-        ]
-
-    def _action_list_jobs(self) -> str | None:
-        """List all jobs."""
-        if not self._orchestrator or not self._engine:
-            return "Services not initialized"
-
-        try:
-            jobs = self._orchestrator.list_jobs()
-
-            if not jobs:
-                return "No jobs found"
-
-            items: list[MenuItem] = []
-
-            for job in jobs:
-                state_str = job.state.name[:4] if job.state else "????"
-                progress_str = f"{int(job.progress * 100)}%" if job.progress else "0%"
-                type_str = job.type.name if job.type else "?"
-                label = f"[{state_str}] {job.job_id[:8]}... ({type_str}) {progress_str}"
-                items.append(MenuItem(id=job.job_id, label=label))
-
-            items.append(MenuItem(id="back", label="<< Back", action=self._action_back))
-            self._engine.push_menu("Jobs List", items)
-            return None
-
-        except Exception as e:
-            logger.error(f"Failed to list jobs: {e}")
-            return f"Error: {e}"
-
-    def _action_view_job_menu(self) -> str | None:
-        """Show view job details menu."""
-        if not self._orchestrator or not self._engine:
-            return "Services not initialized"
-
-        try:
-            jobs = self._orchestrator.list_jobs()
-
-            if not jobs:
-                return "No jobs found"
-
-            items: list[MenuItem] = []
-
-            for job in jobs:
-                state_str = job.state.name[:4] if job.state else "????"
-                type_str = job.type.name if job.type else "?"
-                label = f"[{state_str}] {job.job_id[:8]}... ({type_str})"
-                job_id = job.job_id
-
-                def make_view(jid: str) -> Any:
-                    def view() -> str | None:
-                        return self._view_job_details(jid)
-
-                    return view
-
-                items.append(MenuItem(id=job.job_id, label=label, action=make_view(job_id)))
-
-            items.append(MenuItem(id="back", label="<< Back", action=self._action_back))
-            self._engine.push_menu("View Job Details", items)
-            return None
-
-        except Exception as e:
-            logger.error(f"Failed to list jobs: {e}")
-            return f"Error: {e}"
-
-    def _view_job_details(self, job_id: str) -> str | None:
-        """View detailed job info."""
-        if not self._orchestrator or not self._engine:
-            return "Services not initialized"
-
-        try:
-            job = self._orchestrator.get_job(job_id)
-
-            items: list[MenuItem] = []
-
-            # Job metadata
-            items.append(MenuItem(id="id", label=f"ID: {job.job_id}"))
-            items.append(MenuItem(id="type", label=f"Type: {job.type.name if job.type else '?'}"))
-            items.append(
-                MenuItem(id="state", label=f"State: {job.state.name if job.state else '?'}")
-            )
-            items.append(MenuItem(id="progress", label=f"Progress: {int(job.progress * 100)}%"))
-
-            if job.started_at:
-                items.append(MenuItem(id="started", label=f"Started: {job.started_at[:19]}"))
-            if job.finished_at:
-                items.append(MenuItem(id="finished", label=f"Finished: {job.finished_at[:19]}"))
-            if job.error:
-                error_str = job.error[:40] + "..." if len(job.error) > 40 else job.error
-                items.append(MenuItem(id="error", label=f"Error: {error_str}"))
-
-            # Add view log action
-            def make_view_log(jid: str) -> Any:
-                def view() -> str | None:
-                    return self._view_job_log(jid)
-
-                return view
-
-            items.append(MenuItem(id="view_log", label=">> View Log", action=make_view_log(job_id)))
-            items.append(MenuItem(id="back", label="<< Back", action=self._action_back))
-
-            self._engine.push_menu(f"Job: {job_id[:8]}...", items)
-            return None
-
-        except Exception as e:
-            logger.error(f"Failed to view job {job_id}: {e}")
-            return f"Error: {e}"
-
-    def _action_cancel_job_menu(self) -> str | None:
-        """Show cancel job menu."""
-        if not self._orchestrator or not self._engine:
-            return "Services not initialized"
-
-        try:
-            from audiomason.core.jobs.model import JobState
-
-            jobs = self._orchestrator.list_jobs()
-            cancellable = [j for j in jobs if j.state in (JobState.RUNNING, JobState.PENDING)]
-
-            if not cancellable:
-                return "No cancellable jobs"
-
-            items: list[MenuItem] = []
-
-            for job in cancellable:
-                state_str = job.state.name[:4] if job.state else "????"
-                label = f"[{state_str}] {job.job_id[:8]}..."
-                job_id = job.job_id
-
-                def make_cancel(jid: str) -> Any:
-                    def cancel() -> str | None:
-                        return self._cancel_job(jid)
-
-                    return cancel
-
-                items.append(MenuItem(id=job.job_id, label=label, action=make_cancel(job_id)))
-
-            items.append(MenuItem(id="back", label="<< Back", action=self._action_back))
-            self._engine.push_menu("Cancel Job", items)
-            return None
-
-        except Exception as e:
-            logger.error(f"Failed to build cancel menu: {e}")
-            return f"Error: {e}"
-
-    def _cancel_job(self, job_id: str) -> str | None:
-        """Cancel a job."""
-        if not self._orchestrator or not self._engine:
-            return "Services not initialized"
-
-        try:
-            if self._engine.confirm_dialog(f"Cancel job {job_id[:8]}...?"):
-                self._orchestrator.cancel(job_id)
-                logger.info(f"Job {job_id} cancelled")
-                self._engine.pop_menu()
-                self._action_cancel_job_menu()
-                return f"Job {job_id[:8]}... cancelled"
-            else:
-                return "Cancelled"
-
-        except Exception as e:
-            logger.error(f"Failed to cancel job {job_id}: {e}")
-            return f"Error: {e}"
-
     # =========================================================================
     # CONFIGURATION
     # =========================================================================
@@ -1331,6 +984,21 @@ class TUIPlugin:
             return f"Error: {e}"
 
     # =========================================================================
+    # JOBS
+    # =========================================================================
+
+    def _build_jobs_menu(self) -> list[MenuItem]:
+        """Build jobs submenu."""
+        return [
+            MenuItem(
+                id="view_job_logs",
+                label="1. View Job Logs",
+                action=self._action_view_job_logs,
+            ),
+            MenuItem(id="back", label="2. Back to Main Menu", action=self._action_back),
+        ]
+
+    # =========================================================================
     # FILES
     # =========================================================================
 
@@ -1473,14 +1141,6 @@ class TUIPlugin:
 
                 return handler
 
-            def make_wizard_handler(r: RootName) -> Callable[[], str | None]:
-                def handler() -> str | None:
-                    entry = get_selected_entry()
-                    if not entry:
-                        return "No item selected"
-                    path, _ = entry
-                    return self._run_wizard_on_path(r, path)
-
                 return handler
 
             def make_delete_handler(r: RootName) -> Callable[[], str | None]:
@@ -1496,7 +1156,6 @@ class TUIPlugin:
             key_handlers: dict[str, Callable[[], str | None]] = {
                 "c": make_copy_handler(root),
                 "m": make_move_handler(root),
-                "w": make_wizard_handler(root),
                 "d": make_delete_handler(root),
             }
 
@@ -1505,89 +1164,12 @@ class TUIPlugin:
             if len(display_path) > 30:
                 display_path = "..." + display_path[-27:]
 
-            help_text = " c:Copy  m:Move  w:Wizard  d:Delete  Esc:Back "
+            help_text = " c:Copy  m:Move  d:Delete  Esc:Back "
             self._engine.push_menu(f"{title}: {display_path}", items, help_text, key_handlers)
             return None
 
         except Exception as e:
             logger.error(f"Failed to browse {root}: {e}")
-            return f"Error: {e}"
-
-    def _run_wizard_on_path(self, root: RootName, rel_path: str) -> str | None:
-        """Run a wizard on a specific path."""
-        if not self._engine:
-            return "Services not initialized"
-
-        try:
-            from audiomason.core.wizard_service import WizardService
-
-            svc = WizardService()
-            wizards = svc.list_wizards()
-
-            if not wizards:
-                return "No wizards available"
-
-            items: list[MenuItem] = []
-
-            for w in wizards:
-                wizard_name = w.name
-
-                def make_run(name: str, r: RootName, p: str) -> Any:
-                    def run() -> str | None:
-                        return self._execute_wizard_on_path(name, r, p)
-
-                    return run
-
-                items.append(
-                    MenuItem(id=w.name, label=w.name, action=make_run(wizard_name, root, rel_path))
-                )
-
-            items.append(MenuItem(id="back", label="<< Back", action=self._action_back))
-            self._engine.push_menu("Select Wizard", items)
-            return None
-
-        except Exception as e:
-            logger.error(f"Failed to list wizards: {e}")
-            return f"Error: {e}"
-
-    def _execute_wizard_on_path(
-        self, wizard_name: str, root: RootName, rel_path: str
-    ) -> str | None:
-        """Execute wizard on a path."""
-        if not self._orchestrator or not self._engine or not self._plugin_loader:
-            return "Services not initialized"
-
-        try:
-            from audiomason.core.orchestration_models import WizardRequest
-            from audiomason.core.wizard_service import WizardService
-
-            if not self._engine.confirm_dialog(f"Run '{wizard_name}' on '{Path(rel_path).name}'?"):
-                return "Cancelled"
-
-            svc = WizardService()
-            wizards = svc.list_wizards()
-
-            if not any(w.name == wizard_name for w in wizards):
-                return f"Wizard not found: {wizard_name}"
-
-            wizard_path = svc.wizards_dir / "definitions" / f"{wizard_name}.yaml"
-
-            # Create request with path in payload (non-interactive)
-            request = WizardRequest(
-                wizard_id=wizard_name,
-                wizard_path=wizard_path,
-                plugin_loader=self._plugin_loader,
-                payload={"input_root": root.value, "input_path": rel_path},
-                verbosity=self._verbosity,
-            )
-
-            job_id = self._orchestrator.start_wizard(request)
-            logger.info(f"Started wizard {wizard_name} on {root}/{rel_path}: job {job_id}")
-
-            return f"Started: {wizard_name} (job: {job_id[:8]}...)"
-
-        except Exception as e:
-            logger.error(f"Failed to run wizard: {e}")
             return f"Error: {e}"
 
     def _copy_item(self, root: RootName, rel_path: str) -> str | None:

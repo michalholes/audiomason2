@@ -15,7 +15,6 @@ from fastapi.responses import StreamingResponse
 
 from audiomason.core.config import ConfigResolver
 from audiomason.core.orchestration import Orchestrator
-from audiomason.core.wizard_service import WizardService
 from plugins.file_io.service.service import FileService
 from plugins.file_io.service.types import RootName
 
@@ -128,16 +127,6 @@ def _api_roots(request: Request, resolver: ConfigResolver) -> dict[str, Any]:
     if show_jobs:
         items.append({"id": "jobs", "label": "Jobs"})
     items.append({"id": "outbox", "label": "Outbox"})
-    return {"items": items}
-
-
-def _api_wizards() -> dict[str, Any]:
-    svc = WizardService()
-    items: list[dict[str, Any]] = []
-    for w in svc.list_wizards():
-        item: dict[str, Any] = {"name": w.name}
-        items.append(item)
-    items.sort(key=lambda x: x.get("name") or "")
     return {"items": items}
 
 
@@ -336,16 +325,6 @@ def mount_debug_bundle(app: FastAPI) -> None:
                 manifest["included"]["api_roots"] = {"path": "api/roots.json"}
             except Exception as e:
                 manifest["omitted"]["api_roots"] = f"error:{type(e).__name__}"
-
-            try:
-                _zip_add_text(
-                    z,
-                    "api/wizards.json",
-                    json.dumps(_api_wizards(), indent=2, sort_keys=True) + "\n",
-                )
-                manifest["included"]["api_wizards"] = {"path": "api/wizards.json"}
-            except Exception as e:
-                manifest["omitted"]["api_wizards"] = f"error:{type(e).__name__}"
 
             try:
                 _zip_add_text(
