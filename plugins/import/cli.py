@@ -15,6 +15,17 @@ import argparse
 import json
 from typing import Any
 
+from .editor import (
+    edit_catalog_interactive,
+    edit_flow_interactive,
+    preview_effective_model,
+    save_catalog_validated,
+    save_flow_validated,
+    show_catalog,
+    show_flow,
+    validate_catalog,
+    validate_flow,
+)
 from .engine import ImportWizardEngine
 from .errors import ImportWizardError
 
@@ -47,6 +58,27 @@ def _build_parser() -> argparse.ArgumentParser:
     finalize = wiz_sub.add_parser("finalize", add_help=False)
     finalize.add_argument("session_id")
 
+    ed = sub.add_parser("editor", add_help=False)
+    ed_sub = ed.add_subparsers(dest="ed_area")
+
+    cat = ed_sub.add_parser("catalog", add_help=False)
+    cat_sub = cat.add_subparsers(dest="ed_cmd")
+    cat_sub.add_parser("show", add_help=False)
+    cat_sub.add_parser("edit", add_help=False)
+    cat_sub.add_parser("validate", add_help=False)
+    cat_sub.add_parser("save", add_help=False)
+
+    fl = ed_sub.add_parser("flow", add_help=False)
+    fl_sub = fl.add_subparsers(dest="ed_cmd")
+    fl_sub.add_parser("show", add_help=False)
+    fl_sub.add_parser("edit", add_help=False)
+    fl_sub.add_parser("validate", add_help=False)
+    fl_sub.add_parser("save", add_help=False)
+
+    em = ed_sub.add_parser("effective-model", add_help=False)
+    em_sub = em.add_subparsers(dest="ed_cmd")
+    em_sub.add_parser("preview", add_help=False)
+
     wiz_sub.add_parser("help", add_help=False)
     return p
 
@@ -60,6 +92,16 @@ def _print_help() -> None:
     print("  audiomason import wizard plan <session_id>")
     print("  audiomason import wizard finalize <session_id>")
     print("  audiomason import wizard help")
+    print("")
+    print("  audiomason import editor catalog show")
+    print("  audiomason import editor catalog edit")
+    print("  audiomason import editor catalog validate")
+    print("  audiomason import editor catalog save")
+    print("  audiomason import editor flow show")
+    print("  audiomason import editor flow edit")
+    print("  audiomason import editor flow validate")
+    print("  audiomason import editor flow save")
+    print("  audiomason import editor effective-model preview")
 
 
 def _error_envelope(
@@ -100,15 +142,64 @@ def import_cli_main(argv: list[str], *, engine: ImportWizardEngine) -> int:
         _print_help()
         raise SystemExit(1) from None
 
-    if ns.cmd != "wizard":
+    if ns.cmd not in ("wizard", "editor"):
         _print_help()
         raise SystemExit(1)
 
-    if ns.wiz_cmd in (None, "help"):
+    if ns.cmd == "wizard" and ns.wiz_cmd in (None, "help"):
         _print_help()
         return 0
 
     try:
+        if ns.cmd == "editor":
+            if ns.ed_area is None or ns.ed_cmd is None:
+                _print_help()
+                return 0
+
+            if ns.ed_area == "catalog":
+                if ns.ed_cmd == "show":
+                    res = show_catalog(engine)
+                    _dump(res.data)
+                    return 0
+                if ns.ed_cmd == "validate":
+                    res = validate_catalog(engine)
+                    _dump(res.data)
+                    return 0 if res.ok else 1
+                if ns.ed_cmd == "save":
+                    res = save_catalog_validated(engine)
+                    _dump(res.data)
+                    return 0 if res.ok else 1
+                if ns.ed_cmd == "edit":
+                    res = edit_catalog_interactive(engine)
+                    _dump(res.data)
+                    return 0 if res.ok else 1
+
+            if ns.ed_area == "flow":
+                if ns.ed_cmd == "show":
+                    res = show_flow(engine)
+                    _dump(res.data)
+                    return 0
+                if ns.ed_cmd == "validate":
+                    res = validate_flow(engine)
+                    _dump(res.data)
+                    return 0 if res.ok else 1
+                if ns.ed_cmd == "save":
+                    res = save_flow_validated(engine)
+                    _dump(res.data)
+                    return 0 if res.ok else 1
+                if ns.ed_cmd == "edit":
+                    res = edit_flow_interactive(engine)
+                    _dump(res.data)
+                    return 0 if res.ok else 1
+
+            if ns.ed_area == "effective-model" and ns.ed_cmd == "preview":
+                res = preview_effective_model(engine)
+                _dump(res.data)
+                return 0 if res.ok else 1
+
+            _print_help()
+            raise SystemExit(1)
+
         if ns.wiz_cmd == "start":
             state = engine.create_session(ns.root, ns.path)
             out = {

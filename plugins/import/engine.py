@@ -19,7 +19,7 @@ from audiomason.core.events import get_event_bus
 from plugins.file_io.service import FileService, RootName
 
 from . import discovery as discovery_mod
-from .errors import FinalizeError, SessionNotFoundError, StepSubmissionError
+from .errors import FinalizeError, ImportWizardError, SessionNotFoundError, StepSubmissionError
 from .fingerprints import fingerprint_json, sha256_hex
 from .job_requests import build_job_requests
 from .models import CatalogModel, FlowModel, validate_models
@@ -48,6 +48,30 @@ def _iso_utc_now() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
+def _exception_envelope(exc: Exception) -> dict[str, Any]:
+    code = exc.__class__.__name__
+    if isinstance(exc, ValueError):
+        return {
+            "code": "invalid_payload",
+            "message_id": "import.editor.invalid_payload",
+            "default_message": str(exc) or "invalid payload",
+            "details": {"type": code},
+        }
+    if isinstance(exc, ImportWizardError):
+        return {
+            "code": code,
+            "message_id": f"import.{code}",
+            "default_message": str(exc) or code,
+            "details": {"type": code},
+        }
+    return {
+        "code": "unexpected_error",
+        "message_id": "import.unexpected_error",
+        "default_message": str(exc) or code,
+        "details": {"type": code},
+    }
+
+
 class ImportWizardEngine:
     """Data-defined import wizard engine."""
 
@@ -55,6 +79,13 @@ class ImportWizardEngine:
         # Fallback resolver is for tests only. Real hosts must provide a resolver.
         self._resolver = resolver or ConfigResolver(cli_args={})
         self._fs = FileService.from_resolver(self._resolver)
+
+    def get_file_service(self) -> FileService:
+        """Return the file service used by this engine.
+
+        This is a plugin-internal helper for CLI/editor tooling.
+        """
+        return self._fs
 
     def create_session(
         self,
@@ -207,6 +238,48 @@ class ImportWizardEngine:
         )
 
         return state
+
+    def validate_catalog(self, catalog_json: Any) -> dict[str, Any]:
+        """Validate catalog JSON using engine invariants.
+
+        Returns {"ok": True} on success, or a canonical error envelope.
+        """
+        try:
+            if not isinstance(catalog_json, dict):
+                raise ValueError("catalog_json must be an object")
+            _ = CatalogModel.from_dict(catalog_json)
+            return {"ok": True}
+        except Exception as e:
+            return _exception_envelope(e)
+
+    def validate_flow(self, flow_json: Any, catalog_json: Any) -> dict[str, Any]:
+        """Validate flow JSON against the catalog using engine invariants.
+
+        Returns {"ok": True} on success, or a canonical error envelope.
+        """
+        try:
+            if not isinstance(catalog_json, dict):
+                raise ValueError("catalog_json must be an object")
+            if not isinstance(flow_json, dict):
+                raise ValueError("flow_json must be an object")
+            catalog = CatalogModel.from_dict(catalog_json)
+            flow = FlowModel.from_dict(flow_json)
+            validate_models(catalog, flow)
+            return {"ok": True}
+        except Exception as e:
+            return _exception_envelope(e)
+
+    def preview_effective_model(self, catalog_json: Any, flow_json: Any) -> dict[str, Any]:
+        """Return the effective model that would be frozen for new sessions."""
+        if not isinstance(catalog_json, dict):
+            raise ValueError("catalog_json must be an object")
+        if not isinstance(flow_json, dict):
+            raise ValueError("flow_json must be an object")
+        catalog = CatalogModel.from_dict(catalog_json)
+        flow = FlowModel.from_dict(flow_json)
+        validate_models(catalog, flow)
+        _ = (catalog, flow)
+        return {"version": 1, "catalog": catalog_json, "flow": flow_json}
 
     def _has_key(self, key: str) -> bool:
         try:
