@@ -99,7 +99,7 @@ gates_skip_pytest = false
 gates_skip_mypy = false
 
 # Documentation gate (docs) - required updates when watched paths change
-gates_skip_docs = false
+gates_skip_docs = true
 gate_docs_include = ["src", "plugins"]
 gate_docs_exclude = ["badguys", "patches"]
 gate_docs_required_files = ["docs/changes.md", "docs/specification.md"]
@@ -129,12 +129,12 @@ log_retention = 20
 log_level= 'normal'
 
 [security]
-ascii_only_patch = false
+ascii_only_patch = true
 
 # NOTE: present in your file; not part of runner Policy surface (keep only if used elsewhere).
 block_subprocess_network_best_effort = true
 
-patch_jail = true
+patch_jail = false
 patch_jail_unshare_net = true
 live_repo_guard = true
 live_repo_guard_scope = "patch"

@@ -1,6 +1,6 @@
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.1.1 Specification Versioning Policy: Start at
+Specification Version: 1.1.2 Specification Versioning Policy: Start at
 1.0.0. Patch version increments by +1 for every change.
 
 Author: Michal Holes\
@@ -1027,163 +1027,440 @@ the backend.
 
 ------------------------------------------------------------------------
 
+------------------------------------------------------------------------
+
 # 10. Import Wizard (Authoritative Integration)
 
-This section formally integrates the Import Wizard consolidated model
-into the AudioMason2 authoritative specification.
+This section formally integrates the Import Wizard consolidated model into the AudioMason2 authoritative specification.
 
-## 10.1 Identity
+Normative sources integrated here: Import Wizard Master Spec V3 through V11 (state machine, wire contracts, config governance, runtime model, persistence, performance, and deterministic enforcement).
 
--   Provided by plugin with manifest.name == "import".
--   Implements PHASE 1 interactive workflow.
--   Produces PHASE 2 job requests.
--   System MUST remain functional if plugin is disabled or absent.
+This section is binding. If any implementation contradicts this section, the implementation is invalid unless this specification is updated first.
 
-## 10.2 Storage Model
+## 10.1 Identity and Scope
+
+- Provided by plugin with manifest.name == "import".
+- Implements PHASE 0 (preflight/discovery) and PHASE 1 (interactive wizard engine).
+- Produces PHASE 2 job requests only; it MUST NOT execute PHASE 2 processing directly.
+- UI layers (CLI/Web) are renderers only:
+  - They render steps, collect inputs, submit payloads.
+  - They MUST NOT implement validation, transitions, conflict scanning, job request generation, or any import-specific business logic.
+- The system MUST remain functional if the import plugin is disabled or absent.
+
+## 10.2 Three-Phase Enforcement (Import Wizard)
+
+The wizard MUST follow the global three-phase model:
+
+- PHASE 0: Preflight / discovery
+  - No user interaction.
+  - No jobs are created.
+  - No mutation of processed registry.
+- PHASE 1: User input
+  - Interactive steps only.
+  - No job creation.
+  - No processing execution.
+- PHASE 2: Processing
+  - STRICTLY non-interactive.
+  - Create jobs from canonical job_requests.json only.
+  - No prompts, no questions, no UI calls.
+
+Any violation is a hard contract error.
+
+## 10.3 Authoritative State Machine (Steps and Transitions)
+
+### 10.3.1 Canonical Step Set
+
+The wizard state machine consists of the following step_ids:
+
+S0  select_authors
+S1  select_books
+S2  plan_preview_batch (computed-only)
+S3  effective_author_title
+S4  filename_policy
+S5  covers_policy
+S6  id3_policy
+S7  audio_processing
+S8  publish_policy
+S9  delete_source_policy
+S10 conflict_policy
+S11 parallelism
+S12 final_summary_confirm
+S13 resolve_conflicts_batch (conditional)
+S14 processing (PHASE 2 terminal)
+
+### 10.3.2 Linear Transitions (Default)
+
+The default transition graph is strictly linear:
+
+select_authors -> select_books -> plan_preview_batch -> effective_author_title -> filename_policy -> covers_policy -> id3_policy -> audio_processing -> publish_policy -> delete_source_policy -> conflict_policy -> parallelism -> final_summary_confirm -> processing
+
+Optional steps (filename_policy, covers_policy, id3_policy, audio_processing, publish_policy, delete_source_policy, parallelism) may be disabled by FlowConfig, but mandatory steps MUST NOT be removed (see 10.6).
+
+When an optional step is disabled, the engine MUST skip it deterministically to the next enabled step.
+
+### 10.3.3 Deterministic Error Behavior (ERR/OK)
+
+- ERR(payload): state MUST NOT advance; the current_step_id remains unchanged.
+- OK(payload): state MUST advance deterministically to the next step (or next enabled step).
+
+Special rule: plan_preview_batch error handling MUST be deterministic:
+- If plan_preview_batch fails due to invalid or inconsistent selection, the engine MUST transition back to select_books.
+
+### 10.3.4 Conditional Conflict Path
+
+In final_summary_confirm:
+
+- If confirm_start == false:
+  - The state MUST remain final_summary_confirm (user must set true to proceed).
+- If confirm_start == true AND conflict_mode != "ask":
+  - Transition to processing.
+- If confirm_start == true AND conflict_mode == "ask":
+  - Engine MUST perform a conflict scan.
+  - If conflicts exist: transition to resolve_conflicts_batch.
+  - If no conflicts: transition to processing.
+
+In resolve_conflicts_batch:
+- ERR: remain resolve_conflicts_batch.
+- OK: transition back to final_summary_confirm.
+
+### 10.3.5 Renderer Neutrality (Hard Rule)
+
+Renderers (CLI/Web) MUST NOT contain import-specific branching logic such as "if step_id == ...".
+All step behavior (validation, transitions, conditional branching) MUST live in the wizard engine.
+
+## 10.4 Wire Contracts (FlowConfig, FlowModel, SessionState, Errors)
+
+This section defines the stable JSON contracts between renderers and the import engine.
+
+### 10.4.1 Error JSON (Mandatory)
+
+All validation and invariant failures MUST return:
+
+{
+  "error": {
+    "code": "VALIDATION_ERROR" | "INVARIANT_VIOLATION" | "NOT_FOUND" | "CONFLICTS_UNRESOLVED" | "INTERNAL_ERROR",
+    "message": "Human-readable summary (ASCII-only)",
+    "details": [
+      { "path": "<json-path>", "reason": "<reason-code>", "meta": { ... } }
+    ]
+  }
+}
+
+### 10.4.2 Selection Expression Grammar (Mandatory)
+
+For multi_select_indexed fields, renderers MAY submit either:
+- Expression form: { "<field>_expr": "all" | "1,3,5-8" }
+- Explicit IDs form: { "<field>_ids": ["id1", "id2"] }
+
+Grammar (informal):
+- selection := "all" | segment ("," segment)*
+- segment := number | range
+- range := number "-" number
+- number := [1-9][0-9]*
+
+Rules:
+- Whitespace is ignored.
+- Ranges are inclusive; "5-5" is valid.
+- Duplicates are removed.
+- Out-of-range indices MUST yield VALIDATION_ERROR.
+- The resulting ID list MUST preserve the original item ordering (stable selection).
+
+### 10.4.3 Field Types (Baseline)
+
+Supported field types (baseline):
+- text
+- toggle
+- confirm
+- select
+- number
+- multi_select_indexed
+- table_edit
+
+Field definitions MUST declare required properties appropriate for their type (engine is authoritative).
+
+### 10.4.4 FlowConfig (Versioned)
+
+FlowConfig is the editable configuration for optional steps and defaults. It MUST be versioned and validated.
+
+FlowConfig controls ONLY:
+- enabled/disabled state of optional steps
+- default values for inputs
+- UI preferences (preview limits, collapse defaults)
+- presets and history governance (if implemented)
+
+FlowConfig MUST NOT change:
+- PHASE numbers and boundaries
+- mandatory steps existence
+- ordering invariants
+- conflict resolution placement rules
+- processed registry semantics
+- job creation semantics
+
+### 10.4.5 FlowModel (Runtime)
+
+FlowModel is generated at runtime from FlowConfig and a single BaseFlowDefinition.
+Renderers MUST treat FlowModel as the single source of truth for rendering.
+
+FlowModel includes:
+- flow_id
+- steps[] where each step includes:
+  - step_id
+  - title
+  - phase
+  - required
+  - fields[] with type-specific properties
+
+### 10.4.6 SessionState (Runtime)
+
+SessionState is returned to renderers after each operation and contains at minimum:
+- session_id
+- current_step_id
+- answers (canonicalized inputs)
+- computed (engine-produced computed data)
+- selected_author_ids
+- selected_book_ids
+- effective_author_title (per-book mapping when applicable)
+
+ERR submissions MUST NOT mutate answers except safe normalization.
+
+## 10.5 Import Plugin API (UI-Facing Routes)
+
+All routes are owned by the import plugin.
+
+Baseline routes:
+
+1) GET  /import/ui/flow
+   - Returns FlowModel JSON for the current configuration.
+
+2) GET  /import/ui/config
+   - Returns the current FlowConfig JSON.
+
+3) POST /import/ui/config
+   - Validates and persists FlowConfig (full replace or supported patch mode).
+   - Returns the saved FlowConfig.
+   - On error returns the Error JSON schema (10.4.1).
+
+4) POST /import/ui/config/reset
+   - Resets FlowConfig to built-in defaults.
+   - Persists and returns the FlowConfig.
+
+5) POST /import/ui/session/start
+   - Body: { "root": "<root-name>", "path": "<relative-path>", "mode": "stage" | "inplace" }
+   - Starts a new wizard session and returns SessionState.
+
+6) GET  /import/ui/session/{session_id}/state
+   - Returns SessionState for an existing session.
+
+7) POST /import/ui/session/{session_id}/step/{step_id}
+   - Submits a step payload and returns updated SessionState.
+
+8) POST /import/ui/session/{session_id}/start_processing
+   - Body: { "confirm": true }
+   - Finalizes PHASE 1 and returns a summary: { "job_ids": [...], "batch_size": <int> }
+   - MUST enforce deterministic conflict re-check before job creation (10.11.4).
+
+Optional (only if implemented): config history and rollback endpoints.
+If implemented, they MUST be deterministic and atomic.
+
+## 10.6 Engine Guards (Invariants; MUST REJECT)
+
+The engine MUST reject any FlowConfig or flow construction that attempts to:
+- remove final_summary_confirm
+- remove conflict_policy
+- change PHASE numbers
+- allow start_processing before conflict resolution when conflict_mode == "ask"
+- mark processed registry before job success
+- insert steps before select_authors
+- bypass resolve_conflicts_batch when conflict_mode == "ask" and conflicts exist
+
+Rejection MUST use INVARIANT_VIOLATION (10.4.1).
+
+## 10.7 Storage Model (File IO Root) and Artifacts
 
 All Import Wizard data MUST be stored under the file_io root:
 
-`<wizards_root>`{=html}/import/
+<wizards_root>/import/
 
 Required subpaths:
 
--   catalog/catalog.json
--   flow/current.json
--   sessions/`<session_id>`{=html}/effective_model.json
--   sessions/`<session_id>`{=html}/effective_config.json
--   sessions/`<session_id>`{=html}/discovery.json
--   sessions/`<session_id>`{=html}/state.json
--   sessions/`<session_id>`{=html}/decisions.jsonl
--   sessions/`<session_id>`{=html}/plan.json
--   sessions/`<session_id>`{=html}/job_requests.json
+- catalog/catalog.json
+- flow/current.json
+- sessions/<session_id>/effective_model.json
+- sessions/<session_id>/effective_config.json
+- sessions/<session_id>/discovery.json
+- sessions/<session_id>/state.json
+- sessions/<session_id>/decisions.jsonl
+- sessions/<session_id>/plan.json
+- sessions/<session_id>/job_requests.json
 
-Resume-after-restart is mandatory. All writes MUST be atomic (write
-temp, then rename).
+Resume-after-restart is mandatory where specified by runtime mode policy (10.9).
+All writes MUST be atomic (write temp, then rename).
 
-## 10.3 Deterministic Discovery (PHASE 0)
+## 10.8 Deterministic Discovery (PHASE 0)
 
 Discovery MUST produce a canonical discovery input set.
 
-Each item MUST contain: - item_id - root - relative_path - kind
-(file\|dir\|bundle)
+Each item MUST contain:
+- item_id
+- root
+- relative_path
+- kind (file|dir|bundle)
 
-Canonical ordering: 1. root (ASCII lexicographic) 2. relative_path
-(ASCII lexicographic) 3. kind
+Canonical ordering:
+1) root (ASCII lexicographic)
+2) relative_path (ASCII lexicographic)
+3) kind
 
-item_id MUST equal: root:`<root>`{=html}\|path:`<relative_path>`{=html}
+item_id MUST equal:
+root:<root>|path:<relative_path>
 
-relative_path MUST: - use "/" separators - contain no ".", "..", empty
-segments, or leading slash
+relative_path MUST:
+- use "/" separators
+- contain no ".", "..", empty segments, or leading slash
 
-discovery_fingerprint = SHA-256(canonical JSON discovery set)
+discovery_fingerprint MUST equal:
+SHA-256(canonical JSON discovery set)
 
-Persisted per session and stored in: state.derived.discovery_fingerprint
+Persisted per session in:
+state.derived.discovery_fingerprint
 
-## 10.4 Effective Configuration Snapshot
+## 10.9 Session Snapshot Isolation and Persistence Model
 
-effective_config.json MUST be persisted per session.
-effective_config_fingerprint = SHA-256(canonical JSON
-effective_config.json) Stored in
-state.derived.effective_config_fingerprint
+At session start, the engine MUST create an immutable snapshot:
+- effective_config.json (FlowConfig snapshot for the session)
+- effective_model.json (FlowModel snapshot for the session)
 
-## 10.5 Model Fingerprint
+Active sessions MUST use their snapshot for their entire lifetime.
+Configuration changes MUST affect only new sessions.
 
-effective_model.json MUST be persisted. model_fingerprint =
-SHA-256(canonical JSON effective_model.json) Stored in
-state.model_fingerprint
+Persistence requirements:
+- Web mode: full session persistence on disk is mandatory (crash recovery required).
+- CLI mode: full session persistence may be in-memory, but snapshot semantics still apply.
 
-## 10.6 Determinism Closure
+## 10.10 Determinism Closure (Session Identity Tuple)
 
 A session is deterministically defined by:
+- model_fingerprint (SHA-256 over canonical effective_model.json)
+- discovery_fingerprint
+- effective_config_fingerprint (SHA-256 over canonical effective_config.json)
+- validated user inputs (canonical forms)
 
--   model_fingerprint
--   discovery_fingerprint
--   effective_config_fingerprint
--   validated user inputs
+Finalize MUST produce byte-identical canonical job_requests.json for identical tuples.
 
-Finalize MUST produce byte-identical canonical job_requests.json for
-identical tuples.
+## 10.11 Job Request Contract (PHASE 2)
 
-## 10.7 Session State
+job_requests.json MUST contain:
+- job_type
+- job_version
+- session_id
+- actions[]
+- diagnostics_context
 
-state.json MUST include:
+All file references MUST use (root, relative_path).
+Absolute paths are forbidden.
 
--   session_id
--   model_fingerprint
--   current_step_id
--   inputs
--   derived
--   conflicts
--   status
+### 10.11.1 Canonical Serialization (Mandatory)
 
-Only engine may mutate session state.
+All job request serialization MUST be canonical:
+- JSON keys sorted
+- books (or per-book entries) sorted by canonical key (book_id or stable (root,relative_path) key)
+- paths normalized (no duplicate separators; no traversal segments)
+- no volatile fields (timestamps, random IDs) in canonical output
 
-## 10.8 Step Catalog (Data-Defined)
+A shared canonical_serialize utility MUST exist and MUST be used by:
+- golden tests
+- parity comparisons (if any)
+- job_requests.json persistence
 
-catalog/catalog.json MUST contain: - version - steps\[\]
+### 10.11.2 Idempotency Key (Mandatory)
 
-Required baseline step_ids:
+Each created job MUST have a deterministic idempotency_key.
 
--   select_authors
--   select_books
--   plan_preview_batch
--   effective_author_title
--   filename_policy
--   covers_policy
--   id3_policy
--   audio_processing
--   publish_policy
--   delete_source_policy
--   conflict_policy
--   parallelism
--   final_summary_confirm
--   resolve_conflicts_batch
+Recommended formula:
+hash(book_id + canonical_config_snapshot)
 
-## 10.9 FlowModel
+Rules:
+- Duplicate job creation with the same idempotency_key MUST be prevented.
+- Duplicate start_processing calls MUST not create duplicate jobs.
+- Registry updates MUST remain safe under retries.
 
-flow/current.json MUST contain: - version - entry_step_id - nodes\[\]
+### 10.11.3 Registry Updates (SUCCESS-only)
 
-Engine MUST reject invalid or invariant-breaking flows.
+The processed registry MUST be updated only when the corresponding job finishes with SUCCESS.
+FAILED jobs MUST NOT update the registry.
 
-## 10.10 Job Request Contract (PHASE 2)
+### 10.11.4 Conflict Re-check Before Job Creation (Mandatory)
 
-job_requests.json MUST contain: - job_type - job_version - session_id -
-actions\[\] - diagnostics_context
+Before creating jobs:
+- If conflict_mode == "ask": re-run conflict scan and abort if unresolved conflicts remain.
+- If conflict_mode != "ask": ensure no new filesystem conflicts appeared since preview.
 
-All file references MUST use (root, relative_path). Absolute paths are
-forbidden.
+If conflicts appear, the engine MUST block processing deterministically and return a structured error.
 
-## 10.11 Upgrade and Migration
+## 10.12 Config Governance (Editor and Storage)
 
--   Each versioned artifact MUST include version.
--   Existing sessions use frozen effective_model.json and
-    effective_config.json.
--   No silent upgrades.
--   Explicit migrations MUST be logged.
+If a visual editor exists, it modifies FlowConfig only.
 
-## 10.12 Filesystem Isolation
+Requirements:
+- Validate FlowConfig on load, save, import, and preset apply.
+- Prevent saving invalid config (invariant violations).
+- Support reset to built-in defaults.
+- If history/rollback is implemented:
+  - keep deterministic history with bounded retention (recommended N=5)
+  - allow deterministic rollback to a selected historic version
+- Defaults memory (if implemented) MUST NOT update implicitly.
+  - Only explicit user action may update defaults.
+  - Any auto-save (if implemented) MUST be visible and reversible via history.
 
--   No absolute paths.
--   No ".." traversal.
--   Symlink resolution MUST not escape root.
--   Resource limits enforced via ConfigResolver.
+## 10.13 Performance and Scaling (Deterministic)
 
-## 10.13 Diagnostics
+Performance rules are non-functional constraints but MUST NOT alter outputs.
 
-Engine MUST emit via Core diagnostic entry point:
+- FlowModel build must be lightweight.
+- Selection parser must be linear time.
+- plan_preview_batch output MUST be bounded by preview_limit and MUST surface truncation explicitly.
+- conflict scan SHOULD be optimized with precomputed target path maps when feasible.
+- parallelism MUST be bounded by a hard MAX_PARALLELISM limit in the engine (implementation-defined but fixed).
 
--   session.start
--   session.resume
--   model.load
--   model.validate
--   step.submit
--   plan.compute
--   finalize.request
--   job.create
+Caches (if implemented):
+- cache keys MUST be deterministic
+- cache miss MUST recompute (never silently fail)
+- enabling/disabling cache MUST NOT change job_requests output
 
-Diagnostics MUST include: - session_id - model_fingerprint -
-discovery_fingerprint - effective_config_fingerprint
+## 10.14 Diagnostics (Mandatory)
 
-------------------------------------------------------------------------
+The import engine MUST emit via the Core authoritative diagnostic entry point:
 
-Integration completed: 2026-02-17 16:25:55 UTC
+- session.start
+- session.resume
+- model.load
+- model.validate
+- step.submit
+- plan.compute
+- finalize.request
+- job.create
+
+Diagnostics MUST include at minimum:
+- session_id
+- model_fingerprint
+- discovery_fingerprint
+- effective_config_fingerprint
+
+## 10.15 Testing and Enforcement (Hard Gates)
+
+The repository MUST include deterministic tests that enforce:
+
+- FlowBuilder invariants and mandatory step preservation.
+- Selection expression parser grammar and error behavior.
+- Session transitions: ERR does not advance; OK advances deterministically.
+- Conflict ask batch behavior (final_summary_confirm -> resolve_conflicts_batch).
+- Phase enforcement (no jobs in PHASE 1; no step submits in PHASE 2).
+- Registry SUCCESS-only.
+- Canonical serialization stability (golden job_requests comparisons).
+- Renderer neutrality (static enforcement forbidding import-specific branching in UI layers).
+- Single source of truth for step ordering (BaseFlowDefinition defined exactly once).
+- Session snapshot isolation (config changes do not affect active sessions).
+- Conflict re-check before job creation.
+- Idempotency key enforcement (no duplicate jobs).
+
+Integration completed (updated): 2026-02-18 06:00:00 UTC

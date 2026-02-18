@@ -1,3 +1,9 @@
+## 2026-02-18T07:00:00+01:00
+
+-   spec: Fully integrate Import Wizard consolidated model (V3-V11) into Section 10, including authoritative state machine, wire-level JSON contracts, renderer neutrality enforcement, idempotency rules, conflict re-check before job creation, canonical serialization requirements, snapshot isolation, config governance, performance constraints, and mandatory deterministic test gates.
+-   spec: Replace previous Section 10 with consolidated authoritative definition (no partial layering).
+-   spec: Bump specification version to 1.1.2.
+
 ## 2026-02-18T00:00:00+01:00
 
 -   plugins: Define canonical host config key-space for per-plugin configuration and materialize missing schema defaults during plugin load without overwriting user values.
