@@ -161,6 +161,11 @@ class Policy:
     gates_skip_pytest: bool = False
     gates_skip_mypy: bool = False
     gates_skip_docs: bool = False
+
+    # JS syntax gate (runs only when touched paths include JS files)
+    gates_skip_js: bool = False
+    gate_js_extensions: list[str] = field(default_factory=lambda: [".js"])
+    gate_js_command: list[str] = field(default_factory=lambda: ["node", "--check"])
     gates_on_partial_apply: bool = False
     gates_on_zero_apply: bool = False
     gate_docs_include: list[str] = field(default_factory=lambda: ["src", "plugins"])
@@ -169,7 +174,7 @@ class Policy:
         default_factory=lambda: ["docs/changes.md", "docs/specification.md"]
     )
     gates_order: list[str] = field(
-        default_factory=lambda: ["compile", "ruff", "pytest", "mypy", "docs"]
+        default_factory=lambda: ["compile", "js", "ruff", "pytest", "mypy", "docs"]
     )
 
     # NEW: extra runner-only gate: badguys (default auto)
@@ -639,9 +644,28 @@ def build_policy(defaults: Policy, cfg: dict[str, Any]) -> Policy:
     _mark_cfg(p, cfg, "gates_skip_pytest")
     p.gates_skip_mypy = _as_bool(cfg, "gates_skip_mypy", p.gates_skip_mypy)
     _mark_cfg(p, cfg, "gates_skip_mypy")
-
     p.gates_skip_docs = _as_bool(cfg, "gates_skip_docs", p.gates_skip_docs)
     _mark_cfg(p, cfg, "gates_skip_docs")
+
+    p.gates_skip_js = _as_bool(cfg, "gates_skip_js", p.gates_skip_js)
+    _mark_cfg(p, cfg, "gates_skip_js")
+
+    p.gate_js_extensions = _as_list_str(cfg, "gate_js_extensions", p.gate_js_extensions)
+    _mark_cfg(p, cfg, "gate_js_extensions")
+
+    # gate_js_command: argv list including the tool (default: ["node", "--check"])
+    if "gate_js_command" in cfg:
+        raw_cmd = cfg["gate_js_command"]
+        if isinstance(raw_cmd, str):
+            cmd_list = shlex.split(raw_cmd)
+        elif isinstance(raw_cmd, list) and all(isinstance(x, str) for x in raw_cmd):
+            cmd_list = raw_cmd
+        else:
+            raise RunnerError("CONFIG", "INVALID", "gate_js_command must be a string or list[str]")
+        if not cmd_list:
+            raise RunnerError("CONFIG", "INVALID", "gate_js_command must be non-empty")
+        p.gate_js_command = cmd_list
+        _mark_cfg(p, cfg, "gate_js_command")
 
     p.gate_docs_include = _as_list_str(cfg, "gate_docs_include", p.gate_docs_include)
     _mark_cfg(p, cfg, "gate_docs_include")

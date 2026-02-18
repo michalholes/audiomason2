@@ -371,10 +371,11 @@ scope accordingly - Should be used deliberately and sparingly
     PATCH_APPLY as the primary reason.
 -   Default gate order is:
     1)  COMPILE (python bytecode compilation)
-    2)  Ruff
-    3)  Pytest
-    4)  Mypy
-    5)  Docs (documentation obligation)
+    2)  JS syntax (only when JS files are touched)
+    3)  Ruff
+    4)  Pytest
+    5)  Mypy
+    6)  Docs (documentation obligation)
 -   Individual gates may be configured on/off.
 
 ### 6.1.1 COMPILE gate
@@ -398,7 +399,26 @@ scope accordingly - Should be used deliberately and sparingly
     `GATE:COMPILE`, `patched.zip` is produced, and `patched_success.zip`
     is not.
 
-### 6.1.2 BADGUYS gate (runner-only)
+### 6.1.2 JS syntax gate
+
+-   Purpose: fail fast on JavaScript syntax errors when a patch touches JS files.
+-   Trigger: the gate is evaluated only when at least one changed path ends with an extension
+    listed in `gate_js_extensions` (case-insensitive suffix match).
+-   If not triggered, the gate is SKIPPED and MUST NOT execute any external tool.
+-   Implementation: runs an external command for each touched JS file:
+    -   Default command argv: `["node", "--check"]`
+    -   Invocation: `<argv...> <file>`
+    -   Files are processed in deterministic lexicographic order.
+-   Controls (precedence: CLI > config > defaults):
+    -   `gates_skip_js = true|false` (default: false)
+    -   `gate_js_extensions = [".js", ...]` (default: `[".js"]`)
+    -   `gate_js_command = list[str] | str` (default: `["node", "--check"]`)
+        -   If a string is used (cfg or CLI), it is parsed using shell-like splitting (shlex).
+        -   The value must be non-empty and is treated as argv including the tool.
+-   CLI:
+    -   `--skip-js` (equivalent to `--override gates_skip_js=true`)
+
+### 6.1.3 BADGUYS gate (runner-only)
 
 -   Purpose: protect the runner itself by running the badguys suite when
     the runner is modified.
@@ -450,7 +470,7 @@ finalizeworkspace
 
 ------------------------------------------------------------------------
 
-### 6.1.3 Docs gate (documentation obligation)
+### 6.1.4 Docs gate (documentation obligation)
 
 -   Purpose: enforce that documentation is updated when watched code
     areas change.

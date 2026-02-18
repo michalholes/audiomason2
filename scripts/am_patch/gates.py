@@ -125,6 +125,79 @@ def check_docs_gate(
     return len(missing) == 0, missing, trigger_path
 
 
+def _norm_js_extensions(exts: list[str]) -> list[str]:
+    out: list[str] = []
+    for e in exts:
+        s = str(e).strip().lower()
+        if not s:
+            continue
+        if not s.startswith("."):
+            s = "." + s
+        if s not in out:
+            out.append(s)
+    return out
+
+
+def check_js_gate(
+    decision_paths: list[str],
+    *,
+    extensions: list[str],
+) -> tuple[bool, list[str]]:
+    """Return (triggered, js_paths).
+
+    The gate triggers only if at least one changed path ends with one of the configured extensions.
+    Returned js_paths are normalized repo-relative paths (forward slashes, no leading ./).
+    """
+    exts = _norm_js_extensions(extensions)
+    if not exts:
+        return False, []
+
+    paths = _norm_rel_paths(decision_paths)
+    js_paths: list[str] = []
+    for p in paths:
+        pl = p.lower()
+        if any(pl.endswith(e) for e in exts):
+            js_paths.append(p)
+
+    if not js_paths:
+        return False, []
+    js_paths.sort()
+    return True, js_paths
+
+
+def run_js_syntax_gate(
+    logger: Logger,
+    cwd: Path,
+    *,
+    decision_paths: list[str],
+    extensions: list[str],
+    command: list[str],
+) -> bool:
+    """Run JS syntax validation via an external command (default: node --check).
+
+    The gate is a no-op (SKIP) when no JS files are touched.
+    """
+    triggered, js_paths = check_js_gate(decision_paths, extensions=extensions)
+    if not triggered:
+        logger.warning_core("gate_js=SKIP (no_js_touched)")
+        return True
+
+    cmd0 = [str(x) for x in command if str(x).strip()]
+    if not cmd0:
+        raise RunnerError("GATES", "JS_CMD", "gate_js_command must be non-empty")
+
+    logger.section("GATE: JS SYNTAX")
+    logger.line("gate_js_extensions=" + ",".join(_norm_js_extensions(extensions)))
+    logger.line("gate_js_cmd=" + " ".join(cmd0))
+
+    for rel in js_paths:
+        logger.line("gate_js_file=" + rel)
+        r = logger.run_logged([*cmd0, rel], cwd=cwd)
+        if r.returncode != 0:
+            return False
+    return True
+
+
 def _select_python_for_gate(
     *,
     repo_root: Path,
@@ -290,7 +363,7 @@ def _norm_gate_name(s: str) -> str:
 def _norm_gates_order(order: list[str] | None) -> list[str]:
     if not order:
         return []
-    allowed = {"compile", "ruff", "pytest", "mypy", "docs"}
+    allowed = {"compile", "js", "ruff", "pytest", "mypy", "docs"}
     out: list[str] = []
     for item in order:
         name = _norm_gate_name(item)
@@ -310,12 +383,15 @@ def run_gates(
     compile_exclude: list[str],
     allow_fail: bool,
     skip_ruff: bool,
+    skip_js: bool,
     skip_pytest: bool,
     skip_mypy: bool,
     skip_docs: bool,
     docs_include: list[str],
     docs_exclude: list[str],
     docs_required_files: list[str],
+    js_extensions: list[str],
+    js_command: list[str],
     ruff_format: bool,
     ruff_autofix: bool,
     ruff_targets: list[str],
@@ -347,6 +423,19 @@ def run_gates(
                 repo_root=repo_root,
                 targets=compile_targets,
                 exclude=compile_exclude,
+            )
+
+        if name == "js":
+            if skip_js:
+                skipped.append("js")
+                logger.warning_core("gate_js=SKIP (skipped_by_user)")
+                return True
+            return run_js_syntax_gate(
+                logger,
+                cwd=cwd,
+                decision_paths=decision_paths,
+                extensions=js_extensions,
+                command=js_command,
             )
 
         if name == "ruff":
@@ -405,7 +494,7 @@ def run_gates(
 
         return True
 
-    for gate in ("compile", "ruff", "pytest", "mypy", "docs"):
+    for gate in ("compile", "js", "ruff", "pytest", "mypy", "docs"):
         if gate not in order:
             skipped.append(gate)
             logger.warning_core(f"gate_{gate}=SKIP (not in gates_order)")

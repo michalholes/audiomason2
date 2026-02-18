@@ -67,9 +67,9 @@ allow_no_op = false
 # Legacy alias (runner maps order -> gates_order)
 # order = []
 # order = ["pytest"]
-order = ["compile", "ruff", "pytest", "mypy", "docs"]
+order = ["compile", "js", "ruff", "pytest", "mypy", "docs"]
 # Canonical (supported by runner; missing in your file)
-gates_order = ["compile", "ruff", "pytest", "mypy", "docs"]
+gates_order = ["compile", "js", "ruff", "pytest", "mypy", "docs"]
 
 # Canonical (supported by runner; missing in your file)
 run_all_tests = true
@@ -97,6 +97,10 @@ gates_skip_ruff = false
 # Canonical (supported by runner; missing in your file)
 gates_skip_pytest = false
 gates_skip_mypy = false
+
+gates_skip_js = false
+gate_js_extensions = [".js"]
+gate_js_command = ["node", "--check"]
 
 # Documentation gate (docs) - required updates when watched paths change
 gates_skip_docs = true
