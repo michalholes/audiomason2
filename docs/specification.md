@@ -1,6 +1,6 @@
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.1.3 Specification Versioning Policy: Start at
+Specification Version: 1.1.4 Specification Versioning Policy: Start at
 1.0.0. Patch version increments by +1 for every change.
 
 Author: Michal Holes\
@@ -1363,6 +1363,7 @@ Finalize MUST produce byte-identical canonical job_requests.json for identical t
 ## 10.11 Job Request Contract (PHASE 2)
 
 job_requests.json MUST contain:
+- config_fingerprint (SHA-256 over canonical effective_config.json)
 - job_type
 - job_version
 - session_id
@@ -1419,7 +1420,7 @@ Requirements:
 - Prevent saving invalid config (invariant violations).
 - Support reset to built-in defaults.
 - If history/rollback is implemented:
-  - keep deterministic history with bounded retention (recommended N=5)
+  - keep deterministic history with bounded retention N=5 (MANDATORY)
   - allow deterministic rollback to a selected historic version
 - Defaults memory (if implemented) MUST NOT update implicitly.
   - Only explicit user action may update defaults.

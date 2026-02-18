@@ -1,3 +1,9 @@
+## 2026-02-18T08:53:20+00:00
+
+-   spec: Require job_requests.json to include config_fingerprint (SHA-256 over canonical effective_config.json).
+-   spec: Make FlowConfig history retention N=5 mandatory when history/rollback is implemented.
+-   spec: Bump specification version to 1.1.4.
+
 ## 2026-02-18T08:15:00+01:00
 
 -   spec: Define mandatory bootstrap of Import Wizard catalog/flow models when missing under file_io wizards root.
