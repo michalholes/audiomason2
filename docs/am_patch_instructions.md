@@ -2,7 +2,7 @@
 
 # Patch Authoring Manual
 
-AUTHORITATIVE -- AudioMason2 Status: active Version: v2.37
+AUTHORITATIVE -- AudioMason2 Status: active Version: v2.38
 
 This manual defines what a chat must produce so that the user can run
 the patch successfully and close the issue.
@@ -150,18 +150,18 @@ The runner remains the authority.
 
 # REPAIR PATCH RULES (HARD)
 
-These rules apply when user provides `patched.zip`.
+These rules apply when user provides .zip file with filename beginning with patched_issue{ISSUE}_.
 
 ## Authoritative overlay model
 
 Authoritative file set is composed of:
 
 1.  Last full workspace snapshot.
-2.  Most recent `patched.zip`.
+2.  Most recent patched_issue{ISSUE}_*.zip.
 
 Per-file authority:
 
--   If file exists in `patched.zip`, that version is authoritative.
+-   If file exists in latest , that version is authoritative.
 -   Otherwise, use version from full workspace.
 -   Logs are diagnostic only.
 
@@ -192,9 +192,9 @@ If the failing gates include `ruff` and/or `mypy`, the agent MUST:
 
 1.  Use the provided logs to identify exact failing file paths.
 2.  Restrict modifications to only the implicated files.
-3.  Prefer files present in `patched.zip` when applicable.
+3.  Prefer files present in patched_issue{ISSUE}_*.zip when applicable.
 4.  Avoid unpacking or reconstructing the full workspace unless the log
-    explicitly references files outside `patched.zip`.
+    explicitly references files outside `patched_issue{ISSUE}_*.zip`.
 
 Fixing pure ruff/mypy failures MUST NOT trigger full repository rebuild.
 
@@ -207,12 +207,12 @@ before escalating scope.
 Minimal path (preferred):
 
 -   If the failure can plausibly be fixed within files present in
-    `patched.zip`, modifications MUST be restricted to those files.
+    `patched_issue{ISSUE}_*.zip`, modifications MUST be restricted to those files.
 
 Escalation (only when required):
 
 -   The agent MAY inspect the full workspace snapshot ONLY if the log
-    references files not included in `patched.zip`, or the failure
+    references files not included in `patched_issue{ISSUE}_*.zip`, or the failure
     depends on configuration, fixtures, test resources, packaging,
     entrypoints, or other files outside the authoritative overlay.
 
@@ -228,7 +228,7 @@ Before generating repair patch, the chat MUST output:
 
 1.  Full list of repo files to be modified.
 2.  Authority source per file:
-    -   source = patched.zip
+    -   source = patched_issue{ISSUE}_.zip
     -   or source = full workspace snapshot
 3.  At least one structural anchor per file proving inspection.
 
