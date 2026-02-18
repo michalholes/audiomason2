@@ -2,7 +2,7 @@
 
 # Patch Authoring Manual
 
-AUTHORITATIVE -- AudioMason2 Status: active Version: v2.36
+AUTHORITATIVE -- AudioMason2 Status: active Version: v2.37
 
 This manual defines what a chat must produce so that the user can run
 the patch successfully and close the issue.
@@ -85,13 +85,27 @@ Rules:
 
 ## Patch requirements (HARD)
 
--   Paths are repo-relative.
--   Deterministic behavior only.
--   No randomness, no time dependence, no interactive prompts during
+1.   Paths are repo-relative.
+2.   Deterministic behavior only.
+3.   No randomness, no time dependence, no interactive prompts during
     runtime, no network access.
--   All changes MUST be expressed as unified diff patches, packaged per
+4.   All changes MUST be expressed as unified diff patches, packaged per
     file.
--   `git apply --check <patch>.patch` MUST succeed.
+5.   `git apply --check <patch>.patch` MUST succeed.
+
+## Line Length and Style Safety (HARD)
+
+1. Any added or modified line MUST respect the repository line-length policy - 100 chars per line.
+2. Long lines MUST be wrapped deterministically at authoring time.
+3. Long string literals and f-strings MUST be split using parentheses and
+   implicit concatenation, or equivalent deterministic wrapping.
+4. Long function calls MUST use parenthesized multi-line argument formatting.
+5. Long collection literals (dict, list, tuple, set) MUST use one element per
+   line when exceeding the line-length policy.
+6. Long import statements MUST use parenthesized multi-line imports or
+   multiple explicit imports, consistent with existing repository style.
+7. The patch MUST NOT rely on post-processing formatters to correct
+   line-length violations.
 
 ------------------------------------------------------------------------
 
