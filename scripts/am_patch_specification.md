@@ -868,9 +868,12 @@ This is an additional render of the same log emission events (it does not replac
 
 Location:
 - The NDJSON file is written under patch_layout_json_dir (under patch_dir).
-- The NDJSON filename is derived from the regular log filename by replacing the .log suffix with .jsonl.
+- The NDJSON filename is deterministic and is NOT derived from the regular log filename.
+- Workspace/issue runs: am_patch_issue_<ISSUE>.jsonl
+- Finalize (including finalize-workspace): am_patch_finalize.jsonl
 
 Behavior:
+- The NDJSON file is current-only and is truncated at the start of each run.
 - The NDJSON sink is debug-complete: it records every Logger.emit(...) call (no filtering by verbosity/log_level).
 - Full error detail (failed step stdout/stderr) must be included and must bypass filtering.
 - The JSON sink is best-effort; failures to write NDJSON must not change runner behavior.

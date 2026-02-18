@@ -403,11 +403,10 @@ def main(argv: list[str]) -> int:
     status = StatusReporter(enabled=(verbosity != "quiet"))
     json_path: Path | None = None
     if getattr(policy, "json_out", False):
-        json_name = log_path.name
-        if json_name.endswith(".log"):
-            json_name = json_name[:-4] + ".jsonl"
+        if cli.issue_id is not None:
+            json_name = f"am_patch_issue_{cli.issue_id}.jsonl"
         else:
-            json_name = json_name + ".jsonl"
+            json_name = "am_patch_finalize.jsonl"
         json_path = paths.json_dir / json_name
 
     logger = Logger(
