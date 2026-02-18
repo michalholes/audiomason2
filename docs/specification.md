@@ -1,6 +1,6 @@
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.1.2 Specification Versioning Policy: Start at
+Specification Version: 1.1.3 Specification Versioning Policy: Start at
 1.0.0. Patch version increments by +1 for every change.
 
 Author: Michal Holes\
@@ -1295,6 +1295,19 @@ Required subpaths:
 
 Resume-after-restart is mandatory where specified by runtime mode policy (10.9).
 All writes MUST be atomic (write temp, then rename).
+
+### 10.7.1 Model Bootstrap When Missing
+
+If catalog/catalog.json or flow/current.json do not exist under the file_io root "wizards",
+the import plugin MUST deterministically bootstrap them from built-in defaults.
+
+Bootstrap rules:
+- Creation MUST be atomic (write temp, then rename).
+- Existing files MUST NOT be overwritten.
+- Bootstrapped models MUST pass full model validation.
+- Bootstrap MUST occur before first model load.
+- Absence of models MUST NOT cause a hard failure if bootstrap succeeds.
+
 
 ## 10.8 Deterministic Discovery (PHASE 0)
 

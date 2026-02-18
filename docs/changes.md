@@ -1,3 +1,8 @@
+## 2026-02-18T08:15:00+01:00
+
+-   spec: Define mandatory bootstrap of Import Wizard catalog/flow models when missing under file_io wizards root.
+-   spec: Bump specification version to 1.1.3.
+
 ## 2026-02-18T07:00:00+01:00
 
 -   spec: Fully integrate Import Wizard consolidated model (V3-V11) into Section 10, including authoritative state machine, wire-level JSON contracts, renderer neutrality enforcement, idempotency rules, conflict re-check before job creation, canonical serialization requirements, snapshot isolation, config governance, performance constraints, and mandatory deterministic test gates.
