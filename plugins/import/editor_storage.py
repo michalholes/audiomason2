@@ -19,11 +19,12 @@ from typing import Any
 
 from plugins.file_io.service import FileService, RootName
 
-from .defaults import DEFAULT_CATALOG, DEFAULT_FLOW
+from .defaults import DEFAULT_FLOW_CONFIG
 from .fingerprints import fingerprint_json
 
 CATALOG_REL_PATH = "import/catalog/catalog.json"
 FLOW_REL_PATH = "import/flow/current.json"
+FLOW_CONFIG_REL_PATH = "import/config/flow_config.json"
 
 HISTORY_DIR = "import/editor_history"
 HISTORY_LIMIT = 5
@@ -38,19 +39,31 @@ def load_flow(fs: FileService) -> Any:
 
 
 def save_catalog(fs: FileService, obj: Any) -> None:
-    _save_with_history(fs, kind="catalog", rel_path=CATALOG_REL_PATH, obj=obj)
+    raise ValueError("catalog is immutable; editor may only modify flow_config")
 
 
 def save_flow(fs: FileService, obj: Any) -> None:
-    _save_with_history(fs, kind="flow", rel_path=FLOW_REL_PATH, obj=obj)
+    raise ValueError("flow is immutable; editor may only modify flow_config")
+
+
+def load_flow_config(fs: FileService) -> Any:
+    return _load_json(fs, RootName.WIZARDS, FLOW_CONFIG_REL_PATH)
+
+
+def save_flow_config(fs: FileService, obj: Any) -> None:
+    _save_with_history(fs, kind="flow_config", rel_path=FLOW_CONFIG_REL_PATH, obj=obj)
 
 
 def reset_catalog(fs: FileService) -> None:
-    save_catalog(fs, DEFAULT_CATALOG)
+    raise ValueError("catalog is immutable; editor may only modify flow_config")
 
 
 def reset_flow(fs: FileService) -> None:
-    save_flow(fs, DEFAULT_FLOW)
+    raise ValueError("flow is immutable; editor may only modify flow_config")
+
+
+def reset_flow_config(fs: FileService) -> None:
+    save_flow_config(fs, DEFAULT_FLOW_CONFIG)
 
 
 def list_history(fs: FileService, *, kind: str) -> list[str]:
@@ -61,10 +74,8 @@ def list_history(fs: FileService, *, kind: str) -> list[str]:
 def rollback(fs: FileService, *, kind: str, fingerprint: str) -> None:
     rel = f"{HISTORY_DIR}/{kind}/{fingerprint}.json"
     obj = _load_json(fs, RootName.WIZARDS, rel)
-    if kind == "catalog":
-        save_catalog(fs, obj)
-    elif kind == "flow":
-        save_flow(fs, obj)
+    if kind == "flow_config":
+        save_flow_config(fs, obj)
     else:
         raise ValueError("unknown kind")
 

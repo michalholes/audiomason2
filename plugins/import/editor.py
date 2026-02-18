@@ -20,11 +20,10 @@ from .editor_storage import (
     list_history,
     load_catalog,
     load_flow,
-    reset_catalog,
-    reset_flow,
+    load_flow_config,
+    reset_flow_config,
     rollback,
-    save_catalog,
-    save_flow,
+    save_flow_config,
 )
 from .engine import ImportWizardEngine
 
@@ -60,24 +59,29 @@ def validate_flow(engine: ImportWizardEngine) -> EditorResult:
 
 
 def save_catalog_validated(engine: ImportWizardEngine) -> EditorResult:
-    fs = engine.get_file_service()
-    catalog = load_catalog(fs)
-    result = engine.validate_catalog(catalog)
-    if not bool(result.get("ok")):
-        return EditorResult(ok=False, data=result)
-    save_catalog(fs, catalog)
-    return EditorResult(ok=True, data={"ok": True})
+    return EditorResult(
+        ok=False,
+        data={
+            "error": {
+                "code": "INVARIANT_VIOLATION",
+                "message": "catalog is immutable; editor may only modify flow_config",
+                "details": [{"path": "$.catalog", "reason": "immutable", "meta": {}}],
+            }
+        },
+    )
 
 
 def save_flow_validated(engine: ImportWizardEngine) -> EditorResult:
-    fs = engine.get_file_service()
-    catalog = load_catalog(fs)
-    flow = load_flow(fs)
-    result = engine.validate_flow(flow, catalog)
-    if not bool(result.get("ok")):
-        return EditorResult(ok=False, data=result)
-    save_flow(fs, flow)
-    return EditorResult(ok=True, data={"ok": True})
+    return EditorResult(
+        ok=False,
+        data={
+            "error": {
+                "code": "INVARIANT_VIOLATION",
+                "message": "flow is immutable; editor may only modify flow_config",
+                "details": [{"path": "$.flow", "reason": "immutable", "meta": {}}],
+            }
+        },
+    )
 
 
 def preview_effective_model(engine: ImportWizardEngine) -> EditorResult:
@@ -89,37 +93,45 @@ def preview_effective_model(engine: ImportWizardEngine) -> EditorResult:
 
 
 def edit_catalog_interactive(engine: ImportWizardEngine) -> EditorResult:
-    fs = engine.get_file_service()
-    current = load_catalog(fs)
-    return _edit_interactive(
-        title="catalog",
-        current=current,
-        validate_fn=lambda obj: engine.validate_catalog(obj),
-        save_fn=lambda obj: save_catalog(fs, obj),
+    return EditorResult(
+        ok=False,
+        data={
+            "error": {
+                "code": "INVARIANT_VIOLATION",
+                "message": "catalog is immutable; editor may only modify flow_config",
+                "details": [{"path": "$.catalog", "reason": "immutable", "meta": {}}],
+            }
+        },
     )
 
 
 def edit_flow_interactive(engine: ImportWizardEngine) -> EditorResult:
     fs = engine.get_file_service()
-    current = load_flow(fs)
-    catalog = load_catalog(fs)
+    current = load_flow_config(fs)
     return _edit_interactive(
-        title="flow",
+        title="flow_config",
         current=current,
-        validate_fn=lambda obj: engine.validate_flow(obj, catalog),
-        save_fn=lambda obj: save_flow(fs, obj),
+        validate_fn=lambda obj: engine.validate_flow_config(obj),
+        save_fn=lambda obj: save_flow_config(fs, obj),
     )
 
 
 def reset_catalog_to_defaults(engine: ImportWizardEngine) -> EditorResult:
-    fs = engine.get_file_service()
-    reset_catalog(fs)
-    return EditorResult(ok=True, data={"ok": True})
+    return EditorResult(
+        ok=False,
+        data={
+            "error": {
+                "code": "INVARIANT_VIOLATION",
+                "message": "catalog is immutable; editor may only modify flow_config",
+                "details": [{"path": "$.catalog", "reason": "immutable", "meta": {}}],
+            }
+        },
+    )
 
 
 def reset_flow_to_defaults(engine: ImportWizardEngine) -> EditorResult:
     fs = engine.get_file_service()
-    reset_flow(fs)
+    reset_flow_config(fs)
     return EditorResult(ok=True, data={"ok": True})
 
 

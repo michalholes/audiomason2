@@ -32,7 +32,15 @@ _REQUIRED_STEP_IDS = {
 }
 
 
-_ALLOWED_FIELD_TYPES = {"bool", "int", "str", "list[int]", "list[str]"}
+_ALLOWED_FIELD_TYPES = {
+    "text",
+    "toggle",
+    "confirm",
+    "select",
+    "number",
+    "multi_select_indexed",
+    "table_edit",
+}
 
 
 @dataclass(frozen=True)
@@ -210,6 +218,14 @@ def _validate_step_schema(step: dict[str, Any], step_index: int) -> None:
             raise ModelValidationError(
                 f"Catalog step[{step_index}] field[{i}] constraints must be an object"
             )
+
+        # Optional schema extensions for certain baseline types.
+        if str(ftype) == "multi_select_indexed":
+            items_any = f.get("items")
+            if items_any is not None and not isinstance(items_any, list):
+                raise ModelValidationError(
+                    f"Catalog step[{step_index}] field[{i}] items must be a list when present"
+                )
 
 
 def _reachable_step_ids(flow: FlowModel) -> set[str]:

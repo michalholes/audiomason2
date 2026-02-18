@@ -26,6 +26,8 @@ from .errors import (
     SessionNotFoundError,
     StepSubmissionError,
     error_envelope,
+    invariant_violation,
+    validation_error,
 )
 from .fingerprints import fingerprint_json, sha256_hex
 from .job_requests import build_job_requests
@@ -58,29 +60,47 @@ def _iso_utc_now() -> str:
 
 def _exception_envelope(exc: Exception) -> dict[str, Any]:
     if isinstance(exc, SessionNotFoundError):
-        return error_envelope("NOT_FOUND", str(exc) or "not found")
-    if isinstance(exc, (StepSubmissionError, ValueError)):
         return error_envelope(
-            "VALIDATION_ERROR",
-            str(exc) or "validation error",
-            details=[{"type": exc.__class__.__name__}],
+            "NOT_FOUND",
+            str(exc) or "not found",
+            details=[{"path": "$.session_id", "reason": "not_found", "meta": {}}],
+        )
+    if isinstance(exc, (StepSubmissionError, ValueError)):
+        return validation_error(
+            message=str(exc) or "validation error",
+            path="$",
+            reason="validation_error",
+            meta={"type": exc.__class__.__name__},
         )
     if isinstance(exc, FinalizeError):
-        return error_envelope(
-            "INVARIANT_VIOLATION",
-            str(exc) or "invariant violation",
-            details=[{"type": exc.__class__.__name__}],
+        return invariant_violation(
+            message=str(exc) or "invariant violation",
+            path="$",
+            reason="invariant_violation",
+            meta={"type": exc.__class__.__name__},
         )
     if isinstance(exc, ImportWizardError):
         return error_envelope(
             "INTERNAL_ERROR",
             str(exc) or "internal error",
-            details=[{"type": exc.__class__.__name__}],
+            details=[
+                {
+                    "path": "$.error",
+                    "reason": "internal_error",
+                    "meta": {"type": exc.__class__.__name__},
+                }
+            ],
         )
     return error_envelope(
         "INTERNAL_ERROR",
         str(exc) or "internal error",
-        details=[{"type": exc.__class__.__name__}],
+        details=[
+            {
+                "path": "$.error",
+                "reason": "internal_error",
+                "meta": {"type": exc.__class__.__name__},
+            }
+        ],
     )
 
 
@@ -152,6 +172,19 @@ class ImportWizardEngine:
         ensure_default_models(self._fs)
         catalog_dict = read_json(self._fs, RootName.WIZARDS, "import/catalog/catalog.json")
         flow_dict = read_json(self._fs, RootName.WIZARDS, "import/flow/current.json")
+        flow_cfg = read_json(self._fs, RootName.WIZARDS, "import/config/flow_config.json")
+
+        flow_overrides_from_cfg: dict[str, Any] = {}
+        if isinstance(flow_cfg, dict):
+            overrides_any = flow_cfg.get("overrides")
+            if isinstance(overrides_any, dict):
+                flow_overrides_from_cfg = cast(dict[str, Any], overrides_any)
+
+        if flow_overrides_from_cfg:
+            if not isinstance(flow_dict, dict):
+                raise ValueError("flow model must be an object")
+            flow_dict = dict(flow_dict)
+            flow_dict.update(flow_overrides_from_cfg)
         if flow_overrides:
             if not isinstance(flow_dict, dict) or not isinstance(flow_overrides, dict):
                 raise ValueError("flow_overrides must be a dict")
@@ -319,6 +352,27 @@ class ImportWizardEngine:
             catalog = CatalogModel.from_dict(catalog_json)
             flow = FlowModel.from_dict(flow_json)
             validate_models(catalog, flow)
+            return {"ok": True}
+        except Exception as e:
+            return _exception_envelope(e)
+
+    def validate_flow_config(self, flow_config_json: Any) -> dict[str, Any]:
+        """Validate FlowConfig JSON.
+
+        FlowConfig is allowed to store only an 'overrides' object.
+        It must not mutate catalog or base flow model.
+        """
+        try:
+            if not isinstance(flow_config_json, dict):
+                raise ValueError("flow_config_json must be an object")
+            version = flow_config_json.get("version")
+            overrides = flow_config_json.get("overrides")
+            if not isinstance(version, int):
+                raise ValueError("flow_config_json missing valid 'version' (int)")
+            if not isinstance(overrides, dict):
+                raise ValueError("flow_config_json missing valid 'overrides' (object)")
+            # Overrides must be JSON-serializable dict; deeper validation is delegated
+            # to validate_flow at session creation time.
             return {"ok": True}
         except Exception as e:
             return _exception_envelope(e)
@@ -500,7 +554,17 @@ class ImportWizardEngine:
             raise StepSubmissionError("step schema is invalid")
         fields: list[dict[str, Any]] = [f for f in fields_any if isinstance(f, dict)]
 
-        allowed = {str(f.get("name")) for f in fields if isinstance(f.get("name"), str)}
+        allowed: set[str] = set()
+        for f in fields:
+            name_any = f.get("name")
+            ftype_any = f.get("type")
+            if not isinstance(name_any, str) or not name_any:
+                continue
+            allowed.add(name_any)
+            if ftype_any == "multi_select_indexed":
+                allowed.add(f"{name_any}_expr")
+                allowed.add(f"{name_any}_ids")
+
         unknown = sorted(set(payload.keys()) - allowed)
         if unknown:
             raise StepSubmissionError("unknown field(s): " + ", ".join(unknown))
@@ -512,17 +576,22 @@ class ImportWizardEngine:
             required = bool(f.get("required"))
             if not isinstance(name, str) or not isinstance(ftype, str):
                 continue
-            if required and name not in payload:
+            if required and not any(k in payload for k in (name, f"{name}_expr", f"{name}_ids")):
                 raise StepSubmissionError(f"missing required field: {name}")
-            if name not in payload:
-                continue
-            value = payload[name]
 
-            if ftype == "bool":
+            if ftype in {"toggle", "confirm"}:
+                if name not in payload:
+                    continue
+                value = payload[name]
                 if not isinstance(value, bool):
                     raise StepSubmissionError(f"field '{name}' must be bool")
                 normalized[name] = value
-            elif ftype == "int":
+                continue
+
+            if ftype == "number":
+                if name not in payload:
+                    continue
+                value = payload[name]
                 if not isinstance(value, int):
                     raise StepSubmissionError(f"field '{name}' must be int")
                 constraints = f.get("constraints")
@@ -534,29 +603,97 @@ class ImportWizardEngine:
                     if isinstance(mx, int) and value > mx:
                         raise StepSubmissionError(f"field '{name}' must be <= {mx}")
                 normalized[name] = value
-            elif ftype == "str":
+                continue
+
+            if ftype in {"text", "select"}:
+                if name not in payload:
+                    continue
+                value = payload[name]
                 if not isinstance(value, str):
                     raise StepSubmissionError(f"field '{name}' must be str")
                 normalized[name] = value
-            elif ftype == "list[int]":
-                if not (isinstance(value, list) and all(isinstance(x, int) for x in value)):
-                    raise StepSubmissionError(f"field '{name}' must be list[int]")
-                normalized[name] = sorted(set(value))
-            elif ftype == "list[str]":
-                if not (isinstance(value, list) and all(isinstance(x, str) for x in value)):
-                    raise StepSubmissionError(f"field '{name}' must be list[str]")
-                normalized[name] = sorted(set(value))
-            else:
-                raise StepSubmissionError(f"unsupported field type: {ftype}")
+                continue
 
-        # Selection expression canonicalization.
-        if step_id == "select_authors" and "selection" in normalized:
-            ids = _parse_selection_expr(str(normalized["selection"]), max_index=None)
-            return {"author_ids": ids}
-        if step_id == "select_books" and "selection" in normalized:
-            ids = _parse_selection_expr(str(normalized["selection"]), max_index=None)
-            return {"book_ids": ids}
+            if ftype == "multi_select_indexed":
+                ids = self._canonicalize_multi_select(
+                    name=name, field=f, payload=payload, state=state
+                )
+                normalized[name] = ids
+                continue
+
+            if ftype == "table_edit":
+                if name not in payload:
+                    continue
+                value = payload[name]
+                if not isinstance(value, list):
+                    raise StepSubmissionError(f"field '{name}' must be list")
+                normalized[name] = value
+                continue
+
+            raise StepSubmissionError(f"unsupported field type: {ftype}")
+
         return normalized
+
+    def _canonicalize_multi_select(
+        self,
+        *,
+        name: str,
+        field: dict[str, Any],
+        payload: dict[str, Any],
+        state: dict[str, Any],
+    ) -> list[str]:
+        # Source items are taken from field.items when present, otherwise from discovery.
+        items: list[dict[str, Any]] = []
+        items_any = field.get("items")
+        if isinstance(items_any, list) and all(isinstance(x, dict) for x in items_any):
+            items = [cast(dict[str, Any], x) for x in items_any]
+        else:
+            session_dir = f"import/sessions/{state.get('session_id')}"
+            discovery_any = read_json(self._fs, RootName.WIZARDS, f"{session_dir}/discovery.json")
+            if isinstance(discovery_any, list) and all(isinstance(x, dict) for x in discovery_any):
+                items = [cast(dict[str, Any], x) for x in discovery_any]
+
+        ordered_ids: list[str] = []
+        for it in items:
+            item_id = it.get("item_id")
+            if isinstance(item_id, str):
+                ordered_ids.append(item_id)
+
+        if not ordered_ids:
+            raise StepSubmissionError(f"field '{name}' has no selectable items")
+
+        if f"{name}_ids" in payload:
+            raw = payload.get(f"{name}_ids")
+            if not (isinstance(raw, list) and all(isinstance(x, str) for x in raw)):
+                raise StepSubmissionError(f"field '{name}_ids' must be list[str]")
+            requested = [str(x) for x in raw]
+            unknown = sorted({x for x in requested if x not in set(ordered_ids)})
+            if unknown:
+                raise StepSubmissionError(f"unknown id(s) in '{name}_ids'")
+            # Stable selection: preserve discovery order.
+            selected_set = set(requested)
+            return [x for x in ordered_ids if x in selected_set]
+
+        expr_key = f"{name}_expr"
+        if expr_key not in payload and name in payload and isinstance(payload.get(name), str):
+            # Backward compatibility: allow a plain string value as expr.
+            payload = dict(payload)
+            payload[expr_key] = payload[name]
+
+        if expr_key not in payload:
+            raise StepSubmissionError(f"missing '{expr_key}' or '{name}_ids'")
+        expr = payload.get(expr_key)
+        if not isinstance(expr, str):
+            raise StepSubmissionError(f"field '{expr_key}' must be str")
+
+        indices = _parse_selection_expr(expr, max_index=len(ordered_ids))
+        # Stable selection: preserve discovery order while honoring indices.
+        selected_indices = set(indices)
+        selected_ids: list[str] = []
+        for idx, item_id in enumerate(ordered_ids, start=1):
+            if idx in selected_indices:
+                selected_ids.append(item_id)
+        return selected_ids
 
     def apply_action(self, session_id: str, action: str) -> dict[str, Any]:
         state = self._load_state(session_id)
@@ -647,22 +784,43 @@ class ImportWizardEngine:
         return plan
 
     def finalize(self, session_id: str) -> dict[str, Any]:
+        # finalize() is a legacy entry point kept for compatibility.
+        # Per spec: job_requests.json may only be created by start_processing(confirm=true).
+        return invariant_violation(
+            message="finalize is not supported; use start_processing(confirm=true)",
+            path="$.finalize",
+            reason="legacy_operation",
+            meta={},
+        )
+
+    def start_processing(self, session_id: str, body: dict[str, Any]) -> dict[str, Any]:
         try:
             state = self._load_state(session_id)
             if state.get("status") != "in_progress":
                 raise FinalizeError("session is not active")
 
-            inputs = dict(state.get("inputs") or {})
-            confirm = inputs.get("final_summary_confirm")
-            if not (isinstance(confirm, dict) and confirm.get("confirm") is True):
-                _emit(
-                    "validation.fail",
-                    "finalize.validate",
-                    {"session_id": session_id, "reason": "final_summary_confirm missing"},
+            if not isinstance(body, dict):
+                raise ValueError("body must be an object")
+            confirm = body.get("confirm")
+            if confirm is not True:
+                return validation_error(
+                    message="confirm must be true",
+                    path="$.confirm",
+                    reason="missing_or_false",
+                    meta={},
                 )
-                raise FinalizeError("final_summary_confirm must be submitted with confirm=true")
 
-            # Conflict scan must be re-checked at processing start.
+            inputs = dict(state.get("inputs") or {})
+            final = inputs.get("final_summary_confirm")
+            if not (isinstance(final, dict) and final.get("confirm") is True):
+                return validation_error(
+                    message="final_summary_confirm must be submitted with confirm=true",
+                    path="$.inputs.final_summary_confirm.confirm",
+                    reason="missing_or_false",
+                    meta={},
+                )
+
+            # Conflict policy re-check (minimal deterministic enforcement).
             conflicts = state.get("conflicts")
             if isinstance(conflicts, dict):
                 present = bool(conflicts.get("present"))
@@ -674,36 +832,17 @@ class ImportWizardEngine:
                 resolved = True
 
             if present and policy == "ask" and not resolved:
-                _emit(
-                    "validation.fail",
-                    "finalize.validate",
-                    {"session_id": session_id, "reason": "conflicts present"},
-                )
-                self._append_decision(
-                    session_id,
-                    step_id="__system__",
-                    payload={"event": "finalize"},
-                    result="rejected",
-                    error={"type": "FinalizeError", "message": "conflicts must be resolved"},
-                )
                 return error_envelope(
                     "CONFLICTS_UNRESOLVED",
                     "conflicts must be resolved before processing",
-                    details=[{"policy": policy}],
+                    details=[
+                        {
+                            "path": "$.conflicts",
+                            "reason": "conflicts_unresolved",
+                            "meta": {"policy": policy},
+                        }
+                    ],
                 )
-
-            _emit(
-                "finalize.request",
-                "finalize.request",
-                {
-                    "session_id": session_id,
-                    "model_fingerprint": state.get("model_fingerprint"),
-                    "discovery_fingerprint": state.get("derived", {}).get("discovery_fingerprint"),
-                    "effective_config_fingerprint": state.get("derived", {}).get(
-                        "effective_config_fingerprint"
-                    ),
-                },
-            )
 
             session_dir = f"import/sessions/{session_id}"
 
@@ -739,50 +878,25 @@ class ImportWizardEngine:
                 inputs=inputs,
             )
 
-            # Deterministic output: always canonical JSON.
+            # Idempotent persistence: if already present with same bytes, reuse.
+            job_path = f"{session_dir}/job_requests.json"
+            job_bytes = canonical_serialize(job_requests)
+            if self._fs.exists(RootName.WIZARDS, job_path):
+                with self._fs.open_read(RootName.WIZARDS, job_path) as f:
+                    existing = f.read().decode("utf-8")
+                if existing.strip() == job_bytes.decode("utf-8").strip():
+                    job_ids = [str(job_requests.get("idempotency_key") or "")[:16]]
+                    return {"job_ids": job_ids, "batch_size": len(job_ids)}
+
             atomic_write_text(
                 self._fs,
                 RootName.WIZARDS,
-                f"{session_dir}/job_requests.json",
-                canonical_serialize(job_requests).decode("utf-8") + "\n",
+                job_path,
+                job_bytes.decode("utf-8") + "\n",
             )
 
-            state["status"] = "finalized"
-            state["updated_at"] = _iso_utc_now()
-            self._append_decision(
-                session_id,
-                step_id="__system__",
-                payload={"event": "finalize"},
-                result="accepted",
-                error=None,
-            )
-            self._persist_state(session_id, state)
-
-            _emit(
-                "job.create",
-                "job.create",
-                {
-                    "session_id": session_id,
-                    "jobs": 1,
-                    **diagnostics_context,
-                },
-            )
-
-            _emit(
-                "session.end",
-                "session.end",
-                {
-                    "session_id": session_id,
-                    "status": "finalized",
-                    **diagnostics_context,
-                },
-            )
-
-            return {
-                "session_id": session_id,
-                "status": state.get("status"),
-                "jobs": 1,
-            }
+            job_ids = [str(job_requests.get("idempotency_key") or "")[:16]]
+            return {"job_ids": job_ids, "batch_size": len(job_ids)}
         except Exception as e:
             return _exception_envelope(e)
 

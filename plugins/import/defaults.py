@@ -58,18 +58,20 @@ def _default_fields_for_step(step_id: str) -> list[dict[str, Any]]:
         return [
             {
                 "name": "selection",
-                "type": "str",
+                "type": "multi_select_indexed",
                 "required": True,
                 "constraints": {},
+                "items": [],
             }
         ]
     if step_id == "select_books":
         return [
             {
                 "name": "selection",
-                "type": "str",
+                "type": "multi_select_indexed",
                 "required": True,
                 "constraints": {},
+                "items": [],
             }
         ]
     if step_id == "plan_preview_batch":
@@ -78,7 +80,7 @@ def _default_fields_for_step(step_id: str) -> list[dict[str, Any]]:
         return [
             {
                 "name": "confirm",
-                "type": "bool",
+                "type": "confirm",
                 "required": True,
                 "constraints": {},
             }
@@ -87,7 +89,7 @@ def _default_fields_for_step(step_id: str) -> list[dict[str, Any]]:
         return [
             {
                 "name": "workers",
-                "type": "int",
+                "type": "number",
                 "required": True,
                 "constraints": {"min": 1, "max": 64},
             }
@@ -96,7 +98,7 @@ def _default_fields_for_step(step_id: str) -> list[dict[str, Any]]:
     return [
         {
             "name": "mode",
-            "type": "str",
+            "type": "text",
             "required": True,
             "constraints": {},
         }
@@ -187,6 +189,13 @@ DEFAULT_FLOW: dict[str, Any] = {
 }
 
 
+# FlowConfig stores user overrides only. It must not modify the catalog or base flow definition.
+DEFAULT_FLOW_CONFIG: dict[str, Any] = {
+    "version": 1,
+    "overrides": {},
+}
+
+
 def ensure_default_models(fs: FileService) -> dict[str, bool]:
     """Ensure wizard model JSON files exist; create them if missing.
 
@@ -205,4 +214,12 @@ def ensure_default_models(fs: FileService) -> dict[str, bool]:
     flow_created = atomic_write_json_if_missing(
         fs, RootName.WIZARDS, "import/flow/current.json", DEFAULT_FLOW
     )
-    return {"catalog_created": catalog_created, "flow_created": flow_created}
+
+    flow_config_created = atomic_write_json_if_missing(
+        fs, RootName.WIZARDS, "import/config/flow_config.json", DEFAULT_FLOW_CONFIG
+    )
+    return {
+        "catalog_created": catalog_created,
+        "flow_created": flow_created,
+        "flow_config_created": flow_config_created,
+    }
