@@ -7,6 +7,15 @@ from typing import Any
 from am_patch import git_ops
 from am_patch.archive import make_failure_zip
 from am_patch.errors import RunnerError
+from am_patch.failure_zip import (
+    cleanup_for_issue as cleanup_failure_zips_for_issue,
+)
+from am_patch.failure_zip import (
+    effective_issue_id as effective_failure_zip_issue_id,
+)
+from am_patch.failure_zip import (
+    render_name as render_failure_zip_name,
+)
 from am_patch.issue_diff import (
     collect_issue_logs,
     derive_finalize_pseudo_issue_id,
@@ -97,7 +106,25 @@ def build_artifacts(
         )
         issue_diff_zip = None
     else:
-        failure_zip = paths.patch_dir / policy.failure_zip_name
+        pseudo_issue_id: str | None = None
+        if cli.issue_id is None:
+            pseudo_issue_id = derive_finalize_pseudo_issue_id(
+                log_path=log_path,
+                finalize_template=policy.log_template_finalize,
+            )
+
+        issue = effective_failure_zip_issue_id(
+            issue_id=cli.issue_id,
+            pseudo_issue_id=pseudo_issue_id,
+        )
+        cleanup_failure_zips_for_issue(
+            patch_dir=paths.patch_dir,
+            policy=policy,
+            issue=issue,
+        )
+
+        name = render_failure_zip_name(policy=policy, issue=issue, log_path=log_path)
+        failure_zip = paths.patch_dir / name
 
         include_patch_paths: list[Path] = []
         include_patch_blobs: list[tuple[str, bytes]] = []

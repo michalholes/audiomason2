@@ -7,8 +7,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from am_patch import git_ops
-from am_patch import runtime as runtime
+from am_patch import git_ops, runtime
 from am_patch.archive import archive_patch
 from am_patch.artifacts import build_artifacts
 from am_patch.audit_rubric_check import check_audit_rubric_coverage
@@ -23,6 +22,7 @@ from am_patch.config import (
 )
 from am_patch.errors import RunnerError, fingerprint
 from am_patch.execution_context import open_execution_context
+from am_patch.failure_zip import cleanup_on_success_commit as cleanup_failure_zips_on_success
 from am_patch.fs_junk import fs_junk_ignore_partition
 from am_patch.gates import run_badguys, run_gates
 from am_patch.lock import FileLock
@@ -598,6 +598,20 @@ def run_mode(ctx: RunContext) -> dict[str, Any]:
                 )
                 final_commit_sha = commit_sha
 
+                if commit_sha and cli.issue_id is not None:
+                    cleanup_failure_zips_on_success(
+                        patch_dir=paths.patch_dir,
+                        policy=policy,
+                        issue=str(cli.issue_id),
+                    )
+
+                if commit_sha and cli.issue_id is not None:
+                    cleanup_failure_zips_on_success(
+                        patch_dir=paths.patch_dir,
+                        policy=policy,
+                        issue=str(cli.issue_id),
+                    )
+
                 # Wire live results into the unified end-of-run summary.
                 push_ok_for_posthook = push_ok
                 if push_ok is True and commit_sha:
@@ -1062,6 +1076,13 @@ def run_mode(ctx: RunContext) -> dict[str, Any]:
                 stage_all=False,
             )
             final_commit_sha = commit_sha
+
+            if commit_sha and issue_id is not None:
+                cleanup_failure_zips_on_success(
+                    patch_dir=paths.patch_dir,
+                    policy=policy,
+                    issue=str(issue_id),
+                )
             push_ok = git_ops.push(
                 logger, repo_root, policy.default_branch, allow_fail=policy.allow_push_fail
             )

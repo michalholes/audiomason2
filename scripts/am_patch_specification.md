@@ -47,12 +47,16 @@ The following keys are normative (defaults shown):
 -   log_template_finalize = "am_patch_finalize\_{ts}.log"
 -   json_out = false (when true, write debug-complete NDJSON event log)
 -   failure_zip_name = "patched.zip"
+-   failure_zip_template = "" (when set: render filename using {issue} and {ts})
+-   failure_zip_cleanup_glob_template = "patched_issue{issue}_*.zip"
+-   failure_zip_keep_per_issue = 1
+-   failure_zip_delete_on_success_commit = true
 -   failure_zip_log_dir = "logs"
 -   failure_zip_patch_dir = "patches"
 
-Note: Zip artifacts written by the runner (patched.zip and the success
-archive zip) are written atomically (tmp file + replace + fsync) to
-avoid partial reads.
+Note: Zip artifacts written by the runner (failure zip and the success
+archive zip) are written atomically (tmp file + replace + fsync) to avoid
+partial reads.
 
 -   workspace_issue_dir_template = "issue\_{issue}"
 -   workspace_repo_dir_name = "repo"
@@ -95,7 +99,7 @@ The runner prints its version: - on every invocation - in `--help`
 
 Example:
 
-    am_patch RUNNER_VERSION=4.3.8
+    am_patch RUNNER_VERSION=4.3.9
 
 Version discipline: - Any change that alters runner behavior MUST bump
 `RUNNER_VERSION`. - Any change that alters runner behavior MUST update
@@ -244,7 +248,7 @@ failures but MUST NOT override the primary PATCH_APPLY failure.
     -   no live gates,
     -   no commit/push,
     -   no patch archives,
-    -   no patched.zip artifacts.
+    -   no failure-zip artifacts.
 -   Workspace directory is deleted on exit (SUCCESS or FAILURE).
 
 Workspace cleanup: - In test mode, the workspace is deleted on exit
@@ -396,8 +400,8 @@ scope accordingly - Should be used deliberately and sparingly
         `--override compile_exclude=...` follow the same list format as
         `ruff_targets`.
 -   Failure behavior is identical to other gates: the run fails with
-    `GATE:COMPILE`, `patched.zip` is produced, and `patched_success.zip`
-    is not.
+    `GATE:COMPILE`, a failure zip is produced, and the success archive
+    zip is not.
 
 ### 6.1.2 JS syntax gate
 
@@ -525,9 +529,9 @@ Default behavior: - `live_changed_resolution = "fail"` and
 This behavior applies to workspace promotion and `-w` /
 `--finalize-workspace`.
 
-### 7.3 Archive hygiene (`patched.zip`)
+### 7.3 Failure zip archive hygiene
 
-When building `patched.zip`, the runner excludes repository internals
+When building the failure zip, the runner excludes repository internals
 and tool/runtime caches from the archived
 `changed/touched subset (no full workspace)` tree:
 
@@ -539,6 +543,19 @@ and tool/runtime caches from the archived
 
 This is independent of scope logic and does not affect patch execution,
 gates, or promotion semantics.
+
+Failure zip naming and retention:
+
+-   Legacy mode (default): when `failure_zip_template` is empty, the
+    runner writes `failure_zip_name` (default: `patched.zip`).
+-   Template mode: when `failure_zip_template` is set, the runner renders
+    the filename using `{issue}` and `{ts}` (and may also use `{nonce}` and
+    `{log}`), and writes that zip under `patch_dir`.
+-   Before writing a new failure zip, the runner applies per-issue
+    retention using `failure_zip_cleanup_glob_template` and
+    `failure_zip_keep_per_issue` (default: keep 1).
+-   After a successful commit, the runner removes failure zips for that
+    issue when `failure_zip_delete_on_success_commit` is true.
 
 Workspace failure subset (general): - In workspace mode, the failure zip
 MUST include the deterministic union of: - the per-issue cumulative

@@ -64,6 +64,17 @@ class Policy:
 
     # Failure diagnostics zip naming and internal directory structure.
     failure_zip_name: str = "patched.zip"
+    # Optional template for failure zip filename.
+    # Placeholders: {issue}, {ts}, {nonce}, {log}
+    # If empty, legacy failure_zip_name is used.
+    failure_zip_template: str = ""
+    # Glob template used for cleanup/retention under patch_dir.
+    # Placeholder: {issue}
+    failure_zip_cleanup_glob_template: str = "patched_issue{issue}_*.zip"
+    # Keep last N failure zips per issue under patch_dir.
+    failure_zip_keep_per_issue: int = 1
+    # If true, delete failure zips for issue after a successful commit.
+    failure_zip_delete_on_success_commit: bool = True
     failure_zip_log_dir: str = "logs"
     failure_zip_patch_dir: str = "patches"
 
@@ -445,6 +456,21 @@ def build_policy(defaults: Policy, cfg: dict[str, Any]) -> Policy:
 
     p.failure_zip_name = str(cfg.get("failure_zip_name", p.failure_zip_name))
     _mark_cfg(p, cfg, "failure_zip_name")
+    p.failure_zip_template = str(cfg.get("failure_zip_template", p.failure_zip_template))
+    _mark_cfg(p, cfg, "failure_zip_template")
+    p.failure_zip_cleanup_glob_template = str(
+        cfg.get("failure_zip_cleanup_glob_template", p.failure_zip_cleanup_glob_template)
+    )
+    _mark_cfg(p, cfg, "failure_zip_cleanup_glob_template")
+    if "failure_zip_keep_per_issue" in cfg:
+        p.failure_zip_keep_per_issue = int(cfg["failure_zip_keep_per_issue"])
+        _mark_cfg(p, cfg, "failure_zip_keep_per_issue")
+    p.failure_zip_delete_on_success_commit = _as_bool(
+        cfg,
+        "failure_zip_delete_on_success_commit",
+        p.failure_zip_delete_on_success_commit,
+    )
+    _mark_cfg(p, cfg, "failure_zip_delete_on_success_commit")
     p.failure_zip_log_dir = str(cfg.get("failure_zip_log_dir", p.failure_zip_log_dir))
     _mark_cfg(p, cfg, "failure_zip_log_dir")
     p.failure_zip_patch_dir = str(cfg.get("failure_zip_patch_dir", p.failure_zip_patch_dir))
@@ -565,6 +591,27 @@ def build_policy(defaults: Policy, cfg: dict[str, Any]) -> Policy:
         p.current_log_symlink_name, field="current_log_symlink_name"
     )
     p.failure_zip_name = _validate_basename(p.failure_zip_name, field="failure_zip_name")
+
+    p.failure_zip_template = str(p.failure_zip_template).strip()
+    if p.failure_zip_template and (
+        "{issue}" not in p.failure_zip_template or "{ts}" not in p.failure_zip_template
+    ):
+        raise RunnerError(
+            "CONFIG",
+            "INVALID",
+            "failure_zip_template must contain {issue} and {ts}",
+        )
+
+    p.failure_zip_cleanup_glob_template = _validate_basename(
+        p.failure_zip_cleanup_glob_template,
+        field="failure_zip_cleanup_glob_template",
+    )
+    if p.failure_zip_keep_per_issue < 0:
+        raise RunnerError(
+            "CONFIG",
+            "INVALID",
+            "failure_zip_keep_per_issue must be >= 0",
+        )
 
     p.failure_zip_log_dir = _validate_basename(p.failure_zip_log_dir, field="failure_zip_log_dir")
     p.failure_zip_patch_dir = _validate_basename(
