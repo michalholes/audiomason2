@@ -30,7 +30,13 @@ class ImportPlugin:
 
         This plugin provides the top-level 'import' command.
         """
-        return {"import": lambda argv: import_cli_main(argv, engine=self.engine)}
+        return {
+            "import": lambda argv: import_cli_main(
+                argv,
+                engine=self.engine,
+                resolver=self._resolver,
+            )
+        }
 
     def get_fastapi_router(self):
         """Return the import UI router (host must mount it)."""

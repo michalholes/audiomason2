@@ -1,6 +1,6 @@
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.1.5 Specification Versioning Policy: Start at
+Specification Version: 1.1.6 Specification Versioning Policy: Start at
 1.0.0. Patch version increments by +1 for every change.
 
 Author: Michal Holes\
@@ -1127,6 +1127,50 @@ In resolve_conflicts_batch:
 
 Renderers (CLI/Web) MUST NOT contain import-specific branching logic such as "if step_id == ...".
 All step behavior (validation, transitions, conditional branching) MUST live in the wizard engine.
+
+### 10.3.6 CLI Launcher and Renderer Configuration (Normative)
+
+The CLI MAY provide an interactive renderer for the Import Wizard. This is UI-only.
+It MUST delegate validation, transitions, conflict logic, and job request generation to the engine.
+
+Behavior:
+- The top-level command `audiomason import` is a CLI launcher for the renderer.
+- Explicit subcommands `audiomason import wizard ...` and
+  `audiomason import editor ...` MUST remain supported and unchanged.
+
+Configuration (read via ConfigResolver):
+- `plugins.import.cli.launcher_mode`: one of `interactive` | `fixed` | `disabled`.
+  - `interactive` (default): `audiomason import` runs an interactive renderer and
+    MAY prompt for root/path.
+  - `fixed`: `audiomason import` runs the renderer without prompts using configured
+    defaults.
+  - `disabled`: `audiomason import` MUST print usage (legacy behavior) and MUST NOT
+    start the renderer.
+- `plugins.import.cli.default_root`: default RootName for session creation (default:
+  `inbox`).
+- `plugins.import.cli.default_path`: default relative path under the selected root
+  (default: empty string).
+- `plugins.import.cli.noninteractive`: if true, the renderer MUST NOT prompt and MUST
+  fail if required inputs are missing.
+- `plugins.import.cli.render.confirm_defaults`: if true, Enter MAY accept defaults
+  when prompting (default: true).
+- `plugins.import.cli.render.show_internal_ids`: if true, the renderer MAY display
+  internal ids (default: false).
+- `plugins.import.cli.render.max_list_items`: max items displayed in interactive lists
+  (default: 200).
+
+CLI overrides:
+- The launcher MAY accept CLI flags that override the resolver values for the current run.
+- Precedence MUST be: CLI flags > resolver config > hard-coded defaults.
+- The launcher MUST provide a way to force legacy usage output for a single run
+  (e.g. `--no-launcher` or `--launcher disabled`).
+
+Root/path rules:
+- Root MUST be validated against RootName (file_io roots).
+- Path MUST be a relative path and MUST NOT contain `..`.
+- Any filesystem listing performed by the renderer MUST be done via FileService and
+  RootName (no direct filesystem access).
+
 
 ## 10.4 Wire Contracts (FlowConfig, FlowModel, SessionState, Errors)
 

@@ -1,3 +1,10 @@
+## 2026-02-18T23:25:46+01:00
+
+-   plugins: Add interactive CLI renderer launcher for Import Wizard (`audiomason import`)
+    with resolver-based configuration and CLI overrides.
+-   spec: Define Import CLI launcher/renderer configuration keys and precedence rules.
+-   spec: Bump specification version to 1.1.6.
+
 ## 2026-02-18T08:53:20+00:00
 
 -   spec: Require job_requests.json to include config_fingerprint (SHA-256 over canonical effective_config.json).

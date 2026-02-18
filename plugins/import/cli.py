@@ -1,7 +1,9 @@
 """Import plugin CLI adapter.
 
 Implements:
+  audiomason import
   audiomason import wizard <subcommand> ...
+  audiomason import editor ...
 
 This is UI-only: it delegates all validation and state transitions to the
 ImportWizardEngine.
@@ -15,6 +17,9 @@ import argparse
 import json
 from typing import Any
 
+from audiomason.core.config import ConfigResolver
+
+from .cli_renderer import load_renderer_config, run_launcher
 from .editor import (
     edit_catalog_interactive,
     edit_flow_interactive,
@@ -83,6 +88,25 @@ def _build_parser() -> argparse.ArgumentParser:
     return p
 
 
+def _build_launcher_parser() -> argparse.ArgumentParser:
+    p = argparse.ArgumentParser(prog="audiomason import", add_help=False)
+    p.add_argument(
+        "--launcher",
+        choices=["interactive", "fixed", "disabled"],
+        dest="launcher_mode",
+        default=None,
+    )
+    p.add_argument("--no-launcher", action="store_true", default=False)
+    p.add_argument("--root", dest="root", default=None)
+    p.add_argument("--path", dest="path", default=None)
+    p.add_argument("--noninteractive", action="store_true", default=False)
+    p.add_argument("--max-list-items", dest="max_list_items", default=None)
+    p.add_argument("--show-ids", action="store_true", default=False)
+    p.add_argument("--confirm-defaults", action="store_true", default=False)
+    p.add_argument("--no-confirm-defaults", action="store_true", default=False)
+    return p
+
+
 def _print_help() -> None:
     print("Usage:")
     print("  audiomason import wizard start --root <root> --path <relative_path>")
@@ -102,6 +126,11 @@ def _print_help() -> None:
     print("  audiomason import editor flow validate")
     print("  audiomason import editor flow save")
     print("  audiomason import editor effective-model preview")
+    print("")
+    print("Launcher (CLI renderer):")
+    print("  audiomason import [--root <root>] [--path <rel>] [--launcher <mode>]")
+    print("  audiomason import --no-launcher")
+    print("  audiomason import --noninteractive --root <root> --path <rel>")
 
 
 def _error_envelope(
@@ -129,7 +158,69 @@ def _current_prompt(engine: ImportWizardEngine, session_id: str) -> dict[str, An
     }
 
 
-def import_cli_main(argv: list[str], *, engine: ImportWizardEngine) -> int:
+def import_cli_main(
+    argv: list[str], *, engine: ImportWizardEngine, resolver: ConfigResolver
+) -> int:
+    # If the user invoked explicit subcommands, preserve legacy behavior.
+    if argv and argv[0] in {"wizard", "editor"}:
+        return _run_legacy(argv, engine=engine)
+
+    # Otherwise, parse launcher flags (if any) and decide whether to run the
+    # interactive CLI renderer or show help.
+    launcher_parser = _build_launcher_parser()
+    try:
+        ns, rest = launcher_parser.parse_known_args(argv)
+    except SystemExit:
+        _print_help()
+        raise SystemExit(1) from None
+
+    if rest and rest[0] in {"wizard", "editor"}:
+        # User mixed launcher flags with explicit subcommands. Let legacy parser handle it.
+        return _run_legacy(argv, engine=engine)
+
+    cli_overrides: dict[str, Any] = {}
+    if ns.no_launcher:
+        cli_overrides["launcher_mode"] = "disabled"
+    elif ns.launcher_mode:
+        cli_overrides["launcher_mode"] = ns.launcher_mode
+
+    if ns.root is not None:
+        cli_overrides["root"] = ns.root
+    if ns.path is not None:
+        cli_overrides["path"] = ns.path
+
+    if ns.noninteractive:
+        cli_overrides["noninteractive"] = True
+
+    if ns.max_list_items is not None:
+        cli_overrides["max_list_items"] = ns.max_list_items
+
+    if ns.show_ids:
+        cli_overrides["show_internal_ids"] = True
+
+    if ns.confirm_defaults and ns.no_confirm_defaults:
+        _print_help()
+        raise SystemExit(1)
+
+    if ns.confirm_defaults:
+        cli_overrides["confirm_defaults"] = True
+    if ns.no_confirm_defaults:
+        cli_overrides["confirm_defaults"] = False
+
+    cfg = load_renderer_config(resolver)
+    effective_launcher_mode = str(cli_overrides.get("launcher_mode", cfg.launcher_mode))
+    if effective_launcher_mode == "disabled":
+        _print_help()
+        return 0
+
+    return run_launcher(
+        engine=engine,
+        resolver=resolver,
+        cli_overrides=cli_overrides,
+    )
+
+
+def _run_legacy(argv: list[str], *, engine: ImportWizardEngine) -> int:
     parser = _build_parser()
 
     if not argv:
