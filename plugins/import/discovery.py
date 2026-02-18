@@ -15,6 +15,7 @@ _BUNDLE_EXTS = {
     ".tgz",
     ".tar.gz",
     ".tar.bz2",
+    ".rar",
 }
 
 

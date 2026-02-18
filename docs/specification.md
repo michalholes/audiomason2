@@ -1,6 +1,6 @@
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.1.6 Specification Versioning Policy: Start at
+Specification Version: 1.1.7 Specification Versioning Policy: Start at
 1.0.0. Patch version increments by +1 for every change.
 
 Author: Michal Holes\
@@ -1390,6 +1390,11 @@ Each item MUST contain:
 - root
 - relative_path
 - kind (file|dir|bundle)
+
+Bundle classification rules:
+- kind MUST be "bundle" for files whose relative_path ends with one of:
+  .zip, .tar, .tgz, .tar.gz, .tar.bz2, .rar
+- Extension matching MUST be case-insensitive.
 
 Canonical ordering:
 1) root (ASCII lexicographic)

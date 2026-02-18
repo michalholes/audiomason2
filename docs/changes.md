@@ -1,3 +1,8 @@
+## 2026-02-19T00:31:56+01:00
+
+-   import: Treat .rar archives as bundle sources during PHASE 0 discovery.
+-   spec: Document PHASE 0 bundle extension list includes .rar; bump specification version to 1.1.7.
+
 ## 2026-02-18T23:25:46+01:00
 
 -   plugins: Add interactive CLI renderer launcher for Import Wizard (`audiomason import`)
