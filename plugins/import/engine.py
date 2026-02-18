@@ -30,6 +30,14 @@ from .errors import (
     validation_error,
 )
 from .fingerprints import fingerprint_json, sha256_hex
+from .flow_runtime import (
+    CANONICAL_STEP_ORDER,
+    CONDITIONAL_STEP_IDS,
+    build_flow_model,
+)
+from .flow_runtime import (
+    OPTIONAL_STEP_IDS as FLOWCFG_OPTIONAL_STEP_IDS,
+)
 from .job_requests import build_job_requests
 from .models import BASE_REQUIRED_STEP_IDS, CatalogModel, FlowModel, validate_models
 from .plan import compute_plan
@@ -160,6 +168,21 @@ class ImportWizardEngine:
         """
         return self._fs
 
+    def get_flow_model(self) -> dict[str, Any]:
+        """Return FlowModel JSON for the current configuration (spec 10.5)."""
+        ensure_default_models(self._fs)
+        catalog_dict = read_json(self._fs, RootName.WIZARDS, "import/catalog/catalog.json")
+        flow_dict = read_json(self._fs, RootName.WIZARDS, "import/flow/current.json")
+        flow_cfg = read_json(self._fs, RootName.WIZARDS, "import/config/flow_config.json")
+
+        flow_cfg_norm = self._normalize_flow_config(flow_cfg)
+
+        catalog = CatalogModel.from_dict(catalog_dict)
+        flow = FlowModel.from_dict(flow_dict)
+        validate_models(catalog, flow)
+
+        return build_flow_model(catalog=catalog, flow_config=flow_cfg_norm)
+
     def create_session(
         self,
         root: str,
@@ -191,11 +214,7 @@ class ImportWizardEngine:
         )
         validate_models(catalog, flow)
 
-        effective_model: dict[str, Any] = {
-            "version": 1,
-            "catalog": catalog_dict,
-            "flow": flow_dict,
-        }
+        effective_model = build_flow_model(catalog=catalog, flow_config=flow_cfg_norm)
         model_fingerprint = fingerprint_json(effective_model)
 
         # 2) Discovery
@@ -284,7 +303,7 @@ class ImportWizardEngine:
 
         created_at = _iso_utc_now()
 
-        start_step_id = self._coerce_start_step(flow, flow_cfg_norm)
+        start_step_id = "select_authors"
 
         state: dict[str, Any] = {
             "session_id": session_id,
@@ -378,8 +397,9 @@ class ImportWizardEngine:
         catalog = CatalogModel.from_dict(catalog_json)
         flow = FlowModel.from_dict(flow_json)
         validate_models(catalog, flow)
-        _ = (catalog, flow)
-        return {"version": 1, "catalog": catalog_json, "flow": flow_json}
+        flow_cfg = read_json(self._fs, RootName.WIZARDS, "import/config/flow_config.json")
+        flow_cfg_norm = self._normalize_flow_config(flow_cfg)
+        return build_flow_model(catalog=catalog, flow_config=flow_cfg_norm)
 
     def _has_key(self, key: str) -> bool:
         try:
@@ -401,22 +421,11 @@ class ImportWizardEngine:
         """
         try:
             effective_model = self._load_effective_model(session_id)
-            catalog_any = effective_model.get("catalog")
-            if not isinstance(catalog_any, dict):
-                raise ValueError("effective model missing catalog")
-            catalog = CatalogModel.from_dict(cast(dict[str, Any], catalog_any))
-
-            _emit(
-                "step.view",
-                "step.view",
-                {
-                    "session_id": session_id,
-                    "step_id": step_id,
-                },
-            )
-            for step in catalog.steps:
-                sid = step.get("step_id")
-                if sid == step_id:
+            steps_any = effective_model.get("steps")
+            if not isinstance(steps_any, list):
+                raise ValueError("effective model missing steps")
+            for step in steps_any:
+                if isinstance(step, dict) and step.get("step_id") == step_id:
                     return dict(step)
             raise ValueError("unknown step_id")
         except Exception as e:
@@ -448,34 +457,29 @@ class ImportWizardEngine:
                 raise StepSubmissionError("payload must be an object")
 
             effective_model = self._load_effective_model(session_id)
-            catalog_dict_any = effective_model.get("catalog")
-            flow_dict_any = effective_model.get("flow")
-
-            if not isinstance(catalog_dict_any, dict) or not isinstance(flow_dict_any, dict):
-                raise StepSubmissionError("effective model missing required sections")
-
-            catalog_dict = cast(dict[str, Any], catalog_dict_any)
-            flow_dict = cast(dict[str, Any], flow_dict_any)
-            catalog = CatalogModel.from_dict(catalog_dict)
-            flow = FlowModel.from_dict(flow_dict)
+            steps_any = effective_model.get("steps")
+            if not isinstance(steps_any, list):
+                raise StepSubmissionError("effective model missing steps")
+            steps = [s for s in steps_any if isinstance(s, dict)]
             flow_cfg_norm = self._load_effective_flow_config(session_id)
 
-            if step_id not in catalog.step_ids():
+            step_ids = {str(s.get("step_id")) for s in steps if isinstance(s.get("step_id"), str)}
+            if step_id not in step_ids and step_id not in CONDITIONAL_STEP_IDS:
                 raise StepSubmissionError("unknown step_id")
 
-            current = str(state.get("current_step_id") or flow.entry_step_id)
+            current = str(state.get("current_step_id") or "select_authors")
             if step_id != current:
                 raise StepSubmissionError("step_id must match current_step_id")
 
             schema = None
-            for step in catalog.steps:
+            for step in steps:
                 if step.get("step_id") == step_id:
                     schema = step
                     break
             if schema is None:
                 raise StepSubmissionError("unknown step_id")
 
-            if bool(schema.get("computed_only")):
+            if step_id in {"plan_preview_batch", "processing"}:
                 raise StepSubmissionError("computed-only step cannot be submitted")
 
             normalized_payload = self._validate_and_canonicalize_payload(
@@ -500,40 +504,13 @@ class ImportWizardEngine:
                 completed.append(step_id)
             state["completed_step_ids"] = completed
 
-            # Move to next enabled step deterministically.
-            next_step = self._next_enabled_step(
-                flow,
-                step_id,
-                direction="next",
+            next_step = self._next_step_after_submit(
+                step_id=step_id,
+                state=state,
                 flow_cfg_norm=flow_cfg_norm,
             )
 
-            # Conditional insertion: resolve_conflicts_batch only after final_summary_confirm.
-            if step_id == "final_summary_confirm":
-                conflicts = state.get("conflicts")
-                if isinstance(conflicts, dict):
-                    present = bool(conflicts.get("present"))
-                    policy = str(conflicts.get("policy") or "")
-                    resolved = bool(conflicts.get("resolved"))
-                else:
-                    present = False
-                    policy = ""
-                    resolved = True
-
-                if (
-                    present
-                    and policy == "ask"
-                    and not resolved
-                    and self._is_step_enabled("resolve_conflicts_batch", flow_cfg_norm)
-                ):
-                    next_step = "resolve_conflicts_batch"
-                else:
-                    next_step = None
-
-            if next_step is not None and not self._is_step_enabled(next_step, flow_cfg_norm):
-                next_step = None
-
-            state["current_step_id"] = next_step or step_id
+            state["current_step_id"] = next_step
 
             state["updated_at"] = _iso_utc_now()
             self._append_decision(
@@ -815,26 +792,14 @@ class ImportWizardEngine:
                 self._persist_state(session_id, state)
                 return state
 
-            effective_model = self._load_effective_model(session_id)
-            flow = FlowModel.from_dict(effective_model["flow"])
             flow_cfg_norm = self._load_effective_flow_config(session_id)
-            node_map = flow.node_map()
-
-            current = str(state.get("current_step_id") or flow.entry_step_id)
-            node = node_map.get(current)
-            if node is None:
-                # Reset to entry if current unknown.
-                state["current_step_id"] = self._coerce_start_step(flow, flow_cfg_norm)
-            else:
-                direction = "next" if action == "next" else "back"
-                next_step = self._next_enabled_step(
-                    flow,
-                    current,
-                    direction=direction,
-                    flow_cfg_norm=flow_cfg_norm,
-                )
-                if next_step is not None:
-                    state["current_step_id"] = next_step
+            current = str(state.get("current_step_id") or "select_authors")
+            direction = "next" if action == "next" else "back"
+            state["current_step_id"] = self._move_linear(
+                current=current,
+                direction=direction,
+                flow_cfg_norm=flow_cfg_norm,
+            )
 
             state["updated_at"] = _iso_utc_now()
             self._append_decision(
@@ -1164,6 +1129,69 @@ class ImportWizardEngine:
             return {"version": 1, "steps": {}, "defaults": {}, "ui": {}}
         return flow_cfg_any
 
+    def _linear_enabled_steps(self, flow_cfg_norm: dict[str, Any]) -> list[str]:
+        steps: list[str] = []
+        for sid in CANONICAL_STEP_ORDER:
+            if sid in FLOWCFG_OPTIONAL_STEP_IDS and not self._is_step_enabled(sid, flow_cfg_norm):
+                continue
+            steps.append(sid)
+        return steps
+
+    def _move_linear(
+        self,
+        *,
+        current: str,
+        direction: str,
+        flow_cfg_norm: dict[str, Any],
+    ) -> str:
+        linear = self._linear_enabled_steps(flow_cfg_norm)
+        if not linear:
+            return "select_authors"
+        if current not in linear:
+            return linear[0]
+        idx = linear.index(current)
+        if direction == "next":
+            return linear[min(idx + 1, len(linear) - 1)]
+        return linear[max(idx - 1, 0)]
+
+    def _next_step_after_submit(
+        self,
+        *,
+        step_id: str,
+        state: dict[str, Any],
+        flow_cfg_norm: dict[str, Any],
+    ) -> str:
+        # Spec 10.3.4 conditional conflict path.
+        if step_id == "resolve_conflicts_batch":
+            return "final_summary_confirm"
+
+        if step_id == "final_summary_confirm":
+            inputs = state.get("inputs") or {}
+            payload = inputs.get("final_summary_confirm") if isinstance(inputs, dict) else None
+            confirm = payload.get("confirm") if isinstance(payload, dict) else None
+            if confirm is not True:
+                return "final_summary_confirm"
+
+            conflicts = state.get("conflicts")
+            policy = "ask"
+            if isinstance(conflicts, dict):
+                policy = str(conflicts.get("policy") or "ask")
+
+            if policy != "ask":
+                return "processing"
+
+            # conflict_mode == ask: perform deterministic scan here (spec 10.3.4).
+            self._update_conflicts(str(state.get("session_id") or ""), state)
+            conflicts2 = state.get("conflicts")
+            present = bool(conflicts2.get("present")) if isinstance(conflicts2, dict) else False
+            resolved = bool(conflicts2.get("resolved")) if isinstance(conflicts2, dict) else True
+            if present and not resolved:
+                return "resolve_conflicts_batch"
+            return "processing"
+
+        # Default: strictly linear ordering, skipping disabled optional steps (spec 10.3.2).
+        return self._move_linear(current=step_id, direction="next", flow_cfg_norm=flow_cfg_norm)
+
     def _is_step_enabled(self, step_id: str, flow_cfg_norm: dict[str, Any]) -> bool:
         steps_any = flow_cfg_norm.get("steps")
         if not isinstance(steps_any, dict):
@@ -1237,7 +1265,7 @@ class ImportWizardEngine:
             if enabled is not None and not isinstance(enabled, bool):
                 raise ValueError("flow_config.steps.<step_id>.enabled must be bool")
             if enabled is False and step_id in BASE_REQUIRED_STEP_IDS:
-                raise ValueError(f"required step may not be disabled: {step_id}")
+                raise FinalizeError(f"required step may not be disabled: {step_id}")
             if enabled is None:
                 continue
             steps[step_id] = {"enabled": bool(enabled)}
@@ -1278,7 +1306,7 @@ class ImportWizardEngine:
             if not isinstance(enabled, bool):
                 raise ValueError("flow_overrides.steps.<step_id>.enabled must be bool")
             if enabled is False and step_id in BASE_REQUIRED_STEP_IDS:
-                raise ValueError(f"required step may not be disabled: {step_id}")
+                raise FinalizeError(f"required step may not be disabled: {step_id}")
             steps[step_id] = {"enabled": bool(enabled)}
         merged["steps"] = steps
         return merged

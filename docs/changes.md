@@ -633,3 +633,8 @@
 -   Issue 207: start_processing(confirm=true) now transitions the
     session to PHASE 2 and locks interactive submit_step/apply_action;
     the terminal step_id processing is used when available.
+
+## 2026-02-18T00:00:00+01:00
+
+-   Issue 207: GET /import/ui/flow now returns runtime FlowModel (flow_id + steps[]) derived from FlowConfig.
+-   Issue 207: final_summary_confirm now deterministically transitions to processing or resolve_conflicts_batch per spec; resolve_conflicts_batch OK returns to final_summary_confirm.

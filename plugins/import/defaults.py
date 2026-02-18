@@ -179,13 +179,13 @@ DEFAULT_FLOW: dict[str, Any] = {
         },
         {
             "step_id": "final_summary_confirm",
-            "next_step_id": None,
+            "next_step_id": "processing",
             "prev_step_id": "parallelism",
         },
         {
             # Exists but not linked by default; engine may jump to it conditionally.
             "step_id": "resolve_conflicts_batch",
-            "next_step_id": None,
+            "next_step_id": "final_summary_confirm",
             "prev_step_id": "final_summary_confirm",
         },
         {

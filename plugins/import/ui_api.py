@@ -21,14 +21,7 @@ def build_router(*, engine: Any):
 
     @router.get("/flow")
     def get_flow():
-        fs = engine.get_file_service()
-        from plugins.file_io.service import RootName
-
-        from .defaults import ensure_default_models
-        from .storage import read_json
-
-        ensure_default_models(fs)
-        return read_json(fs, RootName.WIZARDS, "import/flow/current.json")
+        return engine.get_flow_model()
 
     @router.get("/config")
     def get_config():

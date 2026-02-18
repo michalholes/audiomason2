@@ -23,7 +23,10 @@ BASE_REQUIRED_STEP_IDS = {
     "select_books",
     "plan_preview_batch",
     "effective_author_title",
+    "conflict_policy",
     "final_summary_confirm",
+    "resolve_conflicts_batch",
+    "processing",
 }
 
 OPTIONAL_STEP_IDS = {
@@ -34,8 +37,6 @@ OPTIONAL_STEP_IDS = {
     "publish_policy",
     "delete_source_policy",
     "parallelism",
-    "conflict_policy",
-    "resolve_conflicts_batch",
 }
 
 
@@ -157,6 +158,10 @@ def validate_models(catalog: CatalogModel, flow: FlowModel) -> None:
     if flow.entry_step_id not in node_ids:
         raise ModelValidationError("Flow entry_step_id must exist in nodes")
 
+    # Engine Guard (10.6): steps must not be inserted before select_authors.
+    if flow.entry_step_id != "select_authors":
+        raise ModelValidationError("Flow entry_step_id must be select_authors")
+
     for required in sorted(BASE_REQUIRED_STEP_IDS):
         if required not in node_ids:
             raise ModelValidationError(f"Flow missing required step node: {required}")
@@ -175,6 +180,8 @@ def validate_models(catalog: CatalogModel, flow: FlowModel) -> None:
     reachable = _reachable_step_ids(flow)
     if "final_summary_confirm" not in reachable:
         raise ModelValidationError("Flow must reach final_summary_confirm from entry_step_id")
+    if "processing" not in reachable:
+        raise ModelValidationError("Flow must reach processing from entry_step_id")
 
 
 def _require_ascii_str(value: Any, *, field: str, step_index: int) -> str:
