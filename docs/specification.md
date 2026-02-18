@@ -1,6 +1,6 @@
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.1.4 Specification Versioning Policy: Start at
+Specification Version: 1.1.5 Specification Versioning Policy: Start at
 1.0.0. Patch version increments by +1 for every change.
 
 Author: Michal Holes\
@@ -1285,6 +1285,7 @@ Required subpaths:
 
 - catalog/catalog.json
 - flow/current.json
+- config/flow_config.json
 - sessions/<session_id>/effective_model.json
 - sessions/<session_id>/effective_config.json
 - sessions/<session_id>/discovery.json
@@ -1293,18 +1294,45 @@ Required subpaths:
 - sessions/<session_id>/plan.json
 - sessions/<session_id>/job_requests.json
 
+Engine-derived artifacts (engine-owned; may be created deterministically):
+
+- sessions/<session_id>/discovery_fingerprint.txt
+  - Content: <hex> + newline
+  - Meaning: SHA-256 fingerprint of canonical JSON discovery set (10.8).
+
+- sessions/<session_id>/effective_config_fingerprint.txt
+  - Content: <hex> + newline
+  - Meaning: SHA-256 fingerprint of canonical effective_config snapshot.
+
+- sessions/<session_id>/conflicts.json
+  - Content: canonical JSON object describing current conflict state and items.
+  - Meaning: persisted conflict snapshot used by deterministic conflict re-check.
+
+- sessions/<session_id>/idempotency.json
+  - Content: canonical JSON object tracking idempotency_key mappings for job creation.
+  - Meaning: prevents duplicate job creation for repeated start_processing calls.
+
+If present, these artifacts MUST be written atomically (temp + rename).
+
+
+Creation timing:
+- plan.json MUST be created/updated by compute_plan (10.11).
+- job_requests.json MUST be created only when start_processing is accepted and a job is requested
+  (10.11.4).
+
 Resume-after-restart is mandatory where specified by runtime mode policy (10.9).
 All writes MUST be atomic (write temp, then rename).
 
 ### 10.7.1 Model Bootstrap When Missing
 
-If catalog/catalog.json or flow/current.json do not exist under the file_io root "wizards",
-the import plugin MUST deterministically bootstrap them from built-in defaults.
+If catalog/catalog.json, flow/current.json, or config/flow_config.json do not exist under the
+file_io root "wizards", the import plugin MUST deterministically bootstrap them from built-in
+defaults.
 
 Bootstrap rules:
 - Creation MUST be atomic (write temp, then rename).
 - Existing files MUST NOT be overwritten.
-- Bootstrapped models MUST pass full model validation.
+- Bootstrapped models and config MUST pass full model validation.
 - Bootstrap MUST occur before first model load.
 - Absence of models MUST NOT cause a hard failure if bootstrap succeeds.
 

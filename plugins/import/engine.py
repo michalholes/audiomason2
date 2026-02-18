@@ -23,6 +23,7 @@ from .defaults import ensure_default_models
 from .errors import (
     FinalizeError,
     ImportWizardError,
+    ModelValidationError,
     SessionNotFoundError,
     StepSubmissionError,
     error_envelope,
@@ -81,6 +82,13 @@ def _exception_envelope(exc: Exception) -> dict[str, Any]:
             meta={"type": exc.__class__.__name__},
         )
     if isinstance(exc, FinalizeError):
+        return invariant_violation(
+            message=str(exc) or "invariant violation",
+            path="$",
+            reason="invariant_violation",
+            meta={"type": exc.__class__.__name__},
+        )
+    if isinstance(exc, ModelValidationError):
         return invariant_violation(
             message=str(exc) or "invariant violation",
             path="$",
@@ -191,6 +199,25 @@ class ImportWizardEngine:
         mode: str = "stage",
         flow_overrides: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        try:
+            return self._create_session_impl(
+                root,
+                relative_path,
+                mode=mode,
+                flow_overrides=flow_overrides,
+            )
+        except Exception as e:
+            return _exception_envelope(e)
+
+    def _create_session_impl(
+        self,
+        root: str,
+        relative_path: str,
+        *,
+        mode: str = "stage",
+        flow_overrides: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+
         mode = self._validate_mode(mode)
         # 1) Load models
         _emit("model.load", "model.load", {"root": root, "relative_path": relative_path})

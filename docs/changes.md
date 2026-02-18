@@ -638,3 +638,14 @@
 
 -   Issue 207: GET /import/ui/flow now returns runtime FlowModel (flow_id + steps[]) derived from FlowConfig.
 -   Issue 207: final_summary_confirm now deterministically transitions to processing or resolve_conflicts_batch per spec; resolve_conflicts_batch OK returns to final_summary_confirm.
+
+## 2026-02-18T00:00:00+01:00
+
+-   Issue 210: import plugin now enforces atomic JSONL persistence for decisions.jsonl
+    (rewrite + atomic rename) to satisfy spec 10.7.
+
+-   Issue 210: ModelValidationError is now mapped to INVARIANT_VIOLATION (spec 10.6/10.4.1),
+    and import UI routes consistently return canonical error envelopes.
+
+-   spec: Bump specification version to 1.1.5 and document import storage artifacts
+    (derived session files) and flow_config.json bootstrap requirements.

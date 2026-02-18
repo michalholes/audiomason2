@@ -96,12 +96,27 @@ def read_json(fs: FileService, root: RootName, rel_path: str) -> Any:
 
 
 def append_jsonl(fs: FileService, root: RootName, rel_path: str, obj: Any) -> None:
-    line = json.dumps(
-        obj,
-        ensure_ascii=True,
-        separators=(",", ":"),
-        sort_keys=True,
-    )
-    with fs.open_append(root, rel_path, mkdir_parents=True) as f:
-        f.write(line.encode("utf-8"))
-        f.write(b"\n")
+    """Append a JSON object as a JSONL line, atomically.
+
+    Spec 10.7 requires atomic writes (temp + rename). JSONL append is implemented
+    as a deterministic read -> rewrite -> atomic rename.
+    """
+
+    line = (
+        json.dumps(
+            obj,
+            ensure_ascii=True,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        + "\n"
+    ).encode("utf-8")
+
+    existing = b""
+    if fs.exists(root, rel_path):
+        with fs.open_read(root, rel_path) as f:
+            existing = f.read()
+        if existing and not existing.endswith(b"\n"):
+            existing += b"\n"
+
+    _atomic_write_bytes(fs, root, rel_path, existing + line)
