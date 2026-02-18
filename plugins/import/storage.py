@@ -6,6 +6,7 @@ ASCII-only.
 
 from __future__ import annotations
 
+import contextlib
 import json
 from typing import Any
 
@@ -40,6 +41,43 @@ def atomic_write_json(
         + "\n"
     ).encode("utf-8")
     _atomic_write_bytes(fs, root, rel_path, data)
+
+
+def atomic_write_json_if_missing(
+    fs: FileService,
+    root: RootName,
+    rel_path: str,
+    obj: Any,
+) -> bool:
+    """Atomically write JSON only if the destination does not exist.
+
+    Returns True if the file was created, False if it already existed.
+    """
+    if fs.exists(root, rel_path):
+        return False
+
+    tmp_path = f"{rel_path}.bootstrap.tmp"
+    data = (
+        json.dumps(
+            obj,
+            ensure_ascii=True,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        + "\n"
+    ).encode("utf-8")
+
+    with fs.open_write(root, tmp_path, overwrite=True, mkdir_parents=True) as f:
+        f.write(data)
+
+    try:
+        fs.rename(root, tmp_path, rel_path, overwrite=False)
+        return True
+    except Exception:
+        # Best effort cleanup; do not mask the original error if cleanup fails.
+        with contextlib.suppress(Exception):
+            fs.delete_file(root, tmp_path)
+        raise
 
 
 def atomic_write_text(

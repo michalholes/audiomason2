@@ -19,6 +19,7 @@ from audiomason.core.events import get_event_bus
 from plugins.file_io.service import FileService, RootName
 
 from . import discovery as discovery_mod
+from .defaults import ensure_default_models
 from .errors import FinalizeError, ImportWizardError, SessionNotFoundError, StepSubmissionError
 from .fingerprints import fingerprint_json, sha256_hex
 from .job_requests import build_job_requests
@@ -96,6 +97,7 @@ class ImportWizardEngine:
     ) -> dict[str, Any]:
         # 1) Load models
         _emit("model.load", "model.load", {"root": root, "relative_path": relative_path})
+        ensure_default_models(self._fs)
         catalog_dict = read_json(self._fs, RootName.WIZARDS, "import/catalog/catalog.json")
         flow_dict = read_json(self._fs, RootName.WIZARDS, "import/flow/current.json")
         if flow_overrides:
