@@ -622,5 +622,14 @@
 
 -   Issue 206: Import wizard flow now distinguishes required vs optional
     steps; FlowConfig may disable optional steps and the engine
-    deterministically skips them during next/back transitions. \##
-    2026-02-18T00:00:00+01:00
+    deterministically skips them during next/back transitions.
+
+## 2026-02-18T00:00:00+01:00
+
+-   Issue 207: Import wizard conflict policy is now applied to session
+    state; resolve_conflicts_batch persists a resolution decision and
+    unblocks processing when policy=ask.
+
+-   Issue 207: start_processing(confirm=true) now transitions the
+    session to PHASE 2 and locks interactive submit_step/apply_action;
+    the terminal step_id processing is used when available.

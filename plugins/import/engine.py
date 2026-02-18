@@ -425,6 +425,8 @@ class ImportWizardEngine:
     def submit_step(self, session_id: str, step_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         try:
             state = self._load_state(session_id)
+            if int(state.get("phase") or 1) == 2:
+                raise StepSubmissionError("session is locked (phase 2)")
             if state.get("status") != "in_progress":
                 raise StepSubmissionError("session is not in progress")
 
@@ -482,6 +484,12 @@ class ImportWizardEngine:
                 payload=payload,
                 state=state,
             )
+
+            if step_id == "conflict_policy":
+                self._apply_conflict_policy(state, normalized_payload)
+            if step_id == "resolve_conflicts_batch":
+                self._apply_conflict_resolve(state, normalized_payload)
+                self._persist_conflict_resolution(session_id, state, normalized_payload)
 
             inputs = dict(state.get("inputs") or {})
             inputs[step_id] = normalized_payload
@@ -546,6 +554,77 @@ class ImportWizardEngine:
                 error={"type": e.__class__.__name__, "message": str(e) or e.__class__.__name__},
             )
             return _exception_envelope(e)
+
+    def _apply_conflict_policy(self, state: dict[str, Any], payload: dict[str, Any]) -> None:
+        raw_mode = payload.get("mode")
+        if not isinstance(raw_mode, str) or not raw_mode.strip():
+            raise StepSubmissionError("conflict_policy.mode must be a non-empty string")
+        mode = raw_mode.strip().lower()
+        try:
+            mode.encode("ascii")
+        except UnicodeEncodeError as e:
+            raise StepSubmissionError("conflict_policy.mode must be ASCII-only") from e
+
+        policy = "ask" if mode == "ask" else mode
+
+        conflicts = state.get("conflicts")
+        if not isinstance(conflicts, dict):
+            conflicts = {}
+
+        conflicts["policy"] = policy
+
+        items = conflicts.get("items")
+        present = bool(conflicts.get("present"))
+        if isinstance(items, list):
+            present = present or bool(items)
+
+        if policy != "ask":
+            conflicts["resolved"] = True
+        else:
+            conflicts["resolved"] = bool(conflicts.get("resolved")) if present else True
+
+        state["conflicts"] = conflicts
+
+    def _apply_conflict_resolve(self, state: dict[str, Any], payload: dict[str, Any]) -> None:
+        conflicts = state.get("conflicts")
+        if not isinstance(conflicts, dict):
+            raise StepSubmissionError("conflicts missing from state")
+
+        policy = str(conflicts.get("policy") or "ask")
+        if policy != "ask":
+            conflicts["resolved"] = True
+            state["conflicts"] = conflicts
+            return
+
+        confirm = payload.get("confirm")
+        if confirm is not True:
+            raise StepSubmissionError("resolve_conflicts_batch.confirm must be true")
+
+        conflicts["resolved"] = True
+        state["conflicts"] = conflicts
+
+    def _persist_conflict_resolution(
+        self,
+        session_id: str,
+        state: dict[str, Any],
+        payload: dict[str, Any],
+    ) -> None:
+        conflicts = state.get("conflicts")
+        if not isinstance(conflicts, dict):
+            return
+        record = {
+            "at": _iso_utc_now(),
+            "policy": str(conflicts.get("policy") or ""),
+            "conflict_fingerprint": str(state.get("derived", {}).get("conflict_fingerprint") or ""),
+            "payload": dict(payload),
+        }
+        session_dir = f"import/sessions/{session_id}"
+        atomic_write_json(
+            self._fs,
+            RootName.WIZARDS,
+            f"{session_dir}/conflicts_resolution.json",
+            record,
+        )
 
     def _validate_and_canonicalize_payload(
         self,
@@ -702,58 +781,73 @@ class ImportWizardEngine:
         return selected_ids
 
     def apply_action(self, session_id: str, action: str) -> dict[str, Any]:
-        state = self._load_state(session_id)
-        if state.get("status") != "in_progress":
-            return state
+        try:
+            state = self._load_state(session_id)
+            if int(state.get("phase") or 1) == 2:
+                return invariant_violation(
+                    message="session is locked (phase 2)",
+                    path="$.phase",
+                    reason="phase_locked",
+                    meta={},
+                )
+            if state.get("status") != "in_progress":
+                return invariant_violation(
+                    message="session is not in progress",
+                    path="$.status",
+                    reason="status_not_in_progress",
+                    meta={},
+                )
 
-        action = str(action)
-        if action not in {"next", "back", "cancel"}:
-            raise StepSubmissionError("invalid action")
+            action = str(action)
+            if action not in {"next", "back", "cancel"}:
+                raise StepSubmissionError("invalid action")
 
-        if action == "cancel":
-            state["status"] = "aborted"
+            if action == "cancel":
+                state["status"] = "aborted"
+                state["updated_at"] = _iso_utc_now()
+                self._append_decision(
+                    session_id,
+                    step_id="__system__",
+                    payload={"action": "cancel"},
+                    result="accepted",
+                    error=None,
+                )
+                self._persist_state(session_id, state)
+                return state
+
+            effective_model = self._load_effective_model(session_id)
+            flow = FlowModel.from_dict(effective_model["flow"])
+            flow_cfg_norm = self._load_effective_flow_config(session_id)
+            node_map = flow.node_map()
+
+            current = str(state.get("current_step_id") or flow.entry_step_id)
+            node = node_map.get(current)
+            if node is None:
+                # Reset to entry if current unknown.
+                state["current_step_id"] = self._coerce_start_step(flow, flow_cfg_norm)
+            else:
+                direction = "next" if action == "next" else "back"
+                next_step = self._next_enabled_step(
+                    flow,
+                    current,
+                    direction=direction,
+                    flow_cfg_norm=flow_cfg_norm,
+                )
+                if next_step is not None:
+                    state["current_step_id"] = next_step
+
             state["updated_at"] = _iso_utc_now()
             self._append_decision(
                 session_id,
                 step_id="__system__",
-                payload={"action": "cancel"},
+                payload={"action": action, "from": current, "to": state.get("current_step_id")},
                 result="accepted",
                 error=None,
             )
             self._persist_state(session_id, state)
             return state
-
-        effective_model = self._load_effective_model(session_id)
-        flow = FlowModel.from_dict(effective_model["flow"])
-        flow_cfg_norm = self._load_effective_flow_config(session_id)
-        node_map = flow.node_map()
-
-        current = str(state.get("current_step_id") or flow.entry_step_id)
-        node = node_map.get(current)
-        if node is None:
-            # Reset to entry if current unknown.
-            state["current_step_id"] = self._coerce_start_step(flow, flow_cfg_norm)
-        else:
-            direction = "next" if action == "next" else "back"
-            next_step = self._next_enabled_step(
-                flow,
-                current,
-                direction=direction,
-                flow_cfg_norm=flow_cfg_norm,
-            )
-            if next_step is not None:
-                state["current_step_id"] = next_step
-
-        state["updated_at"] = _iso_utc_now()
-        self._append_decision(
-            session_id,
-            step_id="__system__",
-            payload={"action": action, "from": current, "to": state.get("current_step_id")},
-            result="accepted",
-            error=None,
-        )
-        self._persist_state(session_id, state)
-        return state
+        except Exception as e:
+            return _exception_envelope(e)
 
     def compute_plan(self, session_id: str) -> dict[str, Any]:
         state = self._load_state(session_id)
@@ -811,6 +905,8 @@ class ImportWizardEngine:
     def start_processing(self, session_id: str, body: dict[str, Any]) -> dict[str, Any]:
         try:
             state = self._load_state(session_id)
+            if int(state.get("phase") or 1) == 2:
+                return self._start_processing_idempotent(session_id, state, body)
             if state.get("status") != "in_progress":
                 raise FinalizeError("session is not active")
 
@@ -863,12 +959,19 @@ class ImportWizardEngine:
             current_conflicts = self._scan_conflicts(state)
             current_fp = fingerprint_json(current_conflicts)
 
+            resolved = self._resolve_flag_for_scan(
+                state=state,
+                policy=policy,
+                current_fp=current_fp,
+                current_conflicts=current_conflicts,
+            )
+
             # Persist current conflicts to session state (UI must see the latest scan).
             state.setdefault("derived", {})["conflict_fingerprint"] = current_fp
             state["conflicts"] = {
                 "present": bool(current_conflicts),
                 "items": current_conflicts,
-                "resolved": not bool(current_conflicts),
+                "resolved": resolved,
                 "policy": str((state.get("conflicts") or {}).get("policy") or "ask"),
             }
             session_dir = f"import/sessions/{session_id}"
@@ -881,7 +984,7 @@ class ImportWizardEngine:
             state["updated_at"] = _iso_utc_now()
             self._persist_state(session_id, state)
 
-            if policy == "ask" and current_conflicts:
+            if policy == "ask" and current_conflicts and not resolved:
                 return error_envelope(
                     "CONFLICTS_UNRESOLVED",
                     "conflicts must be resolved before processing",
@@ -950,6 +1053,8 @@ class ImportWizardEngine:
             idem_key = str(job_requests.get("idempotency_key") or "")
             job_id = self._get_or_create_job(session_id, state, idem_key)
 
+            self._enter_phase_2(session_id, state)
+
             _emit(
                 "job.create",
                 "job.create",
@@ -974,6 +1079,74 @@ class ImportWizardEngine:
             return {"job_ids": [job_id], "batch_size": 1}
         except Exception as e:
             return _exception_envelope(e)
+
+    def _start_processing_idempotent(
+        self, session_id: str, state: dict[str, Any], body: dict[str, Any]
+    ) -> dict[str, Any]:
+        if not isinstance(body, dict):
+            raise ValueError("body must be an object")
+        confirm = body.get("confirm")
+        if confirm is not True:
+            return validation_error(
+                message="confirm must be true",
+                path="$.confirm",
+                reason="missing_or_false",
+                meta={},
+            )
+
+        session_dir = f"import/sessions/{session_id}"
+        job_path = f"{session_dir}/job_requests.json"
+        if not self._fs.exists(RootName.WIZARDS, job_path):
+            raise FinalizeError("job_requests.json is missing")
+
+        job_requests_any = read_json(self._fs, RootName.WIZARDS, job_path)
+        if not isinstance(job_requests_any, dict):
+            raise FinalizeError("job_requests.json is invalid")
+        idem_key = str(job_requests_any.get("idempotency_key") or "")
+        if not idem_key:
+            raise FinalizeError("job_requests.json missing idempotency_key")
+
+        job_id = self._get_or_create_job(session_id, state, idem_key)
+        return {"job_ids": [job_id], "batch_size": 1}
+
+    def _resolve_flag_for_scan(
+        self,
+        *,
+        state: dict[str, Any],
+        policy: str,
+        current_fp: str,
+        current_conflicts: list[dict[str, Any]],
+    ) -> bool:
+        if policy != "ask":
+            return True
+        if not current_conflicts:
+            return True
+
+        prev = state.get("conflicts")
+        prev_resolved = bool(prev.get("resolved")) if isinstance(prev, dict) else False
+        prev_fp = str(state.get("derived", {}).get("conflict_fingerprint") or "")
+        if current_fp != prev_fp:
+            return False
+        return prev_resolved
+
+    def _enter_phase_2(self, session_id: str, state: dict[str, Any]) -> None:
+        effective_model = self._load_effective_model(session_id)
+        catalog_any = effective_model.get("catalog")
+        step_ids: set[str] = set()
+        if isinstance(catalog_any, dict):
+            try:
+                catalog = CatalogModel.from_dict(cast(dict[str, Any], catalog_any))
+                step_ids = catalog.step_ids()
+            except Exception:
+                step_ids = set()
+
+        if "processing" in step_ids:
+            state["current_step_id"] = "processing"
+
+        state["phase"] = 2
+        state["status"] = "processing"
+        state["updated_at"] = _iso_utc_now()
+        self._persist_state(session_id, state)
 
     def _validate_mode(self, mode: str) -> str:
         mode = str(mode)
@@ -1122,12 +1295,20 @@ class ImportWizardEngine:
     def _update_conflicts(self, session_id: str, state: dict[str, Any]) -> None:
         items = self._scan_conflicts(state)
         fp = fingerprint_json(items)
+        policy = str((state.get("conflicts") or {}).get("policy") or "ask")
+        resolved = self._resolve_flag_for_scan(
+            state=state,
+            policy=policy,
+            current_fp=fp,
+            current_conflicts=items,
+        )
+
         state.setdefault("derived", {})["conflict_fingerprint"] = fp
         state["conflicts"] = {
             "present": bool(items),
             "items": items,
-            "resolved": not bool(items),
-            "policy": str((state.get("conflicts") or {}).get("policy") or "ask"),
+            "resolved": resolved,
+            "policy": policy,
         }
         session_dir = f"import/sessions/{session_id}"
         atomic_write_json(self._fs, RootName.WIZARDS, f"{session_dir}/conflicts.json", items)

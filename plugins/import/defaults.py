@@ -32,11 +32,12 @@ def _make_default_steps() -> list[dict[str, Any]]:
         "parallelism",
         "final_summary_confirm",
         "resolve_conflicts_batch",
+        "processing",
     ]
 
     steps: list[dict[str, Any]] = []
     for step_id in required_order:
-        computed_only = step_id in {"plan_preview_batch"}
+        computed_only = step_id in {"plan_preview_batch", "processing"}
         steps.append(
             {
                 "step_id": step_id,
@@ -75,6 +76,8 @@ def _default_fields_for_step(step_id: str) -> list[dict[str, Any]]:
             }
         ]
     if step_id == "plan_preview_batch":
+        return []
+    if step_id == "processing":
         return []
     if step_id == "final_summary_confirm":
         return [
@@ -182,6 +185,12 @@ DEFAULT_FLOW: dict[str, Any] = {
         {
             # Exists but not linked by default; engine may jump to it conditionally.
             "step_id": "resolve_conflicts_batch",
+            "next_step_id": None,
+            "prev_step_id": "final_summary_confirm",
+        },
+        {
+            # Terminal indicator step for PHASE 2 processing.
+            "step_id": "processing",
             "next_step_id": None,
             "prev_step_id": "final_summary_confirm",
         },
