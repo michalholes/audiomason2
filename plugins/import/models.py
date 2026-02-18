@@ -14,20 +14,27 @@ from typing import Any
 
 from .errors import ModelLoadError, ModelValidationError
 
-_REQUIRED_STEP_IDS = {
+# Required vs optional steps are defined by the project specification.
+#
+# BASE_REQUIRED_STEP_IDS are PHASE 1 steps that must always exist.
+# OPTIONAL_STEP_IDS may exist in the catalog/flow but must not be required.
+BASE_REQUIRED_STEP_IDS = {
     "select_authors",
     "select_books",
     "plan_preview_batch",
     "effective_author_title",
+    "final_summary_confirm",
+}
+
+OPTIONAL_STEP_IDS = {
     "filename_policy",
     "covers_policy",
     "id3_policy",
     "audio_processing",
     "publish_policy",
     "delete_source_policy",
-    "conflict_policy",
     "parallelism",
-    "final_summary_confirm",
+    "conflict_policy",
     "resolve_conflicts_batch",
 }
 
@@ -142,7 +149,7 @@ class FlowModel:
 def validate_models(catalog: CatalogModel, flow: FlowModel) -> None:
     step_ids = catalog.step_ids()
 
-    missing = sorted(_REQUIRED_STEP_IDS - step_ids)
+    missing = sorted(BASE_REQUIRED_STEP_IDS - step_ids)
     if missing:
         raise ModelValidationError(f"Catalog missing required step_ids: {missing}")
 
@@ -150,8 +157,7 @@ def validate_models(catalog: CatalogModel, flow: FlowModel) -> None:
     if flow.entry_step_id not in node_ids:
         raise ModelValidationError("Flow entry_step_id must exist in nodes")
 
-    # Minimal invariants: final confirmation and conflict gate must exist in flow nodes.
-    for required in ("final_summary_confirm", "conflict_policy"):
+    for required in sorted(BASE_REQUIRED_STEP_IDS):
         if required not in node_ids:
             raise ModelValidationError(f"Flow missing required step node: {required}")
 

@@ -617,3 +617,10 @@
 
 -   spec: Clarify that wizard routing/command rules are conditional and
     bump specification version to 1.0.91.
+
+## 2026-02-18T00:00:00+01:00
+
+-   Issue 206: Import wizard flow now distinguishes required vs optional
+    steps; FlowConfig may disable optional steps and the engine
+    deterministically skips them during next/back transitions. \##
+    2026-02-18T00:00:00+01:00
