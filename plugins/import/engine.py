@@ -31,7 +31,7 @@ from .errors import (
 )
 from .fingerprints import fingerprint_json, sha256_hex
 from .job_requests import build_job_requests
-from .models import CatalogModel, FlowModel, validate_models
+from .models import _REQUIRED_STEP_IDS, CatalogModel, FlowModel, validate_models
 from .plan import compute_plan
 from .serialization import canonical_serialize
 from .storage import append_jsonl, atomic_write_json, atomic_write_text, read_json
@@ -165,8 +165,10 @@ class ImportWizardEngine:
         root: str,
         relative_path: str,
         *,
+        mode: str = "stage",
         flow_overrides: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        mode = self._validate_mode(mode)
         # 1) Load models
         _emit("model.load", "model.load", {"root": root, "relative_path": relative_path})
         ensure_default_models(self._fs)
@@ -174,22 +176,10 @@ class ImportWizardEngine:
         flow_dict = read_json(self._fs, RootName.WIZARDS, "import/flow/current.json")
         flow_cfg = read_json(self._fs, RootName.WIZARDS, "import/config/flow_config.json")
 
-        flow_overrides_from_cfg: dict[str, Any] = {}
-        if isinstance(flow_cfg, dict):
-            overrides_any = flow_cfg.get("overrides")
-            if isinstance(overrides_any, dict):
-                flow_overrides_from_cfg = cast(dict[str, Any], overrides_any)
-
-        if flow_overrides_from_cfg:
-            if not isinstance(flow_dict, dict):
-                raise ValueError("flow model must be an object")
-            flow_dict = dict(flow_dict)
-            flow_dict.update(flow_overrides_from_cfg)
-        if flow_overrides:
-            if not isinstance(flow_dict, dict) or not isinstance(flow_overrides, dict):
-                raise ValueError("flow_overrides must be a dict")
-            flow_dict = dict(flow_dict)
-            flow_dict.update(flow_overrides)
+        flow_cfg_norm = self._normalize_flow_config(flow_cfg)
+        if flow_overrides is not None:
+            # Legacy testing hook only. Overrides may only toggle optional steps.
+            flow_cfg_norm = self._merge_flow_config_overrides(flow_cfg_norm, flow_overrides)
 
         catalog = CatalogModel.from_dict(catalog_dict)
         flow = FlowModel.from_dict(flow_dict)
@@ -215,6 +205,7 @@ class ImportWizardEngine:
         # 3) Effective config snapshot (only keys engine uses)
         effective_config: dict[str, Any] = {
             "version": 1,
+            "flow_config": flow_cfg_norm,
             "diagnostics_enabled": bool(self._resolver.resolve("diagnostics.enabled")[0])
             if self._has_key("diagnostics.enabled")
             else False,
@@ -226,6 +217,7 @@ class ImportWizardEngine:
             [
                 f"root:{root}",
                 f"path:{relative_path}",
+                f"mode:{mode}",
                 f"m:{model_fingerprint}",
                 f"d:{discovery_fingerprint}",
                 f"c:{effective_config_fingerprint}",
@@ -262,6 +254,7 @@ class ImportWizardEngine:
                 "session_id": session_id,
                 "root": root,
                 "relative_path": relative_path,
+                "mode": mode,
                 "model_fingerprint": model_fingerprint,
                 "discovery_fingerprint": discovery_fingerprint,
                 "effective_config_fingerprint": effective_config_fingerprint,
@@ -297,6 +290,7 @@ class ImportWizardEngine:
             "updated_at": created_at,
             "model_fingerprint": model_fingerprint,
             "phase": 1,
+            "mode": mode,
             "source": {"root": root, "relative_path": relative_path},
             "current_step_id": flow.entry_step_id,
             "completed_step_ids": [],
@@ -304,6 +298,7 @@ class ImportWizardEngine:
             "derived": {
                 "discovery_fingerprint": discovery_fingerprint,
                 "effective_config_fingerprint": effective_config_fingerprint,
+                "conflict_fingerprint": "",
             },
             "conflicts": {
                 "present": False,
@@ -359,20 +354,15 @@ class ImportWizardEngine:
     def validate_flow_config(self, flow_config_json: Any) -> dict[str, Any]:
         """Validate FlowConfig JSON.
 
-        FlowConfig is allowed to store only an 'overrides' object.
-        It must not mutate catalog or base flow model.
+        FlowConfig v1 governance:
+        - version=1
+        - optional step toggles only: steps.{step_id}.enabled (bool)
+        - required steps may not be disabled
         """
         try:
             if not isinstance(flow_config_json, dict):
                 raise ValueError("flow_config_json must be an object")
-            version = flow_config_json.get("version")
-            overrides = flow_config_json.get("overrides")
-            if not isinstance(version, int):
-                raise ValueError("flow_config_json missing valid 'version' (int)")
-            if not isinstance(overrides, dict):
-                raise ValueError("flow_config_json missing valid 'overrides' (object)")
-            # Overrides must be JSON-serializable dict; deeper validation is delegated
-            # to validate_flow at session creation time.
+            _ = self._normalize_flow_config(flow_config_json)
             return {"ok": True}
         except Exception as e:
             return _exception_envelope(e)
@@ -772,6 +762,9 @@ class ImportWizardEngine:
             inputs=dict(state.get("inputs") or {}),
         )
         atomic_write_json(self._fs, RootName.WIZARDS, f"{session_dir}/plan.json", plan)
+
+        # Update conflict fingerprint during plan preview.
+        self._update_conflicts(session_id, state)
         state["updated_at"] = _iso_utc_now()
         self._append_decision(
             session_id,
@@ -844,6 +837,41 @@ class ImportWizardEngine:
                     ],
                 )
 
+            _emit(
+                "finalize.request",
+                "finalize.request",
+                {
+                    "session_id": session_id,
+                    "mode": str(state.get("mode") or ""),
+                    "model_fingerprint": str(state.get("model_fingerprint") or ""),
+                    "discovery_fingerprint": str(
+                        state.get("derived", {}).get("discovery_fingerprint") or ""
+                    ),
+                    "effective_config_fingerprint": str(
+                        state.get("derived", {}).get("effective_config_fingerprint") or ""
+                    ),
+                    "conflict_fingerprint": str(
+                        state.get("derived", {}).get("conflict_fingerprint") or ""
+                    ),
+                },
+            )
+
+            current_conflicts = self._scan_conflicts(state)
+            current_fp = fingerprint_json(current_conflicts)
+            preview_fp = str(state.get("derived", {}).get("conflict_fingerprint") or "")
+            if policy != "ask" and preview_fp and current_fp != preview_fp:
+                return error_envelope(
+                    "CONFLICTS_CHANGED",
+                    "conflict scan changed since preview",
+                    details=[
+                        {
+                            "path": "$.conflicts",
+                            "reason": "conflicts_changed",
+                            "meta": {"preview": preview_fp, "current": current_fp},
+                        }
+                    ],
+                )
+
             session_dir = f"import/sessions/{session_id}"
 
             # Ensure plan exists.
@@ -864,12 +892,16 @@ class ImportWizardEngine:
                 "effective_config_fingerprint": str(
                     state.get("derived", {}).get("effective_config_fingerprint") or ""
                 ),
+                "conflict_fingerprint": str(
+                    state.get("derived", {}).get("conflict_fingerprint") or ""
+                ),
             }
 
             job_requests = build_job_requests(
                 session_id=session_id,
                 root=src_root,
                 relative_path=src_rel,
+                mode=str(state.get("mode") or ""),
                 diagnostics_context=diagnostics_context,
                 config_fingerprint=str(
                     state.get("derived", {}).get("effective_config_fingerprint") or ""
@@ -878,27 +910,167 @@ class ImportWizardEngine:
                 inputs=inputs,
             )
 
-            # Idempotent persistence: if already present with same bytes, reuse.
             job_path = f"{session_dir}/job_requests.json"
             job_bytes = canonical_serialize(job_requests)
-            if self._fs.exists(RootName.WIZARDS, job_path):
-                with self._fs.open_read(RootName.WIZARDS, job_path) as f:
-                    existing = f.read().decode("utf-8")
-                if existing.strip() == job_bytes.decode("utf-8").strip():
-                    job_ids = [str(job_requests.get("idempotency_key") or "")[:16]]
-                    return {"job_ids": job_ids, "batch_size": len(job_ids)}
+            atomic_write_text(self._fs, RootName.WIZARDS, job_path, job_bytes.decode("utf-8"))
 
-            atomic_write_text(
-                self._fs,
-                RootName.WIZARDS,
-                job_path,
-                job_bytes.decode("utf-8") + "\n",
+            idem_key = str(job_requests.get("idempotency_key") or "")
+            job_id = self._get_or_create_job(session_id, state, idem_key)
+
+            _emit(
+                "job.create",
+                "job.create",
+                {
+                    "session_id": session_id,
+                    "job_id": job_id,
+                    "idempotency_key": idem_key,
+                    "mode": str(state.get("mode") or ""),
+                    "model_fingerprint": str(state.get("model_fingerprint") or ""),
+                    "discovery_fingerprint": str(
+                        state.get("derived", {}).get("discovery_fingerprint") or ""
+                    ),
+                    "effective_config_fingerprint": str(
+                        state.get("derived", {}).get("effective_config_fingerprint") or ""
+                    ),
+                    "conflict_fingerprint": str(
+                        state.get("derived", {}).get("conflict_fingerprint") or ""
+                    ),
+                },
             )
 
-            job_ids = [str(job_requests.get("idempotency_key") or "")[:16]]
-            return {"job_ids": job_ids, "batch_size": len(job_ids)}
+            return {"job_ids": [job_id], "batch_size": 1}
         except Exception as e:
             return _exception_envelope(e)
+
+    def _validate_mode(self, mode: str) -> str:
+        mode = str(mode)
+        if mode not in {"stage", "inplace"}:
+            raise ValueError("mode must be 'stage' or 'inplace'")
+        return mode
+
+    def _normalize_flow_config(self, raw: Any) -> dict[str, Any]:
+        if not isinstance(raw, dict):
+            raise ValueError("flow_config must be an object")
+        version = raw.get("version")
+        if version != 1:
+            raise ValueError("flow_config.version must be 1")
+
+        steps_any = raw.get("steps", {})
+        if steps_any is None:
+            steps_any = {}
+        if not isinstance(steps_any, dict):
+            raise ValueError("flow_config.steps must be an object")
+
+        steps: dict[str, Any] = {}
+        for step_id, cfg in steps_any.items():
+            if not isinstance(step_id, str) or not step_id:
+                raise ValueError("flow_config.steps keys must be non-empty strings")
+            if not isinstance(cfg, dict):
+                raise ValueError("flow_config.steps.<step_id> must be an object")
+            enabled = cfg.get("enabled")
+            if enabled is not None and not isinstance(enabled, bool):
+                raise ValueError("flow_config.steps.<step_id>.enabled must be bool")
+            if enabled is False and step_id in _REQUIRED_STEP_IDS:
+                raise ValueError(f"required step may not be disabled: {step_id}")
+            if enabled is None:
+                continue
+            steps[step_id] = {"enabled": bool(enabled)}
+
+        defaults_any = raw.get("defaults", {})
+        ui_any = raw.get("ui", {})
+        if defaults_any is None:
+            defaults_any = {}
+        if ui_any is None:
+            ui_any = {}
+        if not isinstance(defaults_any, dict):
+            raise ValueError("flow_config.defaults must be an object")
+        if not isinstance(ui_any, dict):
+            raise ValueError("flow_config.ui must be an object")
+
+        return {"version": 1, "steps": steps, "defaults": defaults_any, "ui": ui_any}
+
+    def _merge_flow_config_overrides(
+        self, base: dict[str, Any], overrides: dict[str, Any]
+    ) -> dict[str, Any]:
+        if not isinstance(overrides, dict):
+            raise ValueError("flow_overrides must be an object")
+        if "steps" not in overrides:
+            return base
+        merged = dict(base)
+        steps = dict(cast(dict[str, Any], merged.get("steps") or {}))
+        raw_steps = overrides.get("steps")
+        if not isinstance(raw_steps, dict):
+            raise ValueError("flow_overrides.steps must be an object")
+        for step_id, cfg in raw_steps.items():
+            if not isinstance(step_id, str) or not step_id:
+                raise ValueError("flow_overrides.steps keys must be strings")
+            if not isinstance(cfg, dict):
+                raise ValueError("flow_overrides.steps.<step_id> must be an object")
+            enabled = cfg.get("enabled")
+            if enabled is None:
+                continue
+            if not isinstance(enabled, bool):
+                raise ValueError("flow_overrides.steps.<step_id>.enabled must be bool")
+            if enabled is False and step_id in _REQUIRED_STEP_IDS:
+                raise ValueError(f"required step may not be disabled: {step_id}")
+            steps[step_id] = {"enabled": bool(enabled)}
+        merged["steps"] = steps
+        return merged
+
+    def _scan_conflicts(self, state: dict[str, Any]) -> list[dict[str, str]]:
+        from .conflicts import scan_conflicts
+
+        src = state.get("source") or {}
+        root = str(src.get("root") or "")
+        rel = str(src.get("relative_path") or "")
+        mode = self._validate_mode(str(state.get("mode") or "stage"))
+        return scan_conflicts(self._fs, root=root, relative_path=rel, mode=mode)
+
+    def _update_conflicts(self, session_id: str, state: dict[str, Any]) -> None:
+        items = self._scan_conflicts(state)
+        fp = fingerprint_json(items)
+        state.setdefault("derived", {})["conflict_fingerprint"] = fp
+        state["conflicts"] = {
+            "present": bool(items),
+            "items": items,
+            "resolved": not bool(items),
+            "policy": str((state.get("conflicts") or {}).get("policy") or "ask"),
+        }
+        session_dir = f"import/sessions/{session_id}"
+        atomic_write_json(self._fs, RootName.WIZARDS, f"{session_dir}/conflicts.json", items)
+
+    def _get_or_create_job(self, session_id: str, state: dict[str, Any], idem_key: str) -> str:
+        session_dir = f"import/sessions/{session_id}"
+        idem_path = f"{session_dir}/idempotency.json"
+        mapping: dict[str, str] = {}
+        if self._fs.exists(RootName.WIZARDS, idem_path):
+            loaded = read_json(self._fs, RootName.WIZARDS, idem_path)
+            if isinstance(loaded, dict):
+                mapping = {str(k): str(v) for k, v in loaded.items()}
+
+        if idem_key in mapping and mapping[idem_key]:
+            return mapping[idem_key]
+
+        from audiomason.core.jobs.api import JobService
+        from audiomason.core.jobs.model import JobType
+
+        meta = {
+            "source": "import",
+            "session_id": session_id,
+            "idempotency_key": idem_key,
+            "effective_config_fingerprint": str(
+                state.get("derived", {}).get("effective_config_fingerprint") or ""
+            ),
+            "model_fingerprint": str(state.get("model_fingerprint") or ""),
+            "discovery_fingerprint": str(
+                state.get("derived", {}).get("discovery_fingerprint") or ""
+            ),
+            "job_requests_path": f"wizards:{session_dir}/job_requests.json",
+        }
+        job = JobService().create_job(JobType.PROCESS, meta=meta)
+        mapping[idem_key] = job.job_id
+        atomic_write_json(self._fs, RootName.WIZARDS, idem_path, mapping)
+        return job.job_id
 
     def _load_state(self, session_id: str) -> dict[str, Any]:
         session_dir = f"import/sessions/{session_id}"

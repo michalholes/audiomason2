@@ -11,6 +11,7 @@ from audiomason.core.config import ConfigResolver
 
 from .cli import import_cli_main
 from .engine import ImportWizardEngine
+from .ui_api import build_router
 
 
 class ImportPlugin:
@@ -30,3 +31,7 @@ class ImportPlugin:
         This plugin provides the top-level 'import' command.
         """
         return {"import": lambda argv: import_cli_main(argv, engine=self.engine)}
+
+    def get_fastapi_router(self):
+        """Return the import UI router (host must mount it)."""
+        return build_router(engine=self.engine)

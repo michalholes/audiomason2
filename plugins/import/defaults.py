@@ -189,10 +189,12 @@ DEFAULT_FLOW: dict[str, Any] = {
 }
 
 
-# FlowConfig stores user overrides only. It must not modify the catalog or base flow definition.
+# FlowConfig v1 stores user overrides only. It must not modify the catalog or base flow definition.
 DEFAULT_FLOW_CONFIG: dict[str, Any] = {
     "version": 1,
-    "overrides": {},
+    "steps": {},
+    "defaults": {},
+    "ui": {},
 }
 
 

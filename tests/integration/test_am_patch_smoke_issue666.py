@@ -55,6 +55,8 @@ def test_am_patch_smoke_issue_666() -> None:
         pytest.skip("skip runner smoke test inside am_patch pytest gate")
 
     repo_root = Path(__file__).resolve().parents[2]
+    if not (repo_root / ".git").exists():
+        pytest.skip("requires a git repository")
     runner = repo_root / "scripts" / "am_patch.py"
     assert runner.exists(), "scripts/am_patch.py not found"
 
