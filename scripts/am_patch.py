@@ -112,7 +112,8 @@ if str(_SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(_SCRIPTS_DIR))
 
 from am_patch import git_ops
-from am_patch.archive import archive_patch, make_failure_zip
+from am_patch.archive import archive_patch
+from am_patch.artifacts import build_artifacts
 from am_patch.audit_rubric_check import check_audit_rubric_coverage
 from am_patch.cli import parse_args
 from am_patch.config import (
@@ -124,35 +125,29 @@ from am_patch.config import (
     resolve_config_path,
 )
 from am_patch.errors import RunnerError, fingerprint
+from am_patch.execution_context import open_execution_context
 from am_patch.fs_junk import fs_junk_ignore_partition
 from am_patch.gates import run_badguys, run_gates
-from am_patch.issue_diff import (
-    collect_issue_logs,
-    derive_finalize_pseudo_issue_id,
-    make_issue_diff_zip,
-)
 from am_patch.lock import FileLock
 from am_patch.log import Logger, new_log_file
-from am_patch.manifest import load_files
 from am_patch.patch_archive_select import select_latest_issue_patch
-from am_patch.patch_exec import precheck_patch_script, run_patch, run_unified_patch_bundle
-from am_patch.patch_select import PatchSelectError, choose_default_patch_input, decide_unified_mode
+from am_patch.patch_exec import run_patch, run_unified_patch_bundle
+from am_patch.patch_input import resolve_patch_plan
 from am_patch.paths import default_paths, ensure_dirs
 from am_patch.post_success_audit import run_post_success_audit
 from am_patch.promote import promote_files
 from am_patch.repo_root import is_under, resolve_repo_root
 from am_patch.scope import blessed_gate_outputs_in, changed_paths, enforce_scope_delta
-from am_patch.state import load_state, save_state, update_union
+from am_patch.state import save_state, update_union
 from am_patch.status import StatusReporter
+from am_patch.validation import run_validation
 
 # NOTE: Any change that alters runner behavior MUST bump RUNNER_VERSION and MUST update
 # the runner specification under scripts/ (e.g., scripts/am_patch_specification.md).
 from am_patch.version import RUNNER_VERSION
 from am_patch.workspace import (
-    create_checkpoint,
     delete_workspace,
     drop_checkpoint,
-    ensure_workspace,
     open_existing_workspace,
     rollback_to_checkpoint,
 )
@@ -894,58 +889,17 @@ def main(argv: list[str]) -> int:
         issue_id = cli.issue_id
         assert issue_id is not None
 
-        patch_script: Path | None = None
-
-        if getattr(cli, "load_latest_patch", None):
-            hint_name = Path(cli.patch_script).name if cli.patch_script else None
-            patch_script = _select_latest_issue_patch(
-                patch_dir=patch_root, issue_id=issue_id, hint_name=hint_name
-            )
-        elif cli.patch_script:
-            raw = Path(cli.patch_script)
-            if raw.is_absolute():
-                patch_script = raw
-            else:
-                # Accept either:
-                #  - a path relative to CWD (e.g. patches/issue_999.py), OR
-                #  - a bare filename resolved under patch_dir (e.g. issue_999.py).
-                cand_cwd = (Path.cwd() / raw).resolve()
-                cand_patchdir = (patch_root / raw).resolve()
-                if cand_cwd.exists() and _is_under(cand_cwd, patch_root):
-                    patch_script = cand_cwd
-                elif cand_patchdir.exists():
-                    patch_script = cand_patchdir
-                else:
-                    raise RunnerError(
-                        "PREFLIGHT",
-                        "MANIFEST",
-                        f"patch script not found (tried: {cand_cwd} and {cand_patchdir})",
-                    )
-        else:
-            try:
-                patch_script = choose_default_patch_input(patch_root, issue_id)
-            except PatchSelectError as e:
-                raise RunnerError("PREFLIGHT", "MANIFEST", str(e)) from e
-
-        if not patch_script.exists():
-            raise RunnerError("PREFLIGHT", "MANIFEST", f"patch script not found: {patch_script}")
-
-        # Enforce patch script location: must be under patch_root.
-        if not _is_under(patch_script, patch_root):
-            raise RunnerError(
-                "PREFLIGHT",
-                "PATCH_PATH",
-                f"patch script must be under {patch_root} (got {patch_script})",
-            )
-        try:
-            unified_mode = decide_unified_mode(
-                patch_script, explicit_unified=bool(getattr(policy, "unified_patch", False))
-            )
-        except PatchSelectError as e:
-            raise RunnerError("PREFLIGHT", "PATCH_PATH", str(e)) from e
-
-        if not unified_mode:
-            precheck_patch_script(patch_script, ascii_only=policy.ascii_only_patch)
+        plan = resolve_patch_plan(
+            logger=logger,
+            cli=cli,
+            policy=policy,
+            issue_id=issue_id,
+            repo_root=repo_root,
+            patch_root=patch_root,
+        )
+        patch_script = plan.patch_script
+        unified_mode = plan.unified_mode
+        files_current = list(plan.files_declared)
 
         # Audit rubric guard (future-proofing): fail fast when new audit domains are added
         # but audit/audit_rubric.yaml does not contain the required runtime evidence commands.
@@ -978,37 +932,17 @@ def main(argv: list[str]) -> int:
                 )
                 raise RunnerError("PREFLIGHT", "CONFIG", "\n".join(lines))
 
-        # Git preflight (live repo)
-        git_ops.fetch(logger, repo_root)
-        if policy.require_up_to_date and not policy.skip_up_to_date:
-            git_ops.require_up_to_date(logger, repo_root, policy.default_branch)
-        if policy.enforce_main_branch and not policy.allow_non_main:
-            git_ops.require_branch(logger, repo_root, policy.default_branch)
-
-        base_sha = git_ops.head_sha(logger, repo_root)
-        files_current = [] if unified_mode else load_files(patch_script)
-
-        logger.section("DECLARED FILES")
-        for _p in files_current:
-            logger.line(_p)
-
-        ws = ensure_workspace(
+        ctx = open_execution_context(
             logger=logger,
-            workspaces_dir=paths.workspaces_dir,
-            issue_id=issue_id,
-            live_repo=repo_root,
-            base_sha=base_sha,
-            update=policy.update_workspace,
-            soft_reset=policy.soft_reset_workspace,
-            message=cli.message,
-            issue_dir_template=policy.workspace_issue_dir_template,
-            repo_dir_name=policy.workspace_repo_dir_name,
-            meta_filename=policy.workspace_meta_filename,
-            history_logs_dir=policy.workspace_history_logs_dir,
-            history_oldlogs_dir=policy.workspace_history_oldlogs_dir,
-            history_patches_dir=policy.workspace_history_patches_dir,
-            history_oldpatches_dir=policy.workspace_history_oldpatches_dir,
+            cli=cli,
+            policy=policy,
+            paths=paths,
+            repo_root=repo_root,
+            patch_script=patch_script,
+            unified_mode=unified_mode,
+            files_declared=files_current,
         )
+        ws = ctx.ws
         ws_for_posthook = ws
         _workspace_store_current_patch(
             ws,
@@ -1018,35 +952,10 @@ def main(argv: list[str]) -> int:
             history_patches_dir=policy.workspace_history_patches_dir,
             history_oldpatches_dir=policy.workspace_history_oldpatches_dir,
         )
-        logger.section("WORKSPACE META")
-        logger.line(f"workspace_root={ws.root}")
-        logger.line(f"workspace_repo={ws.repo}")
-        logger.line(f"workspace_base_sha={ws.base_sha}")
-        logger.line(f"attempt={ws.attempt}")
-
-        # Load per-issue cumulative state (allowed union).
-        st = load_state(ws.root, ws.base_sha)
-        logger.section("ISSUE STATE (before)")
-        logger.line(f"allowed_union={sorted(st.allowed_union)}")
-
-        # Optional live repo guard (must stay unchanged until promotion).
-        live_guard_before: str | None = None
-        if policy.live_repo_guard:
-            logger.section("LIVE REPO GUARD (before)")
-            r = logger.run_logged(
-                ["git", "status", "--porcelain", "--untracked-files=all"], cwd=repo_root
-            )
-            live_guard_before = r.stdout or ""
-            logger.line(f"live_repo_porcelain_len={len(live_guard_before)}")
-
-        ckpt = create_checkpoint(
-            logger,
-            ws.repo,
-            enabled=(policy.rollback_workspace_on_fail != "never"),
-        )
-
-        # Baseline changes BEFORE running patch (so scope is delta).
-        before = changed_paths(logger, ws.repo)
+        ckpt = ctx.checkpoint
+        before = ctx.changed_before
+        st = ctx.state_before
+        live_guard_before = ctx.live_guard_before
 
         try:
             touched_for_zip: list[str] = []
@@ -1196,37 +1105,18 @@ def main(argv: list[str]) -> int:
             defer_patch_apply_failure = True
 
         # Gates in workspace (NO rollback)
-        run_gates(
-            logger,
-            cwd=ws.repo,
+        run_validation(
+            logger=logger,
             repo_root=repo_root,
-            run_all=policy.run_all_tests,
-            compile_check=policy.compile_check,
-            compile_targets=policy.compile_targets,
-            compile_exclude=policy.compile_exclude,
-            allow_fail=policy.gates_allow_fail,
-            skip_ruff=policy.gates_skip_ruff,
-            skip_js=policy.gates_skip_js,
-            skip_pytest=policy.gates_skip_pytest,
-            skip_mypy=policy.gates_skip_mypy,
-            skip_docs=policy.gates_skip_docs,
-            docs_include=policy.gate_docs_include,
-            docs_exclude=policy.gate_docs_exclude,
-            docs_required_files=policy.gate_docs_required_files,
-            js_extensions=policy.gate_js_extensions,
-            js_command=policy.gate_js_command,
-            ruff_format=policy.ruff_format,
-            ruff_autofix=policy.ruff_autofix,
-            ruff_targets=policy.ruff_targets,
-            pytest_targets=policy.pytest_targets,
-            mypy_targets=policy.mypy_targets,
-            gates_order=policy.gates_order,
-            pytest_use_venv=policy.pytest_use_venv,
+            cwd=ws.repo,
+            paths=paths,
+            policy=policy,
+            cli_mode=cli.mode,
+            issue_id=cli.issue_id,
             decision_paths=touched,
             progress=_gate_progress,
+            run_badguys_gate=True,
         )
-
-        _maybe_run_badguys(cwd=ws.repo, decision_paths=touched)
 
         # Live repo guard: optionally also after gates.
         if (
@@ -1549,97 +1439,29 @@ def main(argv: list[str]) -> int:
                         exit_code = 1
                         logger.section("AUDIT")
                         logger.line(f"post_success_audit_failed={_audit_e!r}")
-                if exit_code == 0:
-                    # Success: create git-archive snapshot of final repo state (no log inside).
-                    # Success: create git-archive snapshot of final repo state.
-                    repo_name = repo_root.name
-                    branch_name = git_ops.current_branch(logger, repo_root).strip()
-                    if branch_name == "HEAD":
-                        branch_name = "detached"
+                ws_repo = (
+                    ws_for_posthook.repo
+                    if ws_for_posthook is not None
+                    else (paths.workspaces_dir / f"issue_{issue_id}" / "repo")
+                )
 
-                    template = policy.success_archive_name
-                    try:
-                        rendered = template.format(repo=repo_name, branch=branch_name)
-                    except Exception as e:
-                        raise RunnerError(
-                            "POSTHOOK",
-                            "CONFIG",
-                            f"invalid success_archive_name template: {template!r} ({e!r})",
-                        ) from e
-
-                    name = Path(rendered).name
-                    if not name.lower().endswith(".zip"):
-                        name = f"{name}.zip"
-                    zip_path = paths.patch_dir / name
-                    git_ops.git_archive(logger, repo_root, zip_path, treeish="HEAD")
-
-                    logger.line(f"issue_diff_base_sha={issue_diff_base_sha}")
-                    logger.line(f"issue_diff_paths_count={len(issue_diff_paths)}")
-
-                    if issue_diff_base_sha is None:
-                        raise RunnerError("POSTHOOK", "DIFF", "missing issue_diff_base_sha")
-
-                    if cli.issue_id is not None:
-                        issue_diff_bundle_issue_id = cli.issue_id
-                        issue_diff_bundle_logs = collect_issue_logs(
-                            logs_dir=paths.logs_dir,
-                            issue_id=cli.issue_id,
-                            issue_template=policy.log_template_issue,
-                        )
-                    else:
-                        issue_diff_bundle_issue_id = derive_finalize_pseudo_issue_id(
-                            log_path=log_path,
-                            finalize_template=policy.log_template_finalize,
-                        )
-                        issue_diff_bundle_logs = [log_path]
-
-                    make_issue_diff_zip(
-                        logger=logger,
-                        repo_root=repo_root,
-                        artifacts_dir=paths.artifacts_dir,
-                        logs_dir=paths.logs_dir,
-                        base_sha=issue_diff_base_sha,
-                        issue_id=issue_diff_bundle_issue_id,
-                        files_to_promote=issue_diff_paths,
-                        log_paths=issue_diff_bundle_logs,
-                    )
-                else:
-                    # Failure: create diagnostics archive with log + subset of repo files.
-                    zip_path = paths.patch_dir / policy.failure_zip_name
-
-                    include_patch_paths: list[Path] = []
-                    include_patch_blobs: list[tuple[str, bytes]] = []
-
-                    # Include patch script only when patching did not apply.
-                    if (
-                        not patch_applied_successfully
-                        and archived_path is not None
-                        and archived_path.exists()
-                        and not unified_mode
-                    ):
-                        include_patch_paths.append(archived_path)
-
-                    # Unified patch mode: include only failed .patch inputs (not the original zip).
-                    for name, data in failed_patch_blobs_for_zip:
-                        include_patch_blobs.append((name, data))
-
-                    ws_repo = (
-                        ws_for_posthook.repo
-                        if ws_for_posthook is not None
-                        else (paths.workspaces_dir / f"issue_{issue_id}" / "repo")
-                    )
-
-                    make_failure_zip(
-                        logger,
-                        zip_path,
-                        workspace_repo=ws_repo,
-                        log_path=log_path,
-                        include_repo_files=files_for_fail_zip,
-                        include_patch_blobs=include_patch_blobs,
-                        include_patch_paths=include_patch_paths,
-                        log_dir_name=policy.failure_zip_log_dir,
-                        patch_dir_name=policy.failure_zip_patch_dir,
-                    )
+                build_artifacts(
+                    logger=logger,
+                    cli=cli,
+                    policy=policy,
+                    paths=paths,
+                    repo_root=repo_root,
+                    log_path=log_path,
+                    exit_code=exit_code,
+                    unified_mode=unified_mode,
+                    patch_applied_successfully=patch_applied_successfully,
+                    archived_patch=archived_path,
+                    failed_patch_blobs_for_zip=failed_patch_blobs_for_zip,
+                    files_for_fail_zip=files_for_fail_zip,
+                    ws_repo_for_fail_zip=ws_repo,
+                    issue_diff_base_sha=issue_diff_base_sha,
+                    issue_diff_paths=issue_diff_paths,
+                )
                 # Deferred rollback after diagnostics archive.
                 # Keeps workspace available for zip creation.
                 if (

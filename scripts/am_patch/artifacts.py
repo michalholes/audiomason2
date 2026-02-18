@@ -1,0 +1,132 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
+from am_patch import git_ops
+from am_patch.archive import make_failure_zip
+from am_patch.errors import RunnerError
+from am_patch.issue_diff import (
+    collect_issue_logs,
+    derive_finalize_pseudo_issue_id,
+    make_issue_diff_zip,
+)
+
+
+@dataclass(frozen=True)
+class ArtifactSummary:
+    success_zip: Path | None
+    failure_zip: Path | None
+    issue_diff_zip: Path | None
+
+
+def build_artifacts(
+    *,
+    logger: Any,
+    cli: Any,
+    policy: Any,
+    paths: Any,
+    repo_root: Path,
+    log_path: Path,
+    exit_code: int,
+    unified_mode: bool,
+    patch_applied_successfully: bool,
+    archived_patch: Path | None,
+    failed_patch_blobs_for_zip: list[tuple[str, bytes]],
+    files_for_fail_zip: list[str],
+    ws_repo_for_fail_zip: Path,
+    issue_diff_base_sha: str | None,
+    issue_diff_paths: list[str],
+) -> ArtifactSummary:
+    success_zip: Path | None = None
+    failure_zip: Path | None = None
+    issue_diff_zip: Path | None = None
+
+    if exit_code == 0:
+        repo_name = repo_root.name
+        branch_name = git_ops.current_branch(logger, repo_root).strip()
+        if branch_name == "HEAD":
+            branch_name = "detached"
+
+        template = policy.success_archive_name
+        try:
+            rendered = template.format(repo=repo_name, branch=branch_name)
+        except Exception as e:
+            raise RunnerError(
+                "POSTHOOK",
+                "CONFIG",
+                f"invalid success_archive_name template: {template!r} ({e!r})",
+            ) from e
+
+        name = Path(rendered).name
+        if not name.lower().endswith(".zip"):
+            name = f"{name}.zip"
+        success_zip = paths.patch_dir / name
+        git_ops.git_archive(logger, repo_root, success_zip, treeish="HEAD")
+
+        logger.line(f"issue_diff_base_sha={issue_diff_base_sha}")
+        logger.line(f"issue_diff_paths_count={len(issue_diff_paths)}")
+
+        if issue_diff_base_sha is None:
+            raise RunnerError("POSTHOOK", "DIFF", "missing issue_diff_base_sha")
+
+        if cli.issue_id is not None:
+            issue_id = cli.issue_id
+            logs = collect_issue_logs(
+                logs_dir=paths.logs_dir,
+                issue_id=issue_id,
+                issue_template=policy.log_template_issue,
+            )
+        else:
+            issue_id = derive_finalize_pseudo_issue_id(
+                log_path=log_path,
+                finalize_template=policy.log_template_finalize,
+            )
+            logs = [log_path]
+
+        make_issue_diff_zip(
+            logger=logger,
+            repo_root=repo_root,
+            artifacts_dir=paths.artifacts_dir,
+            logs_dir=paths.logs_dir,
+            base_sha=issue_diff_base_sha,
+            issue_id=issue_id,
+            files_to_promote=issue_diff_paths,
+            log_paths=logs,
+        )
+        issue_diff_zip = None
+    else:
+        failure_zip = paths.patch_dir / policy.failure_zip_name
+
+        include_patch_paths: list[Path] = []
+        include_patch_blobs: list[tuple[str, bytes]] = []
+
+        if (
+            not patch_applied_successfully
+            and archived_patch is not None
+            and archived_patch.exists()
+            and not unified_mode
+        ):
+            include_patch_paths.append(archived_patch)
+
+        for name, data in failed_patch_blobs_for_zip:
+            include_patch_blobs.append((name, data))
+
+        make_failure_zip(
+            logger,
+            failure_zip,
+            workspace_repo=ws_repo_for_fail_zip,
+            log_path=log_path,
+            include_repo_files=files_for_fail_zip,
+            include_patch_blobs=include_patch_blobs,
+            include_patch_paths=include_patch_paths,
+            log_dir_name=policy.failure_zip_log_dir,
+            patch_dir_name=policy.failure_zip_patch_dir,
+        )
+
+    return ArtifactSummary(
+        success_zip=success_zip,
+        failure_zip=failure_zip,
+        issue_diff_zip=issue_diff_zip,
+    )
