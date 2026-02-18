@@ -432,6 +432,29 @@ PHASE 2: PATH/LAYOUT OVERRIDES (CFG + CLI)
 """
 
 
+def add_workspace_cmd(subparsers: Any) -> None:
+    # The runner uses legacy positional parsing (rest[]) rather than argparse subcommands.
+    # This function exists to keep the CLI structure modular for future splits.
+    return
+
+
+def add_finalize_cmd(subparsers: Any) -> None:
+    return
+
+
+def add_test_cmd(subparsers: Any) -> None:
+    return
+
+
+def add_web_cmd(subparsers: Any) -> None:
+    return
+
+
+def normalize_args(ns: argparse.Namespace) -> argparse.Namespace:
+    ns = normalize_args(ns)
+    return ns
+
+
 def parse_args(argv: list[str]) -> CliArgs:
     # Explicit short/full help split (do not let argparse generate a chaotic -h).
     if "-h" in argv or "--help" in argv:
