@@ -46,13 +46,14 @@ def build_router(*, engine: Any):
         validated = engine.validate_flow_config(body)
         if validated.get("ok") is not True:
             return JSONResponse(status_code=400, content=validated)
+        normalized = engine._normalize_flow_config(body)
         fs = engine.get_file_service()
         from plugins.file_io.service import RootName
 
         from .storage import atomic_write_json
 
-        atomic_write_json(fs, RootName.WIZARDS, "import/config/flow_config.json", body)
-        return body
+        atomic_write_json(fs, RootName.WIZARDS, "import/config/flow_config.json", normalized)
+        return normalized
 
     @router.post("/config/reset")
     def reset_config():

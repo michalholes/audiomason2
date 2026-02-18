@@ -813,30 +813,6 @@ class ImportWizardEngine:
                     meta={},
                 )
 
-            # Conflict policy re-check (minimal deterministic enforcement).
-            conflicts = state.get("conflicts")
-            if isinstance(conflicts, dict):
-                present = bool(conflicts.get("present"))
-                policy = str(conflicts.get("policy") or "")
-                resolved = bool(conflicts.get("resolved"))
-            else:
-                present = False
-                policy = ""
-                resolved = True
-
-            if present and policy == "ask" and not resolved:
-                return error_envelope(
-                    "CONFLICTS_UNRESOLVED",
-                    "conflicts must be resolved before processing",
-                    details=[
-                        {
-                            "path": "$.conflicts",
-                            "reason": "conflicts_unresolved",
-                            "meta": {"policy": policy},
-                        }
-                    ],
-                )
-
             _emit(
                 "finalize.request",
                 "finalize.request",
@@ -856,9 +832,46 @@ class ImportWizardEngine:
                 },
             )
 
+            # Conflict policy re-check.
+            # Must be based on a fresh deterministic scan immediately before job creation.
+            conflicts = state.get("conflicts")
+            policy = str(conflicts.get("policy") or "ask") if isinstance(conflicts, dict) else "ask"
+            preview_fp = str(state.get("derived", {}).get("conflict_fingerprint") or "")
+
             current_conflicts = self._scan_conflicts(state)
             current_fp = fingerprint_json(current_conflicts)
-            preview_fp = str(state.get("derived", {}).get("conflict_fingerprint") or "")
+
+            # Persist current conflicts to session state (UI must see the latest scan).
+            state.setdefault("derived", {})["conflict_fingerprint"] = current_fp
+            state["conflicts"] = {
+                "present": bool(current_conflicts),
+                "items": current_conflicts,
+                "resolved": not bool(current_conflicts),
+                "policy": str((state.get("conflicts") or {}).get("policy") or "ask"),
+            }
+            session_dir = f"import/sessions/{session_id}"
+            atomic_write_json(
+                self._fs,
+                RootName.WIZARDS,
+                f"{session_dir}/conflicts.json",
+                current_conflicts,
+            )
+            state["updated_at"] = _iso_utc_now()
+            self._persist_state(session_id, state)
+
+            if policy == "ask" and current_conflicts:
+                return error_envelope(
+                    "CONFLICTS_UNRESOLVED",
+                    "conflicts must be resolved before processing",
+                    details=[
+                        {
+                            "path": "$.conflicts",
+                            "reason": "conflicts_unresolved",
+                            "meta": {"policy": policy},
+                        }
+                    ],
+                )
+
             if policy != "ask" and preview_fp and current_fp != preview_fp:
                 return error_envelope(
                     "CONFLICTS_CHANGED",
@@ -871,8 +884,6 @@ class ImportWizardEngine:
                         }
                     ],
                 )
-
-            session_dir = f"import/sessions/{session_id}"
 
             # Ensure plan exists.
             plan_path = f"{session_dir}/plan.json"
