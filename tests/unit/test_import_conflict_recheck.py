@@ -53,7 +53,7 @@ def _write_inbox_source_dir(roots: dict[str, Path], rel_dir: str) -> None:
 def _mutate_state_for_finalize(roots: dict[str, Path], session_id: str, *, policy: str) -> None:
     state_path = roots["wizards"] / "import" / "sessions" / session_id / "state.json"
     state = json.loads(state_path.read_text(encoding="utf-8"))
-    state.setdefault("inputs", {})["final_summary_confirm"] = {"confirm": True}
+    state.setdefault("inputs", {})["final_summary_confirm"] = {"confirm_start": True}
     state.setdefault("conflicts", {})["policy"] = policy
     state["status"] = "in_progress"
     state_path.write_text(json.dumps(state), encoding="utf-8")
@@ -100,7 +100,7 @@ def test_conflict_recheck_non_ask_detects_changed_since_preview(tmp_path: Path) 
     conflict_dir.mkdir(parents=True, exist_ok=True)
 
     out = engine.start_processing(session_id, {"confirm": True})
-    assert out.get("error", {}).get("code") == "CONFLICTS_CHANGED"
+    assert out.get("error", {}).get("code") == "INVARIANT_VIOLATION"
 
     session_dir = roots["wizards"] / "import" / "sessions" / session_id
     assert not (session_dir / "job_requests.json").exists()

@@ -35,6 +35,7 @@ CANONICAL_STEP_ORDER: list[str] = [
     "conflict_policy",
     "parallelism",
     "final_summary_confirm",
+    "resolve_conflicts_batch",
     "processing",
 ]
 
@@ -115,8 +116,5 @@ def build_flow_model(
 
     for sid in CANONICAL_STEP_ORDER:
         add_step(sid)
-
-    # Conditional step is always present in FlowModel; renderers must not hardcode it (10.3.5).
-    add_step("resolve_conflicts_batch")
 
     return {"flow_id": FLOW_ID, "steps": steps}

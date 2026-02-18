@@ -510,7 +510,12 @@ class ImportWizardEngine:
                 flow_cfg_norm=flow_cfg_norm,
             )
 
-            state["current_step_id"] = next_step
+            state["current_step_id"] = self._auto_advance_computed_steps(
+                session_id=session_id,
+                state=state,
+                next_step_id=next_step,
+                flow_cfg_norm=flow_cfg_norm,
+            )
 
             state["updated_at"] = _iso_utc_now()
             self._append_decision(
@@ -531,6 +536,40 @@ class ImportWizardEngine:
                 error={"type": e.__class__.__name__, "message": str(e) or e.__class__.__name__},
             )
             return _exception_envelope(e)
+
+    def _auto_advance_computed_steps(
+        self,
+        *,
+        session_id: str,
+        state: dict[str, Any],
+        next_step_id: str,
+        flow_cfg_norm: dict[str, Any],
+    ) -> str:
+        """Advance past computed-only steps deterministically (spec 10.3.2/10.3.3).
+
+        Renderers must never be forced to "submit" a computed-only step.
+        """
+
+        if next_step_id != "plan_preview_batch":
+            return next_step_id
+
+        # plan_preview_batch is computed-only (spec 10.3.1). Compute and advance.
+        # Special rule: if plan preview fails due to invalid selection, transition back.
+        state["current_step_id"] = "plan_preview_batch"
+        self._persist_state(session_id, state)
+        try:
+            self.compute_plan(session_id)
+        except Exception:
+            state["current_step_id"] = "select_books"
+            state["updated_at"] = _iso_utc_now()
+            self._persist_state(session_id, state)
+            return "select_books"
+
+        return self._move_linear(
+            current="plan_preview_batch",
+            direction="next",
+            flow_cfg_norm=flow_cfg_norm,
+        )
 
     def _apply_conflict_policy(self, state: dict[str, Any], payload: dict[str, Any]) -> None:
         raw_mode = payload.get("mode")
@@ -707,7 +746,11 @@ class ImportWizardEngine:
         # Source items are taken from field.items when present, otherwise from discovery.
         items: list[dict[str, Any]] = []
         items_any = field.get("items")
-        if isinstance(items_any, list) and all(isinstance(x, dict) for x in items_any):
+        if (
+            isinstance(items_any, list)
+            and items_any
+            and all(isinstance(x, dict) for x in items_any)
+        ):
             items = [cast(dict[str, Any], x) for x in items_any]
         else:
             session_dir = f"import/sessions/{state.get('session_id')}"
@@ -795,11 +838,26 @@ class ImportWizardEngine:
             flow_cfg_norm = self._load_effective_flow_config(session_id)
             current = str(state.get("current_step_id") or "select_authors")
             direction = "next" if action == "next" else "back"
-            state["current_step_id"] = self._move_linear(
+
+            next_step_id = self._move_linear(
                 current=current,
                 direction=direction,
                 flow_cfg_norm=flow_cfg_norm,
             )
+
+            if direction == "next":
+                state["current_step_id"] = self._auto_advance_computed_steps(
+                    session_id=session_id,
+                    state=state,
+                    next_step_id=next_step_id,
+                    flow_cfg_norm=flow_cfg_norm,
+                )
+            else:
+                # Computed-only steps must not be the UI current step.
+                if next_step_id == "plan_preview_batch":
+                    state["current_step_id"] = "select_books"
+                else:
+                    state["current_step_id"] = next_step_id
 
             state["updated_at"] = _iso_utc_now()
             self._append_decision(
@@ -888,10 +946,10 @@ class ImportWizardEngine:
 
             inputs = dict(state.get("inputs") or {})
             final = inputs.get("final_summary_confirm")
-            if not (isinstance(final, dict) and final.get("confirm") is True):
+            if not (isinstance(final, dict) and final.get("confirm_start") is True):
                 return validation_error(
                     message="final_summary_confirm must be submitted with confirm=true",
-                    path="$.inputs.final_summary_confirm.confirm",
+                    path="$.inputs.final_summary_confirm.confirm_start",
                     reason="missing_or_false",
                     meta={},
                 )
@@ -963,16 +1021,11 @@ class ImportWizardEngine:
                 )
 
             if policy != "ask" and preview_fp and current_fp != preview_fp:
-                return error_envelope(
-                    "CONFLICTS_CHANGED",
-                    "conflict scan changed since preview",
-                    details=[
-                        {
-                            "path": "$.conflicts",
-                            "reason": "conflicts_changed",
-                            "meta": {"preview": preview_fp, "current": current_fp},
-                        }
-                    ],
+                return invariant_violation(
+                    message="conflict scan changed since preview",
+                    path="$.conflicts",
+                    reason="conflicts_changed",
+                    meta={"preview": preview_fp, "current": current_fp},
                 )
 
             # Ensure plan exists.
@@ -1168,7 +1221,7 @@ class ImportWizardEngine:
         if step_id == "final_summary_confirm":
             inputs = state.get("inputs") or {}
             payload = inputs.get("final_summary_confirm") if isinstance(inputs, dict) else None
-            confirm = payload.get("confirm") if isinstance(payload, dict) else None
+            confirm = payload.get("confirm_start") if isinstance(payload, dict) else None
             if confirm is not True:
                 return "final_summary_confirm"
 

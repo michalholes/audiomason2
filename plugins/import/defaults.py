@@ -82,6 +82,15 @@ def _default_fields_for_step(step_id: str) -> list[dict[str, Any]]:
     if step_id == "final_summary_confirm":
         return [
             {
+                "name": "confirm_start",
+                "type": "confirm",
+                "required": True,
+                "constraints": {},
+            }
+        ]
+    if step_id == "resolve_conflicts_batch":
+        return [
+            {
                 "name": "confirm",
                 "type": "confirm",
                 "required": True,
