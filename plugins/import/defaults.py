@@ -30,21 +30,19 @@ def _make_default_steps() -> list[dict[str, Any]]:
         "delete_source_policy",
         "conflict_policy",
         "parallelism",
-        "resolve_conflicts_batch",
         "final_summary_confirm",
+        "resolve_conflicts_batch",
     ]
 
     steps: list[dict[str, Any]] = []
     for step_id in required_order:
+        computed_only = step_id in {"plan_preview_batch"}
         steps.append(
             {
                 "step_id": step_id,
-                "message_id": f"{step_id}.title",
-                "default_text": step_id.replace("_", " ").title(),
-                "fields": {},
-                "allowed_actions": ["back", "next"],
-                "validation": [],
-                "state_effects": [],
+                "title": step_id.replace("_", " ").title(),
+                "computed_only": computed_only,
+                "fields": _default_fields_for_step(step_id),
             }
         )
 
@@ -52,6 +50,57 @@ def _make_default_steps() -> list[dict[str, Any]]:
     # enabled is harmless in the engine (it will resolve to None and be rejected
     # by the flow node map). Keep it consistent with other steps.
     return steps
+
+
+def _default_fields_for_step(step_id: str) -> list[dict[str, Any]]:
+    # Field schemas are intentionally minimal but strict.
+    if step_id == "select_authors":
+        return [
+            {
+                "name": "selection",
+                "type": "str",
+                "required": True,
+                "constraints": {},
+            }
+        ]
+    if step_id == "select_books":
+        return [
+            {
+                "name": "selection",
+                "type": "str",
+                "required": True,
+                "constraints": {},
+            }
+        ]
+    if step_id == "plan_preview_batch":
+        return []
+    if step_id == "final_summary_confirm":
+        return [
+            {
+                "name": "confirm",
+                "type": "bool",
+                "required": True,
+                "constraints": {},
+            }
+        ]
+    if step_id == "parallelism":
+        return [
+            {
+                "name": "workers",
+                "type": "int",
+                "required": True,
+                "constraints": {"min": 1, "max": 64},
+            }
+        ]
+    # Generic policy steps accept a single string mode.
+    return [
+        {
+            "name": "mode",
+            "type": "str",
+            "required": True,
+            "constraints": {},
+        }
+    ]
 
 
 DEFAULT_CATALOG: dict[str, Any] = {
@@ -62,7 +111,79 @@ DEFAULT_CATALOG: dict[str, Any] = {
 DEFAULT_FLOW: dict[str, Any] = {
     "version": 1,
     "entry_step_id": "select_authors",
-    "nodes": [s["step_id"] for s in DEFAULT_CATALOG["steps"]],
+    "nodes": [
+        {
+            "step_id": "select_authors",
+            "next_step_id": "select_books",
+            "prev_step_id": None,
+        },
+        {
+            "step_id": "select_books",
+            "next_step_id": "plan_preview_batch",
+            "prev_step_id": "select_authors",
+        },
+        {
+            "step_id": "plan_preview_batch",
+            "next_step_id": "effective_author_title",
+            "prev_step_id": "select_books",
+        },
+        {
+            "step_id": "effective_author_title",
+            "next_step_id": "filename_policy",
+            "prev_step_id": "plan_preview_batch",
+        },
+        {
+            "step_id": "filename_policy",
+            "next_step_id": "covers_policy",
+            "prev_step_id": "effective_author_title",
+        },
+        {
+            "step_id": "covers_policy",
+            "next_step_id": "id3_policy",
+            "prev_step_id": "filename_policy",
+        },
+        {
+            "step_id": "id3_policy",
+            "next_step_id": "audio_processing",
+            "prev_step_id": "covers_policy",
+        },
+        {
+            "step_id": "audio_processing",
+            "next_step_id": "publish_policy",
+            "prev_step_id": "id3_policy",
+        },
+        {
+            "step_id": "publish_policy",
+            "next_step_id": "delete_source_policy",
+            "prev_step_id": "audio_processing",
+        },
+        {
+            "step_id": "delete_source_policy",
+            "next_step_id": "conflict_policy",
+            "prev_step_id": "publish_policy",
+        },
+        {
+            "step_id": "conflict_policy",
+            "next_step_id": "parallelism",
+            "prev_step_id": "delete_source_policy",
+        },
+        {
+            "step_id": "parallelism",
+            "next_step_id": "final_summary_confirm",
+            "prev_step_id": "conflict_policy",
+        },
+        {
+            "step_id": "final_summary_confirm",
+            "next_step_id": None,
+            "prev_step_id": "parallelism",
+        },
+        {
+            # Exists but not linked by default; engine may jump to it conditionally.
+            "step_id": "resolve_conflicts_batch",
+            "next_step_id": None,
+            "prev_step_id": "final_summary_confirm",
+        },
+    ],
 }
 
 

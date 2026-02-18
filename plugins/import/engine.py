@@ -20,11 +20,18 @@ from plugins.file_io.service import FileService, RootName
 
 from . import discovery as discovery_mod
 from .defaults import ensure_default_models
-from .errors import FinalizeError, ImportWizardError, SessionNotFoundError, StepSubmissionError
+from .errors import (
+    FinalizeError,
+    ImportWizardError,
+    SessionNotFoundError,
+    StepSubmissionError,
+    error_envelope,
+)
 from .fingerprints import fingerprint_json, sha256_hex
 from .job_requests import build_job_requests
 from .models import CatalogModel, FlowModel, validate_models
 from .plan import compute_plan
+from .serialization import canonical_serialize
 from .storage import append_jsonl, atomic_write_json, atomic_write_text, read_json
 
 
@@ -50,27 +57,72 @@ def _iso_utc_now() -> str:
 
 
 def _exception_envelope(exc: Exception) -> dict[str, Any]:
-    code = exc.__class__.__name__
-    if isinstance(exc, ValueError):
-        return {
-            "code": "invalid_payload",
-            "message_id": "import.editor.invalid_payload",
-            "default_message": str(exc) or "invalid payload",
-            "details": {"type": code},
-        }
+    if isinstance(exc, SessionNotFoundError):
+        return error_envelope("NOT_FOUND", str(exc) or "not found")
+    if isinstance(exc, (StepSubmissionError, ValueError)):
+        return error_envelope(
+            "VALIDATION_ERROR",
+            str(exc) or "validation error",
+            details=[{"type": exc.__class__.__name__}],
+        )
+    if isinstance(exc, FinalizeError):
+        return error_envelope(
+            "INVARIANT_VIOLATION",
+            str(exc) or "invariant violation",
+            details=[{"type": exc.__class__.__name__}],
+        )
     if isinstance(exc, ImportWizardError):
-        return {
-            "code": code,
-            "message_id": f"import.{code}",
-            "default_message": str(exc) or code,
-            "details": {"type": code},
-        }
-    return {
-        "code": "unexpected_error",
-        "message_id": "import.unexpected_error",
-        "default_message": str(exc) or code,
-        "details": {"type": code},
-    }
+        return error_envelope(
+            "INTERNAL_ERROR",
+            str(exc) or "internal error",
+            details=[{"type": exc.__class__.__name__}],
+        )
+    return error_envelope(
+        "INTERNAL_ERROR",
+        str(exc) or "internal error",
+        details=[{"type": exc.__class__.__name__}],
+    )
+
+
+def _parse_selection_expr(expr: str, *, max_index: int | None) -> list[int]:
+    text = expr.strip().lower()
+    if text == "all":
+        if max_index is None:
+            # Caller must provide max_index to expand "all".
+            raise ValueError("selection 'all' requires a known max_index")
+        return list(range(1, max_index + 1))
+
+    ids: set[int] = set()
+    for raw in text.split(","):
+        tok = raw.strip()
+        if not tok:
+            continue
+        if "-" in tok:
+            parts = [p.strip() for p in tok.split("-", 1)]
+            if len(parts) != 2 or not parts[0] or not parts[1]:
+                raise ValueError(f"invalid range token: {tok}")
+            try:
+                start = int(parts[0])
+                end = int(parts[1])
+            except ValueError as e:
+                raise ValueError(f"invalid range token: {tok}") from e
+            if start <= 0 or end <= 0 or end < start:
+                raise ValueError(f"invalid range token: {tok}")
+            for i in range(start, end + 1):
+                ids.add(i)
+        else:
+            try:
+                i = int(tok)
+            except ValueError as e:
+                raise ValueError(f"invalid selection token: {tok}") from e
+            if i <= 0:
+                raise ValueError(f"invalid selection token: {tok}")
+            ids.add(i)
+
+    result = sorted(ids)
+    if max_index is not None and any(i > max_index for i in result):
+        raise ValueError("selection out of range")
+    return result
 
 
 class ImportWizardEngine:
@@ -291,145 +343,220 @@ class ImportWizardEngine:
             return False
 
     def get_state(self, session_id: str) -> dict[str, Any]:
-        state = self._load_state(session_id)
-        return state
+        try:
+            return self._load_state(session_id)
+        except Exception as e:
+            return _exception_envelope(e)
 
     def get_step_definition(self, session_id: str, step_id: str) -> dict[str, Any]:
         """Return the catalog step definition for step_id.
 
         This is a UI helper. It does not perform any state transitions.
         """
-        effective_model = self._load_effective_model(session_id)
-        catalog_any = effective_model.get("catalog")
-        if not isinstance(catalog_any, dict):
-            raise ValueError("effective model missing catalog")
-        catalog = CatalogModel.from_dict(cast(dict[str, Any], catalog_any))
+        try:
+            effective_model = self._load_effective_model(session_id)
+            catalog_any = effective_model.get("catalog")
+            if not isinstance(catalog_any, dict):
+                raise ValueError("effective model missing catalog")
+            catalog = CatalogModel.from_dict(cast(dict[str, Any], catalog_any))
 
-        _emit(
-            "step.view",
-            "step.view",
-            {
-                "session_id": session_id,
-                "step_id": step_id,
-            },
-        )
-        for step in catalog.steps:
-            sid = step.get("step_id")
-            if sid == step_id:
-                return dict(step)
-        raise ValueError("unknown step_id")
+            _emit(
+                "step.view",
+                "step.view",
+                {
+                    "session_id": session_id,
+                    "step_id": step_id,
+                },
+            )
+            for step in catalog.steps:
+                sid = step.get("step_id")
+                if sid == step_id:
+                    return dict(step)
+            raise ValueError("unknown step_id")
+        except Exception as e:
+            return _exception_envelope(e)
 
     def submit_step(self, session_id: str, step_id: str, payload: dict[str, Any]) -> dict[str, Any]:
-        state = self._load_state(session_id)
-        if state.get("status") != "in_progress":
-            raise StepSubmissionError("session is not in progress")
+        try:
+            state = self._load_state(session_id)
+            if state.get("status") != "in_progress":
+                raise StepSubmissionError("session is not in progress")
 
-        _emit(
-            "step.submit",
-            "step.submit",
-            {
-                "session_id": session_id,
-                "step_id": step_id,
-                "model_fingerprint": state.get("model_fingerprint"),
-                "discovery_fingerprint": state.get("derived", {}).get("discovery_fingerprint"),
-                "effective_config_fingerprint": state.get("derived", {}).get(
-                    "effective_config_fingerprint"
-                ),
-            },
-        )
+            _emit(
+                "step.submit",
+                "step.submit",
+                {
+                    "session_id": session_id,
+                    "step_id": step_id,
+                    "model_fingerprint": state.get("model_fingerprint"),
+                    "discovery_fingerprint": state.get("derived", {}).get("discovery_fingerprint"),
+                    "effective_config_fingerprint": state.get("derived", {}).get(
+                        "effective_config_fingerprint"
+                    ),
+                },
+            )
 
-        if not isinstance(payload, dict):
+            if not isinstance(payload, dict):
+                raise StepSubmissionError("payload must be an object")
+
+            effective_model = self._load_effective_model(session_id)
+            catalog_dict_any = effective_model.get("catalog")
+            flow_dict_any = effective_model.get("flow")
+
+            if not isinstance(catalog_dict_any, dict) or not isinstance(flow_dict_any, dict):
+                raise StepSubmissionError("effective model missing required sections")
+
+            catalog_dict = cast(dict[str, Any], catalog_dict_any)
+            flow_dict = cast(dict[str, Any], flow_dict_any)
+            catalog = CatalogModel.from_dict(catalog_dict)
+            flow = FlowModel.from_dict(flow_dict)
+
+            if step_id not in catalog.step_ids():
+                raise StepSubmissionError("unknown step_id")
+
+            current = str(state.get("current_step_id") or flow.entry_step_id)
+            if step_id != current:
+                raise StepSubmissionError("step_id must match current_step_id")
+
+            schema = None
+            for step in catalog.steps:
+                if step.get("step_id") == step_id:
+                    schema = step
+                    break
+            if schema is None:
+                raise StepSubmissionError("unknown step_id")
+
+            if bool(schema.get("computed_only")):
+                raise StepSubmissionError("computed-only step cannot be submitted")
+
+            normalized_payload = self._validate_and_canonicalize_payload(
+                step_id=step_id,
+                schema=schema,
+                payload=payload,
+                state=state,
+            )
+
+            inputs = dict(state.get("inputs") or {})
+            inputs[step_id] = normalized_payload
+            state["inputs"] = inputs
+
+            completed = list(state.get("completed_step_ids") or [])
+            if step_id not in completed:
+                completed.append(step_id)
+            state["completed_step_ids"] = completed
+
+            # Move to next step deterministically.
+            node = flow.node_map().get(step_id)
+            next_step = node.next_step_id if node is not None else None
+
+            # Conditional insertion: resolve_conflicts_batch only after final_summary_confirm.
+            if step_id == "final_summary_confirm":
+                conflicts = state.get("conflicts")
+                if isinstance(conflicts, dict):
+                    present = bool(conflicts.get("present"))
+                    policy = str(conflicts.get("policy") or "")
+                    resolved = bool(conflicts.get("resolved"))
+                else:
+                    present = False
+                    policy = ""
+                    resolved = True
+                if present and policy == "ask" and not resolved:
+                    next_step = "resolve_conflicts_batch"
+                else:
+                    next_step = None
+
+            state["current_step_id"] = next_step or step_id
+
+            state["updated_at"] = _iso_utc_now()
+            self._append_decision(
+                session_id,
+                step_id=step_id,
+                payload=normalized_payload,
+                result="accepted",
+                error=None,
+            )
+            self._persist_state(session_id, state)
+            return state
+        except Exception as e:
             self._append_decision(
                 session_id,
                 step_id=step_id,
                 payload=payload if isinstance(payload, dict) else {"_invalid_payload": True},
                 result="rejected",
-                error={"type": "StepSubmissionError", "message": "payload must be a dict"},
+                error={"type": e.__class__.__name__, "message": str(e) or e.__class__.__name__},
             )
-            raise StepSubmissionError("payload must be a dict")
+            return _exception_envelope(e)
 
-        effective_model = self._load_effective_model(session_id)
-        catalog_dict_any = effective_model.get("catalog")
-        flow_dict_any = effective_model.get("flow")
+    def _validate_and_canonicalize_payload(
+        self,
+        *,
+        step_id: str,
+        schema: dict[str, Any],
+        payload: dict[str, Any],
+        state: dict[str, Any],
+    ) -> dict[str, Any]:
+        fields_any = schema.get("fields")
+        if not isinstance(fields_any, list):
+            raise StepSubmissionError("step schema is invalid")
+        fields: list[dict[str, Any]] = [f for f in fields_any if isinstance(f, dict)]
 
-        if not isinstance(catalog_dict_any, dict) or not isinstance(flow_dict_any, dict):
-            missing: list[str] = []
-            if not isinstance(catalog_dict_any, dict):
-                missing.append("catalog")
-            if not isinstance(flow_dict_any, dict):
-                missing.append("flow")
-            self._append_decision(
-                session_id,
-                step_id=step_id,
-                payload=payload,
-                result="rejected",
-                error={
-                    "type": "StepSubmissionError",
-                    "message": "effective model missing required section(s): " + ", ".join(missing),
-                },
-            )
-            raise StepSubmissionError(
-                "effective model missing required section(s): " + ", ".join(missing)
-            )
+        allowed = {str(f.get("name")) for f in fields if isinstance(f.get("name"), str)}
+        unknown = sorted(set(payload.keys()) - allowed)
+        if unknown:
+            raise StepSubmissionError("unknown field(s): " + ", ".join(unknown))
 
-        catalog_dict = cast(dict[str, Any], catalog_dict_any)
-        flow_dict = cast(dict[str, Any], flow_dict_any)
-        catalog = CatalogModel.from_dict(catalog_dict)
-        flow = FlowModel.from_dict(flow_dict)
+        normalized: dict[str, Any] = {}
+        for f in fields:
+            name = f.get("name")
+            ftype = f.get("type")
+            required = bool(f.get("required"))
+            if not isinstance(name, str) or not isinstance(ftype, str):
+                continue
+            if required and name not in payload:
+                raise StepSubmissionError(f"missing required field: {name}")
+            if name not in payload:
+                continue
+            value = payload[name]
 
-        if step_id not in catalog.step_ids():
-            self._append_decision(
-                session_id,
-                step_id=step_id,
-                payload=payload,
-                result="rejected",
-                error={
-                    "type": "StepSubmissionError",
-                    "message": "step_id does not exist in catalog",
-                },
-            )
-            raise StepSubmissionError("unknown step_id")
+            if ftype == "bool":
+                if not isinstance(value, bool):
+                    raise StepSubmissionError(f"field '{name}' must be bool")
+                normalized[name] = value
+            elif ftype == "int":
+                if not isinstance(value, int):
+                    raise StepSubmissionError(f"field '{name}' must be int")
+                constraints = f.get("constraints")
+                if isinstance(constraints, dict):
+                    mn = constraints.get("min")
+                    mx = constraints.get("max")
+                    if isinstance(mn, int) and value < mn:
+                        raise StepSubmissionError(f"field '{name}' must be >= {mn}")
+                    if isinstance(mx, int) and value > mx:
+                        raise StepSubmissionError(f"field '{name}' must be <= {mx}")
+                normalized[name] = value
+            elif ftype == "str":
+                if not isinstance(value, str):
+                    raise StepSubmissionError(f"field '{name}' must be str")
+                normalized[name] = value
+            elif ftype == "list[int]":
+                if not (isinstance(value, list) and all(isinstance(x, int) for x in value)):
+                    raise StepSubmissionError(f"field '{name}' must be list[int]")
+                normalized[name] = sorted(set(value))
+            elif ftype == "list[str]":
+                if not (isinstance(value, list) and all(isinstance(x, str) for x in value)):
+                    raise StepSubmissionError(f"field '{name}' must be list[str]")
+                normalized[name] = sorted(set(value))
+            else:
+                raise StepSubmissionError(f"unsupported field type: {ftype}")
 
-        current = str(state.get("current_step_id") or flow.entry_step_id)
-        if step_id != current:
-            self._append_decision(
-                session_id,
-                step_id=step_id,
-                payload=payload,
-                result="rejected",
-                error={
-                    "type": "StepSubmissionError",
-                    "message": "step_id must match current_step_id",
-                },
-            )
-            raise StepSubmissionError("step_id must match current_step_id")
-
-        inputs = dict(state.get("inputs") or {})
-        inputs[step_id] = payload
-        state["inputs"] = inputs
-
-        completed = list(state.get("completed_step_ids") or [])
-        if step_id not in completed:
-            completed.append(step_id)
-        state["completed_step_ids"] = completed
-
-        # Move to next step deterministically.
-        node = flow.node_map().get(step_id)
-        if node is not None and node.next_step_id is not None:
-            state["current_step_id"] = node.next_step_id
-        else:
-            state["current_step_id"] = step_id
-
-        state["updated_at"] = _iso_utc_now()
-        self._append_decision(
-            session_id,
-            step_id=step_id,
-            payload=payload,
-            result="accepted",
-            error=None,
-        )
-        self._persist_state(session_id, state)
-        return state
+        # Selection expression canonicalization.
+        if step_id == "select_authors" and "selection" in normalized:
+            ids = _parse_selection_expr(str(normalized["selection"]), max_index=None)
+            return {"author_ids": ids}
+        if step_id == "select_books" and "selection" in normalized:
+            ids = _parse_selection_expr(str(normalized["selection"]), max_index=None)
+            return {"book_ids": ids}
+        return normalized
 
     def apply_action(self, session_id: str, action: str) -> dict[str, Any]:
         state = self._load_state(session_id)
@@ -520,131 +647,144 @@ class ImportWizardEngine:
         return plan
 
     def finalize(self, session_id: str) -> dict[str, Any]:
-        state = self._load_state(session_id)
-        if state.get("status") != "in_progress":
-            raise FinalizeError("session is not active")
+        try:
+            state = self._load_state(session_id)
+            if state.get("status") != "in_progress":
+                raise FinalizeError("session is not active")
 
-        inputs = dict(state.get("inputs") or {})
-        confirm = inputs.get("final_summary_confirm")
-        if not (isinstance(confirm, dict) and confirm.get("confirm") is True):
+            inputs = dict(state.get("inputs") or {})
+            confirm = inputs.get("final_summary_confirm")
+            if not (isinstance(confirm, dict) and confirm.get("confirm") is True):
+                _emit(
+                    "validation.fail",
+                    "finalize.validate",
+                    {"session_id": session_id, "reason": "final_summary_confirm missing"},
+                )
+                raise FinalizeError("final_summary_confirm must be submitted with confirm=true")
+
+            # Conflict scan must be re-checked at processing start.
+            conflicts = state.get("conflicts")
+            if isinstance(conflicts, dict):
+                present = bool(conflicts.get("present"))
+                policy = str(conflicts.get("policy") or "")
+                resolved = bool(conflicts.get("resolved"))
+            else:
+                present = False
+                policy = ""
+                resolved = True
+
+            if present and policy == "ask" and not resolved:
+                _emit(
+                    "validation.fail",
+                    "finalize.validate",
+                    {"session_id": session_id, "reason": "conflicts present"},
+                )
+                self._append_decision(
+                    session_id,
+                    step_id="__system__",
+                    payload={"event": "finalize"},
+                    result="rejected",
+                    error={"type": "FinalizeError", "message": "conflicts must be resolved"},
+                )
+                return error_envelope(
+                    "CONFLICTS_UNRESOLVED",
+                    "conflicts must be resolved before processing",
+                    details=[{"policy": policy}],
+                )
+
             _emit(
-                "validation.fail",
-                "finalize.validate",
-                {"session_id": session_id, "reason": "final_summary_confirm missing"},
+                "finalize.request",
+                "finalize.request",
+                {
+                    "session_id": session_id,
+                    "model_fingerprint": state.get("model_fingerprint"),
+                    "discovery_fingerprint": state.get("derived", {}).get("discovery_fingerprint"),
+                    "effective_config_fingerprint": state.get("derived", {}).get(
+                        "effective_config_fingerprint"
+                    ),
+                },
             )
-            raise FinalizeError("final_summary_confirm must be submitted with confirm=true")
 
-        conflicts = state.get("conflicts")
-        if isinstance(conflicts, dict):
-            present = bool(conflicts.get("present"))
-            policy = str(conflicts.get("policy") or "")
-            resolved = bool(conflicts.get("resolved"))
-        else:
-            present = False
-            policy = ""
-            resolved = True
+            session_dir = f"import/sessions/{session_id}"
 
-        if present and policy == "ask" and not resolved:
-            _emit(
-                "validation.fail",
-                "finalize.validate",
-                {"session_id": session_id, "reason": "conflicts present"},
+            # Ensure plan exists.
+            plan_path = f"{session_dir}/plan.json"
+            if self._fs.exists(RootName.WIZARDS, plan_path):
+                plan = read_json(self._fs, RootName.WIZARDS, plan_path)
+            else:
+                plan = self.compute_plan(session_id)
+
+            src = state.get("source") or {}
+            src_root = str(src.get("root") or "")
+            src_rel = str(src.get("relative_path") or "")
+            diagnostics_context = {
+                "model_fingerprint": str(state.get("model_fingerprint") or ""),
+                "discovery_fingerprint": str(
+                    state.get("derived", {}).get("discovery_fingerprint") or ""
+                ),
+                "effective_config_fingerprint": str(
+                    state.get("derived", {}).get("effective_config_fingerprint") or ""
+                ),
+            }
+
+            job_requests = build_job_requests(
+                session_id=session_id,
+                root=src_root,
+                relative_path=src_rel,
+                diagnostics_context=diagnostics_context,
+                config_fingerprint=str(
+                    state.get("derived", {}).get("effective_config_fingerprint") or ""
+                ),
+                plan=plan,
+                inputs=inputs,
             )
+
+            # Deterministic output: always canonical JSON.
+            atomic_write_text(
+                self._fs,
+                RootName.WIZARDS,
+                f"{session_dir}/job_requests.json",
+                canonical_serialize(job_requests).decode("utf-8") + "\n",
+            )
+
+            state["status"] = "finalized"
+            state["updated_at"] = _iso_utc_now()
             self._append_decision(
                 session_id,
                 step_id="__system__",
                 payload={"event": "finalize"},
-                result="rejected",
-                error={"type": "FinalizeError", "message": "conflicts must be resolved"},
+                result="accepted",
+                error=None,
             )
-            raise FinalizeError("conflicts must be resolved before finalize")
+            self._persist_state(session_id, state)
 
-        _emit(
-            "finalize.request",
-            "finalize.request",
-            {
+            _emit(
+                "job.create",
+                "job.create",
+                {
+                    "session_id": session_id,
+                    "jobs": 1,
+                    **diagnostics_context,
+                },
+            )
+
+            _emit(
+                "session.end",
+                "session.end",
+                {
+                    "session_id": session_id,
+                    "status": "finalized",
+                    **diagnostics_context,
+                },
+            )
+
+            return {
                 "session_id": session_id,
-                "model_fingerprint": state.get("model_fingerprint"),
-                "discovery_fingerprint": state.get("derived", {}).get("discovery_fingerprint"),
-                "effective_config_fingerprint": state.get("derived", {}).get(
-                    "effective_config_fingerprint"
-                ),
-            },
-        )
-
-        session_dir = f"import/sessions/{session_id}"
-
-        # Ensure plan exists.
-        plan_path = f"{session_dir}/plan.json"
-        if self._fs.exists(RootName.WIZARDS, plan_path):
-            plan = read_json(self._fs, RootName.WIZARDS, plan_path)
-        else:
-            plan = self.compute_plan(session_id)
-
-        src = state.get("source") or {}
-        src_root = str(src.get("root") or "")
-        src_rel = str(src.get("relative_path") or "")
-        created_at = _iso_utc_now()
-        diagnostics_context = {
-            "model_fingerprint": str(state.get("model_fingerprint") or ""),
-            "discovery_fingerprint": str(
-                state.get("derived", {}).get("discovery_fingerprint") or ""
-            ),
-            "effective_config_fingerprint": str(
-                state.get("derived", {}).get("effective_config_fingerprint") or ""
-            ),
-        }
-
-        job_requests = build_job_requests(
-            session_id=session_id,
-            root=src_root,
-            relative_path=src_rel,
-            created_at=created_at,
-            diagnostics_context=diagnostics_context,
-            plan=plan,
-            inputs=inputs,
-        )
-
-        atomic_write_json(
-            self._fs, RootName.WIZARDS, f"{session_dir}/job_requests.json", job_requests
-        )
-
-        state["status"] = "finalized"
-        state["updated_at"] = _iso_utc_now()
-        self._append_decision(
-            session_id,
-            step_id="__system__",
-            payload={"event": "finalize"},
-            result="accepted",
-            error=None,
-        )
-        self._persist_state(session_id, state)
-
-        _emit(
-            "job.create",
-            "job.create",
-            {
-                "session_id": session_id,
+                "status": state.get("status"),
                 "jobs": 1,
-                **diagnostics_context,
-            },
-        )
-
-        _emit(
-            "session.end",
-            "session.end",
-            {
-                "session_id": session_id,
-                "status": "finalized",
-                **diagnostics_context,
-            },
-        )
-
-        return {
-            "session_id": session_id,
-            "status": state.get("status"),
-            "jobs": 1,
-        }
+            }
+        except Exception as e:
+            return _exception_envelope(e)
 
     def _load_state(self, session_id: str) -> dict[str, Any]:
         session_dir = f"import/sessions/{session_id}"

@@ -15,16 +15,16 @@ def build_job_requests(
     session_id: str,
     root: str,
     relative_path: str,
-    created_at: str,
     diagnostics_context: dict[str, str],
+    config_fingerprint: str,
     plan: dict[str, Any],
     inputs: dict[str, Any],
 ) -> dict[str, Any]:
-    return {
+    doc: dict[str, Any] = {
         "job_type": "import.process",
         "job_version": 1,
         "session_id": session_id,
-        "created_at": created_at,
+        "config_fingerprint": config_fingerprint,
         "inputs": dict(inputs),
         "actions": [
             {
@@ -35,3 +35,8 @@ def build_job_requests(
         ],
         "diagnostics_context": dict(diagnostics_context),
     }
+    # Idempotency key is derived from canonical content.
+    from .fingerprints import fingerprint_json
+
+    doc["idempotency_key"] = fingerprint_json(doc)
+    return doc

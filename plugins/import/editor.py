@@ -16,7 +16,16 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
-from .editor_storage import load_catalog, load_flow, save_catalog, save_flow
+from .editor_storage import (
+    list_history,
+    load_catalog,
+    load_flow,
+    reset_catalog,
+    reset_flow,
+    rollback,
+    save_catalog,
+    save_flow,
+)
 from .engine import ImportWizardEngine
 
 
@@ -100,6 +109,32 @@ def edit_flow_interactive(engine: ImportWizardEngine) -> EditorResult:
         validate_fn=lambda obj: engine.validate_flow(obj, catalog),
         save_fn=lambda obj: save_flow(fs, obj),
     )
+
+
+def reset_catalog_to_defaults(engine: ImportWizardEngine) -> EditorResult:
+    fs = engine.get_file_service()
+    reset_catalog(fs)
+    return EditorResult(ok=True, data={"ok": True})
+
+
+def reset_flow_to_defaults(engine: ImportWizardEngine) -> EditorResult:
+    fs = engine.get_file_service()
+    reset_flow(fs)
+    return EditorResult(ok=True, data={"ok": True})
+
+
+def history(engine: ImportWizardEngine, *, kind: str) -> EditorResult:
+    fs = engine.get_file_service()
+    return EditorResult(ok=True, data={"items": list_history(fs, kind=kind)})
+
+
+def rollback_history(engine: ImportWizardEngine, *, kind: str, fingerprint: str) -> EditorResult:
+    fs = engine.get_file_service()
+    try:
+        rollback(fs, kind=kind, fingerprint=fingerprint)
+        return EditorResult(ok=True, data={"ok": True})
+    except Exception as e:
+        return EditorResult(ok=False, data={"error": str(e)})
 
 
 def _edit_interactive(

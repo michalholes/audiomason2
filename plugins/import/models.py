@@ -32,6 +32,9 @@ _REQUIRED_STEP_IDS = {
 }
 
 
+_ALLOWED_FIELD_TYPES = {"bool", "int", "str", "list[int]", "list[str]"}
+
+
 @dataclass(frozen=True)
 class CatalogModel:
     version: int
@@ -174,36 +177,39 @@ def _require_ascii_str(value: Any, *, field: str, step_index: int) -> str:
     return value
 
 
+def _require_bool(value: Any, *, field: str, step_index: int) -> bool:
+    if not isinstance(value, bool):
+        raise ModelValidationError(f"Catalog step[{step_index}] missing valid '{field}' (bool)")
+    return value
+
+
 def _validate_step_schema(step: dict[str, Any], step_index: int) -> None:
     _ = _require_ascii_str(step.get("step_id"), field="step_id", step_index=step_index)
-    _ = _require_ascii_str(step.get("message_id"), field="message_id", step_index=step_index)
-    _ = _require_ascii_str(step.get("default_text"), field="default_text", step_index=step_index)
+    _ = _require_ascii_str(step.get("title"), field="title", step_index=step_index)
+    _ = _require_bool(step.get("computed_only"), field="computed_only", step_index=step_index)
 
-    fields = step.get("fields")
-    if not isinstance(fields, (list, dict)):
-        raise ModelValidationError(
-            f"Catalog step[{step_index}] missing valid 'fields' (list or object)"
-        )
+    fields_any = step.get("fields")
+    if not isinstance(fields_any, list):
+        raise ModelValidationError(f"Catalog step[{step_index}] missing valid 'fields' (list)")
 
-    allowed_actions = step.get("allowed_actions")
-    if not isinstance(allowed_actions, list) or not all(
-        isinstance(a, str) for a in allowed_actions
-    ):
-        raise ModelValidationError(
-            f"Catalog step[{step_index}] missing valid 'allowed_actions' (list[str])"
-        )
-
-    validation = step.get("validation")
-    if not isinstance(validation, (list, dict)):
-        raise ModelValidationError(
-            f"Catalog step[{step_index}] missing valid 'validation' (list or object)"
-        )
-
-    state_effects = step.get("state_effects")
-    if not isinstance(state_effects, (list, dict)):
-        raise ModelValidationError(
-            f"Catalog step[{step_index}] missing valid 'state_effects' (list or object)"
-        )
+    for i, f in enumerate(fields_any):
+        if not isinstance(f, dict):
+            raise ModelValidationError(f"Catalog step[{step_index}] field[{i}] must be an object")
+        name = f.get("name")
+        ftype = f.get("type")
+        required = f.get("required")
+        _ = _require_ascii_str(name, field="name", step_index=step_index)
+        _ = _require_ascii_str(ftype, field="type", step_index=step_index)
+        _ = _require_bool(required, field="required", step_index=step_index)
+        if str(ftype) not in _ALLOWED_FIELD_TYPES:
+            raise ModelValidationError(
+                f"Catalog step[{step_index}] field[{i}] has unsupported type '{ftype}'"
+            )
+        constraints = f.get("constraints", {})
+        if not isinstance(constraints, dict):
+            raise ModelValidationError(
+                f"Catalog step[{step_index}] field[{i}] constraints must be an object"
+            )
 
 
 def _reachable_step_ids(flow: FlowModel) -> set[str]:
