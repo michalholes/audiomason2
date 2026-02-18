@@ -95,7 +95,7 @@ The runner prints its version: - on every invocation - in `--help`
 
 Example:
 
-    am_patch RUNNER_VERSION=4.2.24
+    am_patch RUNNER_VERSION=4.3.8
 
 Version discipline: - Any change that alters runner behavior MUST bump
 `RUNNER_VERSION`. - Any change that alters runner behavior MUST update
