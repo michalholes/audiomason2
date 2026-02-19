@@ -376,7 +376,6 @@ class ImportWizardEngine:
         validate_models(catalog, flow)
 
         effective_model = build_flow_model(catalog=catalog, flow_config=flow_cfg_norm)
-        model_fingerprint = fingerprint_json(effective_model)
 
         # 2) Discovery
         discovery = discovery_mod.run_discovery(self._fs, root=root, relative_path=relative_path)
@@ -388,6 +387,8 @@ class ImportWizardEngine:
             authors_items=authors_items,
             books_items=books_items,
         )
+
+        model_fingerprint = fingerprint_json(effective_model)
 
         # 3) Effective config snapshot (only keys engine uses)
         effective_config: dict[str, Any] = {
@@ -433,7 +434,8 @@ class ImportWizardEngine:
             )
             loaded_state = _ensure_session_state_fields(loaded_state)
 
-            # Best-effort upgrader: ensure effective_model contains selection items.
+            # Best-effort upgrader: ensure persisted effective_model contains selection items.
+            # If model changes, update model_fingerprint to match persisted effective_model.
             try:
                 em = read_json(
                     self._fs,
@@ -441,17 +443,22 @@ class ImportWizardEngine:
                     f"{session_dir}/effective_model.json",
                 )
                 if isinstance(em, dict):
+                    before = canonical_serialize(em)
                     em2 = _inject_selection_items(
                         effective_model=em,
                         authors_items=authors_items,
                         books_items=books_items,
                     )
-                    atomic_write_json(
-                        self._fs,
-                        RootName.WIZARDS,
-                        f"{session_dir}/effective_model.json",
-                        em2,
-                    )
+                    after = canonical_serialize(em2)
+                    if after != before:
+                        atomic_write_json(
+                            self._fs,
+                            RootName.WIZARDS,
+                            f"{session_dir}/effective_model.json",
+                            em2,
+                        )
+                        loaded_state["model_fingerprint"] = fingerprint_json(em2)
+                        loaded_state["updated_at"] = _iso_utc_now()
             except Exception:
                 pass
             self._persist_state(session_id, loaded_state)

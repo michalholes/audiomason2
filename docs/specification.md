@@ -1,6 +1,6 @@
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.1.12 Specification Versioning Policy: Start at
+Specification Version: 1.1.13 Specification Versioning Policy: Start at
 1.0.0. Patch version increments by +1 for every change.
 
 Author: Michal Holes\
@@ -1479,6 +1479,8 @@ Persistence requirements:
 
 A session is deterministically defined by:
 - model_fingerprint (SHA-256 over canonical effective_model.json)
+  - model_fingerprint MUST be computed over the final persisted effective_model.json
+    after all enrichment steps (for example, selection items injection).
 - discovery_fingerprint
 - effective_config_fingerprint (SHA-256 over canonical effective_config.json)
 - validated user inputs (canonical forms)

@@ -706,3 +706,9 @@
     returns batch_size equal to the number of planned units.
 
 -   spec: Bump specification version to 1.1.12 and document plan-based job request batching.
+
+-   Issue 218: Fix model_fingerprint to match the final persisted effective_model.json
+    (post-enrichment), including the resume reinjection path.
+
+-   spec: Bump specification version to 1.1.13 and clarify model_fingerprint is computed
+    over the final persisted effective_model.json (after enrichment).
