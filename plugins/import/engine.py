@@ -1212,7 +1212,7 @@ class ImportWizardEngine:
             policy = str(conflicts.get("policy") or "ask") if isinstance(conflicts, dict) else "ask"
             preview_fp = str(state.get("derived", {}).get("conflict_fingerprint") or "")
 
-            current_conflicts = self._scan_conflicts(state)
+            current_conflicts = self._scan_conflicts(session_id, state)
             current_fp = fingerprint_json(current_conflicts)
 
             resolved = self._resolve_flag_for_scan(
@@ -1597,17 +1597,24 @@ class ImportWizardEngine:
         merged["steps"] = steps
         return merged
 
-    def _scan_conflicts(self, state: dict[str, Any]) -> list[dict[str, str]]:
+    def _scan_conflicts(self, session_id: str, state: dict[str, Any]) -> list[dict[str, str]]:
         from .conflicts import scan_conflicts
 
-        src = state.get("source") or {}
-        root = str(src.get("root") or "")
-        rel = str(src.get("relative_path") or "")
+        session_dir = f"import/sessions/{session_id}"
+        plan_path = f"{session_dir}/plan.json"
+        if not self._fs.exists(RootName.WIZARDS, plan_path):
+            _ = self.compute_plan(session_id)
+
+        plan = read_json(self._fs, RootName.WIZARDS, plan_path)
+        if not isinstance(plan, dict):
+            plan = {}
+
         mode = self._validate_mode(str(state.get("mode") or "stage"))
-        return scan_conflicts(self._fs, root=root, relative_path=rel, mode=mode)
+        items = scan_conflicts(self._fs, plan=plan, mode=mode)
+        return [cast(dict[str, str], it) for it in items]
 
     def _update_conflicts(self, session_id: str, state: dict[str, Any]) -> None:
-        items = self._scan_conflicts(state)
+        items = self._scan_conflicts(session_id, state)
         fp = fingerprint_json(items)
         policy = str((state.get("conflicts") or {}).get("policy") or "ask")
         resolved = self._resolve_flag_for_scan(

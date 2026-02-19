@@ -696,3 +696,8 @@
 -   Issue 214: Import plan.json now includes selected_books derived from selected_book_ids; plan summary
     counts reflect the selected books; invalid/inconsistent selection during plan_preview_batch
     deterministically transitions back to select_books.
+
+-   Issue 215: Conflict scanning now derives conflicts from plan.json planned target outputs
+    and persists canonically ordered conflict items for deterministic re-check.
+
+-   spec: Bump specification version to 1.1.11 and document plan-based conflict scanning.

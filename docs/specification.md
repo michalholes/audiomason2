@@ -1,6 +1,6 @@
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.1.10 Specification Versioning Policy: Start at
+Specification Version: 1.1.11 Specification Versioning Policy: Start at
 1.0.0. Patch version increments by +1 for every change.
 
 Author: Michal Holes\
@@ -1391,7 +1391,7 @@ Engine-derived artifacts (engine-owned; may be created deterministically):
   - Meaning: SHA-256 fingerprint of canonical effective_config snapshot.
 
 - sessions/<session_id>/conflicts.json
-  - Content: canonical JSON object describing current conflict state and items.
+  - Content: canonical JSON list of conflict items.
   - Meaning: persisted conflict snapshot used by deterministic conflict re-check.
 
 - sessions/<session_id>/idempotency.json
@@ -1558,6 +1558,17 @@ FAILED jobs MUST NOT update the registry.
 Before creating jobs:
 - If conflict_mode == "ask": re-run conflict scan and abort if unresolved conflicts remain.
 - If conflict_mode != "ask": ensure no new filesystem conflicts appeared since preview.
+
+Conflict scan inputs (normative):
+- conflict scan MUST use planned target outputs from sessions/<session_id>/plan.json
+  (selected_books[].proposed_target_relative_path) rather than raw discovery.
+- conflict items MUST be deterministically sorted by:
+  1) target_relative_path (ASCII lexicographic)
+  2) source_book_id (ASCII lexicographic)
+- minimal conflict item schema:
+  - target_relative_path
+  - reason (exists|unknown)
+  - source_book_id
 
 If conflicts appear, the engine MUST block processing deterministically and return a structured error.
 
