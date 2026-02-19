@@ -11,7 +11,7 @@
 7. Pri uprave scripts/ neplati kontrakt ani docs/specification.md
 8. Ak ziadam kontrolu, chcem aby bola hlbkova, kvalifikovana, kvalitna a overila kazdu okolnost
 9. Sucastou kazdeho implementacneho handoffu musi byt povinnost napisat znenie jedneho nadpisu v instrukciach pre tvorbu patchov, pricom riadiaci chat nahodne vyberie jeho cislo od 1-8. 
-
+10. Ak hrozi, ze spadne brana monolith, musis handoff vytvorit tak, ze novy patch neprispeje k tvorbe monolitu
 ---
 
 ## 2. CHARAKTER PROJEKTU

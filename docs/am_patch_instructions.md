@@ -2,7 +2,7 @@
 
 # Patch Authoring Manual
 
-AUTHORITATIVE -- AudioMason2 Status: active Version: v2.39
+AUTHORITATIVE -- AudioMason2 Status: active Version: v2.40
 
 This manual defines what a chat must produce so that the user can run
 the patch successfully and close the issue.
@@ -248,33 +248,55 @@ Mechanical replacement of the entire repository tree is prohibited.
 If the Monolith gate fails, the chat MUST correct the structural
 violation before attempting any other modification.
 
-Repair procedure:
+### Scope discipline (MANDATORY)
 
-1. Identify the violated signal:
+Monolith repair is file-local by default.
+
+If the Monolith gate identifies specific modified files as the source
+of the violation, the repair MUST be restricted strictly to those files.
+
+Full repository unpacking, workspace-wide inspection, or refactoring of
+unrelated modules is prohibited unless the gate log explicitly indicates
+cross-file structural impact that cannot be repaired within the flagged
+files.
+
+Scope expansion requires explicit log-backed justification.
+
+### Repair procedure (MANDATORY)
+
+1. Identify the violated signal from the Monolith output:
    - excessive LOC growth,
    - large total module size,
    - increased public exports,
    - increased internal imports,
    - hub characteristics,
-   - ownership boundary violation.
+   - ownership boundary violation,
+   - parse/syntax error introduced.
 
-2. Apply structural mitigation:
-   - extract newly added or expanded logic into a new file,
-   - split large modules into responsibility-focused units,
-   - move cross-area logic into appropriately scoped modules,
+2. Apply structural mitigation (default strategy: extraction):
+   - extract newly added or expanded logic into a new, appropriately
+     scoped file,
+   - split responsibility clusters into separate modules,
+   - move cross-area logic into an area-owned module,
    - reduce internal imports by introducing clearer boundaries.
 
-3. Do NOT:
-   - suppress or bypass the violation,
-   - centralize additional logic,
-   - merge unrelated responsibilities to “make it pass”.
+3. Verify the repair does not re-introduce concentration:
+   - the original module must not continue to grow as a catch-all,
+   - the extraction must not create a new hub or cross-area dependency
+     magnet.
 
-4. The default repair strategy is file extraction.
-   Structural simplification takes priority over minimal diff size.
+### Forbidden repairs (HARD)
 
-5. Only if structural repair is objectively impossible
-   may architectural approval be requested.
+The chat MUST NOT:
+- suppress, bypass, or “silence” the violation,
+- centralize additional logic into the failing module,
+- merge unrelated responsibilities to “make it pass”,
+- perform broad refactors not justified by the Monolith output.
 
+### Escalation rule (HARD)
+
+Only if structural repair within the flagged files is objectively
+impossible may architectural approval be requested.
 
 ------------------------------------------------------------------------
 
