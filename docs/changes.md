@@ -692,3 +692,7 @@
 -   Issue 213: Import wizard selection steps now provide deterministic author/book selectable items
     (item_id + ASCII label) in the per-session effective_model.json; CLI renderer lists schema items
     without import-specific step branching.
+
+-   Issue 214: Import plan.json now includes selected_books derived from selected_book_ids; plan summary
+    counts reflect the selected books; invalid/inconsistent selection during plan_preview_batch
+    deterministically transitions back to select_books.

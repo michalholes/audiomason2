@@ -1406,6 +1406,12 @@ Creation timing:
 - job_requests.json MUST be created only when start_processing is accepted and a job is requested
   (10.11.4).
 
+plan.json baseline schema additions (normative):
+- selected_books: list of selected book units (book_id, label, source_relative_path,
+  proposed_target_relative_path)
+- summary.selected_books: count of selected books
+- summary.discovered_items: count of discovery items
+
 Resume-after-restart is mandatory where specified by runtime mode policy (10.9).
 All writes MUST be atomic (write temp, then rename).
 

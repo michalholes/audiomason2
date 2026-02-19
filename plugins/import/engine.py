@@ -41,7 +41,7 @@ from .flow_runtime import (
 )
 from .job_requests import build_job_requests
 from .models import BASE_REQUIRED_STEP_IDS, CatalogModel, FlowModel, validate_models
-from .plan import compute_plan
+from .plan import PlanSelectionError, compute_plan
 from .serialization import canonical_serialize
 from .storage import append_jsonl, atomic_write_json, atomic_write_text, read_json
 
@@ -774,11 +774,15 @@ class ImportWizardEngine:
         self._persist_state(session_id, state)
         try:
             self.compute_plan(session_id)
-        except Exception:
+        except PlanSelectionError:
             state["current_step_id"] = "select_books"
             state["updated_at"] = _iso_utc_now()
             self._persist_state(session_id, state)
             return "select_books"
+
+        except Exception:
+            # Non-selection failures must not change the UI state.
+            raise
 
         return self._move_linear(
             current="plan_preview_batch",
@@ -1114,6 +1118,7 @@ class ImportWizardEngine:
             relative_path=src_rel,
             discovery=discovery,
             inputs=dict(state.get("answers") or {}),
+            selected_book_ids=list(state.get("selected_book_ids") or []),
         )
         atomic_write_json(self._fs, RootName.WIZARDS, f"{session_dir}/plan.json", plan)
 
