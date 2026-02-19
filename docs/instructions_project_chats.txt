@@ -10,6 +10,7 @@
 6. Ak ziadam plan, chcem, aby bol kvalifikovany, kvalitny, verifikovany, bez podmienok, overeny v kode.
 7. Pri uprave scripts/ neplati kontrakt ani docs/specification.md
 8. Ak ziadam kontrolu, chcem aby bola hlbkova, kvalifikovana, kvalitna a overila kazdu okolnost
+9. Sucastou kazdeho implementacneho handoffu musi byt povinnost napisat znenie jedneho nadpisu v instrukciach pre tvorbu patchov, pricom riadiaci chat nahodne vyberie jeho cislo od 1-8. 
 
 ---
 
