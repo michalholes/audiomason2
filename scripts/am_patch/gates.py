@@ -8,6 +8,7 @@ from pathlib import Path
 
 from .errors import RunnerError
 from .log import Logger
+from .monolith_gate import run_monolith_gate
 
 
 def _norm_targets(targets: list[str], fallback: list[str]) -> list[str]:
@@ -363,7 +364,7 @@ def _norm_gate_name(s: str) -> str:
 def _norm_gates_order(order: list[str] | None) -> list[str]:
     if not order:
         return []
-    allowed = {"compile", "js", "ruff", "pytest", "mypy", "docs"}
+    allowed = {"compile", "js", "ruff", "pytest", "mypy", "docs", "monolith"}
     out: list[str] = []
     for item in order:
         name = _norm_gate_name(item)
@@ -387,6 +388,32 @@ def run_gates(
     skip_pytest: bool,
     skip_mypy: bool,
     skip_docs: bool,
+    skip_monolith: bool,
+    gate_monolith_enabled: bool,
+    gate_monolith_mode: str,
+    gate_monolith_scan_scope: str,
+    gate_monolith_compute_fanin: bool,
+    gate_monolith_on_parse_error: str,
+    gate_monolith_areas: list[dict[str, str]],
+    gate_monolith_large_loc: int,
+    gate_monolith_huge_loc: int,
+    gate_monolith_large_allow_loc_increase: int,
+    gate_monolith_huge_allow_loc_increase: int,
+    gate_monolith_large_allow_exports_delta: int,
+    gate_monolith_huge_allow_exports_delta: int,
+    gate_monolith_large_allow_imports_delta: int,
+    gate_monolith_huge_allow_imports_delta: int,
+    gate_monolith_new_file_max_loc: int,
+    gate_monolith_new_file_max_exports: int,
+    gate_monolith_new_file_max_imports: int,
+    gate_monolith_hub_fanin_delta: int,
+    gate_monolith_hub_fanout_delta: int,
+    gate_monolith_hub_exports_delta_min: int,
+    gate_monolith_hub_loc_delta_min: int,
+    gate_monolith_crossarea_min_distinct_areas: int,
+    gate_monolith_catchall_basenames: list[str],
+    gate_monolith_catchall_dirs: list[str],
+    gate_monolith_catchall_allowlist: list[str],
     docs_include: list[str],
     docs_exclude: list[str],
     docs_required_files: list[str],
@@ -472,6 +499,46 @@ def run_gates(
                 return True
             return run_mypy(logger, cwd, repo_root=repo_root, targets=mypy_targets)
 
+        if name == "monolith":
+            if skip_monolith:
+                skipped.append("monolith")
+                logger.warning_core("gate_monolith=SKIP (skipped_by_user)")
+                return True
+            if not gate_monolith_enabled:
+                skipped.append("monolith")
+                logger.warning_core("gate_monolith=SKIP (disabled_by_policy)")
+                return True
+            return run_monolith_gate(
+                logger,
+                cwd,
+                repo_root=repo_root,
+                decision_paths=decision_paths,
+                gate_monolith_mode=gate_monolith_mode,
+                gate_monolith_scan_scope=gate_monolith_scan_scope,
+                gate_monolith_compute_fanin=gate_monolith_compute_fanin,
+                gate_monolith_on_parse_error=gate_monolith_on_parse_error,
+                gate_monolith_areas=gate_monolith_areas,
+                gate_monolith_large_loc=gate_monolith_large_loc,
+                gate_monolith_huge_loc=gate_monolith_huge_loc,
+                gate_monolith_large_allow_loc_increase=gate_monolith_large_allow_loc_increase,
+                gate_monolith_huge_allow_loc_increase=gate_monolith_huge_allow_loc_increase,
+                gate_monolith_large_allow_exports_delta=gate_monolith_large_allow_exports_delta,
+                gate_monolith_huge_allow_exports_delta=gate_monolith_huge_allow_exports_delta,
+                gate_monolith_large_allow_imports_delta=gate_monolith_large_allow_imports_delta,
+                gate_monolith_huge_allow_imports_delta=gate_monolith_huge_allow_imports_delta,
+                gate_monolith_new_file_max_loc=gate_monolith_new_file_max_loc,
+                gate_monolith_new_file_max_exports=gate_monolith_new_file_max_exports,
+                gate_monolith_new_file_max_imports=gate_monolith_new_file_max_imports,
+                gate_monolith_hub_fanin_delta=gate_monolith_hub_fanin_delta,
+                gate_monolith_hub_fanout_delta=gate_monolith_hub_fanout_delta,
+                gate_monolith_hub_exports_delta_min=gate_monolith_hub_exports_delta_min,
+                gate_monolith_hub_loc_delta_min=gate_monolith_hub_loc_delta_min,
+                gate_monolith_crossarea_min_distinct_areas=gate_monolith_crossarea_min_distinct_areas,
+                gate_monolith_catchall_basenames=gate_monolith_catchall_basenames,
+                gate_monolith_catchall_dirs=gate_monolith_catchall_dirs,
+                gate_monolith_catchall_allowlist=gate_monolith_catchall_allowlist,
+            )
+
         if name == "docs":
             if skip_docs:
                 skipped.append("docs")
@@ -494,7 +561,7 @@ def run_gates(
 
         return True
 
-    for gate in ("compile", "js", "ruff", "pytest", "mypy", "docs"):
+    for gate in ("compile", "js", "ruff", "pytest", "mypy", "docs", "monolith"):
         if gate not in order:
             skipped.append(gate)
             logger.warning_core(f"gate_{gate}=SKIP (not in gates_order)")

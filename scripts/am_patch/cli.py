@@ -102,6 +102,7 @@ class CliArgs:
     skip_mypy: bool | None
     skip_js: bool | None
     skip_docs: bool | None
+    skip_monolith: bool | None
     gates_on_partial_apply: bool | None
     gates_on_zero_apply: bool | None
     docs_include: str | None
@@ -770,6 +771,7 @@ def parse_args(argv: list[str]) -> CliArgs:
     p.add_argument("--skip-mypy", dest="skip_mypy", action="store_true", default=None)
     p.add_argument("--skip-js", dest="skip_js", action="store_true", default=None)
     p.add_argument("--skip-docs", dest="skip_docs", action="store_true", default=None)
+    p.add_argument("--skip-monolith", dest="skip_monolith", action="store_true", default=None)
 
     p.add_argument(
         "--gates-on-partial-apply",
@@ -949,6 +951,7 @@ def parse_args(argv: list[str]) -> CliArgs:
             skip_mypy=ns.skip_mypy,
             skip_js=getattr(ns, "skip_js", None),
             skip_docs=getattr(ns, "skip_docs", None),
+            skip_monolith=getattr(ns, "skip_monolith", None),
             gates_on_partial_apply=getattr(ns, "gates_on_partial_apply", None),
             gates_on_zero_apply=getattr(ns, "gates_on_zero_apply", None),
             docs_include=getattr(ns, "docs_include", None),
@@ -1035,6 +1038,7 @@ def parse_args(argv: list[str]) -> CliArgs:
         skip_mypy=ns.skip_mypy,
         skip_js=getattr(ns, "skip_js", None),
         skip_docs=getattr(ns, "skip_docs", None),
+        skip_monolith=getattr(ns, "skip_monolith", None),
         gates_on_partial_apply=getattr(ns, "gates_on_partial_apply", None),
         gates_on_zero_apply=getattr(ns, "gates_on_zero_apply", None),
         docs_include=getattr(ns, "docs_include", None),

@@ -173,6 +173,53 @@ class Policy:
     gates_skip_mypy: bool = False
     gates_skip_docs: bool = False
 
+    # Monolith gate (read-only AST analysis; default ON)
+    gates_skip_monolith: bool = False
+    gate_monolith_enabled: bool = True
+    gate_monolith_mode: str = "strict"  # strict|warn_only|report_only
+    gate_monolith_scan_scope: str = "patch"  # patch|workspace
+    gate_monolith_compute_fanin: bool = True
+    gate_monolith_on_parse_error: str = "fail"  # fail|warn
+
+    gate_monolith_areas: list[dict[str, str]] = field(
+        default_factory=lambda: [
+            {"prefix": "src/audiomason/", "area": "core"},
+            {"prefix": "scripts/am_patch/", "area": "runner"},
+            {"prefix": "plugins/", "area": "plugins", "dynamic": "plugins.<name>"},
+            {"prefix": "tests/", "area": "tests"},
+            {"prefix": "scripts/", "area": "tooling"},
+        ]
+    )
+
+    gate_monolith_large_loc: int = 900
+    gate_monolith_huge_loc: int = 1300
+
+    gate_monolith_large_allow_loc_increase: int = 20
+    gate_monolith_huge_allow_loc_increase: int = 0
+    gate_monolith_large_allow_exports_delta: int = 2
+    gate_monolith_huge_allow_exports_delta: int = 0
+    gate_monolith_large_allow_imports_delta: int = 1
+    gate_monolith_huge_allow_imports_delta: int = 0
+
+    gate_monolith_new_file_max_loc: int = 400
+    gate_monolith_new_file_max_exports: int = 25
+    gate_monolith_new_file_max_imports: int = 15
+
+    gate_monolith_hub_fanin_delta: int = 5
+    gate_monolith_hub_fanout_delta: int = 5
+    gate_monolith_hub_exports_delta_min: int = 3
+    gate_monolith_hub_loc_delta_min: int = 100
+
+    gate_monolith_crossarea_min_distinct_areas: int = 3
+
+    gate_monolith_catchall_basenames: list[str] = field(
+        default_factory=lambda: ["utils.py", "common.py", "helpers.py", "misc.py"]
+    )
+    gate_monolith_catchall_dirs: list[str] = field(
+        default_factory=lambda: ["utils", "common", "helpers", "misc"]
+    )
+    gate_monolith_catchall_allowlist: list[str] = field(default_factory=list)
+
     # JS syntax gate (runs only when touched paths include JS files)
     gates_skip_js: bool = False
     gate_js_extensions: list[str] = field(default_factory=lambda: [".js"])
@@ -185,7 +232,7 @@ class Policy:
         default_factory=lambda: ["docs/changes.md", "docs/specification.md"]
     )
     gates_order: list[str] = field(
-        default_factory=lambda: ["compile", "js", "ruff", "pytest", "mypy", "docs"]
+        default_factory=lambda: ["compile", "js", "ruff", "pytest", "mypy", "monolith", "docs"]
     )
 
     # NEW: extra runner-only gate: badguys (default auto)
@@ -693,6 +740,111 @@ def build_policy(defaults: Policy, cfg: dict[str, Any]) -> Policy:
     _mark_cfg(p, cfg, "gates_skip_mypy")
     p.gates_skip_docs = _as_bool(cfg, "gates_skip_docs", p.gates_skip_docs)
     _mark_cfg(p, cfg, "gates_skip_docs")
+
+    p.gates_skip_monolith = _as_bool(cfg, "gates_skip_monolith", p.gates_skip_monolith)
+    _mark_cfg(p, cfg, "gates_skip_monolith")
+
+    p.gate_monolith_enabled = _as_bool(cfg, "gate_monolith_enabled", p.gate_monolith_enabled)
+    _mark_cfg(p, cfg, "gate_monolith_enabled")
+
+    p.gate_monolith_mode = str(cfg.get("gate_monolith_mode", p.gate_monolith_mode)).strip()
+    _mark_cfg(p, cfg, "gate_monolith_mode")
+    if p.gate_monolith_mode not in ("strict", "warn_only", "report_only"):
+        raise RunnerError(
+            "CONFIG",
+            "INVALID",
+            (
+                "invalid gate_monolith_mode="
+                f"{p.gate_monolith_mode!r}; allowed: strict|warn_only|report_only"
+            ),
+        )
+
+    p.gate_monolith_scan_scope = str(
+        cfg.get("gate_monolith_scan_scope", p.gate_monolith_scan_scope)
+    ).strip()
+    _mark_cfg(p, cfg, "gate_monolith_scan_scope")
+    if p.gate_monolith_scan_scope not in ("patch", "workspace"):
+        raise RunnerError(
+            "CONFIG",
+            "INVALID",
+            (
+                "invalid gate_monolith_scan_scope="
+                f"{p.gate_monolith_scan_scope!r}; allowed: patch|workspace"
+            ),
+        )
+
+    p.gate_monolith_compute_fanin = _as_bool(
+        cfg, "gate_monolith_compute_fanin", p.gate_monolith_compute_fanin
+    )
+    _mark_cfg(p, cfg, "gate_monolith_compute_fanin")
+
+    p.gate_monolith_on_parse_error = str(
+        cfg.get("gate_monolith_on_parse_error", p.gate_monolith_on_parse_error)
+    ).strip()
+    _mark_cfg(p, cfg, "gate_monolith_on_parse_error")
+    if p.gate_monolith_on_parse_error not in ("fail", "warn"):
+        raise RunnerError(
+            "CONFIG",
+            "INVALID",
+            (
+                "invalid gate_monolith_on_parse_error="
+                f"{p.gate_monolith_on_parse_error!r}; allowed: fail|warn"
+            ),
+        )
+
+    if "gate_monolith_areas" in cfg:
+        raw = cfg["gate_monolith_areas"]
+        if not isinstance(raw, list) or not all(isinstance(x, dict) for x in raw):
+            raise RunnerError("CONFIG", "INVALID", "gate_monolith_areas must be list[dict]")
+        cleaned: list[dict[str, str]] = []
+        for item in raw:
+            d: dict[str, str] = {}
+            for k, v in item.items():
+                if not isinstance(k, str) or not isinstance(v, str):
+                    raise RunnerError(
+                        "CONFIG", "INVALID", "gate_monolith_areas entries must be str->str"
+                    )
+                d[k] = v
+            cleaned.append(d)
+        p.gate_monolith_areas = cleaned
+        _mark_cfg(p, cfg, "gate_monolith_areas")
+
+    for k in (
+        "gate_monolith_large_loc",
+        "gate_monolith_huge_loc",
+        "gate_monolith_large_allow_loc_increase",
+        "gate_monolith_huge_allow_loc_increase",
+        "gate_monolith_large_allow_exports_delta",
+        "gate_monolith_huge_allow_exports_delta",
+        "gate_monolith_large_allow_imports_delta",
+        "gate_monolith_huge_allow_imports_delta",
+        "gate_monolith_new_file_max_loc",
+        "gate_monolith_new_file_max_exports",
+        "gate_monolith_new_file_max_imports",
+        "gate_monolith_hub_fanin_delta",
+        "gate_monolith_hub_fanout_delta",
+        "gate_monolith_hub_exports_delta_min",
+        "gate_monolith_hub_loc_delta_min",
+        "gate_monolith_crossarea_min_distinct_areas",
+    ):
+        if k in cfg:
+            setattr(p, k, int(cfg[k]))
+            _mark_cfg(p, cfg, k)
+        if int(getattr(p, k)) < 0:
+            raise RunnerError("CONFIG", "INVALID", f"{k} must be >= 0")
+
+    p.gate_monolith_catchall_basenames = _as_list_str(
+        cfg, "gate_monolith_catchall_basenames", p.gate_monolith_catchall_basenames
+    )
+    _mark_cfg(p, cfg, "gate_monolith_catchall_basenames")
+    p.gate_monolith_catchall_dirs = _as_list_str(
+        cfg, "gate_monolith_catchall_dirs", p.gate_monolith_catchall_dirs
+    )
+    _mark_cfg(p, cfg, "gate_monolith_catchall_dirs")
+    p.gate_monolith_catchall_allowlist = _as_list_str(
+        cfg, "gate_monolith_catchall_allowlist", p.gate_monolith_catchall_allowlist
+    )
+    _mark_cfg(p, cfg, "gate_monolith_catchall_allowlist")
 
     p.gates_skip_js = _as_bool(cfg, "gates_skip_js", p.gates_skip_js)
     _mark_cfg(p, cfg, "gates_skip_js")

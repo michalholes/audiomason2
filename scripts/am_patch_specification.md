@@ -99,7 +99,7 @@ The runner prints its version: - on every invocation - in `--help`
 
 Example:
 
-    am_patch RUNNER_VERSION=4.3.9
+    am_patch RUNNER_VERSION=4.3.10
 
 Version discipline: - Any change that alters runner behavior MUST bump
 `RUNNER_VERSION`. - Any change that alters runner behavior MUST update
@@ -379,7 +379,8 @@ scope accordingly - Should be used deliberately and sparingly
     3)  Ruff
     4)  Pytest
     5)  Mypy
-    6)  Docs (documentation obligation)
+    6)  Monolith (anti-monolith AST gate)
+    7)  Docs (documentation obligation)
 -   Individual gates may be configured on/off.
 
 ### 6.1.1 COMPILE gate
@@ -498,6 +499,37 @@ finalizeworkspace
 -   Failure behavior: treated the same as other gates (subject to
     `-g/--allow-gates-fail`).
 
+
+### 6.1.5 Monolith gate (anti-monolith)
+
+-   Purpose: detect monolith growth and enforce ownership boundaries using read-only AST analysis.
+-   Scan set (policy: gate_monolith_scan_scope):
+    -   patch: analyze only touched existing *.py files (decision_paths).
+    -   workspace: deterministic scan under prefixes listed in gate_monolith_areas.
+-   Baseline model (no git): compare new text (cwd/relpath) vs old text (repo_root/relpath).
+-   Metrics (old vs new): LOC (non-empty lines), EXPORTS (top-level public defs/classes), INTERNAL_IMPORTS (distinct internal modules), optional FANIN/FANOUT graph deltas.
+-   Parse errors: violation MONO.PARSE; severity controlled by gate_monolith_on_parse_error.
+-   Rule IDs (stable API): MONO.PARSE, MONO.GROWTH, MONO.NEWFILE, MONO.HUB, MONO.CORE, MONO.CROSSAREA, MONO.CATCHALL.
+
+Controls (precedence: CLI > config > defaults):
+
+-   gates_skip_monolith = true|false (default: false)
+-   gate_monolith_enabled = true|false (default: true)
+-   gate_monolith_mode = strict|warn_only|report_only (default: strict)
+-   gate_monolith_scan_scope = patch|workspace (default: patch)
+-   gate_monolith_compute_fanin = true|false (default: true)
+-   gate_monolith_on_parse_error = fail|warn (default: fail)
+-   gate_monolith_areas = list[dict] (ownership roots; first match wins; plugins may be dynamic)
+-   Thresholds and lists: gate_monolith_* (all are policy keys; see am_patch.toml defaults).
+
+CLI:
+
+-   --skip-monolith (equivalent to --override gates_skip_monolith=true)
+
+Skip log contract:
+
+-   If skipped by user: gate_monolith=SKIP (skipped_by_user)
+-   If disabled by policy: gate_monolith=SKIP (disabled_by_policy)
 ## 7. Promotion Rules
 
 ### 7.1 Workspace live
