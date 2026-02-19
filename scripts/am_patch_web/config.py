@@ -114,7 +114,7 @@ def load_config(path: Path) -> AppConfig:
             stats_windows_days=list(_must_get(indexing, "stats_windows_days")),
         ),
         ui=UiConfig(
-            base_font_px=int(ui.get("base_font_px", 22)),
+            base_font_px=int(ui.get("base_font_px", 24)),
             drop_overlay_enabled=bool(ui.get("drop_overlay_enabled", True)),
         ),
     )

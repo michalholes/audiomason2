@@ -496,31 +496,42 @@
 
   function setupUpload() {
     var zone = el("uploadZone");
+    var browse = el("uploadBrowse");
     var input = el("uploadInput");
 
-    zone.addEventListener("click", function () {
+    function openPicker() {
+      if (!input) return;
       input.value = "";
       input.click();
-    });
-
-    input.addEventListener("change", function () {
-      if (input.files && input.files[0]) uploadFile(input.files[0]);
-    });
-
-    function setDrag(on) {
-      if (on) zone.classList.add("dragover");
-      else zone.classList.remove("dragover");
     }
 
-    zone.addEventListener("dragenter", function (e) { e.preventDefault(); setDrag(true); });
-    zone.addEventListener("dragleave", function (e) { e.preventDefault(); setDrag(false); });
-    zone.addEventListener("dragover", function (e) { e.preventDefault(); setDrag(true); });
-    zone.addEventListener("drop", function (e) {
-      e.preventDefault();
-      setDrag(false);
-      var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-      if (f) uploadFile(f);
-    });
+    if (browse) {
+      browse.addEventListener("click", function () { openPicker(); });
+    }
+    if (zone) {
+      zone.addEventListener("click", function () { openPicker(); });
+
+      function setDrag(on) {
+        if (on) zone.classList.add("dragover");
+        else zone.classList.remove("dragover");
+      }
+
+      zone.addEventListener("dragenter", function (e) { e.preventDefault(); setDrag(true); });
+      zone.addEventListener("dragleave", function (e) { e.preventDefault(); setDrag(false); });
+      zone.addEventListener("dragover", function (e) { e.preventDefault(); setDrag(true); });
+      zone.addEventListener("drop", function (e) {
+        e.preventDefault();
+        setDrag(false);
+        var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+        if (f) uploadFile(f);
+      });
+    }
+
+    if (input) {
+      input.addEventListener("change", function () {
+        if (input.files && input.files[0]) uploadFile(input.files[0]);
+      });
+    }
 
     window.addEventListener("dragover", function (e) { e.preventDefault(); });
     window.addEventListener("drop", function (e) { e.preventDefault(); });

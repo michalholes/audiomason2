@@ -29,6 +29,6 @@ log_filename_regex = "am_patch_issue_(\\d+)_"
 stats_windows_days = [7, 30]
 
 [ui]
-base_font_px = 22
+base_font_px = 24
 drop_overlay_enabled = true
 
