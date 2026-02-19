@@ -27,6 +27,11 @@ def main() -> int:
 
     app = App(repo_root=repo_root, cfg=cfg)
     server = WebServer((cfg.server.host, cfg.server.port), app=app)
+    host = cfg.server.host
+    port = cfg.server.port
+    print(f"WEB: listening on http://{host}:{port}")
+    if host == "0.0.0.0":
+        print(f"WEB: local access http://127.0.0.1:{port}")
     try:
         server.serve_forever(poll_interval=0.2)
     finally:

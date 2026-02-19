@@ -21,7 +21,16 @@
     return fetch(path, { headers: { "Accept": "application/json" } })
       .then(function (r) {
         return r.text().then(function (t) {
-          try { return JSON.parse(t); } catch (e) { return { ok: false, error: "bad json", raw: t, status: r.status }; }
+          try {
+            return JSON.parse(t);
+          } catch (e) {
+            return {
+              ok: false,
+              error: "bad json",
+              raw: t,
+              status: r.status
+            };
+          }
         });
       });
   }
@@ -33,7 +42,16 @@
       body: JSON.stringify(body || {})
     }).then(function (r) {
       return r.text().then(function (t) {
-        try { return JSON.parse(t); } catch (e) { return { ok: false, error: "bad json", raw: t, status: r.status }; }
+        try {
+          return JSON.parse(t);
+        } catch (e) {
+          return {
+            ok: false,
+            error: "bad json",
+            raw: t,
+            status: r.status
+          };
+        }
       });
     });
   }
@@ -399,39 +417,86 @@
     });
   }
 
+  function uploadFile(file) {
+    var fd = new FormData();
+    fd.append("file", file);
+    fetch("/api/upload/patch", {
+      method: "POST",
+      body: fd,
+      headers: { "Accept": "application/json" }
+    })
+      .then(function (r) {
+        return r.text().then(function (t) {
+          try {
+            return JSON.parse(t);
+          } catch (e) {
+            return {
+              ok: false,
+              error: "bad json",
+              raw: t,
+              status: r.status
+            };
+          }
+        });
+      })
+      .then(function (j) {
+        setPre("uploadResult", j);
+        if (j && j.stored_rel_path) {
+          var stored = String(j.stored_rel_path);
+          el("patchPath").value = stored;
+
+          var relUnderRoot = stripPatchesPrefix(stored);
+          var parent = parentRel(relUnderRoot);
+          if (String(el("fsPath").value || "") === "") {
+            el("fsPath").value = parent;
+          }
+        }
+        refreshFs();
+        validateAndPreview();
+      })
+      .catch(function (e) {
+        setPre("uploadResult", String(e));
+      });
+  }
+
+  function enableGlobalDropOverlay() {
+    var counter = 0;
+
+    function show() { document.body.classList.add("dragging"); }
+    function hide() { document.body.classList.remove("dragging"); }
+
+    document.addEventListener("dragenter", function (e) {
+      e.preventDefault();
+      counter += 1;
+      show();
+    });
+
+    document.addEventListener("dragover", function (e) {
+      e.preventDefault();
+      show();
+    });
+
+    document.addEventListener("dragleave", function (e) {
+      e.preventDefault();
+      counter -= 1;
+      if (counter <= 0) {
+        counter = 0;
+        hide();
+      }
+    });
+
+    document.addEventListener("drop", function (e) {
+      e.preventDefault();
+      counter = 0;
+      hide();
+      var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+      if (f) uploadFile(f);
+    });
+  }
+
   function setupUpload() {
     var zone = el("uploadZone");
     var input = el("uploadInput");
-
-    function doUpload(file) {
-      var fd = new FormData();
-      fd.append("file", file);
-      fetch("/api/upload/patch", { method: "POST", body: fd, headers: { "Accept": "application/json" } })
-        .then(function (r) {
-          return r.text().then(function (t) {
-            try { return JSON.parse(t); } catch (e) { return { ok: false, error: "bad json", raw: t, status: r.status }; }
-          });
-        })
-        .then(function (j) {
-          setPre("uploadResult", j);
-          if (j && j.stored_rel_path) {
-            var stored = String(j.stored_rel_path);
-            el("patchPath").value = stored;
-
-            // For file manager path input we need a path under patches root.
-            var relUnderRoot = stripPatchesPrefix(stored);
-            var parent = parentRel(relUnderRoot);
-            if (String(el("fsPath").value || "") === "") {
-              el("fsPath").value = parent;
-            }
-          }
-          refreshFs();
-          validateAndPreview();
-        })
-        .catch(function (e) {
-          setPre("uploadResult", String(e));
-        });
-    }
 
     zone.addEventListener("click", function () {
       input.value = "";
@@ -439,7 +504,7 @@
     });
 
     input.addEventListener("change", function () {
-      if (input.files && input.files[0]) doUpload(input.files[0]);
+      if (input.files && input.files[0]) uploadFile(input.files[0]);
     });
 
     function setDrag(on) {
@@ -454,7 +519,7 @@
       e.preventDefault();
       setDrag(false);
       var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-      if (f) doUpload(f);
+      if (f) uploadFile(f);
     });
 
     window.addEventListener("dragover", function (e) { e.preventDefault(); });
@@ -468,6 +533,14 @@
         try { issueRegex = new RegExp(cfg.issue.default_regex); } catch (e) { issueRegex = null; }
       }
       refreshHeader();
+      if (cfg && cfg.ui) {
+        if (cfg.ui.base_font_px) {
+          document.documentElement.style.fontSize = String(cfg.ui.base_font_px) + "px";
+        }
+        if (cfg.ui.drop_overlay_enabled) {
+          enableGlobalDropOverlay();
+        }
+      }
       return cfg;
     }).catch(function () {
       cfg = null;

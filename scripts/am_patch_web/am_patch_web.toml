@@ -27,3 +27,8 @@ allocation_max = 99999
 [indexing]
 log_filename_regex = "am_patch_issue_(\\d+)_"
 stats_windows_days = [7, 30]
+
+[ui]
+base_font_px = 22
+drop_overlay_enabled = true
+

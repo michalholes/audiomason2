@@ -284,6 +284,10 @@ class App:
                 "log_filename_regex": self.cfg.indexing.log_filename_regex,
                 "stats_windows_days": self.cfg.indexing.stats_windows_days,
             },
+            "ui": {
+                "base_font_px": self.cfg.ui.base_font_px,
+                "drop_overlay_enabled": self.cfg.ui.drop_overlay_enabled,
+            },
         }
         return _json_bytes(data)
 

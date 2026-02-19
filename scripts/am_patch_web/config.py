@@ -49,6 +49,12 @@ class IndexingConfig:
 
 
 @dataclass(frozen=True)
+class UiConfig:
+    base_font_px: int
+    drop_overlay_enabled: bool
+
+
+@dataclass(frozen=True)
 class AppConfig:
     server: ServerConfig
     runner: RunnerConfig
@@ -56,6 +62,7 @@ class AppConfig:
     upload: UploadConfig
     issue: IssueConfig
     indexing: IndexingConfig
+    ui: UiConfig
 
 
 def _must_get(d: dict[str, Any], key: str) -> Any:
@@ -73,6 +80,7 @@ def load_config(path: Path) -> AppConfig:
     upload = raw.get("upload", {})
     issue = raw.get("issue", {})
     indexing = raw.get("indexing", {})
+    ui = raw.get("ui", {})
 
     return AppConfig(
         server=ServerConfig(
@@ -104,5 +112,9 @@ def load_config(path: Path) -> AppConfig:
         indexing=IndexingConfig(
             log_filename_regex=str(_must_get(indexing, "log_filename_regex")),
             stats_windows_days=list(_must_get(indexing, "stats_windows_days")),
+        ),
+        ui=UiConfig(
+            base_font_px=int(ui.get("base_font_px", 22)),
+            drop_overlay_enabled=bool(ui.get("drop_overlay_enabled", True)),
         ),
     )
