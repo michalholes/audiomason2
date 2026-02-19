@@ -12,6 +12,7 @@
 8. Ak ziadam kontrolu, chcem aby bola hlbkova, kvalifikovana, kvalitna a overila kazdu okolnost
 9. Sucastou kazdeho implementacneho handoffu musi byt povinnost napisat znenie jedneho nadpisu v instrukciach pre tvorbu patchov, pricom riadiaci chat nahodne vyberie jeho cislo od 1-8. 
 10. Ak hrozi, ze spadne brana monolith, musis handoff vytvorit tak, ze novy patch neprispeje k tvorbe monolitu
+11. Ak bol zisteny nedostatok v kode oproti specifikacii, je zakazane updatovat specifikaciu inym sposobom ako version bump.
 ---
 
 ## 2. CHARAKTER PROJEKTU
