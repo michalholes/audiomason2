@@ -7,6 +7,9 @@
 3. Odpovede musia vychádzať z overenia v kóde aj v špecifikácii (docs/).
 4. Ak nie je dostatok informácií, je povinné si ich vyžiadať.
 5. Keď používateľ uvedie „am“, rozumie sa tým AudioMason2.
+6. Ak ziadam plan, chcem, aby bol kvalifikovany, kvalitny, verifikovany, bez podmienok, overeny v kode.
+7. Pri uprave scripts/ neplati kontrakt ani docs/specification.md
+8. Ak ziadam kontrolu, chcem aby bola hlbkova, kvalifikovana, kvalitna a overila kazdu okolnost
 
 ---
 

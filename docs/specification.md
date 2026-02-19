@@ -1,6 +1,6 @@
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.1.8 Specification Versioning Policy: Start at
+Specification Version: 1.1.10 Specification Versioning Policy: Start at
 1.0.0. Patch version increments by +1 for every change.
 
 Author: Michal Holes\
@@ -1068,36 +1068,47 @@ Any violation is a hard contract error.
 
 ## 10.3 Authoritative State Machine (Steps and Transitions)
 
-### 10.3.1 Canonical Step Set
+### 10.3.1 Workflow Authority (WizardDefinition)
 
-The wizard state machine consists of the following step_ids:
+The wizard state machine (step set and transition graph) is defined by the effective workflow snapshot
+generated at session creation time.
 
+Source artifacts:
+- WizardDefinition (structural workflow): <wizards_root>/import/definitions/wizard_definition.json
+- FlowConfig (non-structural tuning only): <wizards_root>/import/config/flow_config.json
+
+At session creation, the engine MUST generate and persist the effective workflow snapshot into:
+- sessions/<session_id>/effective_model.json
+
+This effective snapshot is the single source of truth for the active session.
+
+### 10.3.2 Mandatory Steps and Ordering Constraints
+
+WizardDefinition MAY add, remove, reorder, or insert steps, but the engine MUST enforce mandatory
+constraints to preserve phases and safety invariants.
+
+Mandatory step_ids (MUST exist in every effective workflow):
 S0  select_authors
 S1  select_books
 S2  plan_preview_batch (computed-only)
-S3  effective_author_title
-S4  filename_policy
-S5  covers_policy
-S6  id3_policy
-S7  audio_processing
-S8  publish_policy
-S9  delete_source_policy
 S10 conflict_policy
-S11 parallelism
 S12 final_summary_confirm
-S13 resolve_conflicts_batch (conditional)
 S14 processing (PHASE 2 terminal)
 
-### 10.3.2 Linear Transitions (Default)
+Mandatory ordering constraints (MUST hold):
+- select_authors precedes select_books.
+- select_books precedes plan_preview_batch.
+- plan_preview_batch precedes conflict_policy.
+- conflict_policy precedes final_summary_confirm.
+- final_summary_confirm precedes processing.
+- processing is the only PHASE 2 terminal step.
 
-The default transition graph is strictly linear:
+Optional steps MAY be inserted between mandatory steps, subject to Engine Guards (10.6) and phase rules.
 
-select_authors -> select_books -> plan_preview_batch -> effective_author_title -> filename_policy -> covers_policy -> id3_policy -> audio_processing -> publish_policy -> delete_source_policy -> conflict_policy -> parallelism -> final_summary_confirm -> processing
+### 10.3.3 Default Workflow
 
-Optional steps (filename_policy, covers_policy, id3_policy, audio_processing, publish_policy, delete_source_policy, parallelism) may be disabled by FlowConfig, but mandatory steps MUST NOT be removed (see 10.6).
-
-When an optional step is disabled, the engine MUST skip it deterministically to the next enabled step.
-
+The default workflow provided by the system SHALL remain strictly linear and equivalent to the previous
+canonical order, but it is now expressed as the default WizardDefinition rather than as a hardcoded list.
 ### 10.3.3 Deterministic Error Behavior (ERR/OK)
 
 - ERR(payload): state MUST NOT advance; the current_step_id remains unchanged.
@@ -1308,13 +1319,18 @@ If implemented, they MUST be deterministic and atomic.
 
 ## 10.6 Engine Guards (Invariants; MUST REJECT)
 
-The engine MUST reject any FlowConfig or flow construction that attempts to:
+The engine MUST reject any WizardDefinition, FlowConfig, or effective workflow construction that attempts to:
+
+- remove mandatory steps (10.3.2)
+- violate mandatory ordering constraints (10.3.2)
 - remove final_summary_confirm
 - remove conflict_policy
+- remove processing (PHASE 2 terminal)
 - change PHASE numbers
 - allow start_processing before conflict resolution when conflict_mode == "ask"
 - mark processed registry before job success
 - insert steps before select_authors
+- insert steps after processing
 - bypass resolve_conflicts_batch when conflict_mode == "ask" and conflicts exist
 
 Rejection MUST use INVARIANT_VIOLATION (10.4.1).
@@ -1337,8 +1353,21 @@ Required subpaths:
 - sessions/<session_id>/decisions.jsonl
 - sessions/<session_id>/plan.json
 - sessions/<session_id>/job_requests.json
+Notes:
+- sessions/<session_id>/effective_model.json MUST contain the frozen effective workflow snapshot derived from WizardDefinition and FlowConfig.
+  UI layers MUST NOT interpret global WizardDefinition directly for an active session.
+
 
 Engine-derived artifacts (engine-owned; may be created deterministically):
+
+- sessions/<session_id>/action_jobs.json
+  - Meaning: canonical job requests for action steps with execution="job" within PHASE 1.
+  - Contract: each entry MUST be canonical JSON and MUST be compatible with the job subsystem.
+  - action_jobs.json MUST NOT be used for PHASE 2 processing jobs (see 10.11).
+
+- previews/<preview_id>.json
+  - Meaning: isolated preview_action result artifact (10.23 / 10.23 Preview Execution).
+  - MUST NOT modify any session snapshot.
 
 - sessions/<session_id>/discovery_fingerprint.txt
   - Content: <hex> + newline
@@ -1437,6 +1466,31 @@ A session is deterministically defined by:
 
 Finalize MUST produce byte-identical canonical job_requests.json for identical tuples.
 
+
+## 10.10A PHASE 1 Action Job Request Schema (Normative)
+
+For action steps with execution == "job", the interpreter MUST create entries
+inside:
+
+sessions/<session_id>/action_jobs.json
+
+Each entry MUST conform EXACTLY to the canonical job request schema defined
+in Section 10.11 (Job Request Contract - PHASE 2).
+
+Normative rules:
+
+- The JSON structure MUST match the same schema used by PHASE 2 processing jobs.
+- No additional keys MAY be introduced.
+- Required keys MUST NOT be omitted.
+- job_id generation MUST follow the same deterministic rules as PHASE 2 jobs.
+- action_jobs.json is limited strictly to PHASE 1 action steps.
+- PHASE 2 processing jobs remain governed exclusively by Section 10.11.
+
+Any deviation from the canonical Job Request schema SHALL be treated as
+CONTRACT_VIOLATION.
+
+------------------------------------------------------------------------
+
 ## 10.11 Job Request Contract (PHASE 2)
 
 job_requests.json MUST contain:
@@ -1488,9 +1542,12 @@ Before creating jobs:
 
 If conflicts appear, the engine MUST block processing deterministically and return a structured error.
 
-## 10.12 Config Governance (Editor and Storage)
+## 10.12 Config Governance (Editors and Storage)
 
-If a visual editor exists, it modifies FlowConfig only.
+If visual editors exist:
+
+- A Wizard editor modifies WizardDefinition only (structural workflow).
+- A Config editor modifies FlowConfig only (non-structural tuning).
 
 Requirements:
 - Validate FlowConfig on load, save, import, and preset apply.
@@ -1635,7 +1692,7 @@ Registry metadata MUST include:
 
 {
   "plugin_id": "string",
-  "manifest_pointer": {
+  "wizard_callable_manifest_pointer": {
     "type": "file",
     "path": "relative/path/to/manifest.json"
   }
@@ -1644,7 +1701,7 @@ Registry metadata MUST include:
 The interpreter SHALL:
 
 1. Query PluginRegistry.
-2. Load manifest via manifest_pointer.
+2. Load callable manifest via wizard_callable_manifest_pointer.
 3. Validate manifest.
 4. Expose operations via list_callable_operations().
 
@@ -1653,6 +1710,14 @@ Filesystem scanning is forbidden.
 ------------------------------------------------------------------------
 
 ## 10.20 Callable Plugin Manifest Contract
+
+
+Clarification:
+- "plugin manifest config_schema" in Section 7.1.2 refers to configuration normalization schema.
+- The "callable plugin manifest" defined here is a separate contract for wizard-callable operations.
+- A plugin MAY choose to store both contracts in one physical JSON file, but the registry MUST expose
+  wizard-callable operations through wizard_callable_manifest_pointer and the interpreter MUST validate
+  the callable contract independently.
 
 Each callable plugin MUST provide a manifest with:
 
@@ -1682,7 +1747,7 @@ Interpreter MUST enforce:
 Execution type:
 
 - inline: executed within PHASE 1 under interpreter control
-- job: MUST generate job_request and use existing Job subsystem
+- job: MUST generate a PHASE 1 action job request (sessions/<session_id>/action_jobs.json) and use the existing Job subsystem; PHASE 2 processing remains governed by 10.11
 
 Interpreter MUST NOT implement parallel job execution mechanism outside Section 5.
 
