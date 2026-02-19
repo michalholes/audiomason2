@@ -269,11 +269,7 @@ def _render_loop(
             print_fn(_json_dump({"state": state}))
             return 1
 
-        if (
-            cur == "processing"
-            or int(state.get("phase") or 1) == 2
-            or state.get("status") == "processing"
-        ):
+        if int(state.get("phase") or 1) == 2 or state.get("status") == "processing":
             return _finalize(engine, session_id, print_fn=print_fn)
 
         step = engine.get_step_definition(session_id, cur)
@@ -296,11 +292,7 @@ def _render_loop(
         if computed_only or not fields:
             # No user input required; advance.
             state2 = engine.apply_action(session_id, "next")
-            if (
-                str(state2.get("current_step_id") or "") == "processing"
-                or int(state2.get("phase") or 1) == 2
-                or state2.get("status") == "processing"
-            ):
+            if int(state2.get("phase") or 1) == 2 or state2.get("status") == "processing":
                 return _finalize(engine, session_id, print_fn=print_fn)
             continue
 
@@ -343,11 +335,7 @@ def _render_loop(
             payload[name] = raw
 
         state3 = engine.submit_step(session_id, cur, payload)
-        if (
-            str(state3.get("current_step_id") or "") == "processing"
-            or int(state3.get("phase") or 1) == 2
-            or state3.get("status") == "processing"
-        ):
+        if int(state3.get("phase") or 1) == 2 or state3.get("status") == "processing":
             return _finalize(engine, session_id, print_fn=print_fn)
 
         # Simple navigation prompt.
