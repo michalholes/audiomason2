@@ -701,3 +701,8 @@
     and persists canonically ordered conflict items for deterministic re-check.
 
 -   spec: Bump specification version to 1.1.11 and document plan-based conflict scanning.
+
+-   Issue 216: job_requests.json now derives per-book actions from plan.json and start_processing
+    returns batch_size equal to the number of planned units.
+
+-   spec: Bump specification version to 1.1.12 and document plan-based job request batching.

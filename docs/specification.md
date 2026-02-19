@@ -1,6 +1,6 @@
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.1.11 Specification Versioning Policy: Start at
+Specification Version: 1.1.12 Specification Versioning Policy: Start at
 1.0.0. Patch version increments by +1 for every change.
 
 Author: Michal Holes\
@@ -1522,6 +1522,14 @@ job_requests.json MUST contain:
 
 All file references MUST use (root, relative_path).
 Absolute paths are forbidden.
+
+actions[] contract (normative):
+- actions[] MUST be derived from sessions/<session_id>/plan.json.
+- actions[] MUST contain one entry per planned unit (selected_books[]).
+- If selected_books[] is empty and plan.source.relative_path is non-empty, actions[] MUST contain exactly one implicit unit.
+
+start_processing response contract (normative):
+- start_processing MUST return batch_size equal to the number of planned units represented in job_requests.json actions[].
 
 ### 10.11.1 Canonical Serialization (Mandatory)
 

@@ -1177,8 +1177,8 @@ class ImportWizardEngine:
                     meta={},
                 )
 
-            inputs = dict(state.get("inputs") or {})
-            final = inputs.get("final_summary_confirm")
+            runtime_inputs = dict(state.get("inputs") or {})
+            final = runtime_inputs.get("final_summary_confirm")
             if not (isinstance(final, dict) and final.get("confirm_start") is True):
                 return validation_error(
                     message="final_summary_confirm must be submitted with confirm=true",
@@ -1284,6 +1284,7 @@ class ImportWizardEngine:
                 ),
             }
 
+            policy_inputs = dict(state.get("answers") or {})
             job_requests = build_job_requests(
                 session_id=session_id,
                 root=src_root,
@@ -1294,7 +1295,7 @@ class ImportWizardEngine:
                     state.get("derived", {}).get("effective_config_fingerprint") or ""
                 ),
                 plan=plan,
-                inputs=inputs,
+                inputs=policy_inputs,
             )
 
             job_path = f"{session_dir}/job_requests.json"
@@ -1327,7 +1328,10 @@ class ImportWizardEngine:
                 },
             )
 
-            return {"job_ids": [job_id], "batch_size": 1}
+            from .job_requests import planned_units_count
+
+            batch_size = planned_units_count(plan)
+            return {"job_ids": [job_id], "batch_size": batch_size}
         except Exception as e:
             return _exception_envelope(e)
 
@@ -1358,7 +1362,17 @@ class ImportWizardEngine:
             raise FinalizeError("job_requests.json missing idempotency_key")
 
         job_id = self._get_or_create_job(session_id, state, idem_key)
-        return {"job_ids": [job_id], "batch_size": 1}
+        plan_path = f"{session_dir}/plan.json"
+        plan = (
+            read_json(self._fs, RootName.WIZARDS, plan_path)
+            if self._fs.exists(RootName.WIZARDS, plan_path)
+            else {}
+        )
+        if not isinstance(plan, dict):
+            plan = {}
+        from .job_requests import planned_units_count
+
+        return {"job_ids": [job_id], "batch_size": planned_units_count(plan)}
 
     def _resolve_flag_for_scan(
         self,
