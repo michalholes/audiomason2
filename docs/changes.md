@@ -1,3 +1,16 @@
+## 2026-02-19T00:45:00+01:00
+
+-   spec: Fully integrate WizardDefinition structural workflow authority into Import Wizard specification (no addendum).
+-   spec: Introduce single Interpreter authority model with canonical Step Payload contract.
+-   spec: Define registry-mediated callable plugin manifest discovery (manifest_pointer required in PluginRegistry).
+-   spec: Formalize action execution contract (inline vs job) and require integration with existing Job subsystem.
+-   spec: Add formal session lifecycle state machine (CREATED→ACTIVE→WAITING_FOR_ACTION→ERROR→COMPLETED→FINALIZED).
+-   spec: Enforce FINALIZED snapshot immutability.
+-   spec: Seal expression model (lookup-only; no scripting).
+-   spec: Define preview_action isolation rules and preview artifact storage.
+-   spec: Add CI-enforced anti-drift invariants (UI isolation, determinism, parity tests).
+-   spec: Bump specification version to 1.1.8.
+
 ## 2026-02-19T00:31:56+01:00
 
 -   import: Treat .rar archives as bundle sources during PHASE 0 discovery.

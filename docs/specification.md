@@ -1,6 +1,6 @@
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.1.7 Specification Versioning Policy: Start at
+Specification Version: 1.1.8 Specification Versioning Policy: Start at
 1.0.0. Patch version increments by +1 for every change.
 
 Author: Michal Holes\
@@ -1555,3 +1555,223 @@ The repository MUST include deterministic tests that enforce:
 - Idempotency key enforcement (no duplicate jobs).
 
 Integration completed (updated): 2026-02-18 06:00:00 UTC
+
+------------------------------------------------------------------------
+
+## 10.16 Structural Workflow Authority (WizardDefinition Model)
+
+The Import Wizard structural workflow MUST be defined by a single authoritative
+artifact named WizardDefinition.
+
+Location (file_io root: wizards):
+
+<wizards_root>/import/definitions/wizard_definition.json
+
+Rules:
+
+- WizardDefinition defines structural workflow only:
+  - step ordering
+  - step types
+  - structural transitions
+  - action bindings
+- FlowConfig MUST NOT modify structure.
+- FlowConfig MAY modify only non-structural parameters (see 10.4.4).
+- WizardDefinition MUST be versioned and validated on load.
+- Structural edits affect only new sessions.
+
+Active sessions MUST use a frozen effective_workflow snapshot.
+
+------------------------------------------------------------------------
+
+## 10.17 Interpreter Authority (Single Execution Engine)
+
+The Import Wizard MUST use a single interpreter responsible for:
+
+- Step transitions
+- Validation
+- Conflict evaluation
+- Action execution
+- Job request generation
+
+UI layers (CLI/Web) MUST:
+
+- Render step payload only
+- Submit user input
+- Never branch on step_id
+- Never execute plugin logic directly
+
+Any UI-level business logic is a contract violation.
+
+------------------------------------------------------------------------
+
+## 10.18 Step Payload Contract (Renderer Interface)
+
+The interpreter MUST return the following canonical structure:
+
+{
+  "session_id": "string",
+  "current_step": "step_id",
+  "type": "select | input | transform | action | review | finalize",
+  "data": {},
+  "allowed_actions": [],
+  "errors": [],
+  "action_status": {
+    "state": "idle | running | failed | completed",
+    "details": {}
+  }
+}
+
+Renderers MUST render strictly from this payload.
+
+No UI-specific branching is permitted.
+
+------------------------------------------------------------------------
+
+## 10.19 Plugin Operation Discovery (Registry-Mediated Only)
+
+Callable operations MUST be discovered exclusively via PluginRegistry.
+
+Registry metadata MUST include:
+
+{
+  "plugin_id": "string",
+  "manifest_pointer": {
+    "type": "file",
+    "path": "relative/path/to/manifest.json"
+  }
+}
+
+The interpreter SHALL:
+
+1. Query PluginRegistry.
+2. Load manifest via manifest_pointer.
+3. Validate manifest.
+4. Expose operations via list_callable_operations().
+
+Filesystem scanning is forbidden.
+
+------------------------------------------------------------------------
+
+## 10.20 Callable Plugin Manifest Contract
+
+Each callable plugin MUST provide a manifest with:
+
+{
+  "plugin": "string",
+  "manifest_version": 1,
+  "operations": [
+    {
+      "name": "string",
+      "execution": "inline | job",
+      "input_schema": {},
+      "result_schema": {},
+      "limits": {
+        "timeout_seconds": integer,
+        "max_result_bytes": integer
+      }
+    }
+  ]
+}
+
+Interpreter MUST enforce:
+
+- Input validation
+- Limit enforcement
+- Result validation
+
+Execution type:
+
+- inline: executed within PHASE 1 under interpreter control
+- job: MUST generate job_request and use existing Job subsystem
+
+Interpreter MUST NOT implement parallel job execution mechanism outside Section 5.
+
+------------------------------------------------------------------------
+
+## 10.21 Formal Session Lifecycle Extension
+
+Session states:
+
+- CREATED
+- ACTIVE
+- WAITING_FOR_ACTION
+- ERROR
+- COMPLETED
+- FINALIZED
+
+FINALIZED sessions MUST be immutable:
+
+- effective_workflow frozen
+- state frozen
+- job_requests immutable
+- diagnostics append-only
+
+Mutation after FINALIZED MUST be rejected.
+
+------------------------------------------------------------------------
+
+## 10.22 Expression Model (Sealed)
+
+Expressions allowed in WizardDefinition are restricted to pure data lookup:
+
+Allowed forms:
+
+- $state.<path>
+- $step.<step_id>.output.<path>
+
+Rules:
+
+- No scripting
+- No conditionals
+- No dynamic evaluation
+- No computed expressions
+- Invalid reference MUST raise VALIDATION_ERROR
+- Expression resolution MUST be side-effect free
+
+Embedding general-purpose expression engines is forbidden.
+
+------------------------------------------------------------------------
+
+## 10.23 Preview Execution (Optional, Isolated)
+
+Interpreter MAY support preview_action().
+
+Preview rules:
+
+- Uses same validation as real action
+- Does NOT modify session snapshot
+- Does NOT create job_requests
+- Emits diagnostics
+- Stored under:
+
+<wizards_root>/import/previews/<preview_id>.json
+
+Preview artifacts MUST be isolated and disposable.
+
+------------------------------------------------------------------------
+
+## 10.24 Determinism Guarantees (Extended)
+
+Interpreter MUST guarantee:
+
+- Stable selection ordering
+- No hidden mutable state
+- Same inputs + same effective_workflow -> identical outputs
+- Preview does not alter session determinism
+
+------------------------------------------------------------------------
+
+## 10.25 CI-Enforced Anti-Drift Rules
+
+The repository MUST enforce automated checks ensuring:
+
+1. UI layers do not import plugin execution modules.
+2. Only interpreter executes plugin operations.
+3. No step_id branching in UI.
+4. CLI and Web render identical payload for identical session state.
+5. Deterministic snapshot tests pass.
+6. Malformed manifest is rejected before exposure.
+
+------------------------------------------------------------------------
+
+Integration completed (updated): 2026-02-19 00:00:00 UTC
