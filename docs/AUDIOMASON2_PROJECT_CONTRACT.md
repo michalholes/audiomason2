@@ -1,6 +1,6 @@
 
 # AUDIOMASON2_PROJECT_CONTRACT.md
-Version: 1.3
+Version: 1.4
 
 Status: AUTHORITATIVE / IMMUTABLE BASE CONTRACT  
 Applies to: Entire AudioMason2 project (core, plugins, UI, tests, tooling, docs)  
@@ -123,6 +123,30 @@ Diagnostics are non-functional and fail-safe:
 - Diagnostic emission MUST NOT change functional behavior or outputs.
 - Failure of the diagnostic mechanism MUST NOT crash or block processing; processing must remain valid even if diagnostics fail.
 
+### 4.6 Structural Integrity
+
+AudioMason2 MUST preserve long-term structural modularity.
+
+No part of the system may evolve into a monolithic or catch-all
+structure that accumulates unrelated responsibilities.
+
+The following are considered architectural violations:
+
+- uncontrolled growth of modules beyond their declared responsibility,
+- creation of hub modules that centralize cross-cutting logic,
+- cross-area coupling that breaks plugin or ownership boundaries,
+- structural centralization that reduces isolation between Core,
+  Plugins, UI, and processing layers.
+
+Ownership boundaries are part of the architecture.
+They are not stylistic preferences.
+
+Any change that increases hidden coupling, reduces separation of
+concerns, or erodes modular independence is a contract violation.
+
+Tooling may enforce these constraints, but the invariant itself is
+architectural and exists independently of any specific enforcement
+mechanism.
 
 ---
 

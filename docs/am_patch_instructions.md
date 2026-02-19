@@ -2,7 +2,7 @@
 
 # Patch Authoring Manual
 
-AUTHORITATIVE -- AudioMason2 Status: active Version: v2.38
+AUTHORITATIVE -- AudioMason2 Status: active Version: v2.39
 
 This manual defines what a chat must produce so that the user can run
 the patch successfully and close the issue.
@@ -49,19 +49,34 @@ Refusal to proceed solely on the basis that the snapshot is provided as a `.zip`
 
 ## Anti-monolith rule set (HARD)
 
-A chat MUST NOT create a monolith or contribute to monolith growth. The
-patch MUST preserve modular boundaries and keep changes localized.
+A chat MUST NOT create a monolith or contribute to monolith growth.
+Changes MUST preserve modular boundaries and remain localized.
 
-Required constraints:
+The system evaluates structural changes using metrics such as:
+- growth of non-empty lines (LOC),
+- total module size,
+- increase in public exports,
+- increase in internal imports,
+- emergence of hub modules,
+- violation of architectural ownership boundaries.
 
-1.  Locality-first: prefer the smallest change set that fixes the issue.
-2.  No "god modules": do not introduce new catch-all modules.
-3.  No centralization without approval.
-4.  Respect ownership boundaries.
-5.  New code must have a single clear responsibility.
-6.  If the required change would inherently be cross-cutting, the chat
-    MUST stop and request explicit permission before producing such a
-    patch.
+Growth itself is not forbidden.
+Uncontrolled centralization and coupling expansion are.
+
+Required rules:
+
+1. Prefer small, localized changes.
+2. Do not create catch-all (“god”) modules.
+3. Respect ownership boundaries.
+4. If a module grows significantly or is already large,
+   new logic MUST be extracted into a new file.
+5. If a module shows concentration signals (many exports,
+   many internal imports, or hub characteristics),
+   further expansion is prohibited and extraction is required.
+6. File extraction is the default structural mitigation strategy.
+7. Only if extraction is objectively impossible may
+   architectural approval be requested.
+
 
 ------------------------------------------------------------------------
 
@@ -92,6 +107,8 @@ Rules:
 4.   All changes MUST be expressed as unified diff patches, packaged per
     file.
 5.   `git apply --check <patch>.patch` MUST succeed.
+6.  Structural changes MUST preserve modular boundaries as defined by
+   the Monolith gate ownership areas.
 
 ## Line Length and Style Safety (HARD)
 
@@ -141,6 +158,12 @@ Before sending:
 2.  Patch MUST apply cleanly (`git apply --check`).
 3.  Modified files MUST compile (`python -m compileall` minimum).
 4.  Patch MUST not introduce new dependencies without explicit approval.
+5.  Patch MUST not introduce Monolith gate violations.
+     This includes:
+       - uncontrolled growth of existing modules,
+       - introduction of hub/catch-all files,
+       - cross-area ownership violations,
+       - structural coupling expansion.
 
 The chat MUST NOT claim success without evidence.
 
@@ -219,6 +242,39 @@ Escalation (only when required):
 Even after escalation, only the minimal required files may be modified.
 
 Mechanical replacement of the entire repository tree is prohibited.
+
+## Monolith gate repair instructions (HARD)
+
+If the Monolith gate fails, the chat MUST correct the structural
+violation before attempting any other modification.
+
+Repair procedure:
+
+1. Identify the violated signal:
+   - excessive LOC growth,
+   - large total module size,
+   - increased public exports,
+   - increased internal imports,
+   - hub characteristics,
+   - ownership boundary violation.
+
+2. Apply structural mitigation:
+   - extract newly added or expanded logic into a new file,
+   - split large modules into responsibility-focused units,
+   - move cross-area logic into appropriately scoped modules,
+   - reduce internal imports by introducing clearer boundaries.
+
+3. Do NOT:
+   - suppress or bypass the violation,
+   - centralize additional logic,
+   - merge unrelated responsibilities to “make it pass”.
+
+4. The default repair strategy is file extraction.
+   Structural simplification takes priority over minimal diff size.
+
+5. Only if structural repair is objectively impossible
+   may architectural approval be requested.
+
 
 ------------------------------------------------------------------------
 
