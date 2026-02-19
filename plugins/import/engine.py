@@ -67,6 +67,47 @@ def _iso_utc_now() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
+def _ensure_session_state_fields(state: dict[str, Any]) -> dict[str, Any]:
+    """Ensure SessionState contains minimally required fields (spec 10.*).
+
+    This is a backward-compatible upgrader for existing sessions.
+    """
+    changed = False
+
+    def _setdefault(key: str, value: Any) -> None:
+        nonlocal changed
+        if key not in state:
+            state[key] = value
+            changed = True
+
+    _setdefault("answers", {})
+    _setdefault("computed", {})
+    _setdefault("selected_author_ids", [])
+    _setdefault("selected_book_ids", [])
+    _setdefault("effective_author_title", {})
+
+    # Backward compatibility: keep legacy inputs but answers is canonical.
+    if "inputs" not in state:
+        state["inputs"] = {}
+        changed = True
+
+    answers_any = state.get("answers")
+    inputs_any = state.get("inputs")
+
+    if (
+        isinstance(answers_any, dict)
+        and not answers_any
+        and isinstance(inputs_any, dict)
+        and inputs_any
+    ):
+        state["answers"] = dict(inputs_any)
+        changed = True
+
+    if changed:
+        state["updated_at"] = _iso_utc_now()
+    return state
+
+
 def _exception_envelope(exc: Exception) -> dict[str, Any]:
     if isinstance(exc, SessionNotFoundError):
         return error_envelope(
@@ -290,6 +331,8 @@ class ImportWizardEngine:
                     ),
                 },
             )
+            loaded_state = _ensure_session_state_fields(loaded_state)
+            self._persist_state(session_id, loaded_state)
             return loaded_state
 
         # 5) Persist frozen artifacts
@@ -342,7 +385,12 @@ class ImportWizardEngine:
             "source": {"root": root, "relative_path": relative_path},
             "current_step_id": start_step_id,
             "completed_step_ids": [],
+            "answers": {},
             "inputs": {},
+            "computed": {},
+            "selected_author_ids": [],
+            "selected_book_ids": [],
+            "effective_author_title": {},
             "derived": {
                 "discovery_fingerprint": discovery_fingerprint,
                 "effective_config_fingerprint": effective_config_fingerprint,
@@ -522,9 +570,27 @@ class ImportWizardEngine:
                 self._apply_conflict_resolve(state, normalized_payload)
                 self._persist_conflict_resolution(session_id, state, normalized_payload)
 
+            answers = dict(state.get("answers") or {})
+            answers[step_id] = normalized_payload
+            state["answers"] = answers
+
+            # Backward compatibility: maintain legacy inputs mirror.
             inputs = dict(state.get("inputs") or {})
             inputs[step_id] = normalized_payload
             state["inputs"] = inputs
+
+            if step_id == "select_authors":
+                sel = normalized_payload.get("selection")
+                if isinstance(sel, list) and all(isinstance(x, str) for x in sel):
+                    state["selected_author_ids"] = list(sel)
+
+            if step_id == "select_books":
+                sel = normalized_payload.get("selection")
+                if isinstance(sel, list) and all(isinstance(x, str) for x in sel):
+                    state["selected_book_ids"] = list(sel)
+
+            if step_id == "effective_author_title":
+                state["effective_author_title"] = dict(normalized_payload)
 
             completed = list(state.get("completed_step_ids") or [])
             if step_id not in completed:
@@ -925,9 +991,22 @@ class ImportWizardEngine:
             root=src_root,
             relative_path=src_rel,
             discovery=discovery,
-            inputs=dict(state.get("inputs") or {}),
+            inputs=dict(state.get("answers") or {}),
         )
         atomic_write_json(self._fs, RootName.WIZARDS, f"{session_dir}/plan.json", plan)
+
+        computed = dict(state.get("computed") or {})
+        summary_any = plan.get("summary") if isinstance(plan, dict) else None
+        sel_any = plan.get("selected_policies") if isinstance(plan, dict) else None
+        summary = summary_any if isinstance(summary_any, dict) else {}
+        selected_policies = sel_any if isinstance(sel_any, dict) else {}
+        computed["plan_summary"] = {
+            "files": int(summary.get("files") or 0),
+            "dirs": int(summary.get("dirs") or 0),
+            "bundles": int(summary.get("bundles") or 0),
+            "selected_policies": dict(selected_policies),
+        }
+        state["computed"] = computed
 
         # Update conflict fingerprint during plan preview.
         self._update_conflicts(session_id, state)
@@ -1459,7 +1538,11 @@ class ImportWizardEngine:
         state_path = f"{session_dir}/state.json"
         if not self._fs.exists(RootName.WIZARDS, state_path):
             raise SessionNotFoundError(f"session not found: {session_id}")
-        return read_json(self._fs, RootName.WIZARDS, state_path)
+        state = read_json(self._fs, RootName.WIZARDS, state_path)
+        if isinstance(state, dict):
+            state = _ensure_session_state_fields(state)
+            self._persist_state(session_id, state)
+        return state
 
     def _persist_state(self, session_id: str, state: dict[str, Any]) -> None:
         session_dir = f"import/sessions/{session_id}"

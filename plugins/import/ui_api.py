@@ -88,15 +88,22 @@ def build_router(*, engine: Any):
     @router.post("/config/reset")
     def reset_config():
         def _impl():
-            default_cfg = {"version": 1, "steps": {}, "defaults": {}, "ui": {}}
             fs = engine.get_file_service()
+
+            from .defaults import DEFAULT_FLOW_CONFIG
+
+            validated = engine.validate_flow_config(DEFAULT_FLOW_CONFIG)
+            if validated.get("ok") is not True:
+                return JSONResponse(status_code=500, content=validated)
+
+            normalized = engine._normalize_flow_config(DEFAULT_FLOW_CONFIG)
             atomic_write_json(
                 fs,
                 RootName.WIZARDS,
                 "import/config/flow_config.json",
-                default_cfg,
+                normalized,
             )
-            return default_cfg
+            return normalized
 
         return _call(_impl)
 

@@ -1,3 +1,15 @@
+## 2026-02-19T18:30:00+01:00
+
+-   Issue 212: Import wizard session state now includes canonical fields
+    (answers/computed/selected_* and effective_author_title) and compute_plan
+    writes plan_summary into state.computed.
+
+-   Issue 212: /import/ui/config/reset now resets FlowConfig to the builtin
+    DEFAULT_FLOW_CONFIG and returns the normalized, validated config.
+
+-   Issue 212: Import CLI renderer now finalizes the wizard by calling
+    start_processing(confirm=true) and prints job_ids and batch_size.
+
 ## 2026-02-19T00:45:00+01:00
 
 -   spec: Fully integrate WizardDefinition structural workflow authority into Import Wizard specification (no addendum).

@@ -270,6 +270,13 @@ def _render_loop(
             print_fn(_json_dump({"state": state}))
             return 1
 
+        if (
+            cur == "processing"
+            or int(state.get("phase") or 1) == 2
+            or state.get("status") == "processing"
+        ):
+            return _finalize(engine, session_id, print_fn=print_fn)
+
         step = engine.get_step_definition(session_id, cur)
         if "error" in step:
             print_fn(_json_dump({"step": step}))
@@ -290,7 +297,11 @@ def _render_loop(
         if computed_only or not fields:
             # No user input required; advance.
             state2 = engine.apply_action(session_id, "next")
-            if state2.get("status") in {"done", "aborted"}:
+            if (
+                str(state2.get("current_step_id") or "") == "processing"
+                or int(state2.get("phase") or 1) == 2
+                or state2.get("status") == "processing"
+            ):
                 return _finalize(engine, session_id, print_fn=print_fn)
             continue
 
@@ -333,7 +344,11 @@ def _render_loop(
             payload[name] = raw
 
         state3 = engine.submit_step(session_id, cur, payload)
-        if state3.get("status") in {"done", "aborted"}:
+        if (
+            str(state3.get("current_step_id") or "") == "processing"
+            or int(state3.get("phase") or 1) == 2
+            or state3.get("status") == "processing"
+        ):
             return _finalize(engine, session_id, print_fn=print_fn)
 
         # Simple navigation prompt.
@@ -384,7 +399,16 @@ def _show_select_items(
 def _finalize(
     engine: ImportWizardEngine, session_id: str, *, print_fn: Callable[[str], None]
 ) -> int:
-    result = engine.finalize(session_id)
+    result = engine.start_processing(session_id, {"confirm": True})
+
+    job_ids = result.get("job_ids") if isinstance(result, dict) else None
+    batch_size = result.get("batch_size") if isinstance(result, dict) else None
+
+    if isinstance(job_ids, list):
+        print_fn("job_ids: " + ", ".join(str(x) for x in job_ids))
+    if isinstance(batch_size, int):
+        print_fn(f"batch_size: {batch_size}")
+
     print_fn(_json_dump(result))
     if isinstance(result, dict) and "error" in result:
         return 1
