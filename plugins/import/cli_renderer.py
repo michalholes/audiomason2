@@ -13,10 +13,9 @@ from dataclasses import dataclass
 from typing import Any
 
 from audiomason.core.config import ConfigResolver
-from plugins.file_io.service import RootName
+from plugins.file_io.service.types import RootName
 
 from .engine import ImportWizardEngine
-from .storage import read_json
 
 
 @dataclass(frozen=True)
@@ -317,7 +316,7 @@ def _render_loop(
                 continue
 
             if ftype == "multi_select_indexed":
-                _show_select_items(engine, session_id, name=name, cfg=cfg, print_fn=print_fn)
+                _show_select_items(field=f, name=name, cfg=cfg, print_fn=print_fn)
                 expr = input_fn(f"{name} selection (e.g. all, 1,3,5-8): ").strip()
                 payload[f"{name}_expr"] = expr
                 continue
@@ -366,32 +365,30 @@ def _render_loop(
 
 
 def _show_select_items(
-    engine: ImportWizardEngine,
-    session_id: str,
     *,
+    field: dict[str, Any],
     name: str,
     cfg: RendererConfig,
     print_fn: Callable[[str], None],
 ) -> None:
-    # Best-effort display: show discovery items (ordered) if present.
-    fs = engine.get_file_service()
-    session_dir = f"import/sessions/{session_id}"
-    try:
-        discovery_any = read_json(fs, RootName.WIZARDS, f"{session_dir}/discovery.json")
-    except Exception:
-        return
-    if not (isinstance(discovery_any, list) and all(isinstance(x, dict) for x in discovery_any)):
+    items_any = field.get("items")
+    if not (isinstance(items_any, list) and all(isinstance(x, dict) for x in items_any)):
+        print_fn(f"ERROR: field '{name}' has no selectable items")
         return
 
-    items: list[dict[str, Any]] = [dict(x) for x in discovery_any]
+    items: list[dict[str, Any]] = [dict(x) for x in items_any]
     if not items:
+        print_fn(f"ERROR: field '{name}' has no selectable items")
         return
 
     print_fn(f"Selectable items for '{name}':")
     for idx, it in enumerate(items[: cfg.max_list_items], start=1):
-        rel = str(it.get("relative_path") or "")
-        kind = str(it.get("kind") or "")
-        print_fn(f"  {idx}. {rel} ({kind})")
+        label = str(it.get("label") or "")
+        item_id = str(it.get("item_id") or "")
+        if cfg.show_internal_ids and item_id:
+            print_fn(f"  {idx}. {label} [{item_id}]")
+        else:
+            print_fn(f"  {idx}. {label}")
     if len(items) > cfg.max_list_items:
         print_fn(f"  ... ({len(items) - cfg.max_list_items} more)")
 

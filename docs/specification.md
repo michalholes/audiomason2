@@ -1265,6 +1265,17 @@ FlowModel includes:
   - required
   - fields[] with type-specific properties
 
+For multi_select_indexed fields, the engine MUST provide a concrete items[] list in the
+effective_model.json snapshot for the active session.
+
+For the mandatory selection steps:
+- select_authors items MUST be derived deterministically from discovery.json.
+- select_books items MUST be derived deterministically from discovery.json.
+
+Each item MUST include:
+- item_id (stable, opaque id)
+- label (ASCII-only, human-readable)
+
 ### 10.4.6 SessionState (Runtime)
 
 SessionState is returned to renderers after each operation and contains at minimum:
@@ -1356,6 +1367,8 @@ Required subpaths:
 Notes:
 - sessions/<session_id>/effective_model.json MUST contain the frozen effective workflow snapshot derived from WizardDefinition and FlowConfig.
   UI layers MUST NOT interpret global WizardDefinition directly for an active session.
+  For select_authors and select_books, effective_model.json MUST include items[] for the
+  multi_select_indexed selection fields.
 
 
 Engine-derived artifacts (engine-owned; may be created deterministically):

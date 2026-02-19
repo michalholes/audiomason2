@@ -686,3 +686,9 @@
 
 -   spec: Bump specification version to 1.1.5 and document import storage artifacts
     (derived session files) and flow_config.json bootstrap requirements.
+
+## 2026-02-19T00:00:00+01:00
+
+-   Issue 213: Import wizard selection steps now provide deterministic author/book selectable items
+    (item_id + ASCII label) in the per-session effective_model.json; CLI renderer lists schema items
+    without import-specific step branching.
