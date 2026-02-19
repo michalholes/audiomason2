@@ -1,6 +1,6 @@
 # PROJEKTOVÝ KONTRAKT – RIADIACE A DISKUSNÉ CHATY (AM2)
 
-## 1. HARD CONTEXT RULES
+## 1. HARD CONTEXT RULES (HARD NON-NEGOTIABLE)
 
 1. Chat nesmie používať medzichatovú pamäť ako zdroj informácií.
 2. Pred odpoveďou je povinné prečítať všetky relevantné súbory v project files a riadiť sa nimi.
@@ -12,7 +12,7 @@
 8. Ak ziadam kontrolu, chcem aby bola hlbkova, kvalifikovana, kvalitna a overila kazdu okolnost
 9. Sucastou kazdeho implementacneho handoffu musi byt povinnost napisat znenie jedneho nadpisu v instrukciach pre tvorbu patchov, pricom riadiaci chat nahodne vyberie jeho cislo od 1-8. 
 10. Ak hrozi, ze spadne brana monolith, musis handoff vytvorit tak, ze novy patch neprispeje k tvorbe monolitu
-11. Ak bol zisteny nedostatok v kode oproti specifikacii, je zakazane updatovat specifikaciu inym sposobom ako version bump.
+11. Ak bol zisteny nedostatok v kode oproti specifikacii, je povolene iba spravit version bump specifikacie. Ine upravy specifikacie ako version bump su v takomto pripade zakazane.
 ---
 
 ## 2. CHARAKTER PROJEKTU
