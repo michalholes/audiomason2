@@ -35,6 +35,50 @@ def is_lock_held(lock_path: Path) -> bool:
         fd.close()
 
 
+def _inject_web_overrides(argv: list[str], job_id: str) -> list[str]:
+    """Return argv with web-required runner overrides injected.
+
+    Web requires runner NDJSON output (json_out=true) and a job-local json dir
+    (patch_layout_json_dir=artifacts/web_jobs/<job_id>).
+
+    This function is deterministic and idempotent.
+    """
+
+    out = list(argv)
+
+    # Find the runner script path (usually scripts/am_patch.py).
+    script_idx = -1
+    for i, a in enumerate(out):
+        if a.endswith("am_patch.py"):
+            script_idx = i
+            break
+
+    # If script is not found, append overrides at the end.
+    insert_at = script_idx + 1 if script_idx >= 0 else len(out)
+
+    def _has_override(key: str) -> bool:
+        for j in range(len(out) - 1):
+            if out[j] == "--override" and out[j + 1].startswith(key + "="):
+                return True
+        return False
+
+    overrides: list[str] = []
+    if not _has_override("json_out"):
+        overrides.extend(["--override", "json_out=true"])
+    if not _has_override("patch_layout_json_dir"):
+        overrides.extend(
+            [
+                "--override",
+                "patch_layout_json_dir=artifacts/web_jobs/" + job_id,
+            ]
+        )
+
+    if overrides:
+        out[insert_at:insert_at] = overrides
+
+    return out
+
+
 @dataclass
 class QueueState:
     queued: int
@@ -170,9 +214,8 @@ class JobQueue:
             runner_log = job_dir / "runner.log"
 
             try:
-                res = self._executor.run(
-                    job.canonical_command, cwd=self._repo_root, log_path=runner_log
-                )
+                effective_cmd = _inject_web_overrides(job.canonical_command, job_id)
+                res = self._executor.run(effective_cmd, cwd=self._repo_root, log_path=runner_log)
                 with self._mu:
                     job.return_code = res.return_code
                     if job.status == "canceled":

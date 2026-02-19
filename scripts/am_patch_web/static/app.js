@@ -211,13 +211,13 @@
         setPre("tail", r);
         return;
       }
-      var t = r.tail || "";
-      setPre("tail", t);
-      updateShortProgressFromTail(t);
+      var ev = r.events || [];
+      setPre("tail", ev);
+      updateShortProgressFromEvents(ev);
     });
   }
 
-  function updateShortProgressFromTail(tailText) {
+  function updateShortProgressFromEvents(events) {
     var lines = String(tailText || "").split(/\r?\n/);
     var stage = "(idle)";
     for (var i = lines.length - 1; i >= 0; i--) {

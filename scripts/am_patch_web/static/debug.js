@@ -47,7 +47,7 @@
   }
 
   function refreshTail() {
-    apiGet("/api/runner/tail?lines=200").then(function (r) { setPre("tail", r.tail || ""); });
+    apiGet("/api/runner/tail?lines=200").then(function (r) { setPre("tail", r.events || []); });
   }
 
   function parseCmd() {

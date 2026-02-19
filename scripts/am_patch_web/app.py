@@ -56,6 +56,31 @@ def read_tail(path: Path, lines: int) -> str:
     return "\n".join(parts[-lines:])
 
 
+def read_tail_jsonl(path: Path, lines: int) -> list[dict[str, Any]]:
+    if not path.exists():
+        return []
+    lines = max(1, min(int(lines), 5000))
+
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except Exception:
+        return []
+
+    out: list[dict[str, Any]] = []
+    parts = text.splitlines()
+    for s in parts[-lines:]:
+        s = s.strip()
+        if not s:
+            continue
+        try:
+            obj = json.loads(s)
+        except Exception:
+            continue
+        if isinstance(obj, dict):
+            out.append(cast(dict[str, Any], obj))
+    return out
+
+
 def compute_success_archive_rel(
     repo_root: Path, runner_config_toml: Path, patches_root_rel: str
 ) -> str:
@@ -385,6 +410,22 @@ class App:
         runs.sort(key=lambda r: (r.mtime_utc, r.issue_id), reverse=True)
         runs = runs[: max(1, min(limit, 500))]
         return _ok({"runs": [r.__dict__ for r in runs]})
+
+    def _job_jsonl_path(self, job: JobRecord) -> Path:
+        d = self.jobs_root / job.job_id
+        if job.mode in ("finalize_live", "finalize_workspace"):
+            return d / "am_patch_finalize.jsonl"
+        issue_s = str(job.issue_id or "")
+        if issue_s.isdigit():
+            return d / f"am_patch_issue_{issue_s}.jsonl"
+        return d / "am_patch_finalize.jsonl"
+
+    def _pick_tail_job(self) -> JobRecord | None:
+        jobs = self.queue.list_jobs()
+        for j in jobs:
+            if j.status == "running":
+                return j
+        return jobs[0] if jobs else None
 
     def api_runner_tail(self, qs: dict[str, str]) -> tuple[int, bytes]:
         lines = int(qs.get("lines", "200"))
