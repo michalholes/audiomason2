@@ -469,6 +469,15 @@ def run_monolith_gate(
         exp_delta = new_m.exports - old_m.exports
         imp_delta = new_m.internal_imports - old_m.internal_imports
 
+        metrics = (
+            "loc="
+            f"{old_m.loc}->{new_m.loc}(d={loc_delta}) "
+            "exports="
+            f"{old_m.exports}->{new_m.exports}(d={exp_delta}) "
+            "imports="
+            f"{old_m.internal_imports}->{new_m.internal_imports}(d={imp_delta})"
+        )
+
         tier = _tier(new_m.loc, large=gate_monolith_large_loc, huge=gate_monolith_huge_loc)
         allow_loc = (
             gate_monolith_huge_allow_loc_increase
@@ -495,10 +504,12 @@ def run_monolith_gate(
         # MONO.PARSE
         if not new_m.parse_ok or (old_path.exists() and not old_m.parse_ok):
             sev = "FAIL" if gate_monolith_on_parse_error == "fail" else "WARN"
+            which = "new" if not new_m.parse_ok else "old"
+            hint = "fix_python_syntax_or_encoding"
             add(
                 "MONO.PARSE",
                 rp,
-                f"ast_parse_failed on={'new' if not new_m.parse_ok else 'old'}",
+                f"{metrics} ast_parse_failed on={which} hint={hint}",
                 sev,
             )
 
@@ -511,7 +522,12 @@ def run_monolith_gate(
             dirs=gate_monolith_catchall_dirs,
             allowlist=gate_monolith_catchall_allowlist,
         ):
-            add("MONO.CATCHALL", rp, "new_catchall_file", "FAIL")
+            add(
+                "MONO.CATCHALL",
+                rp,
+                f"{metrics} new_catchall_file hint=rename_or_split_module",
+                "FAIL",
+            )
 
         # MONO.NEWFILE
         if is_new_file:
@@ -519,14 +535,22 @@ def run_monolith_gate(
                 add(
                     "MONO.NEWFILE",
                     rp,
-                    f"loc={new_m.loc} > max={gate_monolith_new_file_max_loc}",
+                    (
+                        f"{metrics} new_file_loc={new_m.loc} "
+                        f"max={gate_monolith_new_file_max_loc} "
+                        "hint=split_file_or_reduce_scope"
+                    ),
                     "FAIL",
                 )
             if new_m.exports > gate_monolith_new_file_max_exports:
                 add(
                     "MONO.NEWFILE",
                     rp,
-                    f"exports={new_m.exports} > max={gate_monolith_new_file_max_exports}",
+                    (
+                        f"{metrics} new_file_exports={new_m.exports} "
+                        f"max={gate_monolith_new_file_max_exports} "
+                        "hint=split_public_api"
+                    ),
                     "FAIL",
                 )
             if new_m.internal_imports > gate_monolith_new_file_max_imports:
@@ -534,8 +558,9 @@ def run_monolith_gate(
                     "MONO.NEWFILE",
                     rp,
                     (
-                        "internal_imports="
-                        f"{new_m.internal_imports} > max={gate_monolith_new_file_max_imports}"
+                        f"{metrics} new_file_imports={new_m.internal_imports} "
+                        f"max={gate_monolith_new_file_max_imports} "
+                        "hint=reduce_coupling"
                     ),
                     "FAIL",
                 )
@@ -546,21 +571,33 @@ def run_monolith_gate(
                 add(
                     "MONO.GROWTH",
                     rp,
-                    f"tier={tier} loc_delta={loc_delta} allow={allow_loc}",
+                    (
+                        f"{metrics} tier={tier} "
+                        f"loc_delta={loc_delta} allow={allow_loc} "
+                        "hint=split_or_refactor"
+                    ),
                     "FAIL",
                 )
             if exp_delta > allow_exp:
                 add(
                     "MONO.GROWTH",
                     rp,
-                    f"tier={tier} exports_delta={exp_delta} allow={allow_exp}",
+                    (
+                        f"{metrics} tier={tier} "
+                        f"exports_delta={exp_delta} allow={allow_exp} "
+                        "hint=split_public_api"
+                    ),
                     "FAIL",
                 )
             if allow_imp is not None and imp_delta > allow_imp:
                 add(
                     "MONO.GROWTH",
                     rp,
-                    f"tier={tier} imports_delta={imp_delta} allow={allow_imp}",
+                    (
+                        f"{metrics} tier={tier} "
+                        f"imports_delta={imp_delta} allow={allow_imp} "
+                        "hint=reduce_coupling"
+                    ),
                     "FAIL",
                 )
 
@@ -573,7 +610,12 @@ def run_monolith_gate(
                 mods = _iter_import_modules(tree, current_module=cur_mod)
             imported_areas = {_area_for_module(m, areas) for m in mods}
             if any(a.startswith("plugins.") for a in imported_areas) or "runner" in imported_areas:
-                add("MONO.CORE", rp, "core_imports_plugins_or_runner", "FAIL")
+                add(
+                    "MONO.CORE",
+                    rp,
+                    f"{metrics} core_imports_plugins_or_runner hint=remove_core_dependency",
+                    "FAIL",
+                )
 
         # MONO.CROSSAREA
         if new_m.distinct_areas >= gate_monolith_crossarea_min_distinct_areas and (
@@ -583,10 +625,11 @@ def run_monolith_gate(
                 "MONO.CROSSAREA",
                 rp,
                 (
-                    f"distinct_areas={new_m.distinct_areas} "
-                    f"delta_loc={loc_delta} delta_exports={exp_delta}"
+                    f"{metrics} distinct_areas={new_m.distinct_areas} "
+                    f"delta_loc={loc_delta} delta_exports={exp_delta} "
+                    "hint=split_by_area_or_add_facade"
                 ),
-                "FAIL" if gate_monolith_mode == "strict" else "WARN",
+                "FAIL",
             )
 
         # MONO.HUB
@@ -606,8 +649,12 @@ def run_monolith_gate(
                 add(
                     "MONO.HUB",
                     rp,
-                    f"fanin_delta={fanin_delta} exports_delta={exp_delta}",
-                    "FAIL" if gate_monolith_mode == "strict" else "WARN",
+                    (
+                        f"{metrics} fanin_delta={fanin_delta} "
+                        f"exports_delta={exp_delta} "
+                        "hint=avoid_hub_growth"
+                    ),
+                    "FAIL",
                 )
             if (
                 fanout_delta >= gate_monolith_hub_fanout_delta
@@ -616,8 +663,12 @@ def run_monolith_gate(
                 add(
                     "MONO.HUB",
                     rp,
-                    f"fanout_delta={fanout_delta} loc_delta={loc_delta}",
-                    "FAIL" if gate_monolith_mode == "strict" else "WARN",
+                    (
+                        f"{metrics} fanout_delta={fanout_delta} "
+                        f"loc_delta={loc_delta} "
+                        "hint=reduce_outbound_dependencies"
+                    ),
+                    "FAIL",
                 )
 
     # Map severities by mode.
@@ -626,13 +677,19 @@ def run_monolith_gate(
         sev = v.severity
         if gate_monolith_mode == "report_only":
             sev = "REPORT"
+        elif gate_monolith_mode == "strict":
+            sev = "FAIL"
         elif gate_monolith_mode == "warn_only":
-            if v.rule_id in ("MONO.CORE", "MONO.CATCHALL"):
-                sev = "FAIL"
-            elif sev == "FAIL":
-                sev = "WARN"
+            is_always_fail = v.rule_id in ("MONO.CORE", "MONO.CATCHALL")
+            is_parse_fail = v.rule_id == "MONO.PARSE" and gate_monolith_on_parse_error == "fail"
+            sev = "FAIL" if is_always_fail or is_parse_fail else "WARN"
         mapped.append(
-            Violation(rule_id=v.rule_id, relpath=v.relpath, message=v.message, severity=sev)
+            Violation(
+                rule_id=v.rule_id,
+                relpath=v.relpath,
+                message=v.message,
+                severity=sev,
+            )
         )
 
     # Emit.

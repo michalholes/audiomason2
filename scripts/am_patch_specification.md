@@ -510,6 +510,10 @@ finalizeworkspace
 -   Metrics (old vs new): LOC (non-empty lines), EXPORTS (top-level public defs/classes), INTERNAL_IMPORTS (distinct internal modules), optional FANIN/FANOUT graph deltas.
 -   Parse errors: violation MONO.PARSE; severity controlled by gate_monolith_on_parse_error.
 -   Rule IDs (stable API): MONO.PARSE, MONO.GROWTH, MONO.NEWFILE, MONO.HUB, MONO.CORE, MONO.CROSSAREA, MONO.CATCHALL.
+-   Mode semantics (policy: gate_monolith_mode):
+    -   strict: any violation => FAIL
+    -   warn_only: only MONO.CORE, MONO.CATCHALL, and MONO.PARSE (when gate_monolith_on_parse_error=fail) => FAIL; others => WARN
+    -   report_only: never FAIL; all violations are reported and final state is WARN
 
 Controls (precedence: CLI > config > defaults):
 
