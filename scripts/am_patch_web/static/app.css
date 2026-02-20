@@ -90,3 +90,10 @@ input::placeholder { color: #6f7f99; }
 .tabs { border-bottom: 1px solid #1d2b50; }
 .tab { font-size: 15px; padding: 8px 10px; border-radius: 10px 10px 0 0; }
 .tab.active { background: #16264a; border: 1px solid #1d2b50; border-bottom-color: #16264a; }
+
+
+/* File browser improvements */
+.fsitem { padding: 6px 0; }
+.fsitem.selected { background: #11162a; border-radius: 6px; padding: 6px; }
+.fsChk { margin-right: 10px; width: 18px; height: 18px; }
+.btn-inline { padding: 6px 10px; min-width: 92px; }

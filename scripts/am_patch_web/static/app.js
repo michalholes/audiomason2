@@ -106,6 +106,8 @@
   var cfg = null;
   var issueRegex = null;
   var fsSelected = "";
+  var fsChecked = {};
+  var fsLastRels = [];
   var runsCache = [];
   var selectedRun = null;
   var tailLines = 200;
@@ -146,6 +148,59 @@
   function setFsHint(msg) {
     var h = el("fsHint");
     if (h) h.textContent = msg || "";
+  }
+
+  function fsUpdateSelCount() {
+    var n = 0;
+    for (var k in fsChecked) {
+      if (Object.prototype.hasOwnProperty.call(fsChecked, k)) n += 1;
+    }
+    var node = el("fsSelCount");
+    if (node) {
+      node.textContent = n ? ("selected: " + String(n)) : "";
+    }
+    return n;
+  }
+
+  function fsClearSelection() {
+    fsChecked = {};
+    fsUpdateSelCount();
+  }
+
+  function fsDownloadSelected() {
+    var paths = [];
+    for (var k in fsChecked) {
+      if (Object.prototype.hasOwnProperty.call(fsChecked, k)) paths.push(k);
+    }
+    if (!paths.length) {
+      setFsHint("select at least one item");
+      return;
+    }
+    paths.sort();
+
+    fetch("/api/fs/archive", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ paths: paths })
+    }).then(function (r) {
+      if (!r.ok) {
+        return r.text().then(function (t) {
+          setFsHint("archive failed: " + String(t || r.status));
+        });
+      }
+      return r.blob().then(function (blob) {
+        var url = URL.createObjectURL(blob);
+        var a = document.createElement("a");
+        a.href = url;
+        a.download = "selection.zip";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+      });
+    }).catch(function (e) {
+      setFsHint("archive failed: " + String(e));
+    });
   }
 
   function setParseHint(msg) {
@@ -232,26 +287,63 @@
         return;
       }
       var items = r.items || [];
+      fsLastRels = [];
       var html = items.map(function (it) {
         var name = it.name;
         var isDir = !!it.is_dir;
         var rel = joinRel(path, name);
-        var sel = (fsSelected === rel) ? " *" : "";
-        var act = "";
+        fsLastRels.push(rel);
+
+        var displayName = isDir ? (name + "/") : name;
+        var isSelected = (fsSelected === rel);
+        var cls = "item fsitem" + (isSelected ? " selected" : "");
+        var checked = fsChecked[rel] ? " checked" : "";
+
+        var dl = "";
         if (!isDir) {
-          act += "<a class=\"linklike\" href=\"/api/fs/download?path=" + encodeURIComponent(rel) + "\" title=\"Download\">dl</a>";
+          dl = "<button class=\"btn btn-small btn-inline fsDl\" data-rel=\"" +
+            escapeHtml(rel) + "\">Download</button>";
         }
+
         return (
-          "<div class=\"item\" data-rel=\"" + escapeHtml(rel) + "\" data-isdir=\"" + (isDir ? "1" : "0") + "\">" +
-          "<span class=\"name\">" + (isDir ? "[d] " : "[f] ") + escapeHtml(name) + sel + "</span>" +
-          "<span class=\"actions\"><span class=\"muted\">" + String(it.size || 0) + "</span>" + act + "</span>" +
+          "<div class=\"" + cls + "\" data-rel=\"" + escapeHtml(rel) +
+            "\" data-isdir=\"" + (isDir ? "1" : "0") + "\">" +
+          "<input class=\"fsChk\" type=\"checkbox\" data-rel=\"" +
+            escapeHtml(rel) + "\" aria-label=\"Select\" " + checked + " />" +
+          "<span class=\"name\">" + escapeHtml(displayName) + "</span>" +
+          "<span class=\"actions\"><span class=\"muted\">" +
+            String(it.size || 0) + "</span>" + dl + "</span>" +
           "</div>"
         );
       }).join("");
 
       el("fsList").innerHTML = html || "<div class=\"muted\">(empty)</div>";
+      fsUpdateSelCount();
 
-      Array.from(el("fsList").querySelectorAll(".item .name")).forEach(function (node) {
+      Array.from(el("fsList").querySelectorAll(".fsChk")).forEach(function (node) {
+        node.addEventListener("click", function (ev) {
+          ev.stopPropagation();
+          var rel = node.getAttribute("data-rel") || "";
+          if (!rel) return;
+          if (node.checked) {
+            fsChecked[rel] = true;
+          } else {
+            delete fsChecked[rel];
+          }
+          fsUpdateSelCount();
+        });
+      });
+
+      Array.from(el("fsList").querySelectorAll(".fsDl")).forEach(function (node) {
+        node.addEventListener("click", function (ev) {
+          ev.stopPropagation();
+          var rel = node.getAttribute("data-rel") || "";
+          if (!rel) return;
+          window.location.href = "/api/fs/download?path=" + encodeURIComponent(rel);
+        });
+      });
+
+      Array.from(el("fsList").querySelectorAll(".fsitem .name")).forEach(function (node) {
         node.addEventListener("click", function () {
           var item = node.parentElement;
           var rel = item.getAttribute("data-rel") || "";
@@ -263,8 +355,9 @@
             refreshFs();
             return;
           }
+
           fsSelected = rel;
-          setFsHint("selected: " + rel);
+          setFsHint("focused: " + rel);
 
           if (/\.(zip|patch|diff)$/i.test(rel)) {
             el("patchPath").value = normalizePatchPath(rel);
@@ -964,6 +1057,110 @@
       refreshFs();
     });
 
+
+    if (el("fsSelectAll")) {
+      el("fsSelectAll").addEventListener("click", function () {
+        fsLastRels.forEach(function (rel) { fsChecked[rel] = true; });
+        fsUpdateSelCount();
+        refreshFs();
+      });
+    }
+    if (el("fsClear")) {
+      el("fsClear").addEventListener("click", function () {
+        fsClearSelection();
+        refreshFs();
+      });
+    }
+    if (el("fsDownloadSelected")) {
+      el("fsDownloadSelected").addEventListener("click", function () {
+        fsDownloadSelected();
+      });
+    }
+
+    if (el("fsMkdir")) {
+      el("fsMkdir").addEventListener("click", function () {
+        var base = String(el("fsPath").value || "");
+        var name = prompt("New directory name");
+        if (!name) return;
+        var rel = joinRel(base, name);
+        apiPost("/api/fs/mkdir", { path: rel }).then(function (r) {
+          if (!r || r.ok === false) {
+            setFsHint("mkdir failed");
+            return;
+          }
+          refreshFs();
+        });
+      });
+    }
+
+    if (el("fsRename")) {
+      el("fsRename").addEventListener("click", function () {
+        if (!fsSelected) {
+          setFsHint("focus an item first");
+          return;
+        }
+        var base = parentRel(fsSelected);
+        var curName = fsSelected.split("/").pop();
+        var dstName = prompt("New name", curName || "");
+        if (!dstName) return;
+        var dst = joinRel(base, dstName);
+        apiPost("/api/fs/rename", { src: fsSelected, dst: dst }).then(function (r) {
+          if (!r || r.ok === false) {
+            setFsHint("rename failed");
+            return;
+          }
+          fsSelected = dst;
+          refreshFs();
+        });
+      });
+    }
+
+    if (el("fsDelete")) {
+      el("fsDelete").addEventListener("click", function () {
+        var paths = [];
+        for (var k in fsChecked) {
+          if (Object.prototype.hasOwnProperty.call(fsChecked, k)) paths.push(k);
+        }
+        if (!paths.length && fsSelected) paths = [fsSelected];
+        if (!paths.length) {
+          setFsHint("select at least one item");
+          return;
+        }
+        if (!confirm("Delete selected item(s)?")) return;
+
+        var seq = Promise.resolve();
+        paths.sort().forEach(function (p) {
+          seq = seq.then(function () {
+            return apiPost("/api/fs/delete", { path: p });
+          });
+        });
+        seq.then(function () {
+          fsClearSelection();
+          fsSelected = "";
+          refreshFs();
+        });
+      });
+    }
+
+    if (el("fsUnzip")) {
+      el("fsUnzip").addEventListener("click", function () {
+        if (!fsSelected || !/\.zip$/i.test(fsSelected)) {
+          setFsHint("focus a .zip file first");
+          return;
+        }
+        var base = parentRel(fsSelected);
+        var dst = prompt("Destination directory", base || "");
+        if (dst === null) return;
+        apiPost("/api/fs/unzip", { zip_path: fsSelected, dest_dir: String(dst || "") })
+          .then(function (r) {
+            if (!r || r.ok === false) {
+              setFsHint("unzip failed");
+              return;
+            }
+            refreshFs();
+          });
+      });
+    }
     el("runsRefresh").addEventListener("click", refreshRuns);
 
     el("jobsRefresh").addEventListener("click", refreshJobs);
