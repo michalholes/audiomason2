@@ -45,6 +45,17 @@
       </section>
 
       <section class="card card-tight">
+        <h2>Preview</h2>
+        <div class="row">
+          <button id="previewToggle" class="btn btn-small">Show</button>
+          <span id="previewHint" class="muted"></span>
+        </div>
+        <div id="previewWrap" style="display:none">
+          <pre id="previewLeft" class="pre pre-box"></pre>
+        </div>
+      </section>
+
+      <section class="card card-tight">
         <h2>Stats</h2>
         <div id="stats" class="stats"></div>
       </section>
@@ -112,11 +123,12 @@
         </details>
 
         <div class="row">
-          <button id="enqueueBtn" class="btn" disabled>Start</button>
+          <span class="spacer"></span>
+          <button id="enqueueBtn" class="btn btn-danger" disabled>Start</button>
         </div>
 
-        <h3>Preview</h3>
-        <pre id="preview" class="pre"></pre>
+        <h3>Last run log</h3>
+        <pre id="lastRunLog" class="pre pre-box"></pre>
       </section>
 
       <section class="card">

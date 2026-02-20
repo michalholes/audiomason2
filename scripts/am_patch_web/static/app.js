@@ -4,6 +4,23 @@
   var activeJobId = null;
   var autoRefreshTimer = null;
 
+  var previewVisible = false;
+  var lastRunLogPath = "";
+
+  function setPreviewVisible(v) {
+    previewVisible = !!v;
+    var wrap = el("previewWrap");
+    var btn = el("previewToggle");
+    if (wrap) wrap.style.display = previewVisible ? "block" : "none";
+    if (btn) btn.textContent = previewVisible ? "Hide" : "Show";
+  }
+
+  function isNearBottom(node, slack) {
+    if (!node) return true;
+    slack = (slack == null) ? 20 : slack;
+    return (node.scrollTop + node.clientHeight) >= (node.scrollHeight - slack);
+  }
+
   function el(id) { return document.getElementById(id); }
 
   function setPre(id, obj) {
@@ -251,6 +268,8 @@
       lastParsed = r;
       setParseHint("");
 
+      setPreviewVisible(true);
+
       if (r.parsed && typeof r.parsed === "object") {
         if (r.parsed.mode) el("mode").value = String(r.parsed.mode);
         if (r.parsed.issue_id != null) {
@@ -420,6 +439,42 @@
             refreshRuns();
           }
         });
+      });
+    });
+  }
+
+  function refreshLastRunLog() {
+    apiGet("/api/runs?limit=1").then(function (r) {
+      if (!r || r.ok === false) {
+        setPre("lastRunLog", r);
+        return;
+      }
+      var runs = r.runs || [];
+      if (!runs.length) {
+        lastRunLogPath = "";
+        setPre("lastRunLog", "");
+        return;
+      }
+      var logRel = String(runs[0].log_rel_path || "");
+      if (!logRel) {
+        lastRunLogPath = "";
+        setPre("lastRunLog", "(no log path)");
+        return;
+      }
+
+      lastRunLogPath = logRel;
+      var box = el("lastRunLog");
+      var wantFollow = isNearBottom(box, 24);
+      var url = "/api/fs/read_text?path=" + encodeURIComponent(logRel) + "&tail_lines=2000";
+      apiGet(url).then(function (rt) {
+        if (!rt || rt.ok === false) {
+          setPre("lastRunLog", rt);
+          return;
+        }
+        var t = String(rt.text || "");
+        if (rt.truncated) t += "\n\n[TRUNCATED]";
+        setPre("lastRunLog", t);
+        if (wantFollow && box) box.scrollTop = box.scrollHeight;
       });
     });
   }
@@ -656,7 +711,7 @@
       };
     }
 
-    setPre("preview", preview);
+    setPre("previewLeft", preview);
     el("enqueueBtn").disabled = !ok;
 
     var hint2 = el("enqueueHint");
@@ -683,7 +738,8 @@
     }
 
     apiPost("/api/jobs/enqueue", body).then(function (r) {
-      setPre("preview", r);
+      setPre("previewLeft", r);
+      setPreviewVisible(true);
       refreshJobs();
     });
   }
@@ -1163,6 +1219,13 @@
     }
     el("runsRefresh").addEventListener("click", refreshRuns);
 
+
+    if (el("previewToggle")) {
+      el("previewToggle").addEventListener("click", function () {
+        setPreviewVisible(!previewVisible);
+      });
+    }
+
     el("jobsRefresh").addEventListener("click", refreshJobs);
     el("tailRefresh").addEventListener("click", function () { refreshTail(tailLines); });
     el("tailMore").addEventListener("click", function () { refreshTail((tailLines || 200) + 200); });
@@ -1232,6 +1295,7 @@
         refreshStats();
         refreshJobs();
         refreshTail(200);
+        refreshLastRunLog();
         refreshHeader();
         renderIssueDetail();
         validateAndPreview();
@@ -1254,10 +1318,12 @@
   function init() {
     setupUpload();
     wireButtons();
+    setPreviewVisible(false);
 
     loadConfig().then(function () {
       refreshFs();
       refreshRuns();
+      refreshLastRunLog();
       refreshTail(200);
       refreshStats();
       refreshJobs();
@@ -1268,6 +1334,7 @@
 
       setInterval(function () {
         refreshJobs();
+        refreshLastRunLog();
       }, 2000);
 
       setInterval(function () {
