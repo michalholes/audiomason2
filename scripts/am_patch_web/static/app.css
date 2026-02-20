@@ -4,7 +4,13 @@ body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-seri
 .title { font-size: 16px; font-weight: 700; white-space: nowrap; }
 .hdrmeta { flex: 1; text-align: center; color: #b7c3d6; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .actions .link { color: #8fc1ff; text-decoration: none; }
-.layout { display: grid; grid-template-columns: 324px 1fr 324px; gap: 10px; padding: 10px; align-items: start; }
+.layout {
+  display: grid;
+  grid-template-columns: 275px 1fr 324px;
+  gap: 10px;
+  padding: 10px;
+  align-items: start;
+}
 .panel { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .panel-left, .panel-right { position: sticky; top: 10px; max-height: calc(100vh - 20px); overflow: auto; padding-right: 4px; }
 
@@ -44,10 +50,25 @@ body.dragging .drop-overlay { display: flex; }
 .pre-tall { min-height: 320px; }
 .scroll { border: 1px solid #2a2a2a; border-radius: 6px; padding: 8px; background: #0b0b0b; max-height: 280px; overflow: auto; font-size: 14px; }
 .scroll-tall { max-height: 420px; }
-.item { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; }
-.item .name { cursor: pointer; user-select: none; }
+.item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+}
+.item .name {
+  flex: 1;
+  cursor: pointer;
+  user-select: none;
+  text-align: left;
+}
 .item .name:hover { text-decoration: underline; }
-.item .actions { display: flex; gap: 6px; align-items: center; }
+.item .actions {
+  margin-left: auto;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
 .stats { background: #0b0b0b; border: 1px solid #2a2a2a; border-radius: 6px; padding: 10px; font-size: 14px; }
 .stats .rowline { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; }
 .stats .k { color: #aaa; }
