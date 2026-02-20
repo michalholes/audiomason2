@@ -13,13 +13,13 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any, cast
 
-from audiomason.core.config import ConfigResolver
-from audiomason.core.diagnostics import build_envelope
-from audiomason.core.events import get_event_bus
-from plugins.file_io.service import FileService, RootName
+from plugins.file_io.service import FileService
+from plugins.file_io.service.types import RootName
 
 from . import discovery as discovery_mod
 from .defaults import ensure_default_models
+from .engine_diagnostics_required import create_process_job, emit_required
+from .engine_session_guards import validate_root_and_path
 from .errors import (
     FinalizeError,
     ImportWizardError,
@@ -44,6 +44,10 @@ from .models import BASE_REQUIRED_STEP_IDS, CatalogModel, FlowModel, validate_mo
 from .plan import PlanSelectionError, compute_plan
 from .serialization import canonical_serialize
 from .storage import append_jsonl, atomic_write_json, atomic_write_text, read_json
+
+# Test seam: unit tests monkeypatch plugins.import.engine.get_event_bus.
+# The diagnostics facade will use it when callable.
+get_event_bus: Any = None
 
 
 def _to_ascii(text: str) -> str:
@@ -139,20 +143,17 @@ def _inject_selection_items(
     return effective_model
 
 
-def _emit(event: str, operation: str, data: dict[str, Any]) -> None:
-    try:
-        get_event_bus().publish(
-            event,
-            build_envelope(
-                event=event,
-                component="import",
-                operation=operation,
-                data=data,
-            ),
-        )
-    except Exception:
-        # Fail-safe: diagnostics must never crash processing.
-        return
+def _emit_required(event: str, operation: str, data: dict[str, Any]) -> None:
+    required_ctx: dict[str, Any] = {}
+    for key in [
+        "session_id",
+        "model_fingerprint",
+        "discovery_fingerprint",
+        "effective_config_fingerprint",
+    ]:
+        if key in data and data.get(key) is not None:
+            required_ctx[key] = data.get(key)
+    emit_required(event=event, operation=operation, data=data, required_ctx=required_ctx)
 
 
 def _iso_utc_now() -> str:
@@ -298,9 +299,8 @@ def _parse_selection_expr(expr: str, *, max_index: int | None) -> list[int]:
 class ImportWizardEngine:
     """Data-defined import wizard engine."""
 
-    def __init__(self, *, resolver: ConfigResolver | None = None) -> None:
-        # Fallback resolver is for tests only. Real hosts must provide a resolver.
-        self._resolver = resolver or ConfigResolver(cli_args={})
+    def __init__(self, *, resolver: Any) -> None:
+        self._resolver = resolver
         self._fs = FileService.from_resolver(self._resolver)
 
     def get_file_service(self) -> FileService:
@@ -352,38 +352,10 @@ class ImportWizardEngine:
         flow_overrides: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
 
-        root_s = str(root or "").strip()
-        if not root_s:
-            return validation_error(message="Missing root", path="$.root", reason="missing_root")
-        try:
-            RootName(root_s)
-        except Exception:
-            return validation_error(
-                message="Invalid root", path="$.root", reason="invalid_root", meta={"root": root_s}
-            )
-
-        rel_s = str(relative_path or "").strip().replace("\\", "/")
-        if not rel_s or rel_s == ".":
-            rel_s = ""
-        if rel_s.startswith("/"):
-            return validation_error(
-                message="relative_path must be relative",
-                path="$.relative_path",
-                reason="absolute_path_forbidden",
-                meta={"relative_path": rel_s},
-            )
-        while "//" in rel_s:
-            rel_s = rel_s.replace("//", "/")
-        segs = [seg for seg in rel_s.split("/") if seg and seg != "."]
-        if any(seg == ".." for seg in segs):
-            return validation_error(
-                message="Invalid relative_path",
-                path="$.relative_path",
-                reason="traversal_forbidden",
-                meta={"relative_path": rel_s},
-            )
-        root = root_s
-        relative_path = "/".join(segs)
+        v = validate_root_and_path(root, relative_path)
+        if isinstance(v, dict):
+            return v
+        root, relative_path = v
 
         mode = self._validate_mode(mode)
         # 1) Load models
@@ -445,12 +417,12 @@ class ImportWizardEngine:
             "discovery_fingerprint": discovery_fingerprint,
             "effective_config_fingerprint": effective_config_fingerprint,
         }
-        _emit(
+        _emit_required(
             "model.load",
             "model.load",
             {**diag, "root": root, "relative_path": relative_path, "mode": mode},
         )
-        _emit(
+        _emit_required(
             "model.validate",
             "model.validate",
             {**diag, "root": root, "relative_path": relative_path, "mode": mode},
@@ -461,7 +433,7 @@ class ImportWizardEngine:
 
         if self._fs.exists(RootName.WIZARDS, state_path):
             loaded_state = read_json(self._fs, RootName.WIZARDS, state_path)
-            _emit(
+            _emit_required(
                 "session.resume",
                 "session.resume",
                 {
@@ -508,7 +480,7 @@ class ImportWizardEngine:
             return loaded_state
 
         # 5) Persist frozen artifacts
-        _emit(
+        _emit_required(
             "session.start",
             "session.start",
             {
@@ -686,7 +658,7 @@ class ImportWizardEngine:
             if state.get("status") != "in_progress":
                 raise StepSubmissionError("session is not in progress")
 
-            _emit(
+            _emit_required(
                 "step.submit",
                 "step.submit",
                 {
@@ -1144,7 +1116,7 @@ class ImportWizardEngine:
     def compute_plan(self, session_id: str) -> dict[str, Any]:
         state = self._load_state(session_id)
 
-        _emit(
+        _emit_required(
             "plan.compute",
             "plan.compute",
             {
@@ -1237,7 +1209,7 @@ class ImportWizardEngine:
                     meta={},
                 )
 
-            _emit(
+            _emit_required(
                 "finalize.request",
                 "finalize.request",
                 {
@@ -1357,7 +1329,7 @@ class ImportWizardEngine:
 
             self._enter_phase_2(session_id, state)
 
-            _emit(
+            _emit_required(
                 "job.create",
                 "job.create",
                 {
@@ -1710,9 +1682,6 @@ class ImportWizardEngine:
         if idem_key in mapping and mapping[idem_key]:
             return mapping[idem_key]
 
-        from audiomason.core.jobs.api import JobService
-        from audiomason.core.jobs.model import JobType
-
         meta = {
             "source": "import",
             "session_id": session_id,
@@ -1726,10 +1695,10 @@ class ImportWizardEngine:
             ),
             "job_requests_path": f"wizards:{session_dir}/job_requests.json",
         }
-        job = JobService().create_job(JobType.PROCESS, meta=meta)
-        mapping[idem_key] = job.job_id
+        job_id = create_process_job(meta=meta)
+        mapping[idem_key] = job_id
         atomic_write_json(self._fs, RootName.WIZARDS, idem_path, mapping)
-        return job.job_id
+        return job_id
 
     def _load_state(self, session_id: str) -> dict[str, Any]:
         session_dir = f"import/sessions/{session_id}"

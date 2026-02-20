@@ -8,13 +8,12 @@ ASCII-only.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from audiomason.core.config import ConfigResolver
-from plugins.file_io.service.types import RootName
-
+from .cli_launcher_facade import begin_phase2, resolve_launcher_inputs
 from .engine import ImportWizardEngine
 
 
@@ -29,7 +28,11 @@ class RendererConfig:
     max_list_items: int
 
 
-def _cfg_get(resolver: ConfigResolver, key: str, default: Any) -> Any:
+def _json_dump(obj: Any) -> str:
+    return json.dumps(obj, ensure_ascii=True, sort_keys=True)
+
+
+def _cfg_get(resolver: Any, key: str, default: Any) -> Any:
     try:
         value, _source = resolver.resolve(key)
         return value
@@ -37,7 +40,7 @@ def _cfg_get(resolver: ConfigResolver, key: str, default: Any) -> Any:
         return default
 
 
-def load_renderer_config(resolver: ConfigResolver) -> RendererConfig:
+def load_renderer_config(resolver: Any) -> RendererConfig:
     launcher_mode = str(_cfg_get(resolver, "plugins.import.cli.launcher_mode", "interactive"))
     default_root = str(_cfg_get(resolver, "plugins.import.cli.default_root", "inbox"))
     default_path = str(_cfg_get(resolver, "plugins.import.cli.default_path", ""))
@@ -75,7 +78,7 @@ def load_renderer_config(resolver: ConfigResolver) -> RendererConfig:
 def run_launcher(
     *,
     engine: ImportWizardEngine,
-    resolver: ConfigResolver,
+    resolver: Any,
     cli_overrides: dict[str, Any],
     input_fn: Callable[[str], str] = input,
     print_fn: Callable[[str], None] = print,
@@ -85,27 +88,14 @@ def run_launcher(
     if cfg.launcher_mode == "disabled":
         return 0
 
-    if cfg.noninteractive:
-        root = cfg.default_root
-        rel_path = cfg.default_path
-        if not root or not rel_path:
-            print_fn("ERROR: noninteractive requires both root and path")
-            return 1
-    elif cfg.launcher_mode == "fixed":
-        root = cfg.default_root
-        rel_path = cfg.default_path
-    else:
-        root = _pick_root(cfg, input_fn=input_fn, print_fn=print_fn)
-        rel_path = _pick_path(engine, cfg, root=root, input_fn=input_fn, print_fn=print_fn)
-
-    # Validate root/path early (engine will validate too, but keep errors user-friendly).
-    try:
-        RootName(root)
-    except Exception:
-        print_fn(f"ERROR: invalid root: {root}")
-        return 1
-    if ".." in [seg for seg in str(rel_path).replace("\\", "/").split("/") if seg]:
-        print_fn("ERROR: invalid path: '..' is forbidden")
+    ok, root, rel_path, err = resolve_launcher_inputs(
+        engine=engine,
+        cfg=cfg,
+        input_fn=input_fn,
+        print_fn=print_fn,
+    )
+    if not ok:
+        print_fn(err or "ERROR: unable to resolve launcher inputs")
         return 1
 
     state = engine.create_session(root, rel_path)
@@ -159,99 +149,12 @@ def _apply_overrides(cfg: RendererConfig, overrides: dict[str, Any]) -> Renderer
     )
 
 
-def _pick_root(
-    cfg: RendererConfig,
-    *,
-    input_fn: Callable[[str], str],
-    print_fn: Callable[[str], None],
-) -> str:
-    roots = [r.value for r in RootName]
-    default = cfg.default_root if cfg.default_root in roots else "inbox"
-
-    if cfg.noninteractive:
-        return default
-
-    print_fn("Select root:")
-    for idx, r in enumerate(roots, start=1):
-        mark = " *" if r == default else ""
-        print_fn(f"  {idx}. {r}{mark}")
-
-    if not cfg.confirm_defaults:
-        prompt = "Enter root number: "
-    else:
-        prompt = "Enter root number (Enter=default): "
-
-    raw = input_fn(prompt).strip()
-    if raw == "" and cfg.confirm_defaults:
-        return default
-    try:
-        n = int(raw)
-        if 1 <= n <= len(roots):
-            return roots[n - 1]
-    except Exception:
-        pass
-    print_fn("Invalid selection, using default.")
-    return default
+def _pick_root(*_args: Any, **_kwargs: Any) -> str:  # pragma: no cover
+    raise RuntimeError("_pick_root moved to cli_launcher_facade")
 
 
-def _pick_path(
-    engine: ImportWizardEngine,
-    cfg: RendererConfig,
-    *,
-    root: str,
-    input_fn: Callable[[str], str],
-    print_fn: Callable[[str], None],
-) -> str:
-    default = cfg.default_path
-
-    if cfg.noninteractive:
-        return default
-
-    fs = engine.get_file_service()
-    try:
-        root_enum = RootName(root)
-    except Exception:
-        return default
-
-    # Offer a shallow directory picker (root-level only).
-    try:
-        entries = fs.list_dir(root_enum, ".", recursive=False)
-    except Exception:
-        entries = []
-
-    dirs = [e for e in entries if getattr(e, "is_dir", False)]
-    dirs_sorted = sorted(dirs, key=lambda e: str(getattr(e, "rel_path", "")))
-
-    if not dirs_sorted:
-        if cfg.confirm_defaults:
-            raw = input_fn(f"Relative path in {root} (Enter=default '{default}'): ").strip()
-            return raw if raw != "" else default
-        return input_fn(f"Relative path in {root}: ").strip()
-
-    print_fn(f"Select directory under root '{root}':")
-    print_fn("  0. (none)")
-    for idx, e in enumerate(dirs_sorted[: cfg.max_list_items], start=1):
-        rel = str(getattr(e, "rel_path", ""))
-        print_fn(f"  {idx}. {rel}/")
-
-    if cfg.confirm_defaults:
-        prompt = f"Enter number (Enter=default '{default or '(none)'}'): "
-    else:
-        prompt = "Enter number: "
-    raw = input_fn(prompt).strip()
-    if raw == "" and cfg.confirm_defaults:
-        return default
-    try:
-        n = int(raw)
-        if n == 0:
-            return ""
-        if 1 <= n <= min(len(dirs_sorted), cfg.max_list_items):
-            return str(getattr(dirs_sorted[n - 1], "rel_path", ""))
-    except Exception:
-        pass
-
-    print_fn("Invalid selection, using default.")
-    return default
+def _pick_path(*_args: Any, **_kwargs: Any) -> str:  # pragma: no cover
+    raise RuntimeError("_pick_path moved to cli_launcher_facade")
 
 
 def _render_loop(
@@ -269,7 +172,7 @@ def _render_loop(
             print_fn(_json_dump({"state": state}))
             return 1
 
-        if int(state.get("phase") or 1) == 2 or state.get("status") == "processing":
+        if int(state.get("phase") or 1) == 2:
             return _finalize(engine, session_id, print_fn=print_fn)
 
         step = engine.get_step_definition(session_id, cur)
@@ -292,7 +195,7 @@ def _render_loop(
         if computed_only or not fields:
             # No user input required; advance.
             state2 = engine.apply_action(session_id, "next")
-            if int(state2.get("phase") or 1) == 2 or state2.get("status") == "processing":
+            if int(state2.get("phase") or 1) == 2:
                 return _finalize(engine, session_id, print_fn=print_fn)
             continue
 
@@ -335,7 +238,7 @@ def _render_loop(
             payload[name] = raw
 
         state3 = engine.submit_step(session_id, cur, payload)
-        if int(state3.get("phase") or 1) == 2 or state3.get("status") == "processing":
+        if int(state3.get("phase") or 1) == 2:
             return _finalize(engine, session_id, print_fn=print_fn)
 
         # Simple navigation prompt.
@@ -384,23 +287,4 @@ def _show_select_items(
 def _finalize(
     engine: ImportWizardEngine, session_id: str, *, print_fn: Callable[[str], None]
 ) -> int:
-    result = engine.start_processing(session_id, {"confirm": True})
-
-    job_ids = result.get("job_ids") if isinstance(result, dict) else None
-    batch_size = result.get("batch_size") if isinstance(result, dict) else None
-
-    if isinstance(job_ids, list):
-        print_fn("job_ids: " + ", ".join(str(x) for x in job_ids))
-    if isinstance(batch_size, int):
-        print_fn(f"batch_size: {batch_size}")
-
-    print_fn(_json_dump(result))
-    if isinstance(result, dict) and "error" in result:
-        return 1
-    return 0
-
-
-def _json_dump(obj: Any) -> str:
-    import json
-
-    return json.dumps(obj, indent=2, sort_keys=True)
+    return begin_phase2(engine, session_id, print_fn=print_fn)
