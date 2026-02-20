@@ -1,7 +1,11 @@
 """Import Wizard Engine (plugin: import).
 
-Implements PHASE 0 discovery, model load/validate, session lifecycle,
-minimal plan/job request generation. No UI implemented here. ASCII-only.
+Implements PHASE 0 discovery, model load/validate, session lifecycle, and
+minimal plan/job request generation.
+
+No UI is implemented here.
+
+ASCII-only.
 """
 
 from __future__ import annotations
@@ -36,7 +40,7 @@ from .flow_runtime import (
 from .flow_runtime import (
     OPTIONAL_STEP_IDS as FLOWCFG_OPTIONAL_STEP_IDS,
 )
-from .job_requests import build_job_requests
+from .job_requests import build_job_requests, planned_units_count
 from .models import CatalogModel, FlowModel, validate_models
 from .plan import PlanSelectionError, compute_plan
 from .serialization import canonical_serialize
@@ -47,8 +51,86 @@ from .storage import (
     read_json,
 )
 
-# Test seam: tests monkeypatch get_event_bus (used by diagnostics facade).
+# Test seam: unit tests monkeypatch plugins.import.engine.get_event_bus.
 get_event_bus: Any = None
+
+
+def _to_ascii(text: str) -> str:
+    return text.encode("ascii", errors="replace").decode("ascii")
+
+
+def _derive_selection_items(
+    discovery: list[dict[str, Any]],
+) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
+    authors: dict[str, dict[str, str]] = {}
+    books: dict[str, dict[str, str]] = {}
+
+    dirs: list[str] = []
+    for it in discovery:
+        if not (isinstance(it, dict) and it.get("kind") == "dir"):
+            continue
+        rel_any = it.get("relative_path")
+        if not isinstance(rel_any, str):
+            continue
+        dirs.append(rel_any.replace("\\", "/"))
+
+    pairs: set[tuple[str, str]] = set()
+    for rel in dirs:
+        segs = [s for s in rel.split("/") if s]
+        if len(segs) >= 2:
+            pairs.add((segs[0], segs[1]))
+
+    if not pairs:
+        for rel in dirs:
+            segs = [s for s in rel.split("/") if s]
+            if segs:
+                pairs.add((segs[0], segs[0]))
+
+    if not pairs:
+        pairs.add(("(root)", "(root)"))
+
+    for author_key, book_key in sorted(pairs):
+        author_label = _to_ascii(author_key)
+        label = author_key if author_key == book_key else f"{author_key} / {book_key}"
+        book_label = _to_ascii(label)
+
+        author_id = "author:" + sha256_hex(f"a|{author_key}".encode())[:16]
+        book_id = "book:" + sha256_hex(f"b|{author_key}|{book_key}".encode())[:16]
+
+        authors.setdefault(author_id, {"item_id": author_id, "label": author_label})
+        books.setdefault(book_id, {"item_id": book_id, "label": book_label})
+
+    authors_items = sorted(authors.values(), key=lambda x: (x["label"], x["item_id"]))
+    books_items = sorted(books.values(), key=lambda x: (x["label"], x["item_id"]))
+    return authors_items, books_items
+
+
+def _inject_selection_items(
+    *,
+    effective_model: dict[str, Any],
+    authors_items: list[dict[str, str]],
+    books_items: list[dict[str, str]],
+) -> dict[str, Any]:
+    steps_any = effective_model.get("steps")
+    if not isinstance(steps_any, list):
+        return effective_model
+
+    steps: list[dict[str, Any]] = [s for s in steps_any if isinstance(s, dict)]
+    for step in steps:
+        step_id = step.get("step_id")
+        if step_id not in {"select_authors", "select_books"}:
+            continue
+        fields_any = step.get("fields")
+        if not isinstance(fields_any, list):
+            continue
+        fields: list[dict[str, Any]] = [f for f in fields_any if isinstance(f, dict)]
+        for fld in fields:
+            if fld.get("type") != "multi_select_indexed":
+                continue
+            fld["items"] = list(authors_items if step_id == "select_authors" else books_items)
+
+    effective_model["steps"] = steps
+    return effective_model
 
 
 def _emit_required(event: str, operation: str, data: dict[str, Any]) -> None:
@@ -70,7 +152,10 @@ def _iso_utc_now() -> str:
 
 
 def _ensure_session_state_fields(state: dict[str, Any]) -> dict[str, Any]:
-    """Ensure SessionState has required fields (spec 10.*); upgrades older sessions."""
+    """Ensure SessionState contains minimally required fields (spec 10.*).
+
+    This is a backward-compatible upgrader for existing sessions.
+    """
     changed = False
 
     def _setdefault(key: str, value: Any) -> None:
@@ -284,12 +369,8 @@ class ImportWizardEngine:
         discovery = discovery_mod.run_discovery(self._fs, root=root, relative_path=relative_path)
         discovery_fingerprint = fingerprint_json(discovery)
 
-        selection_runtime = __import__(
-            "plugins.import.selection_runtime",
-            fromlist=["derive_selection_items", "inject_selection_items"],
-        )
-        authors_items, books_items = selection_runtime.derive_selection_items(discovery)
-        effective_model = selection_runtime.inject_selection_items(
+        authors_items, books_items = _derive_selection_items(discovery)
+        effective_model = _inject_selection_items(
             effective_model=effective_model,
             authors_items=authors_items,
             books_items=books_items,
@@ -357,11 +438,34 @@ class ImportWizardEngine:
                 },
             )
             loaded_state = _ensure_session_state_fields(loaded_state)
-            loaded_state = self._upgrade_legacy_selection_snapshot_if_needed(
-                session_id=session_id,
-                loaded_state=loaded_state,
-                expected_model_fingerprint=model_fingerprint,
-            )
+
+            # Best-effort upgrader: ensure persisted effective_model contains selection items.
+            # If model changes, update model_fingerprint to match persisted effective_model.
+            try:
+                em = read_json(
+                    self._fs,
+                    RootName.WIZARDS,
+                    f"{session_dir}/effective_model.json",
+                )
+                if isinstance(em, dict):
+                    before = canonical_serialize(em)
+                    em2 = _inject_selection_items(
+                        effective_model=em,
+                        authors_items=authors_items,
+                        books_items=books_items,
+                    )
+                    after = canonical_serialize(em2)
+                    if after != before:
+                        atomic_write_json(
+                            self._fs,
+                            RootName.WIZARDS,
+                            f"{session_dir}/effective_model.json",
+                            em2,
+                        )
+                        loaded_state["model_fingerprint"] = fingerprint_json(em2)
+                        loaded_state["updated_at"] = _iso_utc_now()
+            except Exception:
+                pass
             self._persist_state(session_id, loaded_state)
             return loaded_state
 
@@ -534,7 +638,7 @@ class ImportWizardEngine:
         This is a UI helper. It does not perform any state transitions.
         """
         try:
-            effective_model = self._load_effective_model_runtime(session_id)
+            effective_model = self._load_effective_model(session_id)
             steps_any = effective_model.get("steps")
             if not isinstance(steps_any, list):
                 raise ValueError("effective model missing steps")
@@ -549,7 +653,12 @@ class ImportWizardEngine:
         try:
             state = self._load_state(session_id)
             if int(state.get("phase") or 1) == 2:
-                raise StepSubmissionError("session is locked (phase 2)")
+                return invariant_violation(
+                    message="session is locked (phase 2)",
+                    path="$.phase",
+                    reason="phase_locked",
+                    meta={},
+                )
             if state.get("status") != "in_progress":
                 raise StepSubmissionError("session is not in progress")
 
@@ -570,7 +679,7 @@ class ImportWizardEngine:
             if not isinstance(payload, dict):
                 raise StepSubmissionError("payload must be an object")
 
-            effective_model = self._load_effective_model_runtime(session_id)
+            effective_model = self._load_effective_model(session_id)
             steps_any = effective_model.get("steps")
             if not isinstance(steps_any, list):
                 raise StepSubmissionError("effective model missing steps")
@@ -720,8 +829,7 @@ class ImportWizardEngine:
         policy = "ask" if mode == "ask" else mode
 
         conflicts = state.get("conflicts")
-        if not isinstance(conflicts, dict):
-            conflicts = {}
+        conflicts = conflicts if isinstance(conflicts, dict) else {}
 
         conflicts["policy"] = policy
 
@@ -1128,7 +1236,6 @@ class ImportWizardEngine:
             conflicts = state.get("conflicts")
             policy = str(conflicts.get("policy") or "ask") if isinstance(conflicts, dict) else "ask"
             preview_fp = str(state.get("derived", {}).get("conflict_fingerprint") or "")
-
             current_conflicts = self._scan_conflicts(session_id, state)
             current_fp = fingerprint_json(current_conflicts)
 
@@ -1225,9 +1332,10 @@ class ImportWizardEngine:
             idem_key = str(job_any.get("idempotency_key") or "")
             if not idem_key:
                 raise FinalizeError("job_requests.json missing idempotency_key")
-            job_id = self._get_or_create_job(session_id, state, idem_key)
-
             self._enter_phase_2(session_id, state)
+            state = self._load_state(session_id)
+
+            job_id = self._get_or_create_job(session_id, state, idem_key)
 
             _emit_required(
                 "job.create",
@@ -1250,10 +1358,7 @@ class ImportWizardEngine:
                 },
             )
 
-            from .job_requests import planned_units_count
-
-            batch_size = planned_units_count(plan)
-            return {"job_ids": [job_id], "batch_size": batch_size}
+            return {"job_ids": [job_id], "batch_size": planned_units_count(plan)}
         except Exception as e:
             return _exception_envelope(e)
 
@@ -1290,9 +1395,7 @@ class ImportWizardEngine:
             if self._fs.exists(RootName.WIZARDS, plan_path)
             else {}
         )
-        if not isinstance(plan, dict):
-            plan = {}
-        from .job_requests import planned_units_count
+        plan = plan if isinstance(plan, dict) else {}
 
         return {"job_ids": [job_id], "batch_size": planned_units_count(plan)}
 
@@ -1481,8 +1584,7 @@ class ImportWizardEngine:
             _ = self.compute_plan(session_id)
 
         plan = read_json(self._fs, RootName.WIZARDS, plan_path)
-        if not isinstance(plan, dict):
-            plan = {}
+        plan = plan if isinstance(plan, dict) else {}
 
         mode = self._validate_mode(str(state.get("mode") or "stage"))
         items = scan_conflicts(self._fs, plan=plan, mode=mode)
@@ -1557,109 +1659,6 @@ class ImportWizardEngine:
     def _load_effective_model(self, session_id: str) -> dict[str, Any]:
         session_dir = f"import/sessions/{session_id}"
         return read_json(self._fs, RootName.WIZARDS, f"{session_dir}/effective_model.json")
-
-    def _load_effective_model_runtime(self, session_id: str) -> dict[str, Any]:
-        effective_model = self._load_effective_model(session_id)
-        if not isinstance(effective_model, dict) or not self._needs_runtime_selection_items(
-            effective_model
-        ):
-            return effective_model
-
-        try:
-            discovery = self._load_discovery_snapshot(session_id)
-            if discovery is None:
-                return effective_model
-            selection_runtime = __import__(
-                "plugins.import.selection_runtime",
-                fromlist=["derive_selection_items", "inject_selection_items"],
-            )
-            authors_items, books_items = selection_runtime.derive_selection_items(discovery)
-            copied = dict(effective_model)
-            steps_any = copied.get("steps")
-            if isinstance(steps_any, list):
-                copied["steps"] = [dict(s) if isinstance(s, dict) else s for s in steps_any]
-            return selection_runtime.inject_selection_items(
-                effective_model=copied,
-                authors_items=authors_items,
-                books_items=books_items,
-            )
-        except Exception:
-            return effective_model
-
-    def _load_discovery_snapshot(self, session_id: str) -> list[dict[str, Any]] | None:
-        session_dir = f"import/sessions/{session_id}"
-        path = f"{session_dir}/discovery.json"
-        if not self._fs.exists(RootName.WIZARDS, path):
-            return None
-        loaded = read_json(self._fs, RootName.WIZARDS, path)
-        if not isinstance(loaded, list):
-            return None
-        return [cast(dict[str, Any], it) for it in loaded if isinstance(it, dict)]
-
-    def _needs_runtime_selection_items(self, effective_model: dict[str, Any]) -> bool:
-        steps_any = effective_model.get("steps")
-        if not isinstance(steps_any, list):
-            return False
-
-        for step in steps_any:
-            if not isinstance(step, dict) or step.get("step_id") not in {
-                "select_authors",
-                "select_books",
-            }:
-                continue
-            fields_any = step.get("fields")
-            if not isinstance(fields_any, list):
-                continue
-            for f in fields_any:
-                if isinstance(f, dict) and f.get("type") == "multi_select_indexed":
-                    items_any = f.get("items")
-                    if not (isinstance(items_any, list) and items_any):
-                        return True
-
-        return False
-
-    def _upgrade_legacy_selection_snapshot_if_needed(
-        self,
-        *,
-        session_id: str,
-        loaded_state: dict[str, Any],
-        expected_model_fingerprint: str,
-    ) -> dict[str, Any]:
-        current_fp = str(loaded_state.get("model_fingerprint") or "")
-        if not current_fp or current_fp == expected_model_fingerprint:
-            return loaded_state
-
-        try:
-            effective_model = self._load_effective_model(session_id)
-            if not isinstance(effective_model, dict):
-                return loaded_state
-            if fingerprint_json(effective_model) != current_fp:
-                return loaded_state
-
-            discovery = self._load_discovery_snapshot(session_id)
-            if discovery is None:
-                return loaded_state
-
-            selection_runtime = __import__(
-                "plugins.import.selection_runtime",
-                fromlist=["derive_selection_items", "inject_selection_items"],
-            )
-            authors_items, books_items = selection_runtime.derive_selection_items(discovery)
-            upgraded_model = selection_runtime.inject_selection_items(
-                effective_model=dict(effective_model),
-                authors_items=authors_items,
-                books_items=books_items,
-            )
-            if fingerprint_json(upgraded_model) != expected_model_fingerprint:
-                return loaded_state
-        except Exception:
-            return loaded_state
-
-        # Immutable snapshot rule (spec 10.9): never rewrite effective_model.json.
-        # If we can deterministically reconstruct the runtime model, repair state only.
-        loaded_state["model_fingerprint"] = expected_model_fingerprint
-        loaded_state["updated_at"] = _iso_utc_now()
-        return loaded_state
 
     def _append_decision(
         self,

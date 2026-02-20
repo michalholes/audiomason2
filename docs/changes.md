@@ -735,3 +735,7 @@
 -   Issue 223: POST /import/ui/config now supports a deterministic patch mode wrapper
     (mode=patch, ops=[{op:set,path,value}, ...]) applied atomically to the persisted
     FlowConfig with canonical error envelopes on validation failures.
+
+-   Issue 224: Import wizard now enforces spec 10.2 three-phase rules: PHASE 1 never
+    creates jobs; start_processing transitions to PHASE 2 before job creation; PHASE 2
+    interactions are hard contract errors (invariant_violation).
