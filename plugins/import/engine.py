@@ -352,9 +352,41 @@ class ImportWizardEngine:
         flow_overrides: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
 
+        root_s = str(root or "").strip()
+        if not root_s:
+            return validation_error(message="Missing root", path="$.root", reason="missing_root")
+        try:
+            RootName(root_s)
+        except Exception:
+            return validation_error(
+                message="Invalid root", path="$.root", reason="invalid_root", meta={"root": root_s}
+            )
+
+        rel_s = str(relative_path or "").strip().replace("\\", "/")
+        if not rel_s or rel_s == ".":
+            rel_s = ""
+        if rel_s.startswith("/"):
+            return validation_error(
+                message="relative_path must be relative",
+                path="$.relative_path",
+                reason="absolute_path_forbidden",
+                meta={"relative_path": rel_s},
+            )
+        while "//" in rel_s:
+            rel_s = rel_s.replace("//", "/")
+        segs = [seg for seg in rel_s.split("/") if seg and seg != "."]
+        if any(seg == ".." for seg in segs):
+            return validation_error(
+                message="Invalid relative_path",
+                path="$.relative_path",
+                reason="traversal_forbidden",
+                meta={"relative_path": rel_s},
+            )
+        root = root_s
+        relative_path = "/".join(segs)
+
         mode = self._validate_mode(mode)
         # 1) Load models
-        _emit("model.load", "model.load", {"root": root, "relative_path": relative_path})
         ensure_default_models(self._fs)
         catalog_dict = read_json(self._fs, RootName.WIZARDS, "import/catalog/catalog.json")
         flow_dict = read_json(self._fs, RootName.WIZARDS, "import/flow/current.json")
@@ -367,12 +399,6 @@ class ImportWizardEngine:
 
         catalog = CatalogModel.from_dict(catalog_dict)
         flow = FlowModel.from_dict(flow_dict)
-
-        _emit(
-            "model.validate",
-            "model.validate",
-            {"root": root, "relative_path": relative_path},
-        )
         validate_models(catalog, flow)
 
         effective_model = build_flow_model(catalog=catalog, flow_config=flow_cfg_norm)
@@ -412,6 +438,23 @@ class ImportWizardEngine:
             ]
         )
         session_id = sha256_hex(sid_src.encode("utf-8"))[:16]
+
+        diag = {
+            "session_id": session_id,
+            "model_fingerprint": model_fingerprint,
+            "discovery_fingerprint": discovery_fingerprint,
+            "effective_config_fingerprint": effective_config_fingerprint,
+        }
+        _emit(
+            "model.load",
+            "model.load",
+            {**diag, "root": root, "relative_path": relative_path, "mode": mode},
+        )
+        _emit(
+            "model.validate",
+            "model.validate",
+            {**diag, "root": root, "relative_path": relative_path, "mode": mode},
+        )
 
         session_dir = f"import/sessions/{session_id}"
         state_path = f"{session_dir}/state.json"

@@ -82,11 +82,16 @@ def run_launcher(
 ) -> int:
     cfg = load_renderer_config(resolver)
     cfg = _apply_overrides(cfg, cli_overrides)
-
     if cfg.launcher_mode == "disabled":
         return 0
 
-    if cfg.launcher_mode == "fixed":
+    if cfg.noninteractive:
+        root = cfg.default_root
+        rel_path = cfg.default_path
+        if not root or not rel_path:
+            print_fn("ERROR: noninteractive requires both root and path")
+            return 1
+    elif cfg.launcher_mode == "fixed":
         root = cfg.default_root
         rel_path = cfg.default_path
     else:
@@ -102,11 +107,6 @@ def run_launcher(
     if ".." in [seg for seg in str(rel_path).replace("\\", "/").split("/") if seg]:
         print_fn("ERROR: invalid path: '..' is forbidden")
         return 1
-
-    if cfg.noninteractive and (cfg.launcher_mode == "interactive"):
-        # If noninteractive is forced, we must not prompt further. Root/path were chosen above.
-        # This is acceptable because those prompts happened already; keep behavior strict.
-        pass
 
     state = engine.create_session(root, rel_path)
     session_id = str(state.get("session_id") or "")

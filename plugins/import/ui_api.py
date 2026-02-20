@@ -71,7 +71,15 @@ def build_router(*, engine: Any):
         def _impl():
             validated = engine.validate_flow_config(body)
             if validated.get("ok") is not True:
-                return JSONResponse(status_code=400, content=validated)
+                if isinstance(validated, dict) and "error" in validated:
+                    return JSONResponse(status_code=400, content=validated)
+                # Fallback: enforce canonical envelope shape
+                return JSONResponse(
+                    status_code=400,
+                    content={
+                        "error": {"code": "VALIDATION_ERROR", "message": "invalid", "details": []}
+                    },
+                )
 
             normalized = engine._normalize_flow_config(body)
             fs = engine.get_file_service()
