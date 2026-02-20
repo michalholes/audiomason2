@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import shutil
 import zipfile
 from datetime import UTC, datetime
@@ -114,6 +115,16 @@ def compute_success_archive_rel(
 
 def _utc_iso(ts: float) -> str:
     return datetime.fromtimestamp(ts, tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _ascii_sanitize(s: str) -> str:
+    out = []
+    for ch in s:
+        if ord(ch) < 128:
+            out.append(ch)
+        else:
+            out.append(" ")
+    return "".join(out)
 
 
 def _find_latest_artifact_rel(patches_root: Path, dir_name: str, contains: str) -> str | None:
@@ -247,6 +258,73 @@ class App:
     def shutdown(self) -> None:
         self.queue.stop()
 
+    def _autofill_scan_dir_rel(self) -> str | None:
+        scan_dir = str(self.cfg.autofill.scan_dir or "").strip().replace("\\", "/")
+        scan_dir = scan_dir.lstrip("/")
+        if not scan_dir:
+            scan_dir = self.cfg.paths.patches_root
+
+        prefix = self.cfg.paths.patches_root.rstrip("/")
+        if scan_dir == prefix:
+            return ""
+        if scan_dir.startswith(prefix + "/"):
+            return scan_dir[len(prefix) + 1 :]
+        return None
+
+    def _derive_from_filename(self, filename: str) -> tuple[str | None, str | None]:
+        if not self.cfg.autofill.derive_enabled:
+            return None, None
+
+        try:
+            issue_re = re.compile(self.cfg.autofill.issue_regex)
+        except re.error:
+            issue_re = None
+        try:
+            msg_re = re.compile(self.cfg.autofill.commit_regex)
+        except re.error:
+            msg_re = None
+
+        issue_id: str | None = None
+        if issue_re is not None:
+            m = issue_re.search(filename)
+            if m and m.groups():
+                issue_id = str(m.group(1))
+
+        commit_msg: str | None = None
+        if msg_re is not None:
+            m2 = msg_re.match(filename)
+            if m2 and m2.groups():
+                commit_msg = str(m2.group(1))
+
+        if commit_msg is None:
+            dflt = str(self.cfg.autofill.commit_default_if_no_match or "")
+            if dflt == "basename_no_ext":
+                commit_msg = os.path.splitext(filename)[0]
+
+        if commit_msg is not None:
+            if self.cfg.autofill.commit_replace_underscores:
+                commit_msg = commit_msg.replace("_", " ")
+            if self.cfg.autofill.commit_replace_dashes:
+                commit_msg = commit_msg.replace("-", " ")
+            if self.cfg.autofill.commit_collapse_spaces:
+                commit_msg = " ".join(commit_msg.split())
+            if self.cfg.autofill.commit_trim:
+                commit_msg = commit_msg.strip()
+            if self.cfg.autofill.commit_ascii_only:
+                commit_msg = _ascii_sanitize(commit_msg)
+                if self.cfg.autofill.commit_collapse_spaces:
+                    commit_msg = " ".join(commit_msg.split())
+                if self.cfg.autofill.commit_trim:
+                    commit_msg = commit_msg.strip()
+            if commit_msg == "":
+                commit_msg = None
+
+        if issue_id is None:
+            dflt_issue = str(self.cfg.autofill.issue_default_if_no_match or "")
+            issue_id = dflt_issue if dflt_issue else None
+
+        return issue_id, commit_msg
+
     # ---------------- API ----------------
 
     def api_config(self) -> tuple[int, bytes]:
@@ -256,6 +334,7 @@ class App:
         )
 
         data: dict[str, Any] = {
+            "meta": {"version": self.cfg.meta.version},
             "server": {"host": self.cfg.server.host, "port": self.cfg.server.port},
             "runner": {
                 "command": self.cfg.runner.command,
@@ -288,8 +367,94 @@ class App:
                 "base_font_px": self.cfg.ui.base_font_px,
                 "drop_overlay_enabled": self.cfg.ui.drop_overlay_enabled,
             },
+            "autofill": {
+                "enabled": self.cfg.autofill.enabled,
+                "poll_interval_seconds": self.cfg.autofill.poll_interval_seconds,
+                "overwrite_policy": self.cfg.autofill.overwrite_policy,
+                "fill_patch_path": self.cfg.autofill.fill_patch_path,
+                "fill_issue_id": self.cfg.autofill.fill_issue_id,
+                "fill_commit_message": self.cfg.autofill.fill_commit_message,
+                "scan_dir": self.cfg.autofill.scan_dir,
+                "scan_extensions": self.cfg.autofill.scan_extensions,
+                "scan_ignore_filenames": self.cfg.autofill.scan_ignore_filenames,
+                "scan_ignore_prefixes": self.cfg.autofill.scan_ignore_prefixes,
+                "choose_strategy": self.cfg.autofill.choose_strategy,
+                "tiebreaker": self.cfg.autofill.tiebreaker,
+                "derive_enabled": self.cfg.autofill.derive_enabled,
+                "issue_regex": self.cfg.autofill.issue_regex,
+                "commit_regex": self.cfg.autofill.commit_regex,
+                "commit_replace_underscores": self.cfg.autofill.commit_replace_underscores,
+                "commit_replace_dashes": self.cfg.autofill.commit_replace_dashes,
+                "commit_collapse_spaces": self.cfg.autofill.commit_collapse_spaces,
+                "commit_trim": self.cfg.autofill.commit_trim,
+                "commit_ascii_only": self.cfg.autofill.commit_ascii_only,
+                "issue_default_if_no_match": self.cfg.autofill.issue_default_if_no_match,
+                "commit_default_if_no_match": self.cfg.autofill.commit_default_if_no_match,
+            },
         }
         return _json_bytes(data)
+
+    def api_patches_latest(self) -> tuple[int, bytes]:
+        if not self.cfg.autofill.enabled:
+            return _ok({"found": False, "disabled": True})
+        if self.cfg.autofill.choose_strategy != "mtime_ns":
+            return _err("Unsupported choose_strategy", status=400)
+        if self.cfg.autofill.tiebreaker != "lex_name":
+            return _err("Unsupported tiebreaker", status=400)
+
+        rel = self._autofill_scan_dir_rel()
+        if rel is None:
+            return _err("scan_dir must be under patches_root", status=400)
+
+        try:
+            d = self.jail.resolve_rel(rel)
+        except Exception as e:
+            return _err(str(e), status=400)
+        if not d.exists() or not d.is_dir():
+            return _ok({"found": False})
+
+        exts = {str(x).lower() for x in self.cfg.autofill.scan_extensions}
+        ignore_names = {str(x) for x in self.cfg.autofill.scan_ignore_filenames}
+        ignore_pfx = [str(x) for x in self.cfg.autofill.scan_ignore_prefixes]
+
+        best_name: str | None = None
+        best_m = -1
+        for p in d.iterdir():
+            if not p.is_file():
+                continue
+            name = p.name
+            if name in ignore_names:
+                continue
+            if any(name.startswith(px) for px in ignore_pfx):
+                continue
+            if os.path.splitext(name)[1].lower() not in exts:
+                continue
+            try:
+                st = p.stat()
+            except Exception:
+                continue
+            m_ns = int(getattr(st, "st_mtime_ns", int(st.st_mtime * 1_000_000_000)))
+            if m_ns > best_m or (m_ns == best_m and (best_name is None or name < best_name)):
+                best_m = m_ns
+                best_name = name
+
+        if not best_name:
+            return _ok({"found": False})
+
+        rel_dir = self.cfg.autofill.scan_dir.rstrip("/")
+        stored_rel = str(Path(rel_dir) / best_name)
+        issue_id, commit_msg = self._derive_from_filename(best_name)
+        payload: dict[str, Any] = {
+            "found": True,
+            "filename": best_name,
+            "stored_rel_path": stored_rel,
+            "mtime_ns": best_m,
+            "token": f"{best_m}:{stored_rel}",
+        }
+        if self.cfg.autofill.derive_enabled:
+            payload["derived_issue"] = issue_id
+            payload["derived_commit_message"] = commit_msg
+        return _ok(payload)
 
     def api_parse_command(self, body: dict[str, Any]) -> tuple[int, bytes]:
         raw = str(body.get("raw", ""))
@@ -571,7 +736,13 @@ class App:
         dst.write_bytes(data)
 
         rel = str(Path(self.cfg.paths.upload_dir) / dst.name)
-        return _ok({"stored_rel_path": rel, "bytes": len(data)})
+
+        issue_id, commit_msg = self._derive_from_filename(dst.name)
+        payload: dict[str, Any] = {"stored_rel_path": rel, "bytes": len(data)}
+        if self.cfg.autofill.derive_enabled:
+            payload["derived_issue"] = issue_id
+            payload["derived_commit_message"] = commit_msg
+        return _ok(payload)
 
     # ---------------- UI pages ----------------
 

@@ -110,6 +110,10 @@
   var selectedRun = null;
   var tailLines = 200;
 
+  var dirty = { issueId: false, commitMsg: false, patchPath: false };
+  var latestToken = "";
+  var autofillTimer = null;
+
   var lastParsedRaw = "";
   var lastParsed = null;
   var parseInFlight = false;
@@ -613,10 +617,19 @@
           }
         });
       })
-      .then(function (j) {        setText("uploadHint", (j && j.ok) ? ("Uploaded: " + String(j.stored_rel_path || "")) : ("Upload failed: " + String((j && j.error) || "")));
+      .then(function (j) {
+        setText(
+          "uploadHint",
+          (j && j.ok)
+            ? ("Uploaded: " + String(j.stored_rel_path || ""))
+            : ("Upload failed: " + String((j && j.error) || ""))
+        );
         if (j && j.stored_rel_path) {
           var stored = String(j.stored_rel_path);
-          el("patchPath").value = stored;
+          var n = el("patchPath");
+          if (n && shouldOverwrite("patchPath", n)) {
+            n.value = stored;
+          }
 
           var relUnderRoot = stripPatchesPrefix(stored);
           var parent = parentRel(relUnderRoot);
@@ -624,8 +637,8 @@
             el("fsPath").value = parent;
           }
         }
+        applyAutofillFromPayload(j);
         refreshFs();
-        validateAndPreview();
       })
       .catch(function (e) {
         setPre("uploadResult", String(e));
@@ -716,6 +729,9 @@
       if (cfg && cfg.issue && cfg.issue.default_regex) {
         try { issueRegex = new RegExp(cfg.issue.default_regex); } catch (e) { issueRegex = null; }
       }
+      if (cfg && cfg.meta && cfg.meta.version) {
+        setText("ampWebVersion", "v" + String(cfg.meta.version));
+      }
       refreshHeader();
       if (cfg && cfg.ui) {
         if (cfg.ui.base_font_px) {
@@ -730,6 +746,65 @@
       cfg = null;
       return null;
     });
+  }
+
+  function shouldOverwrite(fieldKey, node) {
+    if (!cfg || !cfg.autofill) return String(node.value || "").trim() === "";
+    var pol = String(cfg.autofill.overwrite_policy || "");
+    if (pol === "only_if_empty") return String(node.value || "").trim() === "";
+    if (pol === "if_not_dirty") return !dirty[fieldKey];
+    return false;
+  }
+
+  function applyAutofillFromPayload(p) {
+    if (!cfg || !cfg.autofill || !p) return;
+
+    if (cfg.autofill.fill_patch_path && p.stored_rel_path) {
+      var n1 = el("patchPath");
+      if (n1 && shouldOverwrite("patchPath", n1)) {
+        n1.value = String(p.stored_rel_path);
+      }
+    }
+
+    if (cfg.autofill.fill_issue_id && p.derived_issue != null) {
+      var n2 = el("issueId");
+      if (n2 && shouldOverwrite("issueId", n2)) {
+        n2.value = String(p.derived_issue || "");
+      }
+    }
+
+    if (cfg.autofill.fill_commit_message && p.derived_commit_message != null) {
+      var n3 = el("commitMsg");
+      if (n3 && shouldOverwrite("commitMsg", n3)) {
+        n3.value = String(p.derived_commit_message || "");
+      }
+    }
+
+    validateAndPreview();
+  }
+
+  function pollLatestPatchOnce() {
+    if (!cfg || !cfg.autofill || !cfg.autofill.enabled) return;
+    apiGet("/api/patches/latest").then(function (r) {
+      if (!r || r.ok === false) return;
+      if (!r.found) return;
+      var token = String(r.token || "");
+      if (!token || token === latestToken) return;
+      latestToken = token;
+      applyAutofillFromPayload(r);
+    });
+  }
+
+  function startAutofillPolling() {
+    if (autofillTimer) {
+      clearInterval(autofillTimer);
+      autofillTimer = null;
+    }
+    if (!cfg || !cfg.autofill || !cfg.autofill.enabled) return;
+    var sec = parseInt(String(cfg.autofill.poll_interval_seconds || "10"), 10);
+    if (isNaN(sec) || sec < 1) sec = 10;
+    autofillTimer = setInterval(pollLatestPatchOnce, sec * 1000);
+    pollLatestPatchOnce();
   }
 
   function refreshHeader() {
@@ -927,9 +1002,18 @@
     }
 
     el("mode").addEventListener("change", validateAndPreview);
-    el("issueId").addEventListener("input", validateAndPreview);
-    el("commitMsg").addEventListener("input", validateAndPreview);
-    el("patchPath").addEventListener("input", validateAndPreview);
+    el("issueId").addEventListener("input", function () {
+      dirty.issueId = true;
+      validateAndPreview();
+    });
+    el("commitMsg").addEventListener("input", function () {
+      dirty.commitMsg = true;
+      validateAndPreview();
+    });
+    el("patchPath").addEventListener("input", function () {
+      dirty.patchPath = true;
+      validateAndPreview();
+    });
 
     var browse = el("browsePatch");
     if (browse) {
@@ -939,6 +1023,7 @@
           return;
         }
         el("patchPath").value = normalizePatchPath(fsSelected);
+        dirty.patchPath = true;
         validateAndPreview();
       });
     }
@@ -982,6 +1067,7 @@
       refreshHeader();
       renderIssueDetail();
       validateAndPreview();
+      startAutofillPolling();
 
       setInterval(function () {
         refreshJobs();

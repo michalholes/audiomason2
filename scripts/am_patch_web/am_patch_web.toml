@@ -2,6 +2,9 @@
 host = "0.0.0.0"
 port = 8099
 
+[meta]
+version = "1.0.0"
+
 [runner]
 command = ["python3", "scripts/am_patch.py"]
 default_verbosity = "normal"
@@ -16,7 +19,7 @@ crud_allowlist = ["", "incoming", "artifacts", "logs", "successful", "unsuccessf
 
 [upload]
 max_bytes = 200000000
-allowed_extensions = [".zip", ".patch", ".diff"]
+allowed_extensions = [".zip", ".patch", ".diff", ".py"]
 ascii_only_names = true
 
 [issue]
@@ -32,3 +35,32 @@ stats_windows_days = [7, 30]
 base_font_px = 24
 drop_overlay_enabled = true
 
+[autofill]
+enabled = true
+poll_interval_seconds = 10
+
+# Filesystem scan (non-recursive)
+scan_dir = "patches"
+scan_extensions = [".zip", ".patch", ".diff", ".py"]
+scan_ignore_filenames = []
+scan_ignore_prefixes = []
+choose_strategy = "mtime_ns"
+tiebreaker = "lex_name"
+
+# Derivation
+derive_enabled = true
+issue_regex = "^issue_(\\d+)_"
+commit_regex = "^issue_\\d+_(.+)\\.(zip|patch|diff|py)$"
+commit_replace_underscores = true
+commit_replace_dashes = true
+commit_collapse_spaces = true
+commit_trim = true
+commit_ascii_only = true
+issue_default_if_no_match = ""
+commit_default_if_no_match = ""
+
+# UI fill policy
+overwrite_policy = "if_not_dirty"
+fill_patch_path = true
+fill_issue_id = true
+fill_commit_message = true

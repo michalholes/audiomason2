@@ -13,6 +13,11 @@ class ServerConfig:
 
 
 @dataclass(frozen=True)
+class MetaConfig:
+    version: str
+
+
+@dataclass(frozen=True)
 class RunnerConfig:
     command: list[str]
     default_verbosity: str
@@ -55,14 +60,42 @@ class UiConfig:
 
 
 @dataclass(frozen=True)
+class AutofillConfig:
+    enabled: bool
+    poll_interval_seconds: int
+    scan_dir: str
+    scan_extensions: list[str]
+    scan_ignore_filenames: list[str]
+    scan_ignore_prefixes: list[str]
+    choose_strategy: str
+    tiebreaker: str
+    derive_enabled: bool
+    issue_regex: str
+    commit_regex: str
+    commit_replace_underscores: bool
+    commit_replace_dashes: bool
+    commit_collapse_spaces: bool
+    commit_trim: bool
+    commit_ascii_only: bool
+    issue_default_if_no_match: str
+    commit_default_if_no_match: str
+    overwrite_policy: str
+    fill_patch_path: bool
+    fill_issue_id: bool
+    fill_commit_message: bool
+
+
+@dataclass(frozen=True)
 class AppConfig:
     server: ServerConfig
+    meta: MetaConfig
     runner: RunnerConfig
     paths: PathsConfig
     upload: UploadConfig
     issue: IssueConfig
     indexing: IndexingConfig
     ui: UiConfig
+    autofill: AutofillConfig
 
 
 def _must_get(d: dict[str, Any], key: str) -> Any:
@@ -75,17 +108,22 @@ def load_config(path: Path) -> AppConfig:
     raw = tomllib.loads(path.read_text(encoding="utf-8"))
 
     server = raw.get("server", {})
+    meta = raw.get("meta", {})
     runner = raw.get("runner", {})
     paths = raw.get("paths", {})
     upload = raw.get("upload", {})
     issue = raw.get("issue", {})
     indexing = raw.get("indexing", {})
     ui = raw.get("ui", {})
+    autofill = raw.get("autofill", {})
 
     return AppConfig(
         server=ServerConfig(
             host=str(_must_get(server, "host")),
             port=int(_must_get(server, "port")),
+        ),
+        meta=MetaConfig(
+            version=str(meta.get("version", "0.0.0")),
         ),
         runner=RunnerConfig(
             command=list(_must_get(runner, "command")),
@@ -116,5 +154,34 @@ def load_config(path: Path) -> AppConfig:
         ui=UiConfig(
             base_font_px=int(ui.get("base_font_px", 24)),
             drop_overlay_enabled=bool(ui.get("drop_overlay_enabled", True)),
+        ),
+        autofill=AutofillConfig(
+            enabled=bool(autofill.get("enabled", True)),
+            poll_interval_seconds=int(autofill.get("poll_interval_seconds", 10)),
+            scan_dir=str(autofill.get("scan_dir", "patches")),
+            scan_extensions=list(autofill.get("scan_extensions", [".zip", ".patch"])),
+            scan_ignore_filenames=list(autofill.get("scan_ignore_filenames", [])),
+            scan_ignore_prefixes=list(autofill.get("scan_ignore_prefixes", [])),
+            choose_strategy=str(autofill.get("choose_strategy", "mtime_ns")),
+            tiebreaker=str(autofill.get("tiebreaker", "lex_name")),
+            derive_enabled=bool(autofill.get("derive_enabled", True)),
+            issue_regex=str(autofill.get("issue_regex", "^issue_(\\d+)_")),
+            commit_regex=str(
+                autofill.get(
+                    "commit_regex",
+                    "^issue_\\d+_(.+)\\.(zip|patch|diff|py)$",
+                )
+            ),
+            commit_replace_underscores=bool(autofill.get("commit_replace_underscores", True)),
+            commit_replace_dashes=bool(autofill.get("commit_replace_dashes", True)),
+            commit_collapse_spaces=bool(autofill.get("commit_collapse_spaces", True)),
+            commit_trim=bool(autofill.get("commit_trim", True)),
+            commit_ascii_only=bool(autofill.get("commit_ascii_only", True)),
+            issue_default_if_no_match=str(autofill.get("issue_default_if_no_match", "")),
+            commit_default_if_no_match=str(autofill.get("commit_default_if_no_match", "")),
+            overwrite_policy=str(autofill.get("overwrite_policy", "if_not_dirty")),
+            fill_patch_path=bool(autofill.get("fill_patch_path", True)),
+            fill_issue_id=bool(autofill.get("fill_issue_id", True)),
+            fill_commit_message=bool(autofill.get("fill_commit_message", True)),
         ),
     )

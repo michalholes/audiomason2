@@ -12,7 +12,7 @@ from .app import App
 
 
 class WebHandler(BaseHTTPRequestHandler):
-    server_version = "am_patch_web/1.0"
+    server_version = "am_patch_web/1.0.0"
 
     def do_GET(self) -> None:  # noqa: N802
         try:
@@ -52,6 +52,11 @@ class WebHandler(BaseHTTPRequestHandler):
             return
         if path == "/api/fs/list":
             status, data = self.app.api_fs_list(qs.get("path", ""))
+            self._send_bytes(data, content_type="application/json", status=status)
+            return
+
+        if path == "/api/patches/latest":
+            status, data = self.app.api_patches_latest()
             self._send_bytes(data, content_type="application/json", status=status)
             return
 
