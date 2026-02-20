@@ -729,3 +729,9 @@
 
 -   spec: Bump specification version to 1.1.13 and clarify model_fingerprint is computed
     over the final persisted effective_model.json (after enrichment).
+
+## 2026-02-20T00:00:00+01:00
+
+-   Issue 223: POST /import/ui/config now supports a deterministic patch mode wrapper
+    (mode=patch, ops=[{op:set,path,value}, ...]) applied atomically to the persisted
+    FlowConfig with canonical error envelopes on validation failures.

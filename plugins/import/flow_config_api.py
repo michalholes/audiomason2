@@ -13,6 +13,7 @@ from plugins.file_io.service.types import RootName
 
 from .defaults import ensure_default_models
 from .errors import FinalizeError
+from .flow_config_patch import apply_patch_request
 from .models import BASE_REQUIRED_STEP_IDS
 from .storage import atomic_write_json, read_json
 
@@ -50,16 +51,52 @@ def normalize_flow_config(raw: Any) -> dict[str, Any]:
 
     defaults_any = raw.get("defaults", {})
     ui_any = raw.get("ui", {})
+    conflicts_any = raw.get("conflicts", {})
     if defaults_any is None:
         defaults_any = {}
     if ui_any is None:
         ui_any = {}
+    if conflicts_any is None:
+        conflicts_any = {}
     if not isinstance(defaults_any, dict):
         raise ValueError("flow_config.defaults must be an object")
     if not isinstance(ui_any, dict):
         raise ValueError("flow_config.ui must be an object")
 
-    return {"version": 1, "steps": steps, "defaults": defaults_any, "ui": ui_any}
+    if not isinstance(conflicts_any, dict):
+        raise ValueError("flow_config.conflicts must be an object")
+
+    conflicts: dict[str, Any] = {}
+    policy_any = conflicts_any.get("policy")
+    if policy_any is not None:
+        if not isinstance(policy_any, str) or not policy_any.strip():
+            raise ValueError("flow_config.conflicts.policy must be a non-empty string")
+        policy = policy_any.strip().lower()
+        try:
+            policy.encode("ascii")
+        except UnicodeEncodeError as e:
+            raise ValueError("flow_config.conflicts.policy must be ASCII-only") from e
+        conflicts["policy"] = "ask" if policy == "ask" else policy
+
+    ui: dict[str, Any] = dict(ui_any)
+    verbosity_any = ui_any.get("verbosity")
+    if verbosity_any is not None:
+        if not isinstance(verbosity_any, str) or not verbosity_any.strip():
+            raise ValueError("flow_config.ui.verbosity must be a non-empty string")
+        verbosity = verbosity_any.strip().lower()
+        try:
+            verbosity.encode("ascii")
+        except UnicodeEncodeError as e:
+            raise ValueError("flow_config.ui.verbosity must be ASCII-only") from e
+        ui["verbosity"] = verbosity
+
+    return {
+        "version": 1,
+        "steps": steps,
+        "defaults": defaults_any,
+        "ui": ui,
+        "conflicts": conflicts,
+    }
 
 
 def merge_flow_config_overrides(
@@ -106,6 +143,10 @@ def get_flow_config(self: ImportWizardEngine) -> dict[str, Any]:
 
 def set_flow_config(self: ImportWizardEngine, flow_config_json: Any) -> dict[str, Any]:
     """Validate, normalize, persist, and return FlowConfig JSON."""
+
+    patch_out = apply_patch_request(self, flow_config_json)
+    if patch_out is not None:
+        return patch_out
 
     validated = self.validate_flow_config(flow_config_json)
     if validated.get("ok") is not True:
