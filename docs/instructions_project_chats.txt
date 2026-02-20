@@ -11,8 +11,31 @@
 7. Pri uprave scripts/ neplati kontrakt ani docs/specification.md
 8. Ak ziadam kontrolu, chcem aby bola hlbkova, kvalifikovana, kvalitna a overila kazdu okolnost
 9. Sucastou kazdeho implementacneho handoffu musi byt povinnost napisat znenie jedneho nadpisu v instrukciach pre tvorbu patchov, pricom riadiaci chat nahodne vyberie jeho cislo od 1-8. 
-10. Ak hrozi, ze spadne brana monolith, musis handoff vytvorit tak, ze novy patch neprispeje k tvorbe monolitu
-11. Ak bol zisteny nedostatok v kode oproti specifikacii, je povolene iba spravit version bump specifikacie. Ine upravy specifikacie ako version bump su v takomto pripade zakazane.
+10. Ak bol zisteny nedostatok v kode oproti specifikacii, je povolene iba spravit version bump specifikacie. Ine upravy specifikacie ako version bump su v takomto pripade zakazane.
+10. Monolith gate (platí pre src/, plugins/ aj scripts/):
+   Ak hrozí pád monolith gate, handoff MUSÍ explicitne navrhnúť štruktúru zmien tak, aby prešla prahmi v am_patch.toml.
+
+   10.1 Nové súbory (kdekoľvek, vrátane scripts/):
+       - max 400 LOC, max 25 exports, max 15 imports
+       - zakázané catch-all názvy: utils.py, common.py, helpers.py, misc.py
+       - zakázané catch-all dirs: utils/, common/, helpers/, misc/
+       - žiadne výnimky (allowlist je prázdny)
+
+   10.2 Rast veľkých existujúcich súborov:
+       - ak súbor má >= 900 LOC: povolené max +20 LOC, +2 exports, +1 imports
+       - ak súbor má >= 1300 LOC: povolené +0 LOC, +0 exports, +0 imports (nesmie narásť ani o 1)
+
+   10.3 Hub/cross-area riziko (najmä pri scripts/):
+       - nevytvárať nový „centrálny“ modul, ktorý začne byť importovaný naprieč viacerými oblasťami
+       - vyhnúť sa miešaniu 3+ ownership areas v jednej zmene (core/runner/plugins/tests/tooling)
+       - ak zmena tlačí na limity alebo hub správanie, handoff MUSÍ prikázať extrakciu do menšieho lokálneho modulu
+         v rovnakej ownership oblasti (nie nový shared helper v scripts/)
+
+   10.4 Povinný blok v handoffe: "Monolith risk"
+       - zoznam menených súborov + očakávaný LOC delta
+       - či vzniká nový súbor + potvrdenie, že nie je catch-all a spĺňa limity
+       - 1–2 vety: ako sa zabráni hub/cross-area
+
 ---
 
 ## 2. CHARAKTER PROJEKTU
