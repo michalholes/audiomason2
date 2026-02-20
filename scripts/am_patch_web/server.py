@@ -54,6 +54,11 @@ class WebHandler(BaseHTTPRequestHandler):
             status, data = self.app.api_fs_list(qs.get("path", ""))
             self._send_bytes(data, content_type="application/json", status=status)
             return
+
+        if path == "/api/fs/read_text":
+            status, data = self.app.api_fs_read_text(qs)
+            self._send_bytes(data, content_type="application/json", status=status)
+            return
         if path == "/api/fs/download":
             self._api_fs_download(qs.get("path", ""))
             return

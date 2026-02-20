@@ -1,6 +1,9 @@
 (function () {
   "use strict";
 
+  var activeJobId = null;
+  var autoRefreshTimer = null;
+
   function el(id) { return document.getElementById(id); }
 
   function setPre(id, obj) {
@@ -15,6 +18,26 @@
     } catch (e) {
       node.textContent = String(obj);
     }
+  }
+
+  function setText(id, text) {
+    var node = el(id);
+    if (!node) return;
+    node.textContent = String(text || "");
+  }
+
+  function formatLocalTime(isoUtc) {
+    if (!isoUtc) return "";
+    var d = new Date(String(isoUtc));
+    if (isNaN(d.getTime())) return String(isoUtc);
+    return d.toLocaleString(undefined, {
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit"
+    });
   }
 
   function apiGet(path) {
@@ -201,7 +224,7 @@
         return (
           "<div class=\"item runitem\" data-idx=\"" + String(idx) + "\">" +
           "<span class=\"name\">#" + String(x.issue_id) + " " + escapeHtml(String(x.result || "")) + sel + "</span>" +
-          "<span class=\"actions\">" + link + " <span class=\"muted\">" + String(x.mtime_utc || "") + "</span></span>" +
+          "<span class=\"actions\">" + link + " <span class=\"muted\">" + formatLocalTime(x.mtime_utc || "") + "</span></span>" +
           "</div>"
         );
       }).join("");
@@ -224,19 +247,24 @@
 
   function refreshTail(lines) {
     tailLines = lines || tailLines || 200;
-    apiGet("/api/runner/tail?lines=" + encodeURIComponent(String(tailLines))).then(function (r) {
+    var linesQ = encodeURIComponent(String(tailLines));
+    var url = "/api/runner/tail?lines=" + linesQ;
+    if (activeJobId) {
+      url = "/api/jobs/" + encodeURIComponent(String(activeJobId)) + "/log_tail?lines=" + linesQ;
+    }
+    apiGet(url).then(function (r) {
       if (!r || r.ok === false) {
         setPre("tail", r);
         return;
       }
-      var ev = r.events || [];
-      setPre("tail", ev);
-      updateShortProgressFromEvents(ev);
+      var t = String(r.tail || "");
+      setPre("tail", t);
+      updateShortProgressFromText(t);
     });
   }
 
-  function updateShortProgressFromEvents(events) {
-    var lines = String(tailText || "").split(/\r?\n/);
+  function updateShortProgressFromText(text) {
+    var lines = String(text || "").split(/\r?\n/);
     var stage = "(idle)";
     for (var i = lines.length - 1; i >= 0; i--) {
       var s = String(lines[i] || "").trim();
@@ -245,7 +273,7 @@
       if (s.indexOf("STATUS:") === 0) { stage = s; break; }
       if (s.indexOf("DO:") === 0) { stage = s; break; }
     }
-    if (el("progress")) el("progress").textContent = stage;
+    setText("progress", stage);
   }
 
   function refreshStats() {
@@ -280,6 +308,7 @@
 
   function renderActiveJob(jobs) {
     var active = (jobs || []).find(function (j) { return j.status === "running"; }) || null;
+    activeJobId = active ? String(active.job_id || "") : null;
     var queued = (jobs || []).filter(function (j) { return j.status === "queued"; });
 
     var box = el("activeJob");
@@ -323,6 +352,7 @@
       }
       var jobs = r.jobs || [];
       renderActiveJob(jobs);
+      ensureAutoRefresh();
 
       var html = jobs.map(function (j) {
         var line = "<div class=\"item\">";
@@ -334,6 +364,24 @@
 
       el("jobsList").innerHTML = html || "<div class=\"muted\">(none)</div>";
     });
+  }
+
+
+  function ensureAutoRefresh() {
+    if (activeJobId) {
+      if (!autoRefreshTimer) {
+        autoRefreshTimer = setInterval(function () {
+          refreshTail(tailLines);
+          refreshJobs();
+          refreshRuns();
+        }, 1000);
+      }
+      return;
+    }
+    if (autoRefreshTimer) {
+      clearInterval(autoRefreshTimer);
+      autoRefreshTimer = null;
+    }
   }
 
   function computeCanonicalPreview(mode, issueId, commitMsg, patchPath) {
@@ -439,8 +487,7 @@
           }
         });
       })
-      .then(function (j) {
-        setPre("uploadResult", j);
+      .then(function (j) {        setText("uploadHint", (j && j.ok) ? ("Uploaded: " + String(j.stored_rel_path || "")) : ("Upload failed: " + String((j && j.error) || "")));
         if (j && j.stored_rel_path) {
           var stored = String(j.stored_rel_path);
           el("patchPath").value = stored;
@@ -640,11 +687,23 @@
     function renderLogs() {
       setTabActive("Logs");
       renderLinks();
-      if (selectedRun.log_rel_path) {
-        setPre("issueTabBody", "Download: /api/fs/download?path=" + selectedRun.log_rel_path);
-      } else {
+      if (!selectedRun.log_rel_path) {
         setPre("issueTabBody", "(no log path)");
+        return;
       }
+      var p = String(selectedRun.log_rel_path);
+      var url = "/api/fs/read_text?path=" + encodeURIComponent(p) + "&tail_lines=2000";
+      apiGet(url).then(function (r) {
+        if (!r || r.ok === false) {
+          setPre("issueTabBody", r);
+          return;
+        }
+        var t = String(r.text || "");
+        if (r.truncated) {
+          t += "\n\n[TRUNCATED]";
+        }
+        setPre("issueTabBody", t);
+      });
     }
 
     function renderPatch() {

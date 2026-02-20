@@ -4,7 +4,7 @@ body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-seri
 .title { font-size: 16px; font-weight: 700; white-space: nowrap; }
 .hdrmeta { flex: 1; text-align: center; color: #b7c3d6; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .actions .link { color: #8fc1ff; text-decoration: none; }
-.layout { display: grid; grid-template-columns: 360px 1fr 360px; gap: 10px; padding: 10px; align-items: start; }
+.layout { display: grid; grid-template-columns: 324px 1fr 324px; gap: 10px; padding: 10px; align-items: start; }
 .panel { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
 .panel-left, .panel-right { position: sticky; top: 10px; max-height: calc(100vh - 20px); overflow: auto; padding-right: 4px; }
 

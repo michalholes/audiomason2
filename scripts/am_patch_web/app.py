@@ -321,6 +321,33 @@ class App:
             return _err("Not a directory", status=404)
         return _ok({"path": rel_path, "items": list_dir(p)})
 
+    def api_fs_read_text(self, qs: dict[str, str]) -> tuple[int, bytes]:
+        rel = str(qs.get("path", ""))
+        tail_lines_s = qs.get("tail_lines", "")
+        max_bytes = int(qs.get("max_bytes", "200000"))
+        max_bytes = max(1, min(max_bytes, 2000000))
+        try:
+            p = self.jail.resolve_rel(rel)
+        except FsJailError as e:
+            return _err(str(e), status=400)
+        if not p.exists() or not p.is_file():
+            return _err("Not a file", status=404)
+
+        if tail_lines_s:
+            tail_lines = int(tail_lines_s)
+            text = read_tail(p, tail_lines)
+            return _ok({"path": rel, "text": text, "truncated": False})
+
+        # head read with truncation (byte-based)
+        try:
+            data = p.read_bytes()
+        except Exception:
+            return _err("Read failed", status=500)
+        truncated = len(data) > max_bytes
+        data = data[:max_bytes]
+        text = data.decode("utf-8", errors="replace")
+        return _ok({"path": rel, "text": text, "truncated": truncated})
+
     def api_fs_download(self, rel_path: str) -> tuple[int, bytes] | None:
         # handled in server layer (stream bytes)
         return None
