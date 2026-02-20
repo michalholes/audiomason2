@@ -1,3 +1,15 @@
+## 2026-02-20T17:00:00+01:00
+
+-   Issue 220: Import UI config endpoints now delegate to engine-owned APIs (get/set/reset) and no longer access engine internals or filesystem helpers.
+
+-   Issue 220: start_processing rereads job_requests.json after writing to guarantee the persisted idempotency_key is used for job creation.
+
+-   Issue 220: Import plugin now maintains a processed books registry updated only on successful import PROCESS job completion (diag.job.end status=succeeded).
+
+-   Issue 220: Add unit tests for UI config delegation, idempotency reread, processed registry updates, and plugin boot behavior when the import plugin is absent.
+
+-   spec: Bump specification version to 1.1.14.
+
 ## 2026-02-19T18:30:00+01:00
 
 -   Issue 212: Import wizard session state now includes canonical fields

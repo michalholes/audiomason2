@@ -17,6 +17,7 @@ from plugins.file_io.service import FileService
 from plugins.file_io.service.types import RootName
 
 from . import discovery as discovery_mod
+from . import flow_config_api
 from .defaults import ensure_default_models
 from .engine_diagnostics_required import create_process_job, emit_required
 from .engine_session_guards import validate_root_and_path
@@ -40,10 +41,15 @@ from .flow_runtime import (
     OPTIONAL_STEP_IDS as FLOWCFG_OPTIONAL_STEP_IDS,
 )
 from .job_requests import build_job_requests
-from .models import BASE_REQUIRED_STEP_IDS, CatalogModel, FlowModel, validate_models
+from .models import CatalogModel, FlowModel, validate_models
 from .plan import PlanSelectionError, compute_plan
 from .serialization import canonical_serialize
-from .storage import append_jsonl, atomic_write_json, atomic_write_text, read_json
+from .storage import (
+    append_jsonl,
+    atomic_write_json,
+    atomic_write_text,
+    read_json,
+)
 
 # Test seam: unit tests monkeypatch plugins.import.engine.get_event_bus.
 # The diagnostics facade will use it when callable.
@@ -606,6 +612,15 @@ class ImportWizardEngine:
             return {"ok": True}
         except Exception as e:
             return _exception_envelope(e)
+
+    def get_flow_config(self) -> dict[str, Any]:
+        return flow_config_api.get_flow_config(self)
+
+    def set_flow_config(self, flow_config_json: Any) -> dict[str, Any]:
+        return flow_config_api.set_flow_config(self, flow_config_json)
+
+    def reset_flow_config(self) -> dict[str, Any]:
+        return flow_config_api.reset_flow_config(self)
 
     def preview_effective_model(self, catalog_json: Any, flow_json: Any) -> dict[str, Any]:
         """Return the effective model that would be frozen for new sessions."""
@@ -1324,7 +1339,12 @@ class ImportWizardEngine:
             job_bytes = canonical_serialize(job_requests)
             atomic_write_text(self._fs, RootName.WIZARDS, job_path, job_bytes.decode("utf-8"))
 
-            idem_key = str(job_requests.get("idempotency_key") or "")
+            job_any = read_json(self._fs, RootName.WIZARDS, job_path)
+            if not isinstance(job_any, dict):
+                raise FinalizeError("job_requests.json is invalid")
+            idem_key = str(job_any.get("idempotency_key") or "")
+            if not idem_key:
+                raise FinalizeError("job_requests.json missing idempotency_key")
             job_id = self._get_or_create_job(session_id, state, idem_key)
 
             self._enter_phase_2(session_id, state)
@@ -1565,73 +1585,12 @@ class ImportWizardEngine:
             cur = candidate
 
     def _normalize_flow_config(self, raw: Any) -> dict[str, Any]:
-        if not isinstance(raw, dict):
-            raise ValueError("flow_config must be an object")
-        version = raw.get("version")
-        if version != 1:
-            raise ValueError("flow_config.version must be 1")
-
-        steps_any = raw.get("steps", {})
-        if steps_any is None:
-            steps_any = {}
-        if not isinstance(steps_any, dict):
-            raise ValueError("flow_config.steps must be an object")
-
-        steps: dict[str, Any] = {}
-        for step_id, cfg in steps_any.items():
-            if not isinstance(step_id, str) or not step_id:
-                raise ValueError("flow_config.steps keys must be non-empty strings")
-            if not isinstance(cfg, dict):
-                raise ValueError("flow_config.steps.<step_id> must be an object")
-            enabled = cfg.get("enabled")
-            if enabled is not None and not isinstance(enabled, bool):
-                raise ValueError("flow_config.steps.<step_id>.enabled must be bool")
-            if enabled is False and step_id in BASE_REQUIRED_STEP_IDS:
-                raise FinalizeError(f"required step may not be disabled: {step_id}")
-            if enabled is None:
-                continue
-            steps[step_id] = {"enabled": bool(enabled)}
-
-        defaults_any = raw.get("defaults", {})
-        ui_any = raw.get("ui", {})
-        if defaults_any is None:
-            defaults_any = {}
-        if ui_any is None:
-            ui_any = {}
-        if not isinstance(defaults_any, dict):
-            raise ValueError("flow_config.defaults must be an object")
-        if not isinstance(ui_any, dict):
-            raise ValueError("flow_config.ui must be an object")
-
-        return {"version": 1, "steps": steps, "defaults": defaults_any, "ui": ui_any}
+        return flow_config_api.normalize_flow_config(raw)
 
     def _merge_flow_config_overrides(
         self, base: dict[str, Any], overrides: dict[str, Any]
     ) -> dict[str, Any]:
-        if not isinstance(overrides, dict):
-            raise ValueError("flow_overrides must be an object")
-        if "steps" not in overrides:
-            return base
-        merged = dict(base)
-        steps = dict(cast(dict[str, Any], merged.get("steps") or {}))
-        raw_steps = overrides.get("steps")
-        if not isinstance(raw_steps, dict):
-            raise ValueError("flow_overrides.steps must be an object")
-        for step_id, cfg in raw_steps.items():
-            if not isinstance(step_id, str) or not step_id:
-                raise ValueError("flow_overrides.steps keys must be strings")
-            if not isinstance(cfg, dict):
-                raise ValueError("flow_overrides.steps.<step_id> must be an object")
-            enabled = cfg.get("enabled")
-            if enabled is None:
-                continue
-            if not isinstance(enabled, bool):
-                raise ValueError("flow_overrides.steps.<step_id>.enabled must be bool")
-            if enabled is False and step_id in BASE_REQUIRED_STEP_IDS:
-                raise FinalizeError(f"required step may not be disabled: {step_id}")
-            steps[step_id] = {"enabled": bool(enabled)}
-        merged["steps"] = steps
-        return merged
+        return flow_config_api.merge_flow_config_overrides(base, overrides)
 
     def _scan_conflicts(self, session_id: str, state: dict[str, Any]) -> list[dict[str, str]]:
         from .conflicts import scan_conflicts
