@@ -214,26 +214,13 @@ class ImportWizardEngine:
             )
             loaded_state = _ensure_session_state_fields(loaded_state)
 
-            # Snapshot artifacts are immutable (spec 10.9). However, state is allowed
-            # to track the runtime-effective model fingerprint.
-            try:
-                em_any = read_json(
-                    self._fs,
-                    RootName.WIZARDS,
-                    f"{session_dir}/effective_model.json",
-                )
-                if isinstance(em_any, dict):
-                    em_rt = _inject_selection_items(
-                        effective_model=em_any,
-                        authors_items=authors_items,
-                        books_items=books_items,
-                    )
-                    fp_rt = fingerprint_json(em_rt)
-                    if fp_rt != loaded_state.get("model_fingerprint"):
-                        loaded_state["model_fingerprint"] = fp_rt
-                        loaded_state["updated_at"] = _iso_utc_now()
-            except Exception:
-                pass
+            # Snapshot artifacts are immutable (spec 10.9). Resume MUST NOT modify them.
+            # However, state.json is allowed to track the runtime-effective model fingerprint
+            # (selection items reinjected from discovery.json), even if an older snapshot
+            # on disk is missing those items.
+            runtime_fp = self._runtime_effective_model_fingerprint(session_id)
+            if runtime_fp and loaded_state.get("model_fingerprint") != runtime_fp:
+                loaded_state["model_fingerprint"] = runtime_fp
             self._persist_state(session_id, loaded_state)
             return loaded_state
 
@@ -1423,6 +1410,18 @@ class ImportWizardEngine:
     def _persist_state(self, session_id: str, state: dict[str, Any]) -> None:
         session_dir = f"import/sessions/{session_id}"
         atomic_write_json(self._fs, RootName.WIZARDS, f"{session_dir}/state.json", state)
+
+    def _runtime_effective_model_fingerprint(self, session_id: str) -> str:
+        """Return fingerprint for the runtime-effective model for a session.
+
+        The snapshot effective_model.json is immutable, but runtime selection items may be
+        derived from discovery.json when rendering. state.json model_fingerprint is allowed
+        to reflect this runtime-effective model.
+        """
+        model_any = self._load_effective_model(session_id)
+        if isinstance(model_any, dict):
+            return fingerprint_json(model_any)
+        return ""
 
     def _effective_model_with_runtime_selection_items(
         self, session_id: str, effective_model: dict[str, Any]
