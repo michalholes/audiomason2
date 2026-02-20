@@ -1,6 +1,7 @@
-"""Import plugin: model_fingerprint must match persisted effective_model.json.
+"""Import plugin: session snapshot artifacts are immutable (spec 10.9).
 
-Issue 218.
+The effective_model.json snapshot must never be rewritten after session creation.
+model_fingerprint is allowed to track the runtime-effective model fingerprint.
 """
 
 from __future__ import annotations
@@ -122,5 +123,9 @@ def test_resume_reinjection_updates_fingerprint_only_when_model_changed(tmp_path
     em_after = json.loads(em_path.read_text(encoding="utf-8"))
     st_after = json.loads(st_path.read_text(encoding="utf-8"))
 
-    assert fingerprint_json(em_after) == st_after.get("model_fingerprint")
+    # Snapshot stays immutable (legacy stripped model remains on disk).
+    assert fingerprint_json(em_after) == fingerprint_json(em_stripped)
+
+    # State tracks runtime-effective model fingerprint.
+    assert st_after.get("model_fingerprint") == fingerprint_json(em_full)
     assert st_after.get("model_fingerprint") != st_old.get("model_fingerprint")

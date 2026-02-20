@@ -11,11 +11,9 @@ from collections.abc import Callable
 from typing import Any
 
 from plugins.file_io.service import FileService
-from plugins.file_io.service.types import RootName
 
 from . import selection_runtime
 from .fingerprints import fingerprint_json
-from .storage import atomic_write_json
 
 
 def needs_runtime_selection_items(effective_model: dict[str, Any]) -> bool:
@@ -110,8 +108,9 @@ def upgrade_legacy_selection_snapshot_if_needed(
 ) -> dict[str, Any]:
     """One-time upgrader for legacy sessions missing selection items.
 
-    The upgrader only writes effective_model.json when it can deterministically
-    reconstruct the expected model fingerprint.
+    Immutable snapshot rule (spec 10.9): effective_model.json must never be
+    rewritten after session creation. If we can deterministically reconstruct
+    the runtime model, repair state only.
     """
 
     current_fp = str(loaded_state.get("model_fingerprint") or "")
@@ -156,13 +155,7 @@ def upgrade_legacy_selection_snapshot_if_needed(
     if upgraded_fp != expected_model_fingerprint:
         return loaded_state
 
-    session_dir = f"import/sessions/{session_id}"
-    atomic_write_json(
-        fs,
-        RootName.WIZARDS,
-        f"{session_dir}/effective_model.json",
-        upgraded_model,
-    )
+    # Do not persist upgraded_model. Snapshot is immutable.
     loaded_state["model_fingerprint"] = expected_model_fingerprint
     loaded_state["updated_at"] = now_iso_utc()
     return loaded_state

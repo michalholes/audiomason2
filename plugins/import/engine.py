@@ -1655,13 +1655,8 @@ class ImportWizardEngine:
         except Exception:
             return loaded_state
 
-        session_dir = f"import/sessions/{session_id}"
-        atomic_write_json(
-            self._fs,
-            RootName.WIZARDS,
-            f"{session_dir}/effective_model.json",
-            upgraded_model,
-        )
+        # Immutable snapshot rule (spec 10.9): never rewrite effective_model.json.
+        # If we can deterministically reconstruct the runtime model, repair state only.
         loaded_state["model_fingerprint"] = expected_model_fingerprint
         loaded_state["updated_at"] = _iso_utc_now()
         return loaded_state
