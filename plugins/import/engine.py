@@ -10,7 +10,6 @@ ASCII-only.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from typing import Any, cast
 
 from plugins.file_io.service import FileService
@@ -19,12 +18,19 @@ from plugins.file_io.service.types import RootName
 from . import discovery as discovery_mod
 from . import flow_config_api
 from .defaults import ensure_default_models
-from .engine_diagnostics_required import create_process_job, emit_required
+from .engine_diagnostics_required import create_process_job
 from .engine_session_guards import validate_root_and_path
+from .engine_util import (
+    _derive_selection_items,
+    _emit_required,
+    _ensure_session_state_fields,
+    _exception_envelope,
+    _inject_selection_items,
+    _iso_utc_now,
+    _parse_selection_expr,
+)
 from .errors import (
     FinalizeError,
-    ImportWizardError,
-    ModelValidationError,
     SessionNotFoundError,
     StepSubmissionError,
     error_envelope,
@@ -53,237 +59,6 @@ from .storage import (
 
 # Test seam: unit tests monkeypatch plugins.import.engine.get_event_bus.
 get_event_bus: Any = None
-
-
-def _to_ascii(text: str) -> str:
-    return text.encode("ascii", errors="replace").decode("ascii")
-
-
-def _derive_selection_items(
-    discovery: list[dict[str, Any]],
-) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
-    authors: dict[str, dict[str, str]] = {}
-    books: dict[str, dict[str, str]] = {}
-
-    dirs: list[str] = []
-    for it in discovery:
-        if not (isinstance(it, dict) and it.get("kind") == "dir"):
-            continue
-        rel_any = it.get("relative_path")
-        if not isinstance(rel_any, str):
-            continue
-        dirs.append(rel_any.replace("\\", "/"))
-
-    pairs: set[tuple[str, str]] = set()
-    for rel in dirs:
-        segs = [s for s in rel.split("/") if s]
-        if len(segs) >= 2:
-            pairs.add((segs[0], segs[1]))
-
-    if not pairs:
-        for rel in dirs:
-            segs = [s for s in rel.split("/") if s]
-            if segs:
-                pairs.add((segs[0], segs[0]))
-
-    if not pairs:
-        pairs.add(("(root)", "(root)"))
-
-    for author_key, book_key in sorted(pairs):
-        author_label = _to_ascii(author_key)
-        label = author_key if author_key == book_key else f"{author_key} / {book_key}"
-        book_label = _to_ascii(label)
-
-        author_id = "author:" + sha256_hex(f"a|{author_key}".encode())[:16]
-        book_id = "book:" + sha256_hex(f"b|{author_key}|{book_key}".encode())[:16]
-
-        authors.setdefault(author_id, {"item_id": author_id, "label": author_label})
-        books.setdefault(book_id, {"item_id": book_id, "label": book_label})
-
-    authors_items = sorted(authors.values(), key=lambda x: (x["label"], x["item_id"]))
-    books_items = sorted(books.values(), key=lambda x: (x["label"], x["item_id"]))
-    return authors_items, books_items
-
-
-def _inject_selection_items(
-    *,
-    effective_model: dict[str, Any],
-    authors_items: list[dict[str, str]],
-    books_items: list[dict[str, str]],
-) -> dict[str, Any]:
-    steps_any = effective_model.get("steps")
-    if not isinstance(steps_any, list):
-        return effective_model
-
-    steps: list[dict[str, Any]] = [s for s in steps_any if isinstance(s, dict)]
-    for step in steps:
-        step_id = step.get("step_id")
-        if step_id not in {"select_authors", "select_books"}:
-            continue
-        fields_any = step.get("fields")
-        if not isinstance(fields_any, list):
-            continue
-        fields: list[dict[str, Any]] = [f for f in fields_any if isinstance(f, dict)]
-        for fld in fields:
-            if fld.get("type") != "multi_select_indexed":
-                continue
-            fld["items"] = list(authors_items if step_id == "select_authors" else books_items)
-
-    effective_model["steps"] = steps
-    return effective_model
-
-
-def _emit_required(event: str, operation: str, data: dict[str, Any]) -> None:
-    required_ctx: dict[str, Any] = {}
-    for key in [
-        "session_id",
-        "model_fingerprint",
-        "discovery_fingerprint",
-        "effective_config_fingerprint",
-    ]:
-        if key in data and data.get(key) is not None:
-            required_ctx[key] = data.get(key)
-    emit_required(event=event, operation=operation, data=data, required_ctx=required_ctx)
-
-
-def _iso_utc_now() -> str:
-    # RFC3339 / ISO-8601 in UTC (Z suffix).
-    return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-
-
-def _ensure_session_state_fields(state: dict[str, Any]) -> dict[str, Any]:
-    """Ensure SessionState contains minimally required fields (spec 10.*).
-
-    This is a backward-compatible upgrader for existing sessions.
-    """
-    changed = False
-
-    def _setdefault(key: str, value: Any) -> None:
-        nonlocal changed
-        if key not in state:
-            state[key] = value
-            changed = True
-
-    _setdefault("answers", {})
-    _setdefault("computed", {})
-    _setdefault("selected_author_ids", [])
-    _setdefault("selected_book_ids", [])
-    _setdefault("effective_author_title", {})
-
-    # Backward compatibility: keep legacy inputs but answers is canonical.
-    if "inputs" not in state:
-        state["inputs"] = {}
-        changed = True
-
-    answers_any = state.get("answers")
-    inputs_any = state.get("inputs")
-
-    if (
-        isinstance(answers_any, dict)
-        and not answers_any
-        and isinstance(inputs_any, dict)
-        and inputs_any
-    ):
-        state["answers"] = dict(inputs_any)
-        changed = True
-
-    if changed:
-        state["updated_at"] = _iso_utc_now()
-    return state
-
-
-def _exception_envelope(exc: Exception) -> dict[str, Any]:
-    if isinstance(exc, SessionNotFoundError):
-        return error_envelope(
-            "NOT_FOUND",
-            str(exc) or "not found",
-            details=[{"path": "$.session_id", "reason": "not_found", "meta": {}}],
-        )
-    if isinstance(exc, (StepSubmissionError, ValueError)):
-        return validation_error(
-            message=str(exc) or "validation error",
-            path="$",
-            reason="validation_error",
-            meta={"type": exc.__class__.__name__},
-        )
-    if isinstance(exc, FinalizeError):
-        return invariant_violation(
-            message=str(exc) or "invariant violation",
-            path="$",
-            reason="invariant_violation",
-            meta={"type": exc.__class__.__name__},
-        )
-    if isinstance(exc, ModelValidationError):
-        return invariant_violation(
-            message=str(exc) or "invariant violation",
-            path="$",
-            reason="invariant_violation",
-            meta={"type": exc.__class__.__name__},
-        )
-    if isinstance(exc, ImportWizardError):
-        return error_envelope(
-            "INTERNAL_ERROR",
-            str(exc) or "internal error",
-            details=[
-                {
-                    "path": "$.error",
-                    "reason": "internal_error",
-                    "meta": {"type": exc.__class__.__name__},
-                }
-            ],
-        )
-    return error_envelope(
-        "INTERNAL_ERROR",
-        str(exc) or "internal error",
-        details=[
-            {
-                "path": "$.error",
-                "reason": "internal_error",
-                "meta": {"type": exc.__class__.__name__},
-            }
-        ],
-    )
-
-
-def _parse_selection_expr(expr: str, *, max_index: int | None) -> list[int]:
-    text = expr.strip().lower()
-    if text == "all":
-        if max_index is None:
-            # Caller must provide max_index to expand "all".
-            raise ValueError("selection 'all' requires a known max_index")
-        return list(range(1, max_index + 1))
-
-    ids: set[int] = set()
-    for raw in text.split(","):
-        tok = raw.strip()
-        if not tok:
-            continue
-        if "-" in tok:
-            parts = [p.strip() for p in tok.split("-", 1)]
-            if len(parts) != 2 or not parts[0] or not parts[1]:
-                raise ValueError(f"invalid range token: {tok}")
-            try:
-                start = int(parts[0])
-                end = int(parts[1])
-            except ValueError as e:
-                raise ValueError(f"invalid range token: {tok}") from e
-            if start <= 0 or end <= 0 or end < start:
-                raise ValueError(f"invalid range token: {tok}")
-            for i in range(start, end + 1):
-                ids.add(i)
-        else:
-            try:
-                i = int(tok)
-            except ValueError as e:
-                raise ValueError(f"invalid selection token: {tok}") from e
-            if i <= 0:
-                raise ValueError(f"invalid selection token: {tok}")
-            ids.add(i)
-
-    result = sorted(ids)
-    if max_index is not None and any(i > max_index for i in result):
-        raise ValueError("selection out of range")
-    return result
 
 
 class ImportWizardEngine:
@@ -439,30 +214,23 @@ class ImportWizardEngine:
             )
             loaded_state = _ensure_session_state_fields(loaded_state)
 
-            # Best-effort upgrader: ensure persisted effective_model contains selection items.
-            # If model changes, update model_fingerprint to match persisted effective_model.
+            # Snapshot artifacts are immutable (spec 10.9). However, state is allowed
+            # to track the runtime-effective model fingerprint.
             try:
-                em = read_json(
+                em_any = read_json(
                     self._fs,
                     RootName.WIZARDS,
                     f"{session_dir}/effective_model.json",
                 )
-                if isinstance(em, dict):
-                    before = canonical_serialize(em)
-                    em2 = _inject_selection_items(
-                        effective_model=em,
+                if isinstance(em_any, dict):
+                    em_rt = _inject_selection_items(
+                        effective_model=em_any,
                         authors_items=authors_items,
                         books_items=books_items,
                     )
-                    after = canonical_serialize(em2)
-                    if after != before:
-                        atomic_write_json(
-                            self._fs,
-                            RootName.WIZARDS,
-                            f"{session_dir}/effective_model.json",
-                            em2,
-                        )
-                        loaded_state["model_fingerprint"] = fingerprint_json(em2)
+                    fp_rt = fingerprint_json(em_rt)
+                    if fp_rt != loaded_state.get("model_fingerprint"):
+                        loaded_state["model_fingerprint"] = fp_rt
                         loaded_state["updated_at"] = _iso_utc_now()
             except Exception:
                 pass
@@ -1656,9 +1424,36 @@ class ImportWizardEngine:
         session_dir = f"import/sessions/{session_id}"
         atomic_write_json(self._fs, RootName.WIZARDS, f"{session_dir}/state.json", state)
 
+    def _effective_model_with_runtime_selection_items(
+        self, session_id: str, effective_model: dict[str, Any]
+    ) -> dict[str, Any]:
+        session_dir = f"import/sessions/{session_id}"
+        discovery_path = f"{session_dir}/discovery.json"
+
+        if not self._fs.exists(RootName.WIZARDS, discovery_path):
+            return effective_model
+
+        discovery_any = read_json(self._fs, RootName.WIZARDS, discovery_path)
+        if not isinstance(discovery_any, list):
+            return effective_model
+
+        authors_items, books_items = _derive_selection_items(discovery_any)
+        return _inject_selection_items(
+            effective_model=effective_model,
+            authors_items=authors_items,
+            books_items=books_items,
+        )
+
     def _load_effective_model(self, session_id: str) -> dict[str, Any]:
         session_dir = f"import/sessions/{session_id}"
-        return read_json(self._fs, RootName.WIZARDS, f"{session_dir}/effective_model.json")
+        model_any = read_json(
+            self._fs,
+            RootName.WIZARDS,
+            f"{session_dir}/effective_model.json",
+        )
+        if isinstance(model_any, dict):
+            return self._effective_model_with_runtime_selection_items(session_id, model_any)
+        return model_any
 
     def _append_decision(
         self,
