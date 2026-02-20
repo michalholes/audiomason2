@@ -47,6 +47,7 @@ def build_artifacts(
     ws_repo_for_fail_zip: Path,
     issue_diff_base_sha: str | None,
     issue_diff_paths: list[str],
+    ws_attempt: int | None,
 ) -> ArtifactSummary:
     success_zip: Path | None = None
     failure_zip: Path | None = None
@@ -123,7 +124,12 @@ def build_artifacts(
             issue=issue,
         )
 
-        name = render_failure_zip_name(policy=policy, issue=issue, log_path=log_path)
+        name = render_failure_zip_name(
+            policy=policy,
+            issue=issue,
+            log_path=log_path,
+            attempt=ws_attempt,
+        )
         failure_zip = paths.patch_dir / name
 
         include_patch_paths: list[Path] = []

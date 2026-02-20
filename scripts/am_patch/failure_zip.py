@@ -62,7 +62,7 @@ def _log_nonce(*, log_path: Path) -> str:
     return h.hexdigest()[:12]
 
 
-def render_name(*, policy: Any, issue: str, log_path: Path) -> str:
+def render_name(*, policy: Any, issue: str, log_path: Path, attempt: int | None) -> str:
     """Render the failure zip filename from policy template."""
 
     template = getattr(policy, "failure_zip_template", "") or ""
@@ -71,7 +71,14 @@ def render_name(*, policy: Any, issue: str, log_path: Path) -> str:
 
     ts = _extract_ts_from_log_name(policy=policy, log_path=log_path, issue=issue)
     nonce = _log_nonce(log_path=log_path)
-    rendered = template.format(issue=issue, ts=ts, nonce=nonce, log=log_path.stem)
+    attempt_i = int(attempt) if attempt is not None else 1
+    rendered = template.format(
+        issue=issue,
+        ts=ts,
+        nonce=nonce,
+        log=log_path.stem,
+        attempt=attempt_i,
+    )
 
     name = Path(rendered).name
     if not name.lower().endswith(".zip"):

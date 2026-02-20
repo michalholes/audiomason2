@@ -1403,6 +1403,7 @@ def finalize_and_report(ctx: RunContext, result: dict[str, Any]) -> int:
                 failed_patch_blobs_for_zip=failed_patch_blobs_for_zip,
                 files_for_fail_zip=files_for_fail_zip,
                 ws_repo_for_fail_zip=ws_repo,
+                ws_attempt=(ws_for_posthook.attempt if ws_for_posthook is not None else None),
                 issue_diff_base_sha=issue_diff_base_sha,
                 issue_diff_paths=issue_diff_paths,
             )

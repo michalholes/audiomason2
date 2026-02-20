@@ -186,3 +186,45 @@ def test_parse_args_finalize_still_rejects_positional_args() -> None:
         assert "finalize mode" in str(e)
     else:
         raise AssertionError("expected SystemExit")
+
+
+def test_failure_zip_template_allows_attempt_without_ts() -> None:
+    policy_cls, _, build_policy, _ = _import_am_patch()
+    defaults = policy_cls()
+    cfg = {
+        "failure_zip_template": "patched_issue{issue}_v{attempt:04d}.zip",
+    }
+    p = build_policy(defaults, cfg)
+    assert "{attempt" in p.failure_zip_template
+
+
+def test_failure_zip_template_rejects_missing_issue() -> None:
+    policy_cls, _, build_policy, _ = _import_am_patch()
+    defaults = policy_cls()
+    cfg = {
+        "failure_zip_template": "patched_v{attempt:04d}.zip",
+    }
+    try:
+        build_policy(defaults, cfg)
+    except SystemExit:
+        raise
+    except Exception as e:
+        assert "failure_zip_template must contain {issue}" in str(e)
+    else:
+        raise AssertionError("expected failure")
+
+
+def test_failure_zip_template_rejects_missing_uniqueness_key() -> None:
+    policy_cls, _, build_policy, _ = _import_am_patch()
+    defaults = policy_cls()
+    cfg = {
+        "failure_zip_template": "patched_issue{issue}.zip",
+    }
+    try:
+        build_policy(defaults, cfg)
+    except SystemExit:
+        raise
+    except Exception as e:
+        assert "must contain at least one of" in str(e)
+    else:
+        raise AssertionError("expected failure")

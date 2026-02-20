@@ -65,7 +65,7 @@ class Policy:
     # Failure diagnostics zip naming and internal directory structure.
     failure_zip_name: str = "patched.zip"
     # Optional template for failure zip filename.
-    # Placeholders: {issue}, {ts}, {nonce}, {log}
+    # Placeholders: {issue}, {ts}, {nonce}, {log}, {attempt}
     # If empty, legacy failure_zip_name is used.
     failure_zip_template: str = ""
     # Glob template used for cleanup/retention under patch_dir.
@@ -640,14 +640,17 @@ def build_policy(defaults: Policy, cfg: dict[str, Any]) -> Policy:
     p.failure_zip_name = _validate_basename(p.failure_zip_name, field="failure_zip_name")
 
     p.failure_zip_template = str(p.failure_zip_template).strip()
-    if p.failure_zip_template and (
-        "{issue}" not in p.failure_zip_template or "{ts}" not in p.failure_zip_template
-    ):
-        raise RunnerError(
-            "CONFIG",
-            "INVALID",
-            "failure_zip_template must contain {issue} and {ts}",
-        )
+    if p.failure_zip_template and "{issue}" not in p.failure_zip_template:
+        raise RunnerError("CONFIG", "INVALID", "failure_zip_template must contain {issue}")
+
+    if p.failure_zip_template:
+        uniqueness_keys = ("{ts}", "{nonce}", "{attempt")
+        if not any(k in p.failure_zip_template for k in uniqueness_keys):
+            raise RunnerError(
+                "CONFIG",
+                "INVALID",
+                "failure_zip_template must contain at least one of {ts}, {nonce}, {attempt}",
+            )
 
     p.failure_zip_cleanup_glob_template = _validate_basename(
         p.failure_zip_cleanup_glob_template,

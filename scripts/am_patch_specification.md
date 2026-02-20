@@ -47,7 +47,8 @@ The following keys are normative (defaults shown):
 -   log_template_finalize = "am_patch_finalize\_{ts}.log"
 -   json_out = false (when true, write debug-complete NDJSON event log)
 -   failure_zip_name = "patched.zip"
--   failure_zip_template = "" (when set: render filename using {issue} and {ts})
+-   failure_zip_template = "" (when set: render filename using {issue} and optional
+    {ts}/{nonce}/{log}/{attempt})
 -   failure_zip_cleanup_glob_template = "patched_issue{issue}_*.zip"
 -   failure_zip_keep_per_issue = 1
 -   failure_zip_delete_on_success_commit = true
@@ -584,9 +585,14 @@ Failure zip naming and retention:
 
 -   Legacy mode (default): when `failure_zip_template` is empty, the
     runner writes `failure_zip_name` (default: `patched.zip`).
--   Template mode: when `failure_zip_template` is set, the runner renders
-    the filename using `{issue}` and `{ts}` (and may also use `{nonce}` and
-    `{log}`), and writes that zip under `patch_dir`.
+-
+Placeholders: {issue}, {ts}, {nonce}, {log}, {attempt}.
+- {attempt} is the per-issue workspace attempt counter (1,2,3...).
+- For retention safety with lexicographic sorting, prefer padding via format spec,
+  e.g. {attempt:04d}.
+
+Template mode: when `failure_zip_template` is set, the runner renders the filename
+using `{issue}` and may also use `{ts}`, `{nonce}`, `{log}`, `{attempt}`.
 -   Before writing a new failure zip, the runner applies per-issue
     retention using `failure_zip_cleanup_glob_template` and
     `failure_zip_keep_per_issue` (default: keep 1).
