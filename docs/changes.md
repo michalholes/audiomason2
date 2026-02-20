@@ -1,3 +1,8 @@
+## 2026-02-20T23:00:00+01:00
+
+-   Issue 222: Import discovery canonical ordering now sorts by UTF-8 byte order
+    (root, relative_path, kind) to remain deterministic with non-ASCII inputs.
+
 ## 2026-02-20T17:00:00+01:00
 
 -   Issue 220: Import UI config endpoints now delegate to engine-owned APIs (get/set/reset) and no longer access engine internals or filesystem helpers.

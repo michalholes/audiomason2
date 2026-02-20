@@ -84,6 +84,11 @@ def run_discovery(fs: FileService, *, root: str, relative_path: str) -> list[dic
             )
         )
 
+    def _canonical_sort_key(it: DiscoveryItem) -> tuple[bytes, bytes, str]:
+        # Spec requires ASCII-lex ordering. Input paths may contain non-ASCII
+        # characters, so we define ordering as lexicographic over UTF-8 bytes.
+        return (it.root.encode("utf-8"), it.relative_path.encode("utf-8"), it.kind)
+
     # Canonical ordering: root, relative_path, kind
-    items_sorted = sorted(items, key=lambda it: (it.root, it.relative_path, it.kind))
+    items_sorted = sorted(items, key=_canonical_sort_key)
     return [it.to_dict() for it in items_sorted]
