@@ -110,6 +110,12 @@
   var selectedRun = null;
   var tailLines = 200;
 
+  var lastParsedRaw = "";
+  var lastParsed = null;
+  var parseInFlight = false;
+  var parseTimer = null;
+  var parseSeq = 0;
+
   function patchesRootRel() {
     var p = (cfg && cfg.paths && cfg.paths.patches_root) ? String(cfg.paths.patches_root) : "patches";
     return p.replace(/\/+$/, "");
@@ -136,6 +142,82 @@
   function setFsHint(msg) {
     var h = el("fsHint");
     if (h) h.textContent = msg || "";
+  }
+
+  function setParseHint(msg) {
+    setText("parseHint", msg || "");
+  }
+
+  function getRawCommand() {
+    var n = el("rawCommand");
+    if (!n) return "";
+    return String(n.value || "").trim();
+  }
+
+  function clearParsedState() {
+    lastParsedRaw = "";
+    lastParsed = null;
+    parseInFlight = false;
+  }
+
+  function triggerParse(raw) {
+    raw = String(raw || "").trim();
+    if (!raw) {
+      clearParsedState();
+      setParseHint("");
+      validateAndPreview();
+      return;
+    }
+
+    parseInFlight = true;
+    lastParsedRaw = "";
+    lastParsed = null;
+    setParseHint("Parsing...");
+    validateAndPreview();
+
+    parseSeq += 1;
+    var mySeq = parseSeq;
+    apiPost("/api/parse_command", { raw: raw }).then(function (r) {
+      if (mySeq !== parseSeq) return;
+      parseInFlight = false;
+
+      if (!r || r.ok === false) {
+        clearParsedState();
+        setParseHint("Parse failed: " + String((r && r.error) || ""));
+        validateAndPreview();
+        return;
+      }
+
+      lastParsedRaw = raw;
+      lastParsed = r;
+      setParseHint("");
+
+      if (r.parsed && typeof r.parsed === "object") {
+        if (r.parsed.mode) el("mode").value = String(r.parsed.mode);
+        if (r.parsed.issue_id != null) {
+          el("issueId").value = String(r.parsed.issue_id || "");
+        }
+        if (r.parsed.commit_message != null) {
+          el("commitMsg").value = String(r.parsed.commit_message || "");
+        }
+        if (r.parsed.patch_path != null) {
+          el("patchPath").value = String(r.parsed.patch_path || "");
+        }
+      }
+
+      validateAndPreview();
+    });
+  }
+
+  function scheduleParseDebounced(raw) {
+    if (parseTimer) {
+      clearTimeout(parseTimer);
+      parseTimer = null;
+    }
+    parseTimer = setTimeout(function () {
+      parseTimer = null;
+      triggerParse(raw);
+    }, 350);
   }
 
   function refreshFs() {
@@ -422,28 +504,72 @@
     var patchPath = normalizePatchPath(String(el("patchPath").value || ""));
     el("patchPath").value = patchPath;
 
+    var raw = getRawCommand();
+
     var needsFields = (mode === "patch" || mode === "repair");
     setStartFormEnabled(needsFields);
 
     var ok = true;
-    if (needsFields) {
-      ok = !!commitMsg && !!patchPath;
-    }
 
-    var canonical = computeCanonicalPreview(mode, issueId, commitMsg, patchPath);
-    var preview = {
-      mode: mode,
-      issue_id: issueId,
-      commit_message: commitMsg,
-      patch_path: patchPath,
-      canonical_argv: canonical
-    };
+    var canonical = null;
+    var preview = null;
+
+    if (raw) {
+      ok = !parseInFlight && !!lastParsed && (lastParsedRaw === raw);
+      if (ok) {
+        var p = lastParsed.parsed || {};
+        var c = lastParsed.canonical || {};
+        canonical = c.argv ? c.argv : [];
+        var pMode = p.mode ? p.mode : mode;
+        var pIssue = p.issue_id ? p.issue_id : issueId;
+        var pMsg = p.commit_message ? p.commit_message : commitMsg;
+        var pPatch = p.patch_path ? p.patch_path : patchPath;
+        preview = {
+          mode: pMode,
+          issue_id: pIssue,
+          commit_message: pMsg,
+          patch_path: pPatch,
+          canonical_argv: canonical,
+          raw_command: raw
+        };
+      } else {
+        canonical = [];
+        preview = {
+          mode: mode,
+          issue_id: issueId,
+          commit_message: commitMsg,
+          patch_path: patchPath,
+          canonical_argv: canonical,
+          raw_command: raw,
+          parse_status: parseInFlight ? "parsing" : "needs_parse"
+        };
+      }
+    } else {
+      if (needsFields) {
+        ok = !!commitMsg && !!patchPath;
+      }
+
+      canonical = computeCanonicalPreview(mode, issueId, commitMsg, patchPath);
+      preview = {
+        mode: mode,
+        issue_id: issueId,
+        commit_message: commitMsg,
+        patch_path: patchPath,
+        canonical_argv: canonical
+      };
+    }
 
     setPre("preview", preview);
     el("enqueueBtn").disabled = !ok;
 
     var hint2 = el("enqueueHint");
-    if (hint2) hint2.textContent = ok ? "" : "missing fields";
+    if (hint2) {
+      if (raw) {
+        hint2.textContent = "";
+      } else {
+        hint2.textContent = ok ? "" : "missing fields";
+      }
+    }
   }
 
   function enqueue() {
@@ -770,6 +896,35 @@
     el("tailMore").addEventListener("click", function () { refreshTail((tailLines || 200) + 200); });
 
     el("enqueueBtn").addEventListener("click", enqueue);
+
+    if (el("parseBtn")) {
+      el("parseBtn").addEventListener("click", function () {
+        triggerParse(getRawCommand());
+      });
+    }
+
+    if (el("rawCommand")) {
+      el("rawCommand").addEventListener("input", function () {
+        var raw = getRawCommand();
+        if (raw !== lastParsedRaw) {
+          lastParsed = null;
+          lastParsedRaw = "";
+        }
+        if (!raw) {
+          clearParsedState();
+          setParseHint("");
+          validateAndPreview();
+          return;
+        }
+        scheduleParseDebounced(raw);
+      });
+
+      el("rawCommand").addEventListener("paste", function () {
+        setTimeout(function () {
+          triggerParse(getRawCommand());
+        }, 0);
+      });
+    }
 
     el("mode").addEventListener("change", validateAndPreview);
     el("issueId").addEventListener("input", validateAndPreview);
