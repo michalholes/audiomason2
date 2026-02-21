@@ -1,3 +1,9 @@
+## 2026-02-21T21:00:00+01:00
+
+-   Issue 229: Import CLI suppresses high-volume internal INFO logs on the interactive console in normal verbosity (LogBus unchanged; warnings/errors remain visible).
+
+-   spec: Bump specification version to 1.1.16 and add a normative console output policy for the import launcher.
+
 ## 2026-02-20T23:00:00+01:00
 
 -   Issue 222: Import discovery canonical ordering now sorts by UTF-8 byte order

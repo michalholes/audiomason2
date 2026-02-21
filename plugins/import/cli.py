@@ -18,6 +18,11 @@ import json
 from typing import Any
 
 from audiomason.core.config import ConfigResolver
+from audiomason.core.logging import (
+    VerbosityLevel,
+    get_verbosity,
+    set_verbosity,
+)
 
 from .cli_renderer import load_renderer_config, run_launcher
 from .editor import (
@@ -213,11 +218,23 @@ def import_cli_main(
         _print_help()
         return 0
 
-    return run_launcher(
-        engine=engine,
-        resolver=resolver,
-        cli_overrides=cli_overrides,
+    previous_verbosity = get_verbosity()
+    suppress_info = (
+        effective_launcher_mode == "interactive"
+        and not bool(cli_overrides.get("noninteractive", False))
+        and previous_verbosity == VerbosityLevel.NORMAL
     )
+    if suppress_info:
+        set_verbosity(VerbosityLevel.QUIET)
+    try:
+        return run_launcher(
+            engine=engine,
+            resolver=resolver,
+            cli_overrides=cli_overrides,
+        )
+    finally:
+        if suppress_info:
+            set_verbosity(previous_verbosity)
 
 
 def _run_legacy(argv: list[str], *, engine: ImportWizardEngine) -> int:

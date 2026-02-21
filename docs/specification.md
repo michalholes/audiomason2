@@ -1,6 +1,6 @@
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.1.15 Specification Versioning Policy: Start at
+Specification Version: 1.1.16 Specification Versioning Policy: Start at
 1.0.0. Patch version increments by +1 for every change.
 
 Author: Michal Holes\
@@ -299,6 +299,18 @@ Canonical key: - `logging.level`
 
 Allowed values (after normalization): - `quiet` - `normal` - `verbose` -
 `debug`
+
+### 6.7.A Console Output Policy (Normative)
+
+In canonical logging level `normal`, the interactive CLI launcher
+(`audiomason import`) MUST NOT emit high-volume internal INFO logs
+from underlying services/plugins to the interactive console UI output.
+
+Such logs MUST remain available via LogBus.
+
+They MAY be emitted only in `verbose` or `debug`.
+
+Warnings and errors MUST remain visible in `normal`.
 
 ### 6.7.1 Human-Readable System Log File
 
