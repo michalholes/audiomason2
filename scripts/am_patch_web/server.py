@@ -240,11 +240,32 @@ class WebHandler(BaseHTTPRequestHandler):
 
     def _api_jobs_events(self, job_id: str) -> None:
         job = self.app.queue.get_job(job_id)
+
+        disk_job = None
         if job is None:
-            self._send_json({"ok": False, "error": "Not found"}, status=404)
+            disk_job = self.app._load_job_from_disk(job_id)
+
+        if job is None and disk_job is None:
+            # Do not return 404: EventSource will retry forever.
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+            self.send_header("Cache-Control", "no-cache")
+            self.send_header("Connection", "keep-alive")
+            self.end_headers()
+            data = json.dumps({"reason": "job_not_found"}, ensure_ascii=True)
+            self.wfile.write(f"event: end\ndata: {data}\n\n".encode())
+            self.wfile.flush()
             return
 
-        jsonl_path = self.app._job_jsonl_path(job)
+        if disk_job is not None and job is None:
+            jsonl_path = self.app._job_jsonl_path_from_fields(
+                job_id=str(job_id),
+                mode=str(disk_job.mode),
+                issue_id=str(disk_job.issue_id),
+            )
+        else:
+            assert job is not None
+            jsonl_path = self.app._job_jsonl_path(job)
 
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream; charset=utf-8")
@@ -256,6 +277,14 @@ class WebHandler(BaseHTTPRequestHandler):
             self.wfile.write(line.encode("utf-8", errors="replace"))
             self.wfile.flush()
 
+        def send_end(reason: str, status: str | None = None) -> None:
+            payload: dict[str, Any] = {"reason": reason}
+            if status is not None:
+                payload["status"] = status
+            data = json.dumps(payload, ensure_ascii=True)
+            send_line("event: end\n")
+            send_line("data: " + data + "\n\n")
+
         last_ping = time.monotonic()
         offset = 0
         last_growth = time.monotonic()
@@ -266,10 +295,13 @@ class WebHandler(BaseHTTPRequestHandler):
                 if not jsonl_path.exists():
                     job_now = self.app.queue.get_job(job_id)
                     if job_now is None:
-                        send_line("event: end\ndata: {}\n\n")
+                        if disk_job is not None:
+                            send_end("job_completed", status=str(disk_job.status))
+                            return
+                        send_end("job_not_found")
                         return
                     if job_now.status != "running":
-                        send_line("event: end\ndata: {}\n\n")
+                        send_end("job_completed", status=str(job_now.status))
                         return
                     time.sleep(0.2)
                     continue
@@ -297,9 +329,6 @@ class WebHandler(BaseHTTPRequestHandler):
                                 s = raw.decode("utf-8", errors="replace")
                             send_line(f"data: {s}\n\n")
                         offset = fp.tell() - len(tail)
-                    else:
-                        # No new data.
-                        pass
 
                 now = time.monotonic()
                 if now - last_ping >= 10.0:
@@ -308,18 +337,32 @@ class WebHandler(BaseHTTPRequestHandler):
 
                 job_now = self.app.queue.get_job(job_id)
                 if job_now is None:
-                    send_line("event: end\ndata: {}\n\n")
+                    if disk_job is not None:
+                        send_end("job_completed", status=str(disk_job.status))
+                        return
+                    send_end("job_not_found")
                     return
 
                 if job_now.status != "running" and now - last_growth >= 0.5:
                     # If nothing new has arrived shortly after completion, end the stream.
-                    send_line("event: end\ndata: {}\n\n")
+                    send_end("job_completed", status=str(job_now.status))
                     return
 
                 time.sleep(0.2)
-            except BrokenPipeError:
+            except (BrokenPipeError, ConnectionResetError):
                 return
-            except ConnectionResetError:
+            except FileNotFoundError:
+                # The JSONL file may be rotated/removed; end deterministically.
+                job_now = self.app.queue.get_job(job_id)
+                if job_now is not None:
+                    send_end("job_completed", status=str(job_now.status))
+                elif disk_job is not None:
+                    send_end("job_completed", status=str(disk_job.status))
+                else:
+                    send_end("io_error")
+                return
+            except OSError:
+                send_end("io_error")
                 return
 
     def _api_fs_download(self, rel_path: str) -> None:

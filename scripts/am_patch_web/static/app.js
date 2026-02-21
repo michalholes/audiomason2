@@ -761,16 +761,46 @@ function loadLiveLevel() {
       setLiveStreamStatus("streaming");
     };
 
-    es.addEventListener("end", function () {
-      setLiveStreamStatus("ended");
-      try { es.close(); } catch (e) {}
+    es.addEventListener("end", function (e) {
+      var reason = "";
+      var status = "";
+      if (e && e.data) {
+        try {
+          var p = JSON.parse(String(e.data));
+          if (p && typeof p === "object") {
+            reason = String(p.reason || "");
+            status = String(p.status || "");
+          }
+        } catch (err) {}
+      }
+      var msg = "ended";
+      if (status) msg += " (" + status + ")";
+      if (reason) msg += " [" + reason + "]";
+      setLiveStreamStatus(msg);
+      try { es.close(); } catch (e2) {}
       if (liveES === es) {
         liveES = null;
       }
     });
 
     es.onerror = function () {
-      setLiveStreamStatus("reconnecting...");
+      // EventSource retries automatically. If the job is not running anymore (or vanished),
+      // close the stream so UI does not loop forever.
+      apiGet("/api/jobs/" + encodeURIComponent(jobId)).then(function (r) {
+        if (!r || r.ok === false) {
+          closeLiveStream();
+          setLiveStreamStatus("ended [job_not_found]");
+          return;
+        }
+        var j = r.job || {};
+        var st = String(j.status || "");
+        if (st && st !== "running" && st !== "queued") {
+          closeLiveStream();
+          setLiveStreamStatus("ended (" + st + ") [job_completed]");
+          return;
+        }
+        setLiveStreamStatus("reconnecting...");
+      });
     };
   }
 

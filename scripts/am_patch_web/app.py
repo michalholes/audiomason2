@@ -14,6 +14,7 @@ from .config import AppConfig
 from .fs_jail import FsJail, FsJailError, list_dir, safe_rename
 from .indexing import compute_stats, iter_runs
 from .issue_alloc import allocate_next_issue_id
+from .job_store import list_job_jsons, load_job_json
 from .models import JobMode, JobRecord, RunEntry
 from .queue import JobQueue, new_job_id
 
@@ -607,6 +608,55 @@ class App:
         runs = runs[: max(1, min(limit, 500))]
         return _ok({"runs": [r.__dict__ for r in runs]})
 
+    def _job_jsonl_path_from_fields(self, job_id: str, mode: str, issue_id: str) -> Path:
+        d = self.jobs_root / str(job_id)
+        if mode in ("finalize_live", "finalize_workspace"):
+            return d / "am_patch_finalize.jsonl"
+        issue_s = str(issue_id or "")
+        if issue_s.isdigit():
+            return d / ("am_patch_issue_" + issue_s + ".jsonl")
+        return d / "am_patch_finalize.jsonl"
+
+    def _load_job_from_disk(self, job_id: str) -> JobRecord | None:
+        raw = load_job_json(self.jobs_root, job_id)
+        if raw is None:
+            return None
+        try:
+            # The on-disk schema matches JobRecord.to_json().
+            return JobRecord(**raw)
+        except Exception:
+            # Be tolerant: return minimal info if schema drifted.
+            try:
+                jid = str(raw.get("job_id", job_id))
+                created = str(raw.get("created_utc", ""))
+                mode = str(raw.get("mode", "patch"))
+                issue = str(raw.get("issue_id", ""))
+                commit = str(raw.get("commit_message", ""))
+                patch = str(raw.get("patch_path", ""))
+                raw_cmd = str(raw.get("raw_command", ""))
+                canon = raw.get("canonical_command")
+                if not isinstance(canon, list):
+                    canon = []
+                status = str(raw.get("status", "unknown"))
+                jr = JobRecord(
+                    job_id=jid,
+                    created_utc=created,
+                    mode=mode,  # type: ignore[arg-type]
+                    issue_id=issue,
+                    commit_message=commit,
+                    patch_path=patch,
+                    raw_command=raw_cmd,
+                    canonical_command=[str(x) for x in canon],
+                )
+                jr.status = status  # type: ignore[assignment]
+                jr.started_utc = raw.get("started_utc")
+                jr.ended_utc = raw.get("ended_utc")
+                jr.return_code = raw.get("return_code")
+                jr.error = raw.get("error")
+                return jr
+            except Exception:
+                return None
+
     def _job_jsonl_path(self, job: JobRecord) -> Path:
         d = self.jobs_root / job.job_id
         if job.mode in ("finalize_live", "finalize_workspace"):
@@ -688,11 +738,26 @@ class App:
         return _ok({"job_id": job_id, "job": job.to_json()})
 
     def api_jobs_list(self) -> tuple[int, bytes]:
-        jobs = [j.to_json() for j in self.queue.list_jobs()]
-        return _ok({"jobs": jobs})
+        mem = self.queue.list_jobs()
+        mem_by_id = {j.job_id: j for j in mem}
+        disk_raw = list_job_jsons(self.jobs_root, limit=200)
+        disk: list[JobRecord] = []
+        for r in disk_raw:
+            jid = str(r.get("job_id", ""))
+            if not jid or jid in mem_by_id:
+                continue
+            j = self._load_job_from_disk(jid)
+            if j is not None:
+                disk.append(j)
+
+        jobs = mem + disk
+        jobs.sort(key=lambda j: str(j.created_utc or ""), reverse=True)
+        return _ok({"jobs": [j.to_json() for j in jobs]})
 
     def api_jobs_get(self, job_id: str) -> tuple[int, bytes]:
         job = self.queue.get_job(job_id)
+        if job is None:
+            job = self._load_job_from_disk(job_id)
         if job is None:
             return _err("Not found", status=404)
         return _ok({"job": job.to_json()})
@@ -700,9 +765,11 @@ class App:
     def api_jobs_log_tail(self, job_id: str, qs: dict[str, str]) -> tuple[int, bytes]:
         job = self.queue.get_job(job_id)
         if job is None:
+            job = self._load_job_from_disk(job_id)
+        if job is None:
             return _err("Not found", status=404)
         lines = int(qs.get("lines", "200"))
-        log_path = self.jobs_root / job_id / "runner.log"
+        log_path = self.jobs_root / str(job_id) / "runner.log"
         return _ok({"job_id": job_id, "tail": read_tail(log_path, lines)})
 
     def api_jobs_cancel(self, job_id: str) -> tuple[int, bytes]:
