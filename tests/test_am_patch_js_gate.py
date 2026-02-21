@@ -50,3 +50,42 @@ def test_js_gate_handles_extension_without_dot() -> None:
     )
     assert triggered is True
     assert js_paths == ["a.JS"]
+
+
+def _import_run_gate():
+    scripts_dir = Path(__file__).parent.parent / "scripts"
+    sys.path.insert(0, str(scripts_dir))
+    from am_patch.gates import run_js_syntax_gate
+
+    return run_js_syntax_gate
+
+
+def test_js_syntax_gate_skips_when_only_deleted_js_is_touched(tmp_path: Path) -> None:
+    run_js_syntax_gate = _import_run_gate()
+
+    class DummyLogger:
+        def __init__(self) -> None:
+            self.warnings: list[str] = []
+
+        def warning_core(self, msg: str) -> None:
+            self.warnings.append(msg)
+
+        def section(self, _msg: str) -> None:
+            raise AssertionError("section() must not be called when JS gate is SKIP")
+
+        def line(self, _msg: str) -> None:
+            raise AssertionError("line() must not be called when JS gate is SKIP")
+
+        def run_logged(self, _argv: list[str], *, cwd: Path):
+            raise AssertionError("run_logged() must not be called when JS gate is SKIP")
+
+    logger = DummyLogger()
+    ok = run_js_syntax_gate(
+        logger,  # type: ignore[arg-type]
+        tmp_path,
+        decision_paths=["deleted.js"],
+        extensions=[".js"],
+        command=["node", "--check"],
+    )
+    assert ok is True
+    assert logger.warnings == ["gate_js=SKIP (no_existing_js_files)"]

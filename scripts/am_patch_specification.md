@@ -411,6 +411,9 @@ scope accordingly - Should be used deliberately and sparingly
 -   Trigger: the gate is evaluated only when at least one changed path ends with an extension
     listed in `gate_js_extensions` (case-insensitive suffix match).
 -   If not triggered, the gate is SKIPPED and MUST NOT execute any external tool.
+-   Touched JS paths that do not exist as files after patch application are ignored (e.g.,
+    deletions). If all touched JS paths are non-existent, the gate is SKIPPED and MUST NOT
+    execute any external tool.
 -   Implementation: runs an external command for each touched JS file:
     -   Default command argv: `["node", "--check"]`
     -   Invocation: `<argv...> <file>`

@@ -183,6 +183,15 @@ def run_js_syntax_gate(
         logger.warning_core("gate_js=SKIP (no_js_touched)")
         return True
 
+    existing_js_paths: list[str] = []
+    for rel in js_paths:
+        if (cwd / rel).is_file():
+            existing_js_paths.append(rel)
+
+    if not existing_js_paths:
+        logger.warning_core("gate_js=SKIP (no_existing_js_files)")
+        return True
+
     cmd0 = [str(x) for x in command if str(x).strip()]
     if not cmd0:
         raise RunnerError("GATES", "JS_CMD", "gate_js_command must be non-empty")
@@ -191,7 +200,7 @@ def run_js_syntax_gate(
     logger.line("gate_js_extensions=" + ",".join(_norm_js_extensions(extensions)))
     logger.line("gate_js_cmd=" + " ".join(cmd0))
 
-    for rel in js_paths:
+    for rel in existing_js_paths:
         logger.line("gate_js_file=" + rel)
         r = logger.run_logged([*cmd0, rel], cwd=cwd)
         if r.returncode != 0:
