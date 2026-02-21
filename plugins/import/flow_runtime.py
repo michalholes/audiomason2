@@ -75,6 +75,7 @@ def build_flow_model(
     *,
     catalog: CatalogModel,
     flow_config: dict[str, Any],
+    step_order: list[str],
 ) -> dict[str, Any]:
     """Build the runtime FlowModel dict (spec 10.4.5).
 
@@ -87,7 +88,7 @@ def build_flow_model(
         if isinstance(sid, str) and sid:
             step_defs[sid] = dict(s)
 
-    missing = sorted((set(CANONICAL_STEP_ORDER) | CONDITIONAL_STEP_IDS) - set(step_defs.keys()))
+    missing = sorted(set(step_order) - set(step_defs.keys()))
     if missing:
         raise FinalizeError("catalog missing required step definitions")
 
@@ -114,7 +115,7 @@ def build_flow_model(
             }
         )
 
-    for sid in CANONICAL_STEP_ORDER:
+    for sid in step_order:
         add_step(sid)
 
     return {"flow_id": FLOW_ID, "steps": steps}

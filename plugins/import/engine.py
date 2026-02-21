@@ -15,11 +15,11 @@ from typing import Any, cast
 from plugins.file_io.service import FileService
 from plugins.file_io.service.types import RootName
 
-from . import discovery as discovery_mod
 from . import flow_config_api
 from .defaults import ensure_default_models
 from .engine_diagnostics_required import create_process_job
-from .engine_session_guards import validate_root_and_path
+from .engine_processing import start_processing_impl
+from .engine_session_create import create_session_impl
 from .engine_util import (
     _derive_selection_items,
     _emit_required,
@@ -33,32 +33,35 @@ from .errors import (
     FinalizeError,
     SessionNotFoundError,
     StepSubmissionError,
-    error_envelope,
     invariant_violation,
     validation_error,
 )
-from .fingerprints import fingerprint_json, sha256_hex
+from .fingerprints import fingerprint_json
 from .flow_runtime import (
-    CANONICAL_STEP_ORDER,
     CONDITIONAL_STEP_IDS,
     build_flow_model,
 )
-from .flow_runtime import (
-    OPTIONAL_STEP_IDS as FLOWCFG_OPTIONAL_STEP_IDS,
-)
-from .job_requests import build_job_requests, planned_units_count
+from .job_requests import planned_units_count
 from .models import CatalogModel, FlowModel, validate_models
 from .plan import PlanSelectionError, compute_plan
-from .serialization import canonical_serialize
 from .storage import (
     append_jsonl,
     atomic_write_json,
     atomic_write_text,
     read_json,
 )
+from .wizard_definition_model import (
+    build_effective_workflow_snapshot,
+    load_or_bootstrap_wizard_definition,
+)
 
 # Test seam: unit tests monkeypatch plugins.import.engine.get_event_bus.
 get_event_bus: Any = None
+
+__all__ = [
+    "ImportWizardEngine",
+    "atomic_write_text",
+]
 
 
 class ImportWizardEngine:
@@ -88,7 +91,16 @@ class ImportWizardEngine:
         flow = FlowModel.from_dict(flow_dict)
         validate_models(catalog, flow)
 
-        return build_flow_model(catalog=catalog, flow_config=flow_cfg_norm)
+        wizard_definition = load_or_bootstrap_wizard_definition(self._fs)
+        step_order = build_effective_workflow_snapshot(
+            wizard_definition=wizard_definition,
+            flow_config=flow_cfg_norm,
+        )
+        return build_flow_model(
+            catalog=catalog,
+            flow_config=flow_cfg_norm,
+            step_order=step_order,
+        )
 
     def create_session(
         self,
@@ -116,195 +128,13 @@ class ImportWizardEngine:
         mode: str = "stage",
         flow_overrides: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-
-        v = validate_root_and_path(root, relative_path)
-        if isinstance(v, dict):
-            return v
-        root, relative_path = v
-
-        mode = self._validate_mode(mode)
-        # 1) Load models
-        ensure_default_models(self._fs)
-        catalog_dict = read_json(self._fs, RootName.WIZARDS, "import/catalog/catalog.json")
-        flow_dict = read_json(self._fs, RootName.WIZARDS, "import/flow/current.json")
-        flow_cfg = read_json(self._fs, RootName.WIZARDS, "import/config/flow_config.json")
-
-        flow_cfg_norm = self._normalize_flow_config(flow_cfg)
-        if flow_overrides is not None:
-            # Legacy testing hook only. Overrides may only toggle optional steps.
-            flow_cfg_norm = self._merge_flow_config_overrides(flow_cfg_norm, flow_overrides)
-
-        catalog = CatalogModel.from_dict(catalog_dict)
-        flow = FlowModel.from_dict(flow_dict)
-        validate_models(catalog, flow)
-
-        effective_model = build_flow_model(catalog=catalog, flow_config=flow_cfg_norm)
-
-        # 2) Discovery
-        discovery = discovery_mod.run_discovery(self._fs, root=root, relative_path=relative_path)
-        discovery_fingerprint = fingerprint_json(discovery)
-
-        authors_items, books_items = _derive_selection_items(discovery)
-        effective_model = _inject_selection_items(
-            effective_model=effective_model,
-            authors_items=authors_items,
-            books_items=books_items,
+        return create_session_impl(
+            engine=self,
+            root=root,
+            relative_path=relative_path,
+            mode=mode,
+            flow_overrides=flow_overrides,
         )
-
-        model_fingerprint = fingerprint_json(effective_model)
-
-        # 3) Effective config snapshot (only keys engine uses)
-        effective_config: dict[str, Any] = {
-            "version": 1,
-            "flow_config": flow_cfg_norm,
-            "diagnostics_enabled": bool(self._resolver.resolve("diagnostics.enabled")[0])
-            if self._has_key("diagnostics.enabled")
-            else False,
-        }
-        effective_config_fingerprint = fingerprint_json(effective_config)
-
-        # 4) Deterministic session_id
-        sid_src = "|".join(
-            [
-                f"root:{root}",
-                f"path:{relative_path}",
-                f"mode:{mode}",
-                f"m:{model_fingerprint}",
-                f"d:{discovery_fingerprint}",
-                f"c:{effective_config_fingerprint}",
-            ]
-        )
-        session_id = sha256_hex(sid_src.encode("utf-8"))[:16]
-
-        diag = {
-            "session_id": session_id,
-            "model_fingerprint": model_fingerprint,
-            "discovery_fingerprint": discovery_fingerprint,
-            "effective_config_fingerprint": effective_config_fingerprint,
-        }
-        _emit_required(
-            "model.load",
-            "model.load",
-            {**diag, "root": root, "relative_path": relative_path, "mode": mode},
-        )
-        _emit_required(
-            "model.validate",
-            "model.validate",
-            {**diag, "root": root, "relative_path": relative_path, "mode": mode},
-        )
-
-        session_dir = f"import/sessions/{session_id}"
-        state_path = f"{session_dir}/state.json"
-
-        if self._fs.exists(RootName.WIZARDS, state_path):
-            loaded_state = read_json(self._fs, RootName.WIZARDS, state_path)
-            _emit_required(
-                "session.resume",
-                "session.resume",
-                {
-                    "session_id": session_id,
-                    "model_fingerprint": loaded_state.get("model_fingerprint"),
-                    "discovery_fingerprint": loaded_state.get("derived", {}).get(
-                        "discovery_fingerprint"
-                    ),
-                    "effective_config_fingerprint": loaded_state.get("derived", {}).get(
-                        "effective_config_fingerprint"
-                    ),
-                },
-            )
-            loaded_state = _ensure_session_state_fields(loaded_state)
-
-            # Snapshot artifacts are immutable (spec 10.9). Resume MUST NOT modify them.
-            # However, state.json is allowed to track the runtime-effective model fingerprint
-            # (selection items reinjected from discovery.json), even if an older snapshot
-            # on disk is missing those items.
-            runtime_fp = self._runtime_effective_model_fingerprint(session_id)
-            if runtime_fp and loaded_state.get("model_fingerprint") != runtime_fp:
-                loaded_state["model_fingerprint"] = runtime_fp
-            self._persist_state(session_id, loaded_state)
-            return loaded_state
-
-        # 5) Persist frozen artifacts
-        _emit_required(
-            "session.start",
-            "session.start",
-            {
-                "session_id": session_id,
-                "root": root,
-                "relative_path": relative_path,
-                "mode": mode,
-                "model_fingerprint": model_fingerprint,
-                "discovery_fingerprint": discovery_fingerprint,
-                "effective_config_fingerprint": effective_config_fingerprint,
-            },
-        )
-
-        atomic_write_json(
-            self._fs, RootName.WIZARDS, f"{session_dir}/effective_model.json", effective_model
-        )
-        atomic_write_json(
-            self._fs, RootName.WIZARDS, f"{session_dir}/effective_config.json", effective_config
-        )
-        atomic_write_json(self._fs, RootName.WIZARDS, f"{session_dir}/discovery.json", discovery)
-
-        atomic_write_text(
-            self._fs,
-            RootName.WIZARDS,
-            f"{session_dir}/discovery_fingerprint.txt",
-            discovery_fingerprint + "\n",
-        )
-        atomic_write_text(
-            self._fs,
-            RootName.WIZARDS,
-            f"{session_dir}/effective_config_fingerprint.txt",
-            effective_config_fingerprint + "\n",
-        )
-
-        created_at = _iso_utc_now()
-
-        start_step_id = "select_authors"
-
-        state: dict[str, Any] = {
-            "session_id": session_id,
-            "created_at": created_at,
-            "updated_at": created_at,
-            "model_fingerprint": model_fingerprint,
-            "phase": 1,
-            "mode": mode,
-            "source": {"root": root, "relative_path": relative_path},
-            "current_step_id": start_step_id,
-            "completed_step_ids": [],
-            "answers": {},
-            "inputs": {},
-            "computed": {},
-            "selected_author_ids": [],
-            "selected_book_ids": [],
-            "effective_author_title": {},
-            "derived": {
-                "discovery_fingerprint": discovery_fingerprint,
-                "effective_config_fingerprint": effective_config_fingerprint,
-                "conflict_fingerprint": "",
-            },
-            "conflicts": {
-                "present": False,
-                "items": [],
-                "resolved": True,
-                "policy": "ask",
-            },
-            "status": "in_progress",
-            "errors": [],
-        }
-
-        atomic_write_json(self._fs, RootName.WIZARDS, state_path, state)
-        self._append_decision(
-            session_id,
-            step_id="__system__",
-            payload={"event": "session.created", "root": root, "relative_path": relative_path},
-            result="accepted",
-            error=None,
-        )
-
-        return state
 
     def validate_catalog(self, catalog_json: Any) -> dict[str, Any]:
         """Validate catalog JSON using engine invariants.
@@ -372,7 +202,16 @@ class ImportWizardEngine:
         validate_models(catalog, flow)
         flow_cfg = read_json(self._fs, RootName.WIZARDS, "import/config/flow_config.json")
         flow_cfg_norm = self._normalize_flow_config(flow_cfg)
-        return build_flow_model(catalog=catalog, flow_config=flow_cfg_norm)
+        wizard_definition = load_or_bootstrap_wizard_definition(self._fs)
+        step_order = build_effective_workflow_snapshot(
+            wizard_definition=wizard_definition,
+            flow_config=flow_cfg_norm,
+        )
+        return build_flow_model(
+            catalog=catalog,
+            flow_config=flow_cfg_norm,
+            step_order=step_order,
+        )
 
     def _has_key(self, key: str) -> bool:
         try:
@@ -566,9 +405,9 @@ class ImportWizardEngine:
             raise
 
         return self._move_linear(
+            session_id=session_id,
             current="plan_preview_batch",
             direction="next",
-            flow_cfg_norm=flow_cfg_norm,
         )
 
     def _apply_conflict_policy(self, state: dict[str, Any], payload: dict[str, Any]) -> None:
@@ -839,9 +678,9 @@ class ImportWizardEngine:
             direction = "next" if action == "next" else "back"
 
             next_step_id = self._move_linear(
+                session_id=session_id,
                 current=current,
                 direction=direction,
-                flow_cfg_norm=flow_cfg_norm,
             )
 
             if direction == "next":
@@ -939,183 +778,7 @@ class ImportWizardEngine:
         )
 
     def start_processing(self, session_id: str, body: dict[str, Any]) -> dict[str, Any]:
-        try:
-            state = self._load_state(session_id)
-            if int(state.get("phase") or 1) == 2:
-                return self._start_processing_idempotent(session_id, state, body)
-            if state.get("status") != "in_progress":
-                raise FinalizeError("session is not active")
-
-            if not isinstance(body, dict):
-                raise ValueError("body must be an object")
-            confirm = body.get("confirm")
-            if confirm is not True:
-                return validation_error(
-                    message="confirm must be true",
-                    path="$.confirm",
-                    reason="missing_or_false",
-                    meta={},
-                )
-
-            runtime_inputs = dict(state.get("inputs") or {})
-            final = runtime_inputs.get("final_summary_confirm")
-            if not (isinstance(final, dict) and final.get("confirm_start") is True):
-                return validation_error(
-                    message="final_summary_confirm must be submitted with confirm=true",
-                    path="$.inputs.final_summary_confirm.confirm_start",
-                    reason="missing_or_false",
-                    meta={},
-                )
-
-            _emit_required(
-                "finalize.request",
-                "finalize.request",
-                {
-                    "session_id": session_id,
-                    "mode": str(state.get("mode") or ""),
-                    "model_fingerprint": str(state.get("model_fingerprint") or ""),
-                    "discovery_fingerprint": str(
-                        state.get("derived", {}).get("discovery_fingerprint") or ""
-                    ),
-                    "effective_config_fingerprint": str(
-                        state.get("derived", {}).get("effective_config_fingerprint") or ""
-                    ),
-                    "conflict_fingerprint": str(
-                        state.get("derived", {}).get("conflict_fingerprint") or ""
-                    ),
-                },
-            )
-
-            # Conflict policy re-check.
-            # Must be based on a fresh deterministic scan immediately before job creation.
-            conflicts = state.get("conflicts")
-            policy = str(conflicts.get("policy") or "ask") if isinstance(conflicts, dict) else "ask"
-            preview_fp = str(state.get("derived", {}).get("conflict_fingerprint") or "")
-            current_conflicts = self._scan_conflicts(session_id, state)
-            current_fp = fingerprint_json(current_conflicts)
-
-            resolved = self._resolve_flag_for_scan(
-                state=state,
-                policy=policy,
-                current_fp=current_fp,
-                current_conflicts=current_conflicts,
-            )
-
-            # Persist current conflicts to session state (UI must see the latest scan).
-            state.setdefault("derived", {})["conflict_fingerprint"] = current_fp
-            state["conflicts"] = {
-                "present": bool(current_conflicts),
-                "items": current_conflicts,
-                "resolved": resolved,
-                "policy": str((state.get("conflicts") or {}).get("policy") or "ask"),
-            }
-            session_dir = f"import/sessions/{session_id}"
-            atomic_write_json(
-                self._fs,
-                RootName.WIZARDS,
-                f"{session_dir}/conflicts.json",
-                current_conflicts,
-            )
-            state["updated_at"] = _iso_utc_now()
-            self._persist_state(session_id, state)
-
-            if policy == "ask" and current_conflicts and not resolved:
-                return error_envelope(
-                    "CONFLICTS_UNRESOLVED",
-                    "conflicts must be resolved before processing",
-                    details=[
-                        {
-                            "path": "$.conflicts",
-                            "reason": "conflicts_unresolved",
-                            "meta": {"policy": policy},
-                        }
-                    ],
-                )
-
-            if policy != "ask" and preview_fp and current_fp != preview_fp:
-                return invariant_violation(
-                    message="conflict scan changed since preview",
-                    path="$.conflicts",
-                    reason="conflicts_changed",
-                    meta={"preview": preview_fp, "current": current_fp},
-                )
-
-            # Ensure plan exists.
-            plan_path = f"{session_dir}/plan.json"
-            if self._fs.exists(RootName.WIZARDS, plan_path):
-                plan = read_json(self._fs, RootName.WIZARDS, plan_path)
-            else:
-                plan = self.compute_plan(session_id)
-
-            src = state.get("source") or {}
-            src_root = str(src.get("root") or "")
-            src_rel = str(src.get("relative_path") or "")
-            diagnostics_context = {
-                "model_fingerprint": str(state.get("model_fingerprint") or ""),
-                "discovery_fingerprint": str(
-                    state.get("derived", {}).get("discovery_fingerprint") or ""
-                ),
-                "effective_config_fingerprint": str(
-                    state.get("derived", {}).get("effective_config_fingerprint") or ""
-                ),
-                "conflict_fingerprint": str(
-                    state.get("derived", {}).get("conflict_fingerprint") or ""
-                ),
-            }
-
-            policy_inputs = dict(state.get("answers") or {})
-            job_requests = build_job_requests(
-                session_id=session_id,
-                root=src_root,
-                relative_path=src_rel,
-                mode=str(state.get("mode") or ""),
-                diagnostics_context=diagnostics_context,
-                config_fingerprint=str(
-                    state.get("derived", {}).get("effective_config_fingerprint") or ""
-                ),
-                plan=plan,
-                inputs=policy_inputs,
-            )
-
-            job_path = f"{session_dir}/job_requests.json"
-            job_bytes = canonical_serialize(job_requests)
-            atomic_write_text(self._fs, RootName.WIZARDS, job_path, job_bytes.decode("utf-8"))
-
-            job_any = read_json(self._fs, RootName.WIZARDS, job_path)
-            if not isinstance(job_any, dict):
-                raise FinalizeError("job_requests.json is invalid")
-            idem_key = str(job_any.get("idempotency_key") or "")
-            if not idem_key:
-                raise FinalizeError("job_requests.json missing idempotency_key")
-            self._enter_phase_2(session_id, state)
-            state = self._load_state(session_id)
-
-            job_id = self._get_or_create_job(session_id, state, idem_key)
-
-            _emit_required(
-                "job.create",
-                "job.create",
-                {
-                    "session_id": session_id,
-                    "job_id": job_id,
-                    "idempotency_key": idem_key,
-                    "mode": str(state.get("mode") or ""),
-                    "model_fingerprint": str(state.get("model_fingerprint") or ""),
-                    "discovery_fingerprint": str(
-                        state.get("derived", {}).get("discovery_fingerprint") or ""
-                    ),
-                    "effective_config_fingerprint": str(
-                        state.get("derived", {}).get("effective_config_fingerprint") or ""
-                    ),
-                    "conflict_fingerprint": str(
-                        state.get("derived", {}).get("conflict_fingerprint") or ""
-                    ),
-                },
-            )
-
-            return {"job_ids": [job_id], "batch_size": planned_units_count(plan)}
-        except Exception as e:
-            return _exception_envelope(e)
+        return start_processing_impl(engine=self, session_id=session_id, body=body)
 
     def _start_processing_idempotent(
         self, session_id: str, state: dict[str, Any], body: dict[str, Any]
@@ -1209,24 +872,34 @@ class ImportWizardEngine:
             return {"version": 1, "steps": {}, "defaults": {}, "ui": {}}
         return flow_cfg_any
 
-    def _linear_enabled_steps(self, flow_cfg_norm: dict[str, Any]) -> list[str]:
-        steps: list[str] = []
-        for sid in CANONICAL_STEP_ORDER:
-            if sid in FLOWCFG_OPTIONAL_STEP_IDS and not self._is_step_enabled(sid, flow_cfg_norm):
+    def _session_step_order(self, session_id: str) -> list[str]:
+        effective = read_json(
+            self._fs,
+            RootName.WIZARDS,
+            f"import/sessions/{session_id}/effective_model.json",
+        )
+        steps_any = effective.get("steps") if isinstance(effective, dict) else None
+        if not isinstance(steps_any, list):
+            return []
+        out: list[str] = []
+        for s in steps_any:
+            if not isinstance(s, dict):
                 continue
-            steps.append(sid)
-        return steps
+            sid = s.get("step_id")
+            if isinstance(sid, str) and sid:
+                out.append(sid)
+        return out
 
     def _move_linear(
         self,
         *,
+        session_id: str,
         current: str,
         direction: str,
-        flow_cfg_norm: dict[str, Any],
     ) -> str:
-        linear = self._linear_enabled_steps(flow_cfg_norm)
+        linear = self._session_step_order(session_id)
         if not linear:
-            return "select_authors"
+            return current or "select_authors"
         if current not in linear:
             return linear[0]
         idx = linear.index(current)
@@ -1269,8 +942,13 @@ class ImportWizardEngine:
                 return "resolve_conflicts_batch"
             return "processing"
 
-        # Default: strictly linear ordering, skipping disabled optional steps (spec 10.3.2).
-        return self._move_linear(current=step_id, direction="next", flow_cfg_norm=flow_cfg_norm)
+        # Default: strictly linear ordering, derived from the session snapshot.
+        session_id = str(state.get("session_id") or "")
+        return self._move_linear(
+            session_id=session_id,
+            current=step_id,
+            direction="next",
+        )
 
     def _is_step_enabled(self, step_id: str, flow_cfg_norm: dict[str, Any]) -> bool:
         steps_any = flow_cfg_norm.get("steps")
