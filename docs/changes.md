@@ -755,3 +755,10 @@
 -   Issue 226: Engine now validates baseline field definitions authoritatively before processing payloads (10.4.3).
 
 -   spec: Bump specification version to 1.1.15 and clarify FlowConfig conflicts exclusion.
+
+-   Issue 230: Import selection items now include display_label (Unicode) for renderer display,
+    while keeping label ASCII-only for backward compatibility.
+
+-   Issue 230: Import plan relative path fields now preserve exact Unicode paths (no ASCII replacement).
+
+-   spec: Bump specification version to 1.1.17 and document display_label for selection items.

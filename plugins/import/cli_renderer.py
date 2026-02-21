@@ -274,7 +274,7 @@ def _show_select_items(
 
     print_fn(f"Selectable items for '{name}':")
     for idx, it in enumerate(items[: cfg.max_list_items], start=1):
-        label = str(it.get("label") or "")
+        label = str(it.get("display_label") or it.get("label") or "")
         item_id = str(it.get("item_id") or "")
         if cfg.show_internal_ids and item_id:
             print_fn(f"  {idx}. {label} [{item_id}]")

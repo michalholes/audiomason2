@@ -17,6 +17,8 @@ the patch successfully and close the issue.
 3.  The patch MUST be a unified diff in `git apply` format. Python patch
     scripts are non-compliant.
 
+6. Always inspect the authoritative workspace snapshot before proposing or generating any patch.
+
 ------------------------------------------------------------------------
 
 # PRE-FLIGHT GATE (HARD)

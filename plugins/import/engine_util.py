@@ -67,8 +67,14 @@ def _derive_selection_items(
         author_id = "author:" + sha256_hex(f"a|{author_key}".encode())[:16]
         book_id = "book:" + sha256_hex(f"b|{author_key}|{book_key}".encode())[:16]
 
-        authors.setdefault(author_id, {"item_id": author_id, "label": author_label})
-        books.setdefault(book_id, {"item_id": book_id, "label": book_label})
+        authors.setdefault(
+            author_id,
+            {"item_id": author_id, "label": author_label, "display_label": author_key},
+        )
+        books.setdefault(
+            book_id,
+            {"item_id": book_id, "label": book_label, "display_label": label},
+        )
 
     authors_items = sorted(authors.values(), key=lambda x: (x["label"], x["item_id"]))
     books_items = sorted(books.values(), key=lambda x: (x["label"], x["item_id"]))

@@ -57,17 +57,27 @@ def derive_selection_items(
 
     for author_key, book_key in sorted(book_pairs):
         author_label = _to_ascii(author_key)
+        author_display_label = author_key
         book_label = _to_ascii(
             author_key if author_key == book_key else f"{author_key} / {book_key}"
         )
 
+        book_display_label = author_key if author_key == book_key else f"{author_key} / {book_key}"
         author_id = "author:" + sha256_hex(f"a|{author_key}".encode())[:16]
         book_id = "book:" + sha256_hex(f"b|{author_key}|{book_key}".encode())[:16]
 
         if author_id not in authors:
-            authors[author_id] = {"item_id": author_id, "label": author_label}
+            authors[author_id] = {
+                "item_id": author_id,
+                "label": author_label,
+                "display_label": author_display_label,
+            }
         if book_id not in books:
-            books[book_id] = {"item_id": book_id, "label": book_label}
+            books[book_id] = {
+                "item_id": book_id,
+                "label": book_label,
+                "display_label": book_display_label,
+            }
 
     authors_items = sorted(authors.values(), key=lambda x: (x["label"], x["item_id"]))
     books_items = sorted(books.values(), key=lambda x: (x["label"], x["item_id"]))

@@ -1,6 +1,6 @@
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.1.16 Specification Versioning Policy: Start at
+Specification Version: 1.1.17 Specification Versioning Policy: Start at
 1.0.0. Patch version increments by +1 for every change.
 
 Author: Michal Holes\
@@ -1291,6 +1291,9 @@ For the mandatory selection steps:
 Each item MUST include:
 - item_id (stable, opaque id)
 - label (ASCII-only, human-readable)
+- display_label (Unicode, human-readable; renderer-preferred when present)
+
+Renderers SHOULD prefer display_label when present and fall back to label.
 
 ### 10.4.6 SessionState (Runtime)
 

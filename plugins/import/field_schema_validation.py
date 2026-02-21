@@ -205,6 +205,16 @@ def validate_step_fields(*, step_id: str, fields_any: Any) -> list[dict[str, Any
                     path=f"{ipfx}.label",
                     meta={"step_id": step_id, "name": name},
                 )
+                display_label = it.get("display_label")
+                if display_label is not None and (
+                    not isinstance(display_label, str) or not display_label
+                ):
+                    raise FieldSchemaValidationError(
+                        message="items[].display_label must be a non-empty string",
+                        path=f"{ipfx}.display_label",
+                        reason="missing_or_invalid",
+                        meta={"step_id": step_id, "name": name},
+                    )
 
         out.append(dict(fld))
 

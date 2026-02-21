@@ -59,6 +59,13 @@ def _write_inbox_tree(roots: dict[str, Path]) -> None:
     d.mkdir(parents=True, exist_ok=True)
     (d / "c.txt").write_text("z", encoding="utf-8")
 
+    # Unicode author/title (diacritics), encoded as escapes to keep repo ASCII-only.
+    author = "Meyr\u00ednk, Gust\u00e1v"
+    book = "Obrazy vep\u00edsan\u00e9 do vzduchu"
+    d = roots["inbox"] / author / book
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "u.txt").write_text("u", encoding="utf-8")
+
 
 def test_effective_model_contains_selection_items(tmp_path: Path) -> None:
     engine, roots = _make_engine(tmp_path)
@@ -78,6 +85,7 @@ def test_effective_model_contains_selection_items(tmp_path: Path) -> None:
     assert isinstance(steps, list)
 
     by_id = {s.get("step_id"): s for s in steps if isinstance(s, dict)}
+    found_non_ascii_display = False
     for sid, prefix in [("select_authors", "author:"), ("select_books", "book:")]:
         step = by_id.get(sid)
         assert isinstance(step, dict)
@@ -92,9 +100,15 @@ def test_effective_model_contains_selection_items(tmp_path: Path) -> None:
             assert isinstance(it, dict)
             item_id = it.get("item_id")
             label = it.get("label")
+            display_label = it.get("display_label")
             assert isinstance(item_id, str) and item_id.startswith(prefix)
             assert isinstance(label, str)
+            assert isinstance(display_label, str)
+            if not display_label.isascii():
+                found_non_ascii_display = True
             assert label.isascii()
+
+    assert found_non_ascii_display
 
 
 def test_out_of_range_selection_is_validation_error(tmp_path: Path) -> None:

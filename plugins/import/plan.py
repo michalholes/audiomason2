@@ -57,13 +57,15 @@ def _derive_book_units(discovery: list[dict[str, Any]]) -> dict[str, dict[str, s
         else:
             source_rel = f"{author_key}/{book_key}"
 
-        label = _to_ascii(author_key if author_key == book_key else f"{author_key} / {book_key}")
+        display_label = author_key if author_key == book_key else f"{author_key} / {book_key}"
+        label = _to_ascii(display_label)
 
         units[book_id] = {
             "book_id": book_id,
             "label": label,
-            "source_relative_path": _to_ascii(source_rel),
-            "proposed_target_relative_path": _to_ascii(source_rel),
+            "display_label": display_label,
+            "source_relative_path": source_rel,
+            "proposed_target_relative_path": source_rel,
         }
 
     return units
