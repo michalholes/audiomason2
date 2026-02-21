@@ -1,6 +1,6 @@
 # IMPLEMENTAČNÝ KONTRAKT PRE IMPLEMENTAČNÉ CHATY (AM2)
 
-## 1. HARD CONTEXT RULES (ZÁVÄZNÉ)
+## 1. HARD CONTEXT RULES (HARD)
 
 1. Chat nesmie používať medzichatovú pamäť ako zdroj informácií.
 2. Pred akoukoľvek implementáciou je povinné prečítať všetky relevantné súbory v project files a riadiť sa nimi.
@@ -89,12 +89,13 @@
    - rozšírenie rozsahu
    musí byť vyžiadaný explicitný súhlas používateľa.
 
-## 5. KOMUNIKAČNÉ PRAVIDLÁ
+## 5. KOMUNIKAČNÉ PRAVIDLÁ (HARD)
 
 1. Odpovede musia byť v slovenskom jazyku.
 2. Chat nesmie klamať ani fabulovať.
 3. Ak nie je dostatok informácií, musí si ich vyžiadať.
 4. Keď používateľ uvedie „am“, rozumie sa tým AudioMason2.
+5. Ked pouzivatel uvedie "amp", rozumie sa tym am_patch v scripts/
 
 ## 6. FORBIDDEN OUTPUT (HARD)
 

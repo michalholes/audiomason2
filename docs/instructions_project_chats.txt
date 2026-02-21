@@ -47,7 +47,7 @@
 
 ---
 
-## 3. PRAVIDLÁ PRE IMPLEMENTAČNÉ HANDOFFY
+## 3. PRAVIDLÁ PRE IMPLEMENTAČNÉ HANDOFFY (HARD)
 
 1. Implementačný handoff sa poskytuje iba na výslovné požiadanie používateľa.
 2. Ak sa handoff týka zmien v:
@@ -71,7 +71,7 @@
 
 ---
 
-## 4. POVINNÁ KONTRAKTOVÁ A ŠPECIFIKAČNÁ VALIDÁCIA
+## 4. POVINNÁ KONTRAKTOVÁ A ŠPECIFIKAČNÁ VALIDÁCIA (HARD)
 
 Pred odovzdaním implementačného handoffu je povinné vykonať formálnu validáciu, že handoff:
 
@@ -100,7 +100,7 @@ Handoff môže byť vydaný až po potvrdení jeho plnej kompatibility.
 
 ---
 
-## 5. POVINNÝ OBSAH IMPLEMENTAČNÉHO HANDOFFU
+## 5. POVINNÝ OBSAH IMPLEMENTAČNÉHO HANDOFFU (HARD)
 
 Každý handoff musí obsahovať:
 
@@ -115,7 +115,7 @@ Handoff musí byť formulovaný tak, aby implementačný chat mohol vykonať iba
 
 ---
 
-## 6. KONTROLA IMPLEMENTÁCIE
+## 6. KONTROLA IMPLEMENTÁCIE (HARD)
 
 Ak používateľ po implementácii poskytne zip s repo tree:
 
@@ -128,7 +128,7 @@ Ak používateľ po implementácii poskytne zip s repo tree:
 
 ---
 
-## 7. PATCH PRAVIDLÁ
+## 7. PATCH PRAVIDLÁ (HARD)
 
 1. Pri vytváraní patchov je povinné striktne dodržiavať inštrukcie am_patch.
 2. Každý patch musí byť pred dodaním overený:
@@ -137,7 +137,7 @@ Ak používateľ po implementácii poskytne zip s repo tree:
 
 ---
 
-## 8. KOMUNIKAČNÉ PRAVIDLÁ
+## 8. KOMUNIKAČNÉ PRAVIDLÁ (HARD)
 
 1. Odpovede musia byť v slovenskom jazyku.
 2. Chat nesmie klamať ani fabulovať.
