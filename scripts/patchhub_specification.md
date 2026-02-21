@@ -3,7 +3,7 @@ Status: AUTHORITATIVE SPECIFICATION
 Applies to: scripts/patchhub/*
 Language: ENGLISH (ASCII ONLY)
 
-Specification Version: 1.1.2-spec
+Specification Version: 1.1.3-spec
 Code Baseline: audiomason2-main.zip (as provided in this chat)
 
 -------------------------------------------------------------------------------
@@ -44,6 +44,21 @@ Constraints that apply to scripts/patchhub:
 - Structural integrity (anti-monolith, no catch-all hubs)
 - ASCII-only for authoritative docs and responses using ensure_ascii where applicable
 - No hidden network activity
+
+2.1 Versioning and Spec Sync (HARD)
+
+Before changing PatchHub behavior, the developer MUST read this specification.
+
+Any behavior change (UI/API/validation/defaults) MUST include:
+- a corresponding update to this specification
+- a PatchHub runtime version bump in scripts/patchhub/patchhub.toml ([meta].version)
+
+Versioning uses SemVer: MAJOR.MINOR.PATCH
+- MAJOR: incompatible behavior change
+- MINOR: backward compatible functionality (additive)
+- PATCH: backward compatible bug fix
+
+The runtime version MUST NOT be hardcoded in code.
 
 -------------------------------------------------------------------------------
 
@@ -150,6 +165,16 @@ All JSON is encoded with:
 - Content-Type: application/json
 - Cache-Control: no-store
 
+6.1 Optional status messages (additive)
+
+JSON responses MAY include an optional field:
+- status: ["<string>", ...]
+
+Rules:
+- status is additive and MUST NOT break existing clients
+- status strings are short, human readable, and non-spammy
+- a failure response uses {"ok": false, "error": "..."} and MAY also include status
+
 -------------------------------------------------------------------------------
 
 7. HTTP Surface (Routes, Inputs, Outputs)
@@ -166,6 +191,24 @@ All routes are handled in server.py.
 - GET /static/<rel>
   Output: static bytes from scripts/patchhub/static/<rel>
   Rule: static path must not escape static base directory.
+
+7.1.1 UI Status Bar
+
+The main UI includes a compact status bar for PatchHub events.
+
+HTML element (templates/index.html):
+- <div id="uiStatusBar" class="statusbar" aria-live="polite"></div>
+
+Behavior (static/app.js):
+- The frontend keeps a ring buffer of recent status lines (default: 20).
+- The frontend pushes status lines for:
+  - upload (ok/failed)
+  - parse_command (ok/failed)
+  - enqueue/start job (ok/failed)
+  - autofill scan (/api/patches/latest) when the endpoint is called
+- If an API response includes status: [...], the frontend appends each line.
+- If an API response is {ok:false,error:"..."}, the frontend appends:
+  - ERROR: <error>
 
 7.2 API routes (GET)
 

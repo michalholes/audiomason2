@@ -8,6 +8,7 @@ from .app_support import _err, _is_ascii, _ok
 
 
 def api_upload_patch(self, filename: str, data: bytes) -> tuple[int, bytes]:
+    status_msgs: list[str] = []
     if self.cfg.upload.ascii_only_names and not _is_ascii(filename):
         return _err("Filename must be ASCII", status=400)
     if len(data) > self.cfg.upload.max_bytes:
@@ -32,12 +33,16 @@ def api_upload_patch(self, filename: str, data: bytes) -> tuple[int, bytes]:
     dst.write_bytes(data)
 
     rel = str(Path(self.cfg.paths.upload_dir) / dst.name)
+    status_msgs.append(f"upload: stored {rel} ({len(data)} bytes)")
 
     issue_id, commit_msg = self._derive_from_filename(dst.name)
     payload: dict[str, Any] = {"stored_rel_path": rel, "bytes": len(data)}
     if self.cfg.autofill.derive_enabled:
         payload["derived_issue"] = issue_id
         payload["derived_commit_message"] = commit_msg
+        if issue_id:
+            status_msgs.append(f"autofill: derived issue={issue_id}")
+    payload["status"] = status_msgs
     return _ok(payload)
 
 

@@ -82,6 +82,20 @@ body.dragging .drop-overlay { display: flex; }
 .lbl-wide { width: 72px; }
 .details { margin-bottom: 8px; }
 
+.statusbar {
+  background: #0b1324;
+  border: 1px solid #1d2b50;
+  border-radius: 10px;
+  padding: 8px;
+  margin-bottom: 8px;
+  color: #b7c3d6;
+  font-size: 13px;
+  line-height: 1.25;
+  white-space: normal;
+  max-height: 3.75em;
+  overflow: hidden;
+}
+
 .hidden { display: none; }
 
 @media (max-width: 1200px) {

@@ -4,6 +4,9 @@
   var activeJobId = null;
   var autoRefreshTimer = null;
 
+  var uiStatus = [];
+  var uiStatusMax = 20;
+
   var selectedJobId = null;
   var liveStreamJobId = null;
   var liveES = null;
@@ -31,6 +34,31 @@
   }
 
   function el(id) { return document.getElementById(id); }
+
+  function addUiStatus(msg) {
+    msg = String(msg || "").trim();
+    if (!msg) return;
+    uiStatus.push(msg);
+    while (uiStatus.length > uiStatusMax) uiStatus.shift();
+    renderUiStatus();
+  }
+
+  function renderUiStatus() {
+    var node = el("uiStatusBar");
+    if (!node) return;
+    if (!uiStatus.length) {
+      node.textContent = "";
+      return;
+    }
+    node.textContent = uiStatus.join("\n");
+  }
+
+  function pushApiStatus(payload) {
+    if (!payload || !payload.status || !Array.isArray(payload.status)) return;
+    payload.status.forEach(function (s) {
+      addUiStatus(String(s || ""));
+    });
+  }
 
   function setPre(id, obj) {
     var node = el(id);
@@ -258,6 +286,7 @@
     lastParsedRaw = "";
     lastParsed = null;
     setParseHint("Parsing...");
+    addUiStatus("parse_command: started");
     validateAndPreview();
 
     parseSeq += 1;
@@ -269,9 +298,13 @@
       if (!r || r.ok === false) {
         clearParsedState();
         setParseHint("Parse failed: " + String((r && r.error) || ""));
+        addUiStatus("ERROR: " + String((r && r.error) || "parse failed"));
         validateAndPreview();
         return;
       }
+
+      pushApiStatus(r);
+      addUiStatus("parse_command: ok");
 
       lastParsedRaw = raw;
       lastParsed = r;
@@ -979,6 +1012,8 @@ function refreshJobs() {
       raw_command: (el("rawCommand") ? String(el("rawCommand").value || "").trim() : "")
     };
 
+    addUiStatus("enqueue: started mode=" + mode);
+
     if (mode === "patch" || mode === "repair") {
       body.issue_id = String(el("issueId").value || "").trim();
       body.commit_message = String(el("commitMsg").value || "").trim();
@@ -986,13 +1021,17 @@ function refreshJobs() {
     }
 
     apiPost("/api/jobs/enqueue", body).then(function (r) {
+      pushApiStatus(r);
       setPre("previewRight", r);
       setPreviewVisible(true);
       if (r && r.ok !== false && r.job_id) {
+        addUiStatus("enqueue: ok job_id=" + String(r.job_id));
         selectedJobId = String(r.job_id);
         saveLiveJobId(selectedJobId);
         openLiveStream(selectedJobId);
         refreshTail(tailLines);
+      } else {
+        addUiStatus("ERROR: " + String((r && r.error) || "enqueue failed"));
       }
       refreshJobs();
     });
@@ -1001,6 +1040,7 @@ function refreshJobs() {
   function uploadFile(file) {
     var fd = new FormData();
     fd.append("file", file);
+    addUiStatus("upload: started " + String((file && file.name) || ""));
     fetch("/api/upload/patch", {
       method: "POST",
       body: fd,
@@ -1021,12 +1061,18 @@ function refreshJobs() {
         });
       })
       .then(function (j) {
+        pushApiStatus(j);
         setText(
           "uploadHint",
           (j && j.ok)
             ? ("Uploaded: " + String(j.stored_rel_path || ""))
             : ("Upload failed: " + String((j && j.error) || ""))
         );
+        if (j && j.ok) {
+          addUiStatus("upload: ok");
+        } else {
+          addUiStatus("ERROR: " + String((j && j.error) || "upload failed"));
+        }
         if (j && j.stored_rel_path) {
           var stored = String(j.stored_rel_path);
           var n = el("patchPath");
@@ -1045,6 +1091,7 @@ function refreshJobs() {
       })
       .catch(function (e) {
         setPre("uploadResult", String(e));
+        addUiStatus("ERROR: " + String(e));
       });
   }
 
@@ -1189,7 +1236,12 @@ function refreshJobs() {
   function pollLatestPatchOnce() {
     if (!cfg || !cfg.autofill || !cfg.autofill.enabled) return;
     apiGet("/api/patches/latest").then(function (r) {
-      if (!r || r.ok === false) return;
+      if (!r || r.ok === false) {
+        addUiStatus("ERROR: " + String((r && r.error) || "autofill scan failed"));
+        return;
+      }
+
+      pushApiStatus(r);
       if (!r.found) return;
       var token = String(r.token || "");
       if (!token || token === latestToken) return;

@@ -1,3 +1,15 @@
+"""PatchHub entry point.
+
+Contract (HARD):
+- Before changing PatchHub behavior, read scripts/patchhub_specification.md.
+- Any behavior change (UI/API/validation/defaults) requires:
+  - updating scripts/patchhub_specification.md
+  - bumping PatchHub runtime version in scripts/patchhub/patchhub.toml ([meta].version)
+  - SemVer rules: MAJOR.MINOR.PATCH
+
+Version is NOT hardcoded in code. The source of truth is patchhub.toml.
+"""
+
 from __future__ import annotations
 
 import argparse

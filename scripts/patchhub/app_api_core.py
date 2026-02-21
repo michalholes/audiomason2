@@ -177,7 +177,14 @@ def api_patches_latest(self) -> tuple[int, bytes]:
     except Exception as e:
         return _err(str(e), status=400)
     if not d.exists() or not d.is_dir():
-        return _ok({"found": False})
+        payload_nf: dict[str, Any] = {
+            "found": False,
+            "status": [
+                "autofill scan: scanned=0 ignored_name=0 ignored_prefix=0 "
+                "ignored_ext=0 selected=none",
+            ],
+        }
+        return _ok(payload_nf)
 
     exts = {str(x).lower() for x in self.cfg.autofill.scan_extensions}
     ignore_names = {str(x) for x in self.cfg.autofill.scan_ignore_filenames}
@@ -185,15 +192,23 @@ def api_patches_latest(self) -> tuple[int, bytes]:
 
     best_name: str | None = None
     best_m = -1
+    scanned = 0
+    ignored_name = 0
+    ignored_prefix = 0
+    ignored_ext = 0
     for p in d.iterdir():
         if not p.is_file():
             continue
+        scanned += 1
         name = p.name
         if name in ignore_names:
+            ignored_name += 1
             continue
         if any(name.startswith(px) for px in ignore_pfx):
+            ignored_prefix += 1
             continue
         if os.path.splitext(name)[1].lower() not in exts:
+            ignored_ext += 1
             continue
         try:
             st = p.stat()
@@ -205,7 +220,16 @@ def api_patches_latest(self) -> tuple[int, bytes]:
             best_name = name
 
     if not best_name:
-        return _ok({"found": False})
+        payload_nf2: dict[str, Any] = {
+            "found": False,
+            "status": [
+                "autofill scan: "
+                f"scanned={scanned} ignored_name={ignored_name} "
+                f"ignored_prefix={ignored_prefix} ignored_ext={ignored_ext} "
+                "selected=none",
+            ],
+        }
+        return _ok(payload_nf2)
 
     rel_dir = self.cfg.autofill.scan_dir.rstrip("/")
     stored_rel = str(Path(rel_dir) / best_name)
@@ -216,6 +240,12 @@ def api_patches_latest(self) -> tuple[int, bytes]:
         "stored_rel_path": stored_rel,
         "mtime_ns": best_m,
         "token": f"{best_m}:{stored_rel}",
+        "status": [
+            "autofill scan: "
+            f"scanned={scanned} ignored_name={ignored_name} "
+            f"ignored_prefix={ignored_prefix} ignored_ext={ignored_ext} "
+            f"selected={best_name}",
+        ],
     }
     if self.cfg.autofill.derive_enabled:
         payload["derived_issue"] = issue_id
@@ -232,6 +262,7 @@ def api_parse_command(self, body: dict[str, Any]) -> tuple[int, bytes]:
 
     return _ok(
         {
+            "status": ["parse_command: ok"],
             "parsed": {
                 "mode": parsed.mode,
                 "issue_id": parsed.issue_id,

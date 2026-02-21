@@ -3,7 +3,7 @@ host = "0.0.0.0"
 port = 8099
 
 [meta]
-version = "1.0.0"
+version = "1.1.0"
 
 [runner]
 command = ["python3", "scripts/am_patch.py"]
