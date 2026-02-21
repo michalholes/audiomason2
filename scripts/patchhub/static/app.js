@@ -4,8 +4,7 @@
   var activeJobId = null;
   var autoRefreshTimer = null;
 
-  var uiStatus = [];
-  var uiStatusMax = 20;
+  var uiStatusLatest = "";
 
   var selectedJobId = null;
   var liveStreamJobId = null;
@@ -35,29 +34,24 @@
 
   function el(id) { return document.getElementById(id); }
 
-  function addUiStatus(msg) {
-    msg = String(msg || "").trim();
-    if (!msg) return;
-    uiStatus.push(msg);
-    while (uiStatus.length > uiStatusMax) uiStatus.shift();
-    renderUiStatus();
-  }
-
-  function renderUiStatus() {
+  function setUiStatus(message) {
     var node = el("uiStatusBar");
     if (!node) return;
-    if (!uiStatus.length) {
-      node.textContent = "";
-      return;
-    }
-    node.textContent = uiStatus.join("\n");
+
+    var msg = String(message || "");
+    msg = msg.replace(/\s*\n\s*/g, " ").trim();
+    uiStatusLatest = msg;
+    node.textContent = uiStatusLatest;
+  }
+
+  function setUiError(errorText) {
+    setUiStatus("ERROR: " + String(errorText || ""));
   }
 
   function pushApiStatus(payload) {
     if (!payload || !payload.status || !Array.isArray(payload.status)) return;
-    payload.status.forEach(function (s) {
-      addUiStatus(String(s || ""));
-    });
+    if (!payload.status.length) return;
+    setUiStatus(String(payload.status[payload.status.length - 1] || ""));
   }
 
   function setPre(id, obj) {
@@ -286,7 +280,7 @@
     lastParsedRaw = "";
     lastParsed = null;
     setParseHint("Parsing...");
-    addUiStatus("parse_command: started");
+    setUiStatus("parse_command: started");
     validateAndPreview();
 
     parseSeq += 1;
@@ -298,13 +292,12 @@
       if (!r || r.ok === false) {
         clearParsedState();
         setParseHint("Parse failed: " + String((r && r.error) || ""));
-        addUiStatus("ERROR: " + String((r && r.error) || "parse failed"));
+        setUiError(String((r && r.error) || "parse failed"));
         validateAndPreview();
         return;
       }
 
       pushApiStatus(r);
-      addUiStatus("parse_command: ok");
 
       lastParsedRaw = raw;
       lastParsed = r;
@@ -1012,7 +1005,7 @@ function refreshJobs() {
       raw_command: (el("rawCommand") ? String(el("rawCommand").value || "").trim() : "")
     };
 
-    addUiStatus("enqueue: started mode=" + mode);
+    setUiStatus("enqueue: started mode=" + mode);
 
     if (mode === "patch" || mode === "repair") {
       body.issue_id = String(el("issueId").value || "").trim();
@@ -1025,13 +1018,13 @@ function refreshJobs() {
       setPre("previewRight", r);
       setPreviewVisible(true);
       if (r && r.ok !== false && r.job_id) {
-        addUiStatus("enqueue: ok job_id=" + String(r.job_id));
+        setUiStatus("enqueue: ok job_id=" + String(r.job_id));
         selectedJobId = String(r.job_id);
         saveLiveJobId(selectedJobId);
         openLiveStream(selectedJobId);
         refreshTail(tailLines);
       } else {
-        addUiStatus("ERROR: " + String((r && r.error) || "enqueue failed"));
+        setUiError(String((r && r.error) || "enqueue failed"));
       }
       refreshJobs();
     });
@@ -1040,7 +1033,7 @@ function refreshJobs() {
   function uploadFile(file) {
     var fd = new FormData();
     fd.append("file", file);
-    addUiStatus("upload: started " + String((file && file.name) || ""));
+    setUiStatus("upload: started " + String((file && file.name) || ""));
     fetch("/api/upload/patch", {
       method: "POST",
       body: fd,
@@ -1069,9 +1062,9 @@ function refreshJobs() {
             : ("Upload failed: " + String((j && j.error) || ""))
         );
         if (j && j.ok) {
-          addUiStatus("upload: ok");
+          setUiStatus("upload: ok");
         } else {
-          addUiStatus("ERROR: " + String((j && j.error) || "upload failed"));
+          setUiError(String((j && j.error) || "upload failed"));
         }
         if (j && j.stored_rel_path) {
           var stored = String(j.stored_rel_path);
@@ -1091,7 +1084,7 @@ function refreshJobs() {
       })
       .catch(function (e) {
         setPre("uploadResult", String(e));
-        addUiStatus("ERROR: " + String(e));
+        setUiError(String(e));
       });
   }
 
@@ -1237,7 +1230,7 @@ function refreshJobs() {
     if (!cfg || !cfg.autofill || !cfg.autofill.enabled) return;
     apiGet("/api/patches/latest").then(function (r) {
       if (!r || r.ok === false) {
-        addUiStatus("ERROR: " + String((r && r.error) || "autofill scan failed"));
+        setUiError(String((r && r.error) || "autofill scan failed"));
         return;
       }
 

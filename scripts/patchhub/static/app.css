@@ -91,9 +91,9 @@ body.dragging .drop-overlay { display: flex; }
   color: #b7c3d6;
   font-size: 13px;
   line-height: 1.25;
-  white-space: normal;
-  max-height: 3.75em;
+  white-space: nowrap;
   overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .hidden { display: none; }
