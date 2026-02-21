@@ -492,8 +492,9 @@
     tailLines = lines || tailLines || 200;
     var linesQ = encodeURIComponent(String(tailLines));
     var url = "/api/runner/tail?lines=" + linesQ;
-    if (activeJobId) {
-      url = "/api/jobs/" + encodeURIComponent(String(activeJobId)) + "/log_tail?lines=" + linesQ;
+    var jid = getLiveJobId();
+    if (jid) {
+      url = "/api/jobs/" + encodeURIComponent(String(jid)) + "/log_tail?lines=" + linesQ;
     }
     apiGet(url).then(function (r) {
       if (!r || r.ok === false) {
@@ -987,6 +988,12 @@ function refreshJobs() {
     apiPost("/api/jobs/enqueue", body).then(function (r) {
       setPre("previewRight", r);
       setPreviewVisible(true);
+      if (r && r.ok !== false && r.job_id) {
+        selectedJobId = String(r.job_id);
+        saveLiveJobId(selectedJobId);
+        openLiveStream(selectedJobId);
+        refreshTail(tailLines);
+      }
       refreshJobs();
     });
   }
