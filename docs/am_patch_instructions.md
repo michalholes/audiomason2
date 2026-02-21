@@ -2,14 +2,14 @@
 
 # Patch Authoring Manual
 
-AUTHORITATIVE -- AudioMason2 Status: active Version: v2.40
+AUTHORITATIVE -- AudioMason2 Status: active Version: v2.41
 
 This manual defines what a chat must produce so that the user can run
 the patch successfully and close the issue.
 
 ------------------------------------------------------------------------
 
-## Absolute rules
+## Absolute rules (HARD)
 
 1.  The patch path MUST be under the repo patches directory (default:
     `/home/pi/audiomason2/patches/`).
@@ -150,7 +150,7 @@ Canonical invocation format (NO VARIANTS):
 If invocation command is missing or malformed, the patch is
 NON-COMPLIANT.
 
-## Validation discipline
+## Validation discipline (HARD)
 
 Before sending:
 
@@ -198,7 +198,7 @@ The default behavior is minimal-scope modification based on failing gate logs.
 
 ------------------------------------------------------------------------
 
-## Repair workflow optimization (MANDATORY)
+## Repair workflow optimization (HARD)
 
 ### Core principle: minimal scope
 
@@ -300,7 +300,7 @@ impossible may architectural approval be requested.
 
 ------------------------------------------------------------------------
 
-## FILE AUTHORITY MANIFEST (MANDATORY FOR REPAIR)
+## FILE AUTHORITY MANIFEST (HARD)
 
 Before generating repair patch, the chat MUST output:
 
@@ -314,7 +314,7 @@ Missing manifest = NON-COMPLIANT.
 
 ------------------------------------------------------------------------
 
-## Repair validation evidence (MANDATORY)
+## Repair validation evidence (HARD)
 
 For repair patches, the chat MUST provide evidence of:
 
