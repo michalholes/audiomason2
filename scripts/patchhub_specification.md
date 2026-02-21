@@ -3,7 +3,7 @@ Status: AUTHORITATIVE SPECIFICATION
 Applies to: scripts/patchhub/*
 Language: ENGLISH (ASCII ONLY)
 
-Specification Version: 1.1.3-spec
+Specification Version: 1.1.4-spec
 Code Baseline: audiomason2-main.zip (as provided in this chat)
 
 -------------------------------------------------------------------------------
@@ -209,6 +209,20 @@ Behavior (static/app.js):
 - If an API response includes status: [...], the frontend appends each line.
 - If an API response is {ok:false,error:"..."}, the frontend appends:
   - ERROR: <error>
+
+7.1.2 Live Log Rendering
+
+The main UI includes a live log view for the selected job.
+
+Rendering rule (static/app.js):
+- In non-debug live levels, each log line MUST render only ev.msg.
+  - If ev.stdout is present, the UI appends a block: STDOUT:\n<text>.
+  - If ev.stderr is present, the UI appends a block: STDERR:\n<text>.
+- In debug live level, each log line MUST render as:
+  <stage> | <kind> | <sev> | <msg>
+
+This is a UI-only rendering rule. The SSE event payload fields
+(stage/kind/sev/msg/stdout/stderr) remain unchanged.
 
 7.2 API routes (GET)
 

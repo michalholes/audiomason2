@@ -681,6 +681,7 @@ function loadLiveLevel() {
     return false;
   }
 
+
   function formatLiveEvent(ev) {
     var t = String(ev.type || "");
     if (t === "hello") {
@@ -693,17 +694,23 @@ function loadLiveLevel() {
       return "RESULT: " + ok + " rc=" + String(ev.return_code);
     }
 
-    var parts = [];
-    var stage = String(ev.stage || "");
-    var kind = String(ev.kind || "");
-    var sev = String(ev.sev || "");
-    var msg = String(ev.msg || "");
-    if (stage) parts.push(stage);
-    if (kind) parts.push(kind);
-    if (sev) parts.push(sev);
-    parts.push(msg);
+    var showPrefixes = liveLevel === "debug";
+    var line = "";
 
-    var line = parts.join(" | ");
+    if (showPrefixes) {
+      var parts = [];
+      var stage = String(ev.stage || "");
+      var kind = String(ev.kind || "");
+      var sev = String(ev.sev || "");
+      var msg = String(ev.msg || "");
+      if (stage) parts.push(stage);
+      if (kind) parts.push(kind);
+      if (sev) parts.push(sev);
+      parts.push(msg);
+      line = parts.join(" | ");
+    } else {
+      line = String(ev.msg || "");
+    }
 
     if (ev.stdout || ev.stderr) {
       var out = [];

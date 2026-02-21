@@ -12,8 +12,6 @@ from .app import App
 
 
 class WebHandler(BaseHTTPRequestHandler):
-    server_version = "PatchHub/1.1.0"
-
     def do_GET(self) -> None:  # noqa: N802
         try:
             self._do_get()
@@ -272,6 +270,8 @@ class WebServer(ThreadingHTTPServer):
     def __init__(self, bind: tuple[str, int], app: App) -> None:
         super().__init__(bind, WebHandler)
         self.app = app
+
+        WebHandler.server_version = f"PatchHub/{self.app.cfg.meta.version}"
 
     def server_close(self) -> None:
         try:
