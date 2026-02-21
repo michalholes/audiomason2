@@ -52,18 +52,15 @@ def test_patch_mode_sets_fields_atomically(tmp_path: Path) -> None:
         {
             "mode": "patch",
             "ops": [
-                {"op": "set", "path": "conflicts.policy", "value": "ask"},
                 {"op": "set", "path": "ui.verbosity", "value": "normal"},
             ],
         }
     )
     assert isinstance(out, dict)
     assert "error" not in out
-    assert out.get("conflicts") == {"policy": "ask"}
     assert (out.get("ui") or {}).get("verbosity") == "normal"
 
     after = engine.get_flow_config()
-    assert after.get("conflicts") == {"policy": "ask"}
     assert (after.get("ui") or {}).get("verbosity") == "normal"
 
 
@@ -84,7 +81,7 @@ def test_patch_mode_rejects_type_mismatch(tmp_path: Path) -> None:
     out = engine.set_flow_config(
         {
             "mode": "patch",
-            "ops": [{"op": "set", "path": "conflicts.policy", "value": 123}],
+            "ops": [{"op": "set", "path": "ui.verbosity", "value": 123}],
         }
     )
     err = out.get("error")

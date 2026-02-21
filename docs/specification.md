@@ -1,6 +1,6 @@
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.1.14 Specification Versioning Policy: Start at
+Specification Version: 1.1.15 Specification Versioning Policy: Start at
 1.0.0. Patch version increments by +1 for every change.
 
 Author: Michal Holes\
@@ -1244,6 +1244,10 @@ FlowConfig controls ONLY:
 - presets and history governance (if implemented)
 
 FlowConfig MUST NOT change:
+
+FlowConfig MUST NOT include a top-level conflicts key.
+Conflict policy is provided via the conflict_policy step and stored in SessionState.conflicts.
+
 - PHASE numbers and boundaries
 - mandatory steps existence
 - ordering invariants

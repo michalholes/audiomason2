@@ -21,6 +21,7 @@ from .errors import (
     invariant_violation,
     validation_error,
 )
+from .field_schema_validation import FieldSchemaValidationError
 from .fingerprints import sha256_hex
 
 
@@ -167,6 +168,13 @@ def _exception_envelope(exc: Exception) -> dict[str, Any]:
             "NOT_FOUND",
             str(exc) or "not found",
             details=[{"path": "$.session_id", "reason": "not_found", "meta": {}}],
+        )
+    if isinstance(exc, FieldSchemaValidationError):
+        return validation_error(
+            message=str(exc) or "validation error",
+            path=str(exc.path) or "$",
+            reason=str(exc.reason) or "validation_error",
+            meta=dict(exc.meta),
         )
     if isinstance(exc, (StepSubmissionError, ValueError)):
         return validation_error(

@@ -24,6 +24,12 @@ if TYPE_CHECKING:  # pragma: no cover
 def normalize_flow_config(raw: Any) -> dict[str, Any]:
     if not isinstance(raw, dict):
         raise ValueError("flow_config must be an object")
+
+    allowed_keys = {"version", "steps", "defaults", "ui"}
+    unknown = sorted(set(raw.keys()) - allowed_keys)
+    if unknown:
+        raise ValueError("flow_config contains unknown key(s): " + ", ".join(unknown))
+
     version = raw.get("version")
     if version != 1:
         raise ValueError("flow_config.version must be 1")
@@ -51,32 +57,14 @@ def normalize_flow_config(raw: Any) -> dict[str, Any]:
 
     defaults_any = raw.get("defaults", {})
     ui_any = raw.get("ui", {})
-    conflicts_any = raw.get("conflicts", {})
     if defaults_any is None:
         defaults_any = {}
     if ui_any is None:
         ui_any = {}
-    if conflicts_any is None:
-        conflicts_any = {}
     if not isinstance(defaults_any, dict):
         raise ValueError("flow_config.defaults must be an object")
     if not isinstance(ui_any, dict):
         raise ValueError("flow_config.ui must be an object")
-
-    if not isinstance(conflicts_any, dict):
-        raise ValueError("flow_config.conflicts must be an object")
-
-    conflicts: dict[str, Any] = {}
-    policy_any = conflicts_any.get("policy")
-    if policy_any is not None:
-        if not isinstance(policy_any, str) or not policy_any.strip():
-            raise ValueError("flow_config.conflicts.policy must be a non-empty string")
-        policy = policy_any.strip().lower()
-        try:
-            policy.encode("ascii")
-        except UnicodeEncodeError as e:
-            raise ValueError("flow_config.conflicts.policy must be ASCII-only") from e
-        conflicts["policy"] = "ask" if policy == "ask" else policy
 
     ui: dict[str, Any] = dict(ui_any)
     verbosity_any = ui_any.get("verbosity")
@@ -95,7 +83,6 @@ def normalize_flow_config(raw: Any) -> dict[str, Any]:
         "steps": steps,
         "defaults": defaults_any,
         "ui": ui,
-        "conflicts": conflicts,
     }
 
 

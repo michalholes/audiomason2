@@ -739,3 +739,13 @@
 -   Issue 224: Import wizard now enforces spec 10.2 three-phase rules: PHASE 1 never
     creates jobs; start_processing transitions to PHASE 2 before job creation; PHASE 2
     interactions are hard contract errors (invariant_violation).
+
+## 2026-02-21T00:00:00+01:00
+
+-   Issue 226: FlowConfig v1 normalization now rejects unknown top-level keys and omits conflicts.
+
+-   Issue 226: Error JSON now enforces ASCII-only error.message for all envelopes (10.4.1).
+
+-   Issue 226: Engine now validates baseline field definitions authoritatively before processing payloads (10.4.3).
+
+-   spec: Bump specification version to 1.1.15 and clarify FlowConfig conflicts exclusion.

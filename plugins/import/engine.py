@@ -36,6 +36,7 @@ from .errors import (
     invariant_violation,
     validation_error,
 )
+from .field_schema_validation import validate_step_fields
 from .fingerprints import fingerprint_json
 from .flow_runtime import (
     CONDITIONAL_STEP_IDS,
@@ -489,9 +490,7 @@ class ImportWizardEngine:
         state: dict[str, Any],
     ) -> dict[str, Any]:
         fields_any = schema.get("fields")
-        if not isinstance(fields_any, list):
-            raise StepSubmissionError("step schema is invalid")
-        fields: list[dict[str, Any]] = [f for f in fields_any if isinstance(f, dict)]
+        fields = validate_step_fields(step_id=step_id, fields_any=fields_any)
 
         allowed: set[str] = set()
         for f in fields:

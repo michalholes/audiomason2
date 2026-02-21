@@ -9,6 +9,13 @@ from dataclasses import dataclass
 from typing import Any
 
 
+def _ascii_message(message: str) -> str:
+    try:
+        return message.encode("ascii").decode("ascii")
+    except UnicodeEncodeError:
+        return message.encode("ascii", "replace").decode("ascii")
+
+
 def _detail(
     path: str,
     reason: str,
@@ -62,7 +69,9 @@ def error_envelope(
             meta = {}
         safe_details.append(_detail(path, reason, meta))
 
-    return ErrorEnvelope(code=code, message=message, details=safe_details).to_dict()
+    return ErrorEnvelope(
+        code=code, message=_ascii_message(str(message)), details=safe_details
+    ).to_dict()
 
 
 def validation_error(
