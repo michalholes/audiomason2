@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from .app_support import _err, _is_ascii, _ok
+from .zip_commit_message import ZipCommitConfig, read_commit_message_from_zip_bytes
 
 
 def api_upload_patch(self, filename: str, data: bytes) -> tuple[int, bytes]:
@@ -36,6 +37,17 @@ def api_upload_patch(self, filename: str, data: bytes) -> tuple[int, bytes]:
     status_msgs.append(f"upload: stored {rel} ({len(data)} bytes)")
 
     issue_id, commit_msg = self._derive_from_filename(dst.name)
+    if ext == ".zip" and self.cfg.autofill.zip_commit_enabled:
+        zcfg = ZipCommitConfig(
+            enabled=True,
+            filename=self.cfg.autofill.zip_commit_filename,
+            max_bytes=self.cfg.autofill.zip_commit_max_bytes,
+            max_ratio=self.cfg.autofill.zip_commit_max_ratio,
+        )
+        zmsg, _zerr = read_commit_message_from_zip_bytes(data, zcfg)
+        if zmsg is not None:
+            commit_msg = zmsg
+            status_msgs.append(f"autofill: commit from zip {self.cfg.autofill.zip_commit_filename}")
     payload: dict[str, Any] = {"stored_rel_path": rel, "bytes": len(data)}
     if self.cfg.autofill.derive_enabled:
         payload["derived_issue"] = issue_id

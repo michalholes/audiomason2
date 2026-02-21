@@ -83,6 +83,10 @@ class AutofillConfig:
     fill_patch_path: bool
     fill_issue_id: bool
     fill_commit_message: bool
+    zip_commit_enabled: bool
+    zip_commit_filename: str
+    zip_commit_max_bytes: int
+    zip_commit_max_ratio: int
 
 
 @dataclass(frozen=True)
@@ -183,5 +187,9 @@ def load_config(path: Path) -> AppConfig:
             fill_patch_path=bool(autofill.get("fill_patch_path", True)),
             fill_issue_id=bool(autofill.get("fill_issue_id", True)),
             fill_commit_message=bool(autofill.get("fill_commit_message", True)),
+            zip_commit_enabled=bool(autofill.get("zip_commit_enabled", True)),
+            zip_commit_filename=str(autofill.get("zip_commit_filename", "COMMIT_MESSAGE.txt")),
+            zip_commit_max_bytes=int(autofill.get("zip_commit_max_bytes", 4096)),
+            zip_commit_max_ratio=int(autofill.get("zip_commit_max_ratio", 200)),
         ),
     )

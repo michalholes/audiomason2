@@ -18,6 +18,7 @@ from .app_support import (
 )
 from .command_parse import CommandParseError, parse_runner_command
 from .indexing import compute_stats, iter_runs
+from .zip_commit_message import ZipCommitConfig, read_commit_message_from_zip_path
 
 
 def _autofill_scan_dir_rel(self) -> str | None:
@@ -234,6 +235,21 @@ def api_patches_latest(self) -> tuple[int, bytes]:
     rel_dir = self.cfg.autofill.scan_dir.rstrip("/")
     stored_rel = str(Path(rel_dir) / best_name)
     issue_id, commit_msg = self._derive_from_filename(best_name)
+    zip_commit_used = False
+    zip_commit_err: str | None = None
+    if os.path.splitext(best_name)[1].lower() == ".zip" and self.cfg.autofill.zip_commit_enabled:
+        zcfg = ZipCommitConfig(
+            enabled=True,
+            filename=self.cfg.autofill.zip_commit_filename,
+            max_bytes=self.cfg.autofill.zip_commit_max_bytes,
+            max_ratio=self.cfg.autofill.zip_commit_max_ratio,
+        )
+        zmsg, zerr = read_commit_message_from_zip_path(d / best_name, zcfg)
+        if zmsg is not None:
+            commit_msg = zmsg
+            zip_commit_used = True
+        else:
+            zip_commit_err = zerr
     payload: dict[str, Any] = {
         "found": True,
         "filename": best_name,
@@ -250,6 +266,12 @@ def api_patches_latest(self) -> tuple[int, bytes]:
     if self.cfg.autofill.derive_enabled:
         payload["derived_issue"] = issue_id
         payload["derived_commit_message"] = commit_msg
+    if zip_commit_used:
+        payload["status"].append(
+            f"autofill: commit from zip {self.cfg.autofill.zip_commit_filename}"
+        )
+    elif zip_commit_err:
+        payload["status"].append(f"autofill: zip commit ignored ({zip_commit_err})")
     return _ok(payload)
 
 

@@ -13,6 +13,32 @@ from .issue_alloc import allocate_next_issue_id
 from .job_store import list_job_jsons, load_job_json
 from .models import JobMode, JobRecord
 from .queue import new_job_id
+from .zip_commit_message import ZipCommitConfig, read_commit_message_from_zip_path
+
+
+def _try_fill_commit_from_zip(self, patch_path: str) -> str:
+    if not self.cfg.autofill.zip_commit_enabled:
+        return ""
+    if Path(patch_path).suffix.lower() != ".zip":
+        return ""
+    prefix = self.cfg.paths.patches_root.rstrip("/")
+    rel = patch_path
+    if rel.startswith(prefix + "/"):
+        rel = rel[len(prefix) + 1 :]
+    try:
+        zpath = self.jail.resolve_rel(rel)
+    except Exception:
+        return ""
+    if not zpath.exists() or not zpath.is_file():
+        return ""
+    zcfg = ZipCommitConfig(
+        enabled=True,
+        filename=self.cfg.autofill.zip_commit_filename,
+        max_bytes=self.cfg.autofill.zip_commit_max_bytes,
+        max_ratio=self.cfg.autofill.zip_commit_max_ratio,
+    )
+    msg, _err_reason = read_commit_message_from_zip_path(zpath, zcfg)
+    return msg or ""
 
 
 def _job_jsonl_path_from_fields(self, job_id: str, mode: str, issue_id: str) -> Path:
@@ -123,8 +149,12 @@ def api_jobs_enqueue(self, body: dict[str, Any]) -> tuple[int, bytes]:
                         self.cfg.issue.allocation_max,
                     )
                 )
-            if not commit_message or not patch_path:
-                return _err("Missing commit_message or patch_path", status=400)
+            if not patch_path:
+                return _err("Missing patch_path", status=400)
+            if not commit_message:
+                commit_message = _try_fill_commit_from_zip(self, patch_path)
+            if not commit_message:
+                return _err("Missing commit_message", status=400)
             canonical = build_canonical_command(
                 runner_prefix, mode, issue_id, commit_message, patch_path
             )
