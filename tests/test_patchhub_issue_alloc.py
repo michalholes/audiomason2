@@ -9,7 +9,7 @@ from pathlib import Path
 _SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(_SCRIPTS))
 
-from am_patch_web.issue_alloc import allocate_next_issue_id
+from patchhub.issue_alloc import allocate_next_issue_id
 
 
 class TestIssueAlloc(unittest.TestCase):

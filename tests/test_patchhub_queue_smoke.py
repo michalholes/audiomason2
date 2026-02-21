@@ -12,8 +12,8 @@ import time
 import unittest
 from pathlib import Path
 
-from am_patch_web.models import JobRecord
-from am_patch_web.queue import JobQueue, utc_now
+from patchhub.models import JobRecord
+from patchhub.queue import JobQueue, utc_now
 
 
 class FakeExec:

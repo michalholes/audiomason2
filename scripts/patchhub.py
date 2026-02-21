@@ -7,13 +7,13 @@ from pathlib import Path
 
 def main() -> int:
     ap = argparse.ArgumentParser(
-        prog="am_patch_web",
+        prog="patchhub",
         description="PatchHub (AM Patch Web UI)",
     )
     ap.add_argument(
         "--config",
-        default="scripts/am_patch_web/am_patch_web.toml",
-        help="Path to am_patch_web.toml",
+        default="scripts/patchhub/patchhub.toml",
+        help="Path to patchhub.toml",
     )
     args = ap.parse_args()
 
@@ -21,9 +21,9 @@ def main() -> int:
     scripts_dir = repo_root / "scripts"
     sys.path.insert(0, str(scripts_dir))
 
-    from am_patch_web.app import App
-    from am_patch_web.config import load_config
-    from am_patch_web.server import WebServer
+    from patchhub.app import App
+    from patchhub.config import load_config
+    from patchhub.server import WebServer
 
     cfg_path = (repo_root / args.config).resolve()
     cfg = load_config(cfg_path)

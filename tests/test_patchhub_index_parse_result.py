@@ -9,7 +9,7 @@ sys.path.insert(0, str(_SCRIPTS))
 
 import unittest
 
-from am_patch_web.indexing import parse_run_result_from_log_text
+from patchhub.indexing import parse_run_result_from_log_text
 
 
 class TestIndexParseResult(unittest.TestCase):

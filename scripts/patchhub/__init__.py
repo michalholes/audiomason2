@@ -1,4 +1,4 @@
-"""am_patch_web package.
+"""patchhub package.
 
 This package provides a standalone web UI + JSON API for orchestrating
 scripts/am_patch.py as a subprocess.
