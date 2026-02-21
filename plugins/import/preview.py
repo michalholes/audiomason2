@@ -27,6 +27,8 @@ def write_preview_artifact(
     session_id: str,
     step_id: str,
     payload: dict[str, Any],
+    discovery_fingerprint: str,
+    effective_config_fingerprint: str,
 ) -> dict[str, str]:
     """Write a preview artifact and return a small response envelope."""
 
@@ -35,6 +37,8 @@ def write_preview_artifact(
             "session_id": session_id,
             "step_id": step_id,
             "payload": payload,
+            "discovery_fingerprint": discovery_fingerprint,
+            "effective_config_fingerprint": effective_config_fingerprint,
         }
     )
 
@@ -117,9 +121,21 @@ def preview_action_impl(
         state=state,
     )
 
+    derived_any = state.get("derived")
+    if not isinstance(derived_any, dict):
+        raise StepSubmissionError("session state missing derived")
+    discovery_fp = derived_any.get("discovery_fingerprint")
+    eff_cfg_fp = derived_any.get("effective_config_fingerprint")
+    if not isinstance(discovery_fp, str) or not discovery_fp:
+        raise StepSubmissionError("session state missing discovery_fingerprint")
+    if not isinstance(eff_cfg_fp, str) or not eff_cfg_fp:
+        raise StepSubmissionError("session state missing effective_config_fingerprint")
+
     return write_preview_artifact(
         fs=engine._fs,
         session_id=session_id,
         step_id=step_id,
         payload=normalized_payload,
+        discovery_fingerprint=discovery_fp,
+        effective_config_fingerprint=eff_cfg_fp,
     )

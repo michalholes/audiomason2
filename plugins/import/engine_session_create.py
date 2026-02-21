@@ -190,10 +190,7 @@ def create_session_impl(
     )
     atomic_write_json(engine._fs, RootName.WIZARDS, f"{session_dir}/discovery.json", discovery)
 
-    action_jobs = extract_action_job_requests(
-        wizard_definition=wizard_definition,
-        effective_step_order=step_order,
-    )
+    action_jobs = extract_action_job_requests(effective_model)
     if action_jobs is not None:
         atomic_write_json(
             engine._fs,

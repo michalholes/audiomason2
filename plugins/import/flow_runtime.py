@@ -114,15 +114,23 @@ def build_flow_model(
         s = step_defs[step_id]
         phase = 2 if step_id == "processing" else 1
         required = step_id in MANDATORY_STEP_IDS
-        steps.append(
-            {
-                "step_id": step_id,
-                "title": str(s.get("title") or step_id),
-                "phase": phase,
-                "required": required,
-                "fields": list(s.get("fields") or []),
-            }
-        )
+        eff_step: dict[str, Any] = {
+            "step_id": step_id,
+            "title": str(s.get("title") or step_id),
+            "phase": phase,
+            "required": required,
+            "fields": list(s.get("fields") or []),
+        }
+
+        execution_any = s.get("execution")
+        if execution_any is not None:
+            eff_step["execution"] = execution_any
+
+        job_req_any = s.get("job_request")
+        if job_req_any is not None:
+            eff_step["job_request"] = job_req_any
+
+        steps.append(eff_step)
 
     for sid in step_order:
         add_step(sid)
