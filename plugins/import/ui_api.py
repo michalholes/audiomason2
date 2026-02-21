@@ -83,6 +83,10 @@ def build_router(*, engine: Any):
     def step_submit(session_id: str, step_id: str, body: dict[str, Any]):
         return _call(lambda: engine.submit_step(session_id, step_id, body))
 
+    @router.post("/session/{session_id}/preview/{step_id}")
+    def step_preview(session_id: str, step_id: str, body: dict[str, Any]):
+        return _call(lambda: engine.preview_action(session_id, step_id, body))
+
     @router.post("/session/{session_id}/start_processing")
     def start_processing(session_id: str, body: dict[str, Any]):
         return _call(lambda: engine.start_processing(session_id, body))

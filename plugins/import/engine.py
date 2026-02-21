@@ -46,6 +46,7 @@ from .flow_runtime import (
 from .job_requests import planned_units_count
 from .models import CatalogModel, FlowModel, validate_models
 from .plan import PlanSelectionError, compute_plan
+from .preview import preview_action_impl
 from .storage import (
     append_jsonl,
     atomic_write_json,
@@ -375,6 +376,22 @@ class ImportWizardEngine:
                     "message": ascii_message(str(e) or e.__class__.__name__),
                 },
             )
+            return _exception_envelope(e)
+
+    def preview_action(
+        self,
+        session_id: str,
+        step_id: str,
+        payload: dict[str, Any],
+    ) -> dict[str, Any]:
+        try:
+            return preview_action_impl(
+                engine=self,
+                session_id=session_id,
+                step_id=step_id,
+                payload=payload,
+            )
+        except Exception as e:
             return _exception_envelope(e)
 
     def _auto_advance_computed_steps(

@@ -10,8 +10,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from plugins.file_io.service import FileService, RootName
+from plugins.file_io.service import FileService
+from plugins.file_io.service.types import RootName
 
+from .flow_config_validation import normalize_flow_config
 from .models import CatalogModel, FlowModel, validate_models
 from .storage import atomic_write_json_if_missing
 
@@ -235,8 +237,9 @@ def ensure_default_models(fs: FileService) -> dict[str, bool]:
         fs, RootName.WIZARDS, "import/flow/current.json", DEFAULT_FLOW
     )
 
+    flow_cfg_norm = normalize_flow_config(DEFAULT_FLOW_CONFIG)
     flow_config_created = atomic_write_json_if_missing(
-        fs, RootName.WIZARDS, "import/config/flow_config.json", DEFAULT_FLOW_CONFIG
+        fs, RootName.WIZARDS, "import/config/flow_config.json", flow_cfg_norm
     )
     return {
         "catalog_created": catalog_created,

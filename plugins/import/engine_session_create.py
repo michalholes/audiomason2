@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 from plugins.file_io.service.types import RootName
 
 from . import discovery as discovery_mod
+from .action_jobs import extract_action_job_requests
 from .defaults import ensure_default_models
 from .engine_session_guards import validate_root_and_path
 from .engine_util import (
@@ -188,6 +189,18 @@ def create_session_impl(
         engine._fs, RootName.WIZARDS, f"{session_dir}/effective_config.json", effective_config
     )
     atomic_write_json(engine._fs, RootName.WIZARDS, f"{session_dir}/discovery.json", discovery)
+
+    action_jobs = extract_action_job_requests(
+        wizard_definition=wizard_definition,
+        effective_step_order=step_order,
+    )
+    if action_jobs is not None:
+        atomic_write_json(
+            engine._fs,
+            RootName.WIZARDS,
+            f"{session_dir}/action_jobs.json",
+            action_jobs,
+        )
 
     atomic_write_text(
         engine._fs,
