@@ -45,31 +45,8 @@
       </section>
 
       <section class="card card-tight">
-        <h2>Preview</h2>
-        <div class="row">
-          <button id="previewToggle" class="btn btn-small">Show</button>
-          <span id="previewHint" class="muted"></span>
-        </div>
-        <div id="previewWrap" style="display:none">
-          <pre id="previewLeft" class="pre pre-box"></pre>
-        </div>
-      </section>
-
-      <section class="card card-tight">
         <h2>Stats</h2>
         <div id="stats" class="stats"></div>
-      </section>
-
-      <section class="card card-tight">
-        <h2>Quick actions</h2>
-        <div class="row">
-          <button id="qaIncoming" class="btn btn-small">Open incoming</button>
-          <button id="qaLogs" class="btn btn-small">Open logs</button>
-        </div>
-        <div class="row">
-          <button id="qaSuccessful" class="btn btn-small">Open successful</button>
-          <button id="qaArtifacts" class="btn btn-small">Open artifacts</button>
-        </div>
       </section>
     </aside>
 
@@ -115,12 +92,14 @@
         <details class="details">
           <summary>Advanced: paste canonical runner command</summary>
           <textarea id="rawCommand" class="textarea" rows="3" placeholder="python3 scripts/am_patch.py 1000 \"msg\" patches/issue_1000.zip"></textarea>
-          <div class="row">
-            <button id="parseBtn" class="btn btn-small">Parse</button>
-            <span id="parseHint" class="muted"></span>
-            <span id="enqueueHint" class="muted"></span>
-          </div>
         </details>
+
+        <div class="row">
+          <button id="parseBtn" class="btn btn-small">Parse</button>
+          <button id="previewToggle" class="btn btn-small">Preview</button>
+          <span id="parseHint" class="muted"></span>
+          <span id="enqueueHint" class="muted"></span>
+        </div>
 
         <div class="row">
           <span class="spacer"></span>
@@ -178,6 +157,29 @@
         <div class="row">
           <label class="lbl lbl-wide">Verbose</label>
           <input id="toggleVerbose" type="checkbox" />
+        </div>
+      </section>
+
+      <section class="card card-tight" id="previewCard">
+        <div class="row">
+          <h2 style="margin:0">Preview</h2>
+          <span class="spacer"></span>
+          <button id="previewCollapse" class="btn btn-small">Show</button>
+        </div>
+        <div id="previewWrapRight" class="hidden">
+          <pre id="previewRight" class="pre pre-box"></pre>
+        </div>
+      </section>
+
+      <section class="card card-tight" id="quickActionsCard">
+        <h2>Quick actions</h2>
+        <div class="row">
+          <button id="qaIncoming" class="btn btn-small">Open incoming</button>
+          <button id="qaLogs" class="btn btn-small">Open logs</button>
+        </div>
+        <div class="row">
+          <button id="qaSuccessful" class="btn btn-small">Open successful</button>
+          <button id="qaArtifacts" class="btn btn-small">Open artifacts</button>
         </div>
       </section>
 

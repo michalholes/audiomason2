@@ -4,15 +4,17 @@
   var activeJobId = null;
   var autoRefreshTimer = null;
 
-  var previewVisible = false;
-  var lastRunLogPath = "";
+    var previewVisible = false;
 
   function setPreviewVisible(v) {
     previewVisible = !!v;
-    var wrap = el("previewWrap");
-    var btn = el("previewToggle");
-    if (wrap) wrap.style.display = previewVisible ? "block" : "none";
-    if (btn) btn.textContent = previewVisible ? "Hide" : "Show";
+    var wrap = el("previewWrapRight");
+    var btn1 = el("previewToggle");
+    var btn2 = el("previewCollapse");
+    if (wrap) wrap.classList.toggle("hidden", !previewVisible);
+    var t = previewVisible ? "Hide" : "Show";
+    if (btn1) btn1.textContent = previewVisible ? "Hide preview" : "Preview";
+    if (btn2) btn2.textContent = t;
   }
 
   function isNearBottom(node, slack) {
@@ -711,7 +713,7 @@
       };
     }
 
-    setPre("previewLeft", preview);
+    setPre("previewRight", preview);
     el("enqueueBtn").disabled = !ok;
 
     var hint2 = el("enqueueHint");
@@ -738,7 +740,7 @@
     }
 
     apiPost("/api/jobs/enqueue", body).then(function (r) {
-      setPre("previewLeft", r);
+      setPre("previewRight", r);
       setPreviewVisible(true);
       refreshJobs();
     });
@@ -1220,8 +1222,13 @@
     el("runsRefresh").addEventListener("click", refreshRuns);
 
 
-    if (el("previewToggle")) {
+        if (el("previewToggle")) {
       el("previewToggle").addEventListener("click", function () {
+        setPreviewVisible(!previewVisible);
+      });
+    }
+    if (el("previewCollapse")) {
+      el("previewCollapse").addEventListener("click", function () {
         setPreviewVisible(!previewVisible);
       });
     }

@@ -82,6 +82,8 @@ body.dragging .drop-overlay { display: flex; }
 .lbl-wide { width: 72px; }
 .details { margin-bottom: 8px; }
 
+.hidden { display: none; }
+
 @media (max-width: 1200px) {
   .layout { grid-template-columns: 1fr; }
   .panel-left, .panel-right { position: static; max-height: none; overflow: visible; padding-right: 0; }
