@@ -16,6 +16,12 @@ def _ascii_message(message: str) -> str:
         return message.encode("ascii", "replace").decode("ascii")
 
 
+def ascii_message(message: str) -> str:
+    """Return message sanitized to ASCII-only (spec 10.4.1)."""
+
+    return _ascii_message(str(message))
+
+
 def _detail(
     path: str,
     reason: str,

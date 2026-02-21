@@ -33,7 +33,30 @@ _BASELINE_TYPES = {
 }
 
 
+def _ascii_only(*, value: str, path: str, meta: dict[str, Any]) -> None:
+    try:
+        value.encode("ascii")
+    except UnicodeEncodeError as e:
+        raise FieldSchemaValidationError(
+            message="value must be ASCII-only",
+            path=path,
+            reason="non_ascii",
+            meta=dict(meta),
+        ) from e
+
+
 def validate_step_fields(*, step_id: str, fields_any: Any) -> list[dict[str, Any]]:
+    """Validate and return step field definitions.
+
+    Baseline field types are defined in spec 10.4.3.
+
+    Required invariants:
+      - fields must be a list of objects
+      - each field must include name (str) and type (str)
+      - each field must include required (bool)
+      - type-specific required properties are enforced where applicable
+    """
+
     if not isinstance(fields_any, list):
         raise FieldSchemaValidationError(
             message="step schema fields must be a list",
@@ -62,15 +85,7 @@ def validate_step_fields(*, step_id: str, fields_any: Any) -> list[dict[str, Any
                 reason="missing_or_invalid",
                 meta={"step_id": step_id},
             )
-        try:
-            name.encode("ascii")
-        except UnicodeEncodeError as e:
-            raise FieldSchemaValidationError(
-                message="field.name must be ASCII-only",
-                path=f"{pfx}.name",
-                reason="non_ascii",
-                meta={"step_id": step_id},
-            ) from e
+        _ascii_only(value=name, path=f"{pfx}.name", meta={"step_id": step_id})
 
         if not isinstance(ftype, str) or not ftype:
             raise FieldSchemaValidationError(
@@ -100,18 +115,11 @@ def validate_step_fields(*, step_id: str, fields_any: Any) -> list[dict[str, Any
                 message="field.required must be bool",
                 path=f"{pfx}.required",
                 reason="invalid_type",
-                meta={"step_id": step_id, "name": name},
+                meta={"step_id": step_id, "name": name, "type": ftype},
             )
 
         constraints = fld.get("constraints")
-        if constraints is None:
-            raise FieldSchemaValidationError(
-                message="field.constraints is required",
-                path=f"{pfx}.constraints",
-                reason="missing_required",
-                meta={"step_id": step_id, "name": name, "type": ftype},
-            )
-        if not isinstance(constraints, dict):
+        if constraints is not None and not isinstance(constraints, dict):
             raise FieldSchemaValidationError(
                 message="field.constraints must be an object",
                 path=f"{pfx}.constraints",
@@ -119,7 +127,14 @@ def validate_step_fields(*, step_id: str, fields_any: Any) -> list[dict[str, Any
                 meta={"step_id": step_id, "name": name, "type": ftype},
             )
 
-        if ftype == "number" and isinstance(constraints, dict):
+        if ftype == "number":
+            if constraints is None:
+                raise FieldSchemaValidationError(
+                    message="number.constraints is required",
+                    path=f"{pfx}.constraints",
+                    reason="missing_required",
+                    meta={"step_id": step_id, "name": name},
+                )
             mn = constraints.get("min")
             mx = constraints.get("max")
             if mn is not None and not isinstance(mn, int):
@@ -173,6 +188,11 @@ def validate_step_fields(*, step_id: str, fields_any: Any) -> list[dict[str, Any
                         reason="missing_or_invalid",
                         meta={"step_id": step_id, "name": name},
                     )
+                _ascii_only(
+                    value=item_id,
+                    path=f"{ipfx}.item_id",
+                    meta={"step_id": step_id, "name": name},
+                )
                 if not isinstance(label, str) or not label:
                     raise FieldSchemaValidationError(
                         message="items[].label must be a non-empty string",
@@ -180,15 +200,11 @@ def validate_step_fields(*, step_id: str, fields_any: Any) -> list[dict[str, Any
                         reason="missing_or_invalid",
                         meta={"step_id": step_id, "name": name},
                     )
-                try:
-                    label.encode("ascii")
-                except UnicodeEncodeError as e:
-                    raise FieldSchemaValidationError(
-                        message="items[].label must be ASCII-only",
-                        path=f"{ipfx}.label",
-                        reason="non_ascii",
-                        meta={"step_id": step_id, "name": name},
-                    ) from e
+                _ascii_only(
+                    value=label,
+                    path=f"{ipfx}.label",
+                    meta={"step_id": step_id, "name": name},
+                )
 
         out.append(dict(fld))
 

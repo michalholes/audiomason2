@@ -33,6 +33,7 @@ from .errors import (
     FinalizeError,
     SessionNotFoundError,
     StepSubmissionError,
+    ascii_message,
     invariant_violation,
     validation_error,
 )
@@ -369,7 +370,10 @@ class ImportWizardEngine:
                 step_id=step_id,
                 payload=payload if isinstance(payload, dict) else {"_invalid_payload": True},
                 result="rejected",
-                error={"type": e.__class__.__name__, "message": str(e) or e.__class__.__name__},
+                error={
+                    "type": e.__class__.__name__,
+                    "message": ascii_message(str(e) or e.__class__.__name__),
+                },
             )
             return _exception_envelope(e)
 
