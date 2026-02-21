@@ -1,8 +1,8 @@
 # AM Patch Runner
 
-# Patch Authoring Manual
+# Patch Authoring Manual (PM)
 
-AUTHORITATIVE -- AudioMason2 Status: active Version: v2.41
+AUTHORITATIVE -- AudioMason2 Status: active Version: v2.42
 
 This manual defines what a chat must produce so that the user can run
 the patch successfully and close the issue.
@@ -95,7 +95,19 @@ Rules:
 3.  The zip MUST NOT contain a combined patch.
 4.  The set of patch files must be non-empty.
 5.  Each patch file MUST pass: `git apply --check <that_file.patch>`.
+6.  The zip MUST NOT contain any additional files except:
+    - per-file patch files under patches/per_file/ as defined above, and
+    - the required COMMIT_MESSAGE.txt at the zip root.
+------------------------------------------------------------------------
 
+## Commit message file (HARD)
+
+1. The patch zip MUST include exactly one commit message file at the zip root named:
+   COMMIT_MESSAGE.txt
+2. The file MUST be ASCII-only and use LF newlines.
+3. The file content MUST be non-empty.
+4. The commit message used in the canonical invocation command MUST match the file content exactly after stripping exactly one trailing LF if present (no other trimming).
+5. The commit message MUST be written in English (no other language is permitted).
 ------------------------------------------------------------------------
 
 ## Patch requirements (HARD)
@@ -135,6 +147,7 @@ These rules apply when generating the first patch for an issue.
 The chat MUST provide:
 
 1.  A downloadable `.zip` patch under `patches/`.
+1b. The downloadable .zip patch MUST include COMMIT_MESSAGE.txt at the zip root (see Commit message file).
 2.  A canonical invocation command in a code block.
 3.  The exact PATCH argument used in invocation.
 
@@ -149,6 +162,24 @@ Canonical invocation format (NO VARIANTS):
 
 If invocation command is missing or malformed, the patch is
 NON-COMPLIANT.
+
+## Inspection Proof (HARD)
+
+For every initial patch, the chat MUST include an INSPECTION PROOF block containing:
+
+1. AUTHORITATIVE INPUTS
+   - workspace snapshot identifier
+   - overlay archive identifier (if applicable)
+
+2. FILES TOUCHED (MANIFEST)
+   - full list of repo-relative modified files
+
+3. ANCHORS
+   - for each modified file, at least two structural anchors
+     (e.g. function/class names, existing symbols, identifying section markers)
+
+Missing INSPECTION PROOF = NON-COMPLIANT.
+
 
 ## Validation discipline (HARD)
 
@@ -168,12 +199,19 @@ Before sending:
 The chat MUST NOT claim success without evidence.
 
 The runner remains the authority.
+6. The chat MUST provide evidence of:
+   - git apply --check success per per-file patch
+   - python -m compileall success (at least modified files)
+
+7. If evidence is not shown, the chat MUST NOT claim the patch was tested.
 
 ------------------------------------------------------------------------
 
 # REPAIR PATCH RULES (HARD)
 
 These rules apply when user provides .zip file with filename beginning with patched_issue{ISSUE}_.
+
+Repair patches MUST also include COMMIT_MESSAGE.txt and obey the same matching rule defined in Commit message file (HARD).
 
 ## Authoritative overlay model
 
@@ -298,6 +336,18 @@ The chat MUST NOT:
 Only if structural repair within the flagged files is objectively
 impossible may architectural approval be requested.
 
+## Scope Expansion Justification (HARD)
+
+If the chat modifies files outside the minimal set directly implicated
+by failing gate logs or outside the authoritative overlay,
+it MUST include a SCOPE EXPANSION JUSTIFICATION block containing:
+
+- Gate name
+- Log reference
+- Why the issue cannot be fixed within minimal scope
+- Minimal additional files list
+
+Missing justification when scope expands = NON-COMPLIANT.
 ------------------------------------------------------------------------
 
 ## FILE AUTHORITY MANIFEST (HARD)
@@ -345,3 +395,10 @@ Chats must never instruct closing based on reasoning alone.
 3.  No guessing or reconstruction.
 4.  Workspace overrides chat history.
 5.  No cross-chat memory as source of truth.
+6. Every patch (initial or repair) MUST include an INPUTS USED list
+   enumerating:
+   - workspace snapshot identifiers
+   - overlay archive identifiers (if any)
+   - exact repo files inspected for decision-making
+
+   Inputs not listed MUST NOT be relied upon.

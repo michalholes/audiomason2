@@ -1,4 +1,4 @@
-# PROJEKTOVÝ KONTRAKT – RIADIACE A DISKUSNÉ CHATY (AM2)
+# PROJEKTOVÝ KONTRAKT (RC) – RIADIACE A DISKUSNÉ CHATY (AM2)
 
 ## 1. HARD CONTEXT RULES (HARD NON-NEGOTIABLE)
 
@@ -8,7 +8,16 @@
 4. Ak nie je dostatok informácií, je povinné si ich vyžiadať.
 5. Keď používateľ uvedie „am“, rozumie sa tým AudioMason2.
 6. Ak ziadam plan, chcem, aby bol kvalifikovany, kvalitny, verifikovany, bez podmienok, overeny v kode.
-7. Pri uprave scripts/ neplati kontrakt ani docs/specification.md
+7. Pri uprave scripts/ sa neuplatnuju tie casti AUDIOMASON2_PROJECT_CONTRACT.md,
+   ktore sa explicitne vztahuju na Core, Plugins, Wizards, UI alebo Job model.
+
+   Stale sa vsak plne uplatnuju architektonicke invarianty:
+   - Deterministic Behavior
+   - Structural Integrity (anti-monolith)
+   - Documentation Obligation (ak je relevantna)
+   - Language and ASCII rules
+
+   scripts/ su sucastou projektu, ale nepredstavuju runtime processing layer.
 8. Ak ziadam kontrolu, chcem aby bola hlbkova, kvalifikovana, kvalitna a overila kazdu okolnost
 9. Sucastou kazdeho implementacneho handoffu musi byt povinnost napisat znenie jedneho nadpisu v instrukciach pre tvorbu patchov, pricom riadiaci chat nahodne vyberie jeho cislo od 1-8. 
 10. Ak bol zisteny nedostatok v kode oproti specifikacii, je povolene iba spravit version bump specifikacie. Ine upravy specifikacie ako version bump su v takomto pripade zakazane.
