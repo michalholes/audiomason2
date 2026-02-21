@@ -4,6 +4,13 @@
   var activeJobId = null;
   var autoRefreshTimer = null;
 
+  var selectedJobId = null;
+  var liveStreamJobId = null;
+  var liveES = null;
+  var liveEvents = [];
+  var liveLevel = "normal";
+
+
     var previewVisible = false;
 
   function setPreviewVisible(v) {
@@ -579,7 +586,185 @@
     }
   }
 
-  function refreshJobs() {
+  
+  function loadLiveLevel() {
+    var v = null;
+    try { v = localStorage.getItem("amp.liveLogLevel"); } catch (e) { v = null; }
+    if (!v) return;
+    v = String(v);
+    if (["quiet", "normal", "warning", "verbose", "debug"].indexOf(v) >= 0) {
+      liveLevel = v;
+    }
+  }
+
+  function setLiveStreamStatus(text) {
+    var box = el("liveStreamStatus");
+    if (!box) return;
+    box.textContent = String(text || "");
+  }
+
+  function getLiveJobId() {
+    return selectedJobId || activeJobId || null;
+  }
+
+  function closeLiveStream() {
+    if (liveES) {
+      try { liveES.close(); } catch (e) {}
+    }
+    liveES = null;
+    liveStreamJobId = null;
+  }
+
+  function filterLiveEvent(ev) {
+    if (!ev) return false;
+    var t = String(ev.type || "");
+    if (t === "result") return true;
+    if (t === "hello") return liveLevel === "debug";
+    if (t !== "log") return liveLevel === "debug";
+
+    if (ev.bypass === true) return true;
+
+    var ch = String(ev.ch || "");
+    var sev = String(ev.sev || "");
+    var summary = ev.summary === true;
+
+    if (liveLevel === "quiet") return summary;
+    if (liveLevel === "debug") return true;
+
+    if (ch === "CORE") return true;
+
+    if (liveLevel === "normal") return false;
+
+    if (liveLevel === "warning") return ch === "DETAIL" && sev === "WARNING";
+    if (liveLevel === "verbose") {
+      if (ch !== "DETAIL") return false;
+      return sev === "WARNING" || sev === "INFO";
+    }
+    return false;
+  }
+
+  function formatLiveEvent(ev) {
+    var t = String(ev.type || "");
+    if (t === "hello") {
+      return "HELLO protocol=" + String(ev.protocol || "") +
+        " mode=" + String(ev.runner_mode || "") +
+        " issue=" + String(ev.issue_id || "");
+    }
+    if (t === "result") {
+      var ok = ev.ok ? "SUCCESS" : "FAIL";
+      return "RESULT: " + ok + " rc=" + String(ev.return_code);
+    }
+
+    var parts = [];
+    var stage = String(ev.stage || "");
+    var kind = String(ev.kind || "");
+    var sev = String(ev.sev || "");
+    var msg = String(ev.msg || "");
+    if (stage) parts.push(stage);
+    if (kind) parts.push(kind);
+    if (sev) parts.push(sev);
+    parts.push(msg);
+
+    var line = parts.join(" | ");
+
+    if (ev.stdout || ev.stderr) {
+      var out = [];
+      out.push(line);
+      if (ev.stdout) out.push("STDOUT:\n" + String(ev.stdout));
+      if (ev.stderr) out.push("STDERR:\n" + String(ev.stderr));
+      return out.join("\n");
+    }
+    return line;
+  }
+
+  function renderLiveLog() {
+    var box = el("liveLog");
+    if (!box) return;
+    var lines = [];
+    for (var i = 0; i < liveEvents.length; i++) {
+      var ev = liveEvents[i];
+      if (!filterLiveEvent(ev)) continue;
+      lines.push(formatLiveEvent(ev));
+    }
+    box.textContent = lines.join("\n");
+    var wrap = box.parentElement;
+    if (wrap && wrap.classList && wrap.classList.contains("card-tight")) {
+      // no-op
+    }
+  }
+
+  function updateProgressFromEvents() {
+    var box = el("activeStage");
+    if (!box) return;
+    for (var i = liveEvents.length - 1; i >= 0; i--) {
+      var ev = liveEvents[i];
+      if (!ev) continue;
+      if (String(ev.type || "") === "result") {
+        box.textContent = (ev.ok ? "RESULT: SUCCESS" : "RESULT: FAIL");
+        return;
+      }
+      if (String(ev.type || "") === "log") {
+        var stage = String(ev.stage || "");
+        var kind = String(ev.kind || "");
+        if (stage || kind) {
+          box.textContent = (stage ? stage : "") + (kind ? " / " + kind : "");
+          return;
+        }
+      }
+    }
+  }
+
+  function openLiveStream(jobId) {
+    if (!jobId) {
+      closeLiveStream();
+      liveEvents = [];
+      renderLiveLog();
+      setLiveStreamStatus("");
+      return;
+    }
+    jobId = String(jobId);
+
+    if (liveStreamJobId === jobId && liveES) return;
+
+    closeLiveStream();
+    liveStreamJobId = jobId;
+    liveEvents = [];
+    renderLiveLog();
+    updateProgressFromEvents();
+    setLiveStreamStatus("connecting...");
+
+    var url = "/api/jobs/" + encodeURIComponent(jobId) + "/events";
+    var es = new EventSource(url);
+    liveES = es;
+
+    es.onmessage = function (e) {
+      if (!e || !e.data) return;
+      var obj = null;
+      try { obj = JSON.parse(String(e.data)); } catch (err) { obj = null; }
+      if (!obj) return;
+      liveEvents.push(obj);
+      if (filterLiveEvent(obj)) {
+        renderLiveLog();
+      }
+      updateProgressFromEvents();
+      setLiveStreamStatus("streaming");
+    };
+
+    es.addEventListener("end", function () {
+      setLiveStreamStatus("ended");
+      try { es.close(); } catch (e) {}
+      if (liveES === es) {
+        liveES = null;
+      }
+    });
+
+    es.onerror = function () {
+      setLiveStreamStatus("reconnecting...");
+    };
+  }
+
+
+function refreshJobs() {
     apiGet("/api/jobs").then(function (r) {
       if (!r || r.ok === false) {
         setPre("jobsList", r);
@@ -591,7 +776,9 @@
       ensureAutoRefresh();
 
       var html = jobs.map(function (j) {
-        var line = "<div class=\"item\">";
+        var isSel = selectedJobId && String(selectedJobId) === String(j.job_id || "");
+        var cls = "item" + (isSel ? " selected" : "");
+        var line = "<div class=\"" + cls + "\" data-jobid=\"" + escapeHtml(j.job_id || "") + "\">";
         line += "<span class=\"name\">" + escapeHtml(j.status || "") + " " + escapeHtml(j.job_id || "") + "</span>";
         line += "<span class=\"actions\"><span class=\"muted\">" + escapeHtml(j.mode || "") + "</span></span>";
         line += "</div>";
@@ -604,13 +791,13 @@
 
 
   function ensureAutoRefresh() {
+    openLiveStream(getLiveJobId());
     if (activeJobId) {
       if (!autoRefreshTimer) {
         autoRefreshTimer = setInterval(function () {
-          refreshTail(tailLines);
           refreshJobs();
           refreshRuns();
-        }, 1000);
+        }, 1500);
       }
       return;
     }
@@ -1234,8 +1421,31 @@
     }
 
     el("jobsRefresh").addEventListener("click", refreshJobs);
-    el("tailRefresh").addEventListener("click", function () { refreshTail(tailLines); });
-    el("tailMore").addEventListener("click", function () { refreshTail((tailLines || 200) + 200); });
+
+    if (el("liveLevel")) {
+      el("liveLevel").addEventListener("change", function () {
+        liveLevel = String(el("liveLevel").value || "normal");
+        try { localStorage.setItem("amp.liveLogLevel", liveLevel); } catch (e) {}
+        renderLiveLog();
+        updateProgressFromEvents();
+      });
+    }
+
+    if (el("jobsList")) {
+      el("jobsList").addEventListener("click", function (e) {
+        var t = e && e.target ? e.target : null;
+        while (t && t !== el("jobsList")) {
+          var jobId = t.getAttribute && t.getAttribute("data-jobid");
+          if (jobId) {
+            selectedJobId = String(jobId);
+            refreshJobs();
+            openLiveStream(getLiveJobId());
+            return;
+          }
+          t = t.parentElement;
+        }
+      });
+    }
 
     el("enqueueBtn").addEventListener("click", enqueue);
 
@@ -1301,8 +1511,7 @@
         refreshRuns();
         refreshStats();
         refreshJobs();
-        refreshTail(200);
-        refreshLastRunLog();
+          refreshLastRunLog();
         refreshHeader();
         renderIssueDetail();
         validateAndPreview();
@@ -1326,6 +1535,11 @@
     setupUpload();
     wireButtons();
     setPreviewVisible(false);
+
+    loadLiveLevel();
+    if (el("liveLevel")) {
+      el("liveLevel").value = liveLevel;
+    }
 
     loadConfig().then(function () {
       refreshFs();

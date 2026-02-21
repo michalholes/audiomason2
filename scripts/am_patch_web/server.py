@@ -4,6 +4,7 @@ import cgi
 import json
 import mimetypes
 import os
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import IO, Any, cast
@@ -79,6 +80,14 @@ class WebHandler(BaseHTTPRequestHandler):
             status, data = self.app.api_jobs_list()
             self._send_bytes(data, content_type="application/json", status=status)
             return
+
+        if path.startswith("/api/jobs/") and path.endswith("/events"):
+            parts = path.split("/")
+            if len(parts) == 5:
+                job_id = parts[3]
+                self._api_jobs_events(job_id)
+                return
+
         if path.startswith("/api/jobs/") and path.endswith("/log_tail"):
             parts = path.split("/")
             if len(parts) >= 5:
@@ -228,6 +237,90 @@ class WebHandler(BaseHTTPRequestHandler):
         data = field.file.read() if field.file else b""
         status, resp = self.app.api_upload_patch(filename, data)
         self._send_bytes(resp, content_type="application/json", status=status)
+
+    def _api_jobs_events(self, job_id: str) -> None:
+        job = self.app.queue.get_job(job_id)
+        if job is None:
+            self._send_json({"ok": False, "error": "Not found"}, status=404)
+            return
+
+        jsonl_path = self.app._job_jsonl_path(job)
+
+        self.send_response(200)
+        self.send_header("Content-Type", "text/event-stream; charset=utf-8")
+        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Connection", "keep-alive")
+        self.end_headers()
+
+        def send_line(line: str) -> None:
+            self.wfile.write(line.encode("utf-8", errors="replace"))
+            self.wfile.flush()
+
+        last_ping = time.monotonic()
+        offset = 0
+        last_growth = time.monotonic()
+
+        while True:
+            try:
+                # Wait for the JSONL file to appear (runner creates it early, but not instantly).
+                if not jsonl_path.exists():
+                    job_now = self.app.queue.get_job(job_id)
+                    if job_now is None:
+                        send_line("event: end\ndata: {}\n\n")
+                        return
+                    if job_now.status != "running":
+                        send_line("event: end\ndata: {}\n\n")
+                        return
+                    time.sleep(0.2)
+                    continue
+
+                with jsonl_path.open("rb") as fp:
+                    fp.seek(offset)
+                    chunk = fp.read()
+                    if chunk:
+                        last_growth = time.monotonic()
+                        # We only emit complete lines. Keep partial trailing bytes for next pass.
+                        parts = chunk.split(b"\n")
+                        if chunk.endswith(b"\n"):
+                            complete = parts[:-1]
+                            tail = b""
+                        else:
+                            complete = parts[:-1]
+                            tail = parts[-1]
+                        for raw in complete:
+                            raw = raw.strip()
+                            if not raw:
+                                continue
+                            try:
+                                s = raw.decode("utf-8")
+                            except Exception:
+                                s = raw.decode("utf-8", errors="replace")
+                            send_line(f"data: {s}\n\n")
+                        offset = fp.tell() - len(tail)
+                    else:
+                        # No new data.
+                        pass
+
+                now = time.monotonic()
+                if now - last_ping >= 10.0:
+                    send_line(": ping\n\n")
+                    last_ping = now
+
+                job_now = self.app.queue.get_job(job_id)
+                if job_now is None:
+                    send_line("event: end\ndata: {}\n\n")
+                    return
+
+                if job_now.status != "running" and now - last_growth >= 0.5:
+                    # If nothing new has arrived shortly after completion, end the stream.
+                    send_line("event: end\ndata: {}\n\n")
+                    return
+
+                time.sleep(0.2)
+            except BrokenPipeError:
+                return
+            except ConnectionResetError:
+                return
 
     def _api_fs_download(self, rel_path: str) -> None:
         try:

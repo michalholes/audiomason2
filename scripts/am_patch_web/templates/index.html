@@ -184,12 +184,19 @@
       </section>
 
       <section class="card card-tight">
-        <h2>Live log tail</h2>
+        <h2>Live log (events)</h2>
         <div class="row">
-          <button id="tailRefresh" class="btn btn-small">Refresh</button>
-          <button id="tailMore" class="btn btn-small">More</button>
+          <label class="lbl">Level</label>
+          <select id="liveLevel" class="input">
+            <option value="quiet">quiet</option>
+            <option value="normal">normal</option>
+            <option value="warning">warning</option>
+            <option value="verbose">verbose</option>
+            <option value="debug">debug</option>
+          </select>
+          <span id="liveStreamStatus" class="muted"></span>
         </div>
-        <pre id="tail" class="pre pre-tall"></pre>
+        <pre id="liveLog" class="pre pre-tall"></pre>
       </section>
 
       <section class="card card-tight">
