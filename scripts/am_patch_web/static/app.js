@@ -784,8 +784,6 @@ function loadLiveLevel() {
     });
 
     es.onerror = function () {
-      // EventSource retries automatically. If the job is not running anymore (or vanished),
-      // close the stream so UI does not loop forever.
       apiGet("/api/jobs/" + encodeURIComponent(jobId)).then(function (r) {
         if (!r || r.ok === false) {
           closeLiveStream();
@@ -825,7 +823,7 @@ function refreshJobs() {
         if (selectedJobId) saveLiveJobId(selectedJobId);
       }
       renderActiveJob(jobs);
-      ensureAutoRefresh();
+      ensureAutoRefresh(jobs);
 
       var html = jobs.map(function (j) {
         var isSel = selectedJobId && String(selectedJobId) === String(j.job_id || "");
@@ -842,8 +840,16 @@ function refreshJobs() {
   }
 
 
-  function ensureAutoRefresh() {
-    openLiveStream(getLiveJobId());
+  function ensureAutoRefresh(jobs) {
+    var id = getLiveJobId();
+    var st = "";
+    if (id && jobs && jobs.length) {
+      var j = jobs.find(function (x) { return String(x.job_id || "") === String(id); }) || null;
+      st = j ? String(j.status || "") : "";
+    }
+    if (st === "running" || st === "queued") openLiveStream(id);
+    else closeLiveStream();
+
     if (activeJobId) {
       if (!autoRefreshTimer) {
         autoRefreshTimer = setInterval(function () {
