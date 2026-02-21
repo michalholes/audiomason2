@@ -17,7 +17,7 @@ from plugins.file_io.service import FileService
 from plugins.file_io.service.types import RootName
 
 from .errors import FinalizeError
-from .flow_runtime import OPTIONAL_STEP_IDS
+from .flow_runtime import CANONICAL_STEP_ORDER, OPTIONAL_STEP_IDS
 from .storage import atomic_write_json_if_missing, read_json
 
 WIZARD_DEFINITION_REL_PATH = "import/definitions/wizard_definition.json"
@@ -27,23 +27,7 @@ WIZARD_DEFINITION_REL_PATH = "import/definitions/wizard_definition.json"
 DEFAULT_WIZARD_DEFINITION: dict[str, Any] = {
     "version": 1,
     "wizard_id": "import",
-    "steps": [
-        {"step_id": "select_authors"},
-        {"step_id": "select_books"},
-        {"step_id": "plan_preview_batch"},
-        {"step_id": "effective_author_title"},
-        {"step_id": "filename_policy"},
-        {"step_id": "covers_policy"},
-        {"step_id": "id3_policy"},
-        {"step_id": "audio_processing"},
-        {"step_id": "publish_policy"},
-        {"step_id": "delete_source_policy"},
-        {"step_id": "conflict_policy"},
-        {"step_id": "parallelism"},
-        {"step_id": "final_summary_confirm"},
-        {"step_id": "resolve_conflicts_batch"},
-        {"step_id": "processing"},
-    ],
+    "steps": [{"step_id": sid} for sid in CANONICAL_STEP_ORDER],
 }
 
 _MANDATORY_STEP_IDS: tuple[str, ...] = (

@@ -21,6 +21,8 @@ from .models import CatalogModel
 FLOW_ID = "import_v1"
 
 # Spec 10.3.1 canonical step_ids (including the conditional and PHASE 2 terminal).
+# This list is NOT a runtime authority. It exists only as a stable default for
+# bootstrapping DEFAULT_WIZARD_DEFINITION.
 CANONICAL_STEP_ORDER: list[str] = [
     "select_authors",
     "select_books",
@@ -53,9 +55,16 @@ OPTIONAL_STEP_IDS: set[str] = {
     "parallelism",
 }
 
-# Mandatory steps that MUST NOT be removed or disabled (spec 10.6).
-MANDATORY_STEP_IDS: set[str] = set(CANONICAL_STEP_ORDER) - OPTIONAL_STEP_IDS
-MANDATORY_STEP_IDS |= CONDITIONAL_STEP_IDS
+# Mandatory steps that MUST NOT be removed or disabled.
+# Spec 10.3/10.6: these are fixed invariants, independent of the canonical order.
+MANDATORY_STEP_IDS: set[str] = {
+    "select_authors",
+    "select_books",
+    "plan_preview_batch",
+    "conflict_policy",
+    "final_summary_confirm",
+    "processing",
+}
 
 
 def _is_enabled(step_id: str, flow_cfg: dict[str, Any]) -> bool:
