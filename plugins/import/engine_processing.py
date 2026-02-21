@@ -109,6 +109,16 @@ def start_processing_impl(
         state["updated_at"] = _iso_utc_now()
         engine._persist_state(session_id, state)
 
+        if policy == "ask" and current_conflicts:
+            step_order = engine._session_step_order(session_id)
+            if "resolve_conflicts_batch" not in step_order:
+                return invariant_violation(
+                    message="resolve_conflicts_batch missing under ask policy",
+                    path="$.workflow.steps",
+                    reason="resolve_conflicts_batch_missing",
+                    meta={"policy": policy},
+                )
+
         if policy == "ask" and current_conflicts and not resolved:
             return error_envelope(
                 "CONFLICTS_UNRESOLVED",

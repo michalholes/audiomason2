@@ -109,6 +109,10 @@ def build_effective_workflow_snapshot(
 
 def enforce_mandatory_constraints(step_order: list[str]) -> None:
     """Enforce mandatory constraints from specification section 10.3."""
+    if not step_order:
+        raise FinalizeError("wizard_definition step_order must be non-empty")
+    if step_order[0] != "select_authors":
+        raise FinalizeError("select_authors must be the first step")
     for sid in _MANDATORY_STEP_IDS:
         if sid not in step_order:
             raise FinalizeError(f"wizard_definition missing mandatory step_id: {sid}")
