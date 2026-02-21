@@ -13,7 +13,7 @@ from .app import App
 
 
 class WebHandler(BaseHTTPRequestHandler):
-    server_version = "am_patch_web/1.0.0"
+    server_version = "PatchHub/1.0.0"
 
     def do_GET(self) -> None:  # noqa: N802
         try:
