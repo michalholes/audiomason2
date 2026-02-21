@@ -587,7 +587,18 @@
   }
 
   
-  function loadLiveLevel() {
+  function loadLiveJobId() {
+  var v = null;
+  try { v = localStorage.getItem("amp.liveJobId"); } catch (e) { v = null; }
+  if (!v) return null;
+  return String(v);
+}
+
+function saveLiveJobId(jobId) {
+  try { localStorage.setItem("amp.liveJobId", String(jobId || "")); } catch (e) {}
+}
+
+function loadLiveLevel() {
     var v = null;
     try { v = localStorage.getItem("amp.liveLogLevel"); } catch (e) { v = null; }
     if (!v) return;
@@ -772,6 +783,17 @@ function refreshJobs() {
         return;
       }
       var jobs = r.jobs || [];
+      if (!selectedJobId) {
+        var saved = loadLiveJobId();
+        if (saved) selectedJobId = saved;
+      }
+      if (!selectedJobId && jobs.length) {
+        jobs.sort(function (a, b) {
+          return String(a.created_utc || "").localeCompare(String(b.created_utc || ""));
+        });
+        selectedJobId = String(jobs[jobs.length - 1].job_id || "");
+        if (selectedJobId) saveLiveJobId(selectedJobId);
+      }
       renderActiveJob(jobs);
       ensureAutoRefresh();
 
@@ -1511,8 +1533,7 @@ function refreshJobs() {
         refreshRuns();
         refreshStats();
         refreshJobs();
-          refreshLastRunLog();
-        refreshHeader();
+            refreshHeader();
         renderIssueDetail();
         validateAndPreview();
       });
@@ -1537,6 +1558,8 @@ function refreshJobs() {
     setPreviewVisible(false);
 
     loadLiveLevel();
+    var savedJobId = loadLiveJobId();
+    if (savedJobId) selectedJobId = savedJobId;
     if (el("liveLevel")) {
       el("liveLevel").value = liveLevel;
     }
@@ -1544,8 +1567,6 @@ function refreshJobs() {
     loadConfig().then(function () {
       refreshFs();
       refreshRuns();
-      refreshLastRunLog();
-      refreshTail(200);
       refreshStats();
       refreshJobs();
       refreshHeader();
@@ -1555,8 +1576,7 @@ function refreshJobs() {
 
       setInterval(function () {
         refreshJobs();
-        refreshLastRunLog();
-      }, 2000);
+        }, 2000);
 
       setInterval(function () {
         refreshHeader();

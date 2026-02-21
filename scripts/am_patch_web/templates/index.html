@@ -106,8 +106,19 @@
           <button id="enqueueBtn" class="btn btn-danger" disabled>Start</button>
         </div>
 
-        <h3>Last run log</h3>
-        <pre id="lastRunLog" class="pre pre-box"></pre>
+        <h3>Live log (events)</h3>
+<div class="row">
+  <label class="lbl">Level</label>
+  <select id="liveLevel" class="input">
+    <option value="quiet">quiet</option>
+    <option value="normal">normal</option>
+    <option value="warning">warning</option>
+    <option value="verbose">verbose</option>
+    <option value="debug">debug</option>
+  </select>
+  <span id="liveStreamStatus" class="muted"></span>
+</div>
+<pre id="liveLog" class="pre pre-box"></pre>
       </section>
 
       <section class="card">
@@ -182,24 +193,7 @@
           <button id="qaArtifacts" class="btn btn-small">Open artifacts</button>
         </div>
       </section>
-
-      <section class="card card-tight">
-        <h2>Live log (events)</h2>
-        <div class="row">
-          <label class="lbl">Level</label>
-          <select id="liveLevel" class="input">
-            <option value="quiet">quiet</option>
-            <option value="normal">normal</option>
-            <option value="warning">warning</option>
-            <option value="verbose">verbose</option>
-            <option value="debug">debug</option>
-          </select>
-          <span id="liveStreamStatus" class="muted"></span>
-        </div>
-        <pre id="liveLog" class="pre pre-tall"></pre>
-      </section>
-
-      <section class="card card-tight">
+<section class="card card-tight">
         <h2>Jobs</h2>
         <div class="row">
           <button id="jobsRefresh" class="btn btn-small">Refresh</button>
