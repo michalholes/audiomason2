@@ -1,6 +1,6 @@
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.1.17 Specification Versioning Policy: Start at
+Specification Version: 1.1.18 Specification Versioning Policy: Start at
 1.0.0. Patch version increments by +1 for every change.
 
 Author: Michal Holes\
@@ -1181,6 +1181,10 @@ Configuration (read via ConfigResolver):
   internal ids (default: false).
 - `plugins.import.cli.render.max_list_items`: max items displayed in interactive lists
   (default: 200).
+- `plugins.import.cli.render.nav_ui`: navigation UI mode for interactive runs:
+  - `prompt` (default): show Action prompt after step submission
+  - `inline`: do not show Action prompt; accept `:back` and `:cancel` as inline commands
+  - `both`: accept inline commands and show Action prompt
 
 CLI overrides:
 - The launcher MAY accept CLI flags that override the resolver values for the current run.

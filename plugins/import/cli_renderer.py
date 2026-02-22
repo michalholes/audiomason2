@@ -26,6 +26,7 @@ class RendererConfig:
     confirm_defaults: bool
     show_internal_ids: bool
     max_list_items: int
+    nav_ui: str
 
 
 def _json_dump(obj: Any) -> str:
@@ -61,6 +62,11 @@ def load_renderer_config(resolver: Any) -> RendererConfig:
     if max_list_items > 5000:
         max_list_items = 5000
 
+    nav_ui_raw = str(_cfg_get(resolver, "plugins.import.cli.render.nav_ui", "prompt"))
+    nav_ui = nav_ui_raw.strip().lower() or "prompt"
+    if nav_ui not in {"prompt", "inline", "both"}:
+        nav_ui = "prompt"
+
     if launcher_mode not in {"interactive", "fixed", "disabled"}:
         launcher_mode = "interactive"
 
@@ -72,6 +78,7 @@ def load_renderer_config(resolver: Any) -> RendererConfig:
         confirm_defaults=confirm_defaults,
         show_internal_ids=show_internal_ids,
         max_list_items=max_list_items,
+        nav_ui=nav_ui,
     )
 
 
@@ -146,6 +153,7 @@ def _apply_overrides(cfg: RendererConfig, overrides: dict[str, Any]) -> Renderer
         confirm_defaults=confirm_defaults,
         show_internal_ids=show_internal_ids,
         max_list_items=max_list_items,
+        nav_ui=cfg.nav_ui,
     )
 
 
@@ -203,7 +211,27 @@ def _render_loop(
             print_fn("ERROR: noninteractive mode requires explicit wizard step payloads.")
             return 1
 
+        nav_ui = str(getattr(cfg, "nav_ui", "prompt"))
+        allow_inline = nav_ui in {"inline", "both"}
+        show_action_prompt = nav_ui in {"prompt", "both"}
+
+        def _handle_inline_nav(
+            raw: str, *, _allow_inline: bool = allow_inline
+        ) -> tuple[bool, int | None]:
+            if not _allow_inline:
+                return False, None
+            expr = str(raw or "").strip().lower()
+            if expr in {":back", "back"}:
+                engine.apply_action(session_id, "back")
+                return True, None
+            if expr in {":cancel", "cancel"}:
+                engine.apply_action(session_id, "cancel")
+                return True, 1
+            return False, None
+
         payload: dict[str, Any] = {}
+        back_requested = False
+
         for f in fields:
             name = f.get("name")
             ftype = f.get("type")
@@ -213,16 +241,34 @@ def _render_loop(
             if ftype == "multi_select_indexed":
                 _show_select_items(field=f, name=name, cfg=cfg, print_fn=print_fn)
                 expr = input_fn(f"{name} selection (e.g. all, 1,3,5-8): ").strip()
+                handled, rc = _handle_inline_nav(expr)
+                if handled:
+                    if rc is not None:
+                        return rc
+                    back_requested = True
+                    break
                 payload[f"{name}_expr"] = expr
                 continue
 
             if ftype in {"toggle", "confirm"}:
                 raw = input_fn(f"{name} (y/n): ").strip().lower()
+                handled, rc = _handle_inline_nav(raw)
+                if handled:
+                    if rc is not None:
+                        return rc
+                    back_requested = True
+                    break
                 payload[name] = raw in {"y", "yes", "1", "true", "t"}
                 continue
 
             if ftype == "number":
                 raw = input_fn(f"{name} (int): ").strip()
+                handled, rc = _handle_inline_nav(raw)
+                if handled:
+                    if rc is not None:
+                        return rc
+                    back_requested = True
+                    break
                 try:
                     payload[name] = int(raw)
                 except Exception:
@@ -230,28 +276,43 @@ def _render_loop(
                 continue
 
             if ftype in {"text", "select"}:
-                payload[name] = input_fn(f"{name}: ").rstrip("\n")
+                raw = input_fn(f"{name}: ").rstrip("\n")
+                handled, rc = _handle_inline_nav(raw)
+                if handled:
+                    if rc is not None:
+                        return rc
+                    back_requested = True
+                    break
+                payload[name] = raw
                 continue
 
             # Fallback: ask for raw JSON value.
             raw = input_fn(f"{name} (raw): ").rstrip("\n")
+            handled, rc = _handle_inline_nav(raw)
+            if handled:
+                if rc is not None:
+                    return rc
+                back_requested = True
+                break
             payload[name] = raw
+
+        if back_requested:
+            continue
 
         state3 = engine.submit_step(session_id, cur, payload)
         if int(state3.get("phase") or 1) == 2:
             return _finalize(engine, session_id, print_fn=print_fn)
 
-        # Simple navigation prompt.
-        nav = input_fn("Action (:next, :back, :cancel, Enter=continue): ").strip().lower()
-        if nav in {":next", "next"}:
-            engine.apply_action(session_id, "next")
-        elif nav in {":back", "back"}:
-            engine.apply_action(session_id, "back")
-        elif nav in {":cancel", "cancel"}:
-            engine.apply_action(session_id, "cancel")
-            return 1
+        if show_action_prompt:
+            nav = input_fn("Action (:next, :back, :cancel, Enter=continue): ").strip().lower()
+            if nav in {":next", "next"}:
+                engine.apply_action(session_id, "next")
+            elif nav in {":back", "back"}:
+                engine.apply_action(session_id, "back")
+            elif nav in {":cancel", "cancel"}:
+                engine.apply_action(session_id, "cancel")
+                return 1
 
-        # Loop continues and re-renders current state.
         continue
 
 

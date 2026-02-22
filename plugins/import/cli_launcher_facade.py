@@ -56,10 +56,20 @@ def resolve_launcher_inputs(
         return True, root_n, rel_n, ""
 
     # interactive
-    root = _pick_root(cfg, input_fn=input_fn, print_fn=print_fn)
-    rel_path = _pick_path(engine, cfg, root=root, input_fn=input_fn, print_fn=print_fn)
+    picked_root = _pick_root(cfg, input_fn=input_fn, print_fn=print_fn)
+    if picked_root is None:
+        return False, "", "", "ERROR: canceled"
+    picked_rel_path = _pick_path(
+        engine,
+        cfg,
+        root=picked_root,
+        input_fn=input_fn,
+        print_fn=print_fn,
+    )
+    if picked_rel_path is None:
+        return False, "", "", "ERROR: canceled"
 
-    v = validate_root_and_path(root, rel_path)
+    v = validate_root_and_path(picked_root, picked_rel_path)
     if isinstance(v, dict):
         return False, "", "", "ERROR: invalid root/path"
     root_n, rel_n = v
@@ -71,7 +81,7 @@ def _pick_root(
     *,
     input_fn: Callable[[str], str],
     print_fn: Callable[[str], None],
-) -> str:
+) -> str | None:
     roots = [r.value for r in RootName]
     default_root = str(getattr(cfg, "default_root", ""))
     default = default_root if default_root in roots else "inbox"
@@ -89,6 +99,9 @@ def _pick_root(
         prompt = "Enter root number (Enter=default): "
 
     raw = input_fn(prompt).strip()
+    nav_ui = str(getattr(cfg, "nav_ui", "prompt"))
+    if nav_ui in {"inline", "both"} and raw.strip().lower() in {":cancel", "cancel"}:
+        return None
     if raw == "" and confirm_defaults:
         return default
     try:
@@ -108,7 +121,7 @@ def _pick_path(
     root: str,
     input_fn: Callable[[str], str],
     print_fn: Callable[[str], None],
-) -> str:
+) -> str | None:
     default = str(getattr(cfg, "default_path", ""))
 
     try:
@@ -153,6 +166,9 @@ def _pick_path(
         prompt = "Enter path number (Enter=default): "
 
     raw = input_fn(prompt).strip()
+    nav_ui = str(getattr(cfg, "nav_ui", "prompt"))
+    if nav_ui in {"inline", "both"} and raw.strip().lower() in {":cancel", "cancel"}:
+        return None
     if raw == "" and confirm_defaults:
         return default
 
