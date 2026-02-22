@@ -1967,8 +1967,7 @@ async function renderRootBrowser(content, notify) {
     wizardModel = data && data.model ? data.model : null;
     const wiz = wizardModel && wizardModel.wizard ? wizardModel.wizard : null;
     const steps = wiz && Array.isArray(wiz.steps) ? wiz.steps : [];
-
-    const title = (wiz && wiz.name) ? String(wiz.name) : id;
+    const title = wiz && wiz.name ? String(wiz.name) : id;
     formBox.appendChild(el("div", { class: "hint", text: `Wizard: ${title}` }));
     steps.forEach((s) => {
       const sid = s.id || s.key || "";
@@ -1978,27 +1977,34 @@ async function renderRootBrowser(content, notify) {
       row.appendChild(el("div", { class: "formLabel", text: sid }));
       if (st === "text") {
         row.appendChild(el("div", { class: "hint", text: String(s.prompt || "") }));
-      } else if (st === "confirm") {
+        formBox.appendChild(row);
+        return;
+      }
+      if (st === "confirm") {
         const inp = el("input", { type: "checkbox" });
         inp.dataset.stepId = sid;
         row.appendChild(inp);
         row.appendChild(el("span", { class: "hint", text: String(s.prompt || "") }));
-      } else if (st === "choice" || st === "select") {
+        formBox.appendChild(row);
+        return;
+      }
+      if (st === "choice" || st === "select") {
         const sel = el("select");
         sel.dataset.stepId = sid;
-        const opts = Array.isArray(s.options) ? s.options : [];
-        opts.forEach((o) => {
-          const v = (typeof o === "string") ? o : String(o && o.value !== undefined ? o.value : "");
-          const lbl = (typeof o === "string") ? o : String(o && o.label !== undefined ? o.label : v);
+        (Array.isArray(s.options) ? s.options : []).forEach((o) => {
+          const obj = o && typeof o === "object" ? o : null;
+          const v = obj ? String(obj.value !== undefined ? obj.value : "") : String(o);
+          const lbl = obj ? String(obj.label !== undefined ? obj.label : v) : String(o);
           sel.appendChild(el("option", { value: v, text: lbl }));
         });
         row.appendChild(sel);
-      } else {
-        const inp = el("input", { type: "text" });
-        inp.dataset.stepId = sid;
-        row.appendChild(inp);
-        if (s.prompt) row.appendChild(el("span", { class: "hint", text: String(s.prompt) }));
+        formBox.appendChild(row);
+        return;
       }
+      const inp = el("input", { type: "text" });
+      inp.dataset.stepId = sid;
+      row.appendChild(inp);
+      if (s.prompt) row.appendChild(el("span", { class: "hint", text: String(s.prompt) }));
       formBox.appendChild(row);
     });
   }
@@ -2031,9 +2037,7 @@ async function renderRootBrowser(content, notify) {
     pathInp.value = parts.length ? parts.join("/") : ".";
     await loadDir();
   });
-  pathInp.addEventListener("keydown", async (ev) => {
-    if (ev.key === "Enter") await loadDir();
-  });
+  pathInp.addEventListener("keydown", (ev) => { if (ev.key === "Enter") loadDir(); });
   wizSel.addEventListener("change", () => loadWizardModel());
 
   runBtn.addEventListener("click", async () => {
@@ -2046,17 +2050,13 @@ async function renderRootBrowser(content, notify) {
       const mode = modeSel.value;
       const jobIds = [];
       if (mode === "batch") {
-        const body = {
-          wizard_id: wid,
-          targets: paths.map((p) => ({ root: currentRoot, path: p })),
-          payload: payload,
-        };
+        const body = { wizard_id: wid, targets: paths.map((p) => ({ root: currentRoot, path: p })), payload };
         const r = await API.sendJson("POST", "/api/jobs/wizard", body);
         await API.sendJson("POST", `/api/jobs/${encodeURIComponent(r.job_id)}/run`, {});
         jobIds.push(r.job_id);
       } else {
         for (const p of paths) {
-          const body = { wizard_id: wid, target_root: currentRoot, target_path: p, payload: payload };
+          const body = { wizard_id: wid, target_root: currentRoot, target_path: p, payload };
           const r = await API.sendJson("POST", "/api/jobs/wizard", body);
           await API.sendJson("POST", `/api/jobs/${encodeURIComponent(r.job_id)}/run`, {});
           jobIds.push(r.job_id);
@@ -2074,24 +2074,175 @@ async function renderRootBrowser(content, notify) {
   return root;
 }
 
+async function renderImportWizard(content, notify) { // eslint-disable-line no-unused-vars
+  const nerr = (e) => { if (typeof notify === "function") notify(String(e)); };
+  const root = el("div", { class: "importWizard" });
+  const form = el("div", { class: "formRow" });
+  const rootInp = el("input", { placeholder: "root (e.g. inbox)", value: "inbox" });
+  const pathInp = el("input", { placeholder: "path (relative)", value: "." });
+  const modeSel = el("select");
+  ["stage", "inplace"].forEach((v) => modeSel.appendChild(el("option", { value: v, text: v })));
+  const startBtn = el("button", { class: "btn", text: "Start session" });
+  const reloadBtn = el("button", { class: "btn", text: "Reload" });
+  const outBox = el("div", { class: "hint" });
+  const stepBox = el("div", { class: "cardBody" });
+  const statePre = el("pre", { class: "pre" });
+  form.appendChild(rootInp);
+  form.appendChild(pathInp);
+  form.appendChild(modeSel);
+  form.appendChild(startBtn);
+  form.appendChild(reloadBtn);
+  root.appendChild(el("div", { class: "subTitle", text: "Import" }));
+  root.appendChild(form);
+  root.appendChild(outBox);
+  root.appendChild(stepBox);
+  root.appendChild(el("div", { class: "subTitle", text: "SessionState" }));
+  root.appendChild(statePre);
+
+  let sessionId = null;
+  let flow = null;
+  let state = null;
+
+  const loadFlow = async () => { flow = await API.getJson("/import/ui/flow"); };
+  const loadState = async () => {
+    if (!sessionId) return;
+    const sid = encodeURIComponent(sessionId);
+    state = await API.getJson(`/import/ui/session/${sid}/state`);
+  };
+  const getStep = (stepId) => {
+    const steps = flow && Array.isArray(flow.steps) ? flow.steps : [];
+    return steps.find((s) => s && s.step_id === stepId) || null;
+  };
+  const getAnswer = (name) => {
+    const ans = state && typeof state.answers === "object" ? state.answers : null;
+    if (ans && name in ans) return ans[name];
+    const inp = state && typeof state.inputs === "object" ? state.inputs : null;
+    if (inp && name in inp) return inp[name];
+    return "";
+  };
+
+  const renderField = (fld, stepId) => {
+    const name = String(fld.name || "");
+    const ftype = String(fld.type || "text");
+    const row = el("div", { class: "statRow" });
+    row.appendChild(el("div", { class: "statLabel", text: name }));
+    let ctrl = el("input", { value: String(getAnswer(name) ?? "") });
+    if (ftype === "toggle" || ftype === "confirm") {
+      ctrl = el("input", { type: "checkbox" });
+      ctrl.checked = !!getAnswer(name);
+    } else if (ftype === "number") {
+      ctrl = el("input", { type: "number", value: String(getAnswer(name) ?? "") });
+      const c = fld.constraints && typeof fld.constraints === "object" ? fld.constraints : null;
+      if (c && typeof c.min === "number") ctrl.min = String(c.min);
+      if (c && typeof c.max === "number") ctrl.max = String(c.max);
+    } else if (ftype === "select") {
+      ctrl = el("select");
+      const items = Array.isArray(fld.items) ? fld.items : (Array.isArray(fld.options) ? fld.options : []);
+      items.forEach((it) => {
+        const val = it && typeof it === "object" ? String(it.value ?? it.item_id ?? "") : String(it);
+        const txt = it && typeof it === "object" ? String(it.label ?? it.display_label ?? val) : val;
+        ctrl.appendChild(el("option", { value: val, text: txt }));
+      });
+      const cur = getAnswer(name);
+      if (cur !== undefined && cur !== null) ctrl.value = String(cur);
+    } else if (ftype === "table_edit") {
+      ctrl = el("textarea", { rows: "8" });
+      const v = getAnswer(name);
+      ctrl.value = typeof v === "string" ? v : JSON.stringify(v ?? {}, null, 2);
+    }
+    ctrl.dataset.stepId = name;
+    ctrl.dataset.step = stepId;
+    row.appendChild(ctrl);
+    return row;
+  };
+
+  const collectPayload = (stepId) => {
+    const payload = {};
+    stepBox.querySelectorAll("input,select,textarea").forEach((n) => {
+      if (n.dataset.step !== stepId) return;
+      const key = n.dataset.stepId;
+      if (!key) return;
+      if (n.tagName.toLowerCase() === "input" && n.getAttribute("type") === "checkbox") {
+        payload[key] = !!n.checked;
+      } else if (n.tagName.toLowerCase() === "input" && n.getAttribute("type") === "number") {
+        payload[key] = n.value === "" ? null : Number(n.value);
+      } else if (n.tagName.toLowerCase() === "textarea") {
+        const raw = String(n.value || "");
+        try { payload[key] = JSON.parse(raw); } catch { payload[key] = raw; }
+      } else payload[key] = n.value;
+    });
+    return payload;
+  };
+
+  const refresh = async () => {
+    clear(stepBox);
+    outBox.textContent = "";
+    statePre.textContent = "";
+    try {
+      if (!flow) await loadFlow();
+      await loadState();
+      if (!state) {
+        outBox.textContent = "No active session.";
+        return;
+      }
+      const stepId = String(state.current_step_id || "");
+      const step = getStep(stepId);
+      stepBox.appendChild(el("div", { class: "subTitle", text: step ? step.title : stepId }));
+      const fields = step && Array.isArray(step.fields) ? step.fields : [];
+      fields.forEach((f) => stepBox.appendChild(renderField(f, stepId)));
+      const submitBtn = el("button", { class: "btn", text: "Submit" });
+      const procBtn = el("button", { class: "btn", text: "Start processing" });
+      stepBox.appendChild(el("div", { class: "buttonRow" }, [submitBtn, procBtn]));
+      submitBtn.addEventListener("click", async () => {
+        try {
+          const sid = encodeURIComponent(sessionId);
+          const pid = encodeURIComponent(stepId);
+          await API.sendJson("POST", `/import/ui/session/${sid}/step/${pid}`, collectPayload(stepId));
+          await refresh();
+        } catch (e) { nerr(e); }
+      });
+      procBtn.addEventListener("click", async () => {
+        try {
+          const sid = encodeURIComponent(sessionId);
+          const r = await API.sendJson("POST", `/import/ui/session/${sid}/start_processing`, {});
+          const ids = r && Array.isArray(r.job_ids) ? r.job_ids.join(", ") : "";
+          outBox.textContent = `job_ids: ${ids}`;
+        } catch (e) { nerr(e); }
+      });
+      statePre.textContent = JSON.stringify(state, null, 2);
+    } catch (e) {
+      outBox.textContent = String(e);
+    }
+  };
+
+  startBtn.addEventListener("click", async () => {
+    try {
+      const body = { root: String(rootInp.value || ""), path: String(pathInp.value || ""), mode: String(modeSel.value || "stage") };
+      const r = await API.sendJson("POST", "/import/ui/session/start", body);
+      sessionId = r && typeof r.session_id === "string" ? r.session_id : null;
+      if (!sessionId) throw new Error("missing session_id");
+      await refresh();
+    } catch (e) { nerr(e); }
+  });
+  reloadBtn.addEventListener("click", () => refresh().catch(nerr));
+
+  await refresh();
+  return root;
+}
+
+const CONTENT_RENDERERS = {
+  stat_list: renderStatList, table: renderTable, log_stream: renderLogStream,
+  js_error_feed: renderJsErrorFeed, ui_debug_feed: renderUiDebugFeed, button_row: renderButtonRow,
+  json_editor: renderJsonEditor, yaml_editor: renderYamlEditor, plugin_manager: renderPluginManager,
+  stage_manager: renderStageManager, wizard_manager: renderWizardManager, root_browser: renderRootBrowser,
+  am_config: renderAmConfig, jobs_log_viewer: renderJobsLogViewer, import_wizard: renderImportWizard,
+};
+
 async function renderContent(content, notify) {
-    const t = content.type;
-    if (t === "stat_list") return await renderStatList(content);
-    if (t === "table") return await renderTable(content);
-    if (t === "log_stream") return await renderLogStream(content);
-    if (t === "js_error_feed") return await renderJsErrorFeed(content, notify);
-    if (t === "ui_debug_feed") return await renderUiDebugFeed(content, notify);
-    if (t === "button_row") return await renderButtonRow(content, notify);
-    if (t === "json_editor") return await renderJsonEditor(content, notify);
-    if (t === "yaml_editor") return await renderYamlEditor(content, notify);
-    if (t === "plugin_manager") return await renderPluginManager(content, notify);
-    if (t === "stage_manager") return await renderStageManager(content, notify);
-    if (t === "wizard_manager") return await renderWizardManager(content, notify);
-    if (t === "root_browser") return await renderRootBrowser(content, notify);
-    if (t === "am_config") return await renderAmConfig(content, notify);
-    if (t === "jobs_log_viewer") return await renderJobsLogViewer(content, notify);
-    return el("div", { class: "hint", text: `Unsupported content type: ${t}` });
-  }
+  const fn = CONTENT_RENDERERS[content.type];
+  return fn ? await fn(content, notify)
+    : el("div", { class: "hint", text: `Unsupported content type: ${content.type}` });
+}
 
   async function renderLayout(layout, notify) {
   if (!layout || layout.type !== "grid") {

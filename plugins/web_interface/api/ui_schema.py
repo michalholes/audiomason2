@@ -15,6 +15,7 @@ def _default_nav() -> list[dict[str, Any]]:
         {"title": "Config", "route": "/config", "page_id": "config"},
         {"title": "Plugins", "route": "/plugins", "page_id": "plugins"},
         {"title": "Stage", "route": "/stage", "page_id": "stage"},
+        {"title": "Import", "route": "/import", "page_id": "import"},
         {"title": "Wizards", "route": "/wizards", "page_id": "wizards"},
         {"title": "Logs", "route": "/logs", "page_id": "logs"},
         {"title": "UI Config", "route": "/ui-config", "page_id": "ui_config"},
@@ -74,6 +75,20 @@ def _default_pages() -> dict[str, dict[str, Any]]:
             "id": "stage",
             "title": "Stage",
             "layout": {"type": "grid", "children": [{"type": "stage_manager"}]},
+        },
+        "import": {
+            "id": "import",
+            "title": "Import",
+            "layout": {
+                "type": "grid",
+                "children": [
+                    {
+                        "type": "card",
+                        "title": "Import wizard",
+                        "content": {"type": "import_wizard"},
+                    }
+                ],
+            },
         },
         "wizards": {
             "id": "wizards",

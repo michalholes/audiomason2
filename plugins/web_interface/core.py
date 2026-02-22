@@ -160,6 +160,27 @@ class WebInterfacePlugin:
         mount_logs(app)
         mount_jobs(app)
 
+        # Mount UI routes provided by the import plugin (thin renderer contract).
+        # Fail-safe: absence or failure must not crash web_interface.
+        def _try_mount_import_ui() -> None:
+            loader = getattr(app.state, "plugin_loader", None)
+            if loader is None:
+                return
+            plugin = None
+            with suppress(Exception):
+                plugin = loader.get_plugin("import")
+            if plugin is None:
+                return
+            get_router = getattr(plugin, "get_fastapi_router", None)
+            if not callable(get_router):
+                return
+            with suppress(Exception):
+                router = get_router()
+                if router is not None:
+                    app.include_router(router)
+
+        _try_mount_import_ui()
+
         # Import Wizard is explicitly not implemented in web_interface.
         # Provide a deterministic 404 for all HTTP methods under /api/import_wizard/*
         # to avoid SPA fallback producing 405 for POST/PUT/etc.

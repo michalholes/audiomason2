@@ -91,6 +91,21 @@ a { color: inherit; text-decoration: none; }
 
 .buttonRow { display: flex; gap: 10px; flex-wrap: wrap; }
 
+.importWizard .formRow { display: flex; flex-wrap: wrap; gap: 10px; margin: 10px 0; }
+
+.importWizard input, .importWizard select, .importWizard textarea {
+  background: rgba(0,0,0,0.25);
+  border: 1px solid rgba(255,255,255,0.15);
+  border-radius: 10px;
+  color: #fff;
+  padding: 10px;
+}
+
+.importWizard textarea {
+  width: 100%;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+}
+
 .logWrap { }
 .logBox {
   height: 340px;
