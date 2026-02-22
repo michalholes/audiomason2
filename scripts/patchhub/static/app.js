@@ -1493,13 +1493,26 @@ function refreshJobs() {
         var seq = Promise.resolve();
         paths.sort().forEach(function (p) {
           seq = seq.then(function () {
-            return apiPost("/api/fs/delete", { path: p });
+            return apiPost("/api/fs/delete", { path: p }).then(function (r) {
+              if (!r || r.ok !== true) {
+                var err = (r && r.error) ? String(r.error) : "unknown error";
+                setFsHint("delete failed: " + err);
+                throw new Error(err);
+              }
+              return r;
+            });
           });
         });
         seq.then(function () {
           fsClearSelection();
           fsSelected = "";
           refreshFs();
+        }).catch(function (e) {
+          if (e && e.message) {
+            setFsHint("delete failed: " + String(e.message));
+          } else {
+            setFsHint("delete failed");
+          }
         });
       });
     }

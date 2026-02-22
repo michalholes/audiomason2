@@ -32,3 +32,40 @@ class TestFsJail(unittest.TestCase):
             )
             with self.assertRaises(FsJailError):
                 jail.resolve_rel("../x")
+
+    def test_crud_allowlist_root_level_entry(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "patches").mkdir()
+            jail = FsJail(
+                repo_root=root,
+                patches_root_rel="patches",
+                crud_allowlist=[""],
+                allow_crud=True,
+            )
+            jail.assert_crud_allowed("a.zip")
+
+    def test_crud_allowlist_root_level_entry_denied(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "patches").mkdir()
+            jail = FsJail(
+                repo_root=root,
+                patches_root_rel="patches",
+                crud_allowlist=["incoming"],
+                allow_crud=True,
+            )
+            with self.assertRaises(FsJailError):
+                jail.assert_crud_allowed("a.zip")
+
+    def test_crud_allowlist_subpath_allowed(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "patches").mkdir()
+            jail = FsJail(
+                repo_root=root,
+                patches_root_rel="patches",
+                crud_allowlist=["incoming"],
+                allow_crud=True,
+            )
+            jail.assert_crud_allowed("incoming/a.zip")

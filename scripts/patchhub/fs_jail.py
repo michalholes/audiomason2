@@ -48,6 +48,8 @@ class FsJail:
         norm = rel_path.strip("/")
         if norm == "":
             return "" in self.crud_allowlist
+        if "/" not in norm:
+            return ("" in self.crud_allowlist) or (norm in self.crud_allowlist)
         top = norm.split("/")[0]
         return top in self.crud_allowlist
 

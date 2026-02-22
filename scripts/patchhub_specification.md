@@ -3,7 +3,7 @@ Status: AUTHORITATIVE SPECIFICATION
 Applies to: scripts/patchhub/*
 Language: ENGLISH (ASCII ONLY)
 
-Specification Version: 1.1.6-spec
+Specification Version: 1.1.7-spec
 Code Baseline: audiomason2-main.zip (as provided in this chat)
 
 -------------------------------------------------------------------------------
@@ -113,6 +113,8 @@ CRUD operations are gated by:
 Allowlist semantics:
 - rel_path normalized by stripping leading/trailing "/".
 - If normalized is empty, it is allowed only if "" is present in crud_allowlist.
+- If normalized contains no "/", it is a root-level entry (file or directory).
+  It is allowed if "" is present in crud_allowlist, or if the exact name is present.
 - Otherwise, the top-level segment (before first "/") must be in crud_allowlist.
 
 If allow_crud is false, all mutation endpoints MUST fail with an error.
@@ -790,6 +792,8 @@ Status codes used:
 No silent failures:
 - On validation/jail failure, PatchHub must not perform partial side effects
   before returning error. (Current code follows this for most endpoints.)
+- UI MUST surface mutation failures to the user using the JSON error envelope
+  error string. Silent no-op UI behavior is forbidden.
 
 -------------------------------------------------------------------------------
 
