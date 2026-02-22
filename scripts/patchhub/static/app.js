@@ -1829,6 +1829,7 @@ function refreshJobs() {
       refreshRuns();
       refreshStats();
       refreshJobs();
+      refreshTail(tailLines);
       refreshHeader();
       renderIssueDetail();
       validateAndPreview();
@@ -1836,7 +1837,8 @@ function refreshJobs() {
 
       setInterval(function () {
         refreshJobs();
-        }, 2000);
+        refreshTail(tailLines);
+      }, 2000);
 
       setInterval(function () {
         refreshHeader();
