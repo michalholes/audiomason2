@@ -163,7 +163,8 @@
     <aside class="panel panel-right">
       <section class="card card-tight">
         <h2>Progress</h2>
-        <div id="progress" class="muted">(idle)</div>
+        <div id="progressSteps" class="progress-steps"></div>
+        <div id="progressSummary" class="progress-summary muted">(idle)</div>
         <div class="row">
           <label class="lbl lbl-wide">Verbose</label>
           <input id="toggleVerbose" type="checkbox" />
@@ -181,18 +182,7 @@
         </div>
       </section>
 
-      <section class="card card-tight" id="quickActionsCard">
-        <h2>Quick actions</h2>
-        <div class="row">
-          <button id="qaIncoming" class="btn btn-small">Open incoming</button>
-          <button id="qaLogs" class="btn btn-small">Open logs</button>
-        </div>
-        <div class="row">
-          <button id="qaSuccessful" class="btn btn-small">Open successful</button>
-          <button id="qaArtifacts" class="btn btn-small">Open artifacts</button>
-        </div>
-      </section>
-<section class="card card-tight">
+      <section class="card card-tight">
         <h2>Jobs</h2>
         <div class="row">
           <button id="jobsRefresh" class="btn btn-small">Refresh</button>

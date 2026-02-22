@@ -3,7 +3,7 @@ Status: AUTHORITATIVE SPECIFICATION
 Applies to: scripts/patchhub/*
 Language: ENGLISH (ASCII ONLY)
 
-Specification Version: 1.1.7-spec
+Specification Version: 1.1.8-spec
 Code Baseline: audiomason2-main.zip (as provided in this chat)
 
 -------------------------------------------------------------------------------
@@ -236,6 +236,54 @@ Rendering rule (static/app.js):
 
 This is a UI-only rendering rule. The SSE event payload fields
 (stage/kind/sev/msg/stdout/stderr) remain unchanged.
+
+7.1.3 Progress Card Rendering (Variant 2)
+
+The main UI includes a Progress card (right sidebar) that renders per-step status
+using runner textual markers found in the active log tail.
+
+HTML elements (templates/index.html):
+- <div id="progressSteps" class="progress-steps"></div>
+- <div id="progressSummary" class="progress-summary muted"></div>
+
+Parsing source (static/app.js):
+- The UI consumes the live log tail text (same source used for the Tail view).
+- Step transitions are derived from lines that begin with:
+  - DO: <STEP>
+  - OK: <STEP>
+  - FAIL: <STEP> (preferred for explicit step failure)
+  - ERROR: ... or generic FAIL ... (fallback: marks the last running step as failed)
+
+Rendering rules:
+- Each discovered step is rendered in first-seen order.
+- Per-step states:
+  - pending: gray dot
+  - running: yellow dot and a RUNNING pill
+  - ok: green dot
+  - fail: red dot
+- Exactly one step is shown as running (the most recent DO without a later OK/FAIL).
+
+Summary rule:
+- progressSummary shows the most recent RESULT:/STATUS:/FAIL:/OK:/DO: line
+  (compact single-line status for quick scanning).
+
+This is a UI-only rendering rule. Runner output format is unchanged.
+
+7.1.4 Preview Default Visibility (HARD)
+
+The Preview panel is collapsed by default.
+The UI MUST NOT auto-expand the Preview panel after:
+- Parse (parse_command)
+- Enqueue/Start run
+
+Preview visibility is controlled only by explicit user interaction
+(Preview buttons).
+
+7.1.5 Quick Actions Removal
+
+The "Quick actions" card is not present in the main UI.
+Filesystem navigation remains available via the Files panel.
+
 
 7.2 API routes (GET)
 

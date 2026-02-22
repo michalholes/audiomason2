@@ -142,3 +142,50 @@ input::placeholder { color: #6f7f99; }
 .fsitem.selected { background: #11162a; border-radius: 6px; padding: 6px; }
 .fsChk { margin-right: 10px; width: 18px; height: 18px; }
 .btn-inline { padding: 6px 10px; min-width: 92px; }
+/* Progress (Variant 2) */
+.progress-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.step {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 2px 0;
+  font-size: 15px;
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #555;
+  flex: 0 0 10px;
+}
+
+.dot.pending { background: #555; }
+.dot.running { background: #f5b400; }
+.dot.ok { background: #2ecc71; }
+.dot.fail { background: #e74c3c; }
+
+.pill {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid #1d2b50;
+  background: #16264a;
+  color: #e6edf3;
+  margin-left: auto;
+}
+
+.pill.running {
+  background: #f5b400;
+  border-color: #f5b400;
+  color: #0b1324;
+}
+
+.progress-summary {
+  margin-top: 8px;
+}
