@@ -82,6 +82,7 @@
         <div class="row">
           <input id="issueId" class="input" placeholder="issue id (auto if empty for patch/repair)" />
           <input id="commitMsg" class="input" placeholder="commit message (required for patch/repair)" />
+          <button id="enqueueBtn" class="btn btn-danger btn-start" disabled>Start</button>
         </div>
 
         <div class="row">
@@ -103,10 +104,6 @@
 
         <div id="uiStatusBar" class="statusbar" aria-live="polite"></div>
 
-        <div class="row">
-          <span class="spacer"></span>
-          <button id="enqueueBtn" class="btn btn-danger" disabled>Start</button>
-        </div>
 
         <h3>Live log (events)</h3>
 <div class="row">

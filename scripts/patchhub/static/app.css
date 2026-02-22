@@ -118,6 +118,10 @@ body.dragging .drop-overlay { display: flex; }
 .btn { font-size: 15px; padding: 8px 10px; border-radius: 10px; border: 1px solid #1d2b50; background: #16264a; color: #e6edf3; }
 .btn.primary { background: #2f6fed; border-color: #2f6fed; }
 .btn.btn-danger { background: #b42318; border-color: #b42318; }
+.btn-start {
+  font-size: 20px;
+  padding: 10px 13px;
+}
 .btn.btn-danger:hover { filter: brightness(1.07); }
 .btn.primary:hover { filter: brightness(1.07); }
 .btn:hover { filter: brightness(1.05); }

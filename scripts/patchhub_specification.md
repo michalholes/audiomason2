@@ -3,7 +3,7 @@ Status: AUTHORITATIVE SPECIFICATION
 Applies to: scripts/patchhub/*
 Language: ENGLISH (ASCII ONLY)
 
-Specification Version: 1.1.4-spec
+Specification Version: 1.1.5-spec
 Code Baseline: audiomason2-main.zip (as provided in this chat)
 
 -------------------------------------------------------------------------------
@@ -191,6 +191,12 @@ All routes are handled in server.py.
 - GET /static/<rel>
   Output: static bytes from scripts/patchhub/static/<rel>
   Rule: static path must not escape static base directory.
+
+7.1.0 UI Layout Notes
+
+In the main UI (templates/index.html), the Start button for launching a run
+(HTML id: enqueueBtn) MUST be located in the "B) Start run" section on the
+same row as the commit message input (HTML id: commitMsg).
 
 7.1.1 UI Status Bar
 
