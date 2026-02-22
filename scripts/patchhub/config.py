@@ -87,6 +87,7 @@ class AutofillConfig:
     zip_commit_filename: str
     zip_commit_max_bytes: int
     zip_commit_max_ratio: int
+    scan_zip_require_patch: bool = False
 
 
 @dataclass(frozen=True)
@@ -191,5 +192,6 @@ def load_config(path: Path) -> AppConfig:
             zip_commit_filename=str(autofill.get("zip_commit_filename", "COMMIT_MESSAGE.txt")),
             zip_commit_max_bytes=int(autofill.get("zip_commit_max_bytes", 4096)),
             zip_commit_max_ratio=int(autofill.get("zip_commit_max_ratio", 200)),
+            scan_zip_require_patch=bool(autofill.get("scan_zip_require_patch", False)),
         ),
     )

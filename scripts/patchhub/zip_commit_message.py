@@ -91,3 +91,36 @@ def read_commit_message_from_zip_path(
     except Exception:
         return None, "zip_commit_read_failed"
     return read_commit_message_from_zip_bytes(data, cfg)
+
+
+def zip_contains_patch_file(path: Path) -> tuple[bool, str | None]:
+    """Return whether the given zip contains any file entry ending with .patch.
+
+    Contract:
+    - (True, None) if a .patch file entry exists anywhere in the zip (case-insensitive)
+    - (False, "no_patch") if the zip is readable but contains no .patch file entries
+    - (False, "bad_zip") for BadZipFile
+    - (False, "zip_error") for other read/open errors
+
+    Notes:
+    - Directory entries are ignored.
+    - Member content is never read; only the central directory is inspected.
+    """
+
+    try:
+        with ZipFile(path, "r") as zf:
+            for info in zf.infolist():
+                try:
+                    if info.is_dir():
+                        continue
+                except Exception:
+                    if str(info.filename).endswith("/"):
+                        continue
+                name = str(info.filename)
+                if name.lower().endswith(".patch"):
+                    return True, None
+            return False, "no_patch"
+    except BadZipFile:
+        return False, "bad_zip"
+    except Exception:
+        return False, "zip_error"

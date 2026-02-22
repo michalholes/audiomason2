@@ -18,7 +18,11 @@ from .app_support import (
 )
 from .command_parse import CommandParseError, parse_runner_command
 from .indexing import compute_stats, iter_runs
-from .zip_commit_message import ZipCommitConfig, read_commit_message_from_zip_path
+from .zip_commit_message import (
+    ZipCommitConfig,
+    read_commit_message_from_zip_path,
+    zip_contains_patch_file,
+)
 
 
 def _autofill_scan_dir_rel(self) -> str | None:
@@ -144,6 +148,7 @@ def api_config(self) -> tuple[int, bytes]:
             "scan_extensions": self.cfg.autofill.scan_extensions,
             "scan_ignore_filenames": self.cfg.autofill.scan_ignore_filenames,
             "scan_ignore_prefixes": self.cfg.autofill.scan_ignore_prefixes,
+            "scan_zip_require_patch": self.cfg.autofill.scan_zip_require_patch,
             "choose_strategy": self.cfg.autofill.choose_strategy,
             "tiebreaker": self.cfg.autofill.tiebreaker,
             "derive_enabled": self.cfg.autofill.derive_enabled,
@@ -182,7 +187,7 @@ def api_patches_latest(self) -> tuple[int, bytes]:
             "found": False,
             "status": [
                 "autofill scan: scanned=0 ignored_name=0 ignored_prefix=0 "
-                "ignored_ext=0 selected=none",
+                "ignored_ext=0 ignored_zip_no_patch=0 selected=none",
             ],
         }
         return _ok(payload_nf)
@@ -197,6 +202,7 @@ def api_patches_latest(self) -> tuple[int, bytes]:
     ignored_name = 0
     ignored_prefix = 0
     ignored_ext = 0
+    ignored_zip_no_patch = 0
     for p in d.iterdir():
         if not p.is_file():
             continue
@@ -211,6 +217,11 @@ def api_patches_latest(self) -> tuple[int, bytes]:
         if os.path.splitext(name)[1].lower() not in exts:
             ignored_ext += 1
             continue
+        if os.path.splitext(name)[1].lower() == ".zip" and self.cfg.autofill.scan_zip_require_patch:
+            ok, _reason = zip_contains_patch_file(p)
+            if not ok:
+                ignored_zip_no_patch += 1
+                continue
         try:
             st = p.stat()
         except Exception:
@@ -227,6 +238,7 @@ def api_patches_latest(self) -> tuple[int, bytes]:
                 "autofill scan: "
                 f"scanned={scanned} ignored_name={ignored_name} "
                 f"ignored_prefix={ignored_prefix} ignored_ext={ignored_ext} "
+                f"ignored_zip_no_patch={ignored_zip_no_patch} "
                 "selected=none",
             ],
         }
@@ -260,6 +272,7 @@ def api_patches_latest(self) -> tuple[int, bytes]:
             "autofill scan: "
             f"scanned={scanned} ignored_name={ignored_name} "
             f"ignored_prefix={ignored_prefix} ignored_ext={ignored_ext} "
+            f"ignored_zip_no_patch={ignored_zip_no_patch} "
             f"selected={best_name}",
         ],
     }

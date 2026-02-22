@@ -3,7 +3,7 @@ Status: AUTHORITATIVE SPECIFICATION
 Applies to: scripts/patchhub/*
 Language: ENGLISH (ASCII ONLY)
 
-Specification Version: 1.1.5-spec
+Specification Version: 1.1.6-spec
 Code Baseline: audiomason2-main.zip (as provided in this chat)
 
 -------------------------------------------------------------------------------
@@ -144,6 +144,11 @@ UI/autofill have defaults (see config.py).
 - cfg.runner.command: runner prefix argv (default ["python3","scripts/am_patch.py"])
 - cfg.paths.upload_dir: destination directory for uploads (must be under patches_root)
 - cfg.autofill.*: controls /api/patches/latest scanning and filename derivation
+
+Autofill zip filtering (additive):
+- cfg.autofill.scan_zip_require_patch (bool, default false)
+  If true, /api/patches/latest ignores .zip candidates that do not contain at least one
+  file entry ending with ".patch" anywhere in the zip.
 
 -------------------------------------------------------------------------------
 
@@ -365,7 +370,16 @@ Scanning rules:
 - scan_dir must be under patches_root, else 400.
 - Scan is non-recursive; only direct children files.
 - Files filtered by scan_extensions, scan_ignore_filenames, scan_ignore_prefixes.
+- If cfg.autofill.scan_zip_require_patch is true:
+  - .zip candidates are considered only if the zip contains at least one file entry
+    ending with ".patch" (case-insensitive), anywhere in the zip.
+  - corrupted/unreadable zips are ignored (no 500); they count as ignored_zip_no_patch.
 - Best file chosen by max mtime_ns; ties broken by lexicographic name.
+
+Status counters (additive):
+- ignored_zip_no_patch=<int>
+  Count of ignored .zip candidates due to missing any .patch file entry, including
+  corrupted/unreadable zips.
 
 Output (found):
 {
