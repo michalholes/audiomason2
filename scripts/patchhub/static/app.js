@@ -12,8 +12,9 @@
   var liveEvents = [];
   var liveLevel = "normal";
 
-
-    var previewVisible = false;
+  var previewVisible = false;
+  var runsVisible = false;
+  var jobsVisible = false;
 
   function setPreviewVisible(v) {
     previewVisible = !!v;
@@ -745,6 +746,42 @@ function loadLiveLevel() {
     if (["quiet", "normal", "warning", "verbose", "debug"].indexOf(v) >= 0) {
       liveLevel = v;
     }
+  }
+
+  function loadUiVisibility() {
+    var v = null;
+    try { v = localStorage.getItem("amp.ui.runsVisible"); } catch (e) { v = null; }
+    if (v === "1") runsVisible = true;
+    else if (v === "0") runsVisible = false;
+
+    v = null;
+    try { v = localStorage.getItem("amp.ui.jobsVisible"); } catch (e) { v = null; }
+    if (v === "1") jobsVisible = true;
+    else if (v === "0") jobsVisible = false;
+  }
+
+  function saveRunsVisible(v) {
+    try { localStorage.setItem("amp.ui.runsVisible", v ? "1" : "0"); } catch (e) {}
+  }
+
+  function saveJobsVisible(v) {
+    try { localStorage.setItem("amp.ui.jobsVisible", v ? "1" : "0"); } catch (e) {}
+  }
+
+  function setRunsVisible(v) {
+    runsVisible = !!v;
+    var wrap = el("runsWrap");
+    var btn = el("runsCollapse");
+    if (wrap) wrap.classList.toggle("hidden", !runsVisible);
+    if (btn) btn.textContent = runsVisible ? "Hide" : "Show";
+  }
+
+  function setJobsVisible(v) {
+    jobsVisible = !!v;
+    var wrap = el("jobsWrap");
+    var btn = el("jobsCollapse");
+    if (wrap) wrap.classList.toggle("hidden", !jobsVisible);
+    if (btn) btn.textContent = jobsVisible ? "Hide" : "Show";
   }
 
   function setLiveStreamStatus(text) {
@@ -1649,6 +1686,12 @@ function refreshJobs() {
     }
     el("runsRefresh").addEventListener("click", refreshRuns);
 
+    if (el("runsCollapse")) {
+      el("runsCollapse").addEventListener("click", function () {
+        setRunsVisible(!runsVisible);
+        saveRunsVisible(runsVisible);
+      });
+    }
 
         if (el("previewToggle")) {
       el("previewToggle").addEventListener("click", function () {
@@ -1662,6 +1705,13 @@ function refreshJobs() {
     }
 
     el("jobsRefresh").addEventListener("click", refreshJobs);
+
+    if (el("jobsCollapse")) {
+      el("jobsCollapse").addEventListener("click", function () {
+        setJobsVisible(!jobsVisible);
+        saveJobsVisible(jobsVisible);
+      });
+    }
 
     if (el("liveLevel")) {
       el("liveLevel").addEventListener("change", function () {
@@ -1763,6 +1813,9 @@ function refreshJobs() {
     setupUpload();
     wireButtons();
     setPreviewVisible(false);
+    loadUiVisibility();
+    setRunsVisible(runsVisible);
+    setJobsVisible(jobsVisible);
 
     loadLiveLevel();
     var savedJobId = loadLiveJobId();

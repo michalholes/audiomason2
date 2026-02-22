@@ -285,6 +285,37 @@ The "Quick actions" card is not present in the main UI.
 Filesystem navigation remains available via the Files panel.
 
 
+7.1.4 Sidebar Collapsible Lists (Runs, Jobs)
+
+The main UI includes two sidebar lists that are operator convenience only:
+- Runs list (left sidebar)
+- Jobs list (right sidebar)
+
+These lists MUST be collapsible and MUST be hidden by default.
+
+HTML elements (templates/index.html):
+- Runs:
+  - toggle button: <button id="runsCollapse" ...>
+  - wrapper: <div id="runsWrap" class="hidden"> ... </div>
+- Jobs:
+  - toggle button: <button id="jobsCollapse" ...>
+  - wrapper: <div id="jobsWrap" class="hidden"> ... </div>
+
+Behavior (static/app.js):
+- Default visibility:
+  - runsVisible = false
+  - jobsVisible = false
+- UI state persistence uses localStorage keys:
+  - amp.ui.runsVisible ("1" or "0")
+  - amp.ui.jobsVisible ("1" or "0")
+- If a key is missing or invalid, the default is hidden ("0").
+
+Button text:
+- When the wrapper is hidden, the corresponding button MUST display: Show
+- When the wrapper is visible, the corresponding button MUST display: Hide
+
+This is a UI-only behavior change. API surface and server behavior are unchanged.
+
 7.2 API routes (GET)
 
 7.2.1 GET /api/config

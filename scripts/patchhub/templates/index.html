@@ -27,21 +27,27 @@
       </section>
 
       <section class="card card-tight">
-        <h2>Runs</h2>
         <div class="row">
-          <input id="runsIssue" class="input" placeholder="issue filter" />
-          <select id="runsResult" class="input">
-            <option value="">(any)</option>
-            <option value="success">success</option>
-            <option value="fail">fail</option>
-            <option value="unknown">unknown</option>
-            <option value="canceled">canceled</option>
-          </select>
+          <h2 style="margin:0">Runs</h2>
+          <span class="spacer"></span>
+          <button id="runsCollapse" class="btn btn-small">Show</button>
         </div>
-        <div class="row">
-          <button id="runsRefresh" class="btn btn-small">Refresh</button>
+        <div id="runsWrap" class="hidden">
+          <div class="row">
+            <input id="runsIssue" class="input" placeholder="issue filter" />
+            <select id="runsResult" class="input">
+              <option value="">(any)</option>
+              <option value="success">success</option>
+              <option value="fail">fail</option>
+              <option value="unknown">unknown</option>
+              <option value="canceled">canceled</option>
+            </select>
+          </div>
+          <div class="row">
+            <button id="runsRefresh" class="btn btn-small">Refresh</button>
+          </div>
+          <div id="runsList" class="scroll scroll-tall"></div>
         </div>
-        <div id="runsList" class="scroll scroll-tall"></div>
       </section>
 
       <section class="card card-tight">
@@ -183,11 +189,17 @@
       </section>
 
       <section class="card card-tight">
-        <h2>Jobs</h2>
         <div class="row">
-          <button id="jobsRefresh" class="btn btn-small">Refresh</button>
+          <h2 style="margin:0">Jobs</h2>
+          <span class="spacer"></span>
+          <button id="jobsCollapse" class="btn btn-small">Show</button>
         </div>
-        <div id="jobsList" class="scroll"></div>
+        <div id="jobsWrap" class="hidden">
+          <div class="row">
+            <button id="jobsRefresh" class="btn btn-small">Refresh</button>
+          </div>
+          <div id="jobsList" class="scroll"></div>
+        </div>
       </section>
     </aside>
   </main>
