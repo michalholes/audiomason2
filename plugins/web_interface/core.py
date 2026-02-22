@@ -3,12 +3,14 @@ from __future__ import annotations
 import logging
 import traceback
 from contextlib import suppress
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from audiomason.core.diagnostics import build_envelope
+from audiomason.core.errors import PluginNotFoundError
 from audiomason.core.events import get_event_bus
 from audiomason.core.logging import get_logger
 
@@ -167,8 +169,20 @@ class WebInterfacePlugin:
             if loader is None:
                 return
             plugin = None
-            with suppress(Exception):
+            try:
                 plugin = loader.get_plugin("import")
+            except PluginNotFoundError:
+                # Import plugin is not loaded. Best-effort auto-load from builtin plugins.
+                builtin_dir = getattr(loader, "builtin_plugins_dir", None)
+                with suppress(Exception):
+                    if builtin_dir is not None:
+                        import_dir = Path(builtin_dir) / "import"
+                        if (import_dir / "plugin.yaml").exists():
+                            loader.load_plugin(import_dir, validate=False)
+                with suppress(Exception):
+                    plugin = loader.get_plugin("import")
+            except Exception:
+                return
             if plugin is None:
                 return
             get_router = getattr(plugin, "get_fastapi_router", None)

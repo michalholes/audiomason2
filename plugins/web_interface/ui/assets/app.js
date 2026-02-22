@@ -2102,8 +2102,19 @@ async function renderImportWizard(content, notify) { // eslint-disable-line no-u
   let sessionId = null;
   let flow = null;
   let state = null;
+  let importApiAvailable = true;
 
-  const loadFlow = async () => { flow = await API.getJson("/import/ui/flow"); };
+  const importApiMissingMsg = "Import UI API is not available. The import plugin may not be loaded.";
+
+  const loadFlow = async () => {
+    try {
+      flow = await API.getJson("/import/ui/flow");
+      importApiAvailable = true;
+    } catch (e) {
+      importApiAvailable = false;
+      flow = null;
+    }
+  };
   const loadState = async () => {
     if (!sessionId) return;
     const sid = encodeURIComponent(sessionId);
@@ -2180,6 +2191,10 @@ async function renderImportWizard(content, notify) { // eslint-disable-line no-u
     statePre.textContent = "";
     try {
       if (!flow) await loadFlow();
+      if (!importApiAvailable) {
+        outBox.textContent = importApiMissingMsg;
+        return;
+      }
       await loadState();
       if (!state) {
         outBox.textContent = "No active session.";
