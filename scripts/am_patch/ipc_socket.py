@@ -9,9 +9,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-PROTOCOL = "am_patch_ipc/1"
-DEFAULT_SOCKET_NAME = "am_patch.sock"
+from am_patch.errors import RunnerError
 
+PROTOCOL = "am_patch_ipc/1"
 
 _LEVELS = ("quiet", "normal", "warning", "verbose", "debug")
 
@@ -52,6 +52,32 @@ def _system_runtime_dir() -> Path:
     return Path(".")
 
 
+def _sanitize_filename(name: str) -> str:
+    s = str(name or "").strip()
+    if not s:
+        return "am_patch_ipc_none_0.sock"
+    out: list[str] = []
+    for ch in s:
+        if ch.isalnum() or ch in "._-":
+            out.append(ch)
+        else:
+            out.append("_")
+    cleaned = "".join(out)
+    if "/" in cleaned or "\\" in cleaned or cleaned in (".", ".."):
+        return "am_patch_ipc_none_0.sock"
+    return cleaned
+
+
+def _render_template(tpl: str, *, issue_id: str | None, pid: int) -> str:
+    issue = str(issue_id or "none")
+    issue = _sanitize_filename(issue)
+    try:
+        rendered = str(tpl).format(issue=issue, pid=int(pid))
+    except Exception:
+        rendered = f"am_patch_ipc_{issue}_{pid}.sock"
+    return _sanitize_filename(rendered)
+
+
 @dataclass
 class IpcState:
     paused: bool = False
@@ -82,9 +108,23 @@ class IpcController:
         self._resume = threading.Event()
         self._thread: threading.Thread | None = None
 
+        self._clients_lock = threading.Lock()
+        self._clients: list[Any] = []
+
+        set_stream = getattr(self._logger, "set_ipc_stream", None)
+        if callable(set_stream):
+            set_stream(self._on_log_event)
+
     def start(self) -> None:
         if self._thread is not None:
             return
+        self.socket_path.parent.mkdir(parents=True, exist_ok=True)
+        if self.socket_path.exists() or self.socket_path.is_symlink():
+            raise RunnerError(
+                "IPC",
+                "SOCKET_EXISTS",
+                f"socket path exists: {self.socket_path}",
+            )
         self._thread = threading.Thread(target=self._serve, name="am_patch_ipc", daemon=True)
         self._thread.start()
 
@@ -95,6 +135,12 @@ class IpcController:
         if t is not None:
             t.join(timeout=2.0)
         self._thread = None
+        with self._clients_lock:
+            clients = list(self._clients)
+            self._clients.clear()
+        for fp in clients:
+            with contextlib.suppress(Exception):
+                fp.close()
         _safe_unlink(self.socket_path)
 
     def snapshot(self) -> dict[str, Any]:
@@ -130,13 +176,11 @@ class IpcController:
 
     def request_resume(self) -> None:
         with self._lock:
+            paused = self._state.paused
             self._state.paused = False
         self._resume.set()
-
-    def request_pause_now(self) -> None:
-        with self._lock:
-            self._state.paused = True
-        self._resume.clear()
+        if paused:
+            self._emit_control("resumed")
 
     def set_stop_after_step(self, step: str | None) -> None:
         with self._lock:
@@ -156,6 +200,7 @@ class IpcController:
         step = str(completed_step or "").strip()
         if not step:
             return None
+        paused_now = False
         with self._lock:
             if self._state.cancel:
                 return "cancel"
@@ -165,7 +210,11 @@ class IpcController:
             if self._state.pause_after_step and self._state.pause_after_step == step:
                 self._state.paused = True
                 self._resume.clear()
-                return "pause_after_step"
+                paused_now = True
+
+        if paused_now:
+            self._emit_control("paused", {"step": step})
+            return "pause_after_step"
         return None
 
     def wait_if_paused(self) -> None:
@@ -175,18 +224,55 @@ class IpcController:
                 cancelled = self._state.cancel
             if cancelled or not paused:
                 return
-            # main thread waits; IPC thread remains active
             self._resume.wait(0.25)
+
+    def _emit_control(self, event: str, data: dict[str, Any] | None = None) -> None:
+        emit = getattr(self._logger, "emit_control_event", None)
+        if not callable(emit):
+            return
+        payload: dict[str, Any] = {"type": "control", "event": str(event or "")}
+        if data:
+            payload.update(data)
+        with contextlib.suppress(Exception):
+            emit(payload)
+
+    def _on_log_event(self, evt: dict[str, Any]) -> None:
+        line = _json_line(evt)
+        with self._clients_lock:
+            clients = list(self._clients)
+        keep: list[Any] = []
+        for fp in clients:
+            try:
+                fp.write(line)
+                keep.append(fp)
+            except Exception:
+                with contextlib.suppress(Exception):
+                    fp.close()
+        with self._clients_lock:
+            self._clients = keep
+
+    def _reply_ok(self, *, cmd_id: str, data: dict[str, Any] | None = None) -> dict[str, Any]:
+        return {
+            "type": "reply",
+            "cmd_id": cmd_id,
+            "ok": True,
+            "data": data or {},
+        }
+
+    def _reply_err(self, *, cmd_id: str, code: str, message: str) -> dict[str, Any]:
+        return {
+            "type": "reply",
+            "cmd_id": cmd_id,
+            "ok": False,
+            "error": {"code": str(code or "ERROR"), "message": str(message or "")},
+        }
 
     def _serve(self) -> None:
         sock_path = self.socket_path
-        sock_path.parent.mkdir(parents=True, exist_ok=True)
-        _safe_unlink(sock_path)
-
         srv = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         try:
             srv.bind(str(sock_path))
-            srv.listen(1)
+            srv.listen(5)
             srv.settimeout(0.25)
         except Exception:
             with contextlib.suppress(Exception):
@@ -200,110 +286,204 @@ class IpcController:
                 continue
             except Exception:
                 break
+
+            conn.settimeout(1.0)
+            fp = conn.makefile("rwb", buffering=0)
+            with self._clients_lock:
+                self._clients.append(fp)
+
+            # A small deterministic marker for clients.
+            fp.write(_json_line({"type": "control", "event": "connected", **self.snapshot()}))
+
             try:
-                conn.settimeout(1.0)
-                fp = conn.makefile("rwb", buffering=0)
-                buf = b""
                 while not self._stop.is_set():
                     try:
-                        chunk = fp.readline()
+                        line = fp.readline()
                     except TimeoutError:
                         continue
                     except Exception:
                         break
-                    if not chunk:
+                    if not line:
                         break
-                    buf = chunk.strip()
-                    if not buf:
-                        continue
-                    try:
-                        req = json.loads(buf.decode("utf-8", errors="strict"))
-                    except Exception:
-                        fp.write(
-                            _json_line({"protocol": PROTOCOL, "ok": False, "error": "bad_json"})
-                        )
+                    raw = line.strip()
+                    if not raw:
                         continue
 
-                    if str(req.get("protocol", "")) != PROTOCOL:
+                    try:
+                        req = json.loads(raw.decode("utf-8", errors="strict"))
+                    except Exception:
                         fp.write(
                             _json_line(
-                                {
-                                    "protocol": PROTOCOL,
-                                    "ok": False,
-                                    "error": "bad_protocol",
-                                }
+                                self._reply_err(cmd_id="", code="BAD_JSON", message="bad json")
                             )
                         )
                         continue
 
-                    cmd = str(req.get("cmd", "")).strip()
+                    if not isinstance(req, dict):
+                        fp.write(
+                            _json_line(
+                                self._reply_err(
+                                    cmd_id="",
+                                    code="VALIDATION_ERROR",
+                                    message="request must be an object",
+                                )
+                            )
+                        )
+                        continue
+
+                    if "protocol" in req and str(req.get("protocol", "")) != PROTOCOL:
+                        cmd_id = str(req.get("cmd_id", "") or "")
+                        fp.write(
+                            _json_line(
+                                self._reply_err(
+                                    cmd_id=cmd_id,
+                                    code="BAD_PROTOCOL",
+                                    message="bad protocol",
+                                )
+                            )
+                        )
+                        continue
+
+                    if str(req.get("type", "")) != "cmd":
+                        cmd_id = str(req.get("cmd_id", "") or "")
+                        fp.write(
+                            _json_line(
+                                self._reply_err(
+                                    cmd_id=cmd_id,
+                                    code="VALIDATION_ERROR",
+                                    message="missing type=cmd",
+                                )
+                            )
+                        )
+                        continue
+
+                    cmd_id = str(req.get("cmd_id", "") or "").strip()
+                    if not cmd_id:
+                        fp.write(
+                            _json_line(
+                                self._reply_err(
+                                    cmd_id="",
+                                    code="VALIDATION_ERROR",
+                                    message="missing cmd_id",
+                                )
+                            )
+                        )
+                        continue
+
+                    cmd = str(req.get("cmd", "") or "").strip()
+                    args = req.get("args")
+                    if args is None:
+                        args = {}
+                    if not isinstance(args, dict):
+                        fp.write(
+                            _json_line(
+                                self._reply_err(
+                                    cmd_id=cmd_id,
+                                    code="VALIDATION_ERROR",
+                                    message="args must be an object",
+                                )
+                            )
+                        )
+                        continue
+
                     if cmd == "ping":
-                        fp.write(_json_line({"protocol": PROTOCOL, "ok": True, "reply": "pong"}))
+                        fp.write(_json_line(self._reply_ok(cmd_id=cmd_id, data={"pong": True})))
                         continue
+
                     if cmd == "get_state":
-                        fp.write(_json_line({"ok": True, **self.snapshot()}))
+                        fp.write(_json_line(self._reply_ok(cmd_id=cmd_id, data=self.snapshot())))
                         continue
+
                     if cmd == "cancel":
                         self.request_cancel()
-                        fp.write(_json_line({"protocol": PROTOCOL, "ok": True}))
+                        fp.write(_json_line(self._reply_ok(cmd_id=cmd_id)))
                         continue
-                    if cmd == "resume":
-                        self.request_resume()
-                        fp.write(_json_line({"protocol": PROTOCOL, "ok": True}))
-                        continue
-                    if cmd == "pause_after_step":
-                        step = req.get("step")
-                        self.set_pause_after_step(str(step) if step is not None else None)
-                        fp.write(_json_line({"protocol": PROTOCOL, "ok": True}))
-                        continue
+
                     if cmd == "stop_after_step":
-                        step = req.get("step")
+                        step = args.get("step")
                         self.set_stop_after_step(str(step) if step is not None else None)
-                        fp.write(_json_line({"protocol": PROTOCOL, "ok": True}))
+                        fp.write(_json_line(self._reply_ok(cmd_id=cmd_id)))
                         continue
-                    if cmd == "pause":
-                        self.request_pause_now()
-                        fp.write(_json_line({"protocol": PROTOCOL, "ok": True}))
+
+                    if cmd == "pause_after_step":
+                        step = args.get("step")
+                        self.set_pause_after_step(str(step) if step is not None else None)
+                        fp.write(_json_line(self._reply_ok(cmd_id=cmd_id)))
                         continue
+
+                    if cmd == "resume":
+                        with self._lock:
+                            paused = self._state.paused
+                        if not paused:
+                            fp.write(
+                                _json_line(
+                                    self._reply_err(
+                                        cmd_id=cmd_id,
+                                        code="INVALID_STATE",
+                                        message="runner is not paused",
+                                    )
+                                )
+                            )
+                            continue
+                        self.request_resume()
+                        fp.write(_json_line(self._reply_ok(cmd_id=cmd_id)))
+                        continue
+
                     if cmd == "set_verbosity":
-                        v = req.get("verbosity")
-                        log_level_value = req.get("log_level")
+                        v = args.get("verbosity")
+                        ll = args.get("log_level")
                         self.set_verbosity(
                             verbosity=(str(v) if v is not None else None),
-                            log_level=(
-                                str(log_level_value) if log_level_value is not None else None
-                            ),
+                            log_level=(str(ll) if ll is not None else None),
                         )
-                        fp.write(_json_line({"protocol": PROTOCOL, "ok": True}))
+                        fp.write(
+                            _json_line(
+                                self._reply_ok(
+                                    cmd_id=cmd_id,
+                                    data={
+                                        "verbosity": getattr(
+                                            self._logger, "screen_level", "verbose"
+                                        ),
+                                        "log_level": getattr(self._logger, "log_level", "verbose"),
+                                    },
+                                )
+                            )
+                        )
                         continue
 
                     fp.write(
-                        _json_line({"protocol": PROTOCOL, "ok": False, "error": "unknown_cmd"})
+                        _json_line(
+                            self._reply_err(
+                                cmd_id=cmd_id,
+                                code="UNKNOWN_CMD",
+                                message="unknown cmd",
+                            )
+                        )
                     )
             finally:
                 with contextlib.suppress(Exception):
                     conn.close()
 
-        try:
+        with contextlib.suppress(Exception):
             srv.close()
-        finally:
-            _safe_unlink(sock_path)
+        _safe_unlink(sock_path)
 
 
-def resolve_socket_path(
-    *,
-    policy: Any,
-    patch_dir: Path,
-) -> Path | None:
+def resolve_socket_path(*, policy: Any, patch_dir: Path, issue_id: str | None) -> Path | None:
     enabled = bool(getattr(policy, "ipc_socket_enabled", True))
     if not enabled:
         return None
 
-    mode = str(getattr(policy, "ipc_socket_mode", "patch_dir") or "patch_dir").strip().lower()
-    name = str(getattr(policy, "ipc_socket_name", DEFAULT_SOCKET_NAME) or DEFAULT_SOCKET_NAME)
+    explicit = getattr(policy, "ipc_socket_path", None)
+    if explicit:
+        return Path(str(explicit))
 
-    if "/" in name or "\\" in name or name.strip() != name:
-        name = DEFAULT_SOCKET_NAME
+    mode = str(getattr(policy, "ipc_socket_mode", "patch_dir") or "patch_dir").strip().lower()
+    tpl = str(getattr(policy, "ipc_socket_name_template", "") or "").strip()
+    if not tpl:
+        tpl = "am_patch_ipc_{issue}_{pid}.sock"
+
+    name = _render_template(tpl, issue_id=issue_id, pid=os.getpid())
 
     if mode == "patch_dir":
         return patch_dir / name
@@ -320,5 +500,4 @@ def resolve_socket_path(
             return Path(str(base)) / name
         return _system_runtime_dir() / name
 
-    # Unknown mode -> disabled to avoid surprises.
     return None

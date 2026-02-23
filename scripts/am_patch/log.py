@@ -117,6 +117,8 @@ class Logger:
 
         self._ipc_hook: Callable[[str, str], None] | None = None
 
+        self._ipc_stream: Callable[[dict[str, Any]], None] | None = None
+
         self.console_color = str(console_color or "").strip().lower() or "auto"
         self._console_color_enabled = stdout_color_enabled(self.console_color)
 
@@ -142,6 +144,9 @@ class Logger:
 
     def set_ipc_hook(self, hook: Callable[[str, str], None] | None) -> None:
         self._ipc_hook = hook
+
+    def set_ipc_stream(self, cb: Callable[[dict[str, Any]], None] | None) -> None:
+        self._ipc_stream = cb
 
     def close(self) -> None:
         try:
@@ -192,7 +197,9 @@ class Logger:
         to_log: bool = True,
     ) -> None:
         # One-line discipline: caller controls newlines.
-        if self.json_enabled and self._json_fp is not None:
+        ipc_stream = self._ipc_stream
+        need_evt = (self.json_enabled and self._json_fp is not None) or ipc_stream is not None
+        if need_evt:
             self._json_seq += 1
             msg = message
             if msg.endswith("\n"):
@@ -209,8 +216,12 @@ class Logger:
                 "bypass": bool(error_detail),
                 "msg": msg,
             }
-            with contextlib.suppress(Exception):
-                self._write_json(evt)
+            if self.json_enabled and self._json_fp is not None:
+                with contextlib.suppress(Exception):
+                    self._write_json(evt)
+            if ipc_stream is not None:
+                with contextlib.suppress(Exception):
+                    ipc_stream(evt)
 
         if to_log and (
             error_detail or _allowed(self.log_level, severity, channel, summary=summary)
@@ -233,7 +244,9 @@ class Logger:
     def emit_json_hello(
         self, *, issue_id: str | None, mode: str, verbosity: str, log_level: str
     ) -> None:
-        if not self.json_enabled or self._json_fp is None:
+        ipc_stream = self._ipc_stream
+        need_evt = (self.json_enabled and self._json_fp is not None) or ipc_stream is not None
+        if not need_evt:
             return
         self._json_seq += 1
         evt = {
@@ -246,26 +259,56 @@ class Logger:
             "screen_level": str(verbosity or ""),
             "log_level": str(log_level or ""),
         }
-        with contextlib.suppress(Exception):
-            self._write_json(evt)
+        if self.json_enabled and self._json_fp is not None:
+            with contextlib.suppress(Exception):
+                self._write_json(evt)
+        if ipc_stream is not None:
+            with contextlib.suppress(Exception):
+                ipc_stream(evt)
 
     def emit_json_result(
         self, *, ok: bool, return_code: int, log_path: Path, json_path: Path | None
     ) -> None:
-        if not self.json_enabled or self._json_fp is None:
+        ipc_stream = self._ipc_stream
+        need_evt = (self.json_enabled and self._json_fp is not None) or ipc_stream is not None
+        if not need_evt:
             return
         self._json_seq += 1
         evt = {
             "type": "result",
             "seq": self._json_seq,
             "ts_mono_ms": self._now_mono_ms(),
+            "stage": self._get_stage(),
             "ok": bool(ok),
             "return_code": int(return_code),
             "log_path": str(log_path),
             "json_path": str(json_path) if json_path is not None else None,
         }
-        with contextlib.suppress(Exception):
-            self._write_json(evt)
+        if self.json_enabled and self._json_fp is not None:
+            with contextlib.suppress(Exception):
+                self._write_json(evt)
+        if ipc_stream is not None:
+            with contextlib.suppress(Exception):
+                ipc_stream(evt)
+
+    def emit_control_event(self, payload: dict[str, Any]) -> None:
+        ipc_stream = self._ipc_stream
+        need_evt = (self.json_enabled and self._json_fp is not None) or ipc_stream is not None
+        if not need_evt:
+            return
+        self._json_seq += 1
+        evt = {
+            "seq": self._json_seq,
+            "ts_mono_ms": self._now_mono_ms(),
+            "stage": self._get_stage(),
+            **payload,
+        }
+        if self.json_enabled and self._json_fp is not None:
+            with contextlib.suppress(Exception):
+                self._write_json(evt)
+        if ipc_stream is not None:
+            with contextlib.suppress(Exception):
+                ipc_stream(evt)
 
     def emit_json_failed_step_detail(self, *, stdout: str, stderr: str) -> None:
         if not self.json_enabled or self._json_fp is None:

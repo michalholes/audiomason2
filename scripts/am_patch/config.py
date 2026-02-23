@@ -151,6 +151,11 @@ class Policy:
     # IPC socket (Unix domain socket, newline-delimited JSON)
     ipc_socket_enabled: bool = True
     ipc_socket_mode: str = "patch_dir"  # patch_dir|base_dir|system_runtime
+    # Explicit socket path override (highest priority).
+    ipc_socket_path: str | None = None
+    # Socket name template (rendered using {issue} and {pid}).
+    ipc_socket_name_template: str = "am_patch_ipc_{issue}_{pid}.sock"
+    # Back-compat only. Prefer ipc_socket_name_template.
     ipc_socket_name: str = "am_patch.sock"
     ipc_socket_base_dir: str | None = None
     ipc_socket_system_runtime_dir: str | None = None

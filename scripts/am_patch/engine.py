@@ -292,7 +292,7 @@ def build_paths_and_logger(
     )
 
     ipc: IpcController | None = None
-    sock_path = resolve_socket_path(policy=policy, patch_dir=patch_dir)
+    sock_path = resolve_socket_path(policy=policy, patch_dir=patch_dir, issue_id=cli.issue_id)
     if sock_path is not None:
         ipc = IpcController(
             socket_path=sock_path,

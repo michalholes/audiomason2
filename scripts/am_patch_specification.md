@@ -973,36 +973,56 @@ The runner exposes an optional Unix domain socket control plane.
 Protocol:
 - protocol id: am_patch_ipc/1
 - transport: Unix domain socket (AF_UNIX stream)
-- framing: newline-delimited JSON (one request per line, one response per line)
+- framing: newline-delimited JSON (NDJSON)
+
+Message envelopes (mandatory):
+
+Client -> runner command:
+- {"type":"cmd","cmd":"<command>","cmd_id":"<string>","args":{...}}
+
+Runner -> client reply:
+- {"type":"reply","cmd_id":"<string>","ok":true,"data":{...}}
+- {"type":"reply","cmd_id":"<string>","ok":false,"error":{"code":"<ERR_CODE>","message":"<text>"}}
+
+Event stream (runner -> client):
+- NDJSON events identical to the runner NDJSON event model (hello/log/result)
+- control events: {"type":"control","event":"<name>", ...}
 
 Default location:
 - ipc_socket_enabled = true
 - ipc_socket_mode = patch_dir
-- ipc_socket_name = am_patch.sock
-- In patch_dir mode, the socket path is <patch_dir>/am_patch.sock.
+- ipc_socket_name_template = am_patch_ipc_{issue}_{pid}.sock
+- In patch_dir mode, the socket path is <patch_dir>/<rendered name>.
 
 Configuration keys (Policy):
 - ipc_socket_enabled: bool
 - ipc_socket_mode: patch_dir|base_dir|system_runtime
-- ipc_socket_name: filename only (no path separators)
+- ipc_socket_path: explicit path override (highest priority)
+- ipc_socket_name_template: filename template (no path separators)
 - ipc_socket_base_dir: used when mode=base_dir
 - ipc_socket_system_runtime_dir: optional override when mode=system_runtime
+
+CLI overrides:
+- --ipc-socket PATH
+- --no-ipc-socket
+- --ipc-socket-mode MODE
+- --ipc-socket-base-dir DIR
+- --ipc-socket-name-template TEMPLATE
 
 Commands (cmd field):
 - ping
 - get_state
 - cancel
-- stop_after_step (requires: step)
-- pause_after_step (requires: step)
-- pause
+- stop_after_step (args: {"step":"<STEP>"})
+- pause_after_step (args: {"step":"<STEP>"})
 - resume
-- set_verbosity (optional: verbosity, log_level)
+- set_verbosity (args: {"verbosity":"<level>","log_level":"<level>"})
 
 Semantics:
-- cancel requests immediate termination at the next safe boundary.
+- cancel requests termination at the next safe boundary.
 - stop_after_step terminates when the named step completes.
 - pause_after_step pauses the main thread when the named step completes; resume continues.
+- resume returns INVALID_STATE if the runner is not paused.
 - Priority at a boundary: cancel > stop_after_step > pause_after_step.
 
 The safe boundary definition is the emission of an OK/FAIL step token ("OK: <STEP>" or "FAIL: <STEP>").
-

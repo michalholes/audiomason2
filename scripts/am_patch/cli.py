@@ -517,8 +517,29 @@ def parse_args(argv: list[str]) -> CliArgs:
         "--override", dest="overrides", action="append", default=None, metavar="KEY=VALUE"
     )
 
-    # Phase 2: hardcoded settings must be controllable via dedicated CLI flags (plus cfg keys).
-    # These flags append KEY=VALUE into overrides to keep precedence and show-config output uniform.
+    # Phase 2: hardcoded settings must be controllable via dedicated CLI flags (incl. IPC v1).
+
+    p.add_argument("--ipc-socket", action=AppendOverride, key="ipc_socket_path", dest="overrides")
+    p.add_argument(
+        "--no-ipc-socket",
+        action=AppendOverride,
+        key="ipc_socket_enabled",
+        const_value="false",
+        dest="overrides",
+        nargs=0,
+    )
+    p.add_argument(
+        "--ipc-socket-mode", action=AppendOverride, key="ipc_socket_mode", dest="overrides"
+    )
+    p.add_argument(
+        "--ipc-socket-base-dir", action=AppendOverride, key="ipc_socket_base_dir", dest="overrides"
+    )
+    p.add_argument(
+        "--ipc-socket-name-template",
+        action=AppendOverride,
+        key="ipc_socket_name_template",
+        dest="overrides",
+    )
 
     p.add_argument(
         "--patch-dir-name", action=AppendOverride, key="patch_dir_name", dest="overrides"
