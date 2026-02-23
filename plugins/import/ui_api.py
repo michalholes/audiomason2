@@ -7,13 +7,15 @@ ASCII-only.
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 
 
 def build_router(*, engine: Any):
     try:
         from fastapi import APIRouter
-        from fastapi.responses import JSONResponse
+        from fastapi.responses import HTMLResponse, JSONResponse
+        from fastapi.staticfiles import StaticFiles
     except Exception as e:  # pragma: no cover
         raise RuntimeError("fastapi is required for import UI router") from e
 
@@ -21,6 +23,13 @@ def build_router(*, engine: Any):
     from .field_schema_validation import FieldSchemaValidationError
 
     router = APIRouter(prefix="/import/ui")
+
+    base_dir = Path(__file__).resolve().parent
+    ui_web_dir = base_dir / "ui" / "web"
+    assets_dir = ui_web_dir / "assets"
+
+    if assets_dir.is_dir():
+        router.mount("/assets", StaticFiles(directory=str(assets_dir)), name="import-ui-assets")
 
     session_start_allowed_keys = {"mode", "path", "root"}
     session_start_required_keys = {"mode", "path", "root"}
@@ -125,6 +134,26 @@ def build_router(*, engine: Any):
         except Exception as e:
             env = _exception_envelope(e)
             return JSONResponse(status_code=_status_code_for_envelope(env), content=env)
+
+    @router.get("/")
+    def ui_index():
+        idx = ui_web_dir / "index.html"
+        if not idx.is_file():
+            env = {
+                "error": {
+                    "code": "NOT_FOUND",
+                    "message": "import UI index.html is missing",
+                    "details": [
+                        {
+                            "path": "$.ui.web.index",
+                            "reason": "not_found",
+                            "meta": {"expected": str(idx)},
+                        }
+                    ],
+                }
+            }
+            return JSONResponse(status_code=404, content=env)
+        return HTMLResponse(idx.read_text(encoding="utf-8"))
 
     @router.get("/flow")
     def get_flow():

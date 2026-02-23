@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>AudioMason Import</title>
+  <link rel="stylesheet" href="/import/ui/assets/import_wizard.css" />
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="title">Import</div>
+      <div class="subtitle">Plugin-hosted UI at /import/ui/</div>
+    </div>
+
+    <div class="card">
+      <div class="cardTitle">Session</div>
+      <div class="row">
+        <label>Root</label>
+        <input id="root" value="inbox" />
+        <label>Path</label>
+        <input id="path" value="." />
+        <label>Mode</label>
+        <select id="mode">
+          <option value="">Select mode</option>
+          <option value="stage">stage</option>
+          <option value="inplace">inplace</option>
+        </select>
+        <button id="start" class="btn">Start</button>
+        <button id="reload" class="btn">Reload</button>
+      </div>
+      <div id="status" class="status"></div>
+    </div>
+
+    <div class="card">
+      <div class="cardTitle">Step</div>
+      <div id="step" class="step"></div>
+      <div class="buttonRow">
+        <button id="submit" class="btn">Submit</button>
+        <button id="startProcessing" class="btn">Start processing</button>
+      </div>
+      <div id="stepError" class="error"></div>
+    </div>
+
+    <div class="card">
+      <div class="cardTitle">SessionState</div>
+      <pre id="state" class="pre"></pre>
+    </div>
+  </div>
+
+  <script src="/import/ui/assets/import_wizard.js"></script>
+</body>
+</html>
