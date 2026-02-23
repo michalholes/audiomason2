@@ -4,9 +4,6 @@ import json
 import time
 from typing import Any
 
-from .events_socket import iter_socket_lines, job_socket_path
-from .events_store import append_jsonl_line
-
 
 def _api_jobs_events(self, job_id: str) -> None:
     job = self.app.queue.get_job(job_id)
@@ -107,36 +104,7 @@ def _api_jobs_events(self, job_id: str) -> None:
                 send_end("job_not_found")
                 return
 
-            if status == "running":
-                sock = job_socket_path(job_id)
-                streamed_any = False
-                for line in iter_socket_lines(sock, connect_timeout_s=10.0, retry_sleep_s=0.2):
-                    streamed_any = True
-                    append_jsonl_line(jsonl_path, line)
-                    send_line(f"data: {line}\n\n")
-                    last_growth = time.monotonic()
-                    _maybe_ping()
-                    status = _job_status() or status
-                    if status != "running":
-                        break
-
-                if streamed_any:
-                    try:
-                        offset = jsonl_path.stat().st_size
-                    except Exception:
-                        offset = 0
-
-                status = _job_status() or status
-                if status != "running":
-                    send_end("job_completed", status=str(status))
-                    return
-
-                # Socket stream failed; fall back to tailing the jsonl store.
-                if not jsonl_path.exists():
-                    time.sleep(0.2)
-                    continue
-
-                _tail_once()
+            if status == "running" and not jsonl_path.exists():
                 _maybe_ping()
                 time.sleep(0.2)
                 continue

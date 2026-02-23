@@ -24,6 +24,11 @@ class JobRecord:
     return_code: int | None = None
     error: str | None = None
 
+    # Cancel metadata (Variant 2)
+    cancel_requested_utc: str | None = None
+    cancel_ack_utc: str | None = None
+    cancel_source: str | None = None
+
     def to_json(self) -> dict[str, Any]:
         return asdict(self)
 

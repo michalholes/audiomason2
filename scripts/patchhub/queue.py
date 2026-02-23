@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
+from .event_pump import start_event_pump
 from .events_socket import job_socket_path, send_cancel
 from .models import JobRecord
 from .runner_exec import RunnerExecutor
@@ -151,18 +152,21 @@ class JobQueue:
                 self._changed()
                 return True
             if job.status == "running":
+                now = utc_now()
+                if job.cancel_requested_utc is None:
+                    job.cancel_requested_utc = now
+
                 sock_ok = send_cancel(job_socket_path(job_id))
                 if sock_ok:
-                    job.status = "canceled"
-                    job.ended_utc = utc_now()
+                    job.cancel_ack_utc = utc_now()
+                    job.cancel_source = "socket"
                     self._persist(job)
                     self._changed()
                     return True
 
                 ok = self._executor.terminate()
                 if ok:
-                    job.status = "canceled"
-                    job.ended_utc = utc_now()
+                    job.cancel_source = "terminate"
                     self._persist(job)
                     self._changed()
                 return ok
@@ -227,6 +231,14 @@ class JobQueue:
             job_dir = self._job_dir(job_id)
             runner_log = job_dir / "runner.log"
 
+            def _job_jsonl_path(j: JobRecord, job_dir: Path = job_dir) -> Path:
+                if j.mode in ("finalize_live", "finalize_workspace"):
+                    return job_dir / "am_patch_finalize.jsonl"
+                issue_s = str(j.issue_id or "")
+                if issue_s.isdigit():
+                    return job_dir / ("am_patch_issue_" + issue_s + ".jsonl")
+                return job_dir / "am_patch_finalize.jsonl"
+
             try:
                 effective_cmd = _inject_web_overrides(job.canonical_command, job_id)
 
@@ -237,6 +249,8 @@ class JobQueue:
                 if sock_path.exists() or sock_path.is_symlink():
                     with contextlib.suppress(Exception):
                         sock_path.unlink()
+
+                start_event_pump(job_id, str(sock_path), _job_jsonl_path(job))
 
                 res = self._executor.run(effective_cmd, cwd=self._repo_root, log_path=runner_log)
                 with self._mu:
