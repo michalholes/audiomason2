@@ -1,9 +1,10 @@
 [server]
 host = "0.0.0.0"
 port = 8099
+backend = "sync" # "sync" (default) or "asgi"
 
 [meta]
-version = "1.2.10"
+version = "1.3.0"
 
 [runner]
 command = ["python3", "scripts/am_patch.py"]

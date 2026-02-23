@@ -142,6 +142,14 @@ The loader (config.py) requires the following keys to exist:
 
 UI/autofill have defaults (see config.py).
 
+5.2.1 Optional keys (server)
+
+- [server] backend (string)
+  - "sync" (default): legacy synchronous backend (ThreadingHTTPServer)
+  - "asgi": async backend (FastAPI + uvicorn)
+
+Default behavior MUST remain unchanged (backend="sync").
+
 5.3 Key semantics used by API
 - cfg.meta.version: shown in UI and /api/config
 - cfg.runner.command: runner prefix argv (default ["python3","scripts/am_patch.py"])
