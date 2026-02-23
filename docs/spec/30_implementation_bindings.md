@@ -1,6 +1,6 @@
 # AudioMason2 - Implementation Bindings Specification (Authoritative)
 
-Specification Version: 1.1.20
+Specification Version: 1.1.22
 
 This document contains the LAYOUT layer of the AudioMason2 specification.
 It defines normative file locations, on-disk artifacts, and other implementation bindings.

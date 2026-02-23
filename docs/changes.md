@@ -1,3 +1,10 @@
+## 2026-02-23T19:00:00+01:00
+
+-   spec: Make layered documents under docs/spec/ the only authoritative specification.
+-   spec: Reduce docs/specification.md to a non-normative overview stub.
+-   spec: Bump specification version to 1.1.22.
+
+
 ## 2026-02-23T17:00:00+01:00
 
 -   Issue 237: Import UI session state now includes effective_model, and the web wizard renders steps from the session snapshot after session start.

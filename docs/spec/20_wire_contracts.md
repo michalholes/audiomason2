@@ -1,6 +1,6 @@
 # AudioMason2 - Wire Contracts Specification (Authoritative)
 
-Specification Version: 1.1.20
+Specification Version: 1.1.22
 
 This document contains the WIRE layer of the AudioMason2 specification.
 It defines HTTP routes and JSON contracts between renderers/clients and the backend.

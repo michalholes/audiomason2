@@ -1,8 +1,18 @@
 # AudioMason2 - Specification Index (Authoritative)
 
-Specification Version: 1.1.20
+Specification Version: 1.1.22
 
 AudioMason2 maintains a layered specification to improve auditability without losing detail.
+
+Normative authority:
+- The only authoritative specification is the layered set under docs/spec/.
+- docs/specification.md is an overview stub and is not normative.
+
+Specification versioning and change log:
+- Start at version 1.0.0.
+- Every change to the specification MUST increment the patch number by +1.
+- Every change delivered by a patch MUST be recorded in docs/changes.md.
+- Each change entry in docs/changes.md MUST start with an ISO 8601 timestamp.
 
 Layers:
 - ARCH: docs/spec/10_architecture.md
