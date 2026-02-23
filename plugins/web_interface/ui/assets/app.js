@@ -2081,6 +2081,7 @@ async function renderImportWizard(content, notify) { // eslint-disable-line no-u
   const rootInp = el("input", { placeholder: "root (e.g. inbox)", value: "inbox" });
   const pathInp = el("input", { placeholder: "path (relative)", value: "." });
   const modeSel = el("select");
+  modeSel.appendChild(el("option", { value: "", text: "Select mode" }));
   ["stage", "inplace"].forEach((v) => modeSel.appendChild(el("option", { value: v, text: v })));
   const startBtn = el("button", { class: "btn", text: "Start session" });
   const reloadBtn = el("button", { class: "btn", text: "Reload" });
@@ -2232,7 +2233,15 @@ async function renderImportWizard(content, notify) { // eslint-disable-line no-u
 
   startBtn.addEventListener("click", async () => {
     try {
-      const body = { root: String(rootInp.value || ""), path: String(pathInp.value || ""), mode: String(modeSel.value || "stage") };
+      const selectedMode = String(modeSel.value || "").trim();
+      if (!selectedMode) {
+        throw new Error("Mode must be explicitly selected.");
+      }
+      const body = {
+        root: String(rootInp.value || ""),
+        path: String(pathInp.value || ""),
+        mode: selectedMode,
+      };
       const r = await API.sendJson("POST", "/import/ui/session/start", body);
       sessionId = r && typeof r.session_id === "string" ? r.session_id : null;
       if (!sessionId) throw new Error("missing session_id");
