@@ -26,18 +26,22 @@ from audiomason.core.logging import (
 
 from .cli_renderer import load_renderer_config, run_launcher
 from .editor import (
-    edit_catalog_interactive,
     edit_flow_interactive,
     preview_effective_model,
-    save_catalog_validated,
-    save_flow_validated,
     show_catalog,
     show_flow,
     validate_catalog,
     validate_flow,
 )
+from .editor_storage import load_flow_config, save_flow_config
 from .engine import ImportWizardEngine
 from .errors import ImportWizardError
+from .wizard_editor import (
+    edit_wizard_definition_interactive,
+    save_wizard_definition_validated,
+    show_wizard_definition,
+    validate_wizard_definition,
+)
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -68,6 +72,13 @@ def _build_parser() -> argparse.ArgumentParser:
     finalize = wiz_sub.add_parser("finalize", add_help=False)
     finalize.add_argument("session_id")
 
+    definition = wiz_sub.add_parser("definition", add_help=False)
+    definition_sub = definition.add_subparsers(dest="def_cmd")
+    definition_sub.add_parser("show", add_help=False)
+    definition_sub.add_parser("edit", add_help=False)
+    definition_sub.add_parser("validate", add_help=False)
+    definition_sub.add_parser("save", add_help=False)
+
     ed = sub.add_parser("editor", add_help=False)
     ed_sub = ed.add_subparsers(dest="ed_area")
 
@@ -84,6 +95,27 @@ def _build_parser() -> argparse.ArgumentParser:
     fl_sub.add_parser("edit", add_help=False)
     fl_sub.add_parser("validate", add_help=False)
     fl_sub.add_parser("save", add_help=False)
+
+    fc = ed_sub.add_parser("flow-config", add_help=False)
+    fc_sub = fc.add_subparsers(dest="ed_cmd")
+    fc_sub.add_parser("show", add_help=False)
+    fc_sub.add_parser("edit", add_help=False)
+    fc_sub.add_parser("validate", add_help=False)
+    fc_sub.add_parser("save", add_help=False)
+
+    wd = ed_sub.add_parser("wizard-definition", add_help=False)
+    wd_sub = wd.add_subparsers(dest="ed_cmd")
+    wd_sub.add_parser("show", add_help=False)
+    wd_sub.add_parser("edit", add_help=False)
+    wd_sub.add_parser("validate", add_help=False)
+    wd_sub.add_parser("save", add_help=False)
+
+    wiz_alias = ed_sub.add_parser("wizard", add_help=False)
+    wiz_alias_sub = wiz_alias.add_subparsers(dest="ed_cmd")
+    wiz_alias_sub.add_parser("show", add_help=False)
+    wiz_alias_sub.add_parser("edit", add_help=False)
+    wiz_alias_sub.add_parser("validate", add_help=False)
+    wiz_alias_sub.add_parser("save", add_help=False)
 
     em = ed_sub.add_parser("effective-model", add_help=False)
     em_sub = em.add_subparsers(dest="ed_cmd")
@@ -120,6 +152,10 @@ def _print_help() -> None:
     print("  audiomason import wizard step <session_id> <step_id> --json <payload>")
     print("  audiomason import wizard plan <session_id>")
     print("  audiomason import wizard finalize <session_id>")
+    print("  audiomason import wizard definition show")
+    print("  audiomason import wizard definition edit")
+    print("  audiomason import wizard definition validate")
+    print("  audiomason import wizard definition save")
     print("  audiomason import wizard help")
     print("")
     print("  audiomason import editor catalog show")
@@ -130,6 +166,18 @@ def _print_help() -> None:
     print("  audiomason import editor flow edit")
     print("  audiomason import editor flow validate")
     print("  audiomason import editor flow save")
+    print("  audiomason import editor flow-config show")
+    print("  audiomason import editor flow-config edit")
+    print("  audiomason import editor flow-config validate")
+    print("  audiomason import editor flow-config save")
+    print("  audiomason import editor wizard-definition show")
+    print("  audiomason import editor wizard-definition edit")
+    print("  audiomason import editor wizard-definition validate")
+    print("  audiomason import editor wizard-definition save")
+    print("  audiomason import editor wizard show")
+    print("  audiomason import editor wizard edit")
+    print("  audiomason import editor wizard validate")
+    print("  audiomason import editor wizard save")
     print("  audiomason import editor effective-model preview")
     print("")
     print("Launcher (CLI renderer):")
@@ -275,18 +323,18 @@ def _run_legacy(argv: list[str], *, engine: ImportWizardEngine) -> int:
                     if not res.ok:
                         raise SystemExit(1) from None
                     return 0
-                if ns.ed_cmd == "save":
-                    res = save_catalog_validated(engine)
-                    _dump(res.data)
-                    if not res.ok:
-                        raise SystemExit(1) from None
-                    return 0
-                if ns.ed_cmd == "edit":
-                    res = edit_catalog_interactive(engine)
-                    _dump(res.data)
-                    if not res.ok:
-                        raise SystemExit(1) from None
-                    return 0
+                if ns.ed_cmd in {"edit", "save"}:
+                    env = _error_envelope(
+                        code="immutable_model",
+                        message_id="cli.import.editor.catalog_immutable",
+                        default_message=(
+                            "Catalog is immutable. Use 'audiomason import editor "
+                            "flow-config ...' for FlowConfig tuning."
+                        ),
+                        details={"area": "catalog", "cmd": ns.ed_cmd},
+                    )
+                    _dump(env)
+                    raise SystemExit(1) from None
 
             if ns.ed_area == "flow":
                 if ns.ed_cmd == "show":
@@ -299,23 +347,74 @@ def _run_legacy(argv: list[str], *, engine: ImportWizardEngine) -> int:
                     if not res.ok:
                         raise SystemExit(1) from None
                     return 0
+                if ns.ed_cmd in {"edit", "save"}:
+                    env = _error_envelope(
+                        code="immutable_model",
+                        message_id="cli.import.editor.flow_immutable",
+                        default_message=(
+                            "Flow is immutable. Use 'audiomason import editor "
+                            "flow-config ...' for FlowConfig tuning."
+                        ),
+                        details={"area": "flow", "cmd": ns.ed_cmd},
+                    )
+                    _dump(env)
+                    raise SystemExit(1) from None
+
+            if ns.ed_area == "flow-config":
+                if ns.ed_cmd == "show":
+                    cfg = load_flow_config(engine.get_file_service())
+                    _dump(cfg)
+                    return 0
+                if ns.ed_cmd == "validate":
+                    cfg = load_flow_config(engine.get_file_service())
+                    result = engine.validate_flow_config(cfg)
+                    _dump(result)
+                    if not bool(result.get("ok")):
+                        raise SystemExit(1) from None
+                    return 0
                 if ns.ed_cmd == "save":
-                    res = save_flow_validated(engine)
-                    _dump(res.data)
-                    if not res.ok:
+                    cfg = load_flow_config(engine.get_file_service())
+                    result = engine.validate_flow_config(cfg)
+                    _dump(result)
+                    if not bool(result.get("ok")):
+                        raise SystemExit(1) from None
+                    save_flow_config(engine.get_file_service(), cfg)
+                    return 0
+                if ns.ed_cmd == "edit":
+                    flow_res = edit_flow_interactive(engine)
+                    _dump(flow_res.data)
+                    if not flow_res.ok:
+                        raise SystemExit(1) from None
+                    return 0
+
+            if ns.ed_area in {"wizard-definition", "wizard"}:
+                if ns.ed_cmd == "show":
+                    wiz_res = show_wizard_definition(engine)
+                    _dump(wiz_res.data)
+                    return 0
+                if ns.ed_cmd == "validate":
+                    wiz_res = validate_wizard_definition(engine)
+                    _dump(wiz_res.data)
+                    if not wiz_res.ok:
+                        raise SystemExit(1) from None
+                    return 0
+                if ns.ed_cmd == "save":
+                    wiz_res = save_wizard_definition_validated(engine)
+                    _dump(wiz_res.data)
+                    if not wiz_res.ok:
                         raise SystemExit(1) from None
                     return 0
                 if ns.ed_cmd == "edit":
-                    res = edit_flow_interactive(engine)
-                    _dump(res.data)
-                    if not res.ok:
+                    wiz_res = edit_wizard_definition_interactive(engine)
+                    _dump(wiz_res.data)
+                    if not wiz_res.ok:
                         raise SystemExit(1) from None
                     return 0
 
             if ns.ed_area == "effective-model" and ns.ed_cmd == "preview":
-                res = preview_effective_model(engine)
-                _dump(res.data)
-                if not res.ok:
+                em_res = preview_effective_model(engine)
+                _dump(em_res.data)
+                if not em_res.ok:
                     raise SystemExit(1) from None
                 return 0
 
@@ -387,6 +486,33 @@ def _run_legacy(argv: list[str], *, engine: ImportWizardEngine) -> int:
             result = engine.finalize(ns.session_id)
             _dump(result)
             return 0
+
+        if ns.wiz_cmd == "definition":
+            if getattr(ns, "def_cmd", None) is None:
+                _print_help()
+                raise SystemExit(1)
+            if ns.def_cmd == "show":
+                wiz_res = show_wizard_definition(engine)
+                _dump(wiz_res.data)
+                return 0
+            if ns.def_cmd == "validate":
+                wiz_res = validate_wizard_definition(engine)
+                _dump(wiz_res.data)
+                if not wiz_res.ok:
+                    raise SystemExit(1) from None
+                return 0
+            if ns.def_cmd == "save":
+                wiz_res = save_wizard_definition_validated(engine)
+                _dump(wiz_res.data)
+                if not wiz_res.ok:
+                    raise SystemExit(1) from None
+                return 0
+            if ns.def_cmd == "edit":
+                wiz_res = edit_wizard_definition_interactive(engine)
+                _dump(wiz_res.data)
+                if not wiz_res.ok:
+                    raise SystemExit(1) from None
+                return 0
 
         _print_help()
         raise SystemExit(1)

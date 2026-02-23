@@ -1,6 +1,6 @@
 # AudioMason2 - Project Specification (Overview)
 
-Specification Version: 1.1.22
+Specification Version: 1.1.23
 
 This file is an overview entrypoint only.
 
@@ -15,3 +15,6 @@ Normative authority:
 This file is non-normative. If there is any conflict, docs/spec/00_index.md and
 the layer precedence rules apply.
 
+Notes:
+- Issue 238 extends the import CLI editor with explicit FlowConfig and
+  WizardDefinition editor areas.

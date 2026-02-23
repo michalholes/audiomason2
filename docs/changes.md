@@ -1,3 +1,10 @@
+## 2026-02-23T21:45:00+01:00
+
+-   Issue 238: Import CLI editor now exposes explicit FlowConfig and WizardDefinition editor areas.
+-   Issue 238: Legacy editor catalog/flow edit/save commands remain callable but fail explicitly as immutable.
+-   spec: Bump specification version to 1.1.23.
+
+
 ## 2026-02-23T19:00:00+01:00
 
 -   spec: Make layered documents under docs/spec/ the only authoritative specification.
