@@ -2074,192 +2074,12 @@ async function renderRootBrowser(content, notify) {
   return root;
 }
 
-async function renderImportWizard(content, notify) { // eslint-disable-line no-unused-vars
-  const nerr = (e) => { if (typeof notify === "function") notify(String(e)); };
-  const root = el("div", { class: "importWizard" });
-  const form = el("div", { class: "formRow" });
-  const rootInp = el("input", { placeholder: "root (e.g. inbox)", value: "inbox" });
-  const pathInp = el("input", { placeholder: "path (relative)", value: "." });
-  const modeSel = el("select");
-  modeSel.appendChild(el("option", { value: "", text: "Select mode" }));
-  ["stage", "inplace"].forEach((v) => modeSel.appendChild(el("option", { value: v, text: v })));
-  const startBtn = el("button", { class: "btn", text: "Start session" });
-  const reloadBtn = el("button", { class: "btn", text: "Reload" });
-  const outBox = el("div", { class: "hint" });
-  const stepBox = el("div", { class: "cardBody" });
-  const statePre = el("pre", { class: "pre" });
-  form.appendChild(rootInp);
-  form.appendChild(pathInp);
-  form.appendChild(modeSel);
-  form.appendChild(startBtn);
-  form.appendChild(reloadBtn);
-  root.appendChild(el("div", { class: "subTitle", text: "Import" }));
-  root.appendChild(form);
-  root.appendChild(outBox);
-  root.appendChild(stepBox);
-  root.appendChild(el("div", { class: "subTitle", text: "SessionState" }));
-  root.appendChild(statePre);
-
-  let sessionId = null;
-  let flow = null;
-  let state = null;
-  let importApiAvailable = true;
-
-  const importApiMissingMsg = "Import UI API is not available. The import plugin may not be loaded.";
-
-  const loadFlow = async () => {
-    try {
-      flow = await API.getJson("/import/ui/flow");
-      importApiAvailable = true;
-    } catch (e) {
-      importApiAvailable = false;
-      flow = null;
-    }
-  };
-  const loadState = async () => {
-    if (!sessionId) return;
-    const sid = encodeURIComponent(sessionId);
-    state = await API.getJson(`/import/ui/session/${sid}/state`);
-  };
-  const getStep = (stepId) => {
-    const steps = flow && Array.isArray(flow.steps) ? flow.steps : [];
-    return steps.find((s) => s && s.step_id === stepId) || null;
-  };
-  const getAnswer = (name) => {
-    const ans = state && typeof state.answers === "object" ? state.answers : null;
-    if (ans && name in ans) return ans[name];
-    const inp = state && typeof state.inputs === "object" ? state.inputs : null;
-    if (inp && name in inp) return inp[name];
-    return "";
-  };
-
-  const renderField = (fld, stepId) => {
-    const name = String(fld.name || "");
-    const ftype = String(fld.type || "text");
-    const row = el("div", { class: "statRow" });
-    row.appendChild(el("div", { class: "statLabel", text: name }));
-    let ctrl = el("input", { value: String(getAnswer(name) ?? "") });
-    if (ftype === "toggle" || ftype === "confirm") {
-      ctrl = el("input", { type: "checkbox" });
-      ctrl.checked = !!getAnswer(name);
-    } else if (ftype === "number") {
-      ctrl = el("input", { type: "number", value: String(getAnswer(name) ?? "") });
-      const c = fld.constraints && typeof fld.constraints === "object" ? fld.constraints : null;
-      if (c && typeof c.min === "number") ctrl.min = String(c.min);
-      if (c && typeof c.max === "number") ctrl.max = String(c.max);
-    } else if (ftype === "select") {
-      ctrl = el("select");
-      const items = Array.isArray(fld.items) ? fld.items : (Array.isArray(fld.options) ? fld.options : []);
-      items.forEach((it) => {
-        const val = it && typeof it === "object" ? String(it.value ?? it.item_id ?? "") : String(it);
-        const txt = it && typeof it === "object" ? String(it.label ?? it.display_label ?? val) : val;
-        ctrl.appendChild(el("option", { value: val, text: txt }));
-      });
-      const cur = getAnswer(name);
-      if (cur !== undefined && cur !== null) ctrl.value = String(cur);
-    } else if (ftype === "table_edit") {
-      ctrl = el("textarea", { rows: "8" });
-      const v = getAnswer(name);
-      ctrl.value = typeof v === "string" ? v : JSON.stringify(v ?? {}, null, 2);
-    }
-    ctrl.dataset.stepId = name;
-    ctrl.dataset.step = stepId;
-    row.appendChild(ctrl);
-    return row;
-  };
-
-  const collectPayload = (stepId) => {
-    const payload = {};
-    stepBox.querySelectorAll("input,select,textarea").forEach((n) => {
-      if (n.dataset.step !== stepId) return;
-      const key = n.dataset.stepId;
-      if (!key) return;
-      if (n.tagName.toLowerCase() === "input" && n.getAttribute("type") === "checkbox") {
-        payload[key] = !!n.checked;
-      } else if (n.tagName.toLowerCase() === "input" && n.getAttribute("type") === "number") {
-        payload[key] = n.value === "" ? null : Number(n.value);
-      } else if (n.tagName.toLowerCase() === "textarea") {
-        const raw = String(n.value || "");
-        try { payload[key] = JSON.parse(raw); } catch { payload[key] = raw; }
-      } else payload[key] = n.value;
-    });
-    return payload;
-  };
-
-  const refresh = async () => {
-    clear(stepBox);
-    outBox.textContent = "";
-    statePre.textContent = "";
-    try {
-      if (!flow) await loadFlow();
-      if (!importApiAvailable) {
-        outBox.textContent = importApiMissingMsg;
-        return;
-      }
-      await loadState();
-      if (!state) {
-        outBox.textContent = "No active session.";
-        return;
-      }
-      const stepId = String(state.current_step_id || "");
-      const step = getStep(stepId);
-      stepBox.appendChild(el("div", { class: "subTitle", text: step ? step.title : stepId }));
-      const fields = step && Array.isArray(step.fields) ? step.fields : [];
-      fields.forEach((f) => stepBox.appendChild(renderField(f, stepId)));
-      const submitBtn = el("button", { class: "btn", text: "Submit" });
-      const procBtn = el("button", { class: "btn", text: "Start processing" });
-      stepBox.appendChild(el("div", { class: "buttonRow" }, [submitBtn, procBtn]));
-      submitBtn.addEventListener("click", async () => {
-        try {
-          const sid = encodeURIComponent(sessionId);
-          const pid = encodeURIComponent(stepId);
-          await API.sendJson("POST", `/import/ui/session/${sid}/step/${pid}`, collectPayload(stepId));
-          await refresh();
-        } catch (e) { nerr(e); }
-      });
-      procBtn.addEventListener("click", async () => {
-        try {
-          const sid = encodeURIComponent(sessionId);
-          const r = await API.sendJson("POST", `/import/ui/session/${sid}/start_processing`, {});
-          const ids = r && Array.isArray(r.job_ids) ? r.job_ids.join(", ") : "";
-          outBox.textContent = `job_ids: ${ids}`;
-        } catch (e) { nerr(e); }
-      });
-      statePre.textContent = JSON.stringify(state, null, 2);
-    } catch (e) {
-      outBox.textContent = String(e);
-    }
-  };
-
-  startBtn.addEventListener("click", async () => {
-    try {
-      const selectedMode = String(modeSel.value || "").trim();
-      if (!selectedMode) {
-        throw new Error("Mode must be explicitly selected.");
-      }
-      const body = {
-        root: String(rootInp.value || ""),
-        path: String(pathInp.value || ""),
-        mode: selectedMode,
-      };
-      const r = await API.sendJson("POST", "/import/ui/session/start", body);
-      sessionId = r && typeof r.session_id === "string" ? r.session_id : null;
-      if (!sessionId) throw new Error("missing session_id");
-      await refresh();
-    } catch (e) { nerr(e); }
-  });
-  reloadBtn.addEventListener("click", () => refresh().catch(nerr));
-
-  await refresh();
-  return root;
-}
-
 const CONTENT_RENDERERS = {
   stat_list: renderStatList, table: renderTable, log_stream: renderLogStream,
   js_error_feed: renderJsErrorFeed, ui_debug_feed: renderUiDebugFeed, button_row: renderButtonRow,
   json_editor: renderJsonEditor, yaml_editor: renderYamlEditor, plugin_manager: renderPluginManager,
   stage_manager: renderStageManager, wizard_manager: renderWizardManager, root_browser: renderRootBrowser,
-  am_config: renderAmConfig, jobs_log_viewer: renderJobsLogViewer, import_wizard: renderImportWizard,
+  am_config: renderAmConfig, jobs_log_viewer: renderJobsLogViewer,
 };
 
 async function renderContent(content, notify) {
@@ -2358,6 +2178,10 @@ async function loadNav() {
       const a = el("a", { class: "navItem", href: item.route, text: item.title });
       a.addEventListener("click", (ev) => {
         ev.preventDefault();
+        if (item && item.route === "/import") {
+          window.location = "/import/ui/";
+          return;
+        }
         history.pushState({}, "", item.route);
         renderRoute();
       });
