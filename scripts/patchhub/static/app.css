@@ -126,6 +126,9 @@ body.dragging .drop-overlay { display: flex; }
 .btn.primary:hover { filter: brightness(1.07); }
 .btn:hover { filter: brightness(1.05); }
 
+.btn:disabled { opacity: 0.55; cursor: not-allowed; filter: none; }
+.btn.btn-danger:disabled { opacity: 0.55; cursor: not-allowed; filter: none; }
+
 input, select, textarea { font-size: 15px; padding: 7px 8px; border-radius: 10px; border: 1px solid #1d2b50; background: #0b1324; color: #e6edf3; }
 input::placeholder { color: #6f7f99; }
 

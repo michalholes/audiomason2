@@ -663,10 +663,10 @@ Output (success):
 Parsing rules (command_parse.py):
 - shlex.split(raw)
 - must contain "scripts/am_patch.py" as an argv element
-- supports flags in rest:
-  -f => finalize_live (rest must be exactly ["-f"] after filtering)
-  -w => finalize_workspace (rest must be exactly ["-w"] after filtering)
-  -l => rerun_latest (rest must be exactly ["-l"] after filtering)
+- supports finalize/rerun flags in rest (combinations are rejected):
+  -f MESSAGE => finalize_live (MESSAGE is required; stored as commit_message)
+  -w ISSUE_ID => finalize_workspace (ISSUE_ID is required; digits only)
+  -l => rerun_latest (no extra args)
 - patch mode requires exactly 3 args after scripts/am_patch.py:
   ISSUE_ID (digits), commit message (non-empty), PATCH (non-empty)
 
@@ -687,7 +687,9 @@ Behavior:
   - canonical argv from parsed command is used
   - missing fields may be filled from body fields as fallback
 - If raw_command is absent:
-  - finalize/rerun modes ignore issue_id/commit/patch and build canonical from runner_prefix
+  - finalize_live requires commit_message and builds: runner_prefix + ['-f', commit_message]
+  - finalize_workspace requires issue_id (digits) and builds: runner_prefix + ['-w', issue_id]
+  - rerun_latest builds: runner_prefix + ['-l']
   - patch/repair requires commit_message and patch_path
   - if issue_id missing, PatchHub auto-allocates it (see Section 11)
 

@@ -136,7 +136,15 @@ def api_jobs_enqueue(self, body: dict[str, Any]) -> tuple[int, bytes]:
         commit_message = parsed.commit_message or commit_message
         patch_path = parsed.patch_path or patch_path
     else:
-        if mode in ("finalize_live", "finalize_workspace", "rerun_latest"):
+        if mode == "finalize_live":
+            if not commit_message:
+                return _err("Missing finalize_live message", status=400)
+            canonical = build_canonical_command(runner_prefix, mode, "", commit_message, "")
+        elif mode == "finalize_workspace":
+            if not issue_id or not issue_id.isdigit():
+                return _err("Missing/invalid issue_id", status=400)
+            canonical = build_canonical_command(runner_prefix, mode, issue_id, "", "")
+        elif mode == "rerun_latest":
             canonical = build_canonical_command(runner_prefix, mode, "", "", "")
         else:
             if not issue_id:

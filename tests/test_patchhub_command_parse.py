@@ -20,9 +20,10 @@ class TestCommandParse(unittest.TestCase):
         self.assertEqual(p.patch_path, "patches/x.zip")
 
     def test_parse_finalize(self) -> None:
-        c = "python3 scripts/am_patch.py -f"
+        c = 'python3 scripts/am_patch.py -f "Issue #1000: finalize"'
         p = parse_runner_command(c)
         self.assertEqual(p.mode, "finalize_live")
+        self.assertEqual(p.commit_message, "Issue #1000: finalize")
 
     def test_missing_runner(self) -> None:
         with self.assertRaises(CommandParseError):

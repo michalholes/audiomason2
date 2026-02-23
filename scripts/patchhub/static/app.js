@@ -1079,10 +1079,12 @@ function refreshJobs() {
 
     if (mode === "finalize_live") {
       argv.push("-f");
+      argv.push(String(commitMsg || ""));
       return argv;
     }
     if (mode === "finalize_workspace") {
       argv.push("-w");
+      argv.push(String(issueId || ""));
       return argv;
     }
     if (mode === "rerun_latest") {
@@ -1096,13 +1098,18 @@ function refreshJobs() {
     return argv;
   }
 
-  function setStartFormEnabled(enabled) {
-    el("issueId").disabled = !enabled;
-    el("commitMsg").disabled = !enabled;
-    el("patchPath").disabled = !enabled;
-    var browse = el("browsePatch");
-    if (browse) browse.disabled = !enabled;
-  }
+  
+function setStartFormState(state) {
+  var issueEnabled = !!(state && state.issue_id);
+  var msgEnabled = !!(state && state.commit_message);
+  var patchEnabled = !!(state && state.patch_path);
+
+  el("issueId").disabled = !issueEnabled;
+  el("commitMsg").disabled = !msgEnabled;
+  el("patchPath").disabled = !patchEnabled;
+  var browse = el("browsePatch");
+  if (browse) browse.disabled = !patchEnabled;
+}
 
   function validateAndPreview() {
     var mode = String(el("mode").value || "patch");
@@ -1113,10 +1120,22 @@ function refreshJobs() {
 
     var raw = getRawCommand();
 
-    var needsFields = (mode === "patch" || mode === "repair");
-    setStartFormEnabled(needsFields);
 
-    var ok = true;
+var modeRules = null;
+if (mode === "patch" || mode === "repair") {
+  modeRules = { issue_id: true, commit_message: true, patch_path: true };
+} else if (mode === "finalize_live") {
+  modeRules = { issue_id: false, commit_message: true, patch_path: false };
+} else if (mode === "finalize_workspace") {
+  modeRules = { issue_id: true, commit_message: false, patch_path: false };
+} else if (mode === "rerun_latest") {
+  modeRules = { issue_id: false, commit_message: false, patch_path: false };
+} else {
+  modeRules = { issue_id: true, commit_message: true, patch_path: true };
+}
+setStartFormState(modeRules);
+
+var ok = true;
 
     var canonical = null;
     var preview = null;
@@ -1151,21 +1170,27 @@ function refreshJobs() {
           parse_status: parseInFlight ? "parsing" : "needs_parse"
         };
       }
-    } else {
-      if (needsFields) {
-        ok = !!commitMsg && !!patchPath;
-      }
 
-      canonical = computeCanonicalPreview(mode, issueId, commitMsg, patchPath);
-      preview = {
-        mode: mode,
-        issue_id: issueId,
-        commit_message: commitMsg,
-        patch_path: patchPath,
-        canonical_argv: canonical
-      };
-    }
+} else {
+  if (mode === "patch" || mode === "repair") {
+    ok = !!commitMsg && !!patchPath;
+  } else if (mode === "finalize_live") {
+    ok = !!commitMsg;
+  } else if (mode === "finalize_workspace") {
+    ok = !!issueId && (/^[0-9]+$/.test(issueId));
+  } else if (mode === "rerun_latest") {
+    ok = true;
+  }
 
+  canonical = computeCanonicalPreview(mode, issueId, commitMsg, patchPath);
+  preview = {
+    mode: mode,
+    issue_id: issueId,
+    commit_message: commitMsg,
+    patch_path: patchPath,
+    canonical_argv: canonical
+  };
+}
     setPre("previewRight", preview);
     el("enqueueBtn").disabled = !ok;
 
@@ -1173,10 +1198,20 @@ function refreshJobs() {
     if (hint2) {
       if (raw) {
         hint2.textContent = "";
-      } else {
-        hint2.textContent = ok ? "" : "missing fields";
-      }
-    }
+
+} else {
+  if (ok) {
+    hint2.textContent = "";
+  } else if (mode === "finalize_live") {
+    hint2.textContent = "missing message";
+  } else if (mode === "finalize_workspace") {
+    hint2.textContent = "missing issue id";
+  } else if (mode === "patch" || mode === "repair") {
+    hint2.textContent = "missing commit message or patch path";
+  } else {
+    hint2.textContent = "missing fields";
+  }
+}    }
   }
 
   function enqueue() {
@@ -1188,11 +1223,16 @@ function refreshJobs() {
 
     setUiStatus("enqueue: started mode=" + mode);
 
-    if (mode === "patch" || mode === "repair") {
-      body.issue_id = String(el("issueId").value || "").trim();
-      body.commit_message = String(el("commitMsg").value || "").trim();
-      body.patch_path = normalizePatchPath(String(el("patchPath").value || "").trim());
-    }
+
+if (mode === "patch" || mode === "repair") {
+  body.issue_id = String(el("issueId").value || "").trim();
+  body.commit_message = String(el("commitMsg").value || "").trim();
+  body.patch_path = normalizePatchPath(String(el("patchPath").value || "").trim());
+} else if (mode === "finalize_live") {
+  body.commit_message = String(el("commitMsg").value || "").trim();
+} else if (mode === "finalize_workspace") {
+  body.issue_id = String(el("issueId").value || "").trim();
+}
 
     apiPost("/api/jobs/enqueue", body).then(function (r) {
       pushApiStatus(r);

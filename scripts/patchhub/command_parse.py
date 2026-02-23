@@ -42,29 +42,56 @@ def parse_runner_command(raw: str) -> ParsedCommand:
     rest = argv[idx + 1 :]
 
     mode: JobMode = "patch"
-    if "-f" in rest:
+    flag_f = "-f" in rest
+    flag_w = "-w" in rest
+    flag_l = "-l" in rest
+    flag_count = int(flag_f) + int(flag_w) + int(flag_l)
+    if flag_count > 1:
+        raise CommandParseError("Conflicting finalize/rerun flags")
+
+    if flag_f:
         mode = "finalize_live"
         rest = [a for a in rest if a != "-f"]
-    if "-w" in rest:
+        if len(rest) != 1:
+            raise CommandParseError("finalize_live requires exactly one MESSAGE argument")
+        message = rest[0]
+        if not message:
+            raise CommandParseError("MESSAGE is empty")
+        return ParsedCommand(
+            mode=mode,
+            issue_id="",
+            commit_message=message,
+            patch_path="",
+            canonical_argv=prefix + ["-f", message],
+        )
+
+    if flag_w:
         mode = "finalize_workspace"
         rest = [a for a in rest if a != "-w"]
-    if "-l" in rest:
+        if len(rest) != 1:
+            raise CommandParseError("finalize_workspace requires exactly one ISSUE_ID argument")
+        issue_id = rest[0]
+        if not issue_id.isdigit():
+            raise CommandParseError("ISSUE_ID must be digits")
+        return ParsedCommand(
+            mode=mode,
+            issue_id=issue_id,
+            commit_message="",
+            patch_path="",
+            canonical_argv=prefix + ["-w", issue_id],
+        )
+
+    if flag_l:
         mode = "rerun_latest"
         rest = [a for a in rest if a != "-l"]
-
-    if mode in ("finalize_live", "finalize_workspace", "rerun_latest"):
         if len(rest) != 0:
-            raise CommandParseError("Finalize/rerun commands must not include extra args")
+            raise CommandParseError("rerun_latest must not include extra args")
         return ParsedCommand(
             mode=mode,
             issue_id="",
             commit_message="",
             patch_path="",
-            canonical_argv=prefix + ["-f"]
-            if mode == "finalize_live"
-            else prefix + ["-w"]
-            if mode == "finalize_workspace"
-            else prefix + ["-l"],
+            canonical_argv=prefix + ["-l"],
         )
 
     if len(rest) != 3:
@@ -96,9 +123,9 @@ def build_canonical_command(
     patch_path: str,
 ) -> list[str]:
     if mode == "finalize_live":
-        return runner_prefix + ["-f"]
+        return runner_prefix + ["-f", commit_message]
     if mode == "finalize_workspace":
-        return runner_prefix + ["-w"]
+        return runner_prefix + ["-w", issue_id]
     if mode == "rerun_latest":
         return runner_prefix + ["-l"]
     if mode in ("patch", "repair"):
