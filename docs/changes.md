@@ -1,3 +1,9 @@
+## 2026-02-23T00:30:00+01:00
+
+-   Issue 233: /import/ui/session/start now enforces strict request body validation (root/path/mode required, mode enum enforced, unknown fields rejected; no defaults).
+
+-   spec: Bump specification version to 1.1.19 and document strict session/start validation.
+
 ## 2026-02-21T21:00:00+01:00
 
 -   Issue 229: Import CLI suppresses high-volume internal INFO logs on the interactive console in normal verbosity (LogBus unchanged; warnings/errors remain visible).

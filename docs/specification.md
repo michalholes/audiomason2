@@ -1,6 +1,6 @@
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.1.18 Specification Versioning Policy: Start at
+Specification Version: 1.1.19 Specification Versioning Policy: Start at
 1.0.0. Patch version increments by +1 for every change.
 
 Author: Michal Holes\
@@ -1335,6 +1335,11 @@ Baseline routes:
 
 5) POST /import/ui/session/start
    - Body: { "root": "<root-name>", "path": "<relative-path>", "mode": "stage" | "inplace" }
+   - Contract requirements:
+     - root, path, and mode are REQUIRED (no implicit defaults)
+     - mode MUST be one of: stage, inplace
+     - Unknown request body fields MUST be rejected
+     - Any contract violation MUST return HTTP 400 with VALIDATION_ERROR (10.4.1)
    - Starts a new wizard session and returns SessionState.
 
 6) GET  /import/ui/session/{session_id}/state

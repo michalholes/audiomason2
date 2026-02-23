@@ -18,8 +18,85 @@ def build_router(*, engine: Any):
         raise RuntimeError("fastapi is required for import UI router") from e
 
     from .engine import _exception_envelope
+    from .field_schema_validation import FieldSchemaValidationError
 
     router = APIRouter(prefix="/import/ui")
+
+    session_start_allowed_keys = {"mode", "path", "root"}
+    session_start_required_keys = {"mode", "path", "root"}
+    session_start_allowed_modes = {"inplace", "stage"}
+
+    def _validate_session_start_body(body: Any) -> tuple[str, str, str]:
+        if not isinstance(body, dict):
+            raise FieldSchemaValidationError(
+                message="request body must be an object",
+                path="$",
+                reason="invalid_type",
+                meta={},
+            )
+
+        keys = {k for k in body if isinstance(k, str)}
+        unknown = sorted(keys - session_start_allowed_keys)
+        if unknown:
+            key = unknown[0]
+            raise FieldSchemaValidationError(
+                message="unknown field in request body",
+                path=f"$.{key}",
+                reason="unknown_field",
+                meta={
+                    "allowed": sorted(session_start_allowed_keys),
+                    "unknown": unknown,
+                },
+            )
+
+        missing = sorted(session_start_required_keys - keys)
+        if missing:
+            key = missing[0]
+            raise FieldSchemaValidationError(
+                message="missing required field in request body",
+                path=f"$.{key}",
+                reason="missing_required",
+                meta={"required": sorted(session_start_required_keys)},
+            )
+
+        root = body.get("root")
+        if not isinstance(root, str) or not root:
+            raise FieldSchemaValidationError(
+                message="root must be a non-empty string",
+                path="$.root",
+                reason="missing_or_invalid",
+                meta={},
+            )
+
+        path = body.get("path")
+        if not isinstance(path, str) or not path:
+            raise FieldSchemaValidationError(
+                message="path must be a non-empty string",
+                path="$.path",
+                reason="missing_or_invalid",
+                meta={},
+            )
+
+        mode = body.get("mode")
+        if not isinstance(mode, str) or not mode:
+            raise FieldSchemaValidationError(
+                message="mode must be a non-empty string",
+                path="$.mode",
+                reason="missing_or_invalid",
+                meta={"allowed": sorted(session_start_allowed_modes)},
+            )
+        if mode not in session_start_allowed_modes:
+            raise FieldSchemaValidationError(
+                message="mode must be one of the allowed values",
+                path="$.mode",
+                reason="invalid_enum",
+                meta={
+                    "allowed": sorted(session_start_allowed_modes),
+                    "value": mode,
+                },
+            )
+
+        return root, path, mode
 
     def _status_code_for_envelope(envelope: dict[str, Any]) -> int:
         err = envelope.get("error")
@@ -68,9 +145,7 @@ def build_router(*, engine: Any):
     @router.post("/session/start")
     def session_start(body: dict[str, Any]):
         def _impl():
-            root = str(body.get("root") or "")
-            path = str(body.get("path") or "")
-            mode = str(body.get("mode") or "stage")
+            root, path, mode = _validate_session_start_body(body)
             return engine.create_session(root, path, mode=mode)
 
         return _call(_impl)
