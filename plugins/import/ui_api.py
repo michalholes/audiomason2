@@ -29,7 +29,11 @@ def build_router(*, engine: Any):
     assets_dir = ui_web_dir / "assets"
 
     if assets_dir.is_dir():
-        router.mount("/assets", StaticFiles(directory=str(assets_dir)), name="import-ui-assets")
+        router.mount(
+            "/import/ui/assets",
+            StaticFiles(directory=str(assets_dir)),
+            name="import-ui-assets",
+        )
 
     session_start_allowed_keys = {"mode", "path", "root"}
     session_start_required_keys = {"mode", "path", "root"}
