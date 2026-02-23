@@ -320,18 +320,115 @@ Baseline routes:
    - Returns FlowModel JSON for the current configuration.
 
 2) GET  /import/ui/config
-   - Returns the current FlowConfig JSON.
+   - Returns the current FlowConfig.
+   - Response body:
+     { "config": <FlowConfig> }
 
 3) POST /import/ui/config
-   - Validates and persists FlowConfig (full replace or supported patch mode).
-   - Returns the saved FlowConfig.
+   - Validates, normalizes, and persists FlowConfig (full replace).
+   - Request body:
+     { "config": <FlowConfig> }
+   - Contract requirements:
+     - config is REQUIRED
+     - Unknown request body fields MUST be rejected
+     - Any contract violation MUST return HTTP 400 with VALIDATION_ERROR (10.4.1)
+   - Returns the saved canonical FlowConfig:
+     { "config": <FlowConfig> }
    - On error returns the Error JSON schema (10.4.1).
 
-4) POST /import/ui/config/reset
-   - Resets FlowConfig to built-in defaults.
-   - Persists and returns the FlowConfig.
+4) POST /import/ui/config/validate
+   - Validates and normalizes FlowConfig without persisting.
+   - Request body:
+     { "config": <FlowConfig> }
+   - Contract requirements:
+     - config is REQUIRED
+     - Unknown request body fields MUST be rejected
+     - Any contract violation MUST return HTTP 400 with VALIDATION_ERROR (10.4.1)
+   - Returns canonical normalized FlowConfig:
+     { "config": <FlowConfig> }
 
-5) POST /import/ui/session/start
+5) POST /import/ui/config/reset
+   - Resets FlowConfig to built-in defaults.
+   - Persists and returns the FlowConfig:
+     { "config": <FlowConfig> }
+
+6) GET  /import/ui/config/history
+   - Returns the last 5 persisted FlowConfig versions (newest-first).
+   - Response body:
+     {
+       "items": [
+         { "id": "string", "timestamp": "ISO-8601" }
+       ]
+     }
+
+7) POST /import/ui/config/rollback
+   - Rolls back FlowConfig to a prior version and persists it.
+   - Request body:
+     { "id": "string" }
+   - Contract requirements:
+     - id is REQUIRED
+     - Unknown request body fields MUST be rejected
+     - Any contract violation MUST return HTTP 400 with VALIDATION_ERROR (10.4.1)
+   - If id is not found MUST return HTTP 404 with Error code NOT_FOUND (10.4.1).
+   - Response body:
+     { "config": <FlowConfig> }
+
+8) GET  /import/ui/wizard-definition
+   - Returns the current WizardDefinition.
+   - Response body:
+     { "definition": <WizardDefinition> }
+
+9) POST /import/ui/wizard-definition
+   - Validates and persists WizardDefinition (full replace).
+   - Request body:
+     { "definition": <WizardDefinition> }
+   - Contract requirements:
+     - definition is REQUIRED
+     - Unknown request body fields MUST be rejected
+     - Any contract violation MUST return HTTP 400 with VALIDATION_ERROR (10.4.1)
+   - Returns the saved WizardDefinition:
+     { "definition": <WizardDefinition> }
+   - Engine invariant violations MUST return INVARIANT_VIOLATION (10.4.1).
+
+10) POST /import/ui/wizard-definition/validate
+   - Validates WizardDefinition without persisting.
+   - Request body:
+     { "definition": <WizardDefinition> }
+   - Contract requirements:
+     - definition is REQUIRED
+     - Unknown request body fields MUST be rejected
+     - Any contract violation MUST return HTTP 400 with VALIDATION_ERROR (10.4.1)
+   - Returns canonical WizardDefinition:
+     { "definition": <WizardDefinition> }
+   - Engine invariant violations MUST return INVARIANT_VIOLATION (10.4.1).
+
+11) POST /import/ui/wizard-definition/reset
+   - Resets WizardDefinition to built-in defaults.
+   - Persists and returns the WizardDefinition:
+     { "definition": <WizardDefinition> }
+
+12) GET  /import/ui/wizard-definition/history
+   - Returns the last 5 persisted WizardDefinition versions (newest-first).
+   - Response body:
+     {
+       "items": [
+         { "id": "string", "timestamp": "ISO-8601" }
+       ]
+     }
+
+13) POST /import/ui/wizard-definition/rollback
+   - Rolls back WizardDefinition to a prior version and persists it.
+   - Request body:
+     { "id": "string" }
+   - Contract requirements:
+     - id is REQUIRED
+     - Unknown request body fields MUST be rejected
+     - Any contract violation MUST return HTTP 400 with VALIDATION_ERROR (10.4.1)
+   - If id is not found MUST return HTTP 404 with Error code NOT_FOUND (10.4.1).
+   - Response body:
+     { "definition": <WizardDefinition> }
+
+14) POST /import/ui/session/start
    - Body: { "root": "<root-name>", "path": "<relative-path>", "mode": "stage" | "inplace" }
    - Contract requirements:
      - root, path, and mode are REQUIRED (no implicit defaults)
@@ -340,20 +437,18 @@ Baseline routes:
      - Any contract violation MUST return HTTP 400 with VALIDATION_ERROR (10.4.1)
    - Starts a new wizard session and returns SessionState.
 
-6) GET  /import/ui/session/{session_id}/state
+15) GET  /import/ui/session/{session_id}/state
    - Returns SessionState for an existing session.
 
-7) POST /import/ui/session/{session_id}/step/{step_id}
+16) POST /import/ui/session/{session_id}/step/{step_id}
    - Submits a step payload and returns updated SessionState.
 
-8) POST /import/ui/session/{session_id}/start_processing
+17) POST /import/ui/session/{session_id}/start_processing
    - Body: { "confirm": true }
    - Finalizes PHASE 1 and returns a summary: { "job_ids": [...], "batch_size": <int> }
    - MUST enforce deterministic conflict re-check before job creation (10.11.4).
 
-Optional (only if implemented): config history and rollback endpoints.
-If implemented, they MUST be deterministic and atomic.
-
+All editor history and rollback behavior MUST be deterministic and atomic.
 ## 10.6 Engine Guards (Invariants; MUST REJECT)
 
 The engine MUST reject any WizardDefinition, FlowConfig, or effective workflow construction that attempts to:
