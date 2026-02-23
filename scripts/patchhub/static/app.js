@@ -1070,7 +1070,10 @@ function refreshJobs() {
         var issueId = String(j.issue_id || "").trim();
         var issueText = issueId ? ("#" + issueId) : "(no issue)";
 
-        var status = String(j.status || "").trim().toUpperCase();
+        var stRaw = String(j.status || "").trim().toLowerCase();
+        var statusText = stRaw ? stRaw.toUpperCase() : "UNKNOWN";
+        var statusCls = "job-status st-" + (stRaw || "unknown");
+
         var commit = jobSummaryCommit(j.commit_message || "");
         var patchName = jobSummaryPatchName(j.patch_path || "");
 
@@ -1083,23 +1086,22 @@ function refreshJobs() {
 
         var meta = metaParts.join(" | ");
 
-        var line = "<div class=\"" + cls + "\" data-jobid=\"" + escapeHtml(jobId) + "\">";
+        var line = "<div class=\"" + cls + "\">";
         line += "<div class=\"name job-name\" data-jobid=\"" + escapeHtml(jobId) + "\">";
         line += "<div class=\"job-lines\">";
         line += "<div class=\"job-top\">";
         line += "<span class=\"job-issue\">" + escapeHtml(issueText) + "</span>";
-        line += "<span class=\"job-status\">" + escapeHtml(status) + "</span>";
-        if (commit) {
-          line += "<span class=\"job-commit\">" + escapeHtml(commit) + "</span>";
-        }
+        line += "<span class=\"" + escapeHtml(statusCls) + "\">" + escapeHtml(statusText) + "</span>";
         line += "</div>";
+        if (commit) {
+          line += "<div class=\"job-title\">" + escapeHtml(commit) + "</div>";
+        }
         line += "<div class=\"job-meta\">" + escapeHtml(meta) + "</div>";
         line += "</div>";
         line += "</div>";
         line += "</div>";
         return line;
       }).join("");
-
       el("jobsList").innerHTML = html || "<div class=\"muted\">(none)</div>";
     });
   }

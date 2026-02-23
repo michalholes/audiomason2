@@ -339,6 +339,11 @@ Required visible fields per item:
 - patch basename (filename only)
 - duration in seconds when both started_utc and ended_utc are available
 
+Layout requirements:
+- First line MUST show: issue id and status.
+- Commit summary MUST be on its own line.
+- Meta line MUST include: mode, patch basename (when present), and duration (when present).
+
 Forbidden in visible item text:
 - job_id (may exist only as an internal data attribute for selection)
 

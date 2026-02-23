@@ -72,12 +72,37 @@ body.dragging .drop-overlay { display: flex; }
   align-items: center;
 }
 
-.job-item { align-items: flex-start; padding: 6px 0; }
-.job-lines { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.job-top { display: flex; gap: 8px; align-items: baseline; min-width: 0; }
-.job-commit { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.job-meta { color: #aaa; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.job-status { font-weight: 700; }
+.job-item { align-items: stretch; padding: 0; }
+.job-name {
+  flex: 1;
+  display: block;
+  padding: 8px 10px;
+  border-radius: 10px;
+}
+.job-name:hover { text-decoration: none; background: #16264a; }
+.job-lines { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.job-top { display: flex; gap: 10px; align-items: baseline; min-width: 0; }
+.job-issue { font-weight: 700; }
+.job-title {
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.job-meta {
+  color: #9fb0c9;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.job-status { font-weight: 800; }
+.st-success { color: #3fb950; }
+.st-fail { color: #f85149; }
+.st-running { color: #d29922; }
+.st-queued { color: #8fc1ff; }
+.st-canceled { color: #9fb0c9; }
+.st-unknown { color: #9fb0c9; }
 .stats { background: #0b0b0b; border: 1px solid #2a2a2a; border-radius: 6px; padding: 10px; font-size: 14px; }
 .stats .rowline { display: flex; justify-content: space-between; gap: 8px; padding: 2px 0; }
 .stats .k { color: #aaa; }
