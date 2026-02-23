@@ -115,6 +115,8 @@ class Logger:
         self._json_seq = 0
         self._mono_start = time.monotonic()
 
+        self._ipc_hook: Callable[[str, str], None] | None = None
+
         self.console_color = str(console_color or "").strip().lower() or "auto"
         self._console_color_enabled = stdout_color_enabled(self.console_color)
 
@@ -137,6 +139,9 @@ class Logger:
                 symlink_path.symlink_to(target_rel)
             except Exception:
                 pass
+
+    def set_ipc_hook(self, hook: Callable[[str, str], None] | None) -> None:
+        self._ipc_hook = hook
 
     def close(self) -> None:
         try:
@@ -215,6 +220,15 @@ class Logger:
             error_detail or _allowed(self.screen_level, severity, channel, summary=summary)
         ):
             self._write_screen(message)
+
+        hook = self._ipc_hook
+        if hook is not None and kind in ("OK", "FAIL"):
+            # "OK: STAGE" or "FAIL: STAGE"
+            line = message.strip()
+            _k, _sep, stage = line.partition(":")
+            stage = stage.strip() if _sep else ""
+            if stage:
+                hook(kind, stage)
 
     def emit_json_hello(
         self, *, issue_id: str | None, mode: str, verbosity: str, log_level: str

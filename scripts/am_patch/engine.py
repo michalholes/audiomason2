@@ -23,14 +23,19 @@ from am_patch.config import (
 from am_patch.errors import RunnerError, fingerprint
 from am_patch.execution_context import open_execution_context
 from am_patch.failure_zip import cleanup_on_success_commit as cleanup_failure_zips_on_success
-from am_patch.fs_junk import fs_junk_ignore_partition
 from am_patch.gates import run_badguys, run_gates
+from am_patch.ipc_socket import IpcController, resolve_socket_path
 from am_patch.lock import FileLock
 from am_patch.log import Logger, new_log_file
 from am_patch.patch_archive_select import select_latest_issue_patch
 from am_patch.patch_exec import run_patch, run_unified_patch_bundle
 from am_patch.patch_input import resolve_patch_plan
-from am_patch.paths import default_paths, ensure_dirs
+from am_patch.paths import (
+    _fs_junk_ignore_partition,
+    _workspace_store_current_patch,
+    default_paths,
+    ensure_dirs,
+)
 from am_patch.post_success_audit import run_post_success_audit
 from am_patch.promote import promote_files
 from am_patch.repo_root import is_under, resolve_repo_root
@@ -55,10 +60,6 @@ from am_patch.workspace import (
     open_existing_workspace,
     rollback_to_checkpoint,
 )
-from am_patch.workspace_history import (
-    workspace_history_dirs,
-    workspace_store_current_patch,
-)
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SCRIPTS_DIR = Path(__file__).resolve().parents[1]
@@ -81,21 +82,7 @@ class RunContext:
     status: StatusReporter
     verbosity: str
     log_level: str
-
-
-def _fs_junk_ignore_partition(
-    paths: list[str],
-    *,
-    ignore_prefixes: tuple[str, ...] | list[str],
-    ignore_suffixes: tuple[str, ...] | list[str],
-    ignore_contains: tuple[str, ...] | list[str],
-) -> tuple[list[str], list[str]]:
-    return fs_junk_ignore_partition(
-        paths,
-        ignore_prefixes=ignore_prefixes,
-        ignore_suffixes=ignore_suffixes,
-        ignore_contains=ignore_contains,
-    )
+    ipc: IpcController | None
 
 
 def _run_post_success_audit(logger: Logger, repo_root: Path, policy: Policy) -> None:
@@ -112,42 +99,6 @@ def _is_under(child: Path, parent: Path) -> bool:
 
 def _select_latest_issue_patch(*, patch_dir: Path, issue_id: str, hint_name: str | None) -> Path:
     return select_latest_issue_patch(patch_dir=patch_dir, issue_id=issue_id, hint_name=hint_name)
-
-
-def _workspace_history_dirs(
-    ws_root: Path,
-    *,
-    history_logs_dir: str = "logs",
-    history_oldlogs_dir: str = "oldlogs",
-    history_patches_dir: str = "patches",
-    history_oldpatches_dir: str = "oldpatches",
-) -> tuple[Path, Path, Path, Path]:
-    return workspace_history_dirs(
-        ws_root,
-        history_logs_dir=history_logs_dir,
-        history_oldlogs_dir=history_oldlogs_dir,
-        history_patches_dir=history_patches_dir,
-        history_oldpatches_dir=history_oldpatches_dir,
-    )
-
-
-def _workspace_store_current_patch(
-    ws,
-    patch_script: Path,
-    *,
-    history_logs_dir: str,
-    history_oldlogs_dir: str,
-    history_patches_dir: str,
-    history_oldpatches_dir: str,
-) -> None:
-    return workspace_store_current_patch(
-        ws,
-        patch_script,
-        history_logs_dir=history_logs_dir,
-        history_oldlogs_dir=history_oldlogs_dir,
-        history_patches_dir=history_patches_dir,
-        history_oldpatches_dir=history_oldpatches_dir,
-    )
 
 
 def build_effective_policy(argv: list[str]) -> int | tuple[Any, Policy, Path, str]:
@@ -340,6 +291,38 @@ def build_paths_and_logger(
         issue_id=cli.issue_id, mode=cli.mode, verbosity=verbosity, log_level=log_level
     )
 
+    ipc: IpcController | None = None
+    sock_path = resolve_socket_path(policy=policy, patch_dir=patch_dir)
+    if sock_path is not None:
+        ipc = IpcController(
+            socket_path=sock_path,
+            issue_id=cli.issue_id,
+            mode=cli.mode,
+            status_provider=status,
+            logger=logger,
+        )
+        ipc.start()
+
+        def _ipc_hook(_kind: str, _stage: str) -> None:
+            action = ipc.check_boundary(completed_step=_stage)
+            if action == "pause_after_step":
+                ipc.wait_if_paused()
+            st = ipc.snapshot()
+            if bool(st.get("cancel")):
+                raise RunnerError(
+                    "INTERNAL",
+                    "IPC",
+                    f"cancelled ({action or 'cancel'})",
+                )
+            if action == "stop_after_step":
+                raise RunnerError(
+                    "INTERNAL",
+                    "IPC",
+                    f"stop_after_step reached: {_stage}",
+                )
+
+        logger.set_ipc_hook(_ipc_hook)
+
     status.start()
 
     runtime.status = status
@@ -367,6 +350,7 @@ def build_paths_and_logger(
         status=status,
         verbosity=verbosity,
         log_level=log_level,
+        ipc=ipc,
     )
 
 

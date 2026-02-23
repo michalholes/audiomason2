@@ -965,3 +965,44 @@ Format:
 - Event types: hello, log, result.
 - log events include: seq, ts_mono_ms, stage, kind, sev, ch, summary, bypass, msg.
 - Failed step detail may include stdout and stderr fields.
+
+## IPC socket
+
+The runner exposes an optional Unix domain socket control plane.
+
+Protocol:
+- protocol id: am_patch_ipc/1
+- transport: Unix domain socket (AF_UNIX stream)
+- framing: newline-delimited JSON (one request per line, one response per line)
+
+Default location:
+- ipc_socket_enabled = true
+- ipc_socket_mode = patch_dir
+- ipc_socket_name = am_patch.sock
+- In patch_dir mode, the socket path is <patch_dir>/am_patch.sock.
+
+Configuration keys (Policy):
+- ipc_socket_enabled: bool
+- ipc_socket_mode: patch_dir|base_dir|system_runtime
+- ipc_socket_name: filename only (no path separators)
+- ipc_socket_base_dir: used when mode=base_dir
+- ipc_socket_system_runtime_dir: optional override when mode=system_runtime
+
+Commands (cmd field):
+- ping
+- get_state
+- cancel
+- stop_after_step (requires: step)
+- pause_after_step (requires: step)
+- pause
+- resume
+- set_verbosity (optional: verbosity, log_level)
+
+Semantics:
+- cancel requests immediate termination at the next safe boundary.
+- stop_after_step terminates when the named step completes.
+- pause_after_step pauses the main thread when the named step completes; resume continues.
+- Priority at a boundary: cancel > stop_after_step > pause_after_step.
+
+The safe boundary definition is the emission of an OK/FAIL step token ("OK: <STEP>" or "FAIL: <STEP>").
+

@@ -3,6 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from am_patch.fs_junk import fs_junk_ignore_partition
+from am_patch.workspace_history import (
+    workspace_history_dirs,
+    workspace_store_current_patch,
+)
+
 
 @dataclass(frozen=True)
 class Paths:
@@ -62,4 +68,55 @@ def default_paths(
         artifacts_dir=artifacts_dir,
         lock_path=lock_path,
         symlink_path=symlink_path,
+    )
+
+
+def _fs_junk_ignore_partition(
+    paths: list[str],
+    *,
+    ignore_prefixes: tuple[str, ...] | list[str],
+    ignore_suffixes: tuple[str, ...] | list[str],
+    ignore_contains: tuple[str, ...] | list[str],
+) -> tuple[list[str], list[str]]:
+    return fs_junk_ignore_partition(
+        paths,
+        ignore_prefixes=ignore_prefixes,
+        ignore_suffixes=ignore_suffixes,
+        ignore_contains=ignore_contains,
+    )
+
+
+def _workspace_history_dirs(
+    ws_root: Path,
+    *,
+    history_logs_dir: str = "logs",
+    history_oldlogs_dir: str = "oldlogs",
+    history_patches_dir: str = "patches",
+    history_oldpatches_dir: str = "oldpatches",
+) -> tuple[Path, Path, Path, Path]:
+    return workspace_history_dirs(
+        ws_root,
+        history_logs_dir=history_logs_dir,
+        history_oldlogs_dir=history_oldlogs_dir,
+        history_patches_dir=history_patches_dir,
+        history_oldpatches_dir=history_oldpatches_dir,
+    )
+
+
+def _workspace_store_current_patch(
+    ws,
+    patch_script: Path,
+    *,
+    history_logs_dir: str,
+    history_oldlogs_dir: str,
+    history_patches_dir: str,
+    history_oldpatches_dir: str,
+) -> None:
+    return workspace_store_current_patch(
+        ws,
+        patch_script,
+        history_logs_dir=history_logs_dir,
+        history_oldlogs_dir=history_oldlogs_dir,
+        history_patches_dir=history_patches_dir,
+        history_oldpatches_dir=history_oldpatches_dir,
     )

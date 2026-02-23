@@ -148,6 +148,13 @@ class Policy:
     # never: disable
     console_color: str = "auto"  # auto|always|never
 
+    # IPC socket (Unix domain socket, newline-delimited JSON)
+    ipc_socket_enabled: bool = True
+    ipc_socket_mode: str = "patch_dir"  # patch_dir|base_dir|system_runtime
+    ipc_socket_name: str = "am_patch.sock"
+    ipc_socket_base_dir: str | None = None
+    ipc_socket_system_runtime_dir: str | None = None
+
     # Unified patch input (.patch / .zip)
     unified_patch: bool = False
     unified_patch_continue: bool = True
