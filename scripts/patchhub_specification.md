@@ -3,7 +3,7 @@ Status: AUTHORITATIVE SPECIFICATION
 Applies to: scripts/patchhub/*
 Language: ENGLISH (ASCII ONLY)
 
-Specification Version: 1.1.8-spec
+Specification Version: 1.1.9-spec
 Code Baseline: audiomason2-main.zip (as provided in this chat)
 
 -------------------------------------------------------------------------------
@@ -146,6 +146,16 @@ UI/autofill have defaults (see config.py).
 - cfg.runner.command: runner prefix argv (default ["python3","scripts/am_patch.py"])
 - cfg.paths.upload_dir: destination directory for uploads (must be under patches_root)
 - cfg.autofill.*: controls /api/patches/latest scanning and filename derivation
+
+UI behavior toggles (additive):
+- cfg.ui.clear_output_on_autofill (bool, default true)
+  If true, when the UI detects a new autofill token it clears the previous output
+  (live log, tail view, progress summary and steps) and suppresses idle tail refresh.
+- cfg.ui.show_autofill_clear_status (bool, default true)
+  If true and output is cleared due to autofill, the UI sets the status bar line:
+  "autofill: loaded new patch, output cleared".
+- cfg.ui.idle_auto_select_last_job (bool, default false)
+  If true, when idle and no job is selected, the UI auto-selects the most recent job.
 
 Autofill zip filtering (additive):
 - cfg.autofill.scan_zip_require_patch (bool, default false)
@@ -316,6 +326,39 @@ Button text:
 
 This is a UI-only behavior change. API surface and server behavior are unchanged.
 
+7.1.6 Autofill Token Change Output Clearing (UI)
+
+When autofill is enabled and the UI detects that /api/patches/latest returns a new
+token value, the UI may clear output from the previous patch run.
+
+Config gates (patchhub.toml [ui]):
+- clear_output_on_autofill (default true)
+  If true, on new token detection the UI clears:
+  - the live log view (SSE rendered events),
+  - the Tail view,
+  - the Progress summary and step list.
+
+  The UI also suppresses idle tail refresh so that the cleared output does not
+  immediately reappear from periodic /api/runner/tail polling.
+
+- show_autofill_clear_status (default true)
+  If true and output is cleared due to autofill, the UI status bar is set to the
+  exact line: "autofill: loaded new patch, output cleared".
+
+Job selection interaction:
+- Manual job selection (click on an item in the Jobs list) re-enables output
+  refresh and shows that job output.
+- Starting a new job (enqueue success) re-enables output refresh for that job.
+
+Idle auto-select:
+- If idle_auto_select_last_job is false (default), the UI does not auto-select
+  the most recent job when idle.
+- If idle_auto_select_last_job is true, the UI preserves the legacy behavior
+  and auto-selects the most recent job when idle.
+
+Running job exception:
+- If a job is running and no job is selected, the UI selects the running job.
+
 7.2 API routes (GET)
 
 7.2.1 GET /api/config
@@ -352,7 +395,10 @@ Output schema (success):
   },
   "ui": {
     "base_font_px": <int>,
-    "drop_overlay_enabled": <bool>
+    "drop_overlay_enabled": <bool>,
+    "clear_output_on_autofill": <bool>,
+    "show_autofill_clear_status": <bool>,
+    "idle_auto_select_last_job": <bool>
   },
   "autofill": {
     "enabled": <bool>,

@@ -163,7 +163,10 @@
 
   var dirty = { issueId: false, commitMsg: false, patchPath: false };
   var latestToken = "";
+  var lastAutofillClearedToken = "";
   var autofillTimer = null;
+
+  var suppressIdleOutput = false;
 
   var lastParsedRaw = "";
   var lastParsed = null;
@@ -514,9 +517,17 @@
 
   function refreshTail(lines) {
     tailLines = lines || tailLines || 200;
+
+    var idleGuardOn = !!(cfg && cfg.ui && cfg.ui.clear_output_on_autofill);
+    var jid = getLiveJobId();
+    if (!jid && suppressIdleOutput && idleGuardOn) {
+      setPre("tail", "");
+      updateShortProgressFromText("");
+      return;
+    }
+
     var linesQ = encodeURIComponent(String(tailLines));
     var url = "/api/runner/tail?lines=" + linesQ;
-    var jid = getLiveJobId();
     if (jid) {
       url = "/api/jobs/" + encodeURIComponent(String(jid)) + "/log_tail?lines=" + linesQ;
     }
@@ -994,16 +1005,30 @@ function refreshJobs() {
         return;
       }
       var jobs = r.jobs || [];
+
+      var active = jobs.find(function (j) { return j.status === "running"; }) || null;
+      var activeId = active ? String(active.job_id || "") : "";
+
+      var idleAutoSelect = !!(cfg && cfg.ui && cfg.ui.idle_auto_select_last_job);
+
       if (!selectedJobId) {
         var saved = loadLiveJobId();
         if (saved) selectedJobId = saved;
       }
-      if (!selectedJobId && jobs.length) {
+
+      if (!selectedJobId && activeId) {
+        selectedJobId = activeId;
+        saveLiveJobId(selectedJobId);
+        suppressIdleOutput = false;
+      }
+
+      if (!selectedJobId && jobs.length && idleAutoSelect) {
         jobs.sort(function (a, b) {
           return String(a.created_utc || "").localeCompare(String(b.created_utc || ""));
         });
         selectedJobId = String(jobs[jobs.length - 1].job_id || "");
         if (selectedJobId) saveLiveJobId(selectedJobId);
+        suppressIdleOutput = false;
       }
       renderActiveJob(jobs);
       ensureAutoRefresh(jobs);
@@ -1176,6 +1201,7 @@ function refreshJobs() {
         setUiStatus("enqueue: ok job_id=" + String(r.job_id));
         selectedJobId = String(r.job_id);
         saveLiveJobId(selectedJobId);
+        suppressIdleOutput = false;
         openLiveStream(selectedJobId);
         refreshTail(tailLines);
       } else {
@@ -1381,6 +1407,21 @@ function refreshJobs() {
     validateAndPreview();
   }
 
+  function resetOutputForNewPatch() {
+    selectedJobId = null;
+    saveLiveJobId("");
+
+    openLiveStream(null);
+    setPre("tail", "");
+    updateShortProgressFromText("");
+
+    suppressIdleOutput = true;
+
+    if (cfg && cfg.ui && cfg.ui.show_autofill_clear_status) {
+      setUiStatus("autofill: loaded new patch, output cleared");
+    }
+  }
+
   function pollLatestPatchOnce() {
     if (!cfg || !cfg.autofill || !cfg.autofill.enabled) return;
     apiGet("/api/patches/latest").then(function (r) {
@@ -1395,6 +1436,13 @@ function refreshJobs() {
       if (!token || token === latestToken) return;
       latestToken = token;
       applyAutofillFromPayload(r);
+
+      if (cfg && cfg.ui && cfg.ui.clear_output_on_autofill) {
+        if (token !== lastAutofillClearedToken) {
+          resetOutputForNewPatch();
+          lastAutofillClearedToken = token;
+        }
+      }
     });
   }
 
@@ -1729,8 +1777,11 @@ function refreshJobs() {
           var jobId = t.getAttribute && t.getAttribute("data-jobid");
           if (jobId) {
             selectedJobId = String(jobId);
+            saveLiveJobId(selectedJobId);
+            suppressIdleOutput = false;
             refreshJobs();
             openLiveStream(getLiveJobId());
+            refreshTail(tailLines);
             return;
           }
           t = t.parentElement;

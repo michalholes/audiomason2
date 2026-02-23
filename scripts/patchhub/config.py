@@ -55,8 +55,11 @@ class IndexingConfig:
 
 @dataclass(frozen=True)
 class UiConfig:
-    base_font_px: int
-    drop_overlay_enabled: bool
+    base_font_px: int = 24
+    drop_overlay_enabled: bool = True
+    clear_output_on_autofill: bool = True
+    show_autofill_clear_status: bool = True
+    idle_auto_select_last_job: bool = False
 
 
 @dataclass(frozen=True)
@@ -159,6 +162,9 @@ def load_config(path: Path) -> AppConfig:
         ui=UiConfig(
             base_font_px=int(ui.get("base_font_px", 24)),
             drop_overlay_enabled=bool(ui.get("drop_overlay_enabled", True)),
+            clear_output_on_autofill=bool(ui.get("clear_output_on_autofill", True)),
+            show_autofill_clear_status=bool(ui.get("show_autofill_clear_status", True)),
+            idle_auto_select_last_job=bool(ui.get("idle_auto_select_last_job", False)),
         ),
         autofill=AutofillConfig(
             enabled=bool(autofill.get("enabled", True)),

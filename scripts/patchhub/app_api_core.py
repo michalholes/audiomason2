@@ -136,6 +136,9 @@ def api_config(self) -> tuple[int, bytes]:
         "ui": {
             "base_font_px": self.cfg.ui.base_font_px,
             "drop_overlay_enabled": self.cfg.ui.drop_overlay_enabled,
+            "clear_output_on_autofill": self.cfg.ui.clear_output_on_autofill,
+            "show_autofill_clear_status": self.cfg.ui.show_autofill_clear_status,
+            "idle_auto_select_last_job": self.cfg.ui.idle_auto_select_last_job,
         },
         "autofill": {
             "enabled": self.cfg.autofill.enabled,
