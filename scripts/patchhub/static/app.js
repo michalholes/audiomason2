@@ -1084,13 +1084,17 @@ function refreshJobs() {
         var meta = metaParts.join(" | ");
 
         var line = "<div class=\"" + cls + "\" data-jobid=\"" + escapeHtml(jobId) + "\">";
+        line += "<div class=\"name job-name\" data-jobid=\"" + escapeHtml(jobId) + "\">";
         line += "<div class=\"job-lines\">";
         line += "<div class=\"job-top\">";
         line += "<span class=\"job-issue\">" + escapeHtml(issueText) + "</span>";
         line += "<span class=\"job-status\">" + escapeHtml(status) + "</span>";
-        if (commit) line += "<span class=\"job-commit\">" + escapeHtml(commit) + "</span>";
+        if (commit) {
+          line += "<span class=\"job-commit\">" + escapeHtml(commit) + "</span>";
+        }
         line += "</div>";
         line += "<div class=\"job-meta\">" + escapeHtml(meta) + "</div>";
+        line += "</div>";
         line += "</div>";
         line += "</div>";
         return line;
