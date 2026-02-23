@@ -326,6 +326,22 @@ Button text:
 
 This is a UI-only behavior change. API surface and server behavior are unchanged.
 
+Jobs list item content (UI)
+
+The Jobs list is an operator convenience view.
+Each list item MUST provide a meaningful summary without requiring a click.
+
+Required visible fields per item:
+- issue id (rendered as "#<id>"; if missing, render "(no issue)")
+- status (uppercase)
+- commit message summary (single line; deterministic truncation)
+- mode
+- patch basename (filename only)
+- duration in seconds when both started_utc and ended_utc are available
+
+Forbidden in visible item text:
+- job_id (may exist only as an internal data attribute for selection)
+
 7.1.6 Autofill Token Change Output Clearing (UI)
 
 When autofill is enabled and the UI detects that /api/patches/latest returns a new

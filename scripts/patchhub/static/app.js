@@ -997,6 +997,35 @@ function loadLiveLevel() {
   }
 
 
+  function jobSummaryCommit(msg) {
+    msg = String(msg || "");
+    msg = msg.replace(/\s+/g, " ").trim();
+    if (!msg) return "";
+    if (msg.length <= 60) return msg;
+    return msg.slice(0, 57) + "...";
+  }
+
+  function jobSummaryPatchName(p) {
+    p = String(p || "").trim();
+    if (!p) return "";
+    p = p.replace(/\\/g, "/");
+    var idx = p.lastIndexOf("/");
+    if (idx >= 0) return p.slice(idx + 1);
+    return p;
+  }
+
+  function jobSummaryDurationSeconds(startUtc, endUtc) {
+    if (!startUtc || !endUtc) return "";
+    var a = new Date(String(startUtc));
+    var b = new Date(String(endUtc));
+    if (isNaN(a.getTime()) || isNaN(b.getTime())) return "";
+    var sec = (b.getTime() - a.getTime()) / 1000;
+    if (sec < 0) return "";
+    var s = Math.round(sec * 10) / 10;
+    return String(s);
+  }
+
+
 function refreshJobs() {
     apiGet("/api/jobs").then(function (r) {
       if (!r || r.ok === false) {
@@ -1034,11 +1063,35 @@ function refreshJobs() {
       ensureAutoRefresh(jobs);
 
       var html = jobs.map(function (j) {
-        var isSel = selectedJobId && String(selectedJobId) === String(j.job_id || "");
-        var cls = "item" + (isSel ? " selected" : "");
-        var line = "<div class=\"" + cls + "\" data-jobid=\"" + escapeHtml(j.job_id || "") + "\">";
-        line += "<span class=\"name\">" + escapeHtml(j.status || "") + " " + escapeHtml(j.job_id || "") + "</span>";
-        line += "<span class=\"actions\"><span class=\"muted\">" + escapeHtml(j.mode || "") + "</span></span>";
+        var jobId = String(j.job_id || "");
+        var isSel = selectedJobId && String(selectedJobId) === jobId;
+        var cls = "item job-item" + (isSel ? " selected" : "");
+
+        var issueId = String(j.issue_id || "").trim();
+        var issueText = issueId ? ("#" + issueId) : "(no issue)";
+
+        var status = String(j.status || "").trim().toUpperCase();
+        var commit = jobSummaryCommit(j.commit_message || "");
+        var patchName = jobSummaryPatchName(j.patch_path || "");
+
+        var metaParts = [];
+        metaParts.push("mode=" + String(j.mode || ""));
+        if (patchName) metaParts.push("patch=" + patchName);
+
+        var dur = jobSummaryDurationSeconds(j.started_utc, j.ended_utc);
+        if (dur) metaParts.push("dur=" + dur + "s");
+
+        var meta = metaParts.join(" | ");
+
+        var line = "<div class=\"" + cls + "\" data-jobid=\"" + escapeHtml(jobId) + "\">";
+        line += "<div class=\"job-lines\">";
+        line += "<div class=\"job-top\">";
+        line += "<span class=\"job-issue\">" + escapeHtml(issueText) + "</span>";
+        line += "<span class=\"job-status\">" + escapeHtml(status) + "</span>";
+        if (commit) line += "<span class=\"job-commit\">" + escapeHtml(commit) + "</span>";
+        line += "</div>";
+        line += "<div class=\"job-meta\">" + escapeHtml(meta) + "</div>";
+        line += "</div>";
         line += "</div>";
         return line;
       }).join("");
