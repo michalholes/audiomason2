@@ -1,3 +1,9 @@
+## 2026-02-23T09:30:00+01:00
+
+-   spec: Split the specification into layered documents under docs/spec/ (ARCH/WIRE/LAYOUT).
+
+-   spec: Bump specification version to 1.1.20.
+
 ## 2026-02-23T00:30:00+01:00
 
 -   Issue 233: /import/ui/session/start now enforces strict request body validation (root/path/mode required, mode enum enforced, unknown fields rejected; no defaults).
