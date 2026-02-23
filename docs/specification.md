@@ -1908,3 +1908,45 @@ The repository MUST enforce automated checks ensuring:
 ------------------------------------------------------------------------
 
 Integration completed (updated): 2026-02-19 00:00:00 UTC
+---------------------------------------------------------------------
+## Plugin-Owned UI Architecture
+
+### 1. Normative Rule
+
+A plugin MAY host its own Web UI implementation.
+
+If a plugin exposes a UI-facing FastAPI router (e.g. `/import/ui/*`),
+it MAY additionally serve:
+
+- an HTML entrypoint under the same prefix (e.g. `/import/ui/`)
+- static assets under `/import/ui/assets/*`
+
+This makes the plugin self-sufficient and portable across different
+web hosts.
+
+### 2. Responsibility Model
+
+If a plugin owns its UI:
+
+- The plugin is responsible for rendering all field types used by
+  its wizard/model.
+- The plugin MUST NOT rely on host-specific UI renderers.
+- The host (e.g. web_interface) MUST treat the plugin UI as an
+  opaque consumer route and MUST NOT re-implement its renderer logic.
+
+This prevents renderer drift and preserves CLI/Web parity within
+the plugin boundary.
+
+### 3. Directory Structure
+
+If a plugin owns its UI, the following structure is normative:
+
+    plugins/<plugin>/ui/
+        web/
+            index.html
+            assets/
+        cli/
+        tui/
+
+The presence of `web/` indicates that the plugin serves its own
+web interface.
