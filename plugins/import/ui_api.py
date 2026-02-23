@@ -14,8 +14,7 @@ from typing import Any
 def build_router(*, engine: Any):
     try:
         from fastapi import APIRouter
-        from fastapi.responses import HTMLResponse, JSONResponse
-        from fastapi.staticfiles import StaticFiles
+        from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
     except Exception as e:  # pragma: no cover
         raise RuntimeError("fastapi is required for import UI router") from e
 
@@ -28,12 +27,26 @@ def build_router(*, engine: Any):
     ui_web_dir = base_dir / "ui" / "web"
     assets_dir = ui_web_dir / "assets"
 
-    if assets_dir.is_dir():
-        router.mount(
-            "/import/ui/assets",
-            StaticFiles(directory=str(assets_dir)),
-            name="import-ui-assets",
-        )
+    @router.get("/assets/{asset_path:path}")
+    def ui_asset(asset_path: str):
+        if not assets_dir.is_dir():
+            return JSONResponse(status_code=404, content={"error": {"code": "NOT_FOUND"}})
+
+        rel = Path(asset_path)
+        if rel.is_absolute() or ".." in rel.parts:
+            return JSONResponse(status_code=404, content={"error": {"code": "NOT_FOUND"}})
+
+        root = assets_dir.resolve()
+        candidate = (assets_dir / rel).resolve()
+        try:
+            candidate.relative_to(root)
+        except ValueError:
+            return JSONResponse(status_code=404, content={"error": {"code": "NOT_FOUND"}})
+
+        if not candidate.is_file():
+            return JSONResponse(status_code=404, content={"error": {"code": "NOT_FOUND"}})
+
+        return FileResponse(str(candidate))
 
     session_start_allowed_keys = {"mode", "path", "root"}
     session_start_required_keys = {"mode", "path", "root"}
