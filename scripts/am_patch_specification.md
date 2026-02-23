@@ -1026,3 +1026,24 @@ Semantics:
 - Priority at a boundary: cancel > stop_after_step > pause_after_step.
 
 The safe boundary definition is the emission of an OK/FAIL step token ("OK: <STEP>" or "FAIL: <STEP>").
+
+Socket file lifecycle:
+- The runner MUST attempt to remove the IPC socket file on process exit, best-effort.
+  (Success or failure.)
+- The runner MAY delay socket removal after exit, controlled by:
+  - ipc_socket_cleanup_delay_success_s (exit code 0)
+  - ipc_socket_cleanup_delay_failure_s (exit code non-0 and exceptions)
+- Exceptions are treated as failure for cleanup delay.
+
+Startup behavior when socket path exists:
+- Controlled by ipc_socket_on_startup_exists:
+  - fail (default): fail-fast with SOCKET_EXISTS
+  - wait_then_fail: wait ipc_socket_on_startup_wait_s seconds, then fail if still exists
+  - unlink_if_stale: connect-test; unlink only if connect fails; otherwise fail with SOCKET_EXISTS
+- The runner MUST NOT unlink an existing socket without an explicit stale-detection step
+  (except unlink_if_stale after a failed connect-test).
+
+Constant socket names:
+- ipc_socket_name_template MAY be a constant string (example: am_patch.sock).
+- Consequence: single-instance socket in the selected scope; parallel runs conflict unless
+  the name differs.

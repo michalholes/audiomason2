@@ -2,8 +2,10 @@
 # ruff: noqa: E402
 from __future__ import annotations
 
+import contextlib
 import os
 import sys
+import threading
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -228,9 +230,24 @@ def main(argv: list[str]) -> int:
     if isinstance(res, int):
         return res
     cli, policy, config_path, used_cfg = res
-    ctx = build_paths_and_logger(cli, policy, config_path, used_cfg)
-    result = run_mode(ctx)
-    return finalize_and_report(ctx, result)
+    ctx = None
+    exit_code: int | None = None
+    try:
+        ctx = build_paths_and_logger(cli, policy, config_path, used_cfg)
+        result = run_mode(ctx)
+        exit_code = finalize_and_report(ctx, result)
+        return exit_code
+    finally:
+        if ctx is not None and getattr(ctx, "ipc", None) is not None:
+            delay = (
+                int(getattr(policy, "ipc_socket_cleanup_delay_success_s", 0) or 0)
+                if exit_code == 0
+                else int(getattr(policy, "ipc_socket_cleanup_delay_failure_s", 0) or 0)
+            )
+            if delay > 0:
+                threading.Event().wait(float(delay))
+            with contextlib.suppress(Exception):
+                ctx.ipc.stop()
 
 
 if __name__ == "__main__":

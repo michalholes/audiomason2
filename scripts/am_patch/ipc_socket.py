@@ -15,6 +15,9 @@ PROTOCOL = "am_patch_ipc/1"
 
 _LEVELS = ("quiet", "normal", "warning", "verbose", "debug")
 
+_STARTUP_EXISTS_MODE = "fail"
+_STARTUP_WAIT_S = 0
+
 
 def _normalize_level(v: str) -> str:
     lvl = str(v or "").strip().lower()
@@ -117,14 +120,48 @@ class IpcController:
 
     def start(self) -> None:
         if self._thread is not None:
-            return
-        self.socket_path.parent.mkdir(parents=True, exist_ok=True)
+            return self.socket_path.parent.mkdir(parents=True, exist_ok=True)
         if self.socket_path.exists() or self.socket_path.is_symlink():
-            raise RunnerError(
-                "IPC",
-                "SOCKET_EXISTS",
-                f"socket path exists: {self.socket_path}",
-            )
+            mode = str(_STARTUP_EXISTS_MODE or "fail").strip() or "fail"
+            wait_s = int(_STARTUP_WAIT_S or 0)
+            if wait_s < 0:
+                wait_s = 0
+            if mode == "wait_then_fail" and wait_s:
+                threading.Event().wait(float(wait_s))
+            if mode == "unlink_if_stale":
+                active = False
+                try:
+                    s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                    try:
+                        s.settimeout(0.2)
+                        s.connect(str(self.socket_path))
+                        active = True
+                    finally:
+                        with contextlib.suppress(Exception):
+                            s.close()
+                except Exception:
+                    active = False
+                if not active:
+                    _safe_unlink(self.socket_path)
+                else:
+                    raise RunnerError(
+                        "IPC",
+                        "SOCKET_EXISTS",
+                        (
+                            f"socket path exists and is active: {self.socket_path}\n"
+                            "Hint: stop the other runner or choose a different socket name."
+                        ),
+                    )
+            if self.socket_path.exists() or self.socket_path.is_symlink():
+                raise RunnerError(
+                    "IPC",
+                    "SOCKET_EXISTS",
+                    (
+                        f"socket path exists: {self.socket_path}\n"
+                        "Hint: remove stale socket or set "
+                        "ipc_socket_on_startup_exists=unlink_if_stale."
+                    ),
+                )
         self._thread = threading.Thread(target=self._serve, name="am_patch_ipc", daemon=True)
         self._thread.start()
 
@@ -470,6 +507,15 @@ class IpcController:
 
 
 def resolve_socket_path(*, policy: Any, patch_dir: Path, issue_id: str | None) -> Path | None:
+    global _STARTUP_EXISTS_MODE, _STARTUP_WAIT_S
+    _STARTUP_EXISTS_MODE = (
+        str(getattr(policy, "ipc_socket_on_startup_exists", _STARTUP_EXISTS_MODE)).strip() or "fail"
+    )
+    try:
+        _STARTUP_WAIT_S = int(getattr(policy, "ipc_socket_on_startup_wait_s", 0) or 0)
+    except Exception:
+        _STARTUP_WAIT_S = 0
+
     enabled = bool(getattr(policy, "ipc_socket_enabled", True))
     if not enabled:
         return None

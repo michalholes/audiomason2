@@ -52,7 +52,6 @@ class CliArgs:
     patch_script: str | None
     message: str | None
 
-    # Config discovery (CLI only; no cfg key)
     config_path: str | None
 
     verbosity: str | None
@@ -70,14 +69,12 @@ class CliArgs:
     skip_up_to_date: bool | None
     allow_non_main: bool | None
 
-    # legacy (promotion rollback)
     no_rollback: bool | None
 
     update_workspace: bool | None
     soft_reset_workspace: bool | None
     enforce_allowed_files: bool | None
 
-    # NEW controls
     rollback_workspace_on_fail: str | None
     live_repo_guard: bool | None
     live_repo_guard_scope: str | None
@@ -434,8 +431,6 @@ PHASE 2: PATH/LAYOUT OVERRIDES (CFG + CLI)
 
 
 def add_workspace_cmd(subparsers: Any) -> None:
-    # The runner uses legacy positional parsing (rest[]) rather than argparse subcommands.
-    # This function exists to keep the CLI structure modular for future splits.
     return
 
 
@@ -457,7 +452,6 @@ def normalize_args(ns: argparse.Namespace) -> argparse.Namespace:
 
 
 def parse_args(argv: list[str]) -> CliArgs:
-    # Explicit short/full help split (do not let argparse generate a chaotic -h).
     if "-h" in argv or "--help" in argv:
         print(_fmt_short_help())
         raise SystemExit(0)
@@ -474,7 +468,6 @@ def parse_args(argv: list[str]) -> CliArgs:
         "--version", action="version", version=f"am_patch RUNNER_VERSION={RUNNER_VERSION}"
     )
 
-    # Short-help set (short+long).
     p.add_argument(
         "-a",
         "--allow-undeclared-paths",
@@ -511,13 +504,10 @@ def parse_args(argv: list[str]) -> CliArgs:
         default=None,
     )
 
-    # Full-only options (long-only; no short aliases).
     p.add_argument("--config", dest="config_path", metavar="PATH", default=None)
     p.add_argument(
         "--override", dest="overrides", action="append", default=None, metavar="KEY=VALUE"
     )
-
-    # Phase 2: hardcoded settings must be controllable via dedicated CLI flags (incl. IPC v1).
 
     p.add_argument("--ipc-socket", action=AppendOverride, key="ipc_socket_path", dest="overrides")
     p.add_argument(
@@ -538,6 +528,31 @@ def parse_args(argv: list[str]) -> CliArgs:
         "--ipc-socket-name-template",
         action=AppendOverride,
         key="ipc_socket_name_template",
+        dest="overrides",
+    )
+
+    p.add_argument(
+        "--ipc-socket-cleanup-delay-success-s",
+        action=AppendOverride,
+        key="ipc_socket_cleanup_delay_success_s",
+        dest="overrides",
+    )
+    p.add_argument(
+        "--ipc-socket-cleanup-delay-failure-s",
+        action=AppendOverride,
+        key="ipc_socket_cleanup_delay_failure_s",
+        dest="overrides",
+    )
+    p.add_argument(
+        "--ipc-socket-on-startup-exists",
+        action=AppendOverride,
+        key="ipc_socket_on_startup_exists",
+        dest="overrides",
+    )
+    p.add_argument(
+        "--ipc-socket-on-startup-wait-s",
+        action=AppendOverride,
+        key="ipc_socket_on_startup_wait_s",
         dest="overrides",
     )
 
@@ -907,7 +922,6 @@ def parse_args(argv: list[str]) -> CliArgs:
         "--enforce-allowed-files", dest="enforce_allowed_files", action="store_true", default=None
     )
 
-    # Legacy (promotion rollback)
     p.add_argument(
         "--no-rollback-on-commit-push-failure",
         dest="no_rollback",
@@ -918,7 +932,6 @@ def parse_args(argv: list[str]) -> CliArgs:
     p.add_argument("rest", nargs="*")
     ns = p.parse_args(argv)
 
-    # Normalize override keys to lowercase for deterministic behavior.
     if ns.overrides is not None:
         norm: list[str] = []
         for item in ns.overrides:

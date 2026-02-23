@@ -41,55 +41,39 @@ class Policy:
 
     repo_root: str | None = None
     patch_dir: str | None = None
-    # When patch_dir is not explicitly set, patch_dir_name determines the default
-    # directory under repo_root used for runner artifacts.
     patch_dir_name: str = "patches"
 
-    # Layout names under patch_dir.
     patch_layout_logs_dir: str = "logs"
     patch_layout_json_dir: str = "logs_json"
     patch_layout_workspaces_dir: str = "workspaces"
     patch_layout_successful_dir: str = "successful"
     patch_layout_unsuccessful_dir: str = "unsuccessful"
 
-    # Lock and "current log" symlink names under patch_dir.
     lockfile_name: str = "am_patch.lock"
     current_log_symlink_name: str = "am_patch.log"
     current_log_symlink_enabled: bool = True
 
-    # Log filename templates (placeholders: {issue}, {ts}) and timestamp format.
     log_ts_format: str = "%Y%m%d_%H%M%S"
     log_template_issue: str = "am_patch_issue_{issue}_{ts}.log"
     log_template_finalize: str = "am_patch_finalize_{ts}.log"
 
-    # Failure diagnostics zip naming and internal directory structure.
     failure_zip_name: str = "patched.zip"
-    # Optional template for failure zip filename.
-    # Placeholders: {issue}, {ts}, {nonce}, {log}, {attempt}
-    # If empty, legacy failure_zip_name is used.
     failure_zip_template: str = ""
-    # Glob template used for cleanup/retention under patch_dir.
-    # Placeholder: {issue}
     failure_zip_cleanup_glob_template: str = "patched_issue{issue}_*.zip"
-    # Keep last N failure zips per issue under patch_dir.
     failure_zip_keep_per_issue: int = 1
-    # If true, delete failure zips for issue after a successful commit.
     failure_zip_delete_on_success_commit: bool = True
     failure_zip_log_dir: str = "logs"
     failure_zip_patch_dir: str = "patches"
 
-    # Workspace on-disk layout.
     workspace_issue_dir_template: str = "issue_{issue}"
     workspace_repo_dir_name: str = "repo"
     workspace_meta_filename: str = "meta.json"
 
-    # Per-workspace history directories.
     workspace_history_logs_dir: str = "logs"
     workspace_history_oldlogs_dir: str = "oldlogs"
     workspace_history_patches_dir: str = "patches"
     workspace_history_oldpatches_dir: str = "oldpatches"
 
-    # Scope exemptions.
     blessed_gate_outputs: list[str] = field(
         default_factory=lambda: ["audit/results/pytest_junit.xml"]
     )
@@ -105,18 +89,11 @@ class Policy:
     scope_ignore_suffixes: list[str] = field(default_factory=lambda: [".pyc"])
     scope_ignore_contains: list[str] = field(default_factory=lambda: ["/__pycache__/"])
 
-    # Venv bootstrap (entrypoint re-exec) behavior.
-    # - auto: re-exec only when current interpreter is outside repo/.venv
-    # - always: always re-exec into venv python (unless already there)
-    # - never: disable bootstrap
     venv_bootstrap_mode: str = "auto"  # auto|always|never
     venv_bootstrap_python: str = ".venv/bin/python"
 
     default_branch: str = "main"
 
-    # Success archive name template for git-archive success zip.
-    # Placeholders: {repo}, {branch}
-    # Final filename is sanitized to a basename and forced to end with ".zip".
     success_archive_name: str = "{repo}-{branch}.zip"
 
     require_up_to_date: bool = True
@@ -125,42 +102,33 @@ class Policy:
     update_workspace: bool = False
     soft_reset_workspace: bool = False
     test_mode: bool = False
-    # In --test-mode, isolate runner work paths (lock/logs/workspaces/archives)
-    # under patches/_test_mode/issue_<ID>_pid_<PID>/ to avoid collisions with live runs.
-    # Only applies when patch_dir is not explicitly set.
     test_mode_isolate_patch_dir: bool = True
     delete_workspace_on_success: bool = True
 
     ascii_only_patch: bool = True
 
-    # Screen output verbosity (default: verbose = today's behavior)
     verbosity: str = "verbose"
 
-    # File log level (default: verbose to preserve today's detailed log output)
     log_level: str = "verbose"
 
-    # Optional NDJSON debug-complete event log sink.
     json_out: bool = False
 
     # Console output coloring for OK/FAIL tokens.
-    # auto: enable colors only when stdout is a TTY
-    # always: always enable
-    # never: disable
     console_color: str = "auto"  # auto|always|never
 
-    # IPC socket (Unix domain socket, newline-delimited JSON)
+    # IPC socket (UDS, NDJSON)
     ipc_socket_enabled: bool = True
     ipc_socket_mode: str = "patch_dir"  # patch_dir|base_dir|system_runtime
-    # Explicit socket path override (highest priority).
     ipc_socket_path: str | None = None
-    # Socket name template (rendered using {issue} and {pid}).
     ipc_socket_name_template: str = "am_patch_ipc_{issue}_{pid}.sock"
-    # Back-compat only. Prefer ipc_socket_name_template.
     ipc_socket_name: str = "am_patch.sock"
     ipc_socket_base_dir: str | None = None
     ipc_socket_system_runtime_dir: str | None = None
+    ipc_socket_cleanup_delay_success_s: int = 0
+    ipc_socket_cleanup_delay_failure_s: int = 0
+    ipc_socket_on_startup_exists: str = "fail"
+    ipc_socket_on_startup_wait_s: int = 0
 
-    # Unified patch input (.patch / .zip)
     unified_patch: bool = False
     unified_patch_continue: bool = True
     unified_patch_strip: int | None = None  # None=infer
@@ -176,7 +144,6 @@ class Policy:
     ruff_autofix: bool = True
     ruff_autofix_legalize_outside: bool = True
 
-    # NEW: ruff format before ruff check (default ON)
     ruff_format: bool = True
 
     gates_allow_fail: bool = False
@@ -185,7 +152,6 @@ class Policy:
     gates_skip_mypy: bool = False
     gates_skip_docs: bool = False
 
-    # Monolith gate (read-only AST analysis; default ON)
     gates_skip_monolith: bool = False
     gate_monolith_enabled: bool = True
     gate_monolith_mode: str = "strict"  # strict|warn_only|report_only
@@ -232,7 +198,6 @@ class Policy:
     )
     gate_monolith_catchall_allowlist: list[str] = field(default_factory=list)
 
-    # JS syntax gate (runs only when touched paths include JS files)
     gates_skip_js: bool = False
     gate_js_extensions: list[str] = field(default_factory=lambda: [".js"])
     gate_js_command: list[str] = field(default_factory=lambda: ["node", "--check"])
@@ -247,22 +212,15 @@ class Policy:
         default_factory=lambda: ["compile", "js", "ruff", "pytest", "mypy", "monolith", "docs"]
     )
 
-    # NEW: extra runner-only gate: badguys (default auto)
-    # - auto: run only when patch touches runner files
-    # - on: always run
-    # - off: never run
     gate_badguys_runner: str = "auto"
 
-    # BADGUYS gate command (argv without python prefix). Default: badguys/badguys.py -q
     gate_badguys_command: list[str] = field(default_factory=lambda: ["badguys/badguys.py", "-q"])
 
-    # Where to run the BADGUYS gate. auto|workspace|clone|live
     gate_badguys_cwd: str = "auto"
     ruff_targets: list[str] = field(default_factory=lambda: ["src", "tests"])
     pytest_targets: list[str] = field(default_factory=lambda: ["tests"])
     mypy_targets: list[str] = field(default_factory=lambda: ["src"])
 
-    # NEW: run pytest using live repo .venv python (default ON)
     pytest_use_venv: bool = True
 
     fail_if_live_files_changed: bool = True
@@ -270,30 +228,18 @@ class Policy:
 
     commit_and_push: bool = True
 
-    # Post-success audit report (default ON)
     post_success_audit: bool = True
 
-    # Existing: promotion rollback on commit/push failure (legacy)
     no_rollback: bool = False
 
-    # NEW: rollback workspace to pre-patch checkpoint on PATCH failure only (default ON)
     rollback_workspace_on_fail: str = "none-applied"
 
-    # NEW: live repo guard (default ON)
     live_repo_guard: bool = True
 
-    # NEW: live repo guard scope (default: 'patch')
-    # - 'patch': guard before/after patching+scope enforcement only
-    # - 'patch_and_gates': additionally guard after gates
     live_repo_guard_scope: str = "patch"
 
-    # NEW: audit rubric guard (default ON)
-    # If true, preflight verifies that audit/audit_rubric.yaml contains required
-    # runtime evidence commands
-    # for all domains listed in src/audiomason/audit/registry.py.
     audit_rubric_guard: bool = True
 
-    # NEW: patch execution jail (bubblewrap) (default ON)
     patch_jail: bool = True
     patch_jail_unshare_net: bool = True
 
@@ -317,9 +263,6 @@ def _as_str(d: dict[str, Any], k: str, default: str | None) -> str | None:
 def _as_rollback_mode(d: dict[str, Any], k: str, default: str) -> str:
     v = d.get(k, default)
     if isinstance(v, bool):
-        # Legacy bool config support:
-        # True  -> none-applied (rollback only if 0 patches applied)
-        # False -> never
         return "none-applied" if v else "never"
     if not isinstance(v, str):
         raise TypeError(f"config key {k!r} must be a string or bool, got {type(v).__name__}")
@@ -378,7 +321,6 @@ def _parse_override_kv(s: str) -> tuple[str, object]:
 
 
 def _coerce_override_value(cur: object, raw: object) -> object:
-    # Preserve type of existing policy field where possible.
     if isinstance(cur, bool):
         if isinstance(raw, bool):
             return raw
@@ -433,18 +375,15 @@ def _flatten_sections(cfg: dict[str, object]) -> dict[str, object]:
                 if isinstance(k, str):
                     out.setdefault(k, v)
 
-    # Compatibility/alias keys for common TOML naming.
     if "order" in out and "gates_order" not in out:
         out["gates_order"] = out["order"]
     if "enforce_files_only" in out and "enforce_allowed_files" not in out:
         out["enforce_allowed_files"] = out["enforce_files_only"]
     if "rollback_on_failure" in out and "no_rollback" not in out:
-        # rollback_on_failure=true => no_rollback=false
         out["no_rollback"] = not bool(out["rollback_on_failure"])
     if "delete_on_success" in out and "delete_workspace_on_success" not in out:
         out["delete_workspace_on_success"] = out["delete_on_success"]
     if "fetch_always" in out:
-        # ignore; fetch behavior is currently unconditional
         pass
     if "enforce_files_only" in out:
         pass
@@ -631,7 +570,25 @@ def build_policy(defaults: Policy, cfg: dict[str, Any]) -> Policy:
             f"invalid console_color={p.console_color!r}; allowed: auto|always|never",
         )
 
-    # Phase 2: hardcoded layout/settings must be configurable (cfg + CLI overrides).
+    p.ipc_socket_enabled = _as_bool(cfg, "ipc_socket_enabled", p.ipc_socket_enabled)
+    _mark_cfg(p, cfg, "ipc_socket_enabled")
+    p.ipc_socket_mode = str(cfg.get("ipc_socket_mode", p.ipc_socket_mode))
+    _mark_cfg(p, cfg, "ipc_socket_mode")
+    p.ipc_socket_name_template = str(
+        cfg.get("ipc_socket_name_template", p.ipc_socket_name_template)
+    )
+    _mark_cfg(p, cfg, "ipc_socket_name_template")
+    p.ipc_socket_on_startup_exists = str(
+        cfg.get("ipc_socket_on_startup_exists", p.ipc_socket_on_startup_exists)
+    )
+    _mark_cfg(p, cfg, "ipc_socket_on_startup_exists")
+    if p.ipc_socket_on_startup_exists not in ("fail", "wait_then_fail", "unlink_if_stale"):
+        raise RunnerError(
+            "CONFIG",
+            "INVALID",
+            "ipc_socket_on_startup_exists must be fail|wait_then_fail|unlink_if_stale",
+        )
+
     p.patch_dir_name = _validate_basename(p.patch_dir_name, field="patch_dir_name")
     p.patch_layout_logs_dir = _validate_basename(
         p.patch_layout_logs_dir, field="patch_layout_logs_dir"
@@ -716,7 +673,6 @@ def build_policy(defaults: Policy, cfg: dict[str, Any]) -> Policy:
             "INVALID",
             f"invalid venv_bootstrap_mode={p.venv_bootstrap_mode!r}; allowed: auto|always|never",
         )
-    # venv_bootstrap_python may be relative to repo root; validate non-empty only.
     if not str(p.venv_bootstrap_python).strip():
         raise RunnerError("CONFIG", "INVALID", "venv_bootstrap_python must be non-empty")
 
@@ -841,6 +797,9 @@ def build_policy(defaults: Policy, cfg: dict[str, Any]) -> Policy:
         "gate_monolith_hub_exports_delta_min",
         "gate_monolith_hub_loc_delta_min",
         "gate_monolith_crossarea_min_distinct_areas",
+        "ipc_socket_cleanup_delay_success_s",
+        "ipc_socket_cleanup_delay_failure_s",
+        "ipc_socket_on_startup_wait_s",
     ):
         if k in cfg:
             setattr(p, k, int(cfg[k]))
@@ -867,7 +826,6 @@ def build_policy(defaults: Policy, cfg: dict[str, Any]) -> Policy:
     p.gate_js_extensions = _as_list_str(cfg, "gate_js_extensions", p.gate_js_extensions)
     _mark_cfg(p, cfg, "gate_js_extensions")
 
-    # gate_js_command: argv list including the tool (default: ["node", "--check"])
     if "gate_js_command" in cfg:
         raw_cmd = cfg["gate_js_command"]
         if isinstance(raw_cmd, str):
@@ -902,7 +860,6 @@ def build_policy(defaults: Policy, cfg: dict[str, Any]) -> Policy:
             f"invalid gate_badguys_runner={p.gate_badguys_runner!r}; allowed: auto|on|off",
         )
 
-    # gate_badguys_command: argv list without python prefix
     if "gate_badguys_command" in cfg:
         raw_cmd = cfg["gate_badguys_command"]
         if isinstance(raw_cmd, str):
@@ -920,7 +877,6 @@ def build_policy(defaults: Policy, cfg: dict[str, Any]) -> Policy:
         p.gate_badguys_command = cmd_list
         _mark_cfg(p, cfg, "gate_badguys_command")
 
-    # gate_badguys_cwd: auto|workspace|clone|live
     if "gate_badguys_cwd" in cfg:
         p.gate_badguys_cwd = str(cfg["gate_badguys_cwd"]).strip().lower()
         _mark_cfg(p, cfg, "gate_badguys_cwd")
@@ -1024,7 +980,6 @@ def apply_cli_overrides(p: Policy, mapping: dict[str, object | None]) -> None:
         setattr(p, k, v)
         p._src[k] = "cli"
 
-    # Parse KEY=VALUE overrides (highest priority)
     ovs = mapping.get("overrides")
     if not ovs:
         return
@@ -1041,7 +996,6 @@ def apply_cli_overrides(p: Policy, mapping: dict[str, object | None]) -> None:
         cur = getattr(p, k)
         coerced = _coerce_override_value(cur, v)
         if isinstance(cur, list):
-            # Append semantics for list fields.
             if isinstance(coerced, list):
                 cur.extend(coerced)
             else:
@@ -1052,7 +1006,6 @@ def apply_cli_overrides(p: Policy, mapping: dict[str, object | None]) -> None:
 
 
 def policy_for_log(p: Policy) -> str:
-    # Stable key order for audit logs.
     keys = sorted([k for k in p.__dict__ if k != "_src"])
     lines: list[str] = []
     for k in keys:
