@@ -47,6 +47,7 @@ from .job_requests import planned_units_count
 from .models import CatalogModel, FlowModel, validate_models
 from .plan import PlanSelectionError, compute_plan
 from .preview import preview_action_impl
+from .session_effective_model import load_effective_model_json
 from .storage import (
     append_jsonl,
     atomic_write_json,
@@ -225,7 +226,12 @@ class ImportWizardEngine:
 
     def get_state(self, session_id: str) -> dict[str, Any]:
         try:
-            return self._load_state(session_id)
+            state = self._load_state(session_id)
+            session_dir = f"import/sessions/{session_id}"
+            session_abs = self._fs.resolve_abs_path(RootName.WIZARDS, session_dir)
+            out = dict(state)
+            out["effective_model"] = load_effective_model_json(session_abs)
+            return out
         except Exception as e:
             return _exception_envelope(e)
 

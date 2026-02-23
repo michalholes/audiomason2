@@ -112,6 +112,7 @@
   let sessionId = null;
   let flow = null;
   let state = null;
+  let sessionEffectiveModel = null;
   let currentStep = null;
 
   async function loadFlow() {
@@ -125,10 +126,36 @@
     }
     const sid = encodeURIComponent(sessionId);
     state = await fetchJSON("/import/ui/session/" + sid + "/state");
+    sessionEffectiveModel = (state && typeof state.effective_model === "object")
+      ? state.effective_model
+      : null;
+  }
+
+  function _resolvedSteps() {
+    const sSteps = (sessionEffectiveModel && Array.isArray(sessionEffectiveModel.steps))
+      ? sessionEffectiveModel.steps
+      : null;
+    if (sSteps) return sSteps;
+    return (flow && Array.isArray(flow.steps)) ? flow.steps : [];
+  }
+
+  function _findSessionStep(stepId) {
+    const steps = (sessionEffectiveModel && Array.isArray(sessionEffectiveModel.steps))
+      ? sessionEffectiveModel.steps
+      : [];
+    return steps.find((s) => s && s.step_id === stepId) || null;
+  }
+
+  function _sessionFieldItems(stepId, field) {
+    const step = _findSessionStep(stepId);
+    const fields = step && Array.isArray(step.fields) ? step.fields : [];
+    const match = fields.find((f) => f && f.name === field) || null;
+    const items = match && Array.isArray(match.items) ? match.items : null;
+    return items || [];
   }
 
   function findStep(stepId) {
-    const steps = flow && Array.isArray(flow.steps) ? flow.steps : [];
+    const steps = _resolvedSteps();
     return steps.find((s) => s && s.step_id === stepId) || null;
   }
 
@@ -168,7 +195,9 @@
 
     if (ftype === "select") {
       const sel = el("select");
-      const items = normalizeItems(fld);
+      const items = sessionEffectiveModel
+        ? _sessionFieldItems(stepId, name)
+        : normalizeItems(fld);
       items.forEach((it) => {
         const v = itemId(it);
         sel.appendChild(el("option", { value: v, text: itemLabel(it) }));
@@ -193,7 +222,9 @@
     }
 
     if (ftype === "multi_select_indexed") {
-      const items = normalizeItems(fld);
+      const items = sessionEffectiveModel
+        ? _sessionFieldItems(stepId, name)
+        : normalizeItems(fld);
       const curArr = Array.isArray(cur) ? cur.map(String) : [];
       const list = el("div", { class: "choiceList" });
       items.forEach((it) => {
@@ -281,11 +312,18 @@
     const sid = encodeURIComponent(sessionId);
     const pid = encodeURIComponent(currentStep);
     const payload = collectPayload(currentStep);
-    await fetchJSON("/import/ui/session/" + sid + "/step/" + pid, {
+    const r = await fetchJSON("/import/ui/session/" + sid + "/step/" + pid, {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(payload),
     });
+    if (r && typeof r === "object" && r.error) {
+      throw new Error(String(r.error.message || "step submission failed"));
+    }
+    state = r;
+    sessionEffectiveModel = (state && typeof state.effective_model === "object")
+      ? state.effective_model
+      : null;
   }
 
   async function startProcessing() {

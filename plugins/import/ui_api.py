@@ -20,6 +20,7 @@ def build_router(*, engine: Any):
 
     from .engine import _exception_envelope
     from .field_schema_validation import FieldSchemaValidationError
+    from .session_effective_model import EffectiveModelJsonError
 
     router = APIRouter(prefix="/import/ui")
 
@@ -145,9 +146,33 @@ def build_router(*, engine: Any):
             )
         return result
 
+    def _effective_model_reason(message: str) -> str:
+        if "missing" in message:
+            return "missing_file"
+        if "invalid JSON" in message:
+            return "invalid_json"
+        if "must be an object" in message:
+            return "invalid_type"
+        return "invalid"
+
     def _call(handler):
         try:
             return _as_response(handler())
+        except EffectiveModelJsonError as e:
+            env = {
+                "error": {
+                    "code": "VALIDATION_ERROR",
+                    "message": str(e),
+                    "details": [
+                        {
+                            "path": "$.effective_model",
+                            "reason": _effective_model_reason(str(e)),
+                            "meta": {"path": str(e.path)},
+                        }
+                    ],
+                }
+            }
+            return JSONResponse(status_code=400, content=env)
         except Exception as e:
             env = _exception_envelope(e)
             return JSONResponse(status_code=_status_code_for_envelope(env), content=env)

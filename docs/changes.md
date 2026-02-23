@@ -1,3 +1,7 @@
+## 2026-02-23T17:00:00+01:00
+
+-   Issue 237: Import UI session state now includes effective_model, and the web wizard renders steps from the session snapshot after session start.
+
 ## 2026-02-23T09:30:00+01:00
 
 -   spec: Split the specification into layered documents under docs/spec/ (ARCH/WIRE/LAYOUT).
@@ -774,3 +778,11 @@
 -   Issue 230: Import plan relative path fields now preserve exact Unicode paths (no ASCII replacement).
 
 -   spec: Bump specification version to 1.1.17 and document display_label for selection items.
+
+## 2026-02-23T00:00:00+01:00
+
+-   Issue 237: Import UI session state now includes effective_model loaded from
+    sessions/<session_id>/effective_model.json, and the Web UI renders steps and
+    multi_select_indexed items from the session effective_model after session start.
+
+-   spec: Bump specification version to 1.1.21.

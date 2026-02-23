@@ -1,6 +1,6 @@
 # AudioMason2 - Project Specification (Authoritative)
 
-Specification Version: 1.1.20 Specification Versioning Policy: Start at
+Specification Version: 1.1.21 Specification Versioning Policy: Start at
 
 NOTE: This repository also provides layered specification views under docs/spec/.
 Use docs/spec/00_index.md as the entry point for ARCH / WIRE / LAYOUT documents.
