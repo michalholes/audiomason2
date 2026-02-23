@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 
+from .events_socket import job_socket_path, send_cancel
 from .models import JobRecord
 from .runner_exec import RunnerExecutor
 
@@ -38,8 +39,10 @@ def is_lock_held(lock_path: Path) -> bool:
 def _inject_web_overrides(argv: list[str], job_id: str) -> list[str]:
     """Return argv with web-required runner overrides injected.
 
-    Web requires runner NDJSON output (json_out=true) and a job-local json dir
-    (patch_layout_json_dir=artifacts/web_jobs/<job_id>).
+    Web requires a deterministic IPC socket path.
+
+    PatchHub must not force json_out or debug verbosity. The live event stream
+    is sourced from the IPC socket.
 
     This function is deterministic and idempotent.
     """
@@ -63,8 +66,6 @@ def _inject_web_overrides(argv: list[str], job_id: str) -> list[str]:
         return False
 
     overrides: list[str] = []
-    if not _has_override("json_out"):
-        overrides.extend(["--override", "json_out=true"])
     if not _has_override("patch_layout_json_dir"):
         overrides.extend(
             [
@@ -72,6 +73,11 @@ def _inject_web_overrides(argv: list[str], job_id: str) -> list[str]:
                 "patch_layout_json_dir=artifacts/web_jobs/" + job_id,
             ]
         )
+
+    if not _has_override("ipc_socket_enabled"):
+        overrides.extend(["--override", "ipc_socket_enabled=true"])
+    if not _has_override("ipc_socket_path"):
+        overrides.extend(["--override", f"ipc_socket_path={job_socket_path(job_id)}"])
 
     if overrides:
         out[insert_at:insert_at] = overrides
@@ -145,6 +151,14 @@ class JobQueue:
                 self._changed()
                 return True
             if job.status == "running":
+                sock_ok = send_cancel(job_socket_path(job_id))
+                if sock_ok:
+                    job.status = "canceled"
+                    job.ended_utc = utc_now()
+                    self._persist(job)
+                    self._changed()
+                    return True
+
                 ok = self._executor.terminate()
                 if ok:
                     job.status = "canceled"
@@ -215,6 +229,15 @@ class JobQueue:
 
             try:
                 effective_cmd = _inject_web_overrides(job.canonical_command, job_id)
+
+                # Runner refuses to start when the IPC socket path already exists.
+                # PatchHub must unlink any stale path left behind by crashes.
+                sock_path = Path(job_socket_path(job_id))
+                sock_path.parent.mkdir(parents=True, exist_ok=True)
+                if sock_path.exists() or sock_path.is_symlink():
+                    with contextlib.suppress(Exception):
+                        sock_path.unlink()
+
                 res = self._executor.run(effective_cmd, cwd=self._repo_root, log_path=runner_log)
                 with self._mu:
                     job.return_code = res.return_code
