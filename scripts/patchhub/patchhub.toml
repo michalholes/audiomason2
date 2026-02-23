@@ -48,7 +48,7 @@ scan_extensions = [".zip", ".patch", ".diff", ".py"]
 # If true, ignore .zip candidates that do not contain any .patch file entry.
 scan_zip_require_patch = true
 scan_ignore_filenames = []
-scan_ignore_prefixes = []
+scan_ignore_prefixes = ["patched"]
 choose_strategy = "mtime_ns"
 tiebreaker = "lex_name"
 

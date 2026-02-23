@@ -237,5 +237,5 @@ failure_zip_delete_on_success_commit = true
 # scope_ignore_suffixes = [".pyc"]
 # scope_ignore_contains = ["/__pycache__/"]
 venv_bootstrap_mode = "auto"  # auto|always|never
-
+unified_patch_continue = false
 venv_bootstrap_python = ".venv/bin/python"
