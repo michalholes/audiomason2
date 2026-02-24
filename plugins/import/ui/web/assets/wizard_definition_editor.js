@@ -86,19 +86,65 @@
     return svg;
   }
 
-  function stableSteps(defn) {
-    const steps = defn && Array.isArray(defn.steps) ? defn.steps : [];
-    return steps
+  function stableGraph(defn) {
+    const root = defn && typeof defn === "object" ? defn : {};
+    const vAny = root.version;
+    const version = typeof vAny === "number" ? vAny : 1;
+
+    if (version === 2 && root.graph && typeof root.graph === "object") {
+      const g = root.graph;
+      const entry = typeof g.entry_step_id === "string" ? g.entry_step_id : null;
+
+      const nodesAny = Array.isArray(g.nodes) ? g.nodes : [];
+      const nodes = nodesAny
+        .map((n) => (n && typeof n.step_id === "string" ? n.step_id : ""))
+        .filter((x) => x);
+
+      const edgesAny = Array.isArray(g.edges) ? g.edges : [];
+      const edges = edgesAny
+        .map((e) => (e && typeof e === "object" ? e : null))
+        .filter((e) => e)
+        .map((e) => ({
+          from_step_id: typeof e.from_step_id === "string" ? e.from_step_id : "",
+          to_step_id: typeof e.to_step_id === "string" ? e.to_step_id : "",
+          when: e.when === undefined ? null : e.when,
+        }))
+        .filter((e) => e.from_step_id && e.to_step_id);
+
+      return { version: 2, entry: entry || (nodes[0] || null), nodes: nodes, edges: edges };
+    }
+
+    const steps = root && Array.isArray(root.steps) ? root.steps : [];
+    const nodes = steps
       .map((x) => (x && typeof x.step_id === "string" ? x.step_id : ""))
       .filter((x) => x);
+
+    const edges = [];
+    for (let i = 0; i < nodes.length - 1; i += 1) {
+      edges.push({ from_step_id: nodes[i], to_step_id: nodes[i + 1], when: null });
+    }
+    return { version: 1, entry: nodes[0] || null, nodes: nodes, edges: edges };
+  }
+
+  function defFromGraph(nodes, entryStepId, edges) {
+    const entry = entryStepId || (nodes && nodes[0]) || null;
+    return {
+      version: 2,
+      wizard_id: "import",
+      graph: {
+        entry_step_id: entry || "",
+        nodes: (nodes || []).map((sid) => ({ step_id: sid })),
+        edges: (edges || []).map((e) => ({
+          from_step_id: e.from_step_id,
+          to_step_id: e.to_step_id,
+          when: e.when === undefined ? null : e.when,
+        })),
+      },
+    };
   }
 
   function defFromSteps(stepIds) {
-    return {
-      version: 1,
-      wizard_id: "import",
-      steps: stepIds.map((sid) => ({ step_id: sid })),
-    };
+    return defFromGraph(stepIds || [], state.entry_step_id, state.edges || []);
   }
 
   const state = {
@@ -112,6 +158,11 @@
     validation: { ok: null, local: [], server: [] },
     showRawError: false,
     hasErrorDetails: false,
+
+    entry_step_id: null,
+    edges: [],
+    rightTab: "details",
+    editingEdgeIdx: null,
   };
 
   const layout = el("div", "wdLayout");
@@ -197,6 +248,54 @@
 
   ui.ta.parentNode.insertBefore(layout, ui.ta);
   ui.ta.classList.add("wdHidden");
+
+
+  // Unified right-side panel: Step Details (existing) + Transitions
+  const flowRight = document.querySelector(".flowRight");
+  const stepPanel = document.getElementById("flowStepPanel");
+  const transitionsPanel = el("div", "flowTransPanel");
+
+  function buildFlowRightTabs() {
+    if (!flowRight || !stepPanel) return;
+
+    const tabBar = el("div", "flowRightTabs");
+    const btnDetails = text("button", "flowRightTab", "Step Details");
+    const btnTrans = text("button", "flowRightTab", "Transitions");
+    btnDetails.type = "button";
+    btnTrans.type = "button";
+
+    const panelDetails = el("div", "flowRightPanel");
+    panelDetails.dataset.tab = "details";
+    const panelTrans = el("div", "flowRightPanel");
+    panelTrans.dataset.tab = "transitions";
+
+    panelDetails.appendChild(stepPanel);
+    panelTrans.appendChild(transitionsPanel);
+
+    tabBar.appendChild(btnDetails);
+    tabBar.appendChild(btnTrans);
+
+    clear(flowRight);
+    flowRight.appendChild(tabBar);
+    flowRight.appendChild(panelDetails);
+    flowRight.appendChild(panelTrans);
+
+    function setTab(name) {
+      state.rightTab = name;
+      btnDetails.classList.toggle("is-active", name === "details");
+      btnTrans.classList.toggle("is-active", name === "transitions");
+      panelDetails.classList.toggle("is-active", name === "details");
+      panelTrans.classList.toggle("is-active", name === "transitions");
+      if (name === "transitions") renderTransitions();
+    }
+
+    btnDetails.addEventListener("click", () => setTab("details"));
+    btnTrans.addEventListener("click", () => setTab("transitions"));
+
+    setTab(state.rightTab || "details");
+  }
+
+  buildFlowRightTabs();
 
   function setupRawErrorPanel() {
     if (!ui.err || !ui.err.parentNode) return;
@@ -297,6 +396,10 @@
     return idx;
   }
 
+  function syncTextarea() {
+    ui.ta.value = H.pretty(defFromGraph(state.draft, state.entry_step_id, state.edges));
+  }
+
   function setSelected(stepId) {
     state.selected = stepId || null;
     try {
@@ -361,6 +464,7 @@
     if (!canRemove(stepId)) return;
     state.draft = state.draft.filter((x) => x !== stepId);
     if (state.selected === stepId) state.selected = null;
+    syncTextarea();
     render();
   }
 
@@ -386,6 +490,7 @@
     const next = state.draft.slice();
     next.splice(insertAt, 0, sid);
     state.draft = next;
+    syncTextarea();
     render();
   }
 
@@ -406,6 +511,7 @@
 
     filtered.splice(to, 0, dragId);
     state.draft = filtered;
+    syncTextarea();
     render();
   }
 
@@ -454,11 +560,15 @@
       return false;
     }
     const defn = out.data && out.data.definition ? out.data.definition : {};
-    const steps = stableSteps(defn);
-    state.loaded = steps.slice();
-    state.draft = steps.slice();
+    const g = stableGraph(defn);
+
+    state.loaded = g.nodes.slice();
+    state.draft = g.nodes.slice();
+    state.edges = Array.isArray(g.edges) ? g.edges.slice() : [];
+    state.entry_step_id = g.entry || null;
     state.selected = null;
-    ui.ta.value = H.pretty(defn);
+
+    ui.ta.value = H.pretty(defFromGraph(state.draft, state.entry_step_id, state.edges));
     return true;
   }
 
@@ -478,7 +588,9 @@
   async function validateDraft() {
     renderError(null, false);
     setValidation(null, [], []);
-    const payload = { definition: defFromSteps(state.draft) };
+    const payload = {
+      definition: defFromGraph(state.draft, state.entry_step_id, state.edges),
+    };
     const out = await H.requestJSON("/import/ui/wizard-definition/validate", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -494,9 +606,11 @@
       return false;
     }
     const defn = out.data && out.data.definition ? out.data.definition : {};
-    const steps = stableSteps(defn);
-    state.draft = steps.slice();
-    ui.ta.value = H.pretty(defn);
+    const g = stableGraph(defn);
+    state.draft = g.nodes.slice();
+    state.edges = g.edges.slice();
+    state.entry_step_id = g.entry || null;
+    ui.ta.value = H.pretty(defFromGraph(state.draft, state.entry_step_id, state.edges));
     setValidation(true, [], []);
     render();
     return true;
@@ -505,7 +619,9 @@
   async function saveDraft() {
     if (!(await validateDraft())) return false;
 
-    const payload = { definition: defFromSteps(state.draft) };
+    const payload = {
+      definition: defFromGraph(state.draft, state.entry_step_id, state.edges),
+    };
     const out = await H.requestJSON("/import/ui/wizard-definition", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -516,11 +632,13 @@
       return false;
     }
     const defn = out.data && out.data.definition ? out.data.definition : {};
-    const steps = stableSteps(defn);
-    state.loaded = steps.slice();
-    state.draft = steps.slice();
+    const g = stableGraph(defn);
+    state.loaded = g.nodes.slice();
+    state.draft = g.nodes.slice();
+    state.edges = g.edges.slice();
+    state.entry_step_id = g.entry || null;
     state.selected = null;
-    ui.ta.value = H.pretty(defn);
+    ui.ta.value = H.pretty(defFromGraph(state.draft, state.entry_step_id, state.edges));
     await loadHistory();
     render();
     return true;
@@ -539,11 +657,13 @@
       return false;
     }
     const defn = out.data && out.data.definition ? out.data.definition : {};
-    const steps = stableSteps(defn);
-    state.loaded = steps.slice();
-    state.draft = steps.slice();
+    const g = stableGraph(defn);
+    state.loaded = g.nodes.slice();
+    state.draft = g.nodes.slice();
+    state.edges = g.edges.slice();
+    state.entry_step_id = g.entry || null;
     state.selected = null;
-    ui.ta.value = H.pretty(defn);
+    ui.ta.value = H.pretty(defFromGraph(state.draft, state.entry_step_id, state.edges));
     await loadHistory();
     render();
     return true;
@@ -564,11 +684,13 @@
       return;
     }
     const defn = out.data && out.data.definition ? out.data.definition : {};
-    const steps = stableSteps(defn);
-    state.loaded = steps.slice();
-    state.draft = steps.slice();
+    const g = stableGraph(defn);
+    state.loaded = g.nodes.slice();
+    state.draft = g.nodes.slice();
+    state.edges = g.edges.slice();
+    state.entry_step_id = g.entry || null;
     state.selected = null;
-    ui.ta.value = H.pretty(defn);
+    ui.ta.value = H.pretty(defFromGraph(state.draft, state.entry_step_id, state.edges));
     await loadHistory();
     render();
   }
@@ -800,6 +922,463 @@
       renderPaletteGroup("Conditional", "conditional", conditional)
     );
   }
+
+  function normPath(s) {
+    const raw = String(s || "").trim();
+    if (raw.startsWith("$.")) return raw.slice(2);
+    return raw;
+  }
+
+  function condSummary(when) {
+    if (when === null || when === undefined) return "Always";
+    if (typeof when === "boolean") return when ? "True" : "False";
+    if (!when || typeof when !== "object") return "Custom";
+
+    const op = when.op ? String(when.op) : "";
+    if (op === "eq" || op === "ne") {
+      const p = when.path ? String(when.path) : "";
+      const v = when.value;
+      return op + " " + p + " = " + String(v);
+    }
+    if (op === "exists" || op === "truthy") {
+      return op + " " + String(when.path || "");
+    }
+    if (op === "not" && when.cond && typeof when.cond === "object") {
+      const c = when.cond;
+      const cop = c.op ? String(c.op) : "";
+      if (cop === "truthy") return "falsy " + String(c.path || "");
+      if (cop === "exists") return "not_exists " + String(c.path || "");
+    }
+    if (op === "or" && Array.isArray(when.conds)) {
+      const conds = when.conds;
+      const eqs = conds.filter((c) => c && c.op === "eq" && c.path);
+      if (eqs.length === conds.length && eqs.length) {
+        const path = String(eqs[0].path);
+        const vals = eqs.map((c) => String(c.value));
+        return "in " + path + " [" + vals.join(", " ) + "]";
+      }
+    }
+    return "Custom";
+  }
+
+  function parseWhenToUI(when) {
+    if (when === null || when === undefined) {
+      return {
+        always: true,
+        op: "eq",
+        path: "",
+        valueType: "text",
+        valueText: "",
+        inList: [],
+      };
+    }
+    if (!when || typeof when !== "object") {
+      return {
+        always: false,
+        op: "eq",
+        path: "",
+        valueType: "text",
+        valueText: "",
+        inList: [],
+      };
+    }
+    const op = when.op ? String(when.op) : "";
+    if (op === "eq" || op === "ne") {
+      const v = when.value;
+      if (typeof v === "boolean") {
+        return {
+          always: false,
+          op: op,
+          path: String(when.path || ""),
+          valueType: v ? "true" : "false",
+          valueText: "",
+          inList: [],
+        };
+      }
+      return {
+        always: false,
+        op: op,
+        path: String(when.path || ""),
+        valueType: "text",
+        valueText: v === undefined || v === null ? "" : String(v),
+        inList: [],
+      };
+    }
+    if (op === "exists" || op === "truthy") {
+      return {
+        always: false,
+        op: op,
+        path: String(when.path || ""),
+        valueType: "text",
+        valueText: "",
+        inList: [],
+      };
+    }
+    if (op === "not" && when.cond && typeof when.cond === "object") {
+      const c = when.cond;
+      const cop = c.op ? String(c.op) : "";
+      if (cop === "truthy") {
+        return {
+          always: false,
+          op: "falsy",
+          path: String(c.path || ""),
+          valueType: "text",
+          valueText: "",
+          inList: [],
+        };
+      }
+      if (cop === "exists") {
+        return {
+          always: false,
+          op: "not_exists",
+          path: String(c.path || ""),
+          valueType: "text",
+          valueText: "",
+          inList: [],
+        };
+      }
+    }
+    if (op === "or" && Array.isArray(when.conds)) {
+      const conds = when.conds;
+      const eqs = conds.filter((c) => c && c.op === "eq" && c.path);
+      if (eqs.length === conds.length && eqs.length) {
+        const path = String(eqs[0].path);
+        const vals = eqs.map((c) => String(c.value));
+        return {
+          always: false,
+          op: "in",
+          path: path,
+          valueType: "text",
+          valueText: "",
+          inList: vals,
+        };
+      }
+    }
+    return {
+      always: false,
+      op: "eq",
+      path: "",
+      valueType: "text",
+      valueText: "",
+      inList: [],
+    };
+  }
+
+  function buildWhenFromUI(d) {
+    if (d.always) return null;
+    const op = String(d.op || "");
+    const path = normPath(d.path);
+    if (!path) return null;
+
+    if (op === "eq" || op === "ne") {
+      let v = d.valueText;
+      if (d.valueType === "true") v = true;
+      if (d.valueType === "false") v = false;
+      return { op: op, path: path, value: v };
+    }
+    if (op === "exists" || op === "truthy") {
+      return { op: op, path: path };
+    }
+    if (op === "falsy") {
+      return { op: "not", cond: { op: "truthy", path: path } };
+    }
+    if (op === "not_exists") {
+      return { op: "not", cond: { op: "exists", path: path } };
+    }
+    if (op === "in") {
+      const items = Array.isArray(d.inList) ? d.inList : [];
+      return {
+        op: "or",
+        conds: items
+          .filter((x) => String(x || "").trim())
+          .map((x) => ({ op: "eq", path: path, value: String(x) })),
+      };
+    }
+    return null;
+  }
+
+  function ensureEntryValid() {
+    if (!state.entry_step_id || state.draft.indexOf(state.entry_step_id) < 0) {
+      state.entry_step_id = state.draft[0] || null;
+    }
+  }
+
+  function renderTransitions() {
+    if (!transitionsPanel) return;
+    clear(transitionsPanel);
+    ensureEntryValid();
+
+    const header = el("div", "flowTransHeader");
+    header.appendChild(text("div", "flowTransTitle", "Transitions"));
+
+    const entryWrap = el("div", "flowTransEntry");
+    entryWrap.appendChild(text("label", "flowTransLabel", "Entry"));
+    const entrySel = el("select", "flowTransSelect");
+    state.draft.forEach((sid) => {
+      const opt = el("option", null);
+      opt.value = sid;
+      opt.textContent = sid;
+      if (sid === state.entry_step_id) opt.selected = true;
+      entrySel.appendChild(opt);
+    });
+    entrySel.addEventListener("change", () => {
+      state.entry_step_id = entrySel.value || null;
+      syncTextarea();
+    });
+    entryWrap.appendChild(entrySel);
+    header.appendChild(entryWrap);
+
+    const addWrap = el("div", "flowTransAdd");
+    const fromSel = el("select", "flowTransSelect");
+    const toSel = el("select", "flowTransSelect");
+    state.draft.forEach((sid) => {
+      const a = el("option", null);
+      a.value = sid;
+      a.textContent = sid;
+      fromSel.appendChild(a);
+      const b = el("option", null);
+      b.value = sid;
+      b.textContent = sid;
+      toSel.appendChild(b);
+    });
+    if (state.selected && state.draft.indexOf(state.selected) >= 0) fromSel.value = state.selected;
+
+    addWrap.appendChild(text("label", "flowTransLabel", "From"));
+    addWrap.appendChild(fromSel);
+    addWrap.appendChild(text("label", "flowTransLabel", "To"));
+    addWrap.appendChild(toSel);
+
+    const btnAddEdge = text("button", "btn", "Add transition");
+    btnAddEdge.type = "button";
+    btnAddEdge.addEventListener("click", () => {
+      const frm = fromSel.value || "";
+      const to = toSel.value || "";
+      if (!frm || !to) return;
+      if (frm === to) {
+        pushLocalValidation("Self-loop transitions are not allowed.");
+        return;
+      }
+      if (state.draft.indexOf(frm) < 0 || state.draft.indexOf(to) < 0) return;
+      state.edges = state.edges.concat([{ from_step_id: frm, to_step_id: to, when: null }]);
+      syncTextarea();
+      renderTransitions();
+    });
+    addWrap.appendChild(btnAddEdge);
+
+    transitionsPanel.appendChild(header);
+    transitionsPanel.appendChild(addWrap);
+
+    const table = el("div", "flowTransTable");
+    const head = el("div", "flowTransRow flowTransHead");
+    head.appendChild(text("div", "flowTransCellFrom", "From"));
+    head.appendChild(text("div", "flowTransCellTo", "To"));
+    head.appendChild(text("div", "flowTransCellCond", "Condition"));
+    head.appendChild(text("div", "flowTransCellAct", "Actions"));
+    table.appendChild(head);
+
+    function moveEdge(idx, dir) {
+      const e = state.edges[idx];
+      if (!e) return;
+      const frm = e.from_step_id;
+      const swap = idx + dir;
+      const e2 = state.edges[swap];
+      if (!e2 || e2.from_step_id !== frm) return;
+      const next = state.edges.slice();
+      next[idx] = e2;
+      next[swap] = e;
+      state.edges = next;
+      syncTextarea();
+      renderTransitions();
+    }
+
+    state.edges.forEach((e, idx) => {
+      const row = el("div", "flowTransRow");
+      row.appendChild(text("div", "flowTransCellFrom", e.from_step_id));
+      row.appendChild(text("div", "flowTransCellTo", e.to_step_id));
+
+      const condCell = el("div", "flowTransCellCond");
+      const condBtn = text("button", "flowTransCondBtn", condSummary(e.when));
+      condBtn.type = "button";
+      condBtn.addEventListener("click", () => {
+        state.editingEdgeIdx = state.editingEdgeIdx === idx ? null : idx;
+        renderTransitions();
+      });
+      condCell.appendChild(condBtn);
+      row.appendChild(condCell);
+
+      const act = el("div", "flowTransCellAct");
+      const btnUpEdge = text("button", "btn", "Up");
+      const btnDownEdge = text("button", "btn", "Down");
+      const btnDel = text("button", "btn", "Delete");
+      btnUpEdge.type = "button";
+      btnDownEdge.type = "button";
+      btnDel.type = "button";
+
+      btnUpEdge.addEventListener("click", () => moveEdge(idx, -1));
+      btnDownEdge.addEventListener("click", () => moveEdge(idx, +1));
+      btnDel.addEventListener("click", () => {
+        state.edges = state.edges.filter((_, i) => i !== idx);
+        state.editingEdgeIdx = null;
+        syncTextarea();
+        renderTransitions();
+      });
+      act.appendChild(btnUpEdge);
+      act.appendChild(btnDownEdge);
+      act.appendChild(btnDel);
+      row.appendChild(act);
+
+      table.appendChild(row);
+
+      if (state.editingEdgeIdx === idx) {
+        const ed = el("div", "flowTransEditor");
+        const uiD = parseWhenToUI(e.when);
+
+        const alwaysWrap = el("label", "flowTransAlways");
+        const always = el("input", null);
+        always.type = "checkbox";
+        always.checked = !!uiD.always;
+        alwaysWrap.appendChild(always);
+        alwaysWrap.appendChild(text("span", null, "Always"));
+
+        const opSel = el("select", "flowTransSelect");
+        ["eq", "ne", "truthy", "falsy", "exists", "not_exists", "in"].forEach((k) => {
+          const o = el("option", null);
+          o.value = k;
+          o.textContent = k;
+          if (k === uiD.op) o.selected = true;
+          opSel.appendChild(o);
+        });
+
+        const dlId = "flowPathDL";
+        let dl = document.getElementById(dlId);
+        if (!dl) {
+          dl = el("datalist", null);
+          dl.id = dlId;
+          (state.draft || []).forEach((sid) => {
+            const o = el("option", null);
+            o.value = "$.inputs." + sid + ".<field>";
+            dl.appendChild(o);
+          });
+          const o2 = el("option", null);
+          o2.value = "$.state.<field>";
+          dl.appendChild(o2);
+          document.body.appendChild(dl);
+        }
+
+        const pathInp = el("input", "flowTransPath");
+        pathInp.type = "text";
+        pathInp.setAttribute("list", dlId);
+        pathInp.value = uiD.path ? "$." + uiD.path : "";
+
+        const valWrap = el("div", "flowTransVal");
+        const valType = el("select", "flowTransSelect");
+        ["text", "true", "false"].forEach((k) => {
+          const o = el("option", null);
+          o.value = k;
+          o.textContent = k;
+          if (k === uiD.valueType) o.selected = true;
+          valType.appendChild(o);
+        });
+        const valText = el("input", "flowTransValText");
+        valText.type = "text";
+        valText.value = uiD.valueText || "";
+
+        const inWrap = el("div", "flowTransIn");
+        const inList = el("div", "flowTransInList");
+        const btnAddIn = text("button", "btn", "Add item");
+        btnAddIn.type = "button";
+
+        function renderInList(items) {
+          clear(inList);
+          items.forEach((v, i) => {
+            const r = el("div", "flowTransInRow");
+            const t = el("input", "flowTransInText");
+            t.type = "text";
+            t.value = String(v || "");
+            t.addEventListener("input", () => {
+              items[i] = t.value;
+            });
+            const del = text("button", "btn", "Remove");
+            del.type = "button";
+            del.addEventListener("click", () => {
+              items.splice(i, 1);
+              renderInList(items);
+            });
+            r.appendChild(t);
+            r.appendChild(del);
+            inList.appendChild(r);
+          });
+        }
+
+        const inItems = (uiD.inList || []).slice();
+        renderInList(inItems);
+        btnAddIn.addEventListener("click", () => {
+          inItems.push("");
+          renderInList(inItems);
+        });
+        inWrap.appendChild(inList);
+        inWrap.appendChild(btnAddIn);
+
+        const btnApply = text("button", "btn", "Apply");
+        btnApply.type = "button";
+        btnApply.addEventListener("click", () => {
+          const d = {
+            always: !!always.checked,
+            op: opSel.value,
+            path: pathInp.value,
+            valueType: valType.value,
+            valueText: valText.value,
+            inList: inItems,
+          };
+          const when = buildWhenFromUI(d);
+          const next = state.edges.slice();
+          next[idx] = { from_step_id: e.from_step_id, to_step_id: e.to_step_id, when: when };
+          state.edges = next;
+          syncTextarea();
+          state.editingEdgeIdx = null;
+          renderTransitions();
+        });
+
+        function applyVisibility() {
+          const dis = !!always.checked;
+          opSel.disabled = dis;
+          pathInp.disabled = dis;
+
+          const opv = opSel.value;
+          const needsValue = opv === "eq" || opv === "ne";
+          const needsIn = opv === "in";
+          valWrap.classList.toggle("is-hidden", dis || !needsValue);
+          inWrap.classList.toggle("is-hidden", dis || !needsIn);
+
+          valType.disabled = dis || !needsValue;
+          valText.disabled = dis || !needsValue || valType.value !== "text";
+        }
+
+        always.addEventListener("change", applyVisibility);
+        opSel.addEventListener("change", applyVisibility);
+        valType.addEventListener("change", applyVisibility);
+        applyVisibility();
+
+        ed.appendChild(alwaysWrap);
+        ed.appendChild(text("div", "flowTransLabel", "op"));
+        ed.appendChild(opSel);
+        ed.appendChild(text("div", "flowTransLabel", "path"));
+        ed.appendChild(pathInp);
+
+        valWrap.appendChild(text("div", "flowTransLabel", "value"));
+        valWrap.appendChild(valType);
+        valWrap.appendChild(valText);
+        ed.appendChild(valWrap);
+        ed.appendChild(inWrap);
+        ed.appendChild(btnApply);
+
+        table.appendChild(ed);
+      }
+    });
+
+    transitionsPanel.appendChild(table);
+  }
+
 
   search.addEventListener("input", () => render());
 

@@ -781,6 +781,144 @@ textarea {
   min-width: 320px;
 }
 
+.flowRightTabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.flowRightTab {
+  background: rgba(15, 22, 38, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  color: #e6e9ef;
+  padding: 8px 10px;
+  cursor: pointer;
+}
+
+.flowRightTab.is-active {
+  background: #2a3b62;
+}
+
+.flowRightPanel {
+  display: none;
+}
+
+.flowRightPanel.is-active {
+  display: block;
+}
+
+.flowTransPanel {
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.flowTransHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  background: rgba(15, 22, 38, 0.98);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.flowTransTitle {
+  font-weight: 800;
+}
+
+.flowTransEntry {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.flowTransAdd {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.flowTransLabel {
+  opacity: 0.85;
+  font-size: 12px;
+}
+
+.flowTransSelect {
+  min-width: 140px;
+}
+
+.flowTransTable {
+  padding: 12px;
+}
+
+.flowTransRow {
+  display: grid;
+  grid-template-columns: 1.2fr 1.2fr 2fr 1.3fr;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.flowTransHead {
+  font-weight: 800;
+  opacity: 0.95;
+}
+
+.flowTransCondBtn {
+  width: 100%;
+  text-align: left;
+  background: rgba(15, 22, 38, 0.98);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  color: #e6e9ef;
+  padding: 7px 10px;
+  cursor: pointer;
+}
+
+.flowTransCellAct {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.flowTransEditor {
+  margin: 10px 0 14px 0;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 12px;
+  display: grid;
+  gap: 8px;
+}
+
+.flowTransAlways {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.flowTransPath,
+.flowTransValText,
+.flowTransInText {
+  width: 100%;
+}
+
+.flowTransInList {
+  display: grid;
+  gap: 8px;
+}
+
+.flowTransInRow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
 .flowStepPanel {
   border: 1px solid rgba(255, 255, 255, 0.10);
   border-radius: 12px;
