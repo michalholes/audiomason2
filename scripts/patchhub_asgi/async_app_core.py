@@ -10,6 +10,7 @@ from patchhub import app_ui as _ui
 from patchhub.config import AppConfig
 from patchhub.fs_jail import FsJail
 
+from .async_offload import to_thread
 from .async_queue import AsyncJobQueue
 from .async_runner_exec import AsyncRunnerExecutor
 
@@ -49,7 +50,45 @@ class AsyncAppCore:
     api_parse_command = _core.api_parse_command
     api_runs = _core.api_runs
     api_runner_tail = _core.api_runner_tail
-    diagnostics = _core.diagnostics
+
+    async def diagnostics(self) -> dict[str, object]:
+        qstate = await self.queue.state()
+
+        def _sync_part() -> dict[str, object]:
+            runs = _core.iter_runs(self.patches_root, self.cfg.indexing.log_filename_regex)
+            stats = _core.compute_stats(runs, self.cfg.indexing.stats_windows_days)
+
+            lock_held = False
+            try:
+                from patchhub.queue import is_lock_held
+
+                lock_held = is_lock_held(self.jail.lock_path())
+            except Exception:
+                lock_held = False
+
+            usage = _core.shutil.disk_usage(str(self.patches_root))
+            return {
+                "lock": {
+                    "path": str(Path(self.cfg.paths.patches_root) / "am_patch.lock"),
+                    "held": lock_held,
+                },
+                "disk": {
+                    "total": int(usage.total),
+                    "used": int(usage.used),
+                    "free": int(usage.free),
+                },
+                "runs": {"count": len(runs)},
+                "stats": {
+                    "all_time": stats.all_time.__dict__,
+                    "windows": [w.__dict__ for w in stats.windows],
+                },
+            }
+
+        sync_part = await to_thread(_sync_part)
+        return {
+            "queue": {"queued": int(qstate.queued), "running": int(qstate.running)},
+            **sync_part,
+        }
 
     api_fs_list = _fs.api_fs_list
     api_fs_read_text = _fs.api_fs_read_text

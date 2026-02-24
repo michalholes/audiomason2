@@ -20,6 +20,7 @@ from fastapi.responses import (
 from patchhub.app_support import read_tail
 
 from .async_app_core import AsyncAppCore
+from .async_offload import to_thread
 from .sse_jsonl_stream import stream_job_events_sse
 
 UPLOAD_PATCH_FILE: Any = File(...)
@@ -238,52 +239,57 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
             return JSONResponse({"ok": False, "error": "No valid paths"}, status_code=400)
         rel_paths = sorted(set(rel_paths))
 
-        files: list[tuple[str, Path]] = []
-        seen: set[str] = set()
-        for rel in rel_paths:
-            try:
+        def _build_archive_bytes_sync(core: AsyncAppCore, rel_paths: list[str]) -> bytes:
+            files: list[tuple[str, Path]] = []
+            seen: set[str] = set()
+            for rel in rel_paths:
                 p = core.jail.resolve_rel(rel)
-            except Exception as e:
-                return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
-            if not p.exists():
-                return JSONResponse({"ok": False, "error": f"Not found: {rel}"}, status_code=400)
-            if p.is_file():
-                if rel not in seen:
-                    files.append((rel, p))
-                    seen.add(rel)
-                continue
+                if not p.exists():
+                    raise FileNotFoundError(rel)
+                if p.is_file():
+                    if rel not in seen:
+                        files.append((rel, p))
+                        seen.add(rel)
+                    continue
 
-            root = p
-            for dirpath, dirnames, filenames in os.walk(root):
-                dirnames.sort()
-                filenames.sort()
-                dp = Path(dirpath)
-                for fn in filenames:
-                    fp = dp / fn
-                    if not fp.is_file():
-                        continue
-                    sub_rel = str(fp.relative_to(core.jail.patches_root())).replace(os.sep, "/")
-                    if sub_rel not in seen:
-                        files.append((sub_rel, fp))
-                        seen.add(sub_rel)
+                root = p
+                for dirpath, dirnames, filenames in os.walk(root):
+                    dirnames.sort()
+                    filenames.sort()
+                    dp = Path(dirpath)
+                    for fn in filenames:
+                        fp = dp / fn
+                        if not fp.is_file():
+                            continue
+                        sub_rel = str(fp.relative_to(core.jail.patches_root())).replace(os.sep, "/")
+                        if sub_rel not in seen:
+                            files.append((sub_rel, fp))
+                            seen.add(sub_rel)
 
-        files.sort(key=lambda t: t[0])
+            files.sort(key=lambda t: t[0])
 
-        import io
-        import zipfile
+            import io
+            import zipfile
 
-        buf = io.BytesIO()
-        with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as z:
-            for arc, fp in files:
-                z.write(fp, arcname=arc.replace(os.sep, "/"))
+            buf = io.BytesIO()
+            with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as z:
+                for arc, fp in files:
+                    z.write(fp, arcname=arc.replace(os.sep, "/"))
 
-        data = buf.getvalue()
+            return buf.getvalue()
+
+        try:
+            data = await to_thread(_build_archive_bytes_sync, core, rel_paths)
+        except FileNotFoundError as e:
+            return JSONResponse({"ok": False, "error": f"Not found: {e.args[0]}"}, status_code=400)
+        except Exception as e:
+            return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
         headers = {"Content-Disposition": 'attachment; filename="selection.zip"'}
         return Response(content=data, media_type="application/zip", headers=headers)
 
     @app.get("/api/debug/diagnostics")
     async def api_debug_diagnostics() -> JSONResponse:
-        return JSONResponse(core.diagnostics(), status_code=200)
+        return JSONResponse(await core.diagnostics(), status_code=200)
 
     @app.get("/api/jobs/{job_id}/events")
     async def api_jobs_events(job_id: str) -> StreamingResponse:
