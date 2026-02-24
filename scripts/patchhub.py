@@ -34,8 +34,8 @@ def main() -> int:
     scripts_dir = repo_root / "scripts"
     sys.path.insert(0, str(scripts_dir))
 
+    from patchhub.asgi.asgi_server import serve_asgi
     from patchhub.config import load_config
-    from patchhub_asgi.asgi_server import serve_asgi
 
     cfg_path = (repo_root / args.config).resolve()
 
