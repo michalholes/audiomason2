@@ -71,7 +71,7 @@ class AsyncAppCore:
 
             lock_held = False
             try:
-                from patchhub.queue import is_lock_held
+                from patchhub.job_ids import is_lock_held
 
                 lock_held = is_lock_held(self.jail.lock_path())
             except Exception:

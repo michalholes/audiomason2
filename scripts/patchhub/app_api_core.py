@@ -359,7 +359,7 @@ def diagnostics(self) -> dict[str, Any]:
     qstate = self.queue.state()
     lock_held = False
     try:
-        from .queue import is_lock_held
+        from .job_ids import is_lock_held
 
         lock_held = is_lock_held(self.jail.lock_path())
     except Exception:

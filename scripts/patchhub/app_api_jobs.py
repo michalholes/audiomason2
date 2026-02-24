@@ -10,9 +10,9 @@ from .command_parse import (
     parse_runner_command,
 )
 from .issue_alloc import allocate_next_issue_id
+from .job_ids import new_job_id
 from .job_store import list_job_jsons, load_job_json
 from .models import JobMode, JobRecord
-from .queue import new_job_id
 from .zip_commit_message import ZipCommitConfig, read_commit_message_from_zip_path
 
 

@@ -34,42 +34,26 @@ def main() -> int:
     scripts_dir = repo_root / "scripts"
     sys.path.insert(0, str(scripts_dir))
 
-    from patchhub.app import App
     from patchhub.config import load_config
-    from patchhub.server import WebServer
     from patchhub_asgi.asgi_server import serve_asgi
 
     cfg_path = (repo_root / args.config).resolve()
 
     raw = tomllib.loads(cfg_path.read_text(encoding="utf-8"))
     server_raw = raw.get("server", {})
-    backend = str(server_raw.get("backend", "sync") or "sync")
-    if backend not in ("sync", "asgi"):
-        print(f"WEB: invalid backend={backend!r}; expected 'sync' or 'asgi'")
+    backend = str(server_raw.get("backend", "asgi") or "asgi")
+    if backend != "asgi":
+        print(f"WEB: invalid backend={backend!r}; expected 'asgi'")
         return 2
 
     cfg = load_config(cfg_path)
 
-    if backend == "asgi":
-        host = cfg.server.host
-        port = cfg.server.port
-        print(f"ASGI: listening on http://{host}:{port}")
-        if host == "0.0.0.0":
-            print(f"ASGI: local access http://127.0.0.1:{port}")
-        serve_asgi(repo_root=repo_root, cfg=cfg)
-        return 0
-
-    app = App(repo_root=repo_root, cfg=cfg)
-    server = WebServer((cfg.server.host, cfg.server.port), app=app)
     host = cfg.server.host
     port = cfg.server.port
-    print(f"WEB: listening on http://{host}:{port}")
+    print(f"ASGI: listening on http://{host}:{port}")
     if host == "0.0.0.0":
-        print(f"WEB: local access http://127.0.0.1:{port}")
-    try:
-        server.serve_forever(poll_interval=0.2)
-    finally:
-        server.server_close()
+        print(f"ASGI: local access http://127.0.0.1:{port}")
+    serve_asgi(repo_root=repo_root, cfg=cfg)
     return 0
 
 
