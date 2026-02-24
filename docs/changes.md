@@ -821,3 +821,10 @@
     root keys, returning canonical error envelopes.
 
 -   spec: Bump specification version to 1.1.24.
+
+## 2026-02-24T00:00:00+01:00
+- spec: WizardDefinition v2 FlowGraph (branching nodes/edges)
+- spec: Deterministic condition language for edges (no code)
+- spec: Follow-up questions modeled as nodes/edges
+- spec: Define step settings ownership via FlowConfig.defaults[step_id]
+- spec: Bump specification version to 1.1.27

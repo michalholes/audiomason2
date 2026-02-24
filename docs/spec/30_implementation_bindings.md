@@ -265,3 +265,15 @@ writing files
 
 Persisted artifacts MUST NOT include timestamps or editor metadata
 fields.
+FlowGraph and per-step settings ownership:
+
+- WizardDefinition (v2) is the authoritative structural document. It contains
+  nodes, edges, and entry_step_id only (no timestamps, no editor metadata).
+- FlowConfig is the authoritative behavior/settings document. Per-step settings
+  MUST be stored under flow_config.defaults[step_id] as a dict.
+
+This separation is normative: structure != behavior. Renderers MUST NOT embed
+branching rules or condition evaluation. The import engine owns normalization
+(v1 -> v2) and condition evaluation.
+
+

@@ -747,3 +747,19 @@ If a plugin owns its UI, the following structure is normative:
 
 The presence of `web/` indicates that the plugin serves its own
 web interface.
+
+10a) POST /import/ui/wizard-definition/preview
+   - Produces a read-only preview of WizardDefinition normalization and warnings.
+   - Request body:
+     { "definition": <WizardDefinition> }
+   - Contract requirements:
+     - definition is REQUIRED
+     - Unknown request body fields MUST be rejected
+     - Any contract violation MUST return HTTP 400 with VALIDATION_ERROR (10.4.1)
+   - Response body:
+     { "definition": <WizardDefinition>, "warnings": [ "string" ] }
+
+Notes:
+- WizardDefinition validate/save MUST accept WizardDefinition v2 payloads (FlowGraph).
+- validate and preview SHOULD return a canonical WizardDefinition v2, including v1 -> v2 normalization.
+

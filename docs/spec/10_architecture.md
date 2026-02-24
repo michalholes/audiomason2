@@ -1168,3 +1168,97 @@ UI layers (CLI/Web) MUST:
 Any UI-level business logic is a contract violation.
 
 ------------------------------------------------------------------------
+
+
+#### FlowGraph Branching Model (WizardDefinition v2) (Normative)
+
+The Import wizard flow MUST be representable as a directed graph. The
+graph is the authoritative structure for step order and branching and
+MUST be evaluated by the engine (renderer-neutral).
+
+Concepts:
+- Nodes: steps identified by step_id.
+- Edges: transitions from one step to the next with an optional condition.
+- Entry node: entry_step_id.
+- Terminal node: processing (Phase 1) (MUST remain terminal).
+
+WizardDefinition v2 (FlowGraph) representation (JSON):
+
+{
+  "version": 2,
+  "wizard_id": "import",
+  "entry_step_id": "select_authors",
+  "nodes": [
+    {"step_id": "select_authors"},
+    {"step_id": "select_books"},
+    {"step_id": "conflict_policy"},
+    {"step_id": "processing"}
+  ],
+  "edges": [
+    {"from": "select_authors", "to": "select_books"},
+    {"from": "select_books", "to": "conflict_policy"},
+    {"from": "conflict_policy", "to": "processing"}
+  ]
+}
+
+Rules (v2):
+- nodes.step_id MUST be unique.
+- Every edge.from and edge.to MUST reference an existing nodes.step_id.
+- Deterministic priority:
+  - nodes order defines the default linear order for display only.
+  - edges order defines deterministic priority when multiple edges match.
+- Persisted WizardDefinition MUST NOT include timestamps or editor metadata.
+- Engine-side invariants MUST be enforced during validate/save.
+
+Backward compatibility:
+- WizardDefinition v1 (linear steps list) remains supported.
+- The engine MUST normalize v1 to v2 as a linear graph during validation.
+
+Pinned Phase 1 constraints:
+- select_authors MUST remain the entry_step_id.
+- processing MUST remain the terminal step.
+
+Condition language (edges.condition) (Normative)
+
+An edge MAY contain a condition object. If condition is missing, it MUST
+be treated as always-true.
+
+Condition schema:
+
+{"op": "eq", "path": "$.inputs.some_step.some_field", "value": true}
+
+Supported ops (exact set):
+- eq, ne
+- truthy, falsy
+- exists, not_exists
+- in  (value in list of literals)
+
+Path rules:
+- path MUST start with $.inputs. or $.state. (read-only view).
+- value and list values MUST be JSON primitives (string, integer, boolean).
+
+Evaluation rules:
+- Undefined path:
+  - exists -> false
+  - not_exists -> true
+  - eq/ne/truthy/falsy/in -> false
+- Evaluation MUST be total and deterministic (no exceptions).
+
+Follow-up questions as conditional sub-flow (Pattern)
+
+A follow-up question is modeled as a normal step node and conditional
+edges. No special syntax is allowed.
+
+Example pattern:
+- enable_rename_rules asks yes/no.
+- If yes: enable_rename_rules -> rename_rules_detail.
+- Else: enable_rename_rules -> next_step.
+
+Structure vs behavior governance (Normative)
+
+WizardDefinition (v2) defines structure and branching only. Per-step
+behavior settings MUST be stored in FlowConfig (see 30_implementation_bindings.md):
+
+- flow_config.defaults[step_id] holds per-step settings as a dict.
+- The engine MUST treat structure (WizardDefinition) and behavior
+  (FlowConfig defaults) as distinct sources of truth.
