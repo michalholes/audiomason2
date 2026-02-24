@@ -642,42 +642,49 @@ executed or skipped, including the selected mode and `applied_ok`.
 
 On SUCCESS (in `workspace`, `--finalize-live`, and `-w` /
 `--finalize-workspace` modes; excluding `--test-mode`), the runner
-creates a clean git-archive success zip named by `success_archive_name`
-(default `{repo}-{branch}.zip`, e.g. `audiomason2-main.zip`) as a clean
-`git archive HEAD` snapshot of the final live repository state.
+creates a clean git-archive success zip as a clean `git archive HEAD`
+snapshot of the final live repository state.
 
-Supported placeholders for success_archive_name:
-- {repo}: repository name
-- {branch}: current branch (or "detached")
-- {issue}: issue id from CLI (fallback: "noissue")
-- {ts}: HEAD committer time in UTC (YYYYMMDD_%H%M%S), not runtime time
+Naming:
+- The output filename is controlled by `success_archive_name`
+  (default `{repo}-{branch}.zip`, e.g. `audiomason2-main.zip`).
+- Supported placeholders for success_archive_name:
+  - {repo}: repository name
+  - {branch}: current branch (or "detached")
+  - {issue}: issue id from CLI (fallback: "noissue")
+  - {ts}: HEAD committer time in UTC (YYYYMMDD_%H%M%S), not runtime time
+- Example:
+  - "{repo}-{branch}-issue{issue}-{ts}.zip"
 
-Example:
-- "{repo}-{branch}-issue{issue}-{ts}.zip"
+Destination directory:
+- The output directory is controlled by `success_archive_dir`:
+  - "patch_dir": write to `patches/` (default)
+  - "successful_dir": write to `patches/successful/`
+
+Deterministic retention (optional):
+- Retention is enabled only when:
+  - `success_archive_keep_count > 0`, AND
+  - `success_archive_cleanup_glob_template` is non-empty.
+- The runner MUST enforce deterministic retention after writing the new
+  success archive:
+  1. List candidates using `success_archive_cleanup_glob_template`
+     (glob) in the selected destination directory.
+  2. Sort candidates lexicographically by filename (not by mtime).
+  3. Never delete the newly created success archive.
+  4. Delete from the start of the sorted list until
+     `count <= success_archive_keep_count`.
+- Use of filesystem timestamps (mtime) is forbidden.
+
+CLI flags (dedicated; precedence CLI > config > defaults):
+- --success-archive-dir {patch_dir,successful_dir}
+- --success-archive-cleanup-glob TEMPLATE
+- --success-archive-keep-count N
 
 The runner writes both the failure zip and the success archive zip
 atomically (tmp file + replace + fsync) so they are safe to read
 immediately after the run. It contains only git-tracked files (as if
 fetched from the remote) and does not include logs, workspaces, caches,
 or patch inputs.
-
-Unified patch mode (`--unified-patch`): - Auto-detection rules (no `-u`
-required): - If PATCH_PATH ends with `.patch`: unified mode is used. -
-If PATCH_PATH ends with `.zip`: the runner scans the entire zip
-**recursively**. - If it finds **one or more** `*.patch` entries
-anywhere in the zip, unified mode is used. - All discovered `*.patch`
-entries are extracted and applied **in deterministic order**
-(lexicographic by zip-internal relative path). - If the zip also
-contains `*.py`, those are **ignored** when at least one `*.patch` entry
-exists. - If the zip contains **no** `*.patch` entries, the runner may
-fall back to script patch handling (see Patch script mode). -
-`--unified-patch` forces unified mode and validates that PATCH_PATH is
-`.patch` or a `.zip` containing at least one `*.patch` entry.
-
--   Gate pipeline note: after patches are applied, the runner may run
-    additional gates (see Gates).
--   The primary log records the discovered patch list and the apply
-    result for each patch.
 
 ------------------------------------------------------------------------
 

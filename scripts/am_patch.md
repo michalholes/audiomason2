@@ -337,17 +337,29 @@ If the audit step fails:
 ## Success archive (SUCCESS: clean repo snapshot)
 
 On SUCCESS (in `workspace`, `finalize`, and `finalize_workspace` modes; excluding `--test-mode`), the runner
-creates a git-archive success zip in `patches/`. The filename is configurable via
-`success_archive_name` / `--success-archive-name` (default `{repo}-{branch}.zip`, e.g. `audiomason2-main.zip`).
+creates a git-archive success zip as a clean `git archive HEAD` snapshot of the final live repository state.
 
-Placeholders:
-- {repo}: repository directory name
-- {branch}: current branch name (or "detached")
-- {issue}: CLI issue id, or "noissue" when ISSUE_ID is not provided
-- {ts}: HEAD committer time in UTC (YYYYMMDD_%H%M%S), not runtime time
+Naming:
+- The filename is controlled by `success_archive_name` / `--success-archive-name`
+  (default `{repo}-{branch}.zip`, e.g. `audiomason2-main.zip`).
+- Placeholders:
+  - {repo}: repository directory name
+  - {branch}: current branch name (or "detached")
+  - {issue}: CLI issue id, or "noissue" when ISSUE_ID is not provided
+  - {ts}: HEAD committer time in UTC (YYYYMMDD_%H%M%S), not runtime time
+- Example: `{repo}-{branch}-issue{issue}-{ts}.zip`
 
-Example:
-- `{repo}-{branch}-issue{issue}-{ts}.zip`
+Destination directory:
+- Controlled by `success_archive_dir` / `--success-archive-dir`:
+  - patch_dir: `patches/` (default)
+  - successful_dir: `patches/successful/`
+
+Deterministic retention (optional):
+- Enable by setting BOTH:
+  - `success_archive_cleanup_glob_template` / `--success-archive-cleanup-glob`
+  - `success_archive_keep_count` / `--success-archive-keep-count` (> 0)
+- After writing the new archive, the runner deletes old archives selected by the glob template,
+  sorted lexicographically by filename. It never deletes the newly created archive.
 
 It contains only git-tracked files and does not include logs, workspaces, caches, or patch inputs.
 

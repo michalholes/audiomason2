@@ -32,6 +32,22 @@ success_archive_name = "{repo}-{branch}_{issue}.zip"
 # Example:
 # success_archive_name = "{repo}-{branch}-issue{issue}-{ts}.zip"
 
+# Success archive destination directory:
+#   patch_dir      - patches/ (default)
+#   successful_dir - patches/successful/
+# success_archive_dir = "patch_dir"
+
+# Optional deterministic retention for success archives.
+# Enable only when BOTH of these are set:
+#   - success_archive_cleanup_glob_template (non-empty)
+#   - success_archive_keep_count (> 0)
+#
+# Candidate selection is a glob in the selected destination directory and is sorted
+# lexicographically by filename (mtime is not used). The newest archive created by the
+# current run is never deleted.
+# success_archive_cleanup_glob_template = ""
+# success_archive_keep_count = 0
+
 
 [git]
 allow_push_fail = true
