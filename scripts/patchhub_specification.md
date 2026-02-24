@@ -3,7 +3,7 @@ Status: AUTHORITATIVE SPECIFICATION
 Applies to: scripts/patchhub/*
 Language: ENGLISH (ASCII ONLY)
 
-Specification Version: 1.2.0-spec
+Specification Version: 1.2.1-spec
 Code Baseline: audiomason2-main.zip (as provided in this chat)
 
 -------------------------------------------------------------------------------
@@ -389,6 +389,20 @@ Idle auto-select:
 Running job exception:
 - If a job is running and no job is selected, the UI selects the running job.
 
+7.1.7 Missing patchPath Clears Run Fields (UI) (HARD)
+
+Rule:
+- The UI MUST enforce the following invariant:
+- If the file referenced by the current Run patchPath does not exist on disk,
+  the UI MUST set:
+  - issueId = ""
+  - commitMsg = ""
+  - patchPath = ""
+
+Notes:
+- This clearing is unconditional with respect to user edits, autofill, dirty flags,
+  and overwrite policies.
+
 7.2 API routes (GET)
 
 7.2.1 GET /api/config
@@ -464,7 +478,16 @@ Notes:
 - It substitutes {repo} and {branch}, takes os.path.basename, and ensures a .zip suffix.
 - It always returns a relative path string: <patches_root_rel>/<name>.zip.
 
-7.2.2 GET /api/fs/list?path=<string>
+7.2.2 GET /api/fs/stat?path=<string>
+Input:
+- query parameter: path (string, relative to patches jail)
+Output:
+{ "ok": true, "path": "<string>", "exists": <bool> }
+Semantics:
+- exists is true iff the referenced file exists on disk within jail constraints.
+- For path == "", the endpoint MUST return exists == true.
+
+7.2.3 GET /api/fs/list?path=<string>
 Input:
 - query param "path" (default empty string)
 Output (success):
@@ -480,7 +503,7 @@ Errors:
 - 400 for jail validation errors
 - 404 if not a directory
 
-7.2.3 GET /api/fs/read_text?path=<string>&tail_lines=<int>&max_bytes=<int>
+7.2.4 GET /api/fs/read_text?path=<string>&tail_lines=<int>&max_bytes=<int>
 Inputs:
 - query "path" (required)
 - query "tail_lines" (optional; if present and non-empty, tail mode is used)
@@ -501,13 +524,13 @@ Errors:
 - 404 if not a file
 - 500 if read_bytes fails
 
-7.2.4 GET /api/fs/download?path=<string>
+7.2.5 GET /api/fs/download?path=<string>
 Output:
 - Raw file bytes with guessed Content-Type and Content-Length.
 Errors:
 - JSON error with 400/404 if jail validation or file not found.
 
-7.2.5 GET /api/patches/latest
+7.2.6 GET /api/patches/latest
 Purpose:
 - Used by UI autofill/polling to find latest matching file in scan_dir.
 
