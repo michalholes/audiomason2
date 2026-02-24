@@ -241,7 +241,7 @@ failures but MUST NOT override the primary PATCH_APPLY failure.
 
 ### 2.4 Test mode (`--test-mode`)
 
--   Workspace-only mode intended for runner testing (e.g. badguys).
+-   Workspace-only mode intended for runner testing (e.g. badguys).
 -   Patch execution and gates run in the workspace as usual.
 -   After workspace gates and the live-repo guard check (after gates),
     the runner performs a hard STOP:
@@ -545,7 +545,7 @@ Skip log contract:
 Promotion set includes: - Declared & touched files - Blessed gate
 outputs - (plus any additional files when `-a` is active)
 
-Promotion hygiene excludes deterministic junk (e.g. runner caches),
+Promotion hygiene excludes deterministic junk (e.g. runner caches),
 independent of scope logic.
 
 ### 7.2 Live-changed resolution
@@ -643,8 +643,17 @@ executed or skipped, including the selected mode and `applied_ok`.
 On SUCCESS (in `workspace`, `--finalize-live`, and `-w` /
 `--finalize-workspace` modes; excluding `--test-mode`), the runner
 creates a clean git-archive success zip named by `success_archive_name`
-(default `{repo}-{branch}.zip`, e.g. `audiomason2-main.zip`) as a clean
+(default `{repo}-{branch}.zip`, e.g. `audiomason2-main.zip`) as a clean
 `git archive HEAD` snapshot of the final live repository state.
+
+Supported placeholders for success_archive_name:
+- {repo}: repository name
+- {branch}: current branch (or "detached")
+- {issue}: issue id from CLI (fallback: "noissue")
+- {ts}: HEAD committer time in UTC (YYYYMMDD_%H%M%S), not runtime time
+
+Example:
+- "{repo}-{branch}-issue{issue}-{ts}.zip"
 
 The runner writes both the failure zip and the success archive zip
 atomically (tmp file + replace + fsync) so they are safe to read
@@ -1047,8 +1056,3 @@ Constant socket names:
 - ipc_socket_name_template MAY be a constant string (example: am_patch.sock).
 - Consequence: single-instance socket in the selected scope; parallel runs conflict unless
   the name differs.
-Template placeholders supported by success_archive_name:
-- {repo}: repository directory name (repo_root.name)
-- {branch}: current branch name (or "detached" when HEAD is detached)
-- {issue}: CLI issue id, or "noissue" when ISSUE_ID is not provided
-- {ts}: HEAD committer time in UTC formatted as YYYYMMDD_%H%M%S

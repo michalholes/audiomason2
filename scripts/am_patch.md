@@ -344,7 +344,10 @@ Placeholders:
 - {repo}: repository directory name
 - {branch}: current branch name (or "detached")
 - {issue}: CLI issue id, or "noissue" when ISSUE_ID is not provided
-- {ts}: HEAD committer time in UTC (YYYYMMDD_%H%M%S)
+- {ts}: HEAD committer time in UTC (YYYYMMDD_%H%M%S), not runtime time
+
+Example:
+- `{repo}-{branch}-issue{issue}-{ts}.zip`
 
 It contains only git-tracked files and does not include logs, workspaces, caches, or patch inputs.
 

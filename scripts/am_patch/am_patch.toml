@@ -20,8 +20,16 @@ ipc_socket_on_startup_wait_s = 0
 # patch_dir = "/home/pi/audiomason2/patches"
 
 # Canonical (supported by runner; missing in your file)
+# success_archive_name = "{repo}-{branch}.zip"
 success_archive_name = "{repo}-{branch}.zip"
-# Placeholders: {repo}, {branch}, {issue}, {ts}
+# Placeholders for success_archive_name:
+#   {repo}   - repository name
+#   {branch} - current branch (or "detached")
+#   {issue}  - issue id from CLI (fallback: "noissue")
+#   {ts}     - HEAD committer time in UTC (YYYYMMDD_%H%M%S)
+#
+# Example:
+# success_archive_name = "{repo}-{branch}-issue{issue}-{ts}.zip"
 
 
 [git]
