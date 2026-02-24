@@ -23,10 +23,12 @@ from scripts.patchhub.config import (
 from scripts.patchhub.fs_jail import FsJail
 
 
-def _make_zip(path: Path, commit: str) -> None:
+def _make_zip(path: Path, commit: str, issue: str | None = None) -> None:
     bio = BytesIO()
     with ZipFile(bio, "w") as zf:
         zf.writestr("COMMIT_MESSAGE.txt", (commit + "\n").encode("ascii"))
+        if issue is not None:
+            zf.writestr("ISSUE_NUMBER.txt", (issue + "\n").encode("ascii"))
     path.write_bytes(bio.getvalue())
 
 
@@ -81,6 +83,10 @@ def _cfg() -> AppConfig:
             zip_commit_filename="COMMIT_MESSAGE.txt",
             zip_commit_max_bytes=4096,
             zip_commit_max_ratio=200,
+            zip_issue_enabled=True,
+            zip_issue_filename="ISSUE_NUMBER.txt",
+            zip_issue_max_bytes=128,
+            zip_issue_max_ratio=200,
         ),
     )
 
@@ -146,3 +152,16 @@ def test_enqueue_does_not_override_user_commit(tmp_path: Path) -> None:
     assert status == 200
     payload = json.loads(raw.decode("utf-8"))
     assert payload["job"]["commit_message"] == "UserMsg"
+
+
+def test_enqueue_fills_issue_and_commit_from_zip_when_missing(tmp_path: Path) -> None:
+    s = _mk_self(tmp_path)
+    zpath = s.patches_root / "x.zip"
+    _make_zip(zpath, "Hello", issue="602")
+
+    body = {"mode": "patch", "issue_id": "", "commit_message": "", "patch_path": "x.zip"}
+    status, raw = api_jobs_enqueue(s, body)
+    assert status == 200
+    payload = json.loads(raw.decode("utf-8"))
+    assert payload["job"]["issue_id"] == "602"
+    assert payload["job"]["commit_message"] == "Hello"

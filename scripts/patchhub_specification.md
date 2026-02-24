@@ -172,6 +172,27 @@ Autofill zip filtering (additive):
   If true, /api/patches/latest ignores .zip candidates that do not contain at least one
   file entry ending with ".patch" anywhere in the zip.
 
+Autofill issue id from zip (additive):
+- cfg.autofill.zip_issue_enabled (bool, default true)
+  If true, PatchHub reads an issue id from a root-only text member in a selected/uploaded
+  .zip and uses it as the derived issue id.
+- cfg.autofill.zip_issue_filename (string, default "ISSUE_NUMBER.txt")
+  Zip member name to read. The member MUST be at the zip root (no "/" or "\").
+- cfg.autofill.zip_issue_max_bytes (int, default 128)
+  Maximum uncompressed size allowed for the issue file.
+- cfg.autofill.zip_issue_max_ratio (int, default 200)
+  Compression ratio guard (file_size/compress_size).
+
+Validation rules:
+- Content MUST be ASCII-only and MUST NOT contain "\r".
+- PatchHub strips at most one trailing "\n"; other whitespace is preserved.
+- Result MUST be digits only (str.isdigit()).
+
+Derivation precedence:
+1) Valid issue id from zip ISSUE_NUMBER.txt
+2) Filename derivation via cfg.autofill.issue_regex
+3) cfg.autofill.issue_default_if_no_match
+
 -------------------------------------------------------------------------------
 
 6. Response Envelope (JSON)

@@ -87,6 +87,10 @@ def _cfg(scan_zip_require_patch: bool) -> AppConfig:
             zip_commit_filename="COMMIT_MESSAGE.txt",
             zip_commit_max_bytes=4096,
             zip_commit_max_ratio=200,
+            zip_issue_enabled=True,
+            zip_issue_filename="ISSUE_NUMBER.txt",
+            zip_issue_max_bytes=128,
+            zip_issue_max_ratio=200,
             scan_zip_require_patch=scan_zip_require_patch,
         ),
     )

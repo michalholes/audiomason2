@@ -13,7 +13,12 @@ from .issue_alloc import allocate_next_issue_id
 from .job_ids import new_job_id
 from .job_store import list_job_jsons, load_job_json
 from .models import JobMode, JobRecord
-from .zip_commit_message import ZipCommitConfig, read_commit_message_from_zip_path
+from .zip_commit_message import (
+    ZipCommitConfig,
+    ZipIssueConfig,
+    read_commit_message_from_zip_path,
+    read_issue_number_from_zip_path,
+)
 
 
 def _try_fill_commit_from_zip(self, patch_path: str) -> str:
@@ -39,6 +44,31 @@ def _try_fill_commit_from_zip(self, patch_path: str) -> str:
     )
     msg, _err_reason = read_commit_message_from_zip_path(zpath, zcfg)
     return msg or ""
+
+
+def _try_fill_issue_from_zip(self, patch_path: str) -> str:
+    if not self.cfg.autofill.zip_issue_enabled:
+        return ""
+    if Path(patch_path).suffix.lower() != ".zip":
+        return ""
+    prefix = self.cfg.paths.patches_root.rstrip("/")
+    rel = patch_path
+    if rel.startswith(prefix + "/"):
+        rel = rel[len(prefix) + 1 :]
+    try:
+        zpath = self.jail.resolve_rel(rel)
+    except Exception:
+        return ""
+    if not zpath.exists() or not zpath.is_file():
+        return ""
+    zcfg = ZipIssueConfig(
+        enabled=True,
+        filename=self.cfg.autofill.zip_issue_filename,
+        max_bytes=self.cfg.autofill.zip_issue_max_bytes,
+        max_ratio=self.cfg.autofill.zip_issue_max_ratio,
+    )
+    zid, _err_reason = read_issue_number_from_zip_path(zpath, zcfg)
+    return zid or ""
 
 
 def _job_jsonl_path_from_fields(self, job_id: str, mode: str, issue_id: str) -> Path:
@@ -147,6 +177,8 @@ def api_jobs_enqueue(self, body: dict[str, Any]) -> tuple[int, bytes]:
         elif mode == "rerun_latest":
             canonical = build_canonical_command(runner_prefix, mode, "", "", "")
         else:
+            if not issue_id and patch_path:
+                issue_id = _try_fill_issue_from_zip(self, patch_path)
             if not issue_id:
                 # Auto-allocate for standard patch.
                 issue_id = str(

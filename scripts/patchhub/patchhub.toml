@@ -4,7 +4,7 @@ port = 8099
 backend = "asgi"
 
 [meta]
-version = "1.3.5"
+version = "1.3.6"
 
 [runner]
 command = ["python3", "scripts/am_patch.py"]
@@ -76,3 +76,9 @@ zip_commit_enabled = true
 zip_commit_filename = "COMMIT_MESSAGE.txt"
 zip_commit_max_bytes = 4096
 zip_commit_max_ratio = 200
+
+# Zip issue id (optional; overrides filename derivation)
+zip_issue_enabled = true
+zip_issue_filename = "ISSUE_NUMBER.txt"
+zip_issue_max_bytes = 128
+zip_issue_max_ratio = 200

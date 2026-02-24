@@ -20,7 +20,9 @@ from .command_parse import CommandParseError, parse_runner_command
 from .indexing import compute_stats, iter_runs
 from .zip_commit_message import (
     ZipCommitConfig,
+    ZipIssueConfig,
     read_commit_message_from_zip_path,
+    read_issue_number_from_zip_path,
     zip_contains_patch_file,
 )
 
@@ -252,6 +254,8 @@ def api_patches_latest(self) -> tuple[int, bytes]:
     issue_id, commit_msg = self._derive_from_filename(best_name)
     zip_commit_used = False
     zip_commit_err: str | None = None
+    zip_issue_used = False
+    zip_issue_err: str | None = None
     if os.path.splitext(best_name)[1].lower() == ".zip" and self.cfg.autofill.zip_commit_enabled:
         zcfg = ZipCommitConfig(
             enabled=True,
@@ -265,6 +269,20 @@ def api_patches_latest(self) -> tuple[int, bytes]:
             zip_commit_used = True
         else:
             zip_commit_err = zerr
+    if os.path.splitext(best_name)[1].lower() == ".zip" and self.cfg.autofill.zip_issue_enabled:
+        zicfg = ZipIssueConfig(
+            enabled=True,
+            filename=self.cfg.autofill.zip_issue_filename,
+            max_bytes=self.cfg.autofill.zip_issue_max_bytes,
+            max_ratio=self.cfg.autofill.zip_issue_max_ratio,
+        )
+        zid, zerr2 = read_issue_number_from_zip_path(d / best_name, zicfg)
+        if zid is not None:
+            issue_id = zid
+            zip_issue_used = True
+        else:
+            zip_issue_err = zerr2
+
     payload: dict[str, Any] = {
         "found": True,
         "filename": best_name,
@@ -288,6 +306,10 @@ def api_patches_latest(self) -> tuple[int, bytes]:
         )
     elif zip_commit_err:
         payload["status"].append(f"autofill: zip commit ignored ({zip_commit_err})")
+    if zip_issue_used:
+        payload["status"].append(f"autofill: issue from zip {self.cfg.autofill.zip_issue_filename}")
+    elif zip_issue_err:
+        payload["status"].append(f"autofill: zip issue ignored ({zip_issue_err})")
     return _ok(payload)
 
 
