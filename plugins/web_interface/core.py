@@ -167,8 +167,6 @@ class WebInterfacePlugin:
         # Fail-safe: absence or failure must not crash web_interface.
         def _try_mount_import_ui() -> None:
             loader = getattr(app.state, "plugin_loader", None)
-            if loader is None:
-                return
 
             logger = getattr(app.state, "web_logger", get_logger("web_interface"))
             verbosity = int(getattr(app.state, "verbosity", 1))
@@ -199,6 +197,19 @@ class WebInterfacePlugin:
 
             plugin: Any | None = None
 
+            if loader is None:
+                _emit(
+                    "web_interface.import_ui_mount_failed",
+                    {
+                        "phase": "get_plugin",
+                        "exc_type": "ValueError",
+                        "exc_message": "plugin_loader is None",
+                        "plugin_origin": None,
+                    },
+                )
+                logger.info("import_ui_mount: failed phase=get_plugin origin=None")
+                return
+
             try:
                 plugin = loader.get_plugin("import")
             except PluginNotFoundError as exc:
@@ -211,6 +222,7 @@ class WebInterfacePlugin:
                         "plugin_origin": None,
                     },
                 )
+                logger.info("import_ui_mount: failed phase=get_plugin origin=None")
                 # Import plugin is not loaded. Best-effort auto-load from builtin plugins.
                 builtin_dir = getattr(loader, "builtin_plugins_dir", None)
                 try:
@@ -228,6 +240,7 @@ class WebInterfacePlugin:
                             "plugin_origin": None,
                         },
                     )
+                    logger.info("import_ui_mount: failed phase=autoload_builtin origin=None")
                     if verbosity >= 3:
                         logger.debug(f"import_ui_mount: autoload_builtin failed: {exc2!r}")
                 try:
@@ -242,6 +255,7 @@ class WebInterfacePlugin:
                             "plugin_origin": None,
                         },
                     )
+                    logger.info("import_ui_mount: failed phase=get_plugin origin=None")
                     if verbosity >= 3:
                         logger.debug(f"import_ui_mount: get_plugin failed: {exc3!r}")
                     return
@@ -255,6 +269,7 @@ class WebInterfacePlugin:
                         "plugin_origin": None,
                     },
                 )
+                logger.info("import_ui_mount: failed phase=get_plugin origin=None")
                 if verbosity >= 3:
                     logger.debug(f"import_ui_mount: get_plugin failed: {exc!r}")
                 return
@@ -272,7 +287,7 @@ class WebInterfacePlugin:
                         "plugin_origin": plugin_origin,
                     },
                 )
-                logger.info(f"import_ui_mount: missing get_fastapi_router (origin={plugin_origin})")
+                logger.info(f"import_ui_mount: failed phase=build_router origin={plugin_origin}")
                 return
 
             try:
@@ -287,7 +302,7 @@ class WebInterfacePlugin:
                         "plugin_origin": plugin_origin,
                     },
                 )
-                logger.info(f"import_ui_mount: build_router failed (origin={plugin_origin})")
+                logger.info(f"import_ui_mount: failed phase=build_router origin={plugin_origin}")
                 if verbosity >= 3:
                     logger.debug(f"import_ui_mount: build_router failed: {exc!r}")
                 return
@@ -302,7 +317,7 @@ class WebInterfacePlugin:
                         "plugin_origin": plugin_origin,
                     },
                 )
-                logger.info(f"import_ui_mount: router is None (origin={plugin_origin})")
+                logger.info(f"import_ui_mount: failed phase=build_router origin={plugin_origin}")
                 return
 
             try:
@@ -317,7 +332,7 @@ class WebInterfacePlugin:
                         "plugin_origin": plugin_origin,
                     },
                 )
-                logger.info(f"import_ui_mount: include_router failed (origin={plugin_origin})")
+                logger.info(f"import_ui_mount: failed phase=include_router origin={plugin_origin}")
                 if verbosity >= 3:
                     logger.debug(f"import_ui_mount: include_router failed: {exc!r}")
                 return

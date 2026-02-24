@@ -7,11 +7,11 @@ from plugins.web_interface.core import WebInterfacePlugin
 from audiomason.core.loader import PluginLoader
 
 
-def test_import_ui_openapi_contains_editor_paths() -> None:
+def test_web_interface_openapi_contains_import_ui_editor_paths() -> None:
     repo_root = Path(__file__).resolve().parents[1]
     loader = PluginLoader(builtin_plugins_dir=repo_root / "plugins")
 
-    app = WebInterfacePlugin().create_app(plugin_loader=loader, verbosity=1)
+    app = WebInterfacePlugin().create_app(plugin_loader=loader, verbosity=0)
     spec = app.openapi()
     paths = set(spec.get("paths", {}).keys())
 
