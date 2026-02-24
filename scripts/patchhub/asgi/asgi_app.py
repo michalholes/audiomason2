@@ -61,7 +61,7 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
     @app.get("/static/{rel_path:path}")
     async def static(rel_path: str) -> FileResponse:
         def _resolve_static_sync(rel_path: str) -> Path | None:
-            base = Path(__file__).resolve().parent.parent / "patchhub" / "static"
+            base = Path(__file__).resolve().parent.parent / "static"
             p = (base / rel_path).resolve()
             if base not in p.parents:
                 return None
