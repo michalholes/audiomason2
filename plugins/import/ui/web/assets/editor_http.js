@@ -28,6 +28,21 @@
       node.textContent = pretty(payload);
       return;
     }
+
+    if (
+      payload &&
+      typeof payload === "object" &&
+      Object.prototype.hasOwnProperty.call(payload, "detail")
+    ) {
+      const detail = payload.detail;
+      if (typeof detail === "string") {
+        node.textContent = detail;
+        return;
+      }
+      node.textContent = pretty(detail);
+      return;
+    }
+
     node.textContent = String(payload && payload.text ? payload.text : payload);
   }
 
