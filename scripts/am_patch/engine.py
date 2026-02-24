@@ -31,7 +31,6 @@ from am_patch.patch_archive_select import select_latest_issue_patch
 from am_patch.patch_exec import run_patch, run_unified_patch_bundle
 from am_patch.patch_input import resolve_patch_plan
 from am_patch.paths import (
-    _fs_junk_ignore_partition,
     _workspace_store_current_patch,
     default_paths,
     ensure_dirs,
@@ -57,7 +56,6 @@ from am_patch.version import RUNNER_VERSION
 from am_patch.workspace import (
     delete_workspace,
     drop_checkpoint,
-    open_existing_workspace,
     rollback_to_checkpoint,
 )
 
@@ -83,6 +81,7 @@ class RunContext:
     verbosity: str
     log_level: str
     ipc: IpcController | None
+    lock: FileLock | None = None
 
 
 def _run_post_success_audit(logger: Logger, repo_root: Path, policy: Policy) -> None:
@@ -394,6 +393,7 @@ def run_mode(ctx: RunContext) -> dict[str, Any]:
         }
 
     lock = FileLock(paths.lock_path)
+    ctx.lock = lock
     unified_mode: bool = False
     patch_script: Path | None = None
     commit_sha: str | None = None
@@ -434,268 +434,9 @@ def run_mode(ctx: RunContext) -> dict[str, Any]:
         lock.acquire()
 
         if cli.mode == "finalize_workspace":
-            # Finalize an existing workspace: gates in workspace, then promote to live, then
-            # gates+commit+push in live.
-            issue_id = cli.issue_id
-            assert issue_id is not None
+            from .modes.finalize_workspace_mode import run_finalize_workspace_mode
 
-            ws = open_existing_workspace(
-                logger,
-                paths.workspaces_dir,
-                issue_id,
-                issue_dir_template=policy.workspace_issue_dir_template,
-                repo_dir_name=policy.workspace_repo_dir_name,
-                meta_filename=policy.workspace_meta_filename,
-            )
-            logger.section("FINALIZE WORKSPACE")
-            logger.line(f"workspace_root={ws.root}")
-            logger.line(f"workspace_repo={ws.repo}")
-            logger.line(f"workspace_meta={ws.meta_path}")
-            logger.line(f"workspace_base_sha={ws.base_sha}")
-
-            # Commit message is always sourced from workspace meta.json.
-            if not ws.message or not str(ws.message).strip():
-                raise RunnerError(
-                    "PREFLIGHT", "WORKSPACE", "workspace meta.json missing non-empty message"
-                )
-
-            # Gates in workspace first.
-
-            decision_paths_ws = changed_paths(logger, ws.repo)
-
-            # Failure archive hint: include current workspace changes (even in -w) so
-            # patched.zip is reproducible if gates fail.
-            files_for_fail_zip = sorted(set(files_for_fail_zip) | set(decision_paths_ws))
-
-            run_gates(
-                logger,
-                cwd=ws.repo,
-                repo_root=repo_root,
-                run_all=policy.run_all_tests,
-                compile_check=policy.compile_check,
-                compile_targets=policy.compile_targets,
-                compile_exclude=policy.compile_exclude,
-                allow_fail=policy.gates_allow_fail,
-                skip_ruff=policy.gates_skip_ruff,
-                skip_js=policy.gates_skip_js,
-                skip_pytest=policy.gates_skip_pytest,
-                skip_mypy=policy.gates_skip_mypy,
-                skip_docs=policy.gates_skip_docs,
-                skip_monolith=policy.gates_skip_monolith,
-                gate_monolith_enabled=policy.gate_monolith_enabled,
-                gate_monolith_mode=policy.gate_monolith_mode,
-                gate_monolith_scan_scope=policy.gate_monolith_scan_scope,
-                gate_monolith_compute_fanin=policy.gate_monolith_compute_fanin,
-                gate_monolith_on_parse_error=policy.gate_monolith_on_parse_error,
-                gate_monolith_areas=policy.gate_monolith_areas,
-                gate_monolith_large_loc=policy.gate_monolith_large_loc,
-                gate_monolith_huge_loc=policy.gate_monolith_huge_loc,
-                gate_monolith_large_allow_loc_increase=policy.gate_monolith_large_allow_loc_increase,
-                gate_monolith_huge_allow_loc_increase=policy.gate_monolith_huge_allow_loc_increase,
-                gate_monolith_large_allow_exports_delta=policy.gate_monolith_large_allow_exports_delta,
-                gate_monolith_huge_allow_exports_delta=policy.gate_monolith_huge_allow_exports_delta,
-                gate_monolith_large_allow_imports_delta=policy.gate_monolith_large_allow_imports_delta,
-                gate_monolith_huge_allow_imports_delta=policy.gate_monolith_huge_allow_imports_delta,
-                gate_monolith_new_file_max_loc=policy.gate_monolith_new_file_max_loc,
-                gate_monolith_new_file_max_exports=policy.gate_monolith_new_file_max_exports,
-                gate_monolith_new_file_max_imports=policy.gate_monolith_new_file_max_imports,
-                gate_monolith_hub_fanin_delta=policy.gate_monolith_hub_fanin_delta,
-                gate_monolith_hub_fanout_delta=policy.gate_monolith_hub_fanout_delta,
-                gate_monolith_hub_exports_delta_min=policy.gate_monolith_hub_exports_delta_min,
-                gate_monolith_hub_loc_delta_min=policy.gate_monolith_hub_loc_delta_min,
-                gate_monolith_crossarea_min_distinct_areas=policy.gate_monolith_crossarea_min_distinct_areas,
-                gate_monolith_catchall_basenames=policy.gate_monolith_catchall_basenames,
-                gate_monolith_catchall_dirs=policy.gate_monolith_catchall_dirs,
-                gate_monolith_catchall_allowlist=policy.gate_monolith_catchall_allowlist,
-                docs_include=policy.gate_docs_include,
-                docs_exclude=policy.gate_docs_exclude,
-                docs_required_files=policy.gate_docs_required_files,
-                js_extensions=policy.gate_js_extensions,
-                js_command=policy.gate_js_command,
-                ruff_format=policy.ruff_format,
-                ruff_autofix=policy.ruff_autofix,
-                ruff_targets=policy.ruff_targets,
-                pytest_targets=policy.pytest_targets,
-                mypy_targets=policy.mypy_targets,
-                gates_order=policy.gates_order,
-                pytest_use_venv=policy.pytest_use_venv,
-                decision_paths=decision_paths_ws,
-                progress=_gate_progress,
-            )
-
-            # Gates can modify files (e.g. ruff format/autofix). Refresh the failure
-            # archive subset after workspace gates.
-            changed_after_ws_gates = changed_paths(logger, ws.repo)
-            files_for_fail_zip = sorted(set(files_for_fail_zip) | set(changed_after_ws_gates))
-
-            _maybe_run_badguys(cwd=ws.repo, decision_paths=decision_paths_ws)
-
-            changed_all = changed_paths(logger, ws.repo)
-            promote_list, ignored = _fs_junk_ignore_partition(
-                changed_all,
-                ignore_prefixes=policy.scope_ignore_prefixes,
-                ignore_suffixes=policy.scope_ignore_suffixes,
-                ignore_contains=policy.scope_ignore_contains,
-            )
-            logger.section("PROMOTION PLAN")
-            logger.line(f"changed_all={changed_all}")
-            logger.line(f"ignored_paths={ignored}")
-            logger.line(f"files_to_promote={promote_list}")
-
-            issue_diff_base_sha = ws.base_sha
-            issue_diff_paths = list(promote_list)
-
-            if not promote_list:
-                raise RunnerError("PREFLIGHT", "WORKSPACE", "no promotable workspace changes")
-
-            # If later steps (promotion or live gates) fail, ensure the failure zip
-            # includes the exact files that were planned for promotion.
-            files_for_fail_zip = sorted(set(files_for_fail_zip) | set(promote_list))
-
-            promote_files(
-                logger=logger,
-                workspace_repo=ws.repo,
-                live_repo=repo_root,
-                base_sha=ws.base_sha,
-                files_to_promote=promote_list,
-                fail_if_live_changed=policy.fail_if_live_files_changed,
-                live_changed_resolution=policy.live_changed_resolution,
-            )
-
-            # Gates in live repo.
-            decision_paths_live = list(promote_list)
-            run_gates(
-                logger,
-                cwd=repo_root,
-                repo_root=repo_root,
-                run_all=policy.run_all_tests,
-                compile_check=policy.compile_check,
-                compile_targets=policy.compile_targets,
-                compile_exclude=policy.compile_exclude,
-                allow_fail=policy.gates_allow_fail,
-                skip_ruff=policy.gates_skip_ruff,
-                skip_js=policy.gates_skip_js,
-                skip_pytest=policy.gates_skip_pytest,
-                skip_mypy=policy.gates_skip_mypy,
-                skip_docs=policy.gates_skip_docs,
-                skip_monolith=policy.gates_skip_monolith,
-                gate_monolith_enabled=policy.gate_monolith_enabled,
-                gate_monolith_mode=policy.gate_monolith_mode,
-                gate_monolith_scan_scope=policy.gate_monolith_scan_scope,
-                gate_monolith_compute_fanin=policy.gate_monolith_compute_fanin,
-                gate_monolith_on_parse_error=policy.gate_monolith_on_parse_error,
-                gate_monolith_areas=policy.gate_monolith_areas,
-                gate_monolith_large_loc=policy.gate_monolith_large_loc,
-                gate_monolith_huge_loc=policy.gate_monolith_huge_loc,
-                gate_monolith_large_allow_loc_increase=policy.gate_monolith_large_allow_loc_increase,
-                gate_monolith_huge_allow_loc_increase=policy.gate_monolith_huge_allow_loc_increase,
-                gate_monolith_large_allow_exports_delta=policy.gate_monolith_large_allow_exports_delta,
-                gate_monolith_huge_allow_exports_delta=policy.gate_monolith_huge_allow_exports_delta,
-                gate_monolith_large_allow_imports_delta=policy.gate_monolith_large_allow_imports_delta,
-                gate_monolith_huge_allow_imports_delta=policy.gate_monolith_huge_allow_imports_delta,
-                gate_monolith_new_file_max_loc=policy.gate_monolith_new_file_max_loc,
-                gate_monolith_new_file_max_exports=policy.gate_monolith_new_file_max_exports,
-                gate_monolith_new_file_max_imports=policy.gate_monolith_new_file_max_imports,
-                gate_monolith_hub_fanin_delta=policy.gate_monolith_hub_fanin_delta,
-                gate_monolith_hub_fanout_delta=policy.gate_monolith_hub_fanout_delta,
-                gate_monolith_hub_exports_delta_min=policy.gate_monolith_hub_exports_delta_min,
-                gate_monolith_hub_loc_delta_min=policy.gate_monolith_hub_loc_delta_min,
-                gate_monolith_crossarea_min_distinct_areas=policy.gate_monolith_crossarea_min_distinct_areas,
-                gate_monolith_catchall_basenames=policy.gate_monolith_catchall_basenames,
-                gate_monolith_catchall_dirs=policy.gate_monolith_catchall_dirs,
-                gate_monolith_catchall_allowlist=policy.gate_monolith_catchall_allowlist,
-                docs_include=policy.gate_docs_include,
-                docs_exclude=policy.gate_docs_exclude,
-                docs_required_files=policy.gate_docs_required_files,
-                js_extensions=policy.gate_js_extensions,
-                js_command=policy.gate_js_command,
-                ruff_format=policy.ruff_format,
-                ruff_autofix=policy.ruff_autofix,
-                ruff_targets=policy.ruff_targets,
-                pytest_targets=policy.pytest_targets,
-                mypy_targets=policy.mypy_targets,
-                gates_order=policy.gates_order,
-                pytest_use_venv=policy.pytest_use_venv,
-                decision_paths=decision_paths_live,
-                progress=_gate_progress,
-            )
-            _maybe_run_badguys(cwd=repo_root, decision_paths=decision_paths_live)
-            if policy.commit_and_push:
-                commit_sha = git_ops.commit(
-                    logger,
-                    repo_root,
-                    str(ws.message),
-                    stage_all=False,
-                )
-                push_ok = git_ops.push(
-                    logger,
-                    repo_root,
-                    policy.default_branch,
-                    allow_fail=policy.allow_push_fail,
-                )
-                final_commit_sha = commit_sha
-
-                if commit_sha and cli.issue_id is not None:
-                    cleanup_failure_zips_on_success(
-                        patch_dir=paths.patch_dir,
-                        policy=policy,
-                        issue=str(cli.issue_id),
-                    )
-
-                if commit_sha and cli.issue_id is not None:
-                    cleanup_failure_zips_on_success(
-                        patch_dir=paths.patch_dir,
-                        policy=policy,
-                        issue=str(cli.issue_id),
-                    )
-
-                # Wire live results into the unified end-of-run summary.
-                push_ok_for_posthook = push_ok
-                if push_ok is True and commit_sha:
-                    try:
-                        ns = git_ops.commit_changed_files_name_status(
-                            logger,
-                            repo_root,
-                            commit_sha,
-                        )
-                        final_pushed_files = [f"{st} {p}" for (st, p) in ns]
-                    except Exception:
-                        # Best-effort only; never override SUCCESS contract.
-                        final_pushed_files = None
-
-            logger.section("SUCCESS")
-            if policy.commit_and_push:
-                logger.line(f"commit_sha={commit_sha}")
-                if push_ok is True:
-                    logger.line("push=OK")
-                else:
-                    if policy.allow_push_fail:
-                        logger.line("push=FAILED_ALLOWED")
-                    else:
-                        logger.line("push=FAILED")
-            else:
-                logger.line("commit_sha=SKIPPED")
-                logger.line("push=SKIPPED")
-
-            # Cleanup: mirror workspace-mode behavior.
-            # Delete workspace on success unless policy.delete_workspace_on_success is false.
-            #
-            # When promotion is disabled (no commit/push), keep the workspace even if the
-            # default policy would delete it. This avoids losing an easy re-run path while
-            # the live repo has uncommitted changes.
-            workspace_deleted = False
-            if policy.delete_workspace_on_success and policy.commit_and_push:
-                delete_workspace(logger, ws)
-                workspace_deleted = True
-            elif policy.delete_workspace_on_success and not policy.commit_and_push:
-                logger.line("workspace_delete=SKIPPED (disable-promotion)")
-
-            # Post-success audit: show current audit progress after SUCCESS and workspace cleanup.
-            # Runs on the live repo (repo_root), not the workspace.
-            if push_ok is True and workspace_deleted:
-                _run_post_success_audit(logger, repo_root, policy)
-
-            return _result(0)
+            return run_finalize_workspace_mode(ctx)
 
         if cli.mode == "finalize":
             git_ops.fetch(logger, repo_root)

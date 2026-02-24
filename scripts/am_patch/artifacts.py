@@ -184,6 +184,13 @@ def build_artifacts(
             patch_dir_name=policy.failure_zip_patch_dir,
         )
 
+        # Enforce final retention state after writing the newest failure zip.
+        cleanup_failure_zips_for_issue(
+            patch_dir=paths.patch_dir,
+            policy=policy,
+            issue=issue,
+        )
+
     return ArtifactSummary(
         success_zip=success_zip,
         failure_zip=failure_zip,

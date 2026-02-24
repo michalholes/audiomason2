@@ -77,6 +77,19 @@ def open_existing_workspace(
     )
 
 
+def bump_existing_workspace_attempt(meta_path: Path) -> int:
+    meta = _read_meta(meta_path)
+    current_any = meta.get("attempt", 0)
+    try:
+        current = int(current_any)
+    except Exception:
+        current = 0
+    new_attempt = current + 1
+    meta["attempt"] = new_attempt
+    _write_meta(meta_path, meta)
+    return new_attempt
+
+
 def ensure_workspace(
     logger: Logger,
     workspaces_dir: Path,

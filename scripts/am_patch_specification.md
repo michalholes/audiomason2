@@ -591,6 +591,8 @@ Failure zip naming and retention:
 -
 Placeholders: {issue}, {ts}, {nonce}, {log}, {attempt}.
 - {attempt} is the per-issue workspace attempt counter (1,2,3...).
+- In -w / --finalize-workspace, the runner bumps the workspace attempt counter at the
+  start of the run, so {attempt} increments across repeated finalize attempts.
 - For retention safety with lexicographic sorting, prefer padding via format spec,
   e.g. {attempt:04d}.
 
@@ -599,6 +601,9 @@ using `{issue}` and may also use `{ts}`, `{nonce}`, `{log}`, `{attempt}`.
 -   Before writing a new failure zip, the runner applies per-issue
     retention using `failure_zip_cleanup_glob_template` and
     `failure_zip_keep_per_issue` (default: keep 1).
+-   After writing a failure zip, the runner applies the same per-issue
+    retention again, ensuring the newest zip is always included in the
+    retained set.
 -   After a successful commit, the runner removes failure zips for that
     issue when `failure_zip_delete_on_success_commit` is true.
 
