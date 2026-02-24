@@ -13,6 +13,14 @@
       <div class="subtitle">Plugin-hosted UI at /import/ui/</div>
     </div>
 
+    <div class="tabs" id="tabs">
+      <button class="tabBtn" data-tab="run">Run Wizard</button>
+      <button class="tabBtn" data-tab="config">Config Editor</button>
+      <button class="tabBtn" data-tab="wizard">Wizard Editor</button>
+    </div>
+
+    <div class="tabPanel" data-panel="run">
+
     <div class="card">
       <div class="cardTitle">Session</div>
       <div class="row">
@@ -46,8 +54,49 @@
       <div class="cardTitle">SessionState</div>
       <pre id="state" class="pre"></pre>
     </div>
+
+    </div>
+
+    <div class="tabPanel" data-panel="config">
+      <div class="card">
+        <div class="cardTitle">FlowConfig Editor</div>
+        <div class="buttonRow">
+          <button id="cfgReload" class="btn">Reload</button>
+          <button id="cfgValidate" class="btn">Validate</button>
+          <button id="cfgSave" class="btn">Save</button>
+          <button id="cfgReset" class="btn">Reset</button>
+        </div>
+        <textarea id="cfgJson" class="jsonEditor" rows="22"></textarea>
+        <div id="cfgError" class="error"></div>
+      </div>
+      <div class="card">
+        <div class="cardTitle">History</div>
+        <div id="cfgHistory" class="history"></div>
+      </div>
+    </div>
+
+    <div class="tabPanel" data-panel="wizard">
+      <div class="card">
+        <div class="cardTitle">WizardDefinition Editor</div>
+        <div class="buttonRow">
+          <button id="wdReload" class="btn">Reload</button>
+          <button id="wdValidate" class="btn">Validate</button>
+          <button id="wdSave" class="btn">Save</button>
+          <button id="wdReset" class="btn">Reset</button>
+        </div>
+        <textarea id="wdJson" class="jsonEditor" rows="22"></textarea>
+        <div id="wdError" class="error"></div>
+      </div>
+      <div class="card">
+        <div class="cardTitle">History</div>
+        <div id="wdHistory" class="history"></div>
+      </div>
+    </div>
   </div>
 
   <script src="/import/ui/assets/import_wizard.js"></script>
+  <script src="/import/ui/assets/editor_http.js"></script>
+  <script src="/import/ui/assets/config_editor.js"></script>
+  <script src="/import/ui/assets/wizard_definition_editor.js"></script>
 </body>
 </html>

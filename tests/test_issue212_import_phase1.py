@@ -163,7 +163,7 @@ def test_config_reset_uses_builtin_defaults(tmp_path: Path) -> None:
     resp = client.post("/import/ui/config/reset")
     assert resp.status_code == 200
 
-    data = resp.json()
+    data = resp.json()["config"]
     assert isinstance(data, dict)
     assert data == engine._normalize_flow_config(DEFAULT_FLOW_CONFIG)
 

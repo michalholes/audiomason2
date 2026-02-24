@@ -1,4 +1,4 @@
-"""UI /import/ui/config returns canonical error envelopes."""
+"""Issue 240: /import/ui/config wrapper contract is enforced."""
 
 from __future__ import annotations
 
@@ -59,21 +59,35 @@ def _make_engine(tmp_path: Path) -> ImportWizardEngine:
 
 
 @pytest.mark.skipif((not _HAS_FASTAPI) or (not _HAS_HTTPX), reason="fastapi+httpx required")
-def test_set_config_invalid_body_returns_error_envelope(tmp_path: Path) -> None:
+def test_config_requires_wrapper(tmp_path: Path) -> None:
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
 
     engine = _make_engine(tmp_path)
-
     app = FastAPI()
     app.include_router(build_router(engine=engine))
     client = TestClient(app)
 
-    # Invalid: version must be int (normalize enforces type)
-    resp = client.post("/import/ui/config", json={"config": {"version": "bad"}})
-
+    resp = client.post("/import/ui/config", json={"version": 1})
     assert resp.status_code == 400
     data = resp.json()
-    assert isinstance(data, dict)
-    assert "error" in data
+    assert data["error"]["code"] == "VALIDATION_ERROR"
+
+
+@pytest.mark.skipif((not _HAS_FASTAPI) or (not _HAS_HTTPX), reason="fastapi+httpx required")
+def test_config_rejects_unknown_root_keys(tmp_path: Path) -> None:
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    engine = _make_engine(tmp_path)
+    app = FastAPI()
+    app.include_router(build_router(engine=engine))
+    client = TestClient(app)
+
+    resp = client.post(
+        "/import/ui/config",
+        json={"config": {"version": 1, "steps": {}}, "extra": 1},
+    )
+    assert resp.status_code == 400
+    data = resp.json()
     assert data["error"]["code"] == "VALIDATION_ERROR"

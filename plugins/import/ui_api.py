@@ -21,6 +21,7 @@ def build_router(*, engine: Any):
     from .engine import _exception_envelope
     from .field_schema_validation import FieldSchemaValidationError
     from .session_effective_model import EffectiveModelJsonError
+    from .ui_editor_api import bind_editor_routes
 
     router = APIRouter(prefix="/import/ui")
 
@@ -201,17 +202,7 @@ def build_router(*, engine: Any):
     def get_flow():
         return _call(lambda: engine.get_flow_model())
 
-    @router.get("/config")
-    def get_config():
-        return _call(lambda: engine.get_flow_config())
-
-    @router.post("/config")
-    def set_config(body: dict[str, Any]):
-        return _call(lambda: engine.set_flow_config(body))
-
-    @router.post("/config/reset")
-    def reset_config():
-        return _call(lambda: engine.reset_flow_config())
+    bind_editor_routes(router=router, engine=engine, call=_call)
 
     @router.post("/session/start")
     def session_start(body: dict[str, Any]):

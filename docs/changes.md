@@ -800,3 +800,13 @@
     multi_select_indexed items from the session effective_model after session start.
 
 -   spec: Bump specification version to 1.1.21.
+
+## 2026-02-24T00:00:00+01:00
+
+-   Issue 240: Import plugin Web UI now includes FlowConfig and WizardDefinition
+    editors (tabs) with validate, save, reset, history, and rollback.
+
+-   Issue 240: UI editor routes now enforce wrapper contracts and reject unknown
+    root keys, returning canonical error envelopes.
+
+-   spec: Bump specification version to 1.1.24.

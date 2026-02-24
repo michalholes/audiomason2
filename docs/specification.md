@@ -1,6 +1,6 @@
 # AudioMason2 - Project Specification (Overview)
 
-Specification Version: 1.1.23
+Specification Version: 1.1.24
 
 This file is an overview entrypoint only.
 
@@ -18,3 +18,7 @@ the layer precedence rules apply.
 Notes:
 - Issue 238 extends the import CLI editor with explicit FlowConfig and
   WizardDefinition editor areas.
+
+- Issue 240 extends the import plugin Web UI with FlowConfig and WizardDefinition
+  editors (tabs), backed by strict wrapper contracts, validate-only endpoints,
+  and deterministic history/rollback behavior.

@@ -11,6 +11,33 @@ body {
   padding: 18px;
 }
 
+.tabs {
+  display: flex;
+  gap: 8px;
+  margin: 10px 0 16px 0;
+}
+
+.tabBtn {
+  background: #0f1626;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  color: #e6e9ef;
+  padding: 9px 12px;
+  cursor: pointer;
+}
+
+.tabBtn.active {
+  background: #2a3b62;
+}
+
+.tabPanel {
+  display: none;
+}
+
+.tabPanel.active {
+  display: block;
+}
+
 .header {
   margin-bottom: 14px;
 }
@@ -59,7 +86,15 @@ input, select, textarea {
 
 textarea {
   width: 100%;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-family:
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Monaco,
+    Consolas,
+    "Liberation Mono",
+    "Courier New",
+    monospace;
 }
 
 .btn {
@@ -132,6 +167,48 @@ textarea {
   margin: 0;
   white-space: pre-wrap;
   word-break: break-word;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  font-family:
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Monaco,
+    Consolas,
+    "Liberation Mono",
+    "Courier New",
+    monospace;
   font-size: 13px;
+}
+
+.jsonEditor {
+  width: 100%;
+  font-size: 12px;
+  min-height: 320px;
+}
+
+.history {
+  font-family:
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Monaco,
+    Consolas,
+    "Liberation Mono",
+    "Courier New",
+    monospace;
+  font-size: 12px;
+}
+
+.historyItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.historyMeta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }

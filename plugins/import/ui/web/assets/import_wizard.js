@@ -109,11 +109,30 @@
     step: document.getElementById("step"),
   };
 
+  function initTabs() {
+    const wrap = document.getElementById("tabs");
+    if (!wrap) return;
+    const btns = Array.from(wrap.querySelectorAll(".tabBtn"));
+    const panels = Array.from(document.querySelectorAll(".tabPanel"));
+
+    function activate(tab) {
+      btns.forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
+      panels.forEach((p) => p.classList.toggle("active", p.dataset.panel === tab));
+    }
+
+    btns.forEach((b) => {
+      b.addEventListener("click", () => activate(String(b.dataset.tab || "run")));
+    });
+    activate("run");
+  }
+
   let sessionId = null;
   let flow = null;
   let state = null;
   let sessionEffectiveModel = null;
   let currentStep = null;
+
+  initTabs();
 
   async function loadFlow() {
     flow = await fetchJSON("/import/ui/flow");

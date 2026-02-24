@@ -17,11 +17,16 @@ from typing import Any
 from plugins.file_io.service import FileService
 from plugins.file_io.service.types import RootName
 
+from .fingerprints import fingerprint_json
 from .storage import atomic_write_json, read_json
 from .wizard_definition_model import (
+    DEFAULT_WIZARD_DEFINITION,
     WIZARD_DEFINITION_REL_PATH,
     validate_wizard_definition_structure,
 )
+
+HISTORY_DIR = "import/editor_history"
+HISTORY_LIMIT = 5
 
 
 def load_wizard_definition(fs: FileService) -> Any:
@@ -33,3 +38,59 @@ def load_wizard_definition(fs: FileService) -> Any:
 def save_wizard_definition(fs: FileService, obj: Any) -> None:
     validate_wizard_definition_structure(obj)
     atomic_write_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_REL_PATH, obj)
+
+
+def save_wizard_definition_with_history(fs: FileService, obj: Any) -> None:
+    """Save WizardDefinition and record history deterministically."""
+
+    validate_wizard_definition_structure(obj)
+
+    if fs.exists(RootName.WIZARDS, WIZARD_DEFINITION_REL_PATH):
+        cur = load_wizard_definition(fs)
+        cur_fp = fingerprint_json(cur)
+        new_fp = fingerprint_json(obj)
+        if cur_fp != new_fp:
+            _store_history_entry(fs, fingerprint=cur_fp, obj=cur)
+
+    atomic_write_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_REL_PATH, obj)
+
+
+def reset_wizard_definition(fs: FileService, obj: Any | None = None) -> None:
+    if obj is None:
+        obj = DEFAULT_WIZARD_DEFINITION
+    save_wizard_definition_with_history(fs, obj)
+
+
+def list_wizard_definition_history(fs: FileService) -> list[str]:
+    return list(_load_history_index(fs))
+
+
+def rollback_wizard_definition(fs: FileService, *, fingerprint: str) -> None:
+    rel = f"{HISTORY_DIR}/wizard_definition/{fingerprint}.json"
+    obj = read_json(fs, RootName.WIZARDS, rel)
+    save_wizard_definition_with_history(fs, obj)
+
+
+def _history_index_path() -> str:
+    return f"{HISTORY_DIR}/wizard_definition/index.json"
+
+
+def _load_history_index(fs: FileService) -> list[str]:
+    path = _history_index_path()
+    if not fs.exists(RootName.WIZARDS, path):
+        return []
+    data = read_json(fs, RootName.WIZARDS, path)
+    if not isinstance(data, list) or not all(isinstance(x, str) for x in data):
+        return []
+    return list(data)
+
+
+def _store_history_entry(fs: FileService, *, fingerprint: str, obj: Any) -> None:
+    rel = f"{HISTORY_DIR}/wizard_definition/{fingerprint}.json"
+    if not fs.exists(RootName.WIZARDS, rel):
+        atomic_write_json(fs, RootName.WIZARDS, rel, obj)
+
+    index = _load_history_index(fs)
+    index = [fingerprint] + [x for x in index if x != fingerprint]
+    index = index[:HISTORY_LIMIT]
+    atomic_write_json(fs, RootName.WIZARDS, _history_index_path(), index)
