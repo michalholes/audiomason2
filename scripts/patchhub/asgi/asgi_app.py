@@ -370,12 +370,30 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
                     return str(disk_job.status)
                 return None
 
-            async for chunk in stream_job_events_sse(
-                job_id=str(job_id),
-                jsonl_path=jsonl_path,
-                job_status=job_status,
-            ):
-                yield chunk
+            broker = None
+            if job is not None:
+                broker = await core.queue.get_broker(job_id)
+
+            # Replay persisted events first (best-effort), then stream live events.
+            # If there is no live broker (disk job or after restart), fall back to JSONL tailing.
+            if broker is None:
+                async for chunk in stream_job_events_sse(
+                    job_id=str(job_id),
+                    jsonl_path=jsonl_path,
+                    job_status=job_status,
+                ):
+                    yield chunk
+                return
+
+            tail = await to_thread(read_tail, jsonl_path, 500)
+            if tail:
+                for line in tail.splitlines():
+                    if not line.strip():
+                        continue
+                    yield f"data: {line}\n\n".encode()
+
+            async for line in broker.subscribe():
+                yield f"data: {line}\n\n".encode()
 
         return StreamingResponse(gen(), media_type="text/event-stream")
 

@@ -223,7 +223,7 @@ input::placeholder { color: #6f7f99; }
 
 .progress-summary {
   margin-top: 8px;
-  font-size: 2em;
+  font-size: 30px;
   font-weight: 800;
   line-height: 1.1;
 }

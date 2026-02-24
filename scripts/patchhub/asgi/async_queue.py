@@ -13,6 +13,7 @@ from patchhub.models import JobRecord
 from .async_event_pump import start_event_pump
 from .async_events_socket import job_socket_path, send_cancel_async
 from .async_runner_exec import AsyncRunnerExecutor
+from .job_event_broker import JobEventBroker
 
 
 def utc_now() -> str:
@@ -99,6 +100,7 @@ class AsyncJobQueue:
         self._q: asyncio.Queue[str] = asyncio.Queue()
         self._jobs: dict[str, JobRecord] = {}
         self._task: asyncio.Task[None] | None = None
+        self._brokers: dict[str, JobEventBroker] = {}
 
     async def start(self) -> None:
         if self._task is not None:
@@ -127,6 +129,10 @@ class AsyncJobQueue:
     async def get_job(self, job_id: str) -> JobRecord | None:
         async with self._mu:
             return self._jobs.get(job_id)
+
+    async def get_broker(self, job_id: str) -> JobEventBroker | None:
+        async with self._mu:
+            return self._brokers.get(job_id)
 
     async def enqueue(self, job: JobRecord) -> None:
         async with self._mu:
@@ -252,8 +258,15 @@ class AsyncJobQueue:
                         sock_path.unlink()
 
                 jsonl_path = _job_jsonl_path(job)
+                broker = JobEventBroker()
+                async with self._mu:
+                    self._brokers[job_id] = broker
                 pump_task = asyncio.create_task(
-                    start_event_pump(socket_path=str(sock_path), jsonl_path=jsonl_path),
+                    start_event_pump(
+                        socket_path=str(sock_path),
+                        jsonl_path=jsonl_path,
+                        publish=broker.publish,
+                    ),
                     name=f"patchhub_event_pump_{job_id}",
                 )
 
@@ -264,6 +277,11 @@ class AsyncJobQueue:
                 pump_task.cancel()
                 with contextlib.suppress(Exception):
                     await pump_task
+
+                async with self._mu:
+                    broker_to_close = self._brokers.pop(job_id) if job_id in self._brokers else None
+                if broker_to_close is not None:
+                    broker_to_close.close()
 
                 async with self._mu:
                     job = self._jobs.get(job_id)
@@ -280,6 +298,11 @@ class AsyncJobQueue:
                         job.ended_utc = utc_now()
                     await self._persist(job)
             except Exception as e:
+                async with self._mu:
+                    broker_to_close = self._brokers.pop(job_id) if job_id in self._brokers else None
+                if broker_to_close is not None:
+                    broker_to_close.close()
+
                 async with self._mu:
                     job = self._jobs.get(job_id)
                     if job is None:

@@ -3,7 +3,7 @@ Status: AUTHORITATIVE SPECIFICATION
 Applies to: scripts/patchhub/*
 Language: ENGLISH (ASCII ONLY)
 
-Specification Version: 1.2.1-spec
+Specification Version: 1.3.0-spec
 Code Baseline: audiomason2-main.zip (as provided in this chat)
 
 -------------------------------------------------------------------------------
@@ -76,6 +76,7 @@ Primary modules:
 - server_archive.py: /api/fs/archive (selection.zip creation)
 - server_events.py: /api/jobs/<job_id>/events (SSE stream from PatchHub jsonl store)
 - event_pump.py: single socket->jsonl event persistence pump (one per job)
+- job_event_broker.py: in-memory per-job event broadcast used for low-latency SSE
 - queue.py: job queue, lock, override injection, job persistence
 - runner_exec.py: runner subprocess executor
 - indexing.py: historical runs indexing from patches/logs
@@ -223,6 +224,10 @@ All routes are handled in server.py.
 In the main UI (templates/index.html), the Start button for launching a run
 (HTML id: enqueueBtn) MUST be located in the "B) Start run" section on the
 same row as the commit message input (HTML id: commitMsg).
+
+Result badge sizing rule (UI):
+- The result badge text (progress summary) MUST be approximately 2x the step header size,
+  and MUST NOT dominate the right pane.
 
 7.1.1 UI Status Bar
 
@@ -660,6 +665,9 @@ Semantics (server_events.py):
     data: {"reason":"job_not_found"}
 - Otherwise:
   - Streams "data: <json line>" for each complete line appended to the job jsonl.
+  - On connection, the server SHOULD replay a recent tail of persisted JSONL events
+    (default: last 500 lines) before switching to broker live streaming.
+  - Live events SHOULD appear in the UI with low latency (no polling batching).
   - Emits periodic comment pings every ~10 seconds:
     : ping
   - Ends with:
@@ -667,8 +675,9 @@ Semantics (server_events.py):
     data: {"reason":"job_completed","status":"<job.status>"}
 
 SSE source rule (HARD):
-- SSE MUST tail the PatchHub jsonl store only.
-- SSE MUST NOT connect to the runner IPC socket.
+- SSE MUST NOT connect to the runner IPC socket directly.
+- Live SSE streaming MUST use an in-memory job event broker fed by the job event pump.
+- JSONL tailing is permitted only as a fallback for historical jobs or after restart.
 
 JSONL source file selection:
 - If job exists only on disk:
