@@ -55,7 +55,9 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [tool.mypy]
-mypy_path = "src"
+mypy_path = "src:scripts"
+explicit_package_bases = true
+namespace_packages = true
 exclude = ["patches/", "badguys/", "tests/", "venv/", "__pycache__/"]
 python_version = "3.11"
 strict = false

@@ -2171,6 +2171,14 @@ if (mode === "patch" || mode === "repair") {
       setInterval(function () {
         refreshHeader();
       }, 5000);
+
+      if (window.AmpSettings && typeof window.AmpSettings.init === "function") {
+        try {
+          window.AmpSettings.init();
+        } catch (e) {
+          // Best-effort: do not break main UI if AMP settings init fails.
+        }
+      }
     });
   }
 

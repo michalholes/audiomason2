@@ -1050,7 +1050,49 @@ No silent failures:
 
 -------------------------------------------------------------------------------
 
-13. Non-Goals
+13. AMP Settings Editor (Runner Configuration)
+
+PatchHub MAY provide a visual editor for the AM Patch runner configuration.
+
+Single source of truth:
+- The authoritative configuration is the runner TOML file referenced by:
+  cfg.runner.runner_config_toml
+- PatchHub must never create or maintain a second configuration store.
+
+API:
+- GET /api/amp/schema
+  - returns a deterministic schema describing editable runner policy fields
+  - schema is derived from the runner Policy surface (dataclass) and is not
+    duplicated in PatchHub
+- GET /api/amp/config
+  - returns current runner policy values (typed)
+- POST /api/amp/config
+  - body: { "values": {<key>: <value>, ...}, "dry_run": bool }
+  - dry_run=true performs validation only and returns typed values
+  - dry_run=false validates and then writes the runner TOML atomically
+  - MUST reject writes when the runner lock is held (HTTP 409)
+  - MUST validate by rebuilding runner Policy from the updated TOML (roundtrip)
+
+UI:
+- The AMP Settings editor is located between:
+  - A) Start run
+  - C) Files
+- It is hidden by default (collapsed).
+- Field rendering rules:
+  - bool -> toggle switch
+  - str -> text input
+  - int -> numeric input
+  - enum -> dropdown
+  - list[str] -> tag/chips editor
+- Actions:
+  - Reload: fetch schema + config
+  - Validate: POST with dry_run=true
+  - Save: POST with dry_run=false
+  - Revert: restore last loaded values
+
+-------------------------------------------------------------------------------
+
+14. Non-Goals
 
 PatchHub is NOT:
 - A patch authoring system

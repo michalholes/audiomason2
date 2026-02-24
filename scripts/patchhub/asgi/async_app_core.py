@@ -3,6 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from patchhub import app_api_amp as _amp
 from patchhub import app_api_core as _core
 from patchhub import app_api_fs as _fs
 from patchhub import app_api_jobs as _jobs
@@ -53,6 +54,10 @@ class AsyncAppCore:
     api_parse_command = _core.api_parse_command
     api_runs = _core.api_runs
     api_runner_tail = _core.api_runner_tail
+
+    api_amp_schema = _amp.api_amp_schema
+    api_amp_config_get = _amp.api_amp_config_get
+    api_amp_config_post = _amp.api_amp_config_post
 
     async def diagnostics(self) -> dict[str, object]:
         qstate: Any | None

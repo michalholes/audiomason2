@@ -79,6 +79,21 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
         status, data = await to_thread(core.api_config)
         return _json_bytes_response(status, data)
 
+    @app.get("/api/amp/schema")
+    async def api_amp_schema() -> Response:
+        status, data = await to_thread(core.api_amp_schema)
+        return _json_bytes_response(status, data)
+
+    @app.get("/api/amp/config")
+    async def api_amp_config_get() -> Response:
+        status, data = await to_thread(core.api_amp_config_get)
+        return _json_bytes_response(status, data)
+
+    @app.post("/api/amp/config")
+    async def api_amp_config_post(body: dict[str, Any]) -> Response:
+        status, data = await to_thread(core.api_amp_config_post, body)
+        return _json_bytes_response(status, data)
+
     @app.get("/api/fs/list")
     async def api_fs_list(path: str = "") -> Response:
         status, data = await to_thread(core.api_fs_list, path)

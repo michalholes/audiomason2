@@ -126,6 +126,24 @@
 <pre id="liveLog" class="pre pre-box"></pre>
       </section>
 
+      <section class="card" id="ampCard">
+        <div class="row">
+          <h2 style="margin:0">AMP settings</h2>
+          <span class="spacer"></span>
+          <button id="ampCollapse" class="btn btn-small">Show</button>
+        </div>
+        <div id="ampWrap" class="hidden">
+          <div class="row">
+            <button id="ampReload" class="btn btn-small">Reload</button>
+            <button id="ampValidate" class="btn btn-small">Validate</button>
+            <button id="ampSave" class="btn btn-danger">Save</button>
+            <button id="ampRevert" class="btn btn-small">Revert</button>
+            <span id="ampStatus" class="muted"></span>
+          </div>
+          <div id="ampFields" class="amp-fields"></div>
+        </div>
+      </section>
+
       <section class="card">
         <h2>C) Files</h2>
         <div class="row">
@@ -200,6 +218,7 @@
     </aside>
   </main>
 
+  <script src="/static/amp_settings.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>
