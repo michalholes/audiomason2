@@ -1,7 +1,6 @@
 # AudioMason2 - Project Specification (Overview)
 
-Specification Version: 1.1.25
-
+Specification Version: 1.1.26
 This file is an overview entrypoint only.
 
 Normative authority:

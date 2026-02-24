@@ -1,7 +1,6 @@
 # AudioMason2 - Wire Contracts Specification (Authoritative)
 
-Specification Version: 1.1.22
-
+Specification Version: 1.1.26
 This document contains the WIRE layer of the AudioMason2 specification.
 It defines HTTP routes and JSON contracts between renderers/clients and the backend.
 
@@ -467,6 +466,46 @@ Baseline routes:
      - title MUST be ASCII (if no human title exists, use step_id).
      - kind MUST match the import plugin's runtime classification.
      - pinned MUST be "first" only for the required first step and "last" only for the required last step.
+
+19) GET  /import/ui/steps/{step_id}
+   - Returns read-only step details for UI editors.
+   - Response body:
+     {
+       "step_id": "conflict_policy",
+       "title": "Conflict Policy",
+       "kind": "mandatory|optional|conditional",
+       "pinned": "first|last|none",
+       "description": "Deterministic short description of what the step does.",
+       "settings_schema": {
+         "version": 1,
+         "fields": [
+           {
+             "key": "hint",
+             "type": "string",
+             "required": false,
+             "default": ""
+           },
+           {
+             "key": "prefill_policy",
+             "type": "string",
+             "required": false,
+             "default": ""
+           }
+         ]
+       },
+       "defaults_template": {
+         "hint": "",
+         "prefill_policy": ""
+       }
+     }
+   - Contract requirements:
+     - step_id path parameter MUST be ASCII and MUST match an item in steps-index.
+     - Response object keys MUST be emitted in deterministic order.
+     - description MUST be ASCII-only.
+     - settings_schema is UI-only metadata (read-only contract) and MUST NOT include
+       timestamps or editor metadata.
+     - settings_schema.fields MUST be in deterministic order.
+     - defaults_template MUST be suitable as FlowConfig.defaults[step_id] template.
 
 All editor history and rollback behavior MUST be deterministic and atomic.
 ## 10.6 Engine Guards (Invariants; MUST REJECT)

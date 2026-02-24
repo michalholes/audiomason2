@@ -1,3 +1,10 @@
+## 2026-02-24T18:00:00+01:00
+
+-   spec: Allow Unified Flow Editor (single screen) for WizardDefinition + FlowConfig,
+    preserving governance boundaries.
+-   Import UI: add GET /import/ui/steps/{step_id} (read-only step details for UI rendering).
+-   spec: Bump specification version to 1.1.26.
+
 ## 2026-02-24T00:00:00+01:00
 
 -   Import UI: add GET /import/ui/steps-index (read-only palette for visual wizard editor).

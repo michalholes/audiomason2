@@ -1,7 +1,6 @@
 # AudioMason2 - Architecture Specification (Authoritative)
 
-Specification Version: 1.1.23
-
+Specification Version: 1.1.26
 This document contains the ARCH layer of the AudioMason2 specification.
 It defines architectural invariants and contracts without wire-level
 HTTP/JSON details and without file-layout bindings.
@@ -1030,6 +1029,14 @@ If visual editors exist:
 -   A Wizard editor modifies WizardDefinition only (structural
     workflow).
 -   A Config editor modifies FlowConfig only (non-structural tuning).
+
+Unified Flow Editor (Import plugin UI):
+
+-   The UI MAY present the WizardDefinition editor and the FlowConfig editor in one screen.
+-   The UI MUST maintain two independent drafts and persist them separately.
+-   Structural edits (add/remove/reorder steps) MUST only affect WizardDefinition.
+-   Step behavior/settings edits MUST only affect FlowConfig (for example: defaults[step_id]).
+-   Validate All: the UI MUST validate both artifacts before allowing Save All.
 
 Additional editor capabilities (if implemented):
 

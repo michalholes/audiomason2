@@ -1,7 +1,6 @@
 # AudioMason2 - Implementation Bindings Specification (Authoritative)
 
-Specification Version: 1.1.23
-
+Specification Version: 1.1.26
 This document contains the LAYOUT layer of the AudioMason2
 specification. It defines normative file locations, on-disk artifacts,
 and other implementation bindings.
@@ -90,6 +89,20 @@ Existing files MUST NOT be overwritten. - Bootstrapped models and config
 MUST pass full model validation. - Bootstrap MUST occur before first
 model load. - Absence of models MUST NOT cause a hard failure if
 bootstrap succeeds.
+
+### 10.7.2 Step Catalog for UI Editors (Normative)
+
+The import plugin MUST provide a single internal StepCatalog source of truth for UI step metadata.
+
+Requirements:
+
+- The GET /import/ui/steps-index route and the GET /import/ui/steps/{step_id} route MUST be derived
+  from the same StepCatalog.
+- StepCatalog metadata is read-only and MUST be deterministic.
+- If a step has no human-friendly title or description, the implementation MUST fall back
+  to deterministic ASCII strings (for example: use step_id).
+- The exact StepCatalog implementation filename is owned by the import plugin implementation
+  and is specified by the implementation issue.
 
 ## 10.8 Deterministic Discovery (PHASE 0)
 
