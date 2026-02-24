@@ -83,6 +83,10 @@ def bind_editor_routes(
     def wizard_definition_rollback(body: dict[str, Any]):
         return call(lambda: _rollback_wizard_definition(engine, body))
 
+    @router.get("/steps-index")
+    def get_steps_index():
+        return call(lambda: _get_steps_index())
+
 
 def _validate_wrapper(
     *,
@@ -211,6 +215,56 @@ def _rollback_flow_config(engine: Any, body: Any) -> dict[str, Any]:
     rollback(fs, kind="flow_config", fingerprint=fid)
     cfg = load_flow_config(fs)
     return {"config": normalize_flow_config(cfg)}
+
+
+def _get_steps_index() -> dict[str, Any]:
+    from .flow_runtime import (
+        CANONICAL_STEP_ORDER,
+        CONDITIONAL_STEP_IDS,
+        MANDATORY_STEP_IDS,
+        OPTIONAL_STEP_IDS,
+    )
+
+    seen: set[str] = set()
+    items: list[dict[str, Any]] = []
+
+    def add(step_id: str) -> None:
+        if step_id in seen:
+            return
+        seen.add(step_id)
+
+        if step_id in CONDITIONAL_STEP_IDS:
+            kind = "conditional"
+        elif step_id in MANDATORY_STEP_IDS:
+            kind = "mandatory"
+        elif step_id in OPTIONAL_STEP_IDS:
+            kind = "optional"
+        else:
+            kind = "optional"
+
+        if step_id == "select_authors":
+            pinned = "first"
+        elif step_id == "processing":
+            pinned = "last"
+        else:
+            pinned = "none"
+
+        items.append(
+            {
+                "step_id": step_id,
+                "title": step_id,
+                "kind": kind,
+                "pinned": pinned,
+            }
+        )
+
+    for sid in CANONICAL_STEP_ORDER:
+        add(str(sid))
+
+    for sid in sorted(CONDITIONAL_STEP_IDS - seen):
+        add(str(sid))
+
+    return {"items": items}
 
 
 def _get_wizard_definition(engine: Any) -> dict[str, Any]:
