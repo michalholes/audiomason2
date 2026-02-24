@@ -17,7 +17,8 @@ from plugins.file_io.service import FileService
 from plugins.file_io.service.types import RootName
 
 from .errors import FinalizeError
-from .flow_runtime import CANONICAL_STEP_ORDER, OPTIONAL_STEP_IDS
+from .flow_runtime import CANONICAL_STEP_ORDER, MANDATORY_STEP_IDS, OPTIONAL_STEP_IDS
+from .step_catalog import STEP_CATALOG
 from .storage import atomic_write_json_if_missing, read_json
 
 WIZARD_DEFINITION_REL_PATH = "import/definitions/wizard_definition.json"
@@ -30,7 +31,8 @@ DEFAULT_WIZARD_DEFINITION: dict[str, Any] = {
     "steps": [{"step_id": sid} for sid in CANONICAL_STEP_ORDER],
 }
 
-_MANDATORY_STEP_IDS: tuple[str, ...] = (
+# Mandatory ordering chain (spec 10.3).
+_MANDATORY_CHAIN: tuple[str, ...] = (
     "select_authors",
     "select_books",
     "plan_preview_batch",
@@ -57,7 +59,7 @@ def load_or_bootstrap_wizard_definition(fs: FileService) -> dict[str, Any]:
 
 
 def validate_wizard_definition_structure(wd: Any) -> None:
-    """Validate basic structure and types."""
+    """Validate WizardDefinition v1/v2 structure and invariants."""
     if not isinstance(wd, dict):
         raise FinalizeError("wizard_definition must be a JSON object")
 
@@ -65,9 +67,100 @@ def validate_wizard_definition_structure(wd: Any) -> None:
     if wizard_id != "import":
         raise FinalizeError("wizard_definition wizard_id must be 'import'")
 
+    version_any = wd.get("version")
+    version = int(version_any) if isinstance(version_any, int) else 1
+
+    if version == 1:
+        _validate_v1_steps(wd)
+        return
+
+    if version == 2:
+        _validate_v2_graph(wd)
+        return
+
+    raise FinalizeError("wizard_definition version must be 1 or 2")
+
+
+def build_effective_workflow_snapshot(
+    *,
+    wizard_definition: dict[str, Any],
+    flow_config: dict[str, Any],
+) -> list[str]:
+    """Return the effective ordered step_ids for a session.
+
+    For v1 WizardDefinition, the ordering is derived from the steps list.
+    For v2 WizardDefinition, the ordering is derived from graph.nodes order.
+
+    Applies flow_config optional-step enable/disable rules.
+    """
+    version_any = wizard_definition.get("version")
+    version = int(version_any) if isinstance(version_any, int) else 1
+
+    ordered: list[str] = []
+
+    if version == 1:
+        steps_any = wizard_definition.get("steps")
+        if not isinstance(steps_any, list):
+            raise FinalizeError("wizard_definition steps must be a list")
+        for s in steps_any:
+            sid = s.get("step_id") if isinstance(s, dict) else None
+            if not isinstance(sid, str) or not sid:
+                raise FinalizeError("wizard_definition contains invalid step_id")
+            if sid in OPTIONAL_STEP_IDS and not _is_enabled(sid, flow_config):
+                continue
+            ordered.append(sid)
+
+        enforce_mandatory_constraints(ordered)
+        return ordered
+
+    if version == 2:
+        graph_any = wizard_definition.get("graph")
+        nodes_any = graph_any.get("nodes") if isinstance(graph_any, dict) else None
+        if not isinstance(nodes_any, list):
+            raise FinalizeError("wizard_definition graph nodes must be a list")
+
+        for n in nodes_any:
+            sid = n.get("step_id") if isinstance(n, dict) else None
+            if not isinstance(sid, str) or not sid:
+                raise FinalizeError("wizard_definition graph contains invalid step_id")
+            if sid in OPTIONAL_STEP_IDS and not _is_enabled(sid, flow_config):
+                continue
+            ordered.append(sid)
+
+        enforce_mandatory_constraints(ordered)
+        return ordered
+
+    raise FinalizeError("wizard_definition version must be 1 or 2")
+
+
+def enforce_mandatory_constraints(step_order: list[str]) -> None:
+    """Enforce mandatory constraints from specification section 10.3."""
+    if not step_order:
+        raise FinalizeError("wizard_definition step_order must be non-empty")
+    if step_order[0] != "select_authors":
+        raise FinalizeError("select_authors must be the first step")
+
+    for sid in sorted(MANDATORY_STEP_IDS):
+        if sid not in step_order:
+            raise FinalizeError(f"wizard_definition missing mandatory step_id: {sid}")
+
+    idxs = [step_order.index(sid) for sid in _MANDATORY_CHAIN]
+    if idxs != sorted(idxs):
+        raise FinalizeError("wizard_definition violates mandatory ordering constraints")
+
+    # processing must be the only PHASE 2 step and the only terminal step.
+    if step_order.count("processing") != 1:
+        raise FinalizeError("wizard_definition must contain exactly one 'processing' step")
+    if step_order[-1] != "processing":
+        raise FinalizeError("wizard_definition processing must be the terminal step")
+
+
+def _validate_v1_steps(wd: dict[str, Any]) -> None:
     steps_any = wd.get("steps")
     if not isinstance(steps_any, list) or not steps_any:
         raise FinalizeError("wizard_definition steps must be a non-empty list")
+
+    known = _known_step_ids()
 
     seen: set[str] = set()
     for s in steps_any:
@@ -78,65 +171,114 @@ def validate_wizard_definition_structure(wd: Any) -> None:
             raise FinalizeError("wizard_definition step_id must be a non-empty string")
         if sid in seen:
             raise FinalizeError("wizard_definition step_id must be unique")
+        if sid not in known:
+            raise FinalizeError(f"wizard_definition contains unknown step_id: {sid}")
         seen.add(sid)
 
 
-def build_effective_workflow_snapshot(
-    *,
-    wizard_definition: dict[str, Any],
-    flow_config: dict[str, Any],
-) -> list[str]:
-    """Return the effective ordered step_ids for a session.
+def _validate_v2_graph(wd: dict[str, Any]) -> None:
+    graph_any = wd.get("graph")
+    if not isinstance(graph_any, dict):
+        raise FinalizeError("wizard_definition graph must be an object")
 
-    Applies flow_config optional-step enable/disable rules.
-    """
-    steps_any = wizard_definition.get("steps")
-    if not isinstance(steps_any, list):
-        raise FinalizeError("wizard_definition steps must be a list")
+    entry_any = graph_any.get("entry_step_id")
+    if not isinstance(entry_any, str) or not entry_any:
+        raise FinalizeError("wizard_definition graph entry_step_id must be a string")
 
-    ordered: list[str] = []
-    for s in steps_any:
-        sid = s.get("step_id") if isinstance(s, dict) else None
+    nodes_any = graph_any.get("nodes")
+    if not isinstance(nodes_any, list) or not nodes_any:
+        raise FinalizeError("wizard_definition graph nodes must be a non-empty list")
+
+    known = _known_step_ids()
+
+    nodes: list[str] = []
+    seen: set[str] = set()
+    for n in nodes_any:
+        if not isinstance(n, dict):
+            raise FinalizeError("wizard_definition graph nodes must be objects")
+        sid = n.get("step_id")
         if not isinstance(sid, str) or not sid:
-            raise FinalizeError("wizard_definition contains invalid step_id")
-        if sid in OPTIONAL_STEP_IDS and not _is_enabled(sid, flow_config):
+            raise FinalizeError("wizard_definition graph node step_id must be a string")
+        if sid in seen:
+            raise FinalizeError("wizard_definition graph node step_id must be unique")
+        if sid not in known:
+            raise FinalizeError(f"wizard_definition contains unknown step_id: {sid}")
+        seen.add(sid)
+        nodes.append(sid)
+
+    if entry_any not in seen:
+        raise FinalizeError("wizard_definition graph entry_step_id must exist in nodes")
+
+    edges_any = graph_any.get("edges")
+    if not isinstance(edges_any, list):
+        raise FinalizeError("wizard_definition graph edges must be a list")
+
+    for e in edges_any:
+        if not isinstance(e, dict):
+            raise FinalizeError("wizard_definition graph edges must be objects")
+        frm = e.get("from_step_id")
+        to = e.get("to_step_id")
+        if not isinstance(frm, str) or not frm:
+            raise FinalizeError("wizard_definition graph edges require from_step_id")
+        if not isinstance(to, str) or not to:
+            raise FinalizeError("wizard_definition graph edges require to_step_id")
+        if frm not in seen:
+            raise FinalizeError("wizard_definition graph edge references unknown from_step_id")
+        if to not in seen:
+            raise FinalizeError("wizard_definition graph edge references unknown to_step_id")
+
+    _validate_v2_reachability(entry_any, nodes, edges_any)
+
+
+def _validate_v2_reachability(entry: str, nodes: list[str], edges_any: list[Any]) -> None:
+    adj: dict[str, set[str]] = {n: set() for n in nodes}
+    for e in edges_any:
+        if not isinstance(e, dict):
             continue
-        ordered.append(sid)
+        frm = e.get("from_step_id")
+        to = e.get("to_step_id")
+        if isinstance(frm, str) and isinstance(to, str) and frm in adj and to in adj:
+            adj[frm].add(to)
 
-    enforce_mandatory_constraints(ordered)
-    return ordered
+    # processing must exist, be reachable, and be terminal (no outgoing).
+    if "processing" not in adj:
+        raise FinalizeError("wizard_definition graph missing node: processing")
+
+    reachable = _reachable_from(entry, adj)
+    if "processing" not in reachable:
+        raise FinalizeError("wizard_definition graph processing must be reachable from entry")
+    if adj.get("processing"):
+        raise FinalizeError("wizard_definition graph processing must be terminal")
+
+    # Each mandatory step must be reachable from entry.
+    for sid in sorted(MANDATORY_STEP_IDS):
+        if sid not in reachable:
+            raise FinalizeError(f"wizard_definition graph step not reachable: {sid}")
+
+    # Mandatory chain must be ordered by reachability (path existence).
+    chain = list(_MANDATORY_CHAIN)
+    for a, b in zip(chain, chain[1:], strict=False):
+        if b not in _reachable_from(a, adj):
+            raise FinalizeError("wizard_definition graph violates mandatory chain reachability")
 
 
-def enforce_mandatory_constraints(step_order: list[str]) -> None:
-    """Enforce mandatory constraints from specification section 10.3."""
-    if not step_order:
-        raise FinalizeError("wizard_definition step_order must be non-empty")
-    if step_order[0] != "select_authors":
-        raise FinalizeError("select_authors must be the first step")
-    for sid in _MANDATORY_STEP_IDS:
-        if sid not in step_order:
-            raise FinalizeError(f"wizard_definition missing mandatory step_id: {sid}")
+def _reachable_from(start: str, adj: dict[str, set[str]]) -> set[str]:
+    seen: set[str] = set()
+    stack: list[str] = [start]
+    while stack:
+        cur = stack.pop()
+        if cur in seen:
+            continue
+        seen.add(cur)
+        for nxt in sorted(adj.get(cur, set())):
+            if nxt not in seen:
+                stack.append(nxt)
+    return seen
 
-    # Ordering: select_authors < select_books < plan_preview_batch <
-    # conflict_policy < final_summary_confirm < processing
-    required_chain = [
-        "select_authors",
-        "select_books",
-        "plan_preview_batch",
-        "conflict_policy",
-        "final_summary_confirm",
-        "processing",
-    ]
-    idxs = [step_order.index(sid) for sid in required_chain]
-    if idxs != sorted(idxs):
-        raise FinalizeError("wizard_definition violates mandatory ordering constraints")
 
-    # processing must be the only PHASE 2 step and the only terminal step.
-    # Phase is derived: only 'processing' is PHASE 2.
-    if step_order.count("processing") != 1:
-        raise FinalizeError("wizard_definition must contain exactly one 'processing' step")
-    if step_order[-1] != "processing":
-        raise FinalizeError("wizard_definition processing must be the terminal step")
+def _known_step_ids() -> set[str]:
+    # UI catalog step ids plus canonical defaults.
+    return set(STEP_CATALOG.keys()) | set(CANONICAL_STEP_ORDER)
 
 
 def _is_enabled(step_id: str, flow_config: dict[str, Any]) -> bool:

@@ -20,6 +20,8 @@ from .defaults import ensure_default_models
 from .engine_diagnostics_required import create_process_job
 from .engine_processing import start_processing_impl
 from .engine_session_create import create_session_impl
+from .engine_step_submit import submit_step_impl
+from .engine_steps_api import get_step_definition_impl
 from .engine_util import (
     _derive_selection_items,
     _emit_required,
@@ -29,18 +31,23 @@ from .engine_util import (
     _iso_utc_now,
     _parse_selection_expr,
 )
+from .engine_validation_api import (
+    validate_catalog_impl,
+    validate_flow_config_impl,
+    validate_flow_impl,
+)
 from .errors import (
     FinalizeError,
     SessionNotFoundError,
     StepSubmissionError,
-    ascii_message,
     invariant_violation,
     validation_error,
 )
 from .field_schema_validation import validate_step_fields
 from .fingerprints import fingerprint_json
+from .flow_graph import normalize_to_graph, select_next_step
 from .flow_runtime import (
-    CONDITIONAL_STEP_IDS,
+    CANONICAL_STEP_ORDER,
     build_flow_model,
 )
 from .job_requests import planned_units_count
@@ -48,6 +55,7 @@ from .models import CatalogModel, FlowModel, validate_models
 from .plan import PlanSelectionError, compute_plan
 from .preview import preview_action_impl
 from .session_effective_model import load_effective_model_json
+from .step_catalog import STEP_CATALOG
 from .storage import (
     append_jsonl,
     atomic_write_json,
@@ -57,6 +65,7 @@ from .storage import (
 from .wizard_definition_model import (
     build_effective_workflow_snapshot,
     load_or_bootstrap_wizard_definition,
+    validate_wizard_definition_structure,
 )
 
 # Test seam: unit tests monkeypatch plugins.import.engine.get_event_bus.
@@ -141,50 +150,13 @@ class ImportWizardEngine:
         )
 
     def validate_catalog(self, catalog_json: Any) -> dict[str, Any]:
-        """Validate catalog JSON using engine invariants.
-
-        Returns {"ok": True} on success, or a canonical error envelope.
-        """
-        try:
-            if not isinstance(catalog_json, dict):
-                raise ValueError("catalog_json must be an object")
-            _ = CatalogModel.from_dict(catalog_json)
-            return {"ok": True}
-        except Exception as e:
-            return _exception_envelope(e)
+        return validate_catalog_impl(engine=self, catalog_json=catalog_json)
 
     def validate_flow(self, flow_json: Any, catalog_json: Any) -> dict[str, Any]:
-        """Validate flow JSON against the catalog using engine invariants.
-
-        Returns {"ok": True} on success, or a canonical error envelope.
-        """
-        try:
-            if not isinstance(catalog_json, dict):
-                raise ValueError("catalog_json must be an object")
-            if not isinstance(flow_json, dict):
-                raise ValueError("flow_json must be an object")
-            catalog = CatalogModel.from_dict(catalog_json)
-            flow = FlowModel.from_dict(flow_json)
-            validate_models(catalog, flow)
-            return {"ok": True}
-        except Exception as e:
-            return _exception_envelope(e)
+        return validate_flow_impl(engine=self, flow_json=flow_json, catalog_json=catalog_json)
 
     def validate_flow_config(self, flow_config_json: Any) -> dict[str, Any]:
-        """Validate FlowConfig JSON.
-
-        FlowConfig v1 governance:
-        - version=1
-        - optional step toggles only: steps.{step_id}.enabled (bool)
-        - required steps may not be disabled
-        """
-        try:
-            if not isinstance(flow_config_json, dict):
-                raise ValueError("flow_config_json must be an object")
-            _ = self._normalize_flow_config(flow_config_json)
-            return {"ok": True}
-        except Exception as e:
-            return _exception_envelope(e)
+        return validate_flow_config_impl(engine=self, flow_config_json=flow_config_json)
 
     def get_flow_config(self) -> dict[str, Any]:
         return flow_config_api.get_flow_config(self)
@@ -236,153 +208,12 @@ class ImportWizardEngine:
             return _exception_envelope(e)
 
     def get_step_definition(self, session_id: str, step_id: str) -> dict[str, Any]:
-        """Return the catalog step definition for step_id.
-
-        This is a UI helper. It does not perform any state transitions.
-        """
-        try:
-            effective_model = self._load_effective_model(session_id)
-            steps_any = effective_model.get("steps")
-            if not isinstance(steps_any, list):
-                raise ValueError("effective model missing steps")
-            for step in steps_any:
-                if isinstance(step, dict) and step.get("step_id") == step_id:
-                    return dict(step)
-            raise ValueError("unknown step_id")
-        except Exception as e:
-            return _exception_envelope(e)
+        return get_step_definition_impl(engine=self, session_id=session_id, step_id=step_id)
 
     def submit_step(self, session_id: str, step_id: str, payload: dict[str, Any]) -> dict[str, Any]:
-        try:
-            state = self._load_state(session_id)
-            if int(state.get("phase") or 1) == 2:
-                return invariant_violation(
-                    message="session is locked (phase 2)",
-                    path="$.phase",
-                    reason="phase_locked",
-                    meta={},
-                )
-            if state.get("status") != "in_progress":
-                raise StepSubmissionError("session is not in progress")
-
-            _emit_required(
-                "step.submit",
-                "step.submit",
-                {
-                    "session_id": session_id,
-                    "step_id": step_id,
-                    "model_fingerprint": state.get("model_fingerprint"),
-                    "discovery_fingerprint": state.get("derived", {}).get("discovery_fingerprint"),
-                    "effective_config_fingerprint": state.get("derived", {}).get(
-                        "effective_config_fingerprint"
-                    ),
-                },
-            )
-
-            if not isinstance(payload, dict):
-                raise StepSubmissionError("payload must be an object")
-
-            effective_model = self._load_effective_model(session_id)
-            steps_any = effective_model.get("steps")
-            if not isinstance(steps_any, list):
-                raise StepSubmissionError("effective model missing steps")
-            steps = [s for s in steps_any if isinstance(s, dict)]
-            flow_cfg_norm = self._load_effective_flow_config(session_id)
-
-            step_ids = {str(s.get("step_id")) for s in steps if isinstance(s.get("step_id"), str)}
-            if step_id not in step_ids and step_id not in CONDITIONAL_STEP_IDS:
-                raise StepSubmissionError("unknown step_id")
-
-            current = str(state.get("current_step_id") or "select_authors")
-            if step_id != current:
-                raise StepSubmissionError("step_id must match current_step_id")
-
-            schema = None
-            for step in steps:
-                if step.get("step_id") == step_id:
-                    schema = step
-                    break
-            if schema is None:
-                raise StepSubmissionError("unknown step_id")
-
-            if step_id in {"plan_preview_batch", "processing"}:
-                raise StepSubmissionError("computed-only step cannot be submitted")
-
-            normalized_payload = self._validate_and_canonicalize_payload(
-                step_id=step_id,
-                schema=schema,
-                payload=payload,
-                state=state,
-            )
-
-            if step_id == "conflict_policy":
-                self._apply_conflict_policy(state, normalized_payload)
-            if step_id == "resolve_conflicts_batch":
-                self._apply_conflict_resolve(state, normalized_payload)
-                self._persist_conflict_resolution(session_id, state, normalized_payload)
-
-            answers = dict(state.get("answers") or {})
-            answers[step_id] = normalized_payload
-            state["answers"] = answers
-
-            # Backward compatibility: maintain legacy inputs mirror.
-            inputs = dict(state.get("inputs") or {})
-            inputs[step_id] = normalized_payload
-            state["inputs"] = inputs
-
-            if step_id == "select_authors":
-                sel = normalized_payload.get("selection")
-                if isinstance(sel, list) and all(isinstance(x, str) for x in sel):
-                    state["selected_author_ids"] = list(sel)
-
-            if step_id == "select_books":
-                sel = normalized_payload.get("selection")
-                if isinstance(sel, list) and all(isinstance(x, str) for x in sel):
-                    state["selected_book_ids"] = list(sel)
-
-            if step_id == "effective_author_title":
-                state["effective_author_title"] = dict(normalized_payload)
-
-            completed = list(state.get("completed_step_ids") or [])
-            if step_id not in completed:
-                completed.append(step_id)
-            state["completed_step_ids"] = completed
-
-            next_step = self._next_step_after_submit(
-                step_id=step_id,
-                state=state,
-                flow_cfg_norm=flow_cfg_norm,
-            )
-
-            state["current_step_id"] = self._auto_advance_computed_steps(
-                session_id=session_id,
-                state=state,
-                next_step_id=next_step,
-                flow_cfg_norm=flow_cfg_norm,
-            )
-
-            state["updated_at"] = _iso_utc_now()
-            self._append_decision(
-                session_id,
-                step_id=step_id,
-                payload=normalized_payload,
-                result="accepted",
-                error=None,
-            )
-            self._persist_state(session_id, state)
-            return state
-        except Exception as e:
-            self._append_decision(
-                session_id,
-                step_id=step_id,
-                payload=payload if isinstance(payload, dict) else {"_invalid_payload": True},
-                result="rejected",
-                error={
-                    "type": e.__class__.__name__,
-                    "message": ascii_message(str(e) or e.__class__.__name__),
-                },
-            )
-            return _exception_envelope(e)
+        return submit_step_impl(
+            engine=self, session_id=session_id, step_id=step_id, payload=payload
+        )
 
     def preview_action(
         self,
@@ -436,76 +267,6 @@ class ImportWizardEngine:
             session_id=session_id,
             current="plan_preview_batch",
             direction="next",
-        )
-
-    def _apply_conflict_policy(self, state: dict[str, Any], payload: dict[str, Any]) -> None:
-        raw_mode = payload.get("mode")
-        if not isinstance(raw_mode, str) or not raw_mode.strip():
-            raise StepSubmissionError("conflict_policy.mode must be a non-empty string")
-        mode = raw_mode.strip().lower()
-        try:
-            mode.encode("ascii")
-        except UnicodeEncodeError as e:
-            raise StepSubmissionError("conflict_policy.mode must be ASCII-only") from e
-
-        policy = "ask" if mode == "ask" else mode
-
-        conflicts = state.get("conflicts")
-        conflicts = conflicts if isinstance(conflicts, dict) else {}
-
-        conflicts["policy"] = policy
-
-        items = conflicts.get("items")
-        present = bool(conflicts.get("present"))
-        if isinstance(items, list):
-            present = present or bool(items)
-
-        if policy != "ask":
-            conflicts["resolved"] = True
-        else:
-            conflicts["resolved"] = bool(conflicts.get("resolved")) if present else True
-
-        state["conflicts"] = conflicts
-
-    def _apply_conflict_resolve(self, state: dict[str, Any], payload: dict[str, Any]) -> None:
-        conflicts = state.get("conflicts")
-        if not isinstance(conflicts, dict):
-            raise StepSubmissionError("conflicts missing from state")
-
-        policy = str(conflicts.get("policy") or "ask")
-        if policy != "ask":
-            conflicts["resolved"] = True
-            state["conflicts"] = conflicts
-            return
-
-        confirm = payload.get("confirm")
-        if confirm is not True:
-            raise StepSubmissionError("resolve_conflicts_batch.confirm must be true")
-
-        conflicts["resolved"] = True
-        state["conflicts"] = conflicts
-
-    def _persist_conflict_resolution(
-        self,
-        session_id: str,
-        state: dict[str, Any],
-        payload: dict[str, Any],
-    ) -> None:
-        conflicts = state.get("conflicts")
-        if not isinstance(conflicts, dict):
-            return
-        record = {
-            "at": _iso_utc_now(),
-            "policy": str(conflicts.get("policy") or ""),
-            "conflict_fingerprint": str(state.get("derived", {}).get("conflict_fingerprint") or ""),
-            "payload": dict(payload),
-        }
-        session_dir = f"import/sessions/{session_id}"
-        atomic_write_json(
-            self._fs,
-            RootName.WIZARDS,
-            f"{session_dir}/conflicts_resolution.json",
-            record,
         )
 
     def _validate_and_canonicalize_payload(
@@ -898,6 +659,24 @@ class ImportWizardEngine:
             return {"version": 1, "steps": {}, "defaults": {}, "ui": {}}
         return flow_cfg_any
 
+    def _load_session_wizard_definition_snapshot(
+        self, session_id: str, state: dict[str, Any]
+    ) -> dict[str, Any]:
+        derived_any = state.get("derived")
+        derived: dict[str, Any] = derived_any if isinstance(derived_any, dict) else {}
+        snap_any = derived.get("wizard_definition_snapshot")
+        if isinstance(snap_any, dict):
+            return snap_any
+
+        wd = load_or_bootstrap_wizard_definition(self._fs)
+        validate_wizard_definition_structure(wd)
+
+        derived["wizard_definition_snapshot"] = wd
+        derived["wizard_definition_fingerprint"] = fingerprint_json(wd)
+        state["derived"] = derived
+        self._persist_state(session_id, state)
+        return wd
+
     def _session_step_order(self, session_id: str) -> list[str]:
         effective = read_json(
             self._fs,
@@ -940,40 +719,45 @@ class ImportWizardEngine:
         state: dict[str, Any],
         flow_cfg_norm: dict[str, Any],
     ) -> str:
-        # Spec 10.3.4 conditional conflict path.
-        if step_id == "resolve_conflicts_batch":
-            return "final_summary_confirm"
+        session_id = str(state.get("session_id") or "")
 
+        # Conflict scan side effect is engine-owned (spec 10.3.4) but branching is graph-owned.
         if step_id == "final_summary_confirm":
             inputs = state.get("inputs") or {}
             payload = inputs.get("final_summary_confirm") if isinstance(inputs, dict) else None
             confirm = payload.get("confirm_start") if isinstance(payload, dict) else None
-            if confirm is not True:
-                return "final_summary_confirm"
+            if confirm is True:
+                conflicts = state.get("conflicts")
+                policy = "ask"
+                if isinstance(conflicts, dict):
+                    policy = str(conflicts.get("policy") or "ask")
+                if policy == "ask":
+                    self._update_conflicts(session_id, state)
 
-            conflicts = state.get("conflicts")
-            policy = "ask"
-            if isinstance(conflicts, dict):
-                policy = str(conflicts.get("policy") or "ask")
+        wd = self._load_session_wizard_definition_snapshot(session_id, state)
+        known_step_ids = set(STEP_CATALOG.keys()) | set(CANONICAL_STEP_ORDER)
+        graph = normalize_to_graph(wd, known_step_ids=known_step_ids)
 
-            if policy != "ask":
-                return "processing"
+        inputs_view = state.get("inputs") if isinstance(state.get("inputs"), dict) else {}
+        state_view = {
+            "inputs": inputs_view,
+            "state": {
+                "conflicts": (
+                    state.get("conflicts") if isinstance(state.get("conflicts"), dict) else {}
+                ),
+                "phase": state.get("phase"),
+                "current_step_id": state.get("current_step_id"),
+            },
+        }
 
-            # conflict_mode == ask: perform deterministic scan here (spec 10.3.4).
-            self._update_conflicts(str(state.get("session_id") or ""), state)
-            conflicts2 = state.get("conflicts")
-            present = bool(conflicts2.get("present")) if isinstance(conflicts2, dict) else False
-            resolved = bool(conflicts2.get("resolved")) if isinstance(conflicts2, dict) else True
-            if present and not resolved:
-                return "resolve_conflicts_batch"
-            return "processing"
+        def is_enabled(sid: str) -> bool:
+            return self._is_step_enabled(sid, flow_cfg_norm)
 
-        # Default: strictly linear ordering, derived from the session snapshot.
-        session_id = str(state.get("session_id") or "")
-        return self._move_linear(
-            session_id=session_id,
-            current=step_id,
-            direction="next",
+        return select_next_step(
+            graph,
+            current_step_id=step_id,
+            state_view=state_view,
+            is_step_enabled=is_enabled,
         )
 
     def _is_step_enabled(self, step_id: str, flow_cfg_norm: dict[str, Any]) -> bool:
