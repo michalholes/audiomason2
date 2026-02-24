@@ -3,7 +3,7 @@ Status: AUTHORITATIVE SPECIFICATION
 Applies to: scripts/patchhub/*
 Language: ENGLISH (ASCII ONLY)
 
-Specification Version: 1.3.0-spec
+Specification Version: 1.3.1-spec
 Code Baseline: audiomason2-main.zip (as provided in this chat)
 
 -------------------------------------------------------------------------------
@@ -668,6 +668,14 @@ Semantics (server_events.py):
   - On connection, the server SHOULD replay a recent tail of persisted JSONL events
     (default: last 500 lines) before switching to broker live streaming.
   - Live events SHOULD appear in the UI with low latency (no polling batching).
+
+Runner IPC event persistence robustness (HARD):
+- The job event pump MUST NOT rely on asyncio StreamReader.readline() limits.
+- The pump MUST read the IPC stream in chunks and split on "\n".
+- The pump MUST persist each complete JSONL line as-is (after UTF-8 decode).
+- If a single line grows beyond 64 MiB without a newline, the pump MUST drop
+  the partial buffer and emit a JSON notice line with:
+  {"type":"patchhub_notice","code":"IPC_LINE_TOO_LARGE_DROPPED",...}.
   - Emits periodic comment pings every ~10 seconds:
     : ping
   - Ends with:

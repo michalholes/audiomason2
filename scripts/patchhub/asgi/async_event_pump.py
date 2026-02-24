@@ -2,8 +2,37 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 from collections.abc import Callable
 from pathlib import Path
+
+_CHUNK_BYTES = 8192
+_MAX_LINE_BYTES = 64 * 1024 * 1024
+
+
+def _oversize_notice(*, dropped_bytes: int) -> str:
+    payload = {
+        "type": "patchhub_notice",
+        "code": "IPC_LINE_TOO_LARGE_DROPPED",
+        "dropped_bytes": dropped_bytes,
+    }
+    return json.dumps(payload, ensure_ascii=True, separators=(",", ":"))
+
+
+def _write_line(
+    *,
+    f,
+    line: str,
+    publish: Callable[[str], None] | None,
+) -> None:
+    line = line.rstrip("\n")
+    if not line.strip():
+        return
+
+    if publish is not None:
+        publish(line)
+
+    f.write(line + "\n")
 
 
 async def _connect_and_stream(
@@ -18,27 +47,39 @@ async def _connect_and_stream(
     try:
         flush_every = 20
         n = 0
+        buf = b""
         while True:
-            raw = await reader.readline()
-            if not raw:
+            chunk = await reader.read(_CHUNK_BYTES)
+            if not chunk:
+                if buf.strip():
+                    line = buf.decode("utf-8", errors="replace")
+                    _write_line(f=f, line=line, publish=publish)
                 return
-            try:
-                line = raw.decode("utf-8")
-            except Exception:
-                line = raw.decode("utf-8", errors="replace")
 
-            line = line.rstrip("\n")
-            if not line.strip():
-                continue
+            buf += chunk
+            while True:
+                nl = buf.find(b"\n")
+                if nl < 0:
+                    break
 
-            if publish is not None:
-                publish(line)
+                line_bytes = buf[:nl]
+                buf = buf[nl + 1 :]
 
-            f.write(line + "\n")
-            n += 1
-            if n >= flush_every:
-                f.flush()
-                n = 0
+                if not line_bytes.strip():
+                    continue
+
+                line = line_bytes.decode("utf-8", errors="replace")
+                _write_line(f=f, line=line, publish=publish)
+                n += 1
+                if n >= flush_every:
+                    f.flush()
+                    n = 0
+
+            if len(buf) > _MAX_LINE_BYTES:
+                dropped = len(buf)
+                buf = b""
+                notice = _oversize_notice(dropped_bytes=dropped)
+                _write_line(f=f, line=notice, publish=publish)
     finally:
         with contextlib.suppress(Exception):
             f.flush()
