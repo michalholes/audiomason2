@@ -60,55 +60,68 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
 
     @app.get("/static/{rel_path:path}")
     async def static(rel_path: str) -> FileResponse:
-        base = Path(__file__).resolve().parent.parent / "patchhub" / "static"
-        p = (base / rel_path).resolve()
-        if base not in p.parents:
-            raise HTTPException(status_code=404, detail="Not found")
-        if not p.exists() or not p.is_file():
+        def _resolve_static_sync(rel_path: str) -> Path | None:
+            base = Path(__file__).resolve().parent.parent / "patchhub" / "static"
+            p = (base / rel_path).resolve()
+            if base not in p.parents:
+                return None
+            if not p.exists() or not p.is_file():
+                return None
+            return p
+
+        p = await to_thread(_resolve_static_sync, rel_path)
+        if p is None:
             raise HTTPException(status_code=404, detail="Not found")
         return FileResponse(p, media_type=_guess_content_type(p))
 
     @app.get("/api/config")
     async def api_config() -> Response:
-        status, data = core.api_config()
+        status, data = await to_thread(core.api_config)
         return _json_bytes_response(status, data)
 
     @app.get("/api/fs/list")
     async def api_fs_list(path: str = "") -> Response:
-        status, data = core.api_fs_list(path)
+        status, data = await to_thread(core.api_fs_list, path)
         return _json_bytes_response(status, data)
 
     @app.get("/api/patches/latest")
     async def api_patches_latest() -> Response:
-        status, data = core.api_patches_latest()
+        status, data = await to_thread(core.api_patches_latest)
         return _json_bytes_response(status, data)
 
     @app.get("/api/fs/read_text")
     async def api_fs_read_text(request: Request) -> Response:
         qs = dict(request.query_params)
-        status, data = core.api_fs_read_text(qs)
+        status, data = await to_thread(core.api_fs_read_text, qs)
         return _json_bytes_response(status, data)
 
     @app.get("/api/fs/download")
     async def api_fs_download(path: str = "") -> FileResponse:
+        def _resolve_download_sync(path: str) -> Path:
+            return core.jail.resolve_rel(path)
+
         try:
-            p = core.jail.resolve_rel(path)
+            p = await to_thread(_resolve_download_sync, path)
         except Exception as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
-        if not p.exists() or not p.is_file():
+
+        def _exists_file_sync(p: Path) -> bool:
+            return p.exists() and p.is_file()
+
+        if not await to_thread(_exists_file_sync, p):
             raise HTTPException(status_code=404, detail="Not found")
         return FileResponse(p, media_type=_guess_content_type(p), filename=p.name)
 
     @app.get("/api/runs")
     async def api_runs(request: Request) -> Response:
         qs = dict(request.query_params)
-        status, data = core.api_runs(qs)
+        status, data = await to_thread(core.api_runs, qs)
         return _json_bytes_response(status, data)
 
     @app.get("/api/runner/tail")
     async def api_runner_tail(request: Request) -> Response:
         qs = dict(request.query_params)
-        status, data = core.api_runner_tail(qs)
+        status, data = await to_thread(core.api_runner_tail, qs)
         return _json_bytes_response(status, data)
 
     @app.get("/api/jobs")
@@ -118,15 +131,19 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
 
         from patchhub.job_store import list_job_jsons
 
-        disk_raw = list_job_jsons(core.jobs_root, limit=200)
-        disk = []
-        for r in disk_raw:
-            jid = str(r.get("job_id", ""))
-            if not jid or jid in mem_by_id:
-                continue
-            j = core._load_job_from_disk(jid)
-            if j is not None:
-                disk.append(j)
+        def _load_disk_jobs_sync(mem_by_id: dict[str, object]) -> list[Any]:
+            disk_raw = list_job_jsons(core.jobs_root, limit=200)
+            disk: list[Any] = []
+            for r in disk_raw:
+                jid = str(r.get("job_id", ""))
+                if not jid or jid in mem_by_id:
+                    continue
+                j = core._load_job_from_disk(jid)
+                if j is not None:
+                    disk.append(j)
+            return disk
+
+        disk = await to_thread(_load_disk_jobs_sync, mem_by_id)
 
         jobs = mem + disk
         jobs.sort(key=lambda j: str(j.created_utc or ""), reverse=True)
@@ -136,7 +153,7 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
     async def api_jobs_get(job_id: str) -> JSONResponse:
         job = await core.queue.get_job(job_id)
         if job is None:
-            job = core._load_job_from_disk(job_id)
+            job = await to_thread(core._load_job_from_disk, job_id)
         if job is None:
             return JSONResponse({"ok": False, "error": "Not found"}, status_code=404)
         return JSONResponse({"ok": True, "job": job.to_json()})
@@ -145,11 +162,12 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
     async def api_jobs_log_tail(job_id: str, lines: int = 200) -> JSONResponse:
         job = await core.queue.get_job(job_id)
         if job is None:
-            job = core._load_job_from_disk(job_id)
+            job = await to_thread(core._load_job_from_disk, job_id)
         if job is None:
             return JSONResponse({"ok": False, "error": "Not found"}, status_code=404)
         log_path = core.jobs_root / str(job_id) / "runner.log"
-        return JSONResponse({"ok": True, "job_id": job_id, "tail": read_tail(log_path, lines)})
+        tail = await to_thread(read_tail, log_path, lines)
+        return JSONResponse({"ok": True, "job_id": job_id, "tail": tail})
 
     @app.post("/api/jobs/{job_id}/cancel")
     async def api_jobs_cancel(job_id: str) -> Response:
@@ -190,34 +208,34 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
 
     @app.post("/api/parse_command")
     async def api_parse_command(body: dict[str, Any]) -> Response:
-        status, data = core.api_parse_command(body)
+        status, data = await to_thread(core.api_parse_command, body)
         return _json_bytes_response(status, data)
 
     @app.post("/api/upload/patch")
     async def api_upload_patch(file: UploadFile = UPLOAD_PATCH_FILE) -> Response:
         filename = os.path.basename(file.filename or "")
         data = await file.read()
-        status, resp = core.api_upload_patch(filename, data)
+        status, resp = await to_thread(core.api_upload_patch, filename, data)
         return _json_bytes_response(status, resp)
 
     @app.post("/api/fs/mkdir")
     async def api_fs_mkdir(body: dict[str, Any]) -> Response:
-        status, data = core.api_fs_mkdir(body)
+        status, data = await to_thread(core.api_fs_mkdir, body)
         return _json_bytes_response(status, data)
 
     @app.post("/api/fs/rename")
     async def api_fs_rename(body: dict[str, Any]) -> Response:
-        status, data = core.api_fs_rename(body)
+        status, data = await to_thread(core.api_fs_rename, body)
         return _json_bytes_response(status, data)
 
     @app.post("/api/fs/delete")
     async def api_fs_delete(body: dict[str, Any]) -> Response:
-        status, data = core.api_fs_delete(body)
+        status, data = await to_thread(core.api_fs_delete, body)
         return _json_bytes_response(status, data)
 
     @app.post("/api/fs/unzip")
     async def api_fs_unzip(body: dict[str, Any]) -> Response:
-        status, data = core.api_fs_unzip(body)
+        status, data = await to_thread(core.api_fs_unzip, body)
         return _json_bytes_response(status, data)
 
     @app.post("/api/fs/archive")
@@ -297,7 +315,7 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
             job = await core.queue.get_job(job_id)
             disk_job = None
             if job is None:
-                disk_job = core._load_job_from_disk(job_id)
+                disk_job = await to_thread(core._load_job_from_disk, job_id)
 
             if job is None and disk_job is None:
                 data = json.dumps({"reason": "job_not_found"}, ensure_ascii=True)

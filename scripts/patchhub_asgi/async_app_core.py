@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 from patchhub import app_api_core as _core
 from patchhub import app_api_fs as _fs
@@ -16,9 +17,11 @@ from .async_runner_exec import AsyncRunnerExecutor
 
 
 class AsyncAppCore:
-    def __init__(self, repo_root: Path, cfg: AppConfig) -> None:
+    def __init__(self, *, repo_root: Path, cfg: Any) -> None:
         self.repo_root = repo_root
         self.cfg = cfg
+        if not isinstance(cfg, AppConfig):
+            raise TypeError("cfg must be patchhub.config.AppConfig")
         self.jail = FsJail(
             repo_root=repo_root,
             patches_root_rel=cfg.paths.patches_root,
@@ -52,7 +55,15 @@ class AsyncAppCore:
     api_runner_tail = _core.api_runner_tail
 
     async def diagnostics(self) -> dict[str, object]:
-        qstate = await self.queue.state()
+        qstate: Any | None
+        qerr: str | None = None
+        try:
+            qstate = await self.queue.state()
+        except Exception as e:
+            qstate = None
+            qerr = f"{type(e).__name__}: {e}"
+        else:
+            qerr = None
 
         def _sync_part() -> dict[str, object]:
             runs = _core.iter_runs(self.patches_root, self.cfg.indexing.log_filename_regex)
@@ -84,11 +95,18 @@ class AsyncAppCore:
                 },
             }
 
-        sync_part = await to_thread(_sync_part)
-        return {
-            "queue": {"queued": int(qstate.queued), "running": int(qstate.running)},
-            **sync_part,
-        }
+        try:
+            sync_part = await to_thread(_sync_part)
+        except Exception as e:
+            sync_part = {"ok": False, "error": f"{type(e).__name__}: {e}"}
+
+        queue_part: dict[str, object]
+        if qstate is None:
+            queue_part = {"ok": False, "error": str(qerr)}
+        else:
+            queue_part = {"ok": True, "queued": int(qstate.queued), "running": int(qstate.running)}
+
+        return {"queue": queue_part, **sync_part}
 
     api_fs_list = _fs.api_fs_list
     api_fs_read_text = _fs.api_fs_read_text
