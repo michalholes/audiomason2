@@ -70,6 +70,11 @@
         "d",
         "M10 2a8 8 0 1 0 4.9 14.3l4.4 4.4 1.4-1.4-4.4-4.4A8 8 0 0 0 10 2Zm0 2a6 6 0 1 1 0 12 6 6 0 0 1 0-12Z"
       );
+    } else if (name === "grip") {
+      p.setAttribute(
+        "d",
+        "M9 5a1 1 0 1 1-2 0 1 1 0 0 1 2 0Zm0 7a1 1 0 1 1-2 0 1 1 0 0 1 2 0Zm0 7a1 1 0 1 1-2 0 1 1 0 0 1 2 0Zm8-14a1 1 0 1 1-2 0 1 1 0 0 1 2 0Zm0 7a1 1 0 1 1-2 0 1 1 0 0 1 2 0Zm0 7a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"
+      );
     } else if (name === "required") {
       p.setAttribute(
         "d",
@@ -105,6 +110,8 @@
     dropBeforeId: null,
     showOptional: true,
     validation: { ok: null, local: [], server: [] },
+    showRawError: false,
+    hasErrorDetails: false,
   };
 
   const layout = el("div", "wdLayout");
@@ -162,6 +169,10 @@
   table.appendChild(head);
   table.appendChild(body);
 
+  const paletteHeader = el("div", "wdPaletteHeader");
+  paletteHeader.appendChild(text("div", "wdPaletteTitle", "Step Palette"));
+  paletteHeader.appendChild(el("div", "wdPaletteSpacer"));
+
   const paletteSearch = el("div", "wdPaletteSearch");
   const searchIcon = el("span", "wdSearchIcon");
   searchIcon.appendChild(svgIcon("search", "wdSvg", "Search"));
@@ -172,6 +183,7 @@
   paletteSearch.appendChild(search);
 
   const paletteGroups = el("div", "wdPaletteGroups");
+  rightCol.appendChild(paletteHeader);
   rightCol.appendChild(paletteSearch);
   rightCol.appendChild(paletteGroups);
 
@@ -185,6 +197,57 @@
 
   ui.ta.parentNode.insertBefore(layout, ui.ta);
   ui.ta.classList.add("wdHidden");
+
+  function setupRawErrorPanel() {
+    if (!ui.err || !ui.err.parentNode) return;
+    const parent = ui.err.parentNode;
+
+    const wrap = el("div", "wdErrWrap");
+    const bar = el("div", "wdErrBar");
+    const title = text("div", "wdErrTitle", "Raw Error");
+    const toggle = text("button", "btn wdErrToggle", "Details");
+    toggle.type = "button";
+
+    bar.appendChild(title);
+    bar.appendChild(toggle);
+    wrap.appendChild(bar);
+
+    parent.insertBefore(wrap, ui.err);
+    wrap.appendChild(ui.err);
+
+    ui.err.classList.add("wdRawError");
+    ui.err.classList.add("is-collapsed");
+
+    toggle.addEventListener("click", () => {
+      setRawErrorVisible(!state.showRawError);
+    });
+
+    state.showRawError = false;
+    state.hasErrorDetails = false;
+    setRawErrorVisible(false);
+  }
+
+  function setRawErrorVisible(on) {
+    state.showRawError = !!on;
+    if (!ui.err) return;
+    ui.err.classList.toggle("is-collapsed", !state.showRawError);
+
+    const btn = document.querySelector(".wdErrToggle");
+    if (btn) btn.textContent = state.showRawError ? "Hide Details" : "Details";
+  }
+
+  function renderError(data, collapseByDefault) {
+    H.renderError(ui.err, data);
+    state.hasErrorDetails = !!data;
+    if (!data) {
+      setRawErrorVisible(false);
+      return;
+    }
+    setRawErrorVisible(!collapseByDefault);
+  }
+
+
+  setupRawErrorPanel();
 
   function isDirty() {
     return JSON.stringify(state.loaded) !== JSON.stringify(state.draft);
@@ -254,25 +317,36 @@
     setValidation(false, next, state.validation.server);
   }
 
+
   function extractServerMessages(data) {
-    const out = [];
     const root =
       data && typeof data.error === "object" && data.error ? data.error : data;
+
+    const out = [];
+
+    const code = root && typeof root.code === "string" ? root.code : "";
+    const message = root && typeof root.message === "string" ? root.message : "";
+    const top = code && message ? code + ": " + message : code || message;
+    if (top) out.push(top);
+
     const details = root && Array.isArray(root.details) ? root.details : [];
     details.forEach((d) => {
       if (!d || typeof d !== "object") return;
       const path = typeof d.path === "string" ? d.path : "";
       const reason = typeof d.reason === "string" ? d.reason : "";
-      const msg = [path, reason].filter((x) => x).join(" - ");
-      if (msg) out.push(msg);
+      const mt =
+        d.meta && typeof d.meta === "object" && typeof d.meta.type === "string"
+          ? d.meta.type
+          : "";
+      let msg = [path, reason].filter((x) => x).join(" - ");
+      if (mt) msg = msg ? msg + " [" + mt + "]" : "[" + mt + "]";
+      if (msg && !out.includes(msg)) out.push(msg);
     });
-    const code = root && typeof root.code === "string" ? root.code : "";
-    const message =
-      root && typeof root.message === "string" ? root.message : "";
-    const top = [code, message].filter((x) => x).join(": ");
-    if (top && !out.includes(top)) out.unshift(top);
+
+    if (!out.length) out.push("Unknown server validation error");
     return out;
   }
+
 
   function removeStep(stepId) {
     if (!canRemove(stepId)) return;
@@ -343,7 +417,7 @@
   async function loadHistory() {
     const out = await H.requestJSON("/import/ui/wizard-definition/history");
     if (!out.ok) {
-      H.renderError(ui.err, out.data);
+      renderError(out.data, false);
       return;
     }
     clear(ui.history);
@@ -356,7 +430,7 @@
   async function loadPalette() {
     const out = await H.requestJSON("/import/ui/steps-index");
     if (!out.ok) {
-      H.renderError(ui.err, out.data);
+      renderError(out.data, false);
       return false;
     }
     const items = out.data && out.data.items ? out.data.items : [];
@@ -367,7 +441,7 @@
   async function loadDefinition() {
     const out = await H.requestJSON("/import/ui/wizard-definition");
     if (!out.ok) {
-      H.renderError(ui.err, out.data);
+      renderError(out.data, false);
       return false;
     }
     const defn = out.data && out.data.definition ? out.data.definition : {};
@@ -381,7 +455,7 @@
 
   async function reloadAll() {
     if (!confirmIfDirty("Reload")) return;
-    H.renderError(ui.err, null);
+    renderError(null, false);
     setValidation(null, [], []);
     const ok1 = await loadPalette();
     const ok2 = await loadDefinition();
@@ -392,7 +466,7 @@
   }
 
   async function validateDraft() {
-    H.renderError(ui.err, null);
+    renderError(null, false);
     setValidation(null, [], []);
     const payload = { definition: defFromSteps(state.draft) };
     const out = await H.requestJSON("/import/ui/wizard-definition/validate", {
@@ -401,7 +475,7 @@
       body: JSON.stringify(payload),
     });
     if (!out.ok) {
-      H.renderError(ui.err, out.data);
+      renderError(out.data, true);
       setValidation(
         false,
         ["Validation failed. See error details above."],
@@ -428,7 +502,7 @@
       body: JSON.stringify(payload),
     });
     if (!out.ok) {
-      H.renderError(ui.err, out.data);
+      renderError(out.data, false);
       return;
     }
     const defn = out.data && out.data.definition ? out.data.definition : {};
@@ -444,13 +518,13 @@
   async function resetDefinition() {
     if (!confirmIfDirty("Reset")) return;
 
-    H.renderError(ui.err, null);
+    renderError(null, false);
     setValidation(null, [], []);
     const out = await H.requestJSON("/import/ui/wizard-definition/reset", {
       method: "POST",
     });
     if (!out.ok) {
-      H.renderError(ui.err, out.data);
+      renderError(out.data, false);
       return;
     }
     const defn = out.data && out.data.definition ? out.data.definition : {};
@@ -466,7 +540,7 @@
   async function rollback(id) {
     if (!confirmIfDirty("Rollback")) return;
 
-    H.renderError(ui.err, null);
+    renderError(null, false);
     setValidation(null, [], []);
     const out = await H.requestJSON("/import/ui/wizard-definition/rollback", {
       method: "POST",
@@ -474,7 +548,7 @@
       body: JSON.stringify({ id: id }),
     });
     if (!out.ok) {
-      H.renderError(ui.err, out.data);
+      renderError(out.data, false);
       return;
     }
     const defn = out.data && out.data.definition ? out.data.definition : {};
@@ -502,7 +576,8 @@
     if (state.selected === stepId) row.classList.add("is-selected");
 
     const orderCell = el("div", "wdCellOrder");
-    const handle = text("span", "wdDragHandle", "::");
+    const handle = el("span", "wdDragHandle");
+    handle.appendChild(svgIcon("grip", "wdSvg wdGrip", "Drag"));
     handle.title = isPinned(stepId) ? "Locked" : "Drag to reorder";
 
     if (!isPinned(stepId)) {
@@ -523,7 +598,11 @@
     const idCell = text("div", "wdCellId", stepId);
 
     const typeCell = el("div", "wdCellType");
-    typeCell.appendChild(text("span", "wdTypeBadge", kind));
+    const badge = el("span", "wdTypeBadge");
+    badge.dataset.kind = kind;
+    badge.appendChild(el("span", "wdBadgeIcon"));
+    badge.appendChild(text("span", "wdBadgeText", kind));
+    typeCell.appendChild(badge);
 
     const reqCell = el("div", "wdCellReq");
     const req = el("span", "wdReqIcon");
@@ -535,23 +614,20 @@
     reqCell.appendChild(req);
 
     const actCell = el("div", "wdCellActions");
-    if (!isPinned(stepId)) {
+    if (!isPinned(stepId) && canRemove(stepId)) {
       const rm = el("button", "wdIconBtn wdDeleteBtn");
       rm.type = "button";
-      rm.disabled = !canRemove(stepId);
       rm.setAttribute("aria-label", "Delete step");
-      rm.title = canRemove(stepId) ? "Delete" : "Cannot delete";
+      rm.title = "Delete";
       rm.appendChild(svgIcon("trash", "wdSvg", "Delete"));
       rm.appendChild(text("span", "srOnly", "Delete"));
       rm.addEventListener("click", (e) => {
         e.stopPropagation();
-        if (!canRemove(stepId)) {
-          pushLocalValidation("Cannot remove locked or mandatory step: " + stepId);
-          return;
-        }
         removeStep(stepId);
       });
       actCell.appendChild(rm);
+    } else {
+      actCell.appendChild(el("span", "wdActionsPlaceholder"));
     }
 
     row.appendChild(orderCell);

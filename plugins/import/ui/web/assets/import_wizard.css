@@ -571,3 +571,192 @@ textarea {
   gap: 8px;
   align-items: center;
 }
+
+
+/* Issue 249: Wizard editor polish */
+
+.wdHead {
+  background: rgba(15, 22, 38, 0.98);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.wdHead .wdCellOrder,
+.wdHead .wdCellId,
+.wdHead .wdCellType,
+.wdHead .wdCellReq,
+.wdHead .wdCellActions {
+  padding-top: 12px;
+  padding-bottom: 12px;
+}
+
+.wdRow {
+  min-height: 44px;
+}
+
+.wdRow:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.wdRow.is-selected {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.wdDragHandle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+}
+
+.wdGrip {
+  opacity: 0.9;
+}
+
+.wdTypeBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+}
+
+.wdBadgeIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border-radius: 6px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(0, 0, 0, 0.12);
+  font-size: 10px;
+  line-height: 1;
+  opacity: 0.9;
+}
+
+.wdTypeBadge[data-kind="mandatory"] .wdBadgeIcon::before {
+  content: "M";
+}
+
+.wdTypeBadge[data-kind="optional"] .wdBadgeIcon::before {
+  content: "O";
+}
+
+.wdTypeBadge[data-kind="conditional"] .wdBadgeIcon::before {
+  content: "C";
+}
+
+.wdCellActions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.wdActionsPlaceholder {
+  display: inline-block;
+  width: 1px;
+  height: 1px;
+}
+
+.wdDeleteBtn {
+  opacity: 0.25;
+  transition: opacity 120ms ease-in-out;
+}
+
+.wdRow:hover .wdDeleteBtn,
+.wdRow.is-selected .wdDeleteBtn {
+  opacity: 1;
+}
+
+.wdPalette {
+  padding: 0;
+  overflow: hidden;
+}
+
+.wdPaletteHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 12px 10px 12px;
+  background: rgba(15, 22, 38, 0.98);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.10);
+}
+
+.wdPaletteTitle {
+  font-weight: 800;
+  letter-spacing: 0.2px;
+}
+
+.wdPaletteSpacer {
+  width: 24px;
+  height: 24px;
+  opacity: 0.0;
+}
+
+.wdPaletteSearch {
+  padding: 12px;
+  margin: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.wdPaletteGroups {
+  padding: 12px;
+  gap: 12px;
+}
+
+.wdPaletteGroup {
+  padding-bottom: 12px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.wdPaletteGroup:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.wdPaletteGroupTitle {
+  font-weight: 800;
+  opacity: 0.95;
+  margin-bottom: 8px;
+  letter-spacing: 0.2px;
+}
+
+.wdPaletteAdd {
+  border-radius: 999px;
+}
+
+.wdPaletteAdd.is-added {
+  background: rgba(80, 220, 120, 0.18);
+  border-color: rgba(80, 220, 120, 0.35);
+}
+
+.wdErrWrap {
+  margin-top: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.wdErrBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  background: rgba(15, 22, 38, 0.98);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.wdErrTitle {
+  font-weight: 800;
+  opacity: 0.95;
+}
+
+.wdErrToggle {
+  padding: 7px 10px;
+}
+
+.wdRawError.is-collapsed {
+  display: none;
+}
