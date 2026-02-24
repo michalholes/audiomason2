@@ -538,6 +538,38 @@ Skip log contract:
 
 -   If skipped by user: gate_monolith=SKIP (skipped_by_user)
 -   If disabled by policy: gate_monolith=SKIP (disabled_by_policy)
+
+#### Verbose statistics (DETAIL+INFO)
+
+When the Monolith gate runs and emits the diagnostic section banner `GATE: MONOLITH`,
+it MUST also emit the following stable `key=value` statistics lines via the DETAIL
+channel (DETAIL+INFO). These lines MUST be emitted for all outcomes (PASS/WARN/FAIL)
+but MUST NOT appear when the screen/log level filters out DETAIL (e.g. normal).
+
+Keys and types:
+
+-   gate_monolith_files_scanned=int
+-   gate_monolith_files_new=int
+-   gate_monolith_parse_errors_new=int
+-   gate_monolith_parse_errors_old=int
+-   gate_monolith_loc_total_old=int
+-   gate_monolith_loc_total_new=int
+-   gate_monolith_loc_total_delta=int
+-   gate_monolith_imports_total_old=int
+-   gate_monolith_imports_total_new=int
+-   gate_monolith_imports_total_delta=int
+-   gate_monolith_exports_total_old=int
+-   gate_monolith_exports_total_new=int
+-   gate_monolith_exports_total_delta=int
+-   gate_monolith_fanin_delta_max=int|n/a
+-   gate_monolith_fanout_delta_max=int|n/a
+
+Fan delta semantics:
+
+-   The value is the maximum positive delta observed across scanned files,
+    computed as (new - old).
+-   If gate_monolith_compute_fanin=false, both fan delta keys MUST be emitted
+    with the literal value `n/a`.
 ## 7. Promotion Rules
 
 ### 7.1 Workspace live

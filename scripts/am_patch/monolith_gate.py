@@ -423,6 +423,19 @@ def run_monolith_gate(
     logger.line("gate_monolith_scan_scope=" + gate_monolith_scan_scope)
     logger.line("gate_monolith_candidates=" + str(len(candidates)))
 
+    files_scanned = len(candidates)
+    files_new = 0
+    parse_errors_new = 0
+    parse_errors_old = 0
+    loc_total_new = 0
+    loc_total_old = 0
+    imports_total_new = 0
+    imports_total_old = 0
+    exports_total_new = 0
+    exports_total_old = 0
+    fanin_delta_max: int | None = 0 if gate_monolith_compute_fanin else None
+    fanout_delta_max: int | None = 0 if gate_monolith_compute_fanin else None
+
     fanin_map: dict[str, int] = {}
     fanout_map: dict[str, int] = {}
     fanin_map_old: dict[str, int] = {}
@@ -440,6 +453,9 @@ def run_monolith_gate(
         new_path = cwd / rp
         old_path = repo_root / rp
         is_new_file = not old_path.exists()
+
+        if is_new_file:
+            files_new += 1
 
         new_text = new_path.read_text(encoding="utf-8")
         old_text = old_path.read_text(encoding="utf-8") if old_path.exists() else ""
@@ -464,6 +480,31 @@ def run_monolith_gate(
             fanin=None,
             fanout=None,
         )
+
+        loc_total_new += new_m.loc
+        loc_total_old += old_m.loc
+        imports_total_new += new_m.internal_imports
+        imports_total_old += old_m.internal_imports
+        exports_total_new += new_m.exports
+        exports_total_old += old_m.exports
+
+        if not new_m.parse_ok:
+            parse_errors_new += 1
+        if old_path.exists() and not old_m.parse_ok:
+            parse_errors_old += 1
+
+        if gate_monolith_compute_fanin:
+            old_fanin = fanin_map_old.get(rp, 0)
+            new_fanin = fanin_map.get(rp, 0)
+            old_fanout = fanout_map_old.get(rp, 0)
+            new_fanout = fanout_map.get(rp, 0)
+
+            fanin_delta = new_fanin - old_fanin
+            fanout_delta = new_fanout - old_fanout
+            if fanin_delta_max is not None and fanin_delta > fanin_delta_max:
+                fanin_delta_max = fanin_delta
+            if fanout_delta_max is not None and fanout_delta > fanout_delta_max:
+                fanout_delta_max = fanout_delta
 
         loc_delta = new_m.loc - old_m.loc
         exp_delta = new_m.exports - old_m.exports
@@ -670,6 +711,30 @@ def run_monolith_gate(
                     ),
                     "FAIL",
                 )
+
+    logger.line("gate_monolith_files_scanned=" + str(files_scanned))
+    logger.line("gate_monolith_files_new=" + str(files_new))
+    logger.line("gate_monolith_parse_errors_new=" + str(parse_errors_new))
+    logger.line("gate_monolith_parse_errors_old=" + str(parse_errors_old))
+
+    logger.line("gate_monolith_loc_total_old=" + str(loc_total_old))
+    logger.line("gate_monolith_loc_total_new=" + str(loc_total_new))
+    logger.line("gate_monolith_loc_total_delta=" + str(loc_total_new - loc_total_old))
+
+    logger.line("gate_monolith_imports_total_old=" + str(imports_total_old))
+    logger.line("gate_monolith_imports_total_new=" + str(imports_total_new))
+    logger.line("gate_monolith_imports_total_delta=" + str(imports_total_new - imports_total_old))
+
+    logger.line("gate_monolith_exports_total_old=" + str(exports_total_old))
+    logger.line("gate_monolith_exports_total_new=" + str(exports_total_new))
+    logger.line("gate_monolith_exports_total_delta=" + str(exports_total_new - exports_total_old))
+
+    if gate_monolith_compute_fanin:
+        logger.line("gate_monolith_fanin_delta_max=" + str(fanin_delta_max or 0))
+        logger.line("gate_monolith_fanout_delta_max=" + str(fanout_delta_max or 0))
+    else:
+        logger.line("gate_monolith_fanin_delta_max=n/a")
+        logger.line("gate_monolith_fanout_delta_max=n/a")
 
     # Map severities by mode.
     mapped: list[Violation] = []
