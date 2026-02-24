@@ -92,7 +92,7 @@ def build_artifacts(
 
         keep_count = int(getattr(policy, "success_archive_keep_count", 0))
         glob_template = str(getattr(policy, "success_archive_cleanup_glob_template", "")).strip()
-        if keep_count > 0 and glob_template:
+        if glob_template:
             candidates = [p for p in target_dir.glob(glob_template) if p.is_file()]
             candidates = sorted(candidates, key=lambda p: p.name)
             candidates = [p for p in candidates if p.resolve() != success_zip.resolve()]
