@@ -299,6 +299,15 @@
 
   function setSelected(stepId) {
     state.selected = stepId || null;
+    try {
+      window.dispatchEvent(
+        new CustomEvent("am2:wd:selected", {
+          detail: { step_id: state.selected },
+        })
+      );
+    } catch (e) {
+      // ignore
+    }
     render();
   }
 
@@ -463,6 +472,7 @@
       await loadHistory();
       render();
     }
+    return !!(ok1 && ok2);
   }
 
   async function validateDraft() {
@@ -493,7 +503,7 @@
   }
 
   async function saveDraft() {
-    if (!(await validateDraft())) return;
+    if (!(await validateDraft())) return false;
 
     const payload = { definition: defFromSteps(state.draft) };
     const out = await H.requestJSON("/import/ui/wizard-definition", {
@@ -503,7 +513,7 @@
     });
     if (!out.ok) {
       renderError(out.data, false);
-      return;
+      return false;
     }
     const defn = out.data && out.data.definition ? out.data.definition : {};
     const steps = stableSteps(defn);
@@ -513,6 +523,7 @@
     ui.ta.value = H.pretty(defn);
     await loadHistory();
     render();
+    return true;
   }
 
   async function resetDefinition() {
@@ -525,7 +536,7 @@
     });
     if (!out.ok) {
       renderError(out.data, false);
-      return;
+      return false;
     }
     const defn = out.data && out.data.definition ? out.data.definition : {};
     const steps = stableSteps(defn);
@@ -535,6 +546,7 @@
     ui.ta.value = H.pretty(defn);
     await loadHistory();
     render();
+    return true;
   }
 
   async function rollback(id) {
@@ -849,6 +861,13 @@
   ui.validate && ui.validate.addEventListener("click", validateDraft);
   ui.save && ui.save.addEventListener("click", saveDraft);
   ui.reset && ui.reset.addEventListener("click", resetDefinition);
+
+  window.AM2WizardDefinitionEditor = {
+    reloadAll: reloadAll,
+    validateDraft: validateDraft,
+    saveDraft: saveDraft,
+    resetDefinition: resetDefinition,
+  };
 
   reloadAll();
 })();

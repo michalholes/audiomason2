@@ -760,3 +760,99 @@ textarea {
 .wdRawError.is-collapsed {
   display: none;
 }
+
+.is-hidden {
+  display: none !important;
+}
+
+.flowLayout {
+  display: flex;
+  gap: 14px;
+  margin-top: 10px;
+}
+
+.flowLeft {
+  flex: 1 1 62%;
+  min-width: 520px;
+}
+
+.flowRight {
+  flex: 0 0 38%;
+  min-width: 320px;
+}
+
+.flowStepPanel {
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.flowStepHeader {
+  padding: 10px 12px;
+  background: rgba(15, 22, 38, 0.98);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  font-weight: 800;
+  letter-spacing: 0.2px;
+}
+
+.flowStepBody {
+  padding: 12px;
+}
+
+.flowStepSection {
+  margin-bottom: 14px;
+}
+
+.flowStepSectionTitle {
+  font-weight: 800;
+  margin-bottom: 8px;
+  opacity: 0.95;
+}
+
+.flowStepDesc {
+  opacity: 0.95;
+  line-height: 1.35;
+  white-space: pre-wrap;
+}
+
+.flowStepForm {
+  display: grid;
+  gap: 10px;
+}
+
+.flowField {
+  display: grid;
+  gap: 6px;
+  padding: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+}
+
+.flowFieldLabel {
+  font-weight: 800;
+}
+
+.flowFieldMeta {
+  opacity: 0.75;
+  font-size: 12px;
+}
+
+.flowFieldInput {
+  width: 100%;
+}
+
+.flowStepApply {
+  opacity: 0.90;
+  line-height: 1.35;
+  margin-bottom: 8px;
+}
+
+.status.is-ok {
+  background: rgba(80, 220, 120, 0.10);
+  border-color: rgba(80, 220, 120, 0.22);
+}
+
+.status.is-bad {
+  background: rgba(220, 90, 90, 0.12);
+  border-color: rgba(220, 90, 90, 0.26);
+}

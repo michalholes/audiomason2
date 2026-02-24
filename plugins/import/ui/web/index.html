@@ -15,8 +15,7 @@
 
     <div class="tabs" id="tabs">
       <button class="tabBtn" data-tab="run">Run Wizard</button>
-      <button class="tabBtn" data-tab="config">Config Editor</button>
-      <button class="tabBtn" data-tab="wizard">Wizard Editor</button>
+      <button class="tabBtn" data-tab="flow">Flow Editor</button>
     </div>
 
     <div class="tabPanel" data-panel="run">
@@ -57,39 +56,72 @@
 
     </div>
 
-    <div class="tabPanel" data-panel="config">
+    <div class="tabPanel" data-panel="flow">
       <div class="card">
-        <div class="cardTitle">FlowConfig Editor</div>
         <div class="buttonRow">
-          <button id="cfgReload" class="btn">Reload</button>
-          <button id="cfgValidate" class="btn">Validate</button>
-          <button id="cfgSave" class="btn">Save</button>
-          <button id="cfgReset" class="btn">Reset</button>
+          <button id="flowReloadAll" class="btn">Reload All</button>
+          <button id="flowValidateAll" class="btn">Validate All</button>
+          <button id="flowSaveAll" class="btn">Save All</button>
+          <button id="flowResetAll" class="btn">Reset All</button>
         </div>
-        <textarea id="cfgJson" class="jsonEditor" rows="22"></textarea>
+        <div id="flowAllStatus" class="status"></div>
+
+        <div class="flowLayout">
+          <div class="flowLeft">
+            <textarea id="wdJson" class="jsonEditor" rows="22"></textarea>
+            <div id="wdError" class="error"></div>
+          </div>
+
+          <div class="flowRight">
+            <div class="flowStepPanel" id="flowStepPanel">
+              <div class="flowStepHeader" id="flowStepHeader"></div>
+              <div class="flowStepBody">
+                <div class="flowStepSection">
+                  <div class="flowStepSectionTitle">What it does</div>
+                  <div class="flowStepDesc" id="flowStepDesc"></div>
+                </div>
+
+                <div class="flowStepSection">
+                  <div class="flowStepSectionTitle">Settings</div>
+                  <div class="flowStepForm" id="flowStepForm"></div>
+                </div>
+
+                <div class="flowStepSection">
+                  <div class="flowStepSectionTitle">Apply status</div>
+                  <div class="flowStepApply" id="flowStepApply"></div>
+                  <div class="buttonRow">
+                    <button id="flowClearStep" class="btn">Clear Settings</button>
+                  </div>
+                </div>
+
+                <div class="flowStepError error" id="flowStepError"></div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Hidden controls used by existing editor modules (API-driven in Flow Editor) -->
+        <button id="cfgReload" class="btn is-hidden">Reload</button>
+        <button id="cfgValidate" class="btn is-hidden">Validate</button>
+        <button id="cfgSave" class="btn is-hidden">Save</button>
+        <button id="cfgReset" class="btn is-hidden">Reset</button>
+        <button id="wdReload" class="btn is-hidden">Reload</button>
+        <button id="wdValidate" class="btn is-hidden">Validate</button>
+        <button id="wdSave" class="btn is-hidden">Save</button>
+        <button id="wdReset" class="btn is-hidden">Reset</button>
+
+        <textarea id="cfgJson" class="jsonEditor is-hidden" rows="6"></textarea>
         <div id="cfgError" class="error"></div>
       </div>
-      <div class="card">
-        <div class="cardTitle">History</div>
-        <div id="cfgHistory" class="history"></div>
-      </div>
-    </div>
 
-    <div class="tabPanel" data-panel="wizard">
       <div class="card">
-        <div class="cardTitle">WizardDefinition Editor</div>
-        <div class="buttonRow">
-          <button id="wdReload" class="btn">Reload</button>
-          <button id="wdValidate" class="btn">Validate</button>
-          <button id="wdSave" class="btn">Save</button>
-          <button id="wdReset" class="btn">Reset</button>
-        </div>
-        <textarea id="wdJson" class="jsonEditor" rows="22"></textarea>
-        <div id="wdError" class="error"></div>
-      </div>
-      <div class="card">
-        <div class="cardTitle">History</div>
+        <div class="cardTitle">History - WizardDefinition</div>
         <div id="wdHistory" class="history"></div>
+      </div>
+
+      <div class="card">
+        <div class="cardTitle">History - FlowConfig</div>
+        <div id="cfgHistory" class="history"></div>
       </div>
     </div>
   </div>
@@ -98,5 +130,84 @@
   <script src="/import/ui/assets/editor_http.js"></script>
   <script src="/import/ui/assets/config_editor.js"></script>
   <script src="/import/ui/assets/wizard_definition_editor.js"></script>
+  <script>
+    (function () {
+      "use strict";
+
+      function $(id) {
+        return document.getElementById(id);
+      }
+
+      const ui = {
+        status: $("flowAllStatus"),
+        reloadAll: $("flowReloadAll"),
+        validateAll: $("flowValidateAll"),
+        saveAll: $("flowSaveAll"),
+        resetAll: $("flowResetAll"),
+      };
+
+      const st = { lastValidateOk: false };
+
+      function setStatus(msg, kind) {
+        if (!ui.status) return;
+        ui.status.textContent = String(msg || "");
+        ui.status.classList.toggle("is-ok", kind === "ok");
+        ui.status.classList.toggle("is-bad", kind === "bad");
+      }
+
+      async function doReloadAll() {
+        st.lastValidateOk = false;
+        setStatus("", "");
+        const W = window.AM2WizardDefinitionEditor;
+        const C = window.AM2FlowConfigEditor;
+        if (W && W.reloadAll) await W.reloadAll();
+        if (C && C.reload) await C.reload();
+      }
+
+      async function doValidateAll() {
+        st.lastValidateOk = false;
+        setStatus("Validating...", "");
+        const W = window.AM2WizardDefinitionEditor;
+        const C = window.AM2FlowConfigEditor;
+        const okW = W && W.validateDraft ? await W.validateDraft() : false;
+        const okC = C && C.validate ? await C.validate() : false;
+        st.lastValidateOk = okW && okC;
+        setStatus(
+          st.lastValidateOk ? "Validate All: OK" : "Validate All: FAILED",
+          st.lastValidateOk ? "ok" : "bad"
+        );
+        return st.lastValidateOk;
+      }
+
+      async function doSaveAll() {
+        if (!st.lastValidateOk) {
+          setStatus("Save blocked: run Validate All first.", "bad");
+          return;
+        }
+        setStatus("Saving...", "");
+        const W = window.AM2WizardDefinitionEditor;
+        const C = window.AM2FlowConfigEditor;
+        const okW = W && W.saveDraft ? await W.saveDraft() : false;
+        const okC = C && C.save ? await C.save() : false;
+        const ok = okW && okC;
+        setStatus(ok ? "Save All: OK" : "Save All: FAILED", ok ? "ok" : "bad");
+      }
+
+      async function doResetAll() {
+        st.lastValidateOk = false;
+        setStatus("Resetting...", "");
+        const W = window.AM2WizardDefinitionEditor;
+        const C = window.AM2FlowConfigEditor;
+        if (W && W.resetDefinition) await W.resetDefinition();
+        if (C && C.reset) await C.reset();
+        setStatus("Reset All: OK", "ok");
+      }
+
+      ui.reloadAll && ui.reloadAll.addEventListener("click", doReloadAll);
+      ui.validateAll && ui.validateAll.addEventListener("click", doValidateAll);
+      ui.saveAll && ui.saveAll.addEventListener("click", doSaveAll);
+      ui.resetAll && ui.resetAll.addEventListener("click", doResetAll);
+    })();
+  </script>
 </body>
 </html>

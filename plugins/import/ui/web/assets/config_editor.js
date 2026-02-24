@@ -16,9 +16,26 @@
     validate: $("cfgValidate"),
     save: $("cfgSave"),
     reset: $("cfgReset"),
+
+    stepPanel: $("flowStepPanel"),
+    stepHeader: $("flowStepHeader"),
+    stepDesc: $("flowStepDesc"),
+    stepForm: $("flowStepForm"),
+    stepApply: $("flowStepApply"),
+    stepError: $("flowStepError"),
+    clearStep: $("flowClearStep"),
   };
 
   if (!ui.ta) return;
+
+  const unifiedMode = !!ui.stepPanel;
+
+  const state = {
+    loaded: null,
+    draft: null,
+    selectedStepId: null,
+    stepCache: {},
+  };
 
   function clear(node) {
     while (node && node.firstChild) node.removeChild(node.firstChild);
@@ -64,58 +81,77 @@
     const out = await H.requestJSON("/import/ui/config");
     if (!out.ok) {
       H.renderError(ui.err, out.data);
-      return;
+      return false;
     }
     const cfg = out.data && out.data.config ? out.data.config : {};
     ui.ta.value = H.pretty(cfg);
+    state.loaded = cfg;
+    state.draft = JSON.parse(JSON.stringify(cfg || {}));
     await loadHistory();
-  }
-
-  function parseJSON() {
-    try {
-      return { ok: true, data: JSON.parse(ui.ta.value || "{}")} ;
-    } catch (e) {
-      return { ok: false, err: String(e || "parse error") };
-    }
+    if (unifiedMode) renderSelectedStep();
+    return true;
   }
 
   async function validateOnly() {
     H.renderError(ui.err, null);
-    const parsed = parseJSON();
-    if (!parsed.ok) {
-      ui.err.textContent = parsed.err;
-      return;
+    let payloadCfg = {};
+    if (unifiedMode) {
+      payloadCfg = state.draft || {};
+    } else {
+      try {
+        payloadCfg = JSON.parse(ui.ta.value || "{}");
+      } catch (e) {
+        ui.err.textContent = String(e || "parse error");
+        return false;
+      }
     }
     const out = await H.requestJSON("/import/ui/config/validate", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ config: parsed.data }),
+      body: JSON.stringify({ config: payloadCfg }),
     });
     if (!out.ok) {
       H.renderError(ui.err, out.data);
-      return;
+      return false;
     }
     ui.ta.value = H.pretty(out.data.config || {});
+    state.draft = out.data.config || {};
+    if (unifiedMode) renderSelectedStep();
+    return true;
   }
 
   async function save() {
     H.renderError(ui.err, null);
-    const parsed = parseJSON();
-    if (!parsed.ok) {
-      ui.err.textContent = parsed.err;
-      return;
+    if (unifiedMode) {
+      const ok = await validateOnly();
+      if (!ok) return false;
+    }
+    let payloadCfg = {};
+    if (unifiedMode) {
+      payloadCfg = state.draft || {};
+    } else {
+      try {
+        payloadCfg = JSON.parse(ui.ta.value || "{}");
+      } catch (e) {
+        ui.err.textContent = String(e || "parse error");
+        return false;
+      }
     }
     const out = await H.requestJSON("/import/ui/config", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ config: parsed.data }),
+      body: JSON.stringify({ config: payloadCfg }),
     });
     if (!out.ok) {
       H.renderError(ui.err, out.data);
-      return;
+      return false;
     }
     ui.ta.value = H.pretty(out.data.config || {});
+    state.loaded = out.data.config || {};
+    state.draft = JSON.parse(JSON.stringify(state.loaded || {}));
     await loadHistory();
+    if (unifiedMode) renderSelectedStep();
+    return true;
   }
 
   async function reset() {
@@ -123,10 +159,14 @@
     const out = await H.requestJSON("/import/ui/config/reset", { method: "POST" });
     if (!out.ok) {
       H.renderError(ui.err, out.data);
-      return;
+      return false;
     }
     ui.ta.value = H.pretty(out.data.config || {});
+    state.loaded = out.data.config || {};
+    state.draft = JSON.parse(JSON.stringify(state.loaded || {}));
     await loadHistory();
+    if (unifiedMode) renderSelectedStep();
+    return true;
   }
 
   async function rollback(id) {
@@ -141,13 +181,189 @@
       return;
     }
     ui.ta.value = H.pretty(out.data.config || {});
+    state.loaded = out.data.config || {};
+    state.draft = JSON.parse(JSON.stringify(state.loaded || {}));
     await loadHistory();
+    if (unifiedMode) renderSelectedStep();
   }
+
+  function stableFields(schema) {
+    const root = schema && typeof schema === "object" ? schema : {};
+    const fields = Array.isArray(root.fields) ? root.fields : [];
+    return fields.filter((f) => f && typeof f.key === "string" && f.key);
+  }
+
+  function safeDefaultsRoot(cfg) {
+    if (!cfg || typeof cfg !== "object") return {};
+    if (!cfg.defaults || typeof cfg.defaults !== "object") cfg.defaults = {};
+    return cfg.defaults;
+  }
+
+  function setStepValue(stepId, key, value) {
+    if (!state.draft || typeof state.draft !== "object") state.draft = {};
+    const defaults = safeDefaultsRoot(state.draft);
+    if (!defaults[stepId] || typeof defaults[stepId] !== "object") {
+      defaults[stepId] = {};
+    }
+    defaults[stepId][key] = value;
+    ui.ta.value = H.pretty(state.draft || {});
+  }
+
+  function clearStepDefaults(stepId) {
+    if (!stepId) return;
+    const defaults = safeDefaultsRoot(state.draft);
+    if (defaults[stepId]) delete defaults[stepId];
+    ui.ta.value = H.pretty(state.draft || {});
+    renderSelectedStep();
+  }
+
+  function getAppliedKeys(stepId) {
+    const defaults = safeDefaultsRoot(state.draft);
+    const o = defaults[stepId];
+    if (!o || typeof o !== "object") return [];
+    return Object.keys(o).sort();
+  }
+
+  function inputForField(field, stepId) {
+    const wrap = document.createElement("div");
+    wrap.className = "flowField";
+
+    const label = document.createElement("label");
+    label.className = "flowFieldLabel";
+    label.textContent = String(field.key || "");
+
+    const meta = document.createElement("div");
+    meta.className = "flowFieldMeta";
+    const req = field.required ? "required" : "optional";
+    const typ = field.type ? String(field.type) : "string";
+    meta.textContent = req + " - " + typ;
+
+    const inp = document.createElement("input");
+    inp.className = "flowFieldInput";
+
+    const defaults = safeDefaultsRoot(state.draft);
+    const cur =
+      defaults[stepId] && typeof defaults[stepId] === "object"
+        ? defaults[stepId][field.key]
+        : undefined;
+
+    if (typ === "bool") {
+      inp.type = "checkbox";
+      inp.checked = typeof cur === "boolean" ? cur : !!field.default;
+      inp.addEventListener("change", () => {
+        setStepValue(stepId, field.key, !!inp.checked);
+        renderSelectedStep();
+      });
+    } else if (typ === "number") {
+      inp.type = "number";
+      if (typeof cur === "number") inp.value = String(cur);
+      else if (typeof field.default === "number") inp.value = String(field.default);
+      inp.addEventListener("input", () => {
+        const v = inp.value === "" ? null : Number(inp.value);
+        if (inp.value === "") {
+          setStepValue(stepId, field.key, null);
+        } else if (!Number.isNaN(v)) {
+          setStepValue(stepId, field.key, v);
+        }
+        renderSelectedStep();
+      });
+    } else {
+      inp.type = "text";
+      inp.value = typeof cur === "string" ? cur : String(field.default || "");
+      inp.addEventListener("input", () => {
+        setStepValue(stepId, field.key, String(inp.value || ""));
+        renderSelectedStep();
+      });
+    }
+
+    wrap.appendChild(label);
+    wrap.appendChild(meta);
+    wrap.appendChild(inp);
+    return wrap;
+  }
+
+  function clearNode(node) {
+    while (node && node.firstChild) node.removeChild(node.firstChild);
+  }
+
+  function setStepError(msg) {
+    if (!ui.stepError) return;
+    ui.stepError.textContent = String(msg || "");
+  }
+
+  async function fetchStepDetails(stepId) {
+    const sid = String(stepId || "");
+    if (!sid) return null;
+    if (state.stepCache[sid]) return state.stepCache[sid];
+    const out = await H.requestJSON("/import/ui/steps/" + encodeURIComponent(sid));
+    if (!out.ok) {
+      setStepError("Failed to load step details");
+      return null;
+    }
+    const d = out.data && typeof out.data === "object" ? out.data : {};
+    state.stepCache[sid] = d;
+    return d;
+  }
+
+  async function renderSelectedStep() {
+    if (!unifiedMode) return;
+    const stepId = state.selectedStepId;
+
+    if (!ui.stepHeader || !ui.stepDesc || !ui.stepForm || !ui.stepApply) return;
+
+    setStepError("");
+
+    if (!stepId) {
+      ui.stepHeader.textContent = "Select a step";
+      ui.stepDesc.textContent = "";
+      clearNode(ui.stepForm);
+      ui.stepApply.textContent = "";
+      return;
+    }
+
+    const det = await fetchStepDetails(stepId);
+    const title = det && det.title ? String(det.title) : "";
+    const desc = det && det.description ? String(det.description) : "";
+    const schema = det && det.settings_schema ? det.settings_schema : {};
+
+    ui.stepHeader.textContent = title ? stepId + " - " + title : stepId;
+    ui.stepDesc.textContent = desc;
+
+    clearNode(ui.stepForm);
+    stableFields(schema).forEach((f) => {
+      ui.stepForm.appendChild(inputForField(f, stepId));
+    });
+
+    const keys = getAppliedKeys(stepId);
+    ui.stepApply.textContent = keys.length
+      ? "Applied keys: " + keys.join(", ")
+      : "No settings applied";
+  }
+
+  window.addEventListener("am2:wd:selected", async (e) => {
+    const d = e && e.detail ? e.detail : {};
+    const sid = typeof d.step_id === "string" ? d.step_id : null;
+    state.selectedStepId = sid;
+    await renderSelectedStep();
+  });
+
+  ui.clearStep &&
+    ui.clearStep.addEventListener("click", () => {
+      clearStepDefaults(state.selectedStepId);
+    });
 
   ui.reload && ui.reload.addEventListener("click", reload);
   ui.validate && ui.validate.addEventListener("click", validateOnly);
   ui.save && ui.save.addEventListener("click", save);
   ui.reset && ui.reset.addEventListener("click", reset);
+
+  window.AM2FlowConfigEditor = {
+    reload: reload,
+    validate: validateOnly,
+    save: save,
+    reset: reset,
+    _debug_getDraft: () => state.draft,
+  };
 
   reload();
 })();
