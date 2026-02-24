@@ -1100,3 +1100,34 @@ Constant socket names:
 - ipc_socket_name_template MAY be a constant string (example: am_patch.sock).
 - Consequence: single-instance socket in the selected scope; parallel runs conflict unless
   the name differs.
+
+------------------------------------------------------------------------
+
+## PatchHub Config Editor Contract
+
+PatchHub may edit the runner configuration file:
+- scripts/am_patch/am_patch.toml
+
+The runner provides an authoritative schema export describing the Policy surface and
+PatchHub-safe editing rules.
+
+Schema export:
+- Module: scripts/am_patch/config_schema.py
+- Function: get_policy_schema() -> dict
+- Schema version field: schema_version (string)
+- The implementation constant SCHEMA_VERSION MUST be bumped when the schema shape changes.
+
+Editing engine:
+- Module: scripts/am_patch/config_edit.py
+- validate_patchhub_update(values: dict, schema: dict) -> dict
+  - Reject unknown keys.
+  - Reject read-only keys.
+  - Enforce schema types and enum allow-lists.
+- apply_update_to_config_text(original_text: str, values: dict, schema: dict) -> str
+  - Preserve comments and ordering.
+  - Only modify RHS of canonical key assignments.
+  - Insert missing keys into the schema-declared TOML section.
+  - After edit, validate using the existing build_policy pathway.
+- validate_config_text_roundtrip(text: str) -> None
+  - Parse TOML, flatten sections, build Policy.
+  - Raise RunnerError on failure.
