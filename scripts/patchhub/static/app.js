@@ -549,7 +549,7 @@
     var jid = getLiveJobId();
     if (!jid && suppressIdleOutput && idleGuardOn) {
       setPre("tail", "");
-      updateShortProgressFromText("");
+      updateProgressPanelFromEvents();
       return;
     }
 
@@ -565,7 +565,6 @@
       }
       var t = String(r.tail || "");
       setPre("tail", t);
-      updateShortProgressFromText(t);
     });
   }
 
@@ -688,13 +687,158 @@
   }
 
   function renderProgressSummary(summaryLine) {
-    setText("progressSummary", summaryLine || "(idle)");
+    var node = el("progressSummary");
+    if (!node) return;
+    node.textContent = summaryLine || "(idle)";
   }
 
   function updateShortProgressFromText(text) {
     var progress = parseProgressFromText(text);
     renderProgressSteps(progress);
     renderProgressSummary(pickProgressSummaryLine(text));
+  }
+
+  function normStepName(s) {
+    return String(s || "").replace(/\s+/g, " ").trim();
+  }
+
+  function deriveProgressFromEvents(events) {
+    var order = [];
+    var state = {};
+    var currentRunning = "";
+    var resultStatus = "";
+
+    function ensureStep(name) {
+      if (!name) return;
+      if (!Object.prototype.hasOwnProperty.call(state, name)) {
+        state[name] = "pending";
+      }
+      if (order.indexOf(name) < 0) order.push(name);
+    }
+
+    function setState(name, st) {
+      name = normStepName(name);
+      if (!name) return;
+      ensureStep(name);
+      state[name] = st;
+    }
+
+    for (var i = 0; i < (events || []).length; i++) {
+      var ev = events[i];
+      if (!ev || typeof ev !== "object") continue;
+      var t = String(ev.type || "");
+
+      if (t === "result") {
+        resultStatus = ev.ok ? "success" : "fail";
+        continue;
+      }
+
+      if (t !== "log") continue;
+
+      var kind = String(ev.kind || "");
+      if (kind !== "DO" && kind !== "OK" && kind !== "FAIL") continue;
+
+      var stage = normStepName(ev.stage || "");
+      if (!stage) continue;
+
+      if (kind === "DO") {
+        setState(stage, "running");
+        currentRunning = stage;
+        continue;
+      }
+
+      if (kind === "OK") {
+        setState(stage, "ok");
+        if (currentRunning === stage) currentRunning = "";
+        continue;
+      }
+
+      if (kind === "FAIL") {
+        setState(stage, "fail");
+        if (currentRunning === stage) currentRunning = "";
+        continue;
+      }
+    }
+
+    if (currentRunning) {
+      for (var j = 0; j < order.length; j++) {
+        var nm = order[j];
+        if (state[nm] === "running" && nm !== currentRunning) {
+          state[nm] = "pending";
+        }
+      }
+    }
+
+    for (var k = 0; k < order.length; k++) {
+      var nm2 = order[k];
+      if (!Object.prototype.hasOwnProperty.call(state, nm2)) state[nm2] = "pending";
+    }
+
+    return { order: order, state: state, resultStatus: resultStatus };
+  }
+
+  function deriveProgressSummaryFromEvents(events, progress) {
+    var lastResult = null;
+    var lastLog = null;
+    for (var i = (events || []).length - 1; i >= 0; i--) {
+      var ev = events[i];
+      if (!ev || typeof ev !== "object") continue;
+      var t = String(ev.type || "");
+      if (t === "result") {
+        lastResult = ev;
+        break;
+      }
+      if (t === "log") {
+        var kind = String(ev.kind || "");
+        if (kind === "DO" || kind === "OK" || kind === "FAIL") {
+          lastLog = ev;
+          break;
+        }
+      }
+    }
+
+    if (lastResult) {
+      return {
+        text: lastResult.ok ? "RESULT: SUCCESS" : "RESULT: FAIL",
+        status: lastResult.ok ? "success" : "fail"
+      };
+    }
+
+    if (lastLog) {
+      var stage = normStepName(lastLog.stage || "");
+      var kind = String(lastLog.kind || "");
+      if (kind === "FAIL") {
+        return { text: "FAIL: " + stage, status: "fail" };
+      }
+      if (kind === "OK") {
+        return { text: "OK: " + stage, status: "running" };
+      }
+      if (kind === "DO") {
+        return { text: "DO: " + stage, status: "running" };
+      }
+    }
+
+    if (progress && progress.order && progress.order.length) {
+      return { text: "STATUS: RUNNING", status: "running" };
+    }
+    return { text: "(idle)", status: "idle" };
+  }
+
+  function setProgressSummaryState(summary) {
+    var node = el("progressSummary");
+    if (!node) return;
+    var st = (summary && summary.status) ? String(summary.status) : "idle";
+    node.classList.remove("success", "fail", "running", "idle", "muted");
+    node.classList.add(st);
+    if (st === "idle") node.classList.add("muted");
+  }
+
+  function updateProgressPanelFromEvents() {
+    var progress = deriveProgressFromEvents(liveEvents);
+    renderProgressSteps(progress);
+    var summary = deriveProgressSummaryFromEvents(liveEvents, progress);
+    renderProgressSummary(summary.text);
+    setProgressSummaryState(summary);
   }
 
   function refreshStats() {
@@ -951,6 +1095,7 @@ function loadLiveLevel() {
       closeLiveStream();
       liveEvents = [];
       renderLiveLog();
+      updateProgressPanelFromEvents();
       setLiveStreamStatus("");
       return;
     }
@@ -962,7 +1107,7 @@ function loadLiveLevel() {
     liveStreamJobId = jobId;
     liveEvents = [];
     renderLiveLog();
-    updateProgressFromEvents();
+    updateProgressPanelFromEvents();
     setLiveStreamStatus("connecting...");
 
     var url = "/api/jobs/" + encodeURIComponent(jobId) + "/events";
@@ -978,7 +1123,7 @@ function loadLiveLevel() {
       if (filterLiveEvent(obj)) {
         renderLiveLog();
       }
-      updateProgressFromEvents();
+      updateProgressPanelFromEvents();
       setLiveStreamStatus("streaming");
     };
 

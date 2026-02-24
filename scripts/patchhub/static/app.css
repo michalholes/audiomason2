@@ -223,4 +223,23 @@ input::placeholder { color: #6f7f99; }
 
 .progress-summary {
   margin-top: 8px;
+  font-size: 2em;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.progress-summary.idle {
+  color: #8b949e;
+}
+
+.progress-summary.running {
+  color: #f5b400;
+}
+
+.progress-summary.success {
+  color: #2ecc71;
+}
+
+.progress-summary.fail {
+  color: #e74c3c;
 }
