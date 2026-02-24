@@ -753,11 +753,23 @@ class ImportWizardEngine:
         def is_enabled(sid: str) -> bool:
             return self._is_step_enabled(sid, flow_cfg_norm)
 
+        def debug_log(kind: str, payload: dict[str, Any]) -> None:
+            _emit_required(
+                "flow_graph.debug",
+                "flow_graph.debug",
+                {
+                    "session_id": session_id,
+                    "kind": kind,
+                    "payload": dict(payload),
+                },
+            )
+
         return select_next_step(
             graph,
             current_step_id=step_id,
             state_view=state_view,
             is_step_enabled=is_enabled,
+            debug_log=debug_log,
         )
 
     def _is_step_enabled(self, step_id: str, flow_cfg_norm: dict[str, Any]) -> bool:

@@ -16,6 +16,7 @@ from typing import Any
 from plugins.file_io.service import FileService
 from plugins.file_io.service.types import RootName
 
+from .conditions import find_invalid_condition_path
 from .errors import FinalizeError
 from .flow_runtime import CANONICAL_STEP_ORDER, MANDATORY_STEP_IDS, OPTIONAL_STEP_IDS
 from .step_catalog import STEP_CATALOG
@@ -213,6 +214,8 @@ def _validate_v2_graph(wd: dict[str, Any]) -> None:
     if not isinstance(edges_any, list):
         raise FinalizeError("wizard_definition graph edges must be a list")
 
+    outgoing: dict[str, list[dict[str, Any]]] = {sid: [] for sid in nodes}
+
     for e in edges_any:
         if not isinstance(e, dict):
             raise FinalizeError("wizard_definition graph edges must be objects")
@@ -226,6 +229,20 @@ def _validate_v2_graph(wd: dict[str, Any]) -> None:
             raise FinalizeError("wizard_definition graph edge references unknown from_step_id")
         if to not in seen:
             raise FinalizeError("wizard_definition graph edge references unknown to_step_id")
+
+        outgoing.setdefault(str(frm), []).append(e)
+
+        when_any = e.get("when")
+        bad = find_invalid_condition_path(when_any)
+        if bad is not None:
+            raise FinalizeError("INVALID_CONDITION_PATH: " + bad + " " + str(frm) + "->" + str(to))
+
+    for frm, out_edges in outgoing.items():
+        unconditional = [x for x in out_edges if x.get("when") is None]
+        if len(unconditional) > 1:
+            raise FinalizeError(
+                "AMBIGUOUS_TRANSITIONS: " + frm + " edges=" + str(len(unconditional))
+            )
 
     _validate_v2_reachability(entry_any, nodes, edges_any)
 
