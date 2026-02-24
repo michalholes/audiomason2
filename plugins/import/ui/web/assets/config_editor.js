@@ -207,6 +207,14 @@
     }
     defaults[stepId][key] = value;
     ui.ta.value = H.pretty(state.draft || {});
+
+    try {
+      window.dispatchEvent(new CustomEvent("am2:cfg:changed", { detail: {} }));
+    } catch (e) {
+      // ignore
+    }
+
+    updateApplyStatus(stepId);
   }
 
   function clearStepDefaults(stepId) {
@@ -214,7 +222,24 @@
     const defaults = safeDefaultsRoot(state.draft);
     if (defaults[stepId]) delete defaults[stepId];
     ui.ta.value = H.pretty(state.draft || {});
+    try {
+      window.dispatchEvent(new CustomEvent("am2:cfg:changed", { detail: {} }));
+    } catch (e) {
+      // ignore
+    }
     renderSelectedStep();
+  }
+
+  function updateApplyStatus(stepId) {
+    if (!ui.stepApply) return;
+    if (!stepId) {
+      ui.stepApply.textContent = "";
+      return;
+    }
+    const keys = getAppliedKeys(stepId);
+    ui.stepApply.textContent = keys.length
+      ? "Applied keys: " + keys.join(", ")
+      : "No settings applied";
   }
 
   function getAppliedKeys(stepId) {
@@ -252,7 +277,6 @@
       inp.checked = typeof cur === "boolean" ? cur : !!field.default;
       inp.addEventListener("change", () => {
         setStepValue(stepId, field.key, !!inp.checked);
-        renderSelectedStep();
       });
     } else if (typ === "number") {
       inp.type = "number";
@@ -265,14 +289,12 @@
         } else if (!Number.isNaN(v)) {
           setStepValue(stepId, field.key, v);
         }
-        renderSelectedStep();
       });
     } else {
       inp.type = "text";
       inp.value = typeof cur === "string" ? cur : String(field.default || "");
       inp.addEventListener("input", () => {
         setStepValue(stepId, field.key, String(inp.value || ""));
-        renderSelectedStep();
       });
     }
 
@@ -335,9 +357,7 @@
     });
 
     const keys = getAppliedKeys(stepId);
-    ui.stepApply.textContent = keys.length
-      ? "Applied keys: " + keys.join(", ")
-      : "No settings applied";
+    updateApplyStatus(stepId);
   }
 
   window.addEventListener("am2:wd:selected", async (e) => {

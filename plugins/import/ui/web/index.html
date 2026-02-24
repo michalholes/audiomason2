@@ -146,7 +146,20 @@
         resetAll: $("flowResetAll"),
       };
 
-      const st = { lastValidateOk: false };
+      const st = { lastValidateOk: false, dirty: false };
+
+      function setSaveEnabled() {
+        if (!ui.saveAll) return;
+        const ok = st.lastValidateOk === true && st.dirty === false;
+        ui.saveAll.disabled = !ok;
+        ui.saveAll.classList.toggle("is-disabled", !ok);
+      }
+
+      function markDirty() {
+        st.dirty = true;
+        st.lastValidateOk = false;
+        setSaveEnabled();
+      }
 
       function setStatus(msg, kind) {
         if (!ui.status) return;
@@ -156,7 +169,9 @@
       }
 
       async function doReloadAll() {
+        st.dirty = false;
         st.lastValidateOk = false;
+        setSaveEnabled();
         setStatus("", "");
         const W = window.AM2WizardDefinitionEditor;
         const C = window.AM2FlowConfigEditor;
@@ -166,12 +181,16 @@
 
       async function doValidateAll() {
         st.lastValidateOk = false;
+        st.dirty = true;
+        setSaveEnabled();
         setStatus("Validating...", "");
         const W = window.AM2WizardDefinitionEditor;
         const C = window.AM2FlowConfigEditor;
         const okW = W && W.validateDraft ? await W.validateDraft() : false;
         const okC = C && C.validate ? await C.validate() : false;
         st.lastValidateOk = okW && okC;
+        st.dirty = st.lastValidateOk ? false : true;
+        setSaveEnabled();
         setStatus(
           st.lastValidateOk ? "Validate All: OK" : "Validate All: FAILED",
           st.lastValidateOk ? "ok" : "bad"
@@ -180,8 +199,9 @@
       }
 
       async function doSaveAll() {
-        if (!st.lastValidateOk) {
+        if (!(st.lastValidateOk === true && st.dirty === false)) {
           setStatus("Save blocked: run Validate All first.", "bad");
+          setSaveEnabled();
           return;
         }
         setStatus("Saving...", "");
@@ -190,11 +210,18 @@
         const okW = W && W.saveDraft ? await W.saveDraft() : false;
         const okC = C && C.save ? await C.save() : false;
         const ok = okW && okC;
+        if (!ok) {
+          st.lastValidateOk = false;
+          st.dirty = true;
+          setSaveEnabled();
+        }
         setStatus(ok ? "Save All: OK" : "Save All: FAILED", ok ? "ok" : "bad");
       }
 
       async function doResetAll() {
+        st.dirty = false;
         st.lastValidateOk = false;
+        setSaveEnabled();
         setStatus("Resetting...", "");
         const W = window.AM2WizardDefinitionEditor;
         const C = window.AM2FlowConfigEditor;
@@ -202,6 +229,11 @@
         if (C && C.reset) await C.reset();
         setStatus("Reset All: OK", "ok");
       }
+
+      window.addEventListener("am2:wd:changed", markDirty);
+      window.addEventListener("am2:cfg:changed", markDirty);
+
+      setSaveEnabled();
 
       ui.reloadAll && ui.reloadAll.addEventListener("click", doReloadAll);
       ui.validateAll && ui.validateAll.addEventListener("click", doValidateAll);

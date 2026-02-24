@@ -414,6 +414,14 @@
     render();
   }
 
+  function emitChanged() {
+    try {
+      window.dispatchEvent(new CustomEvent("am2:wd:changed", { detail: {} }));
+    } catch (e) {
+      // ignore
+    }
+  }
+
   function setValidation(ok, localItems, serverItems) {
     state.validation = {
       ok: typeof ok === "boolean" ? ok : null,
@@ -431,40 +439,20 @@
 
 
   function extractServerMessages(data) {
-    const root =
-      data && typeof data.error === "object" && data.error ? data.error : data;
-
-    const out = [];
-
-    const code = root && typeof root.code === "string" ? root.code : "";
-    const message = root && typeof root.message === "string" ? root.message : "";
-    const top = code && message ? code + ": " + message : code || message;
-    if (top) out.push(top);
-
-    const details = root && Array.isArray(root.details) ? root.details : [];
-    details.forEach((d) => {
-      if (!d || typeof d !== "object") return;
-      const path = typeof d.path === "string" ? d.path : "";
-      const reason = typeof d.reason === "string" ? d.reason : "";
-      const mt =
-        d.meta && typeof d.meta === "object" && typeof d.meta.type === "string"
-          ? d.meta.type
-          : "";
-      let msg = [path, reason].filter((x) => x).join(" - ");
-      if (mt) msg = msg ? msg + " [" + mt + "]" : "[" + mt + "]";
-      if (msg && !out.includes(msg)) out.push(msg);
-    });
-
-    if (!out.length) out.push("Unknown server validation error");
-    return out;
+    try {
+      return [JSON.stringify(data, null, 2)];
+    } catch (e) {
+      return [String(data || "")];
+    }
   }
 
 
   function removeStep(stepId) {
     if (!canRemove(stepId)) return;
     state.draft = state.draft.filter((x) => x !== stepId);
-    if (state.selected === stepId) state.selected = null;
+    if (state.selected === stepId) setSelected(null);
     syncTextarea();
+    emitChanged();
     render();
   }
 
@@ -490,7 +478,9 @@
     const next = state.draft.slice();
     next.splice(insertAt, 0, sid);
     state.draft = next;
+    normalizeEdges();
     syncTextarea();
+    emitChanged();
     render();
   }
 
@@ -511,7 +501,9 @@
 
     filtered.splice(to, 0, dragId);
     state.draft = filtered;
+    normalizeEdges();
     syncTextarea();
+    emitChanged();
     render();
   }
 
@@ -566,7 +558,9 @@
     state.draft = g.nodes.slice();
     state.edges = Array.isArray(g.edges) ? g.edges.slice() : [];
     state.entry_step_id = g.entry || null;
-    state.selected = null;
+    setSelected(null);
+
+    normalizeEdges();
 
     ui.ta.value = H.pretty(defFromGraph(state.draft, state.entry_step_id, state.edges));
     return true;
@@ -609,6 +603,7 @@
     const g = stableGraph(defn);
     state.draft = g.nodes.slice();
     state.edges = g.edges.slice();
+    normalizeEdges();
     state.entry_step_id = g.entry || null;
     ui.ta.value = H.pretty(defFromGraph(state.draft, state.entry_step_id, state.edges));
     setValidation(true, [], []);
@@ -636,8 +631,9 @@
     state.loaded = g.nodes.slice();
     state.draft = g.nodes.slice();
     state.edges = g.edges.slice();
+    normalizeEdges();
     state.entry_step_id = g.entry || null;
-    state.selected = null;
+    setSelected(null);
     ui.ta.value = H.pretty(defFromGraph(state.draft, state.entry_step_id, state.edges));
     await loadHistory();
     render();
@@ -661,8 +657,9 @@
     state.loaded = g.nodes.slice();
     state.draft = g.nodes.slice();
     state.edges = g.edges.slice();
+    normalizeEdges();
     state.entry_step_id = g.entry || null;
-    state.selected = null;
+    setSelected(null);
     ui.ta.value = H.pretty(defFromGraph(state.draft, state.entry_step_id, state.edges));
     await loadHistory();
     render();
@@ -688,8 +685,9 @@
     state.loaded = g.nodes.slice();
     state.draft = g.nodes.slice();
     state.edges = g.edges.slice();
+    normalizeEdges();
     state.entry_step_id = g.entry || null;
-    state.selected = null;
+    setSelected(null);
     ui.ta.value = H.pretty(defFromGraph(state.draft, state.entry_step_id, state.edges));
     await loadHistory();
     render();
@@ -1097,6 +1095,34 @@
     return null;
   }
 
+  function normalizeEdges() {
+    const byFrom = {};
+    (state.edges || []).forEach((e) => {
+      if (!e || typeof e !== "object") return;
+      const frm = typeof e.from_step_id === "string" ? e.from_step_id : "";
+      const to = typeof e.to_step_id === "string" ? e.to_step_id : "";
+      if (!frm || !to) return;
+      if (!byFrom[frm]) byFrom[frm] = [];
+      byFrom[frm].push({
+        from_step_id: frm,
+        to_step_id: to,
+        when: e.when === undefined ? null : e.when,
+      });
+    });
+
+    const out = [];
+    (state.draft || []).forEach((sid) => {
+      (byFrom[sid] || []).forEach((e) => out.push(e));
+    });
+    Object.keys(byFrom)
+      .filter((k) => (state.draft || []).indexOf(k) < 0)
+      .sort()
+      .forEach((k) => {
+        (byFrom[k] || []).forEach((e) => out.push(e));
+      });
+    state.edges = out;
+  }
+
   function ensureEntryValid() {
     if (!state.entry_step_id || state.draft.indexOf(state.entry_step_id) < 0) {
       state.entry_step_id = state.draft[0] || null;
@@ -1124,6 +1150,7 @@
     entrySel.addEventListener("change", () => {
       state.entry_step_id = entrySel.value || null;
       syncTextarea();
+      emitChanged();
     });
     entryWrap.appendChild(entrySel);
     header.appendChild(entryWrap);
@@ -1159,8 +1186,12 @@
         return;
       }
       if (state.draft.indexOf(frm) < 0 || state.draft.indexOf(to) < 0) return;
-      state.edges = state.edges.concat([{ from_step_id: frm, to_step_id: to, when: null }]);
+      state.edges = state.edges.concat([
+        { from_step_id: frm, to_step_id: to, when: null },
+      ]);
+      normalizeEdges();
       syncTextarea();
+      emitChanged();
       renderTransitions();
     });
     addWrap.appendChild(btnAddEdge);
@@ -1170,11 +1201,25 @@
 
     const table = el("div", "flowTransTable");
     const head = el("div", "flowTransRow flowTransHead");
+    head.appendChild(text("div", "flowTransCellPri", "Pri"));
     head.appendChild(text("div", "flowTransCellFrom", "From"));
     head.appendChild(text("div", "flowTransCellTo", "To"));
     head.appendChild(text("div", "flowTransCellCond", "Condition"));
     head.appendChild(text("div", "flowTransCellAct", "Actions"));
     table.appendChild(head);
+
+    normalizeEdges();
+
+    function priForEdgeAt(idx) {
+      const e = state.edges[idx];
+      if (!e) return 0;
+      const frm = e.from_step_id;
+      let n = 0;
+      for (let i = 0; i <= idx; i += 1) {
+        if (state.edges[i] && state.edges[i].from_step_id === frm) n += 1;
+      }
+      return n;
+    }
 
     function moveEdge(idx, dir) {
       const e = state.edges[idx];
@@ -1188,11 +1233,13 @@
       next[swap] = e;
       state.edges = next;
       syncTextarea();
+      emitChanged();
       renderTransitions();
     }
 
     state.edges.forEach((e, idx) => {
       const row = el("div", "flowTransRow");
+      row.appendChild(text("div", "flowTransCellPri", String(priForEdgeAt(idx))));
       row.appendChild(text("div", "flowTransCellFrom", e.from_step_id));
       row.appendChild(text("div", "flowTransCellTo", e.to_step_id));
 
@@ -1218,8 +1265,10 @@
       btnDownEdge.addEventListener("click", () => moveEdge(idx, +1));
       btnDel.addEventListener("click", () => {
         state.edges = state.edges.filter((_, i) => i !== idx);
+        normalizeEdges();
         state.editingEdgeIdx = null;
         syncTextarea();
+        emitChanged();
         renderTransitions();
       });
       act.appendChild(btnUpEdge);
@@ -1335,6 +1384,7 @@
           next[idx] = { from_step_id: e.from_step_id, to_step_id: e.to_step_id, when: when };
           state.edges = next;
           syncTextarea();
+          emitChanged();
           state.editingEdgeIdx = null;
           renderTransitions();
         });
