@@ -754,7 +754,7 @@ def parse_args(argv: list[str]) -> CliArgs:
         "--success-archive-name",
         dest="success_archive_name",
         default=None,
-        help="Success archive zip name template (placeholders: {repo}, {branch}).",
+        help="Success archive zip name template (placeholders: {repo}, {branch}, {issue}, {ts}).",
     )
 
     vg = p.add_mutually_exclusive_group()

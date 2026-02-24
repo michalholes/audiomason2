@@ -59,9 +59,18 @@ def build_artifacts(
         if branch_name == "HEAD":
             branch_name = "detached"
 
+        issue = str(cli.issue_id) if cli.issue_id is not None else "noissue"
+        epoch_s = git_ops.head_commit_epoch_s(logger, repo_root)
+        ts = git_ops.format_epoch_utc_ts(epoch_s)
+
         template = policy.success_archive_name
         try:
-            rendered = template.format(repo=repo_name, branch=branch_name)
+            rendered = template.format(
+                repo=repo_name,
+                branch=branch_name,
+                issue=issue,
+                ts=ts,
+            )
         except Exception as e:
             raise RunnerError(
                 "POSTHOOK",

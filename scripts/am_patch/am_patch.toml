@@ -21,6 +21,7 @@ ipc_socket_on_startup_wait_s = 0
 
 # Canonical (supported by runner; missing in your file)
 success_archive_name = "{repo}-{branch}.zip"
+# Placeholders: {repo}, {branch}, {issue}, {ts}
 
 
 [git]

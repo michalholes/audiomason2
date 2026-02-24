@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import datetime
 import os
 from pathlib import Path
 
@@ -26,6 +27,19 @@ def current_branch(logger: Logger, repo: Path) -> str:
 
 def head_sha(logger: Logger, repo: Path) -> str:
     return _git(logger, repo, ["rev-parse", "HEAD"]).strip()
+
+
+def head_commit_epoch_s(logger: Logger, repo_root: Path) -> int:
+    out = _git(logger, repo_root, ["show", "-s", "--format=%ct", "HEAD"]).strip()
+    try:
+        return int(out)
+    except ValueError as err:
+        raise RunnerError("PREFLIGHT", "GIT", f"unexpected %ct output: {out!r}") from err
+
+
+def format_epoch_utc_ts(epoch_s: int) -> str:
+    dt = datetime.datetime.fromtimestamp(epoch_s, tz=datetime.UTC)
+    return dt.strftime("%Y%m%d_%H%M%S")
 
 
 def origin_ahead_count(logger: Logger, repo: Path, branch: str) -> int:

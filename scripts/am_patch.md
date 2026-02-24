@@ -339,6 +339,13 @@ If the audit step fails:
 On SUCCESS (in `workspace`, `finalize`, and `finalize_workspace` modes; excluding `--test-mode`), the runner
 creates a git-archive success zip in `patches/`. The filename is configurable via
 `success_archive_name` / `--success-archive-name` (default `{repo}-{branch}.zip`, e.g. `audiomason2-main.zip`).
+
+Placeholders:
+- {repo}: repository directory name
+- {branch}: current branch name (or "detached")
+- {issue}: CLI issue id, or "noissue" when ISSUE_ID is not provided
+- {ts}: HEAD committer time in UTC (YYYYMMDD_%H%M%S)
+
 It contains only git-tracked files and does not include logs, workspaces, caches, or patch inputs.
 
 ---

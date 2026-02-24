@@ -1047,3 +1047,8 @@ Constant socket names:
 - ipc_socket_name_template MAY be a constant string (example: am_patch.sock).
 - Consequence: single-instance socket in the selected scope; parallel runs conflict unless
   the name differs.
+Template placeholders supported by success_archive_name:
+- {repo}: repository directory name (repo_root.name)
+- {branch}: current branch name (or "detached" when HEAD is detached)
+- {issue}: CLI issue id, or "noissue" when ISSUE_ID is not provided
+- {ts}: HEAD committer time in UTC formatted as YYYYMMDD_%H%M%S
