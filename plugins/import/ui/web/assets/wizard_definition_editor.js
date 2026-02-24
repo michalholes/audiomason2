@@ -89,7 +89,11 @@
   }
 
   function defFromSteps(stepIds) {
-    return { steps: stepIds.map((sid) => ({ step_id: sid })) };
+    return {
+      version: 1,
+      wizard_id: "import",
+      steps: stepIds.map((sid) => ({ step_id: sid })),
+    };
   }
 
   const state = {
@@ -252,7 +256,9 @@
 
   function extractServerMessages(data) {
     const out = [];
-    const details = data && Array.isArray(data.details) ? data.details : [];
+    const root =
+      data && typeof data.error === "object" && data.error ? data.error : data;
+    const details = root && Array.isArray(root.details) ? root.details : [];
     details.forEach((d) => {
       if (!d || typeof d !== "object") return;
       const path = typeof d.path === "string" ? d.path : "";
@@ -260,8 +266,9 @@
       const msg = [path, reason].filter((x) => x).join(" - ");
       if (msg) out.push(msg);
     });
-    const code = data && typeof data.code === "string" ? data.code : "";
-    const message = data && typeof data.message === "string" ? data.message : "";
+    const code = root && typeof root.code === "string" ? root.code : "";
+    const message =
+      root && typeof root.message === "string" ? root.message : "";
     const top = [code, message].filter((x) => x).join(": ");
     if (top && !out.includes(top)) out.unshift(top);
     return out;
