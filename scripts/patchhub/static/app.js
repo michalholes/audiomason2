@@ -166,6 +166,9 @@
   var lastAutofillClearedToken = "";
   var autofillTimer = null;
 
+  var patchStatTimer = null;
+  var patchStatInFlight = false;
+
   var suppressIdleOutput = false;
 
   var lastParsedRaw = "";
@@ -195,6 +198,30 @@
     if (p === pfx) return pfx;
     if (p.indexOf(pfx + "/") === 0) return p;
     return joinRel(pfx, p);
+  }
+
+  function clearRunFieldsBecauseMissingPatch() {
+    if (el("issueId")) el("issueId").value = "";
+    if (el("commitMsg")) el("commitMsg").value = "";
+    if (el("patchPath")) el("patchPath").value = "";
+    validateAndPreview();
+  }
+
+  function tickMissingPatchClear() {
+    if (patchStatInFlight) return;
+    if (!el("patchPath")) return;
+
+    var full = normalizePatchPath(String(el("patchPath").value || ""));
+    var rel = stripPatchesPrefix(full);
+
+    patchStatInFlight = true;
+    apiGet("/api/fs/stat?path=" + encodeURIComponent(rel)).then(function (r) {
+      patchStatInFlight = false;
+      if (!r || r.ok === false) return;
+      if (r.exists === false) clearRunFieldsBecauseMissingPatch();
+    }).catch(function () {
+      patchStatInFlight = false;
+    });
   }
 
   function setFsHint(msg) {
@@ -1984,6 +2011,12 @@ if (mode === "patch" || mode === "repair") {
       renderIssueDetail();
       validateAndPreview();
       startAutofillPolling();
+
+      if (patchStatTimer) {
+        clearInterval(patchStatTimer);
+        patchStatTimer = null;
+      }
+      patchStatTimer = setInterval(tickMissingPatchClear, 1000);
 
       setInterval(function () {
         refreshJobs();

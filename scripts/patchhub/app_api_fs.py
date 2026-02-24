@@ -18,6 +18,16 @@ def api_fs_list(self, rel_path: str) -> tuple[int, bytes]:
     return _ok({"path": rel_path, "items": list_dir(p)})
 
 
+def api_fs_stat(self, rel_path: str) -> tuple[int, bytes]:
+    if rel_path == "":
+        return _ok({"path": rel_path, "exists": True})
+    try:
+        p = self.jail.resolve_rel(rel_path)
+    except FsJailError as e:
+        return _err(str(e), status=400)
+    return _ok({"path": rel_path, "exists": p.exists()})
+
+
 def api_fs_read_text(self, qs: dict[str, str]) -> tuple[int, bytes]:
     rel = str(qs.get("path", ""))
     tail_lines_s = qs.get("tail_lines", "")

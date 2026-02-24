@@ -84,6 +84,11 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
         status, data = await to_thread(core.api_fs_list, path)
         return _json_bytes_response(status, data)
 
+    @app.get("/api/fs/stat")
+    async def api_fs_stat(path: str = "") -> Response:
+        status, data = await to_thread(core.api_fs_stat, path)
+        return _json_bytes_response(status, data)
+
     @app.get("/api/patches/latest")
     async def api_patches_latest() -> Response:
         status, data = await to_thread(core.api_patches_latest)

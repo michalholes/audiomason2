@@ -110,6 +110,7 @@ class AsyncAppCore:
 
     api_fs_list = _fs.api_fs_list
     api_fs_read_text = _fs.api_fs_read_text
+    api_fs_stat = _fs.api_fs_stat
     api_fs_download = _fs.api_fs_download
     api_fs_mkdir = _fs.api_fs_mkdir
     api_fs_rename = _fs.api_fs_rename
