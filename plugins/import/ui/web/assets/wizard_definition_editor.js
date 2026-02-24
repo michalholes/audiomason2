@@ -52,48 +52,79 @@
     draft: [],
     palette: [],
     selected: null,
-    lastMsg: null,
     dragId: null,
+    dropBeforeId: null,
+    showOptional: true,
+    validation: { ok: null, items: [] },
   };
 
-  const root = el("div", "wizardDefEditor");
-  const bar = el("div", "wdBar");
-  const msg = el("div", "wdMsg");
-  const cols = el("div", "wdCols");
-  const left = el("div", "wdLeft");
-  const right = el("div", "wdRight");
+  const layout = el("div", "wdLayout");
+  const leftCol = el("div", "wdLeftCol");
+  const rightCol = el("div", "wdPalette");
 
-  const stepsTitle = text("div", "wdSectionTitle", "Wizard Steps");
-  const stepsList = el("div", "wdSteps");
+  const toolbar = el("div", "wdToolbar");
+  const btnAdd = text("button", "btn", "Add Step");
+  const btnRemove = text("button", "btn", "Remove");
+  const btnUp = text("button", "btn", "Move Up");
+  const btnDown = text("button", "btn", "Move Down");
+  const optLabel = el("label", "wdToggle");
+  const optToggle = el("input", "wdToggleInput");
+  optToggle.type = "checkbox";
+  optToggle.checked = true;
+  optLabel.appendChild(optToggle);
+  optLabel.appendChild(text("span", "wdToggleText", "Show Optional"));
 
-  const palTitle = text("div", "wdSectionTitle", "Available Steps");
-  const searchRow = el("div", "wdSearch");
-  const search = el("input", "wdSearchInput");
+  toolbar.appendChild(btnAdd);
+  toolbar.appendChild(btnRemove);
+  toolbar.appendChild(btnUp);
+  toolbar.appendChild(btnDown);
+  toolbar.appendChild(optLabel);
+
+  const table = el("div", "wdTable");
+  const head = el("div", "wdHead");
+  head.appendChild(text("div", "wdCellOrder", "Order"));
+  head.appendChild(text("div", "wdCellId", "Step ID"));
+  head.appendChild(text("div", "wdCellType", "Type"));
+  head.appendChild(text("div", "wdCellReq", "Required"));
+  head.appendChild(text("div", "wdCellActions", "Actions"));
+  const body = el("div", "wdBody");
+
+  const dropHint = el("div", "wdDropHint");
+  dropHint.appendChild(text("div", "wdDropHintText", "Drop to insert"));
+
+  const validation = el("div", "wdValidation");
+  const validationHeader = el("div", "wdValidationHeader");
+  const validationTitle = text("div", "wdValidationTitle", "Validation");
+  const validationCount = text("div", "wdValidationCount", "");
+  const validationList = el("div", "wdValidationList");
+  validationHeader.appendChild(validationTitle);
+  validationHeader.appendChild(validationCount);
+  validation.appendChild(validationHeader);
+  validation.appendChild(validationList);
+
+  table.appendChild(head);
+  table.appendChild(body);
+
+  const paletteSearch = el("div", "wdPaletteSearch");
+  const search = el("input", "wdPaletteSearchInput");
   search.type = "search";
   search.placeholder = "Search";
-  searchRow.appendChild(search);
-  const palBody = el("div", "wdPalette");
+  paletteSearch.appendChild(search);
 
-  left.appendChild(stepsTitle);
-  left.appendChild(stepsList);
-  right.appendChild(palTitle);
-  right.appendChild(searchRow);
-  right.appendChild(palBody);
+  const paletteGroups = el("div", "wdPaletteGroups");
+  rightCol.appendChild(paletteSearch);
+  rightCol.appendChild(paletteGroups);
 
-  cols.appendChild(left);
-  cols.appendChild(right);
-  root.appendChild(bar);
-  root.appendChild(msg);
-  root.appendChild(cols);
+  leftCol.appendChild(toolbar);
+  leftCol.appendChild(table);
+  leftCol.appendChild(dropHint);
+  leftCol.appendChild(validation);
 
-  ui.ta.parentNode.insertBefore(root, ui.ta);
-  ui.ta.style.display = "none";
+  layout.appendChild(leftCol);
+  layout.appendChild(rightCol);
 
-  function showMsg(s) {
-    state.lastMsg = s ? String(s) : null;
-    msg.textContent = state.lastMsg || "";
-    msg.style.display = state.lastMsg ? "block" : "none";
-  }
+  ui.ta.parentNode.insertBefore(layout, ui.ta);
+  ui.ta.classList.add("wdHidden");
 
   function isDirty() {
     return JSON.stringify(state.loaded) !== JSON.stringify(state.draft);
@@ -148,6 +179,20 @@
     render();
   }
 
+  function setValidation(ok, items) {
+    state.validation = {
+      ok: typeof ok === "boolean" ? ok : null,
+      items: Array.isArray(items) ? items.slice() : [],
+    };
+    renderValidation();
+  }
+
+  function pushValidation(msgText) {
+    const items = state.validation.items.slice();
+    items.push(String(msgText || ""));
+    setValidation(false, items);
+  }
+
   function removeStep(stepId) {
     if (!canRemove(stepId)) return;
     state.draft = state.draft.filter((x) => x !== stepId);
@@ -159,7 +204,7 @@
     const sid = String(stepId || "");
     if (!sid) return;
     if (state.draft.includes(sid)) {
-      showMsg("Step already present: " + sid);
+      pushValidation("Step already present: " + sid);
       return;
     }
 
@@ -256,7 +301,7 @@
   async function reloadAll() {
     if (!confirmIfDirty("Reload")) return;
     H.renderError(ui.err, null);
-    showMsg(null);
+    setValidation(null, []);
     const ok1 = await loadPalette();
     const ok2 = await loadDefinition();
     if (ok1 && ok2) {
@@ -267,7 +312,7 @@
 
   async function validateDraft() {
     H.renderError(ui.err, null);
-    showMsg(null);
+    setValidation(null, []);
     const payload = { definition: defFromSteps(state.draft) };
     const out = await H.requestJSON("/import/ui/wizard-definition/validate", {
       method: "POST",
@@ -276,12 +321,14 @@
     });
     if (!out.ok) {
       H.renderError(ui.err, out.data);
+      pushValidation("Validation failed. See error details above.");
       return false;
     }
     const defn = out.data && out.data.definition ? out.data.definition : {};
     const steps = stableSteps(defn);
     state.draft = steps.slice();
     ui.ta.value = H.pretty(defn);
+    setValidation(true, []);
     render();
     return true;
   }
@@ -313,7 +360,7 @@
     if (!confirmIfDirty("Reset")) return;
 
     H.renderError(ui.err, null);
-    showMsg(null);
+    setValidation(null, []);
     const out = await H.requestJSON("/import/ui/wizard-definition/reset", {
       method: "POST",
     });
@@ -335,7 +382,7 @@
     if (!confirmIfDirty("Rollback")) return;
 
     H.renderError(ui.err, null);
-    showMsg(null);
+    setValidation(null, []);
     const out = await H.requestJSON("/import/ui/wizard-definition/rollback", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -355,110 +402,165 @@
     render();
   }
 
-  function renderStepRow(stepId) {
-    const row = el("div", "wdStepRow");
+  function renderStepRow(stepId, idx) {
+    const row = el("div", "wdRow");
     row.dataset.stepId = stepId;
 
-    const sel = state.selected === stepId;
-    row.style.border = sel ? "1px solid #999" : "1px solid transparent";
-    row.style.padding = "4px";
-    row.style.margin = "2px 0";
-    row.style.display = "flex";
-    row.style.gap = "8px";
-    row.style.alignItems = "center";
+    const kind = kindOf(stepId);
+    const pinned = pinnedOf(stepId);
+    if (kind === "mandatory") row.classList.add("kind-mandatory");
+    if (kind === "optional") row.classList.add("kind-optional");
+    if (kind === "conditional") row.classList.add("kind-conditional");
+    if (pinned === "first") row.classList.add("is-pinned-first");
+    if (pinned === "last") row.classList.add("is-pinned-last");
+    if (isPinned(stepId)) row.classList.add("is-locked");
+    if (state.selected === stepId) row.classList.add("is-selected");
 
-    const handle = text("span", "wdDrag", "::");
-    handle.style.cursor = isPinned(stepId) ? "default" : "grab";
-
-    const lock = text("span", "wdLock", isPinned(stepId) || isMandatory(stepId) ? "L" : "");
-    lock.title = isPinned(stepId) ? "Pinned" : isMandatory(stepId) ? "Mandatory" : "";
-
-    const label = text("span", "wdStepId", stepId);
-    label.style.flex = "1";
-
-    const rm = text("button", "btn", "Del");
-    rm.disabled = !canRemove(stepId);
-
-    row.appendChild(handle);
-    row.appendChild(lock);
-    row.appendChild(label);
-    row.appendChild(rm);
-
-    row.addEventListener("click", () => setSelected(stepId));
-    rm.addEventListener("click", (e) => {
-      e.stopPropagation();
-      removeStep(stepId);
-    });
+    const orderCell = el("div", "wdCellOrder");
+    const handle = text("span", "wdDragHandle", "::");
+    handle.title = isPinned(stepId) ? "Locked" : "Drag to reorder";
 
     if (!isPinned(stepId)) {
-      row.draggable = true;
-      row.addEventListener("dragstart", (e) => {
+      handle.draggable = true;
+      handle.addEventListener("dragstart", (e) => {
         state.dragId = stepId;
+        state.dropBeforeId = stepId;
         e.dataTransfer.effectAllowed = "move";
+        dropHint.classList.add("is-visible");
       });
+    } else {
+      handle.classList.add("is-disabled");
     }
 
+    orderCell.appendChild(handle);
+    orderCell.appendChild(text("span", "wdOrderNum", String(idx + 1)));
+
+    const idCell = text("div", "wdCellId", stepId);
+
+    const typeCell = el("div", "wdCellType");
+    typeCell.appendChild(text("span", "wdTypeBadge", kind));
+
+    const reqCell = el("div", "wdCellReq");
+    reqCell.appendChild(
+      text(
+        "span",
+        "wdReqIcon",
+        isPinned(stepId) || isMandatory(stepId) ? "L" : ""
+      )
+    );
+
+    const actCell = el("div", "wdCellActions");
+    const rm = text("button", "btn", "Del");
+    rm.disabled = !canRemove(stepId);
+    rm.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (!canRemove(stepId)) {
+        pushValidation("Cannot remove locked or mandatory step: " + stepId);
+        return;
+      }
+      removeStep(stepId);
+    });
+    actCell.appendChild(rm);
+
+    row.appendChild(orderCell);
+    row.appendChild(idCell);
+    row.appendChild(typeCell);
+    row.appendChild(reqCell);
+    row.appendChild(actCell);
+
+    row.addEventListener("click", () => setSelected(stepId));
     row.addEventListener("dragover", (e) => {
       if (!state.dragId) return;
       e.preventDefault();
       e.dataTransfer.dropEffect = "move";
+      state.dropBeforeId = stepId;
     });
 
     row.addEventListener("drop", (e) => {
       if (!state.dragId) return;
       e.preventDefault();
       const dragId = state.dragId;
+      const beforeId = state.dropBeforeId;
       state.dragId = null;
-      moveStep(dragId, stepId);
+      state.dropBeforeId = null;
+      dropHint.classList.remove("is-visible");
+      moveStep(dragId, beforeId);
+    });
+
+    row.addEventListener("dragend", () => {
+      state.dragId = null;
+      state.dropBeforeId = null;
+      dropHint.classList.remove("is-visible");
     });
 
     return row;
   }
 
-  function renderPaletteGroup(titleText, items) {
-    const g = el("div", "wdPalGroup");
-    const t = text("div", "wdPalTitle", titleText);
-    t.style.marginTop = "8px";
-    t.style.fontWeight = "bold";
-    g.appendChild(t);
+  function renderPaletteGroup(titleText, kind, items) {
+    const g = el("div", "wdPaletteGroup");
+    if (kind === "mandatory") g.classList.add("kind-mandatory");
+    if (kind === "optional") g.classList.add("kind-optional");
+    if (kind === "conditional") g.classList.add("kind-conditional");
 
+    g.appendChild(text("div", "wdPaletteGroupTitle", titleText));
     items.forEach((it) => {
       const sid = String(it.step_id || "");
       if (!sid) return;
+      if (!state.showOptional && kind !== "mandatory") return;
 
-      const row = el("div", "wdPalRow");
-      row.style.display = "flex";
-      row.style.gap = "8px";
-      row.style.alignItems = "center";
-      row.style.margin = "2px 0";
+      const item = el("div", "wdPaletteItem");
+      if (kind === "mandatory") item.classList.add("kind-mandatory");
+      if (kind === "optional") item.classList.add("kind-optional");
+      if (kind === "conditional") item.classList.add("kind-conditional");
 
-      const add = text("button", "btn", "+");
-      const lab = text("span", null, sid);
-      lab.style.flex = "1";
+      item.appendChild(text("div", "wdPaletteItemId", sid));
 
+      const add = text("button", "btn wdPaletteAdd", "+ Add");
       add.addEventListener("click", () => addStep(sid));
-
-      row.appendChild(add);
-      row.appendChild(lab);
-      g.appendChild(row);
+      item.appendChild(add);
+      g.appendChild(item);
     });
-
     return g;
   }
 
-  function render() {
-    clear(bar);
-    const dirty = isDirty();
-    const d = text("span", "wdDirty", dirty ? "* unsaved" : "");
-    d.style.fontWeight = "bold";
-    bar.appendChild(d);
+  function renderValidation() {
+    clear(validationList);
+    validation.classList.remove("is-ok");
+    validation.classList.remove("is-error");
 
-    clear(stepsList);
-    state.draft.forEach((sid) => {
-      stepsList.appendChild(renderStepRow(sid));
+    const items = state.validation.items;
+    const ok = state.validation.ok;
+
+    if (ok === true) {
+      validation.classList.add("is-ok");
+      validationCount.textContent = "OK";
+      validationList.appendChild(text("div", "wdValidationItem", "No validation errors."));
+      return;
+    }
+
+    if (items.length) {
+      validation.classList.add("is-error");
+      validationCount.textContent = String(items.length);
+      items.forEach((s) => {
+        validationList.appendChild(text("div", "wdValidationItem", s));
+      });
+      return;
+    }
+
+    validationCount.textContent = "";
+  }
+
+  function render() {
+    btnRemove.disabled = !state.selected || !canRemove(state.selected);
+    btnUp.disabled = !state.selected || isPinned(state.selected);
+    btnDown.disabled = !state.selected || isPinned(state.selected);
+
+    clear(body);
+    state.draft.forEach((sid, idx) => {
+      body.appendChild(renderStepRow(sid, idx));
     });
 
-    clear(palBody);
+    clear(paletteGroups);
     const q = String(search.value || "").toLowerCase();
     const filtered = state.palette
       .filter((it) => it && it.step_id)
@@ -468,12 +570,60 @@
     const optional = filtered.filter((it) => String(it.kind) === "optional");
     const conditional = filtered.filter((it) => String(it.kind) === "conditional");
 
-    palBody.appendChild(renderPaletteGroup("Mandatory", mandatory));
-    palBody.appendChild(renderPaletteGroup("Optional", optional));
-    palBody.appendChild(renderPaletteGroup("Conditional", conditional));
+    paletteGroups.appendChild(renderPaletteGroup("Mandatory", "mandatory", mandatory));
+    paletteGroups.appendChild(renderPaletteGroup("Optional", "optional", optional));
+    paletteGroups.appendChild(renderPaletteGroup("Conditional", "conditional", conditional));
   }
 
   search.addEventListener("input", () => render());
+
+  optToggle.addEventListener("change", () => {
+    state.showOptional = !!optToggle.checked;
+    render();
+  });
+
+  btnRemove.addEventListener("click", () => {
+    const sid = state.selected;
+    if (!sid) return;
+    if (!canRemove(sid)) {
+      pushValidation("Cannot remove locked or mandatory step: " + sid);
+      return;
+    }
+    removeStep(sid);
+  });
+
+  btnUp.addEventListener("click", () => {
+    const sid = state.selected;
+    if (!sid) return;
+    if (isPinned(sid)) return;
+    const from = idxOf(sid);
+    if (from <= 0) return;
+    const target = state.draft[from - 1];
+    moveStep(sid, target);
+  });
+
+  btnDown.addEventListener("click", () => {
+    const sid = state.selected;
+    if (!sid) return;
+    if (isPinned(sid)) return;
+    const from = idxOf(sid);
+    if (from < 0 || from >= state.draft.length - 1) return;
+    const target = state.draft[from + 2] || null;
+    moveStep(sid, target);
+  });
+
+  btnAdd.addEventListener("click", () => {
+    const q = String(search.value || "").toLowerCase();
+    const matches = state.palette
+      .filter((it) => it && it.step_id)
+      .filter((it) => String(it.step_id).toLowerCase().includes(q));
+
+    if (matches.length !== 1) {
+      pushValidation("Add Step requires search to match exactly one palette item.");
+      return;
+    }
+    addStep(matches[0].step_id);
+  });
 
   ui.reload && ui.reload.addEventListener("click", reloadAll);
   ui.validate && ui.validate.addEventListener("click", validateDraft);

@@ -212,3 +212,244 @@ textarea {
   flex-direction: column;
   gap: 2px;
 }
+
+/* WizardDefinition editor (Variant 1: Compact Column Editor) */
+
+.wdHidden {
+  display: none;
+}
+
+.wdLayout {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.wdToolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.wdToggle {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  opacity: 0.9;
+  user-select: none;
+}
+
+.wdToggleInput {
+  margin: 0;
+}
+
+.wdTable {
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.wdHead,
+.wdRow {
+  display: grid;
+  grid-template-columns: 90px 1fr 110px 90px 110px;
+  gap: 0;
+  align-items: center;
+}
+
+.wdHead {
+  background: #0f1626;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  font-weight: 700;
+}
+
+.wdBody {
+  background: #162033;
+}
+
+.wdRow {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.wdRow:last-child {
+  border-bottom: 0;
+}
+
+.wdRow.is-selected {
+  outline: 2px solid rgba(255, 255, 255, 0.20);
+  outline-offset: -2px;
+}
+
+.wdCellOrder,
+.wdCellId,
+.wdCellType,
+.wdCellReq,
+.wdCellActions {
+  padding: 10px;
+}
+
+.wdCellOrder {
+  display: inline-flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.wdDragHandle {
+  display: inline-block;
+  opacity: 0.85;
+  cursor: grab;
+  user-select: none;
+  padding: 2px 6px;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+}
+
+.wdDragHandle.is-disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.wdOrderNum {
+  opacity: 0.85;
+}
+
+.wdTypeBadge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  opacity: 0.95;
+}
+
+.wdRow.kind-mandatory .wdTypeBadge {
+  background: rgba(68, 170, 255, 0.14);
+}
+
+.wdRow.kind-optional .wdTypeBadge {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.wdRow.kind-conditional .wdTypeBadge {
+  background: rgba(255, 187, 68, 0.14);
+}
+
+.wdReqIcon {
+  opacity: 0.9;
+}
+
+.wdRow.is-locked .wdReqIcon {
+  font-weight: 700;
+}
+
+.wdDropHint {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px dashed rgba(255, 255, 255, 0.22);
+  border-radius: 12px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.wdDropHint.is-visible {
+  opacity: 1;
+}
+
+.wdValidation {
+  margin-top: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 12px;
+  overflow: hidden;
+}
+
+.wdValidationHeader {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 12px;
+  background: #0f1626;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.wdValidationCount {
+  opacity: 0.85;
+}
+
+.wdValidationList {
+  padding: 10px 12px;
+}
+
+.wdValidationItem {
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.wdValidationItem:last-child {
+  border-bottom: 0;
+}
+
+.wdValidation.is-ok {
+  border-color: rgba(80, 220, 120, 0.40);
+}
+
+.wdValidation.is-error {
+  border-color: rgba(255, 154, 162, 0.40);
+}
+
+.wdPalette {
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 12px;
+  padding: 12px;
+  background: #162033;
+}
+
+.wdPaletteSearch {
+  margin-bottom: 10px;
+}
+
+.wdPaletteSearchInput {
+  width: 100%;
+}
+
+.wdPaletteGroups {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.wdPaletteGroupTitle {
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.wdPaletteItem {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.wdPaletteItemId {
+  font-family:
+    ui-monospace,
+    SFMono-Regular,
+    Menlo,
+    Monaco,
+    Consolas,
+    "Liberation Mono",
+    "Courier New",
+    monospace;
+  font-size: 12px;
+  opacity: 0.95;
+}
+
+.wdPaletteAdd {
+  padding: 7px 10px;
+}
