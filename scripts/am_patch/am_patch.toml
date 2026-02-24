@@ -21,7 +21,7 @@ ipc_socket_on_startup_wait_s = 0
 
 # Canonical (supported by runner; missing in your file)
 # success_archive_name = "{repo}-{branch}.zip"
-success_archive_name = "{repo}-{branch}.zip"
+success_archive_name = "{repo}-{branch}_{issue}.zip"
 # Placeholders for success_archive_name:
 #   {repo}   - repository name
 #   {branch} - current branch (or "detached")
