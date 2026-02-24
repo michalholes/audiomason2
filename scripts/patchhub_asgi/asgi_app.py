@@ -132,6 +132,8 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
         from patchhub.job_store import list_job_jsons
 
         def _load_disk_jobs_sync(mem_by_id: dict[str, object]) -> list[Any]:
+            from datetime import UTC, datetime
+
             disk_raw = list_job_jsons(core.jobs_root, limit=200)
             disk: list[Any] = []
             for r in disk_raw:
@@ -139,8 +141,22 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
                 if not jid or jid in mem_by_id:
                     continue
                 j = core._load_job_from_disk(jid)
-                if j is not None:
-                    disk.append(j)
+                if j is None:
+                    continue
+
+                status = str(getattr(j, "status", ""))
+                if status in ("queued", "running"):
+                    j.status = "fail"
+                    j.ended_utc = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+                    j.error = "orphaned: not in memory queue"
+                    job_dir = core.jobs_root / jid
+                    job_dir.mkdir(parents=True, exist_ok=True)
+                    (job_dir / "job.json").write_text(
+                        json.dumps(j.to_json(), ensure_ascii=True, indent=2),
+                        encoding="utf-8",
+                    )
+
+                disk.append(j)
             return disk
 
         disk = await to_thread(_load_disk_jobs_sync, mem_by_id)
@@ -192,6 +208,7 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
                 self.patches_root = core.patches_root
                 self.jobs_root = core.jobs_root
                 self.queue = self
+                self._pending: list[asyncio.Task[None]] = []
 
             def _load_job_from_disk(self, job_id: str):
                 return core._load_job_from_disk(job_id)
@@ -200,10 +217,18 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
                 await core.queue.enqueue(job)
 
             def enqueue(self, job: Any) -> None:
-                asyncio.get_running_loop().create_task(self._enqueue_async(job))
+                t = asyncio.get_running_loop().create_task(self._enqueue_async(job))
+                self._pending.append(t)
 
         adapter = _Adapter(core)
         status, data = api_jobs_enqueue(adapter, body)
+        if status < 400 and adapter._pending:
+            try:
+                await asyncio.gather(*adapter._pending)
+            except Exception as e:
+                msg = f"enqueue_failed: {type(e).__name__}: {e}"
+                msg = msg.encode("ascii", errors="replace").decode("ascii")
+                raise HTTPException(status_code=500, detail=msg) from e
         return _json_bytes_response(status, data)
 
     @app.post("/api/parse_command")
