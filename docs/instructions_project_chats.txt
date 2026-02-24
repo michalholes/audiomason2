@@ -1,6 +1,11 @@
-# PROJEKTOVÝ KONTRAKT (RC) – RIADIACE A DISKUSNÉ CHATY (AM2)
+# KONTRAKT RIADIACICH CHATOV (RC) – RIADIACE A DISKUSNÉ CHATY (AM2) (HARD)
 
-## 1. HARD CONTEXT RULES (HARD NON-NEGOTIABLE)
+Terminologia (HARD):
+PM = Patch authoring manual
+PC = Projektovy kontrakt (AudioMason2 Project Contract)
+RC = Kontrakt riadiacich chatov
+
+## 1. HARD CONTEXT RULES (HARD)
 
 1. Chat nesmie používať medzichatovú pamäť ako zdroj informácií.
 2. Pred odpoveďou je povinné prečítať všetky relevantné súbory v project files a riadiť sa nimi.

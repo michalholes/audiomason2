@@ -1,12 +1,12 @@
 # AudioMason2 - Architecture Specification (Authoritative)
 
-Specification Version: 1.1.22
+Specification Version: 1.1.23
 
 This document contains the ARCH layer of the AudioMason2 specification.
-It defines architectural invariants and contracts without wire-level HTTP/JSON details
-and without file-layout bindings.
+It defines architectural invariants and contracts without wire-level
+HTTP/JSON details and without file-layout bindings.
 
----
+------------------------------------------------------------------------
 
 # AudioMason2 - Project Specification (Authoritative)
 
@@ -51,7 +51,7 @@ Rules:
 
 -   Start at version 1.0.0.
 -   Every change to this specification MUST increment the patch number
-    by +1 (e.g. 1.0.0 -\> 1.0.1).
+    by +1 (e.g. 1.0.0 -\> 1.0.1).
 -   Every change delivered by a patch MUST be recorded in
     docs/changes.md.
 -   Each change entry in docs/changes.md MUST start with an ISO 8601
@@ -67,7 +67,7 @@ first or oldest first, but consistent), - one or more change
 descriptions per timestamp.
 
 It MUST NOT contain: - issue numbers or issue references, - issue
-groupings or headings (e.g. "Issue 123"), - patch IDs, commit hashes, or
+groupings or headings (e.g. "Issue 123"), - patch IDs, commit hashes, or
 author names, - explanations of motivation, discussion, or process.
 
 docs/changes.md records **what changed and when**, nothing else. Process
@@ -258,7 +258,7 @@ The source of each resolved value must be traceable in debug mode.
 -   ConfigResolver must expose an authoritative schema registry for
     known configuration keys.
 -   Each schema entry must define at minimum:
-    -   key_path (dot notation, e.g. "web.port")
+    -   key_path (dot notation, e.g. "web.port")
     -   value_type ("string" \| "int" \| "bool" \| "enum" \| "list" \|
         "object" \| "path")
     -   description (ASCII-only)
@@ -313,8 +313,8 @@ Allowed values (after normalization): - `quiet` - `normal` - `verbose` -
 ### 6.7.A Console Output Policy (Normative)
 
 In canonical logging level `normal`, the interactive CLI launcher
-(`audiomason import`) MUST NOT emit high-volume internal INFO logs
-from underlying services/plugins to the interactive console UI output.
+(`audiomason import`) MUST NOT emit high-volume internal INFO logs from
+underlying services/plugins to the interactive console UI output.
 
 Such logs MUST remain available via LogBus.
 
@@ -446,7 +446,8 @@ free. - No numeric levels and no coupling to any logging library.
 -   It is the only source of truth for:
     -   discovery
     -   enable/disable state
-    -   plugin configuration stored in host config under the canonical key-space
+    -   plugin configuration stored in host config under the canonical
+        key-space
     -   metadata
 
 Multiple parallel plugin state mechanisms are forbidden.
@@ -455,7 +456,7 @@ Multiple parallel plugin state mechanisms are forbidden.
 
 Plugin configuration is host configuration and MUST be stored under:
 
--   plugins.<plugin_id>.config.<key>
+-   plugins.`<plugin_id>`{=html}.config.`<key>`{=html}
 
 #### 7.1.2 Plugin config default normalization (deterministic)
 
@@ -465,8 +466,10 @@ During plugin load, the host performs an explicit normalization step:
     -   plugin_id
     -   plugin manifest config_schema
 -   Behavior:
-    -   For each schema key missing under plugins.<plugin_id>.config:
-        -   If the schema entry defines a default value (field "default"), write that default.
+    -   For each schema key missing under
+        plugins.`<plugin_id>`{=html}.config:
+        -   If the schema entry defines a default value (field
+            "default"), write that default.
     -   Existing user values are never overwritten.
     -   If no keys are missing, no write occurs.
     -   Deterministic iteration order: lexicographic by schema key.
@@ -475,8 +478,9 @@ During plugin load, the host performs an explicit normalization step:
 
 #### 7.1.3 Obsolete plugins.yaml
 
-The legacy file "~/.config/audiomason/plugins.yaml" is obsolete/unsupported and MUST NOT be used
-for plugin state or plugin configuration.
+The legacy file "\~/.config/audiomason/plugins.yaml" is
+obsolete/unsupported and MUST NOT be used for plugin state or plugin
+configuration.
 
 ------------------------------------------------------------------------
 
@@ -865,30 +869,35 @@ Location:
 
 ## 10.1 Identity and Scope
 
-- Provided by plugin with manifest.name == "import".
-- Implements PHASE 0 (preflight/discovery) and PHASE 1 (interactive wizard engine).
-- Produces PHASE 2 job requests only; it MUST NOT execute PHASE 2 processing directly.
-- UI layers (CLI/Web) are renderers only:
-  - They render steps, collect inputs, submit payloads.
-  - They MUST NOT implement validation, transitions, conflict scanning, job request generation, or any import-specific business logic.
-- The system MUST remain functional if the import plugin is disabled or absent.
+-   Provided by plugin with manifest.name == "import".
+-   Implements PHASE 0 (preflight/discovery) and PHASE 1 (interactive
+    wizard engine).
+-   Produces PHASE 2 job requests only; it MUST NOT execute PHASE 2
+    processing directly.
+-   UI layers (CLI/Web) are renderers only:
+    -   They render steps, collect inputs, submit payloads.
+    -   They MUST NOT implement validation, transitions, conflict
+        scanning, job request generation, or any import-specific
+        business logic.
+-   The system MUST remain functional if the import plugin is disabled
+    or absent.
 
 ## 10.2 Three-Phase Enforcement (Import Wizard)
 
 The wizard MUST follow the global three-phase model:
 
-- PHASE 0: Preflight / discovery
-  - No user interaction.
-  - No jobs are created.
-  - No mutation of processed registry.
-- PHASE 1: User input
-  - Interactive steps only.
-  - No job creation.
-  - No processing execution.
-- PHASE 2: Processing
-  - STRICTLY non-interactive.
-  - Create jobs from canonical job_requests.json only.
-  - No prompts, no questions, no UI calls.
+-   PHASE 0: Preflight / discovery
+    -   No user interaction.
+    -   No jobs are created.
+    -   No mutation of processed registry.
+-   PHASE 1: User input
+    -   Interactive steps only.
+    -   No job creation.
+    -   No processing execution.
+-   PHASE 2: Processing
+    -   STRICTLY non-interactive.
+    -   Create jobs from canonical job_requests.json only.
+    -   No prompts, no questions, no UI calls.
 
 Any violation is a hard contract error.
 
@@ -896,190 +905,212 @@ Any violation is a hard contract error.
 
 ### 10.3.1 Workflow Authority (WizardDefinition)
 
-The wizard state machine (step set and transition graph) is defined by the effective workflow snapshot
-generated at session creation time.
+The wizard state machine (step set and transition graph) is defined by
+the effective workflow snapshot generated at session creation time.
 
-Source artifacts:
-- WizardDefinition (structural workflow): <wizards_root>/import/definitions/wizard_definition.json
-- FlowConfig (non-structural tuning only): <wizards_root>/import/config/flow_config.json
+Source artifacts: - WizardDefinition (structural workflow):
+`<wizards_root>`{=html}/import/definitions/wizard_definition.json -
+FlowConfig (non-structural tuning only):
+`<wizards_root>`{=html}/import/config/flow_config.json
 
-At session creation, the engine MUST generate and persist the effective workflow snapshot into:
-- sessions/<session_id>/effective_model.json
+At session creation, the engine MUST generate and persist the effective
+workflow snapshot into: -
+sessions/`<session_id>`{=html}/effective_model.json
 
-This effective snapshot is the single source of truth for the active session.
+This effective snapshot is the single source of truth for the active
+session.
 
 ### 10.3.2 Mandatory Steps and Ordering Constraints
 
-WizardDefinition MAY add, remove, reorder, or insert steps, but the engine MUST enforce mandatory
-constraints to preserve phases and safety invariants.
+WizardDefinition MAY add, remove, reorder, or insert steps, but the
+engine MUST enforce mandatory constraints to preserve phases and safety
+invariants.
 
-Mandatory step_ids (MUST exist in every effective workflow):
-S0  select_authors
-S1  select_books
-S2  plan_preview_batch (computed-only)
-S10 conflict_policy
-S12 final_summary_confirm
-S14 processing (PHASE 2 terminal)
+Mandatory step_ids (MUST exist in every effective workflow): S0
+select_authors S1 select_books S2 plan_preview_batch (computed-only) S10
+conflict_policy S12 final_summary_confirm S14 processing (PHASE 2
+terminal)
 
-Mandatory ordering constraints (MUST hold):
-- select_authors precedes select_books.
-- select_books precedes plan_preview_batch.
-- plan_preview_batch precedes conflict_policy.
-- conflict_policy precedes final_summary_confirm.
-- final_summary_confirm precedes processing.
-- processing is the only PHASE 2 terminal step.
+Mandatory ordering constraints (MUST hold): - select_authors precedes
+select_books. - select_books precedes plan_preview_batch. -
+plan_preview_batch precedes conflict_policy. - conflict_policy precedes
+final_summary_confirm. - final_summary_confirm precedes processing. -
+processing is the only PHASE 2 terminal step.
 
-Optional steps MAY be inserted between mandatory steps, subject to Engine Guards (10.6) and phase rules.
+Optional steps MAY be inserted between mandatory steps, subject to
+Engine Guards (10.6) and phase rules.
 
 ### 10.3.3 Default Workflow
 
-The default workflow provided by the system SHALL remain strictly linear and equivalent to the previous
-canonical order, but it is now expressed as the default WizardDefinition rather than as a hardcoded list.
-### 10.3.3 Deterministic Error Behavior (ERR/OK)
+The default workflow provided by the system SHALL remain strictly linear
+and equivalent to the previous canonical order, but it is now expressed
+as the default WizardDefinition rather than as a hardcoded list. \###
+10.3.3 Deterministic Error Behavior (ERR/OK)
 
-- ERR(payload): state MUST NOT advance; the current_step_id remains unchanged.
-- OK(payload): state MUST advance deterministically to the next step (or next enabled step).
+-   ERR(payload): state MUST NOT advance; the current_step_id remains
+    unchanged.
+-   OK(payload): state MUST advance deterministically to the next step
+    (or next enabled step).
 
-Special rule: plan_preview_batch error handling MUST be deterministic:
-- If plan_preview_batch fails due to invalid or inconsistent selection, the engine MUST transition back to select_books.
+Special rule: plan_preview_batch error handling MUST be deterministic: -
+If plan_preview_batch fails due to invalid or inconsistent selection,
+the engine MUST transition back to select_books.
 
 ### 10.3.4 Conditional Conflict Path
 
 In final_summary_confirm:
 
-- If confirm_start == false:
-  - The state MUST remain final_summary_confirm (user must set true to proceed).
-- If confirm_start == true AND conflict_mode != "ask":
-  - Transition to processing.
-- If confirm_start == true AND conflict_mode == "ask":
-  - Engine MUST perform a conflict scan.
-  - If conflicts exist: transition to resolve_conflicts_batch.
-  - If no conflicts: transition to processing.
+-   If confirm_start == false:
+    -   The state MUST remain final_summary_confirm (user must set true
+        to proceed).
+-   If confirm_start == true AND conflict_mode != "ask":
+    -   Transition to processing.
+-   If confirm_start == true AND conflict_mode == "ask":
+    -   Engine MUST perform a conflict scan.
+    -   If conflicts exist: transition to resolve_conflicts_batch.
+    -   If no conflicts: transition to processing.
 
-In resolve_conflicts_batch:
-- ERR: remain resolve_conflicts_batch.
-- OK: transition back to final_summary_confirm.
+In resolve_conflicts_batch: - ERR: remain resolve_conflicts_batch. - OK:
+transition back to final_summary_confirm.
 
 ### 10.3.5 Renderer Neutrality (Hard Rule)
 
-Renderers (CLI/Web) MUST NOT contain import-specific branching logic such as "if step_id == ...".
-All step behavior (validation, transitions, conditional branching) MUST live in the wizard engine.
+Renderers (CLI/Web) MUST NOT contain import-specific branching logic
+such as "if step_id == ...". All step behavior (validation, transitions,
+conditional branching) MUST live in the wizard engine.
 
 ### 10.3.6 CLI Launcher and Renderer Configuration (Normative)
 
-The CLI MAY provide an interactive renderer for the Import Wizard. This is UI-only.
-It MUST delegate validation, transitions, conflict logic, and job request generation to the engine.
+The CLI MAY provide an interactive renderer for the Import Wizard. This
+is UI-only. It MUST delegate validation, transitions, conflict logic,
+and job request generation to the engine.
 
-Behavior:
-- The top-level command `audiomason import` is a CLI launcher for the renderer.
-- Explicit subcommands `audiomason import wizard ...` and
-  `audiomason import editor ...` MUST remain supported and unchanged.
+Behavior: - The top-level command `audiomason import` is a CLI launcher
+for the renderer. - Explicit subcommands `audiomason import wizard ...`
+and `audiomason import editor ...` MUST remain supported and unchanged.
 
-Configuration (read via ConfigResolver):
-- `plugins.import.cli.launcher_mode`: one of `interactive` | `fixed` | `disabled`.
-  - `interactive` (default): `audiomason import` runs an interactive renderer and
-    MAY prompt for root/path.
-  - `fixed`: `audiomason import` runs the renderer without prompts using configured
-    defaults.
-  - `disabled`: `audiomason import` MUST print usage (legacy behavior) and MUST NOT
-    start the renderer.
-- `plugins.import.cli.default_root`: default RootName for session creation (default:
-  `inbox`).
-- `plugins.import.cli.default_path`: default relative path under the selected root
-  (default: empty string).
-- `plugins.import.cli.noninteractive`: if true, the renderer MUST NOT prompt and MUST
-  fail if required inputs are missing.
-- `plugins.import.cli.render.confirm_defaults`: if true, Enter MAY accept defaults
-  when prompting (default: true).
-- `plugins.import.cli.render.show_internal_ids`: if true, the renderer MAY display
-  internal ids (default: false).
-- `plugins.import.cli.render.max_list_items`: max items displayed in interactive lists
-  (default: 200).
-- `plugins.import.cli.render.nav_ui`: navigation UI mode for interactive runs:
-  - `prompt` (default): show Action prompt after step submission
-  - `inline`: do not show Action prompt; accept `:back` and `:cancel` as inline commands
-  - `both`: accept inline commands and show Action prompt
+Configuration (read via ConfigResolver): -
+`plugins.import.cli.launcher_mode`: one of `interactive` \| `fixed` \|
+`disabled`. - `interactive` (default): `audiomason import` runs an
+interactive renderer and MAY prompt for root/path. - `fixed`:
+`audiomason import` runs the renderer without prompts using configured
+defaults. - `disabled`: `audiomason import` MUST print usage (legacy
+behavior) and MUST NOT start the renderer. -
+`plugins.import.cli.default_root`: default RootName for session creation
+(default: `inbox`). - `plugins.import.cli.default_path`: default
+relative path under the selected root (default: empty string). -
+`plugins.import.cli.noninteractive`: if true, the renderer MUST NOT
+prompt and MUST fail if required inputs are missing. -
+`plugins.import.cli.render.confirm_defaults`: if true, Enter MAY accept
+defaults when prompting (default: true). -
+`plugins.import.cli.render.show_internal_ids`: if true, the renderer MAY
+display internal ids (default: false). -
+`plugins.import.cli.render.max_list_items`: max items displayed in
+interactive lists (default: 200). - `plugins.import.cli.render.nav_ui`:
+navigation UI mode for interactive runs: - `prompt` (default): show
+Action prompt after step submission - `inline`: do not show Action
+prompt; accept `:back` and `:cancel` as inline commands - `both`: accept
+inline commands and show Action prompt
 
-CLI overrides:
-- The launcher MAY accept CLI flags that override the resolver values for the current run.
-- Precedence MUST be: CLI flags > resolver config > hard-coded defaults.
-- The launcher MUST provide a way to force legacy usage output for a single run
-  (e.g. `--no-launcher` or `--launcher disabled`).
+CLI overrides: - The launcher MAY accept CLI flags that override the
+resolver values for the current run. - Precedence MUST be: CLI flags \>
+resolver config \> hard-coded defaults. - The launcher MUST provide a
+way to force legacy usage output for a single run (e.g. `--no-launcher`
+or `--launcher disabled`).
 
-Root/path rules:
-- Root MUST be validated against RootName (file_io roots).
-- Path MUST be a relative path and MUST NOT contain `..`.
-- Any filesystem listing performed by the renderer MUST be done via FileService and
-  RootName (no direct filesystem access).
+Root/path rules: - Root MUST be validated against RootName (file_io
+roots). - Path MUST be a relative path and MUST NOT contain `..`. - Any
+filesystem listing performed by the renderer MUST be done via
+FileService and RootName (no direct filesystem access).
 
 ## 10.12 Config Governance (Editors and Storage)
 
 If visual editors exist:
 
-- A Wizard editor modifies WizardDefinition only (structural workflow).
-- A Config editor modifies FlowConfig only (non-structural tuning).
+-   A Wizard editor modifies WizardDefinition only (structural
+    workflow).
+-   A Config editor modifies FlowConfig only (non-structural tuning).
 
-Requirements:
-- Validate FlowConfig on load, save, import, and preset apply.
-- Prevent saving invalid config (invariant violations).
-- Support reset to built-in defaults.
-- If history/rollback is implemented:
-  - keep deterministic history with bounded retention N=5 (MANDATORY)
-  - allow deterministic rollback to a selected historic version
-- Defaults memory (if implemented) MUST NOT update implicitly.
-  - Only explicit user action may update defaults.
-  - Any auto-save (if implemented) MUST be visible and reversible via history.
+Additional editor capabilities (if implemented):
+
+-   A Step Schema editor modifies StepSchema only (field definitions and
+    constraints).
+-   A Provider editor modifies ProviderBindings only (provider
+    selection, mapping, merge policy).
+
+All editor-managed artifacts MUST implement a deterministic
+Draft/Active/History lifecycle: - Draft state - Active state - History
+snapshots (bounded retention = 5) - SHA-256 fingerprint identity over
+canonical JSON bytes - Deterministic activation and rollback
+
+Persisted artifacts MUST NOT include timestamps or editor metadata
+fields.
+
+Requirements: - Validate FlowConfig on load, save, import, and preset
+apply. - Prevent saving invalid config (invariant violations). - Support
+reset to built-in defaults. - If history/rollback is implemented: - keep
+deterministic history with bounded retention N=5 (MANDATORY) - allow
+deterministic rollback to a selected historic version - Defaults memory
+(if implemented) MUST NOT update implicitly. - Only explicit user action
+may update defaults. - Any auto-save (if implemented) MUST be visible
+and reversible via history.
 
 ## 10.13 Performance and Scaling (Deterministic)
 
-Performance rules are non-functional constraints but MUST NOT alter outputs.
+Performance rules are non-functional constraints but MUST NOT alter
+outputs.
 
-- FlowModel build must be lightweight.
-- Selection parser must be linear time.
-- plan_preview_batch output MUST be bounded by preview_limit and MUST surface truncation explicitly.
-- conflict scan SHOULD be optimized with precomputed target path maps when feasible.
-- parallelism MUST be bounded by a hard MAX_PARALLELISM limit in the engine (implementation-defined but fixed).
+-   FlowModel build must be lightweight.
+-   Selection parser must be linear time.
+-   plan_preview_batch output MUST be bounded by preview_limit and MUST
+    surface truncation explicitly.
+-   conflict scan SHOULD be optimized with precomputed target path maps
+    when feasible.
+-   parallelism MUST be bounded by a hard MAX_PARALLELISM limit in the
+    engine (implementation-defined but fixed).
 
-Caches (if implemented):
-- cache keys MUST be deterministic
-- cache miss MUST recompute (never silently fail)
-- enabling/disabling cache MUST NOT change job_requests output
+Caches (if implemented): - cache keys MUST be deterministic - cache miss
+MUST recompute (never silently fail) - enabling/disabling cache MUST NOT
+change job_requests output
 
 ## 10.14 Diagnostics (Mandatory)
 
-The import engine MUST emit via the Core authoritative diagnostic entry point:
+The import engine MUST emit via the Core authoritative diagnostic entry
+point:
 
-- session.start
-- session.resume
-- model.load
-- model.validate
-- step.submit
-- plan.compute
-- finalize.request
-- job.create
+-   session.start
+-   session.resume
+-   model.load
+-   model.validate
+-   step.submit
+-   plan.compute
+-   finalize.request
+-   job.create
 
-Diagnostics MUST include at minimum:
-- session_id
-- model_fingerprint
-- discovery_fingerprint
-- effective_config_fingerprint
+Diagnostics MUST include at minimum: - session_id - model_fingerprint -
+discovery_fingerprint - effective_config_fingerprint
 
 ## 10.15 Testing and Enforcement (Hard Gates)
 
 The repository MUST include deterministic tests that enforce:
 
-- FlowBuilder invariants and mandatory step preservation.
-- Selection expression parser grammar and error behavior.
-- Session transitions: ERR does not advance; OK advances deterministically.
-- Conflict ask batch behavior (final_summary_confirm -> resolve_conflicts_batch).
-- Phase enforcement (no jobs in PHASE 1; no step submits in PHASE 2).
-- Registry SUCCESS-only.
-- Canonical serialization stability (golden job_requests comparisons).
-- Renderer neutrality (static enforcement forbidding import-specific branching in UI layers).
-- Single source of truth for step ordering (BaseFlowDefinition defined exactly once).
-- Session snapshot isolation (config changes do not affect active sessions).
-- Conflict re-check before job creation.
-- Idempotency key enforcement (no duplicate jobs).
+-   FlowBuilder invariants and mandatory step preservation.
+-   Selection expression parser grammar and error behavior.
+-   Session transitions: ERR does not advance; OK advances
+    deterministically.
+-   Conflict ask batch behavior (final_summary_confirm -\>
+    resolve_conflicts_batch).
+-   Phase enforcement (no jobs in PHASE 1; no step submits in PHASE 2).
+-   Registry SUCCESS-only.
+-   Canonical serialization stability (golden job_requests comparisons).
+-   Renderer neutrality (static enforcement forbidding import-specific
+    branching in UI layers).
+-   Single source of truth for step ordering (BaseFlowDefinition defined
+    exactly once).
+-   Session snapshot isolation (config changes do not affect active
+    sessions).
+-   Conflict re-check before job creation.
+-   Idempotency key enforcement (no duplicate jobs).
 
 Integration completed (updated): 2026-02-18 06:00:00 UTC
 
@@ -1087,24 +1118,24 @@ Integration completed (updated): 2026-02-18 06:00:00 UTC
 
 ## 10.16 Structural Workflow Authority (WizardDefinition Model)
 
-The Import Wizard structural workflow MUST be defined by a single authoritative
-artifact named WizardDefinition.
+The Import Wizard structural workflow MUST be defined by a single
+authoritative artifact named WizardDefinition.
 
 Location (file_io root: wizards):
 
-<wizards_root>/import/definitions/wizard_definition.json
+`<wizards_root>`{=html}/import/definitions/wizard_definition.json
 
 Rules:
 
-- WizardDefinition defines structural workflow only:
-  - step ordering
-  - step types
-  - structural transitions
-  - action bindings
-- FlowConfig MUST NOT modify structure.
-- FlowConfig MAY modify only non-structural parameters (see 10.4.4).
-- WizardDefinition MUST be versioned and validated on load.
-- Structural edits affect only new sessions.
+-   WizardDefinition defines structural workflow only:
+    -   step ordering
+    -   step types
+    -   structural transitions
+    -   action bindings
+-   FlowConfig MUST NOT modify structure.
+-   FlowConfig MAY modify only non-structural parameters (see 10.4.4).
+-   WizardDefinition MUST be versioned and validated on load.
+-   Structural edits affect only new sessions.
 
 Active sessions MUST use a frozen effective_workflow snapshot.
 
@@ -1114,18 +1145,18 @@ Active sessions MUST use a frozen effective_workflow snapshot.
 
 The Import Wizard MUST use a single interpreter responsible for:
 
-- Step transitions
-- Validation
-- Conflict evaluation
-- Action execution
-- Job request generation
+-   Step transitions
+-   Validation
+-   Conflict evaluation
+-   Action execution
+-   Job request generation
 
 UI layers (CLI/Web) MUST:
 
-- Render step payload only
-- Submit user input
-- Never branch on step_id
-- Never execute plugin logic directly
+-   Render step payload only
+-   Submit user input
+-   Never branch on step_id
+-   Never execute plugin logic directly
 
 Any UI-level business logic is a contract violation.
 
