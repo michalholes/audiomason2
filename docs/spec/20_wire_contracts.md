@@ -448,6 +448,26 @@ Baseline routes:
    - Finalizes PHASE 1 and returns a summary: { "job_ids": [...], "batch_size": <int> }
    - MUST enforce deterministic conflict re-check before job creation (10.11.4).
 
+18) GET  /import/ui/steps-index
+   - Returns a stable index of known wizard steps for UI editors (palette).
+   - Response body:
+     {
+       "items": [
+         {
+           "step_id": "string",
+           "title": "string",
+           "kind": "mandatory|optional|conditional",
+           "pinned": "first|last|none"
+         }
+       ]
+     }
+   - Contract requirements:
+     - items MUST be returned in deterministic order.
+     - step_id MUST be ASCII.
+     - title MUST be ASCII (if no human title exists, use step_id).
+     - kind MUST match the import plugin's runtime classification.
+     - pinned MUST be "first" only for the required first step and "last" only for the required last step.
+
 All editor history and rollback behavior MUST be deterministic and atomic.
 ## 10.6 Engine Guards (Invariants; MUST REJECT)
 

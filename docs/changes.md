@@ -1,3 +1,7 @@
+## 2026-02-24T00:00:00+01:00
+
+-   Import UI: add GET /import/ui/steps-index (read-only palette for visual wizard editor).
+
 ## 2026-02-23T21:45:00+01:00
 
 -   Issue 238: Import CLI editor now exposes explicit FlowConfig and WizardDefinition editor areas.
