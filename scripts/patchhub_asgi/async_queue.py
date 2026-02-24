@@ -11,7 +11,7 @@ from pathlib import Path
 from patchhub.models import JobRecord
 
 from .async_event_pump import start_event_pump
-from .async_events_socket import job_socket_path, send_cancel_sync
+from .async_events_socket import job_socket_path, send_cancel_async
 from .async_runner_exec import AsyncRunnerExecutor
 
 
@@ -65,6 +65,13 @@ def _inject_web_overrides(argv: list[str], job_id: str) -> list[str]:
         out[insert_at:insert_at] = overrides
 
     return out
+
+
+def _persist_job_sync(job_dir: Path, job: JobRecord) -> None:
+    job_dir.mkdir(parents=True, exist_ok=True)
+    (job_dir / "job.json").write_text(
+        json.dumps(job.to_json(), ensure_ascii=True, indent=2), encoding="utf-8"
+    )
 
 
 @dataclass
@@ -124,7 +131,7 @@ class AsyncJobQueue:
     async def enqueue(self, job: JobRecord) -> None:
         async with self._mu:
             self._jobs[job.job_id] = job
-            self._persist(job)
+            await self._persist(job)
         await self._q.put(job.job_id)
 
     async def cancel(self, job_id: str) -> bool:
@@ -141,7 +148,7 @@ class AsyncJobQueue:
                     return False
                 job.status = "canceled"
                 job.ended_utc = utc_now()
-                self._persist(job)
+                await self._persist(job)
             return True
 
         if status == "running":
@@ -152,16 +159,16 @@ class AsyncJobQueue:
                     return False
                 if job.cancel_requested_utc is None:
                     job.cancel_requested_utc = now
-                    self._persist(job)
+                    await self._persist(job)
 
-            sock_ok = send_cancel_sync(job_socket_path(job_id))
+            sock_ok = await send_cancel_async(job_socket_path(job_id))
             if sock_ok:
                 async with self._mu:
                     job = self._jobs.get(job_id)
                     if job is not None:
                         job.cancel_ack_utc = utc_now()
                         job.cancel_source = "socket"
-                        self._persist(job)
+                        await self._persist(job)
                 return True
 
             ok = await self._executor.terminate()
@@ -170,7 +177,7 @@ class AsyncJobQueue:
                     job = self._jobs.get(job_id)
                     if job is not None:
                         job.cancel_source = "terminate"
-                        self._persist(job)
+                        await self._persist(job)
             return ok
 
         return False
@@ -181,12 +188,9 @@ class AsyncJobQueue:
     def _job_dir(self, job_id: str) -> Path:
         return self._jobs_root / job_id
 
-    def _persist(self, job: JobRecord) -> None:
-        d = self._job_dir(job.job_id)
-        d.mkdir(parents=True, exist_ok=True)
-        (d / "job.json").write_text(
-            json.dumps(job.to_json(), ensure_ascii=True, indent=2), encoding="utf-8"
-        )
+    async def _persist(self, job: JobRecord) -> None:
+        job_dir = self._job_dir(job.job_id)
+        await asyncio.to_thread(_persist_job_sync, job_dir, job)
 
     async def _wait_for_runner_slot(self) -> None:
         while True:
@@ -225,7 +229,7 @@ class AsyncJobQueue:
                     continue
                 job.status = "running"
                 job.started_utc = utc_now()
-                self._persist(job)
+                await self._persist(job)
 
             job_dir = self._job_dir(job_id)
             runner_log = job_dir / "runner.log"
@@ -274,7 +278,7 @@ class AsyncJobQueue:
                     else:
                         job.status = "fail"
                         job.ended_utc = utc_now()
-                    self._persist(job)
+                    await self._persist(job)
             except Exception as e:
                 async with self._mu:
                     job = self._jobs.get(job_id)
@@ -283,4 +287,4 @@ class AsyncJobQueue:
                     job.status = "fail" if job.status != "canceled" else job.status
                     job.ended_utc = utc_now()
                     job.error = f"{type(e).__name__}: {e}"
-                    self._persist(job)
+                    await self._persist(job)

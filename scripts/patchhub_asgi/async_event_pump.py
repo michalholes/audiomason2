@@ -5,28 +5,32 @@ import contextlib
 from pathlib import Path
 
 
+def _append_jsonl_line_sync(jsonl_path: Path, line: str) -> None:
+    jsonl_path.parent.mkdir(parents=True, exist_ok=True)
+    with jsonl_path.open("a", encoding="utf-8") as f:
+        f.write(line + "\n")
+
+
 async def _connect_and_stream(socket_path: str, jsonl_path: Path) -> None:
-    reader, _writer = await asyncio.open_unix_connection(socket_path)
+    reader, writer = await asyncio.open_unix_connection(socket_path)
     try:
-        jsonl_path.parent.mkdir(parents=True, exist_ok=True)
-        with jsonl_path.open("a", encoding="utf-8") as f:
-            while True:
-                raw = await reader.readline()
-                if not raw:
-                    return
-                try:
-                    line = raw.decode("utf-8")
-                except Exception:
-                    line = raw.decode("utf-8", errors="replace")
-                line = line.rstrip("\n")
-                if not line.strip():
-                    continue
-                f.write(line + "\n")
-                f.flush()
+        while True:
+            raw = await reader.readline()
+            if not raw:
+                return
+            try:
+                line = raw.decode("utf-8")
+            except Exception:
+                line = raw.decode("utf-8", errors="replace")
+            line = line.rstrip("\n")
+            if not line.strip():
+                continue
+            await asyncio.to_thread(_append_jsonl_line_sync, jsonl_path, line)
     finally:
-        # The writer will be closed automatically when GC'd; close explicitly.
         with contextlib.suppress(Exception):
-            _writer.close()
+            writer.close()
+        with contextlib.suppress(Exception):
+            await writer.wait_closed()
 
 
 async def start_event_pump(

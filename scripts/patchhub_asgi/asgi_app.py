@@ -20,6 +20,7 @@ from fastapi.responses import (
 from patchhub.app_support import read_tail
 
 from .async_app_core import AsyncAppCore
+from .sse_jsonl_stream import stream_job_events_sse
 
 UPLOAD_PATCH_FILE: Any = File(...)
 
@@ -307,10 +308,6 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
                 assert job is not None
                 jsonl_path = core._job_jsonl_path(job)
 
-            offset = 0
-            last_growth = asyncio.get_running_loop().time()
-            last_ping = asyncio.get_running_loop().time()
-
             async def job_status() -> str | None:
                 j = await core.queue.get_job(job_id)
                 if j is not None:
@@ -319,75 +316,12 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
                     return str(disk_job.status)
                 return None
 
-            while True:
-                status = await job_status()
-                if status is None:
-                    data = json.dumps({"reason": "job_not_found"}, ensure_ascii=True)
-                    yield f"event: end\ndata: {data}\n\n".encode()
-                    return
-
-                if status == "running" and not jsonl_path.exists():
-                    now = asyncio.get_running_loop().time()
-                    if now - last_ping >= 10.0:
-                        yield b": ping\n\n"
-                        last_ping = now
-                    await asyncio.sleep(0.2)
-                    continue
-
-                if not jsonl_path.exists():
-                    data = json.dumps(
-                        {"reason": "job_completed", "status": str(status)}, ensure_ascii=True
-                    )
-                    yield f"event: end\ndata: {data}\n\n".encode()
-                    return
-
-                try:
-                    with jsonl_path.open("rb") as fp:
-                        fp.seek(offset)
-                        chunk = fp.read()
-                        if chunk:
-                            last_growth = asyncio.get_running_loop().time()
-                            parts = chunk.split(b"\n")
-                            if chunk.endswith(b"\n"):
-                                complete = parts[:-1]
-                                tail = b""
-                            else:
-                                complete = parts[:-1]
-                                tail = parts[-1]
-                            for raw in complete:
-                                raw = raw.strip()
-                                if not raw:
-                                    continue
-                                try:
-                                    s = raw.decode("utf-8")
-                                except Exception:
-                                    s = raw.decode("utf-8", errors="replace")
-                                yield f"data: {s}\n\n".encode()
-                            offset = fp.tell() - len(tail)
-                except FileNotFoundError:
-                    data = json.dumps(
-                        {"reason": "job_completed", "status": str(status)}, ensure_ascii=True
-                    )
-                    yield f"event: end\ndata: {data}\n\n".encode()
-                    return
-                except OSError:
-                    data = json.dumps({"reason": "io_error"}, ensure_ascii=True)
-                    yield f"event: end\ndata: {data}\n\n".encode()
-                    return
-
-                now = asyncio.get_running_loop().time()
-                if now - last_ping >= 10.0:
-                    yield b": ping\n\n"
-                    last_ping = now
-
-                if status != "running" and now - last_growth >= 0.5:
-                    data = json.dumps(
-                        {"reason": "job_completed", "status": str(status)}, ensure_ascii=True
-                    )
-                    yield f"event: end\ndata: {data}\n\n".encode()
-                    return
-
-                await asyncio.sleep(0.2)
+            async for chunk in stream_job_events_sse(
+                job_id=str(job_id),
+                jsonl_path=jsonl_path,
+                job_status=job_status,
+            ):
+                yield chunk
 
         return StreamingResponse(gen(), media_type="text/event-stream")
 

@@ -5,6 +5,17 @@ from dataclasses import dataclass
 from pathlib import Path
 
 
+def _truncate_file_sync(path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("", encoding="utf-8")
+
+
+def _append_text_sync(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8") as f:
+        f.write(text)
+
+
 @dataclass(frozen=True)
 class ExecResult:
     return_code: int
@@ -34,7 +45,7 @@ class AsyncRunnerExecutor:
         return True
 
     async def run(self, argv: list[str], cwd: Path, log_path: Path) -> ExecResult:
-        log_path.parent.mkdir(parents=True, exist_ok=True)
+        await asyncio.to_thread(_truncate_file_sync, log_path)
 
         proc = await asyncio.create_subprocess_exec(
             *argv,
@@ -46,18 +57,16 @@ class AsyncRunnerExecutor:
             self._proc = proc
 
         try:
-            with log_path.open("w", encoding="utf-8") as f:
-                assert proc.stdout is not None
-                while True:
-                    raw = await proc.stdout.readline()
-                    if not raw:
-                        break
-                    try:
-                        line = raw.decode("utf-8")
-                    except Exception:
-                        line = raw.decode("utf-8", errors="replace")
-                    f.write(line)
-                    f.flush()
+            assert proc.stdout is not None
+            while True:
+                raw = await proc.stdout.readline()
+                if not raw:
+                    break
+                try:
+                    line = raw.decode("utf-8")
+                except Exception:
+                    line = raw.decode("utf-8", errors="replace")
+                await asyncio.to_thread(_append_text_sync, log_path, line)
 
             rc = await proc.wait()
             return ExecResult(return_code=int(rc))
