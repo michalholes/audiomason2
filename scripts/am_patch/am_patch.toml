@@ -45,8 +45,8 @@ success_archive_name = "{repo}-{branch}_{issue}.zip"
 # Candidate selection is a glob in the selected destination directory and is sorted
 # lexicographically by filename (mtime is not used). The newest archive created by the
 # current run is never deleted.
-# success_archive_cleanup_glob_template = ""
-# success_archive_keep_count = 0
+success_archive_cleanup_glob_template = "audiomason2-main"
+success_archive_keep_count = 0
 
 
 [git]

@@ -111,7 +111,14 @@ Rules:
 4. The commit message used in the canonical invocation command MUST match the file content exactly after stripping exactly one trailing LF if present (no other trimming).
 5. The commit message MUST be written in English (no other language is permitted).
 ------------------------------------------------------------------------
-
+## Issue number file (HARD) 
+ 
+1. The patch zip MUST include exactly one issue file at the zip root named: 
+   ISSUE_NUMBER.txt 
+2. The file MUST be ASCII-only and use LF newlines. 
+3. The file content MUST be non-empty. 
+4. The issue number  used in the canonical invocation command MUST match the file content exactly after stripping exactly one trailing LF if present (no other trimming). 
+------------------------------------------------------------------------ 
 ## Patch requirements (HARD)
 
 1.   Paths are repo-relative.
