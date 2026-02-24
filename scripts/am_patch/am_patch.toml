@@ -20,7 +20,7 @@ ipc_socket_on_startup_wait_s = 0
 # patch_dir = "/home/pi/audiomason2/patches"
 
 # Canonical (supported by runner; missing in your file)
-success_archive_name = "{repo}-{branch}-v{attempt:02d}.zip"
+success_archive_name = "{repo}-{branch}.zip"
 
 
 [git]
