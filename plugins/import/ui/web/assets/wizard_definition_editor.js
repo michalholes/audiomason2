@@ -165,7 +165,7 @@
     editingEdgeIdx: null,
   };
 
-  const layout = el("div", "wdLayout");
+  const layout = el("div", "wdLayout wdLayoutSingle");
   const leftCol = el("div", "wdLeftCol");
   const rightCol = el("div", "wdPalette");
 
@@ -244,58 +244,93 @@
   leftCol.appendChild(validation);
 
   layout.appendChild(leftCol);
-  layout.appendChild(rightCol);
 
   ui.ta.parentNode.insertBefore(layout, ui.ta);
   ui.ta.classList.add("wdHidden");
 
-
-  // Unified right-side panel: Step Details (existing) + Transitions
-  const flowRight = document.querySelector(".flowRight");
+  // Deterministic sidebar: Step Details + Transitions + Step Palette
+  const flowSidebar = document.getElementById("flowEditorSidebar");
   const stepPanel = document.getElementById("flowStepPanel");
   const transitionsPanel = el("div", "flowTransPanel");
 
-  function buildFlowRightTabs() {
-    if (!flowRight || !stepPanel) return;
+  function buildSidebarTabs() {
+    if (!flowSidebar || !stepPanel) return;
 
     const tabBar = el("div", "flowRightTabs");
     const btnDetails = text("button", "flowRightTab", "Step Details");
     const btnTrans = text("button", "flowRightTab", "Transitions");
+    const btnPalette = text("button", "flowRightTab", "Step Palette");
     btnDetails.type = "button";
     btnTrans.type = "button";
+    btnPalette.type = "button";
 
     const panelDetails = el("div", "flowRightPanel");
     panelDetails.dataset.tab = "details";
     const panelTrans = el("div", "flowRightPanel");
     panelTrans.dataset.tab = "transitions";
+    const panelPalette = el("div", "flowRightPanel");
+    panelPalette.dataset.tab = "palette";
 
     panelDetails.appendChild(stepPanel);
     panelTrans.appendChild(transitionsPanel);
+    panelPalette.appendChild(rightCol);
 
     tabBar.appendChild(btnDetails);
     tabBar.appendChild(btnTrans);
+    tabBar.appendChild(btnPalette);
 
-    clear(flowRight);
-    flowRight.appendChild(tabBar);
-    flowRight.appendChild(panelDetails);
-    flowRight.appendChild(panelTrans);
+    clear(flowSidebar);
+    flowSidebar.appendChild(tabBar);
+    flowSidebar.appendChild(panelDetails);
+    flowSidebar.appendChild(panelTrans);
+    flowSidebar.appendChild(panelPalette);
 
     function setTab(name) {
       state.rightTab = name;
       btnDetails.classList.toggle("is-active", name === "details");
       btnTrans.classList.toggle("is-active", name === "transitions");
+      btnPalette.classList.toggle("is-active", name === "palette");
       panelDetails.classList.toggle("is-active", name === "details");
       panelTrans.classList.toggle("is-active", name === "transitions");
+      panelPalette.classList.toggle("is-active", name === "palette");
       if (name === "transitions") renderTransitions();
     }
 
     btnDetails.addEventListener("click", () => setTab("details"));
     btnTrans.addEventListener("click", () => setTab("transitions"));
+    btnPalette.addEventListener("click", () => setTab("palette"));
 
     setTab(state.rightTab || "details");
   }
 
-  buildFlowRightTabs();
+  function clearSidebar() {
+    state.selected = null;
+    try {
+      window.dispatchEvent(
+        new CustomEvent("am2:wd:selected", {
+          detail: { step_id: null },
+        })
+      );
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  function renderSidebar(stepId) {
+    state.selected = stepId || null;
+    try {
+      window.dispatchEvent(
+        new CustomEvent("am2:wd:selected", {
+          detail: { step_id: state.selected },
+        })
+      );
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  buildSidebarTabs();
+  clearSidebar();
 
   function setupRawErrorPanel() {
     if (!ui.err || !ui.err.parentNode) return;
@@ -402,14 +437,10 @@
 
   function setSelected(stepId) {
     state.selected = stepId || null;
-    try {
-      window.dispatchEvent(
-        new CustomEvent("am2:wd:selected", {
-          detail: { step_id: state.selected },
-        })
-      );
-    } catch (e) {
-      // ignore
+    if (state.selected) {
+      renderSidebar(state.selected);
+    } else {
+      clearSidebar();
     }
     render();
   }

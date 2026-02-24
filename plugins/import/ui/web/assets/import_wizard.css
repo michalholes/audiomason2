@@ -226,6 +226,10 @@ textarea {
   margin-top: 12px;
 }
 
+.wdLayout.wdLayoutSingle {
+  grid-template-columns: 1fr;
+}
+
 .wdToolbar {
   display: flex;
   flex-wrap: wrap;
@@ -765,6 +769,22 @@ textarea {
   display: none !important;
 }
 
+.flow-editor-layout {
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  gap: 16px;
+  margin-top: 10px;
+  align-items: start;
+}
+
+.flow-editor-main {
+  min-width: 520px;
+}
+
+.flow-editor-sidebar {
+  position: relative;
+}
+
 .flowLayout {
   display: flex;
   gap: 14px;
@@ -879,6 +899,14 @@ textarea {
   .flowRight {
     min-width: 0;
     flex: 1 1 auto;
+  }
+
+  .flow-editor-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .flow-editor-main {
+    min-width: 0;
   }
 
   .wdLayout {

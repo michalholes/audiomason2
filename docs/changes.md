@@ -1,3 +1,9 @@
+## 2026-02-24T22:00:00+01:00
+
+-   Issue 259: Refactor Import UI Flow Editor layout from overlay panels to a
+    deterministic grid-based sidebar with explicit tabs.
+-   spec: Bump specification version to 1.1.28.
+
 ## 2026-02-24T18:00:00+01:00
 
 -   spec: Allow Unified Flow Editor (single screen) for WizardDefinition + FlowConfig,

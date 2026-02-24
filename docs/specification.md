@@ -1,6 +1,6 @@
 # AudioMason2 - Project Specification (Overview)
 
-Specification Version: 1.1.27
+Specification Version: 1.1.28
 This file is an overview entrypoint only.
 
 Normative authority:
@@ -21,3 +21,6 @@ Notes:
 - Issue 240 extends the import plugin Web UI with FlowConfig and WizardDefinition
   editors (tabs), backed by strict wrapper contracts, validate-only endpoints,
   and deterministic history/rollback behavior.
+
+- Issue 259 refactors the Flow Editor layout from an overlay model into a
+  deterministic grid-based sidebar with explicit tabs.
