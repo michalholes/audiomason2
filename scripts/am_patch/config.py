@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from .errors import RunnerError
+from .success_archive_retention import validate_success_archive_retention
 
 
 def default_config_path(scripts_dir: Path) -> Path:
@@ -95,6 +96,10 @@ class Policy:
     default_branch: str = "main"
 
     success_archive_name: str = "{repo}-{branch}.zip"
+
+    success_archive_dir: str = "patch_dir"
+    success_archive_cleanup_glob_template: str = ""
+    success_archive_keep_count: int = 0
 
     require_up_to_date: bool = True
     enforce_main_branch: bool = True
@@ -519,6 +524,19 @@ def build_policy(defaults: Policy, cfg: dict[str, Any]) -> Policy:
     p.success_archive_name = str(cfg.get("success_archive_name", p.success_archive_name))
     _mark_cfg(p, cfg, "success_archive_name")
 
+    p.success_archive_dir = str(cfg.get("success_archive_dir", p.success_archive_dir))
+    _mark_cfg(p, cfg, "success_archive_dir")
+    p.success_archive_cleanup_glob_template = str(
+        cfg.get(
+            "success_archive_cleanup_glob_template",
+            p.success_archive_cleanup_glob_template,
+        )
+    )
+    _mark_cfg(p, cfg, "success_archive_cleanup_glob_template")
+    if "success_archive_keep_count" in cfg:
+        p.success_archive_keep_count = int(cfg["success_archive_keep_count"])
+        _mark_cfg(p, cfg, "success_archive_keep_count")
+
     p.require_up_to_date = _as_bool(cfg, "require_up_to_date", p.require_up_to_date)
     _mark_cfg(p, cfg, "require_up_to_date")
     p.enforce_main_branch = _as_bool(cfg, "enforce_main_branch", p.enforce_main_branch)
@@ -631,7 +649,7 @@ def build_policy(defaults: Policy, cfg: dict[str, Any]) -> Policy:
             "INVALID",
             "failure_zip_keep_per_issue must be >= 0",
         )
-
+    validate_success_archive_retention(p)
     p.failure_zip_log_dir = _validate_basename(p.failure_zip_log_dir, field="failure_zip_log_dir")
     p.failure_zip_patch_dir = _validate_basename(
         p.failure_zip_patch_dir, field="failure_zip_patch_dir"

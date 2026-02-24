@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -81,8 +82,24 @@ def build_artifacts(
         name = Path(rendered).name
         if not name.lower().endswith(".zip"):
             name = f"{name}.zip"
-        success_zip = paths.patch_dir / name
+
+        target_dir = paths.patch_dir
+        if getattr(policy, "success_archive_dir", "patch_dir") == "successful_dir":
+            target_dir = paths.successful_dir
+
+        success_zip = target_dir / name
         git_ops.git_archive(logger, repo_root, success_zip, treeish="HEAD")
+
+        keep_count = int(getattr(policy, "success_archive_keep_count", 0))
+        glob_template = str(getattr(policy, "success_archive_cleanup_glob_template", "")).strip()
+        if keep_count > 0 and glob_template:
+            candidates = [p for p in target_dir.glob(glob_template) if p.is_file()]
+            candidates = sorted(candidates, key=lambda p: p.name)
+            candidates = [p for p in candidates if p.resolve() != success_zip.resolve()]
+            while len(candidates) > keep_count:
+                doomed = candidates.pop(0)
+                with contextlib.suppress(FileNotFoundError):
+                    doomed.unlink()
 
         logger.line(f"issue_diff_base_sha={issue_diff_base_sha}")
         logger.line(f"issue_diff_paths_count={len(issue_diff_paths)}")

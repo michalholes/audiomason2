@@ -7,6 +7,8 @@ from typing import Any
 
 from am_patch.version import RUNNER_VERSION
 
+from .cli_help_text import fmt_full_help, fmt_short_help
+
 
 class AppendOverride(argparse.Action):
     """Append KEY=VALUE strings into ns.overrides."""
@@ -115,319 +117,11 @@ class CliArgs:
 
 
 def _fmt_short_help() -> str:
-    return f"""am_patch.py (RUNNER_VERSION={RUNNER_VERSION})
-
-Options:
-  -h, --help
-      Show short help with commonly used options.
-
-  -H, --help-all
-      Show full reference help with all available options and exit.
-
-  -c, --show-config
-      Print effective configuration and policy sources (defaults, config file,
-      CLI overrides) and exit.
-
-  --config PATH
-      Use PATH as config file (CLI only; not a config key).
-      [default: scripts/am_patch/am_patch.toml]
-
-  -q, -v, -n, -d, --verbosity {{debug, verbose, normal, warning, quiet}}
-      Control screen output amount. [default: verbose]
-
-  -a, --allow-undeclared-paths
-      Allow patch scripts to touch files outside declared FILES (override default FAIL).
-
-  -t, --allow-untouched-files
-      Allow declared but untouched FILES (override default FAIL).
-
-  -l, --rerun-latest
-      Rerun the latest archived patch for ISSUE_ID (auto-select from
-      patches/successful and patches/unsuccessful).
-
-  -r, --run-all-gates
-      Run all gates (ruff, pytest, mypy) even if one fails.
-
-  -g, --allow-gates-fail
-      Allow gate failures and still promote; intended for bug bounty.
-
-  --gate-badguys-runner {{auto, on, off}}
-      Runner-only extra gate: run badguys/badguys.py -q.
-      auto=only when runner files changed. [default: auto]
-
-  -f, --finalize-live MESSAGE
-      Finalize live repo using MESSAGE as commit message.
-
-  -w, --finalize-workspace ISSUE_ID
-      Finalize existing workspace for ISSUE_ID; commit message is read from workspace meta.json.
-
-  -o, --allow-no-op
-      Allow no-op patches (override default FAIL).
-
-  -u, --unified-patch
-      Force unified patch mode (.patch or .zip bundle). Without -u, auto-detect:
-      .patch/.zip => unified; .py => patch script.
-
-"""
+    return fmt_short_help(RUNNER_VERSION)
 
 
 def _fmt_full_help() -> str:
-    return f"""am_patch.py (RUNNER_VERSION={RUNNER_VERSION})
-
-Full reference of all available options.
-All options are shown in long form.
-Short aliases are shown in parentheses only for options that also appear in short help.
-
-CORE / INFO
-  --help (-h)
-      Show short help with commonly used options.
-
-  --help-all (-H)
-      Show full reference help with all available options and exit.
-
-  --show-config (-c)
-      Print effective configuration and policy sources (defaults, config file,
-      CLI overrides) and exit.
-
-  --config PATH
-      Use PATH as config file (CLI only; not a config key).
-      Relative paths are resolved against repo root.
-      [default: scripts/am_patch/am_patch.toml]
-
-  --version
-      Print runner version and exit.
-
-  -q, -v, -n, -d, --verbosity {{debug, verbose, normal, warning, quiet}}
-      Control screen output amount.
-      [default: verbose]
-
-  --log-level {{debug, verbose, normal, warning, quiet}}
-      Control what is written to the file log (independent from screen output).
-      [default: verbose]
-
-WORKFLOW / MODES
-  --finalize-live MESSAGE (-f)
-      Finalize live repository using MESSAGE as commit message.
-      Enables finalize mode and performs promotion, commit, and push.
-
-  -w, --finalize-workspace ISSUE_ID
-      Finalize an existing workspace for ISSUE_ID, including promotion, gates, commit, and push.
-      Commit message is read from workspace meta.json.
-
-  --rerun-latest (-l)
-      Rerun the latest archived patch for the given ISSUE_ID.
-      Patch is auto-selected from successful or unsuccessful archives.
-
-  --update-workspace
-      Update the existing workspace to match the current live repository state.
-
-  --test-mode
-      Badguys test mode: run patch + gates in workspace, then stop.
-      Skips promotion/live gates/commit/push and does not create any archives.
-      Workspace is deleted on exit (success or failure).
-
-GATES / EXECUTION
-  --skip-ruff
-      Skip ruff gate.
-      [default: OFF]
-
-  --skip-pytest
-      Skip pytest gate.
-      [default: OFF]
-
-  --skip-mypy
-      Skip mypy gate.
-      [default: OFF]
-
-  --skip-docs
-      Skip docs gate (documentation obligation).
-      [default: OFF]
-  --gates-on-partial-apply
-      If patch apply fails but at least one file was applied, still run workspace gates.
-      Run remains FAIL with PATCH_APPLY as primary reason.
-      [default: OFF]
-
-  --gates-on-zero-apply
-      If patch apply fails and no files were applied, still run workspace gates.
-      Run remains FAIL with PATCH_APPLY as primary reason.
-      [default: OFF]
-
-
-  --docs-include CSV
-      Docs gate watched path prefixes (CSV). Gate triggers when changes touch any include prefix.
-      [default: src,plugins]
-
-  --docs-exclude CSV
-      Docs gate ignore path prefixes (CSV). Excluded paths do not trigger the gate.
-      [default: badguys,patches]
-
-  --gates-order CSV
-      Gate execution order/selection as CSV (compile,ruff,pytest,mypy,docs).
-      Empty means run no gates.
-      [default: compile,ruff,pytest,mypy,docs]
-
-  --gate-badguys-runner {{auto, on, off}}
-      Runner-only extra gate: run badguys/badguys.py -q and require exit code 0.
-      auto: run only when runner files are changed in the current run.
-      on: always run. off: never run.
-      [default: auto]
-
-  --run-all-gates (-r)
-      Run all gates even if one fails.
-      [default: OFF]
-
-  --allow-gates-fail (-g)
-      Allow gate failures and still promote; intended for bug bounty.
-      [default: OFF]
-
-POLICY OVERRIDES (COMMON)
-  --allow-undeclared-paths (-a)
-      Allow patch scripts to touch files outside declared FILES.
-      [default: OFF]
-
-  --allow-untouched-files (-t)
-      Allow declared but untouched FILES.
-      [default: OFF]
-
-  --allow-no-op (-n)
-      Allow no-op patches.
-      [default: OFF]
-
-PROMOTION / GIT
-  --require-push-success
-      Require git push success (override default allow-push-fail).
-      [default: OFF]
-
-  --disable-promotion
-      Disable commit+push promotion.
-      [default: OFF]
-
-  --allow-live-changed
-      Allow live-repo changes since base_sha for promoted files (override default FAIL).
-      [default: OFF]
-
-  --overwrite-live
-      On LIVE_CHANGED: overwrite live repo with workspace.
-
-  --overwrite-workspace
-      On LIVE_CHANGED: keep live repo and drop those files from promotion.
-
-  --overwrite-live
-      On LIVE_CHANGED: overwrite live repo with workspace for the changed files.
-
-  --overwrite-workspace
-      On LIVE_CHANGED: keep live repo and drop those files from promotion.
-
-SAFETY / CONSISTENCY
-  --rollback-workspace-on-fail none-applied|always|never
-      Control workspace rollback after a failed run:
-        none-applied: rollback only if 0 patches applied
-        always: rollback on any FAIL (including partial apply)
-        never: never rollback workspace automatically
-      [default: none-applied]
-
-  --no-rollback-workspace-on-fail
-      Alias for --rollback-workspace-on-fail=never.
-
-  --live-repo-guard / --no-live-repo-guard
-      Fail if live repo changes during patching.
-      [default: ON]
-
-  --live-repo-guard-scope [patch|patch_and_gates]
-      Live repo guard scope.
-      [default: patch]
-
-  --patch-jail / --no-patch-jail
-      Execute patch script inside bubblewrap jail (bwrap).
-      [default: ON]
-
-  --patch-jail-unshare-net / --no-patch-jail-unshare-net
-      When patch_jail is enabled, unshare network namespace.
-      [default: ON]
-
-TOOLING INTEGRATION
-  --ruff-format / --no-ruff-format
-      Run `ruff format` before ruff check.
-      [default: ON]
-
-  --pytest-use-venv / --no-pytest-use-venv
-      Run pytest with live repo .venv python.
-      [default: ON]
-
-  --ruff-autofix-legalize-outside / --no-ruff-autofix-legalize-outside
-      When ruff_autofix is enabled, automatically legalize ruff-only fixes
-      outside FILES (bounded to ruff_targets).
-      [default: ON]
-
-UNIFIED PATCH INPUT
-  -u, --unified-patch
-      Force unified patch mode (.patch or .zip bundle). Without -u, auto-detect:
-      .patch/.zip => unified; .py => patch script.
-
-  -p N, --patch-strip N
-      Strip N leading path components when applying unified patches (like patch -pN).
-
-POST-SUCCESS ACTIONS
-  --post-success-audit / --no-post-success-audit
-      Run audit report after a successful promotion and push.
-      [default: ON]
-
-ADVANCED CONFIG / OVERRIDES
-  --override KEY=VALUE
-      Policy override(s) in KEY=VALUE form; may be repeated.
-
-  --gates-order CSV
-      Gate execution order/selection as CSV; empty disables all gates.
-
-  --skip-up-to-date
-      Skip up-to-date check.
-
-  --allow-non-main
-      Allow running on a non-main branch.
-
-  --keep-workspace
-      Keep workspace on success (override default delete).
-
-  --soft-reset-workspace
-      Soft reset workspace.
-
-  --enforce-allowed-files
-      Enforce allowed-files.
-
-NOTES
-  Short options exist only for options listed in short help. All other options are long-form only.
-
-
-PHASE 2: PATH/LAYOUT OVERRIDES (CFG + CLI)
-  --patch-dir-name NAME
-  --patch-layout-logs-dir NAME
-  --patch-layout-workspaces-dir NAME
-  --patch-layout-successful-dir NAME
-  --patch-layout-unsuccessful-dir NAME
-  --lockfile-name NAME
-  --current-log-symlink-name NAME
-  --current-log-symlink / --no-current-log-symlink
-  --log-ts-format STRFTIME
-  --log-template-issue TEMPLATE
-  --log-template-finalize TEMPLATE
-  --failure-zip-name NAME
-  --failure-zip-log-dir NAME
-  --failure-zip-patch-dir NAME
-  --workspace-issue-dir-template TEMPLATE
-  --workspace-repo-dir-name NAME
-  --workspace-meta-filename NAME
-  --workspace-history-logs-dir NAME
-  --workspace-history-oldlogs-dir NAME
-  --workspace-history-patches-dir NAME
-  --workspace-history-oldpatches-dir NAME
-  --blessed-gate-output PATH (repeatable)
-  --scope-ignore-prefix STR (repeatable)
-  --scope-ignore-suffix STR (repeatable)
-  --scope-ignore-contains STR (repeatable)
-  --venv-bootstrap-mode {{auto, always, never}}
-  --venv-bootstrap-python PATH
-
-"""
+    return fmt_full_help(RUNNER_VERSION)
 
 
 def add_workspace_cmd(subparsers: Any) -> None:
@@ -755,6 +449,28 @@ def parse_args(argv: list[str]) -> CliArgs:
         dest="success_archive_name",
         default=None,
         help="Success archive zip name template (placeholders: {repo}, {branch}, {issue}, {ts}).",
+    )
+
+    p.add_argument(
+        "--success-archive-dir",
+        dest="overrides",
+        action=AppendOverride,
+        key="success_archive_dir",
+        help="Success archive destination: patch_dir|successful_dir.",
+    )
+    p.add_argument(
+        "--success-archive-cleanup-glob",
+        dest="overrides",
+        action=AppendOverride,
+        key="success_archive_cleanup_glob_template",
+        help="Glob template for success archive retention candidate selection.",
+    )
+    p.add_argument(
+        "--success-archive-keep-count",
+        dest="overrides",
+        action=AppendOverride,
+        key="success_archive_keep_count",
+        help="Keep the last N success archives matching the glob template (0=disabled).",
     )
 
     vg = p.add_mutually_exclusive_group()
