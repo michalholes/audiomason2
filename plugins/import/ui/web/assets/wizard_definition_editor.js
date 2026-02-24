@@ -36,6 +36,51 @@
     return n;
   }
 
+  function svgIcon(name, cls, title) {
+    const ns = "http://www.w3.org/2000/svg";
+    const svg = document.createElementNS(ns, "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("width", "16");
+    svg.setAttribute("height", "16");
+    svg.setAttribute("aria-hidden", "true");
+    if (cls) svg.setAttribute("class", cls);
+
+    if (title) {
+      const t = document.createElementNS(ns, "title");
+      t.textContent = String(title);
+      svg.appendChild(t);
+    }
+
+    const p = document.createElementNS(ns, "path");
+
+    if (name === "lock") {
+      p.setAttribute(
+        "d",
+        "M17 10V8a5 5 0 0 0-10 0v2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2h-1Zm-8 0V8a3 3 0 0 1 6 0v2H9Z"
+      );
+    } else if (name === "trash") {
+      p.setAttribute(
+        "d",
+        "M9 3h6l1 2h4v2h-2l-1 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 7H4V5h4l1-2Zm0 4 1 14h4l1-14H9Zm2 2h2v10h-2V9Z"
+      );
+    } else if (name === "check") {
+      p.setAttribute("d", "M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z");
+    } else if (name === "search") {
+      p.setAttribute(
+        "d",
+        "M10 2a8 8 0 1 0 4.9 14.3l4.4 4.4 1.4-1.4-4.4-4.4A8 8 0 0 0 10 2Zm0 2a6 6 0 1 1 0 12 6 6 0 0 1 0-12Z"
+      );
+    } else if (name === "required") {
+      p.setAttribute(
+        "d",
+        "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm1 5v6h-2V7h2Zm0 8v2h-2v-2h2Z"
+      );
+    }
+
+    svg.appendChild(p);
+    return svg;
+  }
+
   function stableSteps(defn) {
     const steps = defn && Array.isArray(defn.steps) ? defn.steps : [];
     return steps
@@ -55,7 +100,7 @@
     dragId: null,
     dropBeforeId: null,
     showOptional: true,
-    validation: { ok: null, items: [] },
+    validation: { ok: null, local: [], server: [] },
   };
 
   const layout = el("div", "wdLayout");
@@ -94,11 +139,19 @@
 
   const validation = el("div", "wdValidation");
   const validationHeader = el("div", "wdValidationHeader");
-  const validationTitle = text("div", "wdValidationTitle", "Validation");
+  const validationTitle = text(
+    "div",
+    "wdValidationTitle",
+    "Validation Messages"
+  );
   const validationCount = text("div", "wdValidationCount", "");
+  const validationClear = text("button", "btn wdValidationClear", "Clear All");
+  validationClear.type = "button";
   const validationList = el("div", "wdValidationList");
+
   validationHeader.appendChild(validationTitle);
   validationHeader.appendChild(validationCount);
+  validationHeader.appendChild(validationClear);
   validation.appendChild(validationHeader);
   validation.appendChild(validationList);
 
@@ -106,9 +159,12 @@
   table.appendChild(body);
 
   const paletteSearch = el("div", "wdPaletteSearch");
+  const searchIcon = el("span", "wdSearchIcon");
+  searchIcon.appendChild(svgIcon("search", "wdSvg", "Search"));
   const search = el("input", "wdPaletteSearchInput");
   search.type = "search";
   search.placeholder = "Search";
+  paletteSearch.appendChild(searchIcon);
   paletteSearch.appendChild(search);
 
   const paletteGroups = el("div", "wdPaletteGroups");
@@ -179,18 +235,36 @@
     render();
   }
 
-  function setValidation(ok, items) {
+  function setValidation(ok, localItems, serverItems) {
     state.validation = {
       ok: typeof ok === "boolean" ? ok : null,
-      items: Array.isArray(items) ? items.slice() : [],
+      local: Array.isArray(localItems) ? localItems.slice() : [],
+      server: Array.isArray(serverItems) ? serverItems.slice() : [],
     };
     renderValidation();
   }
 
-  function pushValidation(msgText) {
-    const items = state.validation.items.slice();
-    items.push(String(msgText || ""));
-    setValidation(false, items);
+  function pushLocalValidation(msgText) {
+    const next = state.validation.local.slice();
+    next.push(String(msgText || ""));
+    setValidation(false, next, state.validation.server);
+  }
+
+  function extractServerMessages(data) {
+    const out = [];
+    const details = data && Array.isArray(data.details) ? data.details : [];
+    details.forEach((d) => {
+      if (!d || typeof d !== "object") return;
+      const path = typeof d.path === "string" ? d.path : "";
+      const reason = typeof d.reason === "string" ? d.reason : "";
+      const msg = [path, reason].filter((x) => x).join(" - ");
+      if (msg) out.push(msg);
+    });
+    const code = data && typeof data.code === "string" ? data.code : "";
+    const message = data && typeof data.message === "string" ? data.message : "";
+    const top = [code, message].filter((x) => x).join(": ");
+    if (top && !out.includes(top)) out.unshift(top);
+    return out;
   }
 
   function removeStep(stepId) {
@@ -204,7 +278,7 @@
     const sid = String(stepId || "");
     if (!sid) return;
     if (state.draft.includes(sid)) {
-      pushValidation("Step already present: " + sid);
+      pushLocalValidation("Step already present: " + sid);
       return;
     }
 
@@ -301,7 +375,7 @@
   async function reloadAll() {
     if (!confirmIfDirty("Reload")) return;
     H.renderError(ui.err, null);
-    setValidation(null, []);
+    setValidation(null, [], []);
     const ok1 = await loadPalette();
     const ok2 = await loadDefinition();
     if (ok1 && ok2) {
@@ -312,7 +386,7 @@
 
   async function validateDraft() {
     H.renderError(ui.err, null);
-    setValidation(null, []);
+    setValidation(null, [], []);
     const payload = { definition: defFromSteps(state.draft) };
     const out = await H.requestJSON("/import/ui/wizard-definition/validate", {
       method: "POST",
@@ -321,14 +395,18 @@
     });
     if (!out.ok) {
       H.renderError(ui.err, out.data);
-      pushValidation("Validation failed. See error details above.");
+      setValidation(
+        false,
+        ["Validation failed. See error details above."],
+        extractServerMessages(out.data)
+      );
       return false;
     }
     const defn = out.data && out.data.definition ? out.data.definition : {};
     const steps = stableSteps(defn);
     state.draft = steps.slice();
     ui.ta.value = H.pretty(defn);
-    setValidation(true, []);
+    setValidation(true, [], []);
     render();
     return true;
   }
@@ -360,7 +438,7 @@
     if (!confirmIfDirty("Reset")) return;
 
     H.renderError(ui.err, null);
-    setValidation(null, []);
+    setValidation(null, [], []);
     const out = await H.requestJSON("/import/ui/wizard-definition/reset", {
       method: "POST",
     });
@@ -382,7 +460,7 @@
     if (!confirmIfDirty("Rollback")) return;
 
     H.renderError(ui.err, null);
-    setValidation(null, []);
+    setValidation(null, [], []);
     const out = await H.requestJSON("/import/ui/wizard-definition/rollback", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -441,26 +519,33 @@
     typeCell.appendChild(text("span", "wdTypeBadge", kind));
 
     const reqCell = el("div", "wdCellReq");
-    reqCell.appendChild(
-      text(
-        "span",
-        "wdReqIcon",
-        isPinned(stepId) || isMandatory(stepId) ? "L" : ""
-      )
-    );
+    const req = el("span", "wdReqIcon");
+    if (isPinned(stepId)) {
+      req.appendChild(svgIcon("lock", "wdSvg", "Locked"));
+    } else if (isMandatory(stepId)) {
+      req.appendChild(svgIcon("required", "wdSvg", "Required"));
+    }
+    reqCell.appendChild(req);
 
     const actCell = el("div", "wdCellActions");
-    const rm = text("button", "btn", "Del");
-    rm.disabled = !canRemove(stepId);
-    rm.addEventListener("click", (e) => {
-      e.stopPropagation();
-      if (!canRemove(stepId)) {
-        pushValidation("Cannot remove locked or mandatory step: " + stepId);
-        return;
-      }
-      removeStep(stepId);
-    });
-    actCell.appendChild(rm);
+    if (!isPinned(stepId)) {
+      const rm = el("button", "wdIconBtn wdDeleteBtn");
+      rm.type = "button";
+      rm.disabled = !canRemove(stepId);
+      rm.setAttribute("aria-label", "Delete step");
+      rm.title = canRemove(stepId) ? "Delete" : "Cannot delete";
+      rm.appendChild(svgIcon("trash", "wdSvg", "Delete"));
+      rm.appendChild(text("span", "srOnly", "Delete"));
+      rm.addEventListener("click", (e) => {
+        e.stopPropagation();
+        if (!canRemove(stepId)) {
+          pushLocalValidation("Cannot remove locked or mandatory step: " + stepId);
+          return;
+        }
+        removeStep(stepId);
+      });
+      actCell.appendChild(rm);
+    }
 
     row.appendChild(orderCell);
     row.appendChild(idCell);
@@ -496,6 +581,25 @@
     return row;
   }
 
+  function paletteButton(sid) {
+    const already = state.draft.includes(sid);
+
+    const add = el("button", "btn wdPaletteAdd");
+    add.type = "button";
+
+    if (already) {
+      add.classList.add("is-added");
+      add.disabled = true;
+      add.appendChild(svgIcon("check", "wdSvg", "Added"));
+      add.appendChild(text("span", "wdPaletteAddText", "Added"));
+      return add;
+    }
+
+    add.textContent = "+ Add";
+    add.addEventListener("click", () => addStep(sid));
+    return add;
+  }
+
   function renderPaletteGroup(titleText, kind, items) {
     const g = el("div", "wdPaletteGroup");
     if (kind === "mandatory") g.classList.add("kind-mandatory");
@@ -514,13 +618,26 @@
       if (kind === "conditional") item.classList.add("kind-conditional");
 
       item.appendChild(text("div", "wdPaletteItemId", sid));
-
-      const add = text("button", "btn wdPaletteAdd", "+ Add");
-      add.addEventListener("click", () => addStep(sid));
-      item.appendChild(add);
+      item.appendChild(paletteButton(sid));
       g.appendChild(item);
     });
     return g;
+  }
+
+  function validationGroup(titleText, items, groupClass) {
+    const wrap = el("div", "wdValidationGroup");
+    if (groupClass) wrap.classList.add(groupClass);
+    wrap.appendChild(text("div", "wdValidationGroupTitle", titleText));
+
+    if (!items.length) {
+      wrap.appendChild(text("div", "wdValidationItem", "None"));
+      return wrap;
+    }
+
+    items.forEach((s) => {
+      wrap.appendChild(text("div", "wdValidationItem", s));
+    });
+    return wrap;
   }
 
   function renderValidation() {
@@ -528,22 +645,32 @@
     validation.classList.remove("is-ok");
     validation.classList.remove("is-error");
 
-    const items = state.validation.items;
     const ok = state.validation.ok;
+    const localItems = state.validation.local;
+    const serverItems = state.validation.server;
+    const total = localItems.length + serverItems.length;
 
-    if (ok === true) {
+    validationClear.disabled = localItems.length === 0;
+
+    if (ok === true && total === 0) {
       validation.classList.add("is-ok");
       validationCount.textContent = "OK";
-      validationList.appendChild(text("div", "wdValidationItem", "No validation errors."));
+      const okItem = el("div", "wdValidationItem wdValidationOk");
+      okItem.appendChild(svgIcon("check", "wdSvg", "OK"));
+      okItem.appendChild(text("span", "wdValidationOkText", "No validation errors."));
+      validationList.appendChild(okItem);
       return;
     }
 
-    if (items.length) {
+    if (total) {
       validation.classList.add("is-error");
-      validationCount.textContent = String(items.length);
-      items.forEach((s) => {
-        validationList.appendChild(text("div", "wdValidationItem", s));
-      });
+      validationCount.textContent = String(total);
+      validationList.appendChild(
+        validationGroup("Local UI Messages", localItems, "is-local")
+      );
+      validationList.appendChild(
+        validationGroup("Server Validation Messages", serverItems, "is-server")
+      );
       return;
     }
 
@@ -570,9 +697,13 @@
     const optional = filtered.filter((it) => String(it.kind) === "optional");
     const conditional = filtered.filter((it) => String(it.kind) === "conditional");
 
-    paletteGroups.appendChild(renderPaletteGroup("Mandatory", "mandatory", mandatory));
+    paletteGroups.appendChild(
+      renderPaletteGroup("Mandatory", "mandatory", mandatory)
+    );
     paletteGroups.appendChild(renderPaletteGroup("Optional", "optional", optional));
-    paletteGroups.appendChild(renderPaletteGroup("Conditional", "conditional", conditional));
+    paletteGroups.appendChild(
+      renderPaletteGroup("Conditional", "conditional", conditional)
+    );
   }
 
   search.addEventListener("input", () => render());
@@ -582,11 +713,15 @@
     render();
   });
 
+  validationClear.addEventListener("click", () => {
+    setValidation(false, [], state.validation.server);
+  });
+
   btnRemove.addEventListener("click", () => {
     const sid = state.selected;
     if (!sid) return;
     if (!canRemove(sid)) {
-      pushValidation("Cannot remove locked or mandatory step: " + sid);
+      pushLocalValidation("Cannot remove locked or mandatory step: " + sid);
       return;
     }
     removeStep(sid);
@@ -619,7 +754,9 @@
       .filter((it) => String(it.step_id).toLowerCase().includes(q));
 
     if (matches.length !== 1) {
-      pushValidation("Add Step requires search to match exactly one palette item.");
+      pushLocalValidation(
+        "Add Step requires search to match exactly one palette item."
+      );
       return;
     }
     addStep(matches[0].step_id);

@@ -453,3 +453,121 @@ textarea {
 .wdPaletteAdd {
   padding: 7px 10px;
 }
+
+.wdRow {
+  min-height: 40px;
+}
+
+.wdRow:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.wdRow.is-selected {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.wdRow.is-locked {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.wdReqIcon {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.wdSvg {
+  fill: currentColor;
+  opacity: 0.9;
+}
+
+.wdIconBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 7px 10px;
+  border-radius: 10px;
+}
+
+.wdIconBtn .wdSvg {
+  opacity: 0.95;
+}
+
+.wdIconBtn:disabled .wdSvg {
+  opacity: 0.45;
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.wdPaletteSearch {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.wdSearchIcon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: #0f1626;
+}
+
+.wdPaletteAdd.is-added {
+  opacity: 0.75;
+}
+
+.wdPaletteAdd.is-added .wdSvg {
+  margin-right: 6px;
+}
+
+.wdValidationHeader {
+  align-items: center;
+}
+
+.wdValidationCount {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  height: 22px;
+  padding: 0 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  font-size: 12px;
+}
+
+.wdValidationClear {
+  padding: 7px 10px;
+}
+
+.wdValidationGroup {
+  padding: 8px 0;
+}
+
+.wdValidationGroupTitle {
+  font-weight: 700;
+  opacity: 0.9;
+  margin-bottom: 6px;
+}
+
+.wdValidationOk {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+}
