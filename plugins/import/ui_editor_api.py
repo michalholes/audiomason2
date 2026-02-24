@@ -87,6 +87,52 @@ def bind_editor_routes(
     def get_steps_index():
         return call(lambda: _get_steps_index())
 
+    @router.get("/steps/{step_id}")
+    def get_step_details(step_id: str):
+        return call(lambda: _get_step_details(step_id))
+
+
+def _ensure_ascii_step_id(step_id: Any) -> str:
+    if not isinstance(step_id, str) or not step_id:
+        raise FieldSchemaValidationError(
+            message="step_id must be a non-empty string",
+            path="$.step_id",
+            reason="missing_or_invalid",
+            meta={},
+        )
+    try:
+        step_id.encode("ascii")
+    except UnicodeEncodeError as err:
+        raise FieldSchemaValidationError(
+            message="step_id must be ASCII",
+            path="$.step_id",
+            reason="invalid_ascii",
+            meta={},
+        ) from err
+    return step_id
+
+
+def _classify_step(step_id: str) -> tuple[str, str]:
+    from .flow_runtime import CONDITIONAL_STEP_IDS, MANDATORY_STEP_IDS, OPTIONAL_STEP_IDS
+
+    if step_id in CONDITIONAL_STEP_IDS:
+        kind = "conditional"
+    elif step_id in MANDATORY_STEP_IDS:
+        kind = "mandatory"
+    elif step_id in OPTIONAL_STEP_IDS:
+        kind = "optional"
+    else:
+        kind = "optional"
+
+    if step_id == "select_authors":
+        pinned = "first"
+    elif step_id == "processing":
+        pinned = "last"
+    else:
+        pinned = "none"
+
+    return kind, pinned
+
 
 def _validate_wrapper(
     *,
@@ -221,8 +267,6 @@ def _get_steps_index() -> dict[str, Any]:
     from .flow_runtime import (
         CANONICAL_STEP_ORDER,
         CONDITIONAL_STEP_IDS,
-        MANDATORY_STEP_IDS,
-        OPTIONAL_STEP_IDS,
     )
 
     seen: set[str] = set()
@@ -233,21 +277,7 @@ def _get_steps_index() -> dict[str, Any]:
             return
         seen.add(step_id)
 
-        if step_id in CONDITIONAL_STEP_IDS:
-            kind = "conditional"
-        elif step_id in MANDATORY_STEP_IDS:
-            kind = "mandatory"
-        elif step_id in OPTIONAL_STEP_IDS:
-            kind = "optional"
-        else:
-            kind = "optional"
-
-        if step_id == "select_authors":
-            pinned = "first"
-        elif step_id == "processing":
-            pinned = "last"
-        else:
-            pinned = "none"
+        kind, pinned = _classify_step(step_id)
 
         items.append(
             {
@@ -265,6 +295,32 @@ def _get_steps_index() -> dict[str, Any]:
         add(str(sid))
 
     return {"items": items}
+
+
+def _get_step_details(step_id: Any) -> dict[str, Any]:
+    from .step_catalog import get_step_details
+
+    sid = _ensure_ascii_step_id(step_id)
+    details = get_step_details(sid)
+    if details is None:
+        return error_envelope(
+            "NOT_FOUND",
+            "not found",
+            details=[{"path": "$.step_id", "reason": "not_found", "meta": {}}],
+        )
+
+    kind, pinned = _classify_step(sid)
+
+    # Deterministic key order as required by the wire contract.
+    return {
+        "step_id": sid,
+        "title": str(details.get("title") or sid),
+        "kind": kind,
+        "pinned": pinned,
+        "description": str(details.get("description") or ""),
+        "settings_schema": dict(details.get("settings_schema") or {}),
+        "defaults_template": dict(details.get("defaults_template") or {}),
+    }
 
 
 def _get_wizard_definition(engine: Any) -> dict[str, Any]:
