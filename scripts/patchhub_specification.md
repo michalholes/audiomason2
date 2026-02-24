@@ -145,10 +145,10 @@ UI/autofill have defaults (see config.py).
 5.2.1 Optional keys (server)
 
 - [server] backend (string)
-  - "sync" (default): legacy synchronous backend (ThreadingHTTPServer)
-  - "asgi": async backend (FastAPI + uvicorn)
+  - "asgi": async backend (FastAPI + uvicorn). This is the only supported backend.
+  - "sync": removed / unsupported (legacy synchronous backend)
 
-Default behavior MUST remain unchanged (backend="sync").
+Default behavior is backend="asgi".
 
 5.3 Key semantics used by API
 - cfg.meta.version: shown in UI and /api/config
