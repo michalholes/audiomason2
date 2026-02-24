@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import sys
 import traceback
 from contextlib import suppress
 from pathlib import Path
@@ -168,30 +169,164 @@ class WebInterfacePlugin:
             loader = getattr(app.state, "plugin_loader", None)
             if loader is None:
                 return
-            plugin = None
+
+            logger = getattr(app.state, "web_logger", get_logger("web_interface"))
+            verbosity = int(getattr(app.state, "verbosity", 1))
+
+            def _emit(event: str, data: dict[str, Any]) -> None:
+                env = build_envelope(
+                    event=event,
+                    component="web_interface",
+                    operation="import_ui_mount",
+                    data=data,
+                )
+                with suppress(Exception):
+                    get_event_bus().publish(event, env)
+
+            def _plugin_origin(p: Any | None) -> str | None:
+                if p is None:
+                    return None
+                module_name = getattr(p.__class__, "__module__", None)
+                if isinstance(module_name, str) and module_name:
+                    mod = sys.modules.get(module_name)
+                    module_file = getattr(mod, "__file__", None)
+                    if isinstance(module_file, str) and module_file:
+                        return module_file
+                try:
+                    return repr(p)
+                except Exception:
+                    return None
+
+            plugin: Any | None = None
+
             try:
                 plugin = loader.get_plugin("import")
-            except PluginNotFoundError:
+            except PluginNotFoundError as exc:
+                _emit(
+                    "web_interface.import_ui_mount_failed",
+                    {
+                        "phase": "get_plugin",
+                        "exc_type": type(exc).__name__,
+                        "exc_message": str(exc),
+                        "plugin_origin": None,
+                    },
+                )
                 # Import plugin is not loaded. Best-effort auto-load from builtin plugins.
                 builtin_dir = getattr(loader, "builtin_plugins_dir", None)
-                with suppress(Exception):
+                try:
                     if builtin_dir is not None:
                         import_dir = Path(builtin_dir) / "import"
                         if (import_dir / "plugin.yaml").exists():
                             loader.load_plugin(import_dir, validate=False)
-                with suppress(Exception):
+                except Exception as exc2:
+                    _emit(
+                        "web_interface.import_ui_mount_failed",
+                        {
+                            "phase": "autoload_builtin",
+                            "exc_type": type(exc2).__name__,
+                            "exc_message": str(exc2),
+                            "plugin_origin": None,
+                        },
+                    )
+                    if verbosity >= 3:
+                        logger.debug(f"import_ui_mount: autoload_builtin failed: {exc2!r}")
+                try:
                     plugin = loader.get_plugin("import")
-            except Exception:
+                except Exception as exc3:
+                    _emit(
+                        "web_interface.import_ui_mount_failed",
+                        {
+                            "phase": "get_plugin",
+                            "exc_type": type(exc3).__name__,
+                            "exc_message": str(exc3),
+                            "plugin_origin": None,
+                        },
+                    )
+                    if verbosity >= 3:
+                        logger.debug(f"import_ui_mount: get_plugin failed: {exc3!r}")
+                    return
+            except Exception as exc:
+                _emit(
+                    "web_interface.import_ui_mount_failed",
+                    {
+                        "phase": "get_plugin",
+                        "exc_type": type(exc).__name__,
+                        "exc_message": str(exc),
+                        "plugin_origin": None,
+                    },
+                )
+                if verbosity >= 3:
+                    logger.debug(f"import_ui_mount: get_plugin failed: {exc!r}")
                 return
-            if plugin is None:
-                return
+
+            plugin_origin = _plugin_origin(plugin)
+
             get_router = getattr(plugin, "get_fastapi_router", None)
             if not callable(get_router):
+                _emit(
+                    "web_interface.import_ui_mount_failed",
+                    {
+                        "phase": "build_router",
+                        "exc_type": "AttributeError",
+                        "exc_message": "plugin has no get_fastapi_router",
+                        "plugin_origin": plugin_origin,
+                    },
+                )
+                logger.info(f"import_ui_mount: missing get_fastapi_router (origin={plugin_origin})")
                 return
-            with suppress(Exception):
+
+            try:
                 router = get_router()
-                if router is not None:
-                    app.include_router(router)
+            except Exception as exc:
+                _emit(
+                    "web_interface.import_ui_mount_failed",
+                    {
+                        "phase": "build_router",
+                        "exc_type": type(exc).__name__,
+                        "exc_message": str(exc),
+                        "plugin_origin": plugin_origin,
+                    },
+                )
+                logger.info(f"import_ui_mount: build_router failed (origin={plugin_origin})")
+                if verbosity >= 3:
+                    logger.debug(f"import_ui_mount: build_router failed: {exc!r}")
+                return
+
+            if router is None:
+                _emit(
+                    "web_interface.import_ui_mount_failed",
+                    {
+                        "phase": "build_router",
+                        "exc_type": "ValueError",
+                        "exc_message": "get_fastapi_router returned None",
+                        "plugin_origin": plugin_origin,
+                    },
+                )
+                logger.info(f"import_ui_mount: router is None (origin={plugin_origin})")
+                return
+
+            try:
+                app.include_router(router)
+            except Exception as exc:
+                _emit(
+                    "web_interface.import_ui_mount_failed",
+                    {
+                        "phase": "include_router",
+                        "exc_type": type(exc).__name__,
+                        "exc_message": str(exc),
+                        "plugin_origin": plugin_origin,
+                    },
+                )
+                logger.info(f"import_ui_mount: include_router failed (origin={plugin_origin})")
+                if verbosity >= 3:
+                    logger.debug(f"import_ui_mount: include_router failed: {exc!r}")
+                return
+
+            _emit(
+                "web_interface.import_ui_mount_ok",
+                {"plugin_origin": plugin_origin},
+            )
+            logger.info(f"import_ui_mount: ok (origin={plugin_origin})")
 
         _try_mount_import_ui()
 
