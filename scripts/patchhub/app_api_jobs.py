@@ -249,7 +249,13 @@ def api_jobs_log_tail(self, job_id: str, qs: dict[str, str]) -> tuple[int, bytes
         return _err("Not found", status=404)
     lines = int(qs.get("lines", "200"))
     log_path = self.jobs_root / str(job_id) / "runner.log"
-    return _ok({"job_id": job_id, "tail": read_tail(log_path, lines)})
+    tail = read_tail(
+        log_path,
+        lines,
+        max_bytes=self.cfg.server.tail_max_bytes,
+        cache_max_entries=self.cfg.server.tail_cache_max_entries,
+    )
+    return _ok({"job_id": job_id, "tail": tail})
 
 
 def api_jobs_cancel(self, job_id: str) -> tuple[int, bytes]:

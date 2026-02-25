@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+from collections import OrderedDict
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
@@ -36,40 +37,191 @@ def _utc_now() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def read_tail(path: Path, lines: int) -> str:
-    if not path.exists():
-        return ""
-    lines = max(1, min(int(lines), 5000))
+def _tail_stat_fingerprint(path: Path) -> tuple[int, int] | None:
     try:
-        text = path.read_text(encoding="utf-8", errors="replace")
+        st = path.stat()
     except Exception:
-        return ""
-    parts = text.splitlines()
-    return "\n".join(parts[-lines:])
+        return None
+    return int(st.st_size), int(getattr(st, "st_mtime_ns", int(st.st_mtime * 1_000_000_000)))
 
 
-def read_tail_jsonl(path: Path, lines: int) -> list[dict[str, Any]]:
-    if not path.exists():
-        return []
-    lines = max(1, min(int(lines), 5000))
-
+def _tail_read_suffix(
+    path: Path,
+    *,
+    max_bytes: int,
+    min_newlines: int,
+) -> bytes:
+    if max_bytes <= 0:
+        return b""
     try:
-        text = path.read_text(encoding="utf-8", errors="replace")
+        fp = path.open("rb")
     except Exception:
-        return []
-
-    out: list[dict[str, Any]] = []
-    parts = text.splitlines()
-    for s in parts[-lines:]:
-        s = s.strip()
-        if not s:
-            continue
+        return b""
+    with fp:
         try:
-            obj = json.loads(s)
+            fp.seek(0, os.SEEK_END)
+            size = int(fp.tell())
         except Exception:
-            continue
-        if isinstance(obj, dict):
-            out.append(cast(dict[str, Any], obj))
+            return b""
+
+        block = 65536
+        offset = size
+        buf = bytearray()
+        newlines = 0
+
+        while offset > 0 and len(buf) < max_bytes and newlines < min_newlines:
+            step = min(block, offset, max_bytes - len(buf))
+            offset -= step
+            try:
+                fp.seek(offset, os.SEEK_SET)
+                chunk = fp.read(step)
+            except Exception:
+                break
+
+            if not chunk:
+                break
+
+            newlines += chunk.count(b"\n")
+            buf[:0] = chunk
+
+        return bytes(buf)
+
+
+_TAIL_CACHE_TEXT: OrderedDict[tuple[str, int], tuple[tuple[int, int], str]] = OrderedDict()
+_TAIL_CACHE_JSONL: OrderedDict[tuple[str, int], tuple[tuple[int, int], list[dict[str, Any]]]] = (
+    OrderedDict()
+)
+
+
+def _tail_cache_get_text(
+    key: tuple[str, int],
+    fp: tuple[int, int],
+) -> str | None:
+    hit = _TAIL_CACHE_TEXT.get(key)
+    if not hit:
+        return None
+    cached_fp, cached_val = hit
+    if cached_fp != fp:
+        return None
+    return cached_val
+
+
+def _tail_cache_put_text(
+    key: tuple[str, int],
+    fp: tuple[int, int],
+    val: str,
+    *,
+    max_entries: int,
+) -> None:
+    _TAIL_CACHE_TEXT[key] = (fp, val)
+    while len(_TAIL_CACHE_TEXT) > max_entries:
+        _TAIL_CACHE_TEXT.popitem(last=False)
+
+
+def _tail_cache_get_jsonl(
+    key: tuple[str, int],
+    fp: tuple[int, int],
+) -> list[dict[str, Any]] | None:
+    hit = _TAIL_CACHE_JSONL.get(key)
+    if not hit:
+        return None
+    cached_fp, cached_val = hit
+    if cached_fp != fp:
+        return None
+    return cached_val
+
+
+def _tail_cache_put_jsonl(
+    key: tuple[str, int],
+    fp: tuple[int, int],
+    val: list[dict[str, Any]],
+    *,
+    max_entries: int,
+) -> None:
+    _TAIL_CACHE_JSONL[key] = (fp, val)
+    while len(_TAIL_CACHE_JSONL) > max_entries:
+        _TAIL_CACHE_JSONL.popitem(last=False)
+
+
+def read_tail(
+    path: Path,
+    lines: int,
+    *,
+    max_bytes: int = 8_388_608,
+    cache_max_entries: int = 32,
+) -> str:
+    if not path.exists():
+        return ""
+    lines = max(1, min(int(lines), 5000))
+    max_bytes = max(0, int(max_bytes))
+    cache_max_entries = max(0, int(cache_max_entries))
+
+    fp = _tail_stat_fingerprint(path)
+    if fp is None:
+        return ""
+
+    key = (str(path), lines)
+    if cache_max_entries > 0:
+        cached = _tail_cache_get_text(key, fp)
+        if cached is not None:
+            return cached
+
+    raw = _tail_read_suffix(path, max_bytes=max_bytes, min_newlines=lines + 1)
+    if not raw:
+        out = ""
+    else:
+        text = raw.decode("utf-8", errors="replace")
+        parts = text.splitlines()
+        out = "\n".join(parts[-lines:])
+
+    if cache_max_entries > 0:
+        _tail_cache_put_text(key, fp, out, max_entries=cache_max_entries)
+    return out
+
+
+def read_tail_jsonl(
+    path: Path,
+    lines: int,
+    *,
+    max_bytes: int = 8_388_608,
+    cache_max_entries: int = 32,
+) -> list[dict[str, Any]]:
+    if not path.exists():
+        return []
+    lines = max(1, min(int(lines), 5000))
+    max_bytes = max(0, int(max_bytes))
+    cache_max_entries = max(0, int(cache_max_entries))
+
+    fp = _tail_stat_fingerprint(path)
+    if fp is None:
+        return []
+
+    key = (str(path), lines)
+    if cache_max_entries > 0:
+        cached = _tail_cache_get_jsonl(key, fp)
+        if cached is not None:
+            return cached
+
+    raw = _tail_read_suffix(path, max_bytes=max_bytes, min_newlines=lines + 1)
+    if not raw:
+        out: list[dict[str, Any]] = []
+    else:
+        text = raw.decode("utf-8", errors="replace")
+        out = []
+        parts = text.splitlines()
+        for s in parts[-lines:]:
+            s = s.strip()
+            if not s:
+                continue
+            try:
+                obj = json.loads(s)
+            except Exception:
+                continue
+            if isinstance(obj, dict):
+                out.append(cast(dict[str, Any], obj))
+
+    if cache_max_entries > 0:
+        _tail_cache_put_jsonl(key, fp, out, max_entries=cache_max_entries)
     return out
 
 

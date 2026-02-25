@@ -371,7 +371,12 @@ def api_runs(self, qs: dict[str, str]) -> tuple[int, bytes]:
 
 def api_runner_tail(self, qs: dict[str, str]) -> tuple[int, bytes]:
     lines = int(qs.get("lines", "200"))
-    tail = read_tail(self.patches_root / "am_patch.log", lines)
+    tail = read_tail(
+        self.patches_root / "am_patch.log",
+        lines,
+        max_bytes=self.cfg.server.tail_max_bytes,
+        cache_max_entries=self.cfg.server.tail_cache_max_entries,
+    )
     return _ok({"path": str(Path(self.cfg.paths.patches_root) / "am_patch.log"), "tail": tail})
 
 

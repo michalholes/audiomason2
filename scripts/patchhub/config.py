@@ -10,6 +10,8 @@ from typing import Any
 class ServerConfig:
     host: str
     port: int
+    tail_max_bytes: int = 8_388_608
+    tail_cache_max_entries: int = 32
 
 
 @dataclass(frozen=True)
@@ -133,6 +135,8 @@ def load_config(path: Path) -> AppConfig:
         server=ServerConfig(
             host=str(_must_get(server, "host")),
             port=int(_must_get(server, "port")),
+            tail_max_bytes=int(server.get("tail_max_bytes", 8_388_608)),
+            tail_cache_max_entries=int(server.get("tail_cache_max_entries", 32)),
         ),
         meta=MetaConfig(
             version=str(meta.get("version", "0.0.0")),

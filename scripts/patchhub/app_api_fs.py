@@ -42,7 +42,12 @@ def api_fs_read_text(self, qs: dict[str, str]) -> tuple[int, bytes]:
 
     if tail_lines_s:
         tail_lines = int(tail_lines_s)
-        text = read_tail(p, tail_lines)
+        text = read_tail(
+            p,
+            tail_lines,
+            max_bytes=self.cfg.server.tail_max_bytes,
+            cache_max_entries=self.cfg.server.tail_cache_max_entries,
+        )
         return _ok({"path": rel, "text": text, "truncated": False})
 
     # head read with truncation (byte-based)
