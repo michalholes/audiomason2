@@ -12,10 +12,12 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, TypeGuard
 
 from .conditions import eval_condition, find_invalid_condition_path
 from .errors import FinalizeError
+
+MAX_TRANSITION_HOPS = 50
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,10 +25,12 @@ class FlowEdge:
     from_step_id: str
     to_step_id: str
     when: Any | None = None
+    priority: int = 0
 
 
 @dataclass(frozen=True, slots=True)
 class FlowGraph:
+    version: int
     entry_step_id: str
     nodes: tuple[str, ...]
     edges: tuple[FlowEdge, ...]
@@ -70,10 +74,17 @@ def normalize_to_graph(
 
         entry = nodes_v1[0]
         edges_v1: list[FlowEdge] = []
+        prio = 0
         for a, b in zip(nodes_v1, nodes_v1[1:], strict=False):
-            edges_v1.append(FlowEdge(from_step_id=a, to_step_id=b, when=None))
+            edges_v1.append(FlowEdge(from_step_id=a, to_step_id=b, when=None, priority=prio))
+            prio += 10
 
-        g = FlowGraph(entry_step_id=entry, nodes=tuple(nodes_v1), edges=tuple(edges_v1))
+        g = FlowGraph(
+            version=1,
+            entry_step_id=entry,
+            nodes=tuple(nodes_v1),
+            edges=tuple(edges_v1),
+        )
         g = _inject_conflict_rules(g)
         _validate_graph(g)
         return g
@@ -126,9 +137,29 @@ def normalize_to_graph(
                 raise FinalizeError("wizard_definition graph edge references unknown from_step_id")
             if to not in seen:
                 raise FinalizeError("wizard_definition graph edge references unknown to_step_id")
-            edges_v2.append(FlowEdge(from_step_id=frm, to_step_id=to, when=e.get("when")))
 
-        g = FlowGraph(entry_step_id=entry, nodes=tuple(nodes_v2), edges=tuple(edges_v2))
+            if "priority" not in e:
+                raise FinalizeError("MISSING_PRIORITY: " + frm + "->" + to)
+            prio_any = e.get("priority")
+            if not _is_strict_int(prio_any):
+                raise FinalizeError(
+                    "AMBIGUOUS_TRANSITION: invalid_priority_type " + frm + "->" + to
+                )
+            edges_v2.append(
+                FlowEdge(
+                    from_step_id=frm,
+                    to_step_id=to,
+                    when=e.get("when"),
+                    priority=prio_any,
+                )
+            )
+
+        g = FlowGraph(
+            version=2,
+            entry_step_id=entry,
+            nodes=tuple(nodes_v2),
+            edges=tuple(edges_v2),
+        )
         g = _inject_conflict_rules(g)
         _validate_graph(g)
         return g
@@ -147,7 +178,7 @@ def select_next_step(
     if current_step_id not in graph.nodes:
         raise FinalizeError(f"unknown current_step_id: {current_step_id}")
 
-    edges = graph.outgoing(current_step_id)
+    edges = tuple(sorted(graph.outgoing(current_step_id), key=lambda e: e.priority))
 
     evaluated_edges: list[dict[str, Any]] = []
     matched_edges: list[FlowEdge] = []
@@ -167,41 +198,27 @@ def select_next_step(
                 "when": _summarize_when(e.when),
                 "matched": bool(matched),
                 "enabled_target": bool(is_step_enabled(e.to_step_id)),
+                "priority": e.priority,
             }
         )
 
-    if len(matched_edges) > 1 and debug_log is not None:
-        debug_log(
-            "MULTIPLE_MATCHES",
-            {
-                "from_step_id": current_step_id,
-                "matched_edges": [
-                    {
-                        "to": e.to_step_id,
-                        "when": _summarize_when(e.when),
-                    }
-                    for e in matched_edges
-                ],
-                "selected_edge": {
-                    "to": matched_edges[0].to_step_id,
-                    "when": _summarize_when(matched_edges[0].when),
-                },
-            },
+    if len(matched_edges) >= 2:
+        raise FinalizeError(
+            "AMBIGUOUS_TRANSITION: "
+            + current_step_id
+            + " matches="
+            + str([{"to": e.to_step_id, "priority": e.priority} for e in matched_edges])
         )
 
     def _resolve_enabled_target(start: str) -> str | None:
         visited: list[str] = []
         seen: set[str] = set()
         cur = start
-        hops = 0
         while True:
             if cur in seen:
                 raise FinalizeError("CYCLE_DETECTED: " + ",".join(visited + [cur]))
             seen.add(cur)
             visited.append(cur)
-            if hops >= 50:
-                raise FinalizeError("CYCLE_DETECTED: hop_limit")
-            hops += 1
             if is_step_enabled(cur):
                 return cur
 
@@ -218,24 +235,15 @@ def select_next_step(
                 return None
             cur = nxt
 
-    for e in matched_edges:
-        target = _resolve_enabled_target(e.to_step_id)
-        if target is not None:
-            return target
+    if len(matched_edges) == 0:
+        raise FinalizeError(
+            "NO_TRANSITION: " + current_step_id + " edges=" + str(len(evaluated_edges))
+        )
 
-    # Fallback for v2 graphs that omit explicit edges for linear transitions:
-    # use nodes ordering to pick the next enabled step deterministically.
-    try:
-        idx = graph.nodes.index(current_step_id)
-    except ValueError:
-        idx = -1
-    if idx >= 0:
-        for sid in graph.nodes[idx + 1 :]:
-            fallback = _resolve_enabled_target(sid)
-            if fallback is not None:
-                return fallback
-
-    raise FinalizeError("NO_TRANSITION: " + current_step_id + " edges=" + str(len(evaluated_edges)))
+    target = _resolve_enabled_target(matched_edges[0].to_step_id)
+    if target is not None:
+        return target
+    raise FinalizeError("NO_TRANSITION: " + current_step_id + " target_disabled")
 
 
 def _inject_conflict_rules(graph: FlowGraph) -> FlowGraph:
@@ -260,6 +268,7 @@ def _inject_conflict_rules(graph: FlowGraph) -> FlowGraph:
                 from_step_id="resolve_conflicts_batch",
                 to_step_id="final_summary_confirm",
                 when=None,
+                priority=0,
             )
         )
 
@@ -273,6 +282,7 @@ def _inject_conflict_rules(graph: FlowGraph) -> FlowGraph:
                 "path": "$.inputs.final_summary_confirm.confirm_start",
                 "value": True,
             },
+            priority=0,
         )
     )
 
@@ -296,6 +306,7 @@ def _inject_conflict_rules(graph: FlowGraph) -> FlowGraph:
                     },
                 ],
             },
+            priority=10,
         )
     )
 
@@ -330,6 +341,7 @@ def _inject_conflict_rules(graph: FlowGraph) -> FlowGraph:
                         },
                     ],
                 },
+                priority=20,
             )
         )
 
@@ -368,10 +380,16 @@ def _inject_conflict_rules(graph: FlowGraph) -> FlowGraph:
                     },
                 ],
             },
+            priority=30,
         )
     )
 
-    return FlowGraph(entry_step_id=graph.entry_step_id, nodes=graph.nodes, edges=tuple(edges))
+    return FlowGraph(
+        version=graph.version,
+        entry_step_id=graph.entry_step_id,
+        nodes=graph.nodes,
+        edges=tuple(edges),
+    )
 
 
 _CONFLICT_FROM_IDS: set[str] = {"final_summary_confirm", "resolve_conflicts_batch"}
@@ -398,10 +416,21 @@ def _validate_graph(graph: FlowGraph) -> None:
         outgoing.setdefault(e.from_step_id, []).append(e)
 
     for frm, edges in outgoing.items():
+        seen_priorities: set[int] = set()
+        for e in edges:
+            if e.priority in seen_priorities:
+                raise FinalizeError(
+                    "AMBIGUOUS_TRANSITION: duplicate_priority "
+                    + frm
+                    + " priority="
+                    + str(e.priority)
+                )
+            seen_priorities.add(e.priority)
+
         unconditional = [e for e in edges if e.when is None]
         if len(unconditional) > 1:
             raise FinalizeError(
-                "AMBIGUOUS_TRANSITIONS: " + frm + " edges=" + str(len(unconditional))
+                "AMBIGUOUS_TRANSITION: " + frm + " edges=" + str(len(unconditional))
             )
 
         for e in edges:
@@ -410,3 +439,7 @@ def _validate_graph(graph: FlowGraph) -> None:
                 raise FinalizeError(
                     "INVALID_CONDITION_PATH: " + bad + " " + e.from_step_id + "->" + e.to_step_id
                 )
+
+
+def _is_strict_int(v: Any) -> TypeGuard[int]:
+    return isinstance(v, int) and not isinstance(v, bool)

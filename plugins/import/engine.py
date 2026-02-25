@@ -45,7 +45,7 @@ from .errors import (
 )
 from .field_schema_validation import validate_step_fields
 from .fingerprints import fingerprint_json
-from .flow_graph import normalize_to_graph, select_next_step
+from .flow_graph import MAX_TRANSITION_HOPS, normalize_to_graph, select_next_step
 from .flow_runtime import (
     CANONICAL_STEP_ORDER,
     build_flow_model,
@@ -666,6 +666,8 @@ class ImportWizardEngine:
         derived: dict[str, Any] = derived_any if isinstance(derived_any, dict) else {}
         snap_any = derived.get("wizard_definition_snapshot")
         if isinstance(snap_any, dict):
+            if "flow_transition_hops" not in derived:
+                derived["flow_transition_hops"] = 0
             return snap_any
 
         wd = load_or_bootstrap_wizard_definition(self._fs)
@@ -673,6 +675,7 @@ class ImportWizardEngine:
 
         derived["wizard_definition_snapshot"] = wd
         derived["wizard_definition_fingerprint"] = fingerprint_json(wd)
+        derived["flow_transition_hops"] = 0
         state["derived"] = derived
         self._persist_state(session_id, state)
         return wd
@@ -720,6 +723,16 @@ class ImportWizardEngine:
         flow_cfg_norm: dict[str, Any],
     ) -> str:
         session_id = str(state.get("session_id") or "")
+
+        derived_any = state.get("derived")
+        derived: dict[str, Any] = derived_any if isinstance(derived_any, dict) else {}
+        hops_any = derived.get("flow_transition_hops")
+        hops = int(hops_any) if isinstance(hops_any, int) and not isinstance(hops_any, bool) else 0
+        hops += 1
+        if hops > MAX_TRANSITION_HOPS:
+            raise FinalizeError("CYCLE_DETECTED: hop_limit")
+        derived["flow_transition_hops"] = hops
+        state["derived"] = derived
 
         # Conflict scan side effect is engine-owned (spec 10.3.4) but branching is graph-owned.
         if step_id == "final_summary_confirm":

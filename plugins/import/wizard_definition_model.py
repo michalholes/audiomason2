@@ -11,7 +11,7 @@ ASCII-only.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, TypeGuard
 
 from plugins.file_io.service import FileService
 from plugins.file_io.service.types import RootName
@@ -215,6 +215,7 @@ def _validate_v2_graph(wd: dict[str, Any]) -> None:
         raise FinalizeError("wizard_definition graph edges must be a list")
 
     outgoing: dict[str, list[dict[str, Any]]] = {sid: [] for sid in nodes}
+    priorities_by_from: dict[str, set[int]] = {sid: set() for sid in nodes}
 
     for e in edges_any:
         if not isinstance(e, dict):
@@ -232,6 +233,21 @@ def _validate_v2_graph(wd: dict[str, Any]) -> None:
 
         outgoing.setdefault(str(frm), []).append(e)
 
+        if "priority" not in e:
+            raise FinalizeError("MISSING_PRIORITY: " + str(frm) + "->" + str(to))
+        prio_any = e.get("priority")
+        if not _is_strict_int(prio_any):
+            raise FinalizeError(
+                "AMBIGUOUS_TRANSITION: invalid_priority_type " + str(frm) + "->" + str(to)
+            )
+        prio = prio_any
+        pri_set = priorities_by_from.setdefault(str(frm), set())
+        if prio in pri_set:
+            raise FinalizeError(
+                "AMBIGUOUS_TRANSITION: duplicate_priority " + str(frm) + " priority=" + str(prio)
+            )
+        pri_set.add(prio)
+
         when_any = e.get("when")
         bad = find_invalid_condition_path(when_any)
         if bad is not None:
@@ -241,7 +257,7 @@ def _validate_v2_graph(wd: dict[str, Any]) -> None:
         unconditional = [x for x in out_edges if x.get("when") is None]
         if len(unconditional) > 1:
             raise FinalizeError(
-                "AMBIGUOUS_TRANSITIONS: " + frm + " edges=" + str(len(unconditional))
+                "AMBIGUOUS_TRANSITION: " + frm + " edges=" + str(len(unconditional))
             )
 
     _validate_v2_reachability(entry_any, nodes, edges_any)
@@ -309,3 +325,7 @@ def _is_enabled(step_id: str, flow_config: dict[str, Any]) -> bool:
     if enabled is None:
         return True
     return bool(enabled)
+
+
+def _is_strict_int(v: Any) -> TypeGuard[int]:
+    return isinstance(v, int) and not isinstance(v, bool)
