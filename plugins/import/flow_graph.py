@@ -213,6 +213,7 @@ def select_next_step(
     def _resolve_enabled_target(start: str) -> str | None:
         visited: list[str] = []
         seen: set[str] = set()
+        hop_counter = 0
         cur = start
         while True:
             if cur in seen:
@@ -233,6 +234,9 @@ def select_next_step(
                     break
             if nxt is None:
                 return None
+            hop_counter += 1
+            if hop_counter > MAX_TRANSITION_HOPS:
+                raise FinalizeError("CYCLE_DETECTED: hop_limit")
             cur = nxt
 
     if len(matched_edges) == 0:
