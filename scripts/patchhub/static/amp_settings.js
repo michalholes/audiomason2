@@ -74,6 +74,42 @@
     return s2.split(",").map(function (x) { return String(x || "").trim(); }).filter(Boolean);
   }
 
+  function schemaToFields(schemaObj) {
+    if (schemaObj && Array.isArray(schemaObj.fields)) {
+      return schemaObj.fields;
+    }
+
+    if (schemaObj && schemaObj.policy && typeof schemaObj.policy === "object") {
+      var out = [];
+      Object.keys(schemaObj.policy).forEach(function (k) {
+        var p = schemaObj.policy[k] || {};
+        out.push({
+          key: k,
+          kind: p.kind || "str",
+          label: p.label || k,
+          help: p.help || "",
+          enum: Array.isArray(p.enum) ? p.enum : null,
+          section: p.section || "",
+          read_only: !!p.read_only
+        });
+      });
+      out.sort(function (a, b) {
+        var as = String(a.section || "");
+        var bs = String(b.section || "");
+        if (as < bs) return -1;
+        if (as > bs) return 1;
+        var ak = String(a.key || "");
+        var bk = String(b.key || "");
+        if (ak < bk) return -1;
+        if (ak > bk) return 1;
+        return 0;
+      });
+      return out;
+    }
+
+    return [];
+  }
+
   function renderChipList(container, key, values, onChange) {
     container.textContent = "";
 
@@ -128,16 +164,34 @@
       var key = String(f.key || "");
       var kind = String(f.kind || "str");
       var enumVals = Array.isArray(f.enum) ? f.enum : null;
+      var label = String((f.label != null) ? f.label : key);
+      var help = String((f.help != null) ? f.help : "");
+      var readOnly = !!f.read_only;
 
       if (ftxt && key.toLowerCase().indexOf(ftxt) < 0) return;
 
       var row = mk("div", "amp-row", null);
       row.id = "ampRow__" + key;
+      if (help) row.title = help;
+      if (readOnly) row.classList.add("amp-readonly");
 
-      var keyBox = mk("div", "amp-key", key);
+      var keyBox = mk("div", "amp-key", label);
+      keyBox.title = "Key: " + key;
+      keyBox.appendChild(mk("div", "amp-key-sub", key));
       row.appendChild(keyBox);
 
       var ctl = mk("div", "amp-control", null);
+
+      if (readOnly) {
+        var ro = "";
+        if (kind === "list_str") ro = normalizeList(values[key]).join(", ");
+        else if (kind === "bool") ro = (!!values[key]) ? "true" : "false";
+        else ro = String(values[key] == null ? "" : values[key]);
+        ctl.appendChild(mk("span", "amp-readonly-value", ro));
+        row.appendChild(ctl);
+        wrap.appendChild(row);
+        return;
+      }
 
       if (kind === "bool") {
         var sw = mk("label", "switch", null);
@@ -293,8 +347,9 @@ function init() {
             setStatus((c && c.error) ? c.error : "config load failed", true);
             return;
           }
+          var fields = schemaToFields(schema || {});
           fieldKinds = {};
-          ((schema && schema.fields) ? schema.fields : []).forEach(function (f) {
+          fields.forEach(function (f) {
             var k = String(f.key || "");
             var kind = String(f.kind || "str");
             fieldKinds[k] = kind;
@@ -304,7 +359,7 @@ function init() {
           curValues = cloneValues(baseValues);
 
           renderFields(
-            (schema && schema.fields) ? schema.fields : [],
+            fields,
             baseValues,
             curValues,
             setCur,
@@ -324,11 +379,9 @@ function init() {
         }
         baseValues = r.values || baseValues;
         if (!dry) {
-          curValues = {};
-          Object.keys(baseValues || {}).forEach(function (k) {
-            curValues[k] = baseValues[k];
-          });
-          renderFields((schema && schema.fields) ? schema.fields : [], curValues, setCur);
+          var fields = schemaToFields(schema || {});
+          curValues = cloneValues(baseValues);
+          renderFields(fields, baseValues, curValues, setCur, filterText);
         }
         setStatus(dry ? "Validation OK" : "Saved", false);
       });
@@ -348,7 +401,7 @@ function init() {
       btnRevert.addEventListener("click", function () {
         if (!baseValues || !schema) return;
         curValues = cloneValues(baseValues);
-        renderFields(schema.fields || [], baseValues, curValues, setCur, filterText);
+        renderFields(schemaToFields(schema || {}), baseValues, curValues, setCur, filterText);
         setStatus("Reverted", false);
       });
     }
@@ -358,7 +411,7 @@ function init() {
       inpFilter.addEventListener("input", function () {
         filterText = String(inpFilter.value || "");
         renderFields(
-          (schema && schema.fields) ? schema.fields : [],
+          schemaToFields(schema || {}),
           baseValues,
           curValues,
           setCur,
