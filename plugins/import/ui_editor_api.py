@@ -20,6 +20,7 @@ from .wizard_definition_model import (
     DEFAULT_WIZARD_DEFINITION,
     canonicalize_wizard_definition,
     load_or_bootstrap_wizard_definition,
+    migrate_v1_to_v2,
     validate_wizard_definition_structure,
 )
 
@@ -383,10 +384,23 @@ def _set_wizard_definition(engine: Any, body: Any) -> dict[str, Any]:
     )
     wd_any = obj.get("definition")
     validate_wizard_definition_structure(wd_any)
+    if not isinstance(wd_any, dict):
+        raise FieldSchemaValidationError(
+            message="definition must be an object",
+            path="$.definition",
+            reason="invalid_type",
+            meta={},
+        )
+    wd_obj: dict[str, Any] = wd_any
+
+    if wd_obj.get("version") == 1:
+        wd_obj = migrate_v1_to_v2(wd_obj)
+
+    wd_canon = canonicalize_wizard_definition(wd_obj)
     fs = _engine_fs(engine)
-    save_wizard_definition_with_history(fs, wd_any)
-    wd = load_or_bootstrap_wizard_definition(fs)
-    return {"definition": wd}
+    save_wizard_definition_with_history(fs, wd_canon)
+
+    return {"definition": wd_canon}
 
 
 def _validate_wizard_definition(engine: Any, body: Any) -> dict[str, Any]:

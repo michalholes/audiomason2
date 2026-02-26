@@ -17,6 +17,7 @@
     }
 
     const p = document.createElementNS(ns, "path");
+    p.setAttribute("fill", "currentColor");
 
     if (name === "lock") {
       p.setAttribute(

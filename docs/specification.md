@@ -1,6 +1,6 @@
 # AudioMason2 - Project Specification (Overview)
 
-Specification Version: 1.1.30
+Specification Version: 1.1.31
 This file is an overview entrypoint only.
 
 Normative authority:
@@ -35,3 +35,6 @@ Notes:
   mirrors JSON per keystroke, and Save gating is centralized in FlowEditorState.
 
 - Issue 267 refines Flow Editor row UX: click selects, explicit drag handle grip, and simplified row actions.
+
+- Issue 268 eliminates remaining Flow Editor deficiencies: WizardDefinition v1 migration,
+  enforced v2 canonical storage/serving, and deterministic icon/CSS wiring.

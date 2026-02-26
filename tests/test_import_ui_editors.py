@@ -125,12 +125,33 @@ def test_wizard_definition_history_and_rollback(tmp_path: Path) -> None:
     app.include_router(build_router(engine=engine))
     client = TestClient(app)
 
-    base = client.get("/import/ui/wizard-definition").json()["definition"]
-    d1 = dict(base)
-    d1["steps"] = [x for x in base["steps"] if x.get("step_id") != "filename_policy"]
+    from importlib import import_module
 
-    d2 = dict(base)
-    d2["steps"] = [x for x in base["steps"] if x.get("step_id") != "effective_author_title"]
+    canonicalize_wizard_definition = import_module(
+        "plugins.import.wizard_definition_model"
+    ).canonicalize_wizard_definition
+
+    base = client.get("/import/ui/wizard-definition").json()["definition"]
+    graph = base.get("graph")
+    assert isinstance(graph, dict)
+    edges_any = graph.get("edges")
+    assert isinstance(edges_any, list)
+    assert len(edges_any) >= 3
+
+    def _with_priority(edge_index: int, prio: int) -> dict:
+        d = dict(base)
+        g = dict(graph)
+        edges: list[dict] = []
+        for e in edges_any:
+            edges.append(dict(e) if isinstance(e, dict) else {})
+        if isinstance(edges[edge_index], dict):
+            edges[edge_index]["priority"] = prio
+        g["edges"] = edges
+        d["graph"] = g
+        return canonicalize_wizard_definition(d)
+
+    d1 = _with_priority(0, 1)
+    d2 = _with_priority(1, 2)
 
     assert client.post("/import/ui/wizard-definition", json={"definition": d1}).status_code == 200
     assert client.post("/import/ui/wizard-definition", json={"definition": d2}).status_code == 200
@@ -145,7 +166,7 @@ def test_wizard_definition_history_and_rollback(tmp_path: Path) -> None:
     )
     assert rb.status_code == 200
     cur = rb.json()["definition"]
-    assert all(x.get("step_id") != "filename_policy" for x in cur["steps"])
+    assert fingerprint_json(cur) == fingerprint_json(d1)
 
     nf = client.post(
         "/import/ui/wizard-definition/rollback",

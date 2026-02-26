@@ -73,7 +73,7 @@
         const handle = el("span", "wdDragHandle");
         const gripSvg =
           window.AM2WDDomIcons && window.AM2WDDomIcons.svgIcon
-            ? window.AM2WDDomIcons.svgIcon("grip", null, "Reorder")
+            ? window.AM2WDDomIcons.svgIcon("grip", "wdGrip", "Reorder")
             : null;
         if (gripSvg) {
           handle.appendChild(gripSvg);
@@ -97,7 +97,7 @@
         );
         const cellActions = el("div", "wdCellActions");
 
-        const btnRemove = el("button", "btn btnSmall");
+        const btnRemove = el("button", "btn btnSmall wdDeleteBtn");
         btnRemove.type = "button";
         btnRemove.title = "Remove";
         const trashSvg =

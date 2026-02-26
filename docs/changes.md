@@ -1,6 +1,8 @@
 ## 2026-02-26T00:00:00+01:00
 
 - Issue 267: Import UI Flow Editor - row click selects step, drag handle grip for reorder, and per-row actions reduced to trash only.
+- Issue 268: Flow Editor - eliminate remaining deficiencies: migrate WizardDefinition v1 to v2 (graph),
+  enforce v2 at runtime and editor API, and fix deterministic icon/CSS wiring.
 - Import UI: WizardDefinition editor now ensures graph (version 2) on reload to keep transitions available.
 
 ## 2026-02-24T22:00:00+01:00

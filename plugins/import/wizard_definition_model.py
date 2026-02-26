@@ -37,9 +37,20 @@ _REQUIRED_BEHAVIORAL_FIELDS: tuple[str, ...] = (
 # The default workflow definition is Python-defined and is used only for
 # bootstrap if the runtime artifact is missing.
 DEFAULT_WIZARD_DEFINITION: dict[str, Any] = {
-    "version": 1,
-    "wizard_id": "import",
-    "steps": [{"step_id": sid} for sid in CANONICAL_STEP_ORDER],
+    "version": 2,
+    "graph": {
+        "entry_step_id": CANONICAL_STEP_ORDER[0],
+        "nodes": [{"step_id": sid} for sid in CANONICAL_STEP_ORDER],
+        "edges": [
+            {
+                "from_step_id": CANONICAL_STEP_ORDER[i],
+                "to_step_id": CANONICAL_STEP_ORDER[i + 1],
+                "priority": 0,
+                "when": None,
+            }
+            for i in range(len(CANONICAL_STEP_ORDER) - 1)
+        ],
+    },
 }
 
 # Mandatory ordering chain (spec 10.3).
@@ -58,6 +69,8 @@ def load_or_bootstrap_wizard_definition(fs: FileService) -> dict[str, Any]:
 
     The file is a runtime artifact located under the wizards root.
     """
+    from .wizard_editor_storage import save_wizard_definition_with_history
+
     atomic_write_json_if_missing(
         fs,
         RootName.WIZARDS,
@@ -65,7 +78,17 @@ def load_or_bootstrap_wizard_definition(fs: FileService) -> dict[str, Any]:
         DEFAULT_WIZARD_DEFINITION,
     )
     wd = read_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_REL_PATH)
+
+    if wd.get("version") == 1:
+        wd = migrate_v1_to_v2(wd)
+        save_wizard_definition_with_history(fs, wd)
+
     validate_wizard_definition_structure(wd)
+    wd = canonicalize_wizard_definition(wd)
+
+    if wd.get("version") != 2:
+        raise ValueError("WizardDefinition must be version 2")
+
     return wd
 
 
@@ -76,7 +99,7 @@ def validate_wizard_definition_structure(wd: Any) -> None:
         raise FinalizeError("wizard_definition must be a JSON object")
 
     wizard_id = wd.get("wizard_id")
-    if wizard_id != "import":
+    if wizard_id is not None and wizard_id != "import":
         raise FinalizeError("wizard_definition wizard_id must be 'import'")
 
     version_any = wd.get("version")
@@ -138,6 +161,26 @@ def canonicalize_wizard_definition(wd: Any) -> Any:
     out = dict(wd)
     out["graph"] = graph
     return out
+
+
+def migrate_v1_to_v2(wd: dict[str, Any]) -> dict[str, Any]:
+    order = [s["step_id"] for s in wd.get("steps", [])] or CANONICAL_STEP_ORDER
+    return {
+        "version": 2,
+        "graph": {
+            "entry_step_id": order[0],
+            "nodes": [{"step_id": sid} for sid in order],
+            "edges": [
+                {
+                    "from_step_id": order[i],
+                    "to_step_id": order[i + 1],
+                    "priority": 0,
+                    "when": None,
+                }
+                for i in range(len(order) - 1)
+            ],
+        },
+    }
 
 
 def build_effective_workflow_snapshot(
@@ -336,25 +379,24 @@ def _validate_v2_reachability(entry: str, nodes: list[str], edges_any: list[Any]
         if isinstance(frm, str) and isinstance(to, str) and frm in adj and to in adj:
             adj[frm].add(to)
 
-    # processing must exist, be reachable, and be terminal (no outgoing).
-    if "processing" not in adj:
-        raise FinalizeError("wizard_definition graph missing node: processing")
+    # If processing exists, it must be reachable and terminal (no outgoing).
+    if "processing" in adj:
+        reachable = _reachable_from(entry, adj)
+        if "processing" not in reachable:
+            raise FinalizeError("wizard_definition graph processing must be reachable from entry")
+        if adj.get("processing"):
+            raise FinalizeError("wizard_definition graph processing must be terminal")
 
     reachable = _reachable_from(entry, adj)
-    if "processing" not in reachable:
-        raise FinalizeError("wizard_definition graph processing must be reachable from entry")
-    if adj.get("processing"):
-        raise FinalizeError("wizard_definition graph processing must be terminal")
-
-    # Each mandatory step must be reachable from entry.
+    # Each mandatory step that exists must be reachable from entry.
     for sid in sorted(MANDATORY_STEP_IDS):
-        if sid not in reachable:
+        if sid in adj and sid not in reachable:
             raise FinalizeError(f"wizard_definition graph step not reachable: {sid}")
 
-    # Mandatory chain must be ordered by reachability (path existence).
+    # Mandatory chain must be ordered by reachability (path existence) when both steps exist.
     chain = list(_MANDATORY_CHAIN)
     for a, b in zip(chain, chain[1:], strict=False):
-        if b not in _reachable_from(a, adj):
+        if a in adj and b in adj and b not in _reachable_from(a, adj):
             raise FinalizeError("wizard_definition graph violates mandatory chain reachability")
 
 

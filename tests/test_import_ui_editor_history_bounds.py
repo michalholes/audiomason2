@@ -113,20 +113,34 @@ def test_wizard_definition_history_is_bounded_and_ordered(tmp_path: Path) -> Non
     app.include_router(build_router(engine=engine))
     client = TestClient(app)
 
-    base = client.get("/import/ui/wizard-definition").json()["definition"]
-    steps = [x.get("step_id") for x in base.get("steps") if isinstance(x, dict)]
-    step_ids = [x for x in steps if isinstance(x, str)]
-    assert len(step_ids) >= 6
+    from importlib import import_module
 
+    canonicalize_wizard_definition = import_module(
+        "plugins.import.wizard_definition_model"
+    ).canonicalize_wizard_definition
+
+    base = client.get("/import/ui/wizard-definition").json()["definition"]
+    graph = base.get("graph")
+    assert isinstance(graph, dict)
+    edges_any = graph.get("edges")
+    assert isinstance(edges_any, list)
+    assert len(edges_any) >= 7
+
+    # Generate valid variants by changing edge priority.
     defs: list[dict] = []
     for i in range(6):
-        cut = step_ids[i]
         d = dict(base)
-        d["steps"] = [x for x in base["steps"] if x.get("step_id") != cut]
-        defs.append(d)
+        g = dict(graph)
+        edges: list[dict] = []
+        for e in edges_any:
+            edges.append(dict(e) if isinstance(e, dict) else {})
+        if isinstance(edges[i], dict):
+            edges[i]["priority"] = i + 1
+        g["edges"] = edges
+        d["graph"] = g
+        defs.append(canonicalize_wizard_definition(d))
         r = client.post("/import/ui/wizard-definition", json={"definition": d})
         assert r.status_code == 200
-
     hist = client.get("/import/ui/wizard-definition/history").json()["items"]
     ids = [it["id"] for it in hist]
 
@@ -142,8 +156,13 @@ def test_wizard_definition_history_is_bounded_and_ordered(tmp_path: Path) -> Non
     rb = client.post("/import/ui/wizard-definition/rollback", json={"id": expected[1]})
     assert rb.status_code == 200
     out = rb.json()["definition"]
-    removed = step_ids[3]
-    assert all(x.get("step_id") != removed for x in out["steps"])
+    out_graph = out.get("graph")
+    assert isinstance(out_graph, dict)
+    out_edges = out_graph.get("edges")
+    assert isinstance(out_edges, list)
+    # Rolled back to expected[1] == defs[3].
+    out_canon = canonicalize_wizard_definition(out)
+    assert fingerprint_json(out_canon) == fingerprint_json(defs[3])
 
     nf = client.post("/import/ui/wizard-definition/rollback", json={"id": "nope"})
     assert nf.status_code == 404
