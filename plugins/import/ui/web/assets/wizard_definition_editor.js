@@ -69,11 +69,11 @@
   }
 
   function defFromSteps(stepIds) {
-    return defFromGraph(stepIds || [], state.entry_step_id, state.edges || []);
+    return defFromGraph(stepIds || [], view.entry_step_id, view.edges || []);
   }
 
-  const state = {
-    loaded: [],
+
+  const view = {
     draft: [],
     palette: [],
     selected: null,
@@ -173,7 +173,6 @@
   ui.ta.parentNode.insertBefore(layout, ui.ta);
   ui.ta.classList.add("wdHidden");
 
-  // Deterministic sidebar: Step Details + Transitions + Step Palette
   const flowSidebar = document.getElementById("flowEditorSidebar");
   const stepPanel = document.getElementById("flowStepPanel");
   const transitionsPanel = el("div", "flowTransPanel");
@@ -184,7 +183,7 @@
       stepPanel: stepPanel,
       transitionsPanel: transitionsPanel,
       rightCol: rightCol,
-      state: state,
+      state: view,
       clear: clear,
       el: el,
       text: text,
@@ -194,28 +193,28 @@
     });
   }
   if (window.AM2WDSidebar && window.AM2WDSidebar.clearSidebar) {
-    window.AM2WDSidebar.clearSidebar(state);
+    window.AM2WDSidebar.clearSidebar(view);
   }
 
   function setupRawErrorPanel() {
     if (window.AM2WDRawError && window.AM2WDRawError.setupRawErrorPanel) {
-      window.AM2WDRawError.setupRawErrorPanel({ ui: ui, state: state, el: el, text: text });
+      window.AM2WDRawError.setupRawErrorPanel({ ui: ui, state: view, el: el, text: text });
     }
     setRawErrorVisible(false);
   }
 
   function setRawErrorVisible(on) {
-    state.showRawError = !!on;
+    view.showRawError = !!on;
     if (!ui.err) return;
-    ui.err.classList.toggle("is-collapsed", !state.showRawError);
+    ui.err.classList.toggle("is-collapsed", !view.showRawError);
 
     const btn = document.querySelector(".wdErrToggle");
-    if (btn) btn.textContent = state.showRawError ? "Hide Details" : "Details";
+    if (btn) btn.textContent = view.showRawError ? "Hide Details" : "Details";
   }
 
   function renderError(data, collapseByDefault) {
     H.renderError(ui.err, data);
-    state.hasErrorDetails = !!data;
+    view.hasErrorDetails = !!data;
     if (!data) {
       setRawErrorVisible(false);
       return;
@@ -226,8 +225,25 @@
 
   setupRawErrorPanel();
 
+  function refreshFromFlowState() {
+    const FE = window.AM2FlowEditorState;
+    if (!FE || !FE.getSnapshot) return;
+    const s = FE.getSnapshot();
+    const defn = (s && s.wizardDraft) || {};
+    const g = stableGraph(defn);
+    view.draft = g.nodes.slice();
+    view.edges = Array.isArray(g.edges) ? g.edges.slice() : [];
+    view.entry_step_id = g.entry || null;
+    view.selected = (s && s.selectedStepId) || null;
+    normalizeEdges();
+  }
+
+
   function isDirty() {
-    return JSON.stringify(state.loaded) !== JSON.stringify(state.draft);
+    const FE = window.AM2FlowEditorState;
+    if (!FE || !FE.getSnapshot) return false;
+    const s = FE.getSnapshot();
+    return !!(s && s.draftDirty);
   }
 
   function confirmIfDirty(actionName) {
@@ -236,12 +252,12 @@
   }
 
   function kindOf(stepId) {
-    const item = state.palette.find((x) => x && x.step_id === stepId);
+    const item = view.palette.find((x) => x && x.step_id === stepId);
     return item && item.kind ? String(item.kind) : "optional";
   }
 
   function pinnedOf(stepId) {
-    const item = state.palette.find((x) => x && x.step_id === stepId);
+    const item = view.palette.find((x) => x && x.step_id === stepId);
     return item && item.pinned ? String(item.pinned) : "none";
   }
 
@@ -261,31 +277,31 @@
   }
 
   function idxOf(stepId) {
-    return state.draft.indexOf(stepId);
+    return view.draft.indexOf(stepId);
   }
 
   function clampDropIndex(idx) {
     const first = idxOf("select_authors");
     const last = idxOf("processing");
     const min = first >= 0 ? first + 1 : 0;
-    const max = last >= 0 ? last : state.draft.length;
+    const max = last >= 0 ? last : view.draft.length;
     if (idx < min) return min;
     if (idx > max) return max;
     return idx;
   }
 
   function syncTextarea() {
-    ui.ta.value = H.pretty(defFromGraph(state.draft, state.entry_step_id, state.edges));
+    ui.ta.value = H.pretty(defFromGraph(view.draft, view.entry_step_id, view.edges));
   }
 
   function setSelected(stepId) {
-    state.selected = stepId || null;
     const FE = window.AM2FlowEditorState;
-    if (FE && FE.setSelectedStep) FE.setSelectedStep(state.selected);
-    if (window.AM2WDSidebar && window.AM2WDSidebar.renderSidebar && state.selected) {
-      window.AM2WDSidebar.renderSidebar(state, state.selected);
+    const next = stepId || null;
+    if (FE && FE.setSelectedStep) FE.setSelectedStep(next);
+    if (window.AM2WDSidebar && window.AM2WDSidebar.renderSidebar && next) {
+      window.AM2WDSidebar.renderSidebar(view, next);
     } else if (window.AM2WDSidebar && window.AM2WDSidebar.clearSidebar) {
-      window.AM2WDSidebar.clearSidebar(state);
+      window.AM2WDSidebar.clearSidebar(view);
     }
     render();
   }
@@ -293,14 +309,13 @@
   function emitChanged() {
     const FE = window.AM2FlowEditorState;
     if (FE && FE.mutateWizard) {
-      const defn = defFromGraph(state.draft, state.entry_step_id, state.edges);
+      const defn = defFromGraph(view.draft, view.entry_step_id, view.edges);
       FE.mutateWizard(function (wd) {
         const next = defn;
         Object.keys(wd || {}).forEach(function (k) {
           try {
             delete wd[k];
           } catch (e) {
-            // ignore
           }
         });
         Object.keys(next || {}).forEach(function (k) {
@@ -316,7 +331,7 @@
   }
 
   function setValidation(ok, localItems, serverItems) {
-    state.validation = {
+    view.validation = {
       ok: typeof ok === "boolean" ? ok : null,
       local: Array.isArray(localItems) ? localItems.slice() : [],
       server: Array.isArray(serverItems) ? serverItems.slice() : [],
@@ -325,9 +340,9 @@
   }
 
   function pushLocalValidation(msgText) {
-    const next = state.validation.local.slice();
+    const next = view.validation.local.slice();
     next.push(String(msgText || ""));
-    setValidation(false, next, state.validation.server);
+    setValidation(false, next, view.validation.server);
   }
 
 
@@ -342,9 +357,8 @@
 
   function removeStep(stepId) {
     if (!canRemove(stepId)) return;
-    state.draft = state.draft.filter((x) => x !== stepId);
-    if (state.selected === stepId) setSelected(null);
-    syncTextarea();
+    view.draft = view.draft.filter((x) => x !== stepId);
+    if (view.selected === stepId) setSelected(null);
     emitChanged();
     render();
   }
@@ -352,27 +366,26 @@
   function addStep(stepId) {
     const sid = String(stepId || "");
     if (!sid) return;
-    if (state.draft.includes(sid)) {
+    if (view.draft.includes(sid)) {
       pushLocalValidation("Step already present: " + sid);
       return;
     }
 
-    let insertAt = state.draft.length;
-    const sel = state.selected;
-    if (sel && state.draft.includes(sel)) {
+    let insertAt = view.draft.length;
+    const sel = view.selected;
+    if (sel && view.draft.includes(sel)) {
       insertAt = idxOf(sel) + 1;
     } else {
       const last = idxOf("processing");
-      insertAt = last >= 0 ? last : state.draft.length;
+      insertAt = last >= 0 ? last : view.draft.length;
     }
 
     insertAt = clampDropIndex(insertAt);
 
-    const next = state.draft.slice();
+    const next = view.draft.slice();
     next.splice(insertAt, 0, sid);
-    state.draft = next;
+    view.draft = next;
     normalizeEdges();
-    syncTextarea();
     emitChanged();
     render();
   }
@@ -382,7 +395,7 @@
     if (from < 0) return;
     if (isPinned(dragId)) return;
 
-    const filtered = state.draft.filter((x) => x !== dragId);
+    const filtered = view.draft.filter((x) => x !== dragId);
 
     let to = filtered.length;
     if (beforeId) {
@@ -393,9 +406,8 @@
     to = clampDropIndex(to);
 
     filtered.splice(to, 0, dragId);
-    state.draft = filtered;
+    view.draft = filtered;
     normalizeEdges();
-    syncTextarea();
     emitChanged();
     render();
   }
@@ -434,7 +446,7 @@
       return false;
     }
     const items = out.data && out.data.items ? out.data.items : [];
-    state.palette = Array.isArray(items) ? items : [];
+    view.palette = Array.isArray(items) ? items : [];
     return true;
   }
 
@@ -445,18 +457,6 @@
       return false;
     }
     const defn = out.data && out.data.definition ? out.data.definition : {};
-    const g = stableGraph(defn);
-
-    state.loaded = g.nodes.slice();
-    state.draft = g.nodes.slice();
-    state.edges = Array.isArray(g.edges) ? g.edges.slice() : [];
-    state.entry_step_id = g.entry || null;
-    setSelected(null);
-
-    normalizeEdges();
-
-    ui.ta.value = H.pretty(defFromGraph(state.draft, state.entry_step_id, state.edges));
-
     const FE = window.AM2FlowEditorState;
     if (FE && FE.loadAll && FE.getSnapshot) {
       const snap = FE.getSnapshot();
@@ -482,7 +482,7 @@
     renderError(null, false);
     setValidation(null, [], []);
     const payload = {
-      definition: defFromGraph(state.draft, state.entry_step_id, state.edges),
+      definition: defFromGraph(view.draft, view.entry_step_id, view.edges),
     };
     const out = await H.requestJSON("/import/ui/wizard-definition/validate", {
       method: "POST",
@@ -499,13 +499,6 @@
       return false;
     }
     const defn = out.data && out.data.definition ? out.data.definition : {};
-    const g = stableGraph(defn);
-    state.draft = g.nodes.slice();
-    state.edges = g.edges.slice();
-    normalizeEdges();
-    state.entry_step_id = g.entry || null;
-    ui.ta.value = H.pretty(defFromGraph(state.draft, state.entry_step_id, state.edges));
-
     const FE = window.AM2FlowEditorState;
     if (FE && FE.markValidated && FE.getSnapshot) {
       const snap = FE.getSnapshot();
@@ -515,17 +508,14 @@
         validationEnvelope: { ok: true },
       });
     }
-
     setValidation(true, [], []);
-    render();
     return true;
   }
 
   async function saveDraft() {
     if (!(await validateDraft())) return false;
-
     const payload = {
-      definition: defFromGraph(state.draft, state.entry_step_id, state.edges),
+      definition: defFromGraph(view.draft, view.entry_step_id, view.edges),
     };
     const out = await H.requestJSON("/import/ui/wizard-definition", {
       method: "POST",
@@ -537,22 +527,12 @@
       return false;
     }
     const defn = out.data && out.data.definition ? out.data.definition : {};
-    const g = stableGraph(defn);
-    state.loaded = g.nodes.slice();
-    state.draft = g.nodes.slice();
-    state.edges = g.edges.slice();
-    normalizeEdges();
-    state.entry_step_id = g.entry || null;
-    setSelected(null);
-    ui.ta.value = H.pretty(defFromGraph(state.draft, state.entry_step_id, state.edges));
-
     const FE = window.AM2FlowEditorState;
     if (FE && FE.loadAll && FE.getSnapshot) {
       const snap = FE.getSnapshot();
       FE.loadAll({ wizardDefinition: defn, flowConfig: snap.configDraft });
     }
     await loadHistory();
-    render();
     return true;
   }
 
@@ -569,22 +549,12 @@
       return false;
     }
     const defn = out.data && out.data.definition ? out.data.definition : {};
-    const g = stableGraph(defn);
-    state.loaded = g.nodes.slice();
-    state.draft = g.nodes.slice();
-    state.edges = g.edges.slice();
-    normalizeEdges();
-    state.entry_step_id = g.entry || null;
-    setSelected(null);
-    ui.ta.value = H.pretty(defFromGraph(state.draft, state.entry_step_id, state.edges));
-
     const FE = window.AM2FlowEditorState;
     if (FE && FE.loadAll && FE.getSnapshot) {
       const snap = FE.getSnapshot();
       FE.loadAll({ wizardDefinition: defn, flowConfig: snap.configDraft });
     }
     await loadHistory();
-    render();
     return true;
   }
 
@@ -603,16 +573,12 @@
       return;
     }
     const defn = out.data && out.data.definition ? out.data.definition : {};
-    const g = stableGraph(defn);
-    state.loaded = g.nodes.slice();
-    state.draft = g.nodes.slice();
-    state.edges = g.edges.slice();
-    normalizeEdges();
-    state.entry_step_id = g.entry || null;
-    setSelected(null);
-    ui.ta.value = H.pretty(defFromGraph(state.draft, state.entry_step_id, state.edges));
+    const FE = window.AM2FlowEditorState;
+    if (FE && FE.loadAll && FE.getSnapshot) {
+      const snap = FE.getSnapshot();
+      FE.loadAll({ wizardDefinition: defn, flowConfig: snap.configDraft });
+    }
     await loadHistory();
-    render();
   }
 
   function renderStepRow(stepId, idx) {
@@ -627,7 +593,7 @@
     if (pinned === "first") row.classList.add("is-pinned-first");
     if (pinned === "last") row.classList.add("is-pinned-last");
     if (isPinned(stepId)) row.classList.add("is-locked");
-    if (state.selected === stepId) row.classList.add("is-selected");
+    if (view.selected === stepId) row.classList.add("is-selected");
 
     const orderCell = el("div", "wdCellOrder");
     const handle = el("span", "wdDragHandle");
@@ -637,8 +603,8 @@
     if (!isPinned(stepId)) {
       handle.draggable = true;
       handle.addEventListener("dragstart", (e) => {
-        state.dragId = stepId;
-        state.dropBeforeId = stepId;
+        view.dragId = stepId;
+        view.dropBeforeId = stepId;
         e.dataTransfer.effectAllowed = "move";
         dropHint.classList.add("is-visible");
       });
@@ -692,26 +658,26 @@
 
     row.addEventListener("click", () => setSelected(stepId));
     row.addEventListener("dragover", (e) => {
-      if (!state.dragId) return;
+      if (!view.dragId) return;
       e.preventDefault();
       e.dataTransfer.dropEffect = "move";
-      state.dropBeforeId = stepId;
+      view.dropBeforeId = stepId;
     });
 
     row.addEventListener("drop", (e) => {
-      if (!state.dragId) return;
+      if (!view.dragId) return;
       e.preventDefault();
-      const dragId = state.dragId;
-      const beforeId = state.dropBeforeId;
-      state.dragId = null;
-      state.dropBeforeId = null;
+      const dragId = view.dragId;
+      const beforeId = view.dropBeforeId;
+      view.dragId = null;
+      view.dropBeforeId = null;
       dropHint.classList.remove("is-visible");
       moveStep(dragId, beforeId);
     });
 
     row.addEventListener("dragend", () => {
-      state.dragId = null;
-      state.dropBeforeId = null;
+      view.dragId = null;
+      view.dropBeforeId = null;
       dropHint.classList.remove("is-visible");
     });
 
@@ -719,7 +685,7 @@
   }
 
   function paletteButton(sid) {
-    const already = state.draft.includes(sid);
+    const already = view.draft.includes(sid);
 
     const add = el("button", "btn wdPaletteAdd");
     add.type = "button";
@@ -747,7 +713,7 @@
     items.forEach((it) => {
       const sid = String(it.step_id || "");
       if (!sid) return;
-      if (!state.showOptional && kind !== "mandatory") return;
+      if (!view.showOptional && kind !== "mandatory") return;
 
       const item = el("div", "wdPaletteItem");
       if (kind === "mandatory") item.classList.add("kind-mandatory");
@@ -782,9 +748,9 @@
     validation.classList.remove("is-ok");
     validation.classList.remove("is-error");
 
-    const ok = state.validation.ok;
-    const localItems = state.validation.local;
-    const serverItems = state.validation.server;
+    const ok = view.validation.ok;
+    const localItems = view.validation.local;
+    const serverItems = view.validation.server;
     const total = localItems.length + serverItems.length;
 
     validationClear.disabled = localItems.length === 0;
@@ -815,18 +781,20 @@
   }
 
   function render() {
-    btnRemove.disabled = !state.selected || !canRemove(state.selected);
-    btnUp.disabled = !state.selected || isPinned(state.selected);
-    btnDown.disabled = !state.selected || isPinned(state.selected);
+    refreshFromFlowState();
+    syncTextarea();
+    btnRemove.disabled = !view.selected || !canRemove(view.selected);
+    btnUp.disabled = !view.selected || isPinned(view.selected);
+    btnDown.disabled = !view.selected || isPinned(view.selected);
 
     clear(body);
-    state.draft.forEach((sid, idx) => {
+    view.draft.forEach((sid, idx) => {
       body.appendChild(renderStepRow(sid, idx));
     });
 
     clear(paletteGroups);
     const q = String(search.value || "").toLowerCase();
-    const filtered = state.palette
+    const filtered = view.palette
       .filter((it) => it && it.step_id)
       .filter((it) => String(it.step_id).toLowerCase().includes(q));
 
@@ -1023,13 +991,13 @@
         ? window.AM2WDEdgesIntegrity.normalizeEdges
         : null;
     if (fn) {
-      state.edges = fn(state.draft, state.edges);
+      view.edges = fn(view.draft, view.edges);
     }
   }
 
   function ensureEntryValid() {
-    if (!state.entry_step_id || state.draft.indexOf(state.entry_step_id) < 0) {
-      state.entry_step_id = state.draft[0] || null;
+    if (!view.entry_step_id || view.draft.indexOf(view.entry_step_id) < 0) {
+      view.entry_step_id = view.draft[0] || null;
     }
   }
 
@@ -1044,17 +1012,16 @@
     const entryWrap = el("div", "flowTransEntry");
     entryWrap.appendChild(text("label", "flowTransLabel", "Entry"));
     const entrySel = el("select", "flowTransSelect");
-    state.draft.forEach((sid) => {
+    view.draft.forEach((sid) => {
       const opt = el("option", null);
       opt.value = sid;
       opt.textContent = sid;
-      if (sid === state.entry_step_id) opt.selected = true;
+      if (sid === view.entry_step_id) opt.selected = true;
       entrySel.appendChild(opt);
     });
     entrySel.addEventListener("change", () => {
-      state.entry_step_id = entrySel.value || null;
-      syncTextarea();
-      emitChanged();
+      view.entry_step_id = entrySel.value || null;
+    emitChanged();
     });
     entryWrap.appendChild(entrySel);
     header.appendChild(entryWrap);
@@ -1067,7 +1034,7 @@
     priInp.min = "0";
     priInp.step = "1";
     priInp.value = "0";
-    state.draft.forEach((sid) => {
+    view.draft.forEach((sid) => {
       const a = el("option", null);
       a.value = sid;
       a.textContent = sid;
@@ -1077,7 +1044,7 @@
       b.textContent = sid;
       toSel.appendChild(b);
     });
-    if (state.selected && state.draft.indexOf(state.selected) >= 0) fromSel.value = state.selected;
+    if (view.selected && view.draft.indexOf(view.selected) >= 0) fromSel.value = view.selected;
 
     addWrap.appendChild(text("label", "flowTransLabel", "From"));
     addWrap.appendChild(fromSel);
@@ -1097,8 +1064,8 @@
         pushLocalValidation("Self-loop transitions are not allowed.");
         return;
       }
-      if (state.draft.indexOf(frm) < 0 || state.draft.indexOf(to) < 0) return;
-      state.edges = state.edges.concat([
+      if (view.draft.indexOf(frm) < 0 || view.draft.indexOf(to) < 0) return;
+      view.edges = view.edges.concat([
         {
           from_step_id: frm,
           to_step_id: to,
@@ -1107,8 +1074,7 @@
         },
       ]);
       normalizeEdges();
-      syncTextarea();
-      emitChanged();
+    emitChanged();
       renderTransitions();
     });
     addWrap.appendChild(btnAddEdge);
@@ -1128,22 +1094,21 @@
     normalizeEdges();
 
     function moveEdge(idx, dir) {
-      const e = state.edges[idx];
+      const e = view.edges[idx];
       if (!e) return;
       const frm = e.from_step_id;
       const swap = idx + dir;
-      const e2 = state.edges[swap];
+      const e2 = view.edges[swap];
       if (!e2 || e2.from_step_id !== frm) return;
-      const next = state.edges.slice();
+      const next = view.edges.slice();
       next[idx] = e2;
       next[swap] = e;
-      state.edges = next;
-      syncTextarea();
-      emitChanged();
+      view.edges = next;
+    emitChanged();
       renderTransitions();
     }
 
-    state.edges.forEach((e, idx) => {
+    view.edges.forEach((e, idx) => {
       const row = el("div", "flowTransRow");
       row.appendChild(text("div", "flowTransCellPri", String(e.priority || 0)));
       row.appendChild(text("div", "flowTransCellFrom", e.from_step_id));
@@ -1153,7 +1118,7 @@
       const condBtn = text("button", "flowTransCondBtn", condSummary(e.when));
       condBtn.type = "button";
       condBtn.addEventListener("click", () => {
-        state.editingEdgeIdx = state.editingEdgeIdx === idx ? null : idx;
+        view.editingEdgeIdx = view.editingEdgeIdx === idx ? null : idx;
         renderTransitions();
       });
       condCell.appendChild(condBtn);
@@ -1170,11 +1135,10 @@
       btnUpEdge.addEventListener("click", () => moveEdge(idx, -1));
       btnDownEdge.addEventListener("click", () => moveEdge(idx, +1));
       btnDel.addEventListener("click", () => {
-        state.edges = state.edges.filter((_, i) => i !== idx);
+        view.edges = view.edges.filter((_, i) => i !== idx);
         normalizeEdges();
-        state.editingEdgeIdx = null;
-        syncTextarea();
-        emitChanged();
+        view.editingEdgeIdx = null;
+    emitChanged();
         renderTransitions();
       });
       act.appendChild(btnUpEdge);
@@ -1184,7 +1148,7 @@
 
       table.appendChild(row);
 
-      if (state.editingEdgeIdx === idx) {
+      if (view.editingEdgeIdx === idx) {
         const ed = el("div", "flowTransEditor");
         const uiD = parseWhenToUI(e.when);
 
@@ -1209,13 +1173,13 @@
         if (!dl) {
           dl = el("datalist", null);
           dl.id = dlId;
-          (state.draft || []).forEach((sid) => {
+          (view.draft || []).forEach((sid) => {
             const o = el("option", null);
             o.value = "$.inputs." + sid + ".<field>";
             dl.appendChild(o);
           });
           const o2 = el("option", null);
-          o2.value = "$.state.<field>";
+          o2.value = "$.view.<field>";
           dl.appendChild(o2);
           document.body.appendChild(dl);
         }
@@ -1286,12 +1250,11 @@
             inList: inItems,
           };
           const when = buildWhenFromUI(d);
-          const next = state.edges.slice();
+          const next = view.edges.slice();
           next[idx] = { from_step_id: e.from_step_id, to_step_id: e.to_step_id, when: when };
-          state.edges = next;
-          syncTextarea();
-          emitChanged();
-          state.editingEdgeIdx = null;
+          view.edges = next;
+    emitChanged();
+          view.editingEdgeIdx = null;
           renderTransitions();
         });
 
@@ -1339,16 +1302,16 @@
   search.addEventListener("input", () => render());
 
   optToggle.addEventListener("change", () => {
-    state.showOptional = !!optToggle.checked;
+    view.showOptional = !!optToggle.checked;
     render();
   });
 
   validationClear.addEventListener("click", () => {
-    setValidation(false, [], state.validation.server);
+    setValidation(false, [], view.validation.server);
   });
 
   btnRemove.addEventListener("click", () => {
-    const sid = state.selected;
+    const sid = view.selected;
     if (!sid) return;
     if (!canRemove(sid)) {
       pushLocalValidation("Cannot remove locked or mandatory step: " + sid);
@@ -1358,28 +1321,28 @@
   });
 
   btnUp.addEventListener("click", () => {
-    const sid = state.selected;
+    const sid = view.selected;
     if (!sid) return;
     if (isPinned(sid)) return;
     const from = idxOf(sid);
     if (from <= 0) return;
-    const target = state.draft[from - 1];
+    const target = view.draft[from - 1];
     moveStep(sid, target);
   });
 
   btnDown.addEventListener("click", () => {
-    const sid = state.selected;
+    const sid = view.selected;
     if (!sid) return;
     if (isPinned(sid)) return;
     const from = idxOf(sid);
-    if (from < 0 || from >= state.draft.length - 1) return;
-    const target = state.draft[from + 2] || null;
+    if (from < 0 || from >= view.draft.length - 1) return;
+    const target = view.draft[from + 2] || null;
     moveStep(sid, target);
   });
 
   btnAdd.addEventListener("click", () => {
     const q = String(search.value || "").toLowerCase();
-    const matches = state.palette
+    const matches = view.palette
       .filter((it) => it && it.step_id)
       .filter((it) => String(it.step_id).toLowerCase().includes(q));
 
@@ -1404,5 +1367,12 @@
     resetDefinition: resetDefinition,
   };
 
-  reloadAll();
+  
+
+  const FE = window.AM2FlowEditorState;
+  if (FE && FE.bindWizardEditorBridge) {
+    FE.bindWizardEditorBridge({ renderRequested: render });
+  }
+
+reloadAll();
 })();

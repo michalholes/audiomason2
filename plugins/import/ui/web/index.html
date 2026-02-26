@@ -158,7 +158,7 @@
 
       function snap() {
         const FE = window.AM2FlowEditorState;
-        return FE && FE.getSnapshot ? FE.getSnapshot() : { draftDirty: true, validationState: { lastOk: false } };
+        return FE.getSnapshot();
       }
 
       function setSaveEnabled() {

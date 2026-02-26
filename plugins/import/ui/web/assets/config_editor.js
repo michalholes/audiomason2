@@ -30,7 +30,18 @@
 
   const unifiedMode = !!ui.stepPanel;
 
-  const state = {
+  function refreshFromFlowState() {
+    const FE = window.AM2FlowEditorState;
+    if (!FE || !FE.getSnapshot) return;
+    const s = FE.getSnapshot();
+    const cfg = (s && s.configDraft) || {};
+    view.loaded = cfg;
+    view.draft = JSON.parse(JSON.stringify(cfg || {}));
+    view.selectedStepId = (s && s.selectedStepId) || null;
+  }
+
+
+  const view = {
     loaded: null,
     draft: null,
     selectedStepId: null,
@@ -85,8 +96,12 @@
     }
     const cfg = out.data && out.data.config ? out.data.config : {};
     ui.ta.value = H.pretty(cfg);
-    state.loaded = cfg;
-    state.draft = JSON.parse(JSON.stringify(cfg || {}));
+    const FE = window.AM2FlowEditorState;
+    if (FE && FE.loadAll && FE.getSnapshot) {
+      const snap = FE.getSnapshot();
+      FE.loadAll({ wizardDefinition: snap.wizardDraft, flowConfig: cfg });
+    }
+    refreshFromFlowState();
     await loadHistory();
     if (unifiedMode) renderSelectedStep();
     return true;
@@ -96,7 +111,8 @@
     H.renderError(ui.err, null);
     let payloadCfg = {};
     if (unifiedMode) {
-      payloadCfg = state.draft || {};
+      refreshFromFlowState();
+      payloadCfg = view.draft || {};
     } else {
       try {
         payloadCfg = JSON.parse(ui.ta.value || "{}");
@@ -115,17 +131,17 @@
       return false;
     }
     ui.ta.value = H.pretty(out.data.config || {});
-    state.draft = out.data.config || {};
 
     const FE = window.AM2FlowEditorState;
     if (FE && FE.markValidated && FE.getSnapshot) {
       const snap = FE.getSnapshot();
       FE.markValidated({
         canonicalWizardDefinition: snap.wizardDraft,
-        canonicalFlowConfig: state.draft,
+        canonicalFlowConfig: out.data.config || {},
         validationEnvelope: { ok: true },
       });
     }
+    refreshFromFlowState();
 
     if (unifiedMode) renderSelectedStep();
     return true;
@@ -139,7 +155,7 @@
     }
     let payloadCfg = {};
     if (unifiedMode) {
-      payloadCfg = state.draft || {};
+      payloadCfg = view.draft || {};
     } else {
       try {
         payloadCfg = JSON.parse(ui.ta.value || "{}");
@@ -158,13 +174,13 @@
       return false;
     }
     ui.ta.value = H.pretty(out.data.config || {});
-    state.loaded = out.data.config || {};
-    state.draft = JSON.parse(JSON.stringify(state.loaded || {}));
+    view.loaded = out.data.config || {};
+    view.draft = JSON.parse(JSON.stringify(view.loaded || {}));
 
     const FE = window.AM2FlowEditorState;
     if (FE && FE.loadAll && FE.getSnapshot) {
       const snap = FE.getSnapshot();
-      FE.loadAll({ wizardDefinition: snap.wizardDraft, flowConfig: state.draft });
+      FE.loadAll({ wizardDefinition: snap.wizardDraft, flowConfig: view.draft });
     }
 
     await loadHistory();
@@ -180,13 +196,13 @@
       return false;
     }
     ui.ta.value = H.pretty(out.data.config || {});
-    state.loaded = out.data.config || {};
-    state.draft = JSON.parse(JSON.stringify(state.loaded || {}));
+    view.loaded = out.data.config || {};
+    view.draft = JSON.parse(JSON.stringify(view.loaded || {}));
 
     const FE = window.AM2FlowEditorState;
     if (FE && FE.loadAll && FE.getSnapshot) {
       const snap = FE.getSnapshot();
-      FE.loadAll({ wizardDefinition: snap.wizardDraft, flowConfig: state.draft });
+      FE.loadAll({ wizardDefinition: snap.wizardDraft, flowConfig: view.draft });
     }
 
     await loadHistory();
@@ -206,13 +222,13 @@
       return;
     }
     ui.ta.value = H.pretty(out.data.config || {});
-    state.loaded = out.data.config || {};
-    state.draft = JSON.parse(JSON.stringify(state.loaded || {}));
+    view.loaded = out.data.config || {};
+    view.draft = JSON.parse(JSON.stringify(view.loaded || {}));
 
     const FE = window.AM2FlowEditorState;
     if (FE && FE.loadAll && FE.getSnapshot) {
       const snap = FE.getSnapshot();
-      FE.loadAll({ wizardDefinition: snap.wizardDraft, flowConfig: state.draft });
+      FE.loadAll({ wizardDefinition: snap.wizardDraft, flowConfig: view.draft });
     }
 
     await loadHistory();
@@ -232,17 +248,17 @@
   }
 
   function setStepValue(stepId, key, value) {
-    if (!state.draft || typeof state.draft !== "object") state.draft = {};
-    const defaults = safeDefaultsRoot(state.draft);
+    if (!view.draft || typeof view.draft !== "object") view.draft = {};
+    const defaults = safeDefaultsRoot(view.draft);
     if (!defaults[stepId] || typeof defaults[stepId] !== "object") {
       defaults[stepId] = {};
     }
     defaults[stepId][key] = value;
-    ui.ta.value = H.pretty(state.draft || {});
+    ui.ta.value = H.pretty(view.draft || {});
 
     const FE = window.AM2FlowEditorState;
     if (FE && FE.mutateConfig) {
-      const nextCfg = JSON.parse(JSON.stringify(state.draft || {}));
+      const nextCfg = JSON.parse(JSON.stringify(view.draft || {}));
       FE.mutateConfig(function (cfg) {
         Object.keys(cfg || {}).forEach(function (k) {
           try {
@@ -268,13 +284,13 @@
 
   function clearStepDefaults(stepId) {
     if (!stepId) return;
-    const defaults = safeDefaultsRoot(state.draft);
+    const defaults = safeDefaultsRoot(view.draft);
     if (defaults[stepId]) delete defaults[stepId];
-    ui.ta.value = H.pretty(state.draft || {});
+    ui.ta.value = H.pretty(view.draft || {});
 
     const FE = window.AM2FlowEditorState;
     if (FE && FE.mutateConfig) {
-      const nextCfg = JSON.parse(JSON.stringify(state.draft || {}));
+      const nextCfg = JSON.parse(JSON.stringify(view.draft || {}));
       FE.mutateConfig(function (cfg) {
         Object.keys(cfg || {}).forEach(function (k) {
           try {
@@ -309,7 +325,7 @@
   }
 
   function getAppliedKeys(stepId) {
-    const defaults = safeDefaultsRoot(state.draft);
+    const defaults = safeDefaultsRoot(view.draft);
     const o = defaults[stepId];
     if (!o || typeof o !== "object") return [];
     return Object.keys(o).sort();
@@ -332,7 +348,7 @@
     const inp = document.createElement("input");
     inp.className = "flowFieldInput";
 
-    const defaults = safeDefaultsRoot(state.draft);
+    const defaults = safeDefaultsRoot(view.draft);
     const cur =
       defaults[stepId] && typeof defaults[stepId] === "object"
         ? defaults[stepId][field.key]
@@ -382,20 +398,20 @@
   async function fetchStepDetails(stepId) {
     const sid = String(stepId || "");
     if (!sid) return null;
-    if (state.stepCache[sid]) return state.stepCache[sid];
+    if (view.stepCache[sid]) return view.stepCache[sid];
     const out = await H.requestJSON("/import/ui/steps/" + encodeURIComponent(sid));
     if (!out.ok) {
       setStepError("Failed to load step details");
       return null;
     }
     const d = out.data && typeof out.data === "object" ? out.data : {};
-    state.stepCache[sid] = d;
+    view.stepCache[sid] = d;
     return d;
   }
 
   async function renderSelectedStep() {
     if (!unifiedMode) return;
-    const stepId = state.selectedStepId;
+    const stepId = view.selectedStepId;
 
     if (!ui.stepHeader || !ui.stepDesc || !ui.stepForm || !ui.stepApply) return;
 
@@ -430,13 +446,13 @@
   window.addEventListener("am2:wd:selected", async (e) => {
     const d = e && e.detail ? e.detail : {};
     const sid = typeof d.step_id === "string" ? d.step_id : null;
-    state.selectedStepId = sid;
+    view.selectedStepId = sid;
     await renderSelectedStep();
   });
 
   ui.clearStep &&
     ui.clearStep.addEventListener("click", () => {
-      clearStepDefaults(state.selectedStepId);
+      clearStepDefaults(view.selectedStepId);
     });
 
   ui.reload && ui.reload.addEventListener("click", reload);
@@ -449,8 +465,19 @@
     validate: validateOnly,
     save: save,
     reset: reset,
-    _debug_getDraft: () => state.draft,
+    _debug_getDraft: () => view.draft,
   };
+
+
+  const FE = window.AM2FlowEditorState;
+  if (FE && FE.bindConfigEditorBridge) {
+    FE.bindConfigEditorBridge({
+      renderRequested: function () {
+        refreshFromFlowState();
+        if (unifiedMode) renderSelectedStep();
+      },
+    });
+  }
 
   reload();
 })();
