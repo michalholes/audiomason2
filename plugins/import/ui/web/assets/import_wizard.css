@@ -278,6 +278,15 @@ textarea {
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
+
+.wdRow.is-drop-target {
+  outline: 2px dashed rgba(255, 255, 255, 0.35);
+  outline-offset: -2px;
+}
+
+.wdRow.is-dragging {
+  opacity: 0.6;
+}
 .wdRow:last-child {
   border-bottom: 0;
 }

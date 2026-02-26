@@ -208,6 +208,67 @@
     });
   }
 
+
+  function reorderStep(dragStepId, dropBeforeStepIdOrNull) {
+    ensureV2();
+    mutateWizard(function (uiState, wd) {
+      const g = stableGraph(wd);
+      const nodes = Array.isArray(g.nodes) ? g.nodes.slice(0) : [];
+      const dragId = String(dragStepId || "");
+      const dropBeforeId = dropBeforeStepIdOrNull ? String(dropBeforeStepIdOrNull) : null;
+      const fromIdx = nodes.indexOf(dragId);
+      if (fromIdx < 0) return;
+      if (dropBeforeId && dropBeforeId === dragId) return;
+      nodes.splice(fromIdx, 1);
+      let toIdx = -1;
+      if (dropBeforeId) toIdx = nodes.indexOf(dropBeforeId);
+      if (toIdx < 0) {
+        nodes.push(dragId);
+      } else {
+        nodes.splice(toIdx, 0, dragId);
+      }
+      const next = defFromGraph(nodes, g.entry, g.edges);
+      next._am2_ui = uiState;
+      Object.keys(wd).forEach((k) => delete wd[k]);
+      Object.assign(wd, next);
+    });
+  }
+
+  function moveStepUp(stepId) {
+    ensureV2();
+    mutateWizard(function (uiState, wd) {
+      const g = stableGraph(wd);
+      const nodes = Array.isArray(g.nodes) ? g.nodes.slice(0) : [];
+      const sid = String(stepId || "");
+      const idx = nodes.indexOf(sid);
+      if (idx <= 0) return;
+      const tmp = nodes[idx - 1];
+      nodes[idx - 1] = nodes[idx];
+      nodes[idx] = tmp;
+      const next = defFromGraph(nodes, g.entry, g.edges);
+      next._am2_ui = uiState;
+      Object.keys(wd).forEach((k) => delete wd[k]);
+      Object.assign(wd, next);
+    });
+  }
+
+  function moveStepDown(stepId) {
+    ensureV2();
+    mutateWizard(function (uiState, wd) {
+      const g = stableGraph(wd);
+      const nodes = Array.isArray(g.nodes) ? g.nodes.slice(0) : [];
+      const sid = String(stepId || "");
+      const idx = nodes.indexOf(sid);
+      if (idx < 0 || idx >= nodes.length - 1) return;
+      const tmp = nodes[idx + 1];
+      nodes[idx + 1] = nodes[idx];
+      nodes[idx] = tmp;
+      const next = defFromGraph(nodes, g.entry, g.edges);
+      next._am2_ui = uiState;
+      Object.keys(wd).forEach((k) => delete wd[k]);
+      Object.assign(wd, next);
+    });
+  }
   function addEdge(fromId, toId, prio, whenVal) {
     ensureV2();
     mutateWizard(function (uiState, wd) {
@@ -558,6 +619,18 @@
             setSelectedStep: setSelectedStep,
             removeStep: function (sid) {
               removeStep(sid);
+              renderAll();
+            },
+            moveStepUp: function (sid) {
+              moveStepUp(sid);
+              renderAll();
+            },
+            moveStepDown: function (sid) {
+              moveStepDown(sid);
+              renderAll();
+            },
+            reorderStep: function (dragSid, dropBeforeSidOrNull) {
+              reorderStep(dragSid, dropBeforeSidOrNull);
               renderAll();
             },
           },

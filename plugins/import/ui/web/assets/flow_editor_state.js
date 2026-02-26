@@ -40,6 +40,18 @@
     });
   };
 
+  FlowEditorState.prototype._dispatchSelectionEvent =
+    function _dispatchSelectionEvent(stepIdOrNull) {
+    try {
+      window.dispatchEvent(
+        new CustomEvent("am2:wd:selected", {
+          detail: { step_id: stepIdOrNull || null },
+        })
+      );
+    } catch (e) {
+    }
+  };
+
   FlowEditorState.prototype.loadAll = function loadAll(payload) {
     const wiz = payload && payload.wizardDefinition;
     const cfg = payload && payload.flowConfig;
@@ -55,6 +67,7 @@
     this.emit("wizard_changed", { reason: "load_all" });
     this.emit("config_changed", { reason: "load_all" });
     this.emit("selection_changed", { reason: "load_all" });
+    this._dispatchSelectionEvent(null);
     this.emit("validation_changed", { reason: "load_all" });
   };
 
@@ -113,6 +126,7 @@
   FlowEditorState.prototype.setSelectedStep = function setSelectedStep(stepIdOrNull) {
     this.selectedStepId = stepIdOrNull || null;
     this.emit("selection_changed", { reason: "selection" });
+    this._dispatchSelectionEvent(this.selectedStepId);
   };
 
   FlowEditorState.prototype.mutateWizard = function mutateWizard(mutatorFn) {
@@ -152,4 +166,7 @@
   };
 
   window.FlowEditorState = FlowEditorState;
+  if (!window.AM2FlowEditorState) {
+    window.AM2FlowEditorState = new FlowEditorState();
+  }
 })();
