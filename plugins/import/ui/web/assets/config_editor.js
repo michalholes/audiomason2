@@ -19,7 +19,10 @@
 
     stepPanel: $("flowStepPanel"),
     stepHeader: $("flowStepHeader"),
-    stepDesc: $("flowStepDesc"),
+    stepBehavior: $("flowStepBehavior"),
+    stepInput: $("flowStepInput"),
+    stepOutput: $("flowStepOutput"),
+    stepSideEffects: $("flowStepSideEffects"),
     stepForm: $("flowStepForm"),
     stepApply: $("flowStepApply"),
     stepError: $("flowStepError"),
@@ -255,8 +258,10 @@
       });
     }
 
-    ui.ta.value = H.pretty(currentConfig());
-    emitChanged();
+    if (!unifiedMode) {
+      ui.ta.value = H.pretty(currentConfig());
+      emitChanged();
+    }
     updateApplyStatus(stepId);
   }
 
@@ -269,8 +274,10 @@
         if (defaults && defaults[stepId]) delete defaults[stepId];
       });
     }
-    ui.ta.value = H.pretty(currentConfig());
-    emitChanged();
+    if (!unifiedMode) {
+      ui.ta.value = H.pretty(currentConfig());
+      emitChanged();
+    }
     renderSelectedStep();
   }
 
@@ -378,13 +385,16 @@
     const s = snapshot();
     const stepId = (s && s.selectedStepId) || null;
 
-    if (!ui.stepHeader || !ui.stepDesc || !ui.stepForm || !ui.stepApply) return;
+    if (!ui.stepHeader || !ui.stepBehavior || !ui.stepForm || !ui.stepApply) return;
 
     setStepError("");
 
     if (!stepId) {
       ui.stepHeader.textContent = "Select a step";
-      ui.stepDesc.textContent = "";
+      ui.stepBehavior.textContent = "";
+      if (ui.stepInput) ui.stepInput.textContent = "";
+      if (ui.stepOutput) ui.stepOutput.textContent = "";
+      if (ui.stepSideEffects) ui.stepSideEffects.textContent = "";
       clearNode(ui.stepForm);
       ui.stepApply.textContent = "";
       return;
@@ -393,11 +403,17 @@
     const det = await fetchStepDetails(stepId);
     const title =
       det && (det.displayName || det.title) ? String(det.displayName || det.title) : "";
-    const desc = det && det.description ? String(det.description) : "";
+    const behavior = det && det.behavioralSummary ? String(det.behavioralSummary) : "";
+    const inC = det && det.inputContract ? String(det.inputContract) : "";
+    const outC = det && det.outputContract ? String(det.outputContract) : "";
+    const sideFx = det && det.sideEffectsDescription ? String(det.sideEffectsDescription) : "";
     const schema = det && det.settings_schema ? det.settings_schema : {};
 
     ui.stepHeader.textContent = title ? stepId + " - " + title : stepId;
-    ui.stepDesc.textContent = desc;
+    ui.stepBehavior.textContent = behavior;
+    if (ui.stepInput) ui.stepInput.textContent = inC;
+    if (ui.stepOutput) ui.stepOutput.textContent = outC;
+    if (ui.stepSideEffects) ui.stepSideEffects.textContent = sideFx;
 
     clearNode(ui.stepForm);
     stableFields(schema).forEach((f) => {

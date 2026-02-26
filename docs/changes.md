@@ -844,3 +844,20 @@
 -   Issue 264: Enforce step behavioral metadata fields and validate FlowGraph invariants before job creation.
 
 -   spec: Bump specification version to 1.1.29.
+
+-   Issue 265: Remove raw JSON condition editing from Transitions; add a visual condition builder
+    with server-defined path prefixes.
+
+-   Issue 265: Step Details now renders behavioral summary, input contract, output contract,
+    and side effects description.
+
+-   Issue 265: Step Palette now shows displayName and shortDescription; toolbar Add Step only
+    focuses the palette (no implicit insertion).
+
+-   Issue 265: Unified mode config editor no longer mirrors cfgJson on each field mutation;
+    JSON text is refreshed only on reload/validate/save.
+
+-   Issue 265: Save All gating is centralized on FlowEditorState validation_changed,
+    wizard_changed, and config_changed, enabling Save only when lastOk=true and draftDirty=false.
+
+-   spec: Bump specification version to 1.1.30.

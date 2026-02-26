@@ -68,7 +68,7 @@
 
         <div class="flow-editor-layout">
           <div class="flow-editor-main">
-            <textarea id="wdJson" class="jsonEditor" rows="22"></textarea>
+            <textarea id="wdJson" class="jsonEditor is-hidden" rows="22"></textarea>
             <div id="wdError" class="error"></div>
           </div>
 
@@ -77,8 +77,23 @@
               <div class="flowStepHeader" id="flowStepHeader"></div>
               <div class="flowStepBody">
                 <div class="flowStepSection">
-                  <div class="flowStepSectionTitle">What it does</div>
-                  <div class="flowStepDesc" id="flowStepDesc"></div>
+                  <div class="flowStepSectionTitle">Behavioral Summary</div>
+                  <div class="flowStepDesc" id="flowStepBehavior"></div>
+                </div>
+
+                <div class="flowStepSection">
+                  <div class="flowStepSectionTitle">Input Contract</div>
+                  <pre class="flowStepContract" id="flowStepInput"></pre>
+                </div>
+
+                <div class="flowStepSection">
+                  <div class="flowStepSectionTitle">Output Contract</div>
+                  <pre class="flowStepContract" id="flowStepOutput"></pre>
+                </div>
+
+                <div class="flowStepSection">
+                  <div class="flowStepSectionTitle">Side Effects</div>
+                  <div class="flowStepDesc" id="flowStepSideEffects"></div>
                 </div>
 
                 <div class="flowStepSection">
@@ -206,7 +221,12 @@
         const okC = C && C.validate ? await C.validate() : false;
         setSaveEnabled();
         const s = snap();
-        const ok = okW && okC && s.validationState && s.validationState.lastOk === true && s.draftDirty === false;
+        const ok =
+          okW &&
+          okC &&
+          s.validationState &&
+          s.validationState.lastOk === true &&
+          s.draftDirty === false;
         setSaveEnabled();
         setStatus(ok ? "Validate All: OK" : "Validate All: FAILED", ok ? "ok" : "bad");
         return ok;
@@ -214,7 +234,13 @@
 
       async function doSaveAll() {
         const s0 = snap();
-        if (!(s0.validationState && s0.validationState.lastOk === true && s0.draftDirty === false)) {
+        if (
+          !(
+            s0.validationState &&
+            s0.validationState.lastOk === true &&
+            s0.draftDirty === false
+          )
+        ) {
           setStatus("Save blocked: run Validate All first.", "bad");
           setSaveEnabled();
           return;
@@ -239,8 +265,12 @@
         setStatus("Reset All: OK", "ok");
       }
 
-      window.addEventListener("am2:wd:changed", markDirty);
-      window.addEventListener("am2:cfg:changed", markDirty);
+      const FE = window.AM2FlowEditorState;
+      if (FE && FE.on) {
+        FE.on("wizard_changed", markDirty);
+        FE.on("config_changed", markDirty);
+        FE.on("validation_changed", markDirty);
+      }
 
       setSaveEnabled();
 

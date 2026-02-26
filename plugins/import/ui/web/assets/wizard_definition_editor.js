@@ -418,7 +418,11 @@
     });
     if (!out.ok) {
       renderError(out.data, true);
-      setValidation(false, ["Validation failed. See error details above."], extractServerMessages(out.data));
+      setValidation(
+        false,
+        ["Validation failed. See error details above."],
+        extractServerMessages(out.data)
+      );
       renderAll();
       return false;
     }
@@ -522,10 +526,11 @@
 
     btnAdd.type = "button";
     btnAdd.addEventListener("click", function () {
-      if (!paletteItems.length) return;
-      const sid = String(paletteItems[0].step_id || "");
-      if (sid) addStep(sid);
-      renderAll();
+      try {
+        window.dispatchEvent(new CustomEvent("am2:palette:focus", { detail: {} }));
+      } catch (e) {
+        // ignore
+      }
     });
 
     optToggle.addEventListener("change", function () {

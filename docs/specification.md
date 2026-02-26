@@ -1,6 +1,6 @@
 # AudioMason2 - Project Specification (Overview)
 
-Specification Version: 1.1.29
+Specification Version: 1.1.30
 This file is an overview entrypoint only.
 
 Normative authority:
@@ -28,3 +28,8 @@ Notes:
 - Issue 264 further consolidates the Flow Editor into a single authoritative
   layout with deterministic sidebar sections (details, transitions, palette),
   and tightens runtime validation for FlowGraph and behavioral step metadata.
+
+- Issue 265 completes the Flow Editor correction: transitions use a visual
+  condition builder (no raw JSON), step details render full behavioral
+  semantics, the palette shows extended metadata, unified config mode no longer
+  mirrors JSON per keystroke, and Save gating is centralized in FlowEditorState.

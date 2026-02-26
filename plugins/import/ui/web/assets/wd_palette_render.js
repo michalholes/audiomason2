@@ -1,6 +1,10 @@
 (function () {
   "use strict";
 
+  let _focusHandlerBound = false;
+  let _lastSearch = null;
+  let _lastMount = null;
+
   function clear(node) {
     while (node && node.firstChild) node.removeChild(node.firstChild);
   }
@@ -36,12 +40,17 @@
         " " +
         String((it && it.displayName) || "") +
         " " +
+        String((it && it.shortDescription) || "") +
+        " " +
         String((it && it.title) || "")
       )
         .toLowerCase()
         .trim();
       return s.indexOf(q.toLowerCase().trim()) >= 0;
     }
+
+    _lastSearch = search;
+    _lastMount = mount;
 
     function renderList() {
       clear(list);
@@ -57,6 +66,12 @@
         meta.appendChild(
           text("div", "wdPaletteItemTitle", String(it.displayName || it.title || sid))
         );
+
+        if (it && it.shortDescription) {
+          meta.appendChild(
+            text("div", "wdPaletteItemDesc", String(it.shortDescription || ""))
+          );
+        }
 
         const btn = text("button", "btn btnSmall", "Add");
         btn.type = "button";
@@ -75,6 +90,23 @@
     search.addEventListener("input", function () {
       renderList();
     });
+
+    if (!_focusHandlerBound) {
+      _focusHandlerBound = true;
+      window.addEventListener("am2:palette:focus", function () {
+        try {
+          _lastSearch && _lastSearch.focus();
+        } catch (e) {
+          // ignore
+        }
+        if (_lastMount && _lastMount.classList) {
+          _lastMount.classList.add("wdPaletteAttention");
+          window.setTimeout(function () {
+            _lastMount && _lastMount.classList.remove("wdPaletteAttention");
+          }, 900);
+        }
+      });
+    }
 
     renderList();
   }

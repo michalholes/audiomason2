@@ -92,6 +92,17 @@ def bind_editor_routes(
     def get_step_details(step_id: str):
         return call(lambda: _get_step_details(step_id))
 
+    @router.get("/transition-condition-prefixes")
+    def get_transition_condition_prefixes():
+        return call(lambda: _get_transition_condition_prefixes())
+
+
+_TRANSITION_CONDITION_PREFIXES: tuple[str, ...] = (
+    "cfg.defaults.",
+    "session.",
+    "wizard.",
+)
+
 
 def _ensure_ascii_step_id(step_id: Any) -> str:
     if not isinstance(step_id, str) or not step_id:
@@ -265,10 +276,8 @@ def _rollback_flow_config(engine: Any, body: Any) -> dict[str, Any]:
 
 
 def _get_steps_index() -> dict[str, Any]:
-    from .flow_runtime import (
-        CANONICAL_STEP_ORDER,
-        CONDITIONAL_STEP_IDS,
-    )
+    from .flow_runtime import CANONICAL_STEP_ORDER, CONDITIONAL_STEP_IDS
+    from .step_catalog import get_step_details
 
     seen: set[str] = set()
     items: list[dict[str, Any]] = []
@@ -280,10 +289,18 @@ def _get_steps_index() -> dict[str, Any]:
 
         kind, pinned = _classify_step(step_id)
 
+        det = get_step_details(step_id) or {}
+        display = str(det.get("displayName") or det.get("title") or step_id)
+        desc = str(det.get("description") or det.get("behavioralSummary") or "")
+        short = desc.split("\n", 1)[0].strip()
+        if len(short) > 120:
+            short = short[:117].rstrip() + "..."
+
         items.append(
             {
                 "step_id": step_id,
-                "title": step_id,
+                "displayName": display,
+                "shortDescription": short,
                 "kind": kind,
                 "pinned": pinned,
             }
@@ -296,6 +313,10 @@ def _get_steps_index() -> dict[str, Any]:
         add(str(sid))
 
     return {"items": items}
+
+
+def _get_transition_condition_prefixes() -> dict[str, Any]:
+    return {"items": list(_TRANSITION_CONDITION_PREFIXES)}
 
 
 def _get_step_details(step_id: Any) -> dict[str, Any]:
