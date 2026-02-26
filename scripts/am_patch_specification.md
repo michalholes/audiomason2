@@ -509,7 +509,8 @@ finalizeworkspace
 -   Purpose: detect monolith growth and enforce ownership boundaries using read-only AST analysis.
 -   Scan set (policy: gate_monolith_scan_scope, gate_monolith_extensions):
     -   patch: analyze only touched existing files whose suffix is in gate_monolith_extensions.
-    -   workspace: deterministic scan under prefixes listed in gate_monolith_areas, filtering by suffix.
+    -   workspace: deterministic scan under ownership roots listed in gate_monolith_areas_prefixes,
+        filtering by suffix.
 -   JS support: .js uses deterministic heuristics (no external parsers) for exports and internal relative imports.
 -   Baseline model (no git): compare new text (cwd/relpath) vs old text (repo_root/relpath).
 -   Metrics (old vs new): LOC (non-empty lines), EXPORTS (public export surface; for .js counted via export/module.exports/exports.<name> heuristics), INTERNAL_IMPORTS (distinct internal modules), optional FANIN/FANOUT graph deltas.
@@ -529,8 +530,25 @@ Controls (precedence: CLI > config > defaults):
 -   gate_monolith_extensions = [".py", ".js", ...] (default: [".py", ".js"])
 -   gate_monolith_compute_fanin = true|false (default: true)
 -   gate_monolith_on_parse_error = fail|warn (default: fail)
--   gate_monolith_areas = list[dict] (ownership roots; first match wins; plugins may be dynamic)
+-   gate_monolith_areas_prefixes = list[str] (ownership root prefixes; first match wins)
+-   gate_monolith_areas_names = list[str] (logical ownership area names)
+-   gate_monolith_areas_dynamic = list[str] (empty string means None; otherwise template string)
 -   Thresholds and lists: gate_monolith_* (all are policy keys; see am_patch.toml defaults).
+
+Monolith areas invariants:
+
+-   The three lists MUST have the same length N.
+-   For each index i:
+    -   gate_monolith_areas_prefixes[i] MUST be non-empty after trim.
+    -   gate_monolith_areas_names[i] MUST be non-empty after trim.
+    -   gate_monolith_areas_dynamic[i] trimmed:
+        -   "" means no dynamic template (None)
+        -   otherwise is a template string (example: "plugins.<name>")
+
+Legacy key (no backward compatibility):
+
+-   gate_monolith_areas is no longer supported.
+-   If gate_monolith_areas is present in configuration, the runner MUST fail with CONFIG/INVALID.
 
 CLI:
 
