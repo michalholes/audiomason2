@@ -785,6 +785,29 @@ textarea {
   position: relative;
 }
 
+.flowSidebarSection {
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  border-radius: 12px;
+  overflow: hidden;
+  margin-bottom: 12px;
+}
+
+.flowSidebarSectionHead {
+  padding: 10px 12px;
+  background: rgba(15, 22, 38, 0.98);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.flowSidebarSectionTitle {
+  font-weight: 800;
+}
+
+.wdLayoutRoot {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .flowLayout {
   display: flex;
   gap: 14px;

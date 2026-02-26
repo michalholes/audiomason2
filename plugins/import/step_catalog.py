@@ -38,6 +38,7 @@ def _schema(fields: list[dict[str, Any]]) -> dict[str, Any]:
 # - Keep descriptions short and deterministic.
 STEP_CATALOG: dict[str, dict[str, Any]] = {
     "select_authors": {
+        "id": "select_authors",
         "title": "Select Authors",
         "displayName": "Select Authors",
         "description": "Choose authors to include in the import session.",
@@ -49,6 +50,7 @@ STEP_CATALOG: dict[str, dict[str, Any]] = {
         "defaults_template": {},
     },
     "select_books": {
+        "id": "select_books",
         "title": "Select Books",
         "displayName": "Select Books",
         "description": "Choose which books to import for the selected authors.",
@@ -60,6 +62,7 @@ STEP_CATALOG: dict[str, dict[str, Any]] = {
         "defaults_template": {},
     },
     "plan_preview_batch": {
+        "id": "plan_preview_batch",
         "title": "Plan Preview",
         "displayName": "Plan Preview",
         "description": "Preview the planned operations before applying policies.",
@@ -71,6 +74,7 @@ STEP_CATALOG: dict[str, dict[str, Any]] = {
         "defaults_template": {},
     },
     "effective_author_title": {
+        "id": "effective_author_title",
         "title": "Effective Author Title",
         "displayName": "Effective Author Title",
         "description": "Show the effective author/title values computed for the plan.",
@@ -82,6 +86,7 @@ STEP_CATALOG: dict[str, dict[str, Any]] = {
         "defaults_template": {},
     },
     "filename_policy": {
+        "id": "filename_policy",
         "title": "Filename Policy",
         "displayName": "Filename Policy",
         "description": "Define filename normalization and naming behavior.",
@@ -97,6 +102,7 @@ STEP_CATALOG: dict[str, dict[str, Any]] = {
         "defaults_template": {"hint": ""},
     },
     "covers_policy": {
+        "id": "covers_policy",
         "title": "Covers Policy",
         "displayName": "Covers Policy",
         "description": "Define how cover images are selected and applied.",
@@ -112,6 +118,7 @@ STEP_CATALOG: dict[str, dict[str, Any]] = {
         "defaults_template": {"hint": ""},
     },
     "id3_policy": {
+        "id": "id3_policy",
         "title": "ID3 Policy",
         "displayName": "ID3 Policy",
         "description": "Define how ID3 tags are written for audio outputs.",
@@ -127,6 +134,7 @@ STEP_CATALOG: dict[str, dict[str, Any]] = {
         "defaults_template": {"hint": ""},
     },
     "audio_processing": {
+        "id": "audio_processing",
         "title": "Audio Processing",
         "displayName": "Audio Processing",
         "description": "Configure audio processing options used during import.",
@@ -142,6 +150,7 @@ STEP_CATALOG: dict[str, dict[str, Any]] = {
         "defaults_template": {"hint": ""},
     },
     "publish_policy": {
+        "id": "publish_policy",
         "title": "Publish Policy",
         "displayName": "Publish Policy",
         "description": "Define how results are published after processing.",
@@ -157,6 +166,7 @@ STEP_CATALOG: dict[str, dict[str, Any]] = {
         "defaults_template": {"hint": ""},
     },
     "delete_source_policy": {
+        "id": "delete_source_policy",
         "title": "Delete Source Policy",
         "displayName": "Delete Source Policy",
         "description": "Define whether and when source files may be deleted.",
@@ -172,6 +182,7 @@ STEP_CATALOG: dict[str, dict[str, Any]] = {
         "defaults_template": {"hint": ""},
     },
     "conflict_policy": {
+        "id": "conflict_policy",
         "title": "Conflict Policy",
         "displayName": "Conflict Policy",
         "description": "Define conflict detection and resolution behavior.",
@@ -193,6 +204,7 @@ STEP_CATALOG: dict[str, dict[str, Any]] = {
         "defaults_template": {"hint": "", "prefill_policy": ""},
     },
     "parallelism": {
+        "id": "parallelism",
         "title": "Parallelism",
         "displayName": "Parallelism",
         "description": "Configure concurrency limits for processing jobs.",
@@ -208,6 +220,7 @@ STEP_CATALOG: dict[str, dict[str, Any]] = {
         "defaults_template": {"max_jobs": 0},
     },
     "final_summary_confirm": {
+        "id": "final_summary_confirm",
         "title": "Final Summary",
         "displayName": "Final Summary",
         "description": "Review the final plan summary and confirm execution.",
@@ -219,6 +232,7 @@ STEP_CATALOG: dict[str, dict[str, Any]] = {
         "defaults_template": {},
     },
     "resolve_conflicts_batch": {
+        "id": "resolve_conflicts_batch",
         "title": "Resolve Conflicts",
         "displayName": "Resolve Conflicts",
         "description": "Resolve conflicts when conflict resolution is required.",
@@ -230,6 +244,7 @@ STEP_CATALOG: dict[str, dict[str, Any]] = {
         "defaults_template": {},
     },
     "processing": {
+        "id": "processing",
         "title": "Processing",
         "displayName": "Processing",
         "description": "Execute processing jobs and show progress.",

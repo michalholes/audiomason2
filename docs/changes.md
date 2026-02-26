@@ -834,3 +834,13 @@
 - spec: Follow-up questions modeled as nodes/edges
 - spec: Define step settings ownership via FlowConfig.defaults[step_id]
 - spec: Bump specification version to 1.1.27
+
+## 2026-02-26T00:00:00+01:00
+
+-   Issue 264: Consolidate Flow Editor UI into a single grid layout (main + deterministic sidebar sections).
+
+-   Issue 264: Introduce event-based UI state updates so config edits do not rebuild the wizard table.
+
+-   Issue 264: Enforce step behavioral metadata fields and validate FlowGraph invariants before job creation.
+
+-   spec: Bump specification version to 1.1.29.

@@ -1,6 +1,6 @@
 # AudioMason2 - Project Specification (Overview)
 
-Specification Version: 1.1.28
+Specification Version: 1.1.29
 This file is an overview entrypoint only.
 
 Normative authority:
@@ -24,3 +24,7 @@ Notes:
 
 - Issue 259 refactors the Flow Editor layout from an overlay model into a
   deterministic grid-based sidebar with explicit tabs.
+
+- Issue 264 further consolidates the Flow Editor into a single authoritative
+  layout with deterministic sidebar sections (details, transitions, palette),
+  and tightens runtime validation for FlowGraph and behavioral step metadata.

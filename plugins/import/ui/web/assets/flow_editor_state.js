@@ -1,10 +1,6 @@
 (function () {
   "use strict";
 
-  function deepClone(x) {
-    return x === undefined ? undefined : JSON.parse(JSON.stringify(x));
-  }
-
   function isNil(x) {
     return x === null || x === undefined;
   }
@@ -16,77 +12,107 @@
     this.draftDirty = false;
     this.validationState = { lastOk: false, envelope: null };
 
-    this._wizardRenders = [];
-    this._configRenders = [];
+    this._listeners = {
+      wizard_changed: [],
+      config_changed: [],
+      selection_changed: [],
+      validation_changed: [],
+    };
   }
+
+  FlowEditorState.prototype.on = function on(eventName, fn) {
+    const list = this._listeners && this._listeners[eventName];
+    if (!list || typeof fn !== "function") return function () {};
+    list.push(fn);
+    return () => {
+      const i = list.indexOf(fn);
+      if (i >= 0) list.splice(i, 1);
+    };
+  };
+
+  FlowEditorState.prototype.emit = function emit(eventName, payload) {
+    const list = (this._listeners && this._listeners[eventName]) || [];
+    list.slice(0).forEach(function (fn) {
+      try {
+        fn(payload || {});
+      } catch (e) {
+      }
+    });
+  };
 
   FlowEditorState.prototype.loadAll = function loadAll(payload) {
     const wiz = payload && payload.wizardDefinition;
     const cfg = payload && payload.flowConfig;
-    this.wizardDraft = deepClone(wiz) || {};
+    this.wizardDraft = wiz && typeof wiz === "object" ? JSON.parse(JSON.stringify(wiz)) : {};
     if (!this.wizardDraft._am2_ui || typeof this.wizardDraft._am2_ui !== "object") {
       this.wizardDraft._am2_ui = { showOptional: true, rightTab: "details" };
     }
-    this.configDraft = deepClone(cfg) || {};
+    this.configDraft = cfg && typeof cfg === "object" ? JSON.parse(JSON.stringify(cfg)) : {};
     this.selectedStepId = null;
     this.draftDirty = false;
     this.validationState = { lastOk: false, envelope: null };
-    this._requestWizardRender();
-    this._requestConfigRender();
+
+    this.emit("wizard_changed", { reason: "load_all" });
+    this.emit("config_changed", { reason: "load_all" });
+    this.emit("selection_changed", { reason: "load_all" });
+    this.emit("validation_changed", { reason: "load_all" });
   };
 
   FlowEditorState.prototype.getSnapshot = function getSnapshot() {
     return {
-      wizardDraft: deepClone(this.wizardDraft),
-      configDraft: deepClone(this.configDraft),
+      wizardDraft: this.wizardDraft,
+      configDraft: this.configDraft,
       selectedStepId: this.selectedStepId,
       draftDirty: this.draftDirty,
-      validationState: deepClone(this.validationState),
+      validationState: this.validationState,
     };
   };
 
   FlowEditorState.prototype.setValidationState = function setValidationState(nextState) {
     if (nextState && typeof nextState === "object" && "lastOk" in nextState) {
-      this.validationState = deepClone(nextState);
+      this.validationState = JSON.parse(JSON.stringify(nextState));
+      this.emit("validation_changed", { reason: "set_validation_state" });
       return;
     }
-    this.validationState = { lastOk: true, envelope: deepClone(nextState) };
+    this.validationState = {
+      lastOk: true,
+      envelope: JSON.parse(JSON.stringify(nextState || null)),
+    };
+    this.emit("validation_changed", { reason: "set_validation_state" });
   };
 
+  // Backward-compat adapters for older modules.
   FlowEditorState.prototype.registerWizardRender = function registerWizardRender(fn) {
     if (typeof fn !== "function") return;
-    this._wizardRenders.push(fn);
     fn();
+    this.on("wizard_changed", function () {
+      fn();
+    });
+    this.on("selection_changed", function () {
+      fn();
+    });
+    this.on("validation_changed", function () {
+      fn();
+    });
   };
 
   FlowEditorState.prototype.registerConfigRender = function registerConfigRender(fn) {
     if (typeof fn !== "function") return;
-    this._configRenders.push(fn);
     fn();
-  };
-
-  FlowEditorState.prototype._requestWizardRender = function _requestWizardRender() {
-    (this._wizardRenders || []).forEach(function (fn) {
-      try {
-        fn();
-      } catch (e) {
-      }
+    this.on("config_changed", function () {
+      fn();
     });
-  };
-
-  FlowEditorState.prototype._requestConfigRender = function _requestConfigRender() {
-    (this._configRenders || []).forEach(function (fn) {
-      try {
-        fn();
-      } catch (e) {
-      }
+    this.on("selection_changed", function () {
+      fn();
+    });
+    this.on("validation_changed", function () {
+      fn();
     });
   };
 
   FlowEditorState.prototype.setSelectedStep = function setSelectedStep(stepIdOrNull) {
     this.selectedStepId = stepIdOrNull || null;
-    this._requestWizardRender();
-    this._requestConfigRender();
+    this.emit("selection_changed", { reason: "selection" });
   };
 
   FlowEditorState.prototype.mutateWizard = function mutateWizard(mutatorFn) {
@@ -94,7 +120,8 @@
     mutatorFn && mutatorFn(this.wizardDraft);
     this.draftDirty = true;
     this.validationState = { lastOk: false, envelope: null };
-    this._requestWizardRender();
+    this.emit("wizard_changed", { reason: "mutate_wizard" });
+    this.emit("validation_changed", { reason: "dirty" });
   };
 
   FlowEditorState.prototype.mutateConfig = function mutateConfig(mutatorFn) {
@@ -102,21 +129,26 @@
     mutatorFn && mutatorFn(this.configDraft);
     this.draftDirty = true;
     this.validationState = { lastOk: false, envelope: null };
-    this._requestConfigRender();
+    this.emit("config_changed", { reason: "mutate_config" });
+    this.emit("validation_changed", { reason: "dirty" });
   };
 
   FlowEditorState.prototype.markValidated = function markValidated(payload) {
     const w = payload && payload.canonicalWizardDefinition;
     const c = payload && payload.canonicalFlowConfig;
-    if (!isNil(w)) this.wizardDraft = deepClone(w);
-    if (!isNil(c)) this.configDraft = deepClone(c);
+    if (!isNil(w)) this.wizardDraft = JSON.parse(JSON.stringify(w));
+    if (!isNil(c)) this.configDraft = JSON.parse(JSON.stringify(c));
     this.validationState = {
       lastOk: true,
-      envelope: deepClone(payload && payload.validationEnvelope),
+      envelope: JSON.parse(
+        JSON.stringify((payload && payload.validationEnvelope) || null)
+      ),
     };
     this.draftDirty = false;
-    this._requestWizardRender();
-    this._requestConfigRender();
+
+    this.emit("wizard_changed", { reason: "validated" });
+    this.emit("config_changed", { reason: "validated" });
+    this.emit("validation_changed", { reason: "validated" });
   };
 
   window.FlowEditorState = FlowEditorState;

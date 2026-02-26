@@ -1,66 +1,37 @@
 (function () {
   "use strict";
 
-  function buildSidebarTabs(ctx) {
+  function _section(title, body, el, text) {
+    const wrap = el("div", "flowSidebarSection");
+    const head = el("div", "flowSidebarSectionHead");
+    head.appendChild(text("div", "flowSidebarSectionTitle", title));
+    wrap.appendChild(head);
+    if (body) wrap.appendChild(body);
+    return wrap;
+  }
+
+  function buildSidebarSections(ctx) {
     const flowSidebar = ctx && ctx.flowSidebar;
     const stepPanel = ctx && ctx.stepPanel;
     const transitionsPanel = ctx && ctx.transitionsPanel;
     const rightCol = ctx && ctx.rightCol;
-    const state = ctx && ctx.state;
     const clear = ctx && ctx.clear;
     const el = ctx && ctx.el;
     const text = ctx && ctx.text;
-    const renderTransitions = ctx && ctx.renderTransitions;
 
-    if (!flowSidebar || !stepPanel) return;
-
-    const tabBar = el("div", "flowRightTabs");
-    const btnDetails = text("button", "flowRightTab", "Step Details");
-    const btnTrans = text("button", "flowRightTab", "Transitions");
-    const btnPalette = text("button", "flowRightTab", "Step Palette");
-    btnDetails.type = "button";
-    btnTrans.type = "button";
-    btnPalette.type = "button";
-
-    const panelDetails = el("div", "flowRightPanel");
-    panelDetails.dataset.tab = "details";
-    const panelTrans = el("div", "flowRightPanel");
-    panelTrans.dataset.tab = "transitions";
-    const panelPalette = el("div", "flowRightPanel");
-    panelPalette.dataset.tab = "palette";
-
-    panelDetails.appendChild(stepPanel);
-    panelTrans.appendChild(transitionsPanel);
-    panelPalette.appendChild(rightCol);
-
-    tabBar.appendChild(btnDetails);
-    tabBar.appendChild(btnTrans);
-    tabBar.appendChild(btnPalette);
+    if (!flowSidebar || !stepPanel || !transitionsPanel || !rightCol) return;
 
     clear(flowSidebar);
-    flowSidebar.appendChild(tabBar);
-    flowSidebar.appendChild(panelDetails);
-    flowSidebar.appendChild(panelTrans);
-    flowSidebar.appendChild(panelPalette);
+    flowSidebar.appendChild(_section("Step Details", stepPanel, el, text));
+    flowSidebar.appendChild(_section("Transitions", transitionsPanel, el, text));
+    flowSidebar.appendChild(_section("Step Palette", rightCol, el, text));
 
-    function setTab(name) {
-      state.rightTab = name;
-      btnDetails.classList.toggle("is-active", name === "details");
-      btnTrans.classList.toggle("is-active", name === "transitions");
-      btnPalette.classList.toggle("is-active", name === "palette");
-      panelDetails.classList.toggle("is-active", name === "details");
-      panelTrans.classList.toggle("is-active", name === "transitions");
-      panelPalette.classList.toggle("is-active", name === "palette");
-      if (name === "transitions" && renderTransitions) renderTransitions();
-    }
+    return {};
+  }
 
-    btnDetails.addEventListener("click", () => setTab("details"));
-    btnTrans.addEventListener("click", () => setTab("transitions"));
-    btnPalette.addEventListener("click", () => setTab("palette"));
-
-    setTab(state.rightTab || "details");
-
-    return { setTab: setTab };
+  // Backward-compatible alias. Tabs are forbidden in the consolidated Flow Editor.
+  function buildSidebarTabs(ctx) {
+    return buildSidebarSections(ctx);
   }
 
   function clearSidebar(state) {
@@ -90,6 +61,7 @@
   }
 
   window.AM2WDSidebar = {
+    buildSidebarSections: buildSidebarSections,
     buildSidebarTabs: buildSidebarTabs,
     clearSidebar: clearSidebar,
     renderSidebar: renderSidebar,

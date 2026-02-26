@@ -880,6 +880,12 @@ class ImportWizardEngine:
         atomic_write_json(self._fs, RootName.WIZARDS, f"{session_dir}/conflicts.json", items)
 
     def _get_or_create_job(self, session_id: str, state: dict[str, Any], idem_key: str) -> str:
+        # Invariants must be validated before job creation.
+        wd = self._load_session_wizard_definition_snapshot(session_id, state)
+        known_step_ids = set(STEP_CATALOG.keys()) | set(CANONICAL_STEP_ORDER)
+        _ = normalize_to_graph(wd, known_step_ids=known_step_ids)
+        _ = self._normalize_flow_config(self._load_effective_flow_config(session_id))
+
         session_dir = f"import/sessions/{session_id}"
         idem_path = f"{session_dir}/idempotency.json"
         mapping: dict[str, str] = {}
