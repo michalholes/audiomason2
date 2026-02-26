@@ -1,11 +1,11 @@
 from __future__ import annotations
 
 import ast
-import re
 from collections.abc import Sequence
 from dataclasses import dataclass, replace
 from pathlib import Path
 
+from . import monolith_js_metrics
 from .errors import RunnerError
 from .log import Logger
 
@@ -290,63 +290,6 @@ def _scan_candidates(
     raise RunnerError("GATES", "MONOLITH", f"invalid gate_monolith_scan_scope={scope!r}")
 
 
-_RE_JS_IMPORT_FROM = re.compile(r"\bimport\b[^;\n]*\bfrom\s*[\"']([^\"']+)[\"']")
-_RE_JS_EXPORT_FROM = re.compile(r"\bexport\b[^;\n]*\bfrom\s*[\"']([^\"']+)[\"']")
-_RE_JS_REQUIRE = re.compile(r"\brequire\(\s*[\"']([^\"']+)[\"']\s*\)")
-
-
-def _js_internal_import_targets(
-    *,
-    relpath: str,
-    text: str,
-    cwd: Path,
-    repo_root: Path,
-) -> set[str]:
-    specs: list[str] = []
-
-    def add(spec: str) -> None:
-        s = str(spec).strip()
-        if s and s not in specs:
-            specs.append(s)
-
-    for rx in (_RE_JS_IMPORT_FROM, _RE_JS_EXPORT_FROM, _RE_JS_REQUIRE):
-        for m in rx.finditer(text):
-            add(m.group(1))
-
-    base = Path(_norm_relpath(relpath)).parent
-    targets: set[str] = set()
-
-    def exists(rp: str) -> bool:
-        rpn = _norm_relpath(rp)
-        return (cwd / rpn).exists() or (repo_root / rpn).exists()
-
-    for spec in specs:
-        s = spec
-        if not (s.startswith("./") or s.startswith("../")):
-            continue
-        for sep in ("?", "#"):
-            if sep in s:
-                s = s.split(sep, 1)[0]
-
-        cand = Path(_norm_relpath(str((base / s).as_posix())))
-        if cand.suffix == ".js":
-            rp = _norm_relpath(str(cand))
-            if exists(rp):
-                targets.add(rp)
-            continue
-
-        rp1 = _norm_relpath(str(Path(str(cand) + ".js")))
-        if exists(rp1):
-            targets.add(rp1)
-            continue
-
-        rp2 = _norm_relpath(str(cand / "index.js"))
-        if exists(rp2):
-            targets.add(rp2)
-
-    return targets
-
-
 def _fan_graph(
     text_root: Path,
     *,
@@ -391,7 +334,7 @@ def _fan_graph(
                 if tgt and tgt != rp:
                     edges[rp].add(tgt)
         elif rp.endswith(".js"):
-            for tgt in _js_internal_import_targets(
+            for tgt in monolith_js_metrics.js_internal_import_targets(
                 relpath=rp,
                 text=text,
                 cwd=cwd,
@@ -787,7 +730,7 @@ def run_monolith_gate(
                     mods = _iter_import_modules(tree, current_module=cur_mod)
                 imported_areas = {_area_for_module(m, areas) for m in mods}
             elif rp.endswith(".js"):
-                for tgt in _js_internal_import_targets(
+                for tgt in monolith_js_metrics.js_internal_import_targets(
                     relpath=rp,
                     text=new_text,
                     cwd=cwd,

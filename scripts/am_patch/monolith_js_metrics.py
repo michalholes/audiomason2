@@ -76,6 +76,25 @@ _RE_EXPORT_FROM = re.compile(r"\bexport\b[^;\n]*\bfrom\s*[\"']([^\"']+)[\"']")
 _RE_REQUIRE = re.compile(r"\brequire\(\s*[\"']([^\"']+)[\"']\s*\)")
 
 
+def js_internal_import_targets(
+    *,
+    relpath: str,
+    text: str,
+    cwd: Path,
+    repo_root: Path,
+) -> set[str]:
+    """Return repo-relative internal JS import targets for relpath.
+
+    This is a deterministic heuristic used by both the monolith gate and js_metrics().
+    """
+    return _resolve_internal_import_targets(
+        relpath=relpath,
+        text=text,
+        cwd=cwd,
+        repo_root=repo_root,
+    )
+
+
 def _norm_relpath(p: str) -> str:
     s = str(p).replace("\\\\", "/").strip()
     if s.startswith("./"):

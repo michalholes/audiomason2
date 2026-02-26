@@ -512,7 +512,7 @@ finalizeworkspace
     -   workspace: deterministic scan under prefixes listed in gate_monolith_areas, filtering by suffix.
 -   JS support: .js uses deterministic heuristics (no external parsers) for exports and internal relative imports.
 -   Baseline model (no git): compare new text (cwd/relpath) vs old text (repo_root/relpath).
--   Metrics (old vs new): LOC (non-empty lines), EXPORTS (top-level public defs/classes), INTERNAL_IMPORTS (distinct internal modules), optional FANIN/FANOUT graph deltas.
+-   Metrics (old vs new): LOC (non-empty lines), EXPORTS (public export surface; for .js counted via export/module.exports/exports.<name> heuristics), INTERNAL_IMPORTS (distinct internal modules), optional FANIN/FANOUT graph deltas.
 -   Parse errors: violation MONO.PARSE; severity controlled by gate_monolith_on_parse_error.
 -   Rule IDs (stable API): MONO.PARSE, MONO.GROWTH, MONO.NEWFILE, MONO.HUB, MONO.CORE, MONO.CROSSAREA, MONO.CATCHALL.
 -   Mode semantics (policy: gate_monolith_mode):

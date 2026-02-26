@@ -780,6 +780,12 @@ def build_policy(defaults: Policy, cfg: dict[str, Any]) -> Policy:
                 s = "." + s
             if s not in cleaned:
                 cleaned.append(s)
+        if not cleaned:
+            raise RunnerError(
+                "CONFIG",
+                "INVALID",
+                "gate_monolith_extensions must be non-empty",
+            )
         p.gate_monolith_extensions = cleaned
         _mark_cfg(p, cfg, "gate_monolith_extensions")
 

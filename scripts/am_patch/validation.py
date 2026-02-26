@@ -31,6 +31,13 @@ def run_validation(
     run_badguys_gate: bool,
 ) -> GateSummary:
     crossarea_min_areas = policy.gate_monolith_crossarea_min_distinct_areas
+    if not getattr(policy, "gate_monolith_extensions", None):
+        raise RunnerError(
+            "CONFIG",
+            "INVALID",
+            "gate_monolith_extensions must be non-empty (use gates_skip_monolith or "
+            "gate_monolith_enabled instead)",
+        )
     run_gates(
         logger,
         cwd=cwd,
