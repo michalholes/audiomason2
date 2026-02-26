@@ -1064,6 +1064,8 @@ API:
   - returns a deterministic schema describing editable runner policy fields
   - schema is derived from the runner Policy surface (dataclass) and is not
     duplicated in PatchHub
+  - returns the runner schema export object (schema_version + policy map)
+  - PatchHub UI may use label/help metadata when present (non-normative)
 - GET /api/amp/config
   - returns current runner policy values (typed)
 - POST /api/amp/config

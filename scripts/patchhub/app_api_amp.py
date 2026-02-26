@@ -265,8 +265,71 @@ def _read_policy_values(cfg_path: Path) -> dict[str, Any]:
     return out
 
 
+def _read_policy_values_from_text(text: str) -> dict[str, Any]:
+    from am_patch.config import Policy, _flatten_sections, build_policy
+
+    tmap = get_type_hints(Policy)
+
+    data = tomllib.loads(text)
+    flat = _flatten_sections(data)
+    p = build_policy(Policy(), flat)
+
+    out: dict[str, Any] = {}
+    for f in fields(Policy):
+        if f.name == "_src":
+            continue
+        tp = tmap.get(f.name, f.type)
+        norm = _norm_type(tp)
+        if norm is None:
+            continue
+        v = getattr(p, f.name)
+        if v is None:
+            if norm in ("str",):
+                v = ""
+            elif norm == "list_str":
+                v = []
+            elif norm == "bool":
+                v = False
+            elif norm == "int":
+                v = 0
+        out[f.name] = v
+    return out
+
+
 def api_amp_schema(self) -> tuple[int, bytes]:
-    return _ok({"schema": {"fields": _policy_fields()}})
+    from am_patch.config_schema import get_policy_schema
+
+    schema = get_policy_schema()
+    policy = schema.get("policy")
+    if not isinstance(policy, dict):
+        return _err("amp_schema_invalid: policy missing")
+
+    fields_out: list[dict[str, Any]] = []
+    for item in policy.values():
+        if not isinstance(item, dict):
+            continue
+        key = item.get("key")
+        if not isinstance(key, str) or not key:
+            continue
+
+        enum = item.get("enum")
+        typ = item.get("type")
+        if isinstance(enum, list) and all(isinstance(x, str) for x in enum):
+            kind = "enum"
+        elif typ == "bool":
+            kind = "bool"
+        elif typ == "int":
+            kind = "int"
+        elif typ in ("str", "optional[str]"):
+            kind = "str"
+        else:
+            # list[str] (and any unknown type) are exposed as list_str
+            kind = "list_str"
+
+        fields_out.append({"key": key, "kind": kind, "enum": enum if kind == "enum" else None})
+
+    fields_out.sort(key=lambda d: cast(str, d.get("key", "")))
+    return _ok({"schema": {"fields": fields_out}})
 
 
 def api_amp_config_get(self) -> tuple[int, bytes]:
@@ -289,57 +352,28 @@ def api_amp_config_post(self, body: dict[str, Any]) -> tuple[int, bytes]:
         return _err("values must be an object")
     dry_run = bool(body.get("dry_run", False))
 
-    schema = {field["key"]: field for field in _policy_fields()}
-    updates: dict[str, Any] = {}
-    for k, raw_v in values.items():
-        if not isinstance(k, str):
-            continue
-        if k not in schema:
-            continue
-        field_spec = schema[k]
-        kind = str(field_spec.get("kind", "str"))
-        try:
-            v = _coerce_value(kind, raw_v)
-        except Exception:
-            return _err(f"invalid value for {k}")
-        enum = field_spec.get("enum")
-        if (
-            kind == "enum"
-            and isinstance(enum, list)
-            and enum
-            and str(v) not in [str(x) for x in enum]
-        ):
-            return _err(f"invalid enum for {k}")
-        updates[k] = v
+    from am_patch.config_edit import (
+        apply_update_to_config_text,
+        validate_config_text_roundtrip,
+        validate_patchhub_update,
+    )
+    from am_patch.config_schema import get_policy_schema
+    from am_patch.errors import RunnerError
 
-    if not updates:
-        return _err("no valid fields")
-
+    schema = get_policy_schema()
     try:
+        updates_typed = validate_patchhub_update(values, schema)
+
         cfg_path = _runner_config_path(self.repo_root, self.cfg)
-        raw = tomllib.loads(cfg_path.read_text(encoding="utf-8"))
-        if not isinstance(raw, dict):
-            raise TypeError("toml root must be a table")
+        original_text = cfg_path.read_text(encoding="utf-8") if cfg_path.exists() else ""
 
-        raw_dict = raw
-        for k, v in updates.items():
-            c = _key_container(raw_dict, k)
-            c[k] = v
+        new_text = apply_update_to_config_text(original_text, updates_typed, schema)
+        validate_config_text_roundtrip(new_text)
 
-        rendered = _dump_toml(raw_dict)
-
-        # Roundtrip validation: parse -> flatten -> build_policy must succeed.
-        tmp_obj = tomllib.loads(rendered.encode("utf-8").decode("utf-8"))
-        if not isinstance(tmp_obj, dict):
-            raise TypeError("toml parse produced non-table")
-
-        from am_patch.config import Policy, build_policy
-        from am_patch.config import _flatten_sections as _flat
-
-        flat = _flat(tmp_obj)
-        build_policy(Policy(), flat)
-
-        if not dry_run:
+        if dry_run:
+            # Dry-run must validate without applying (and without writing).
+            typed = _read_policy_values(cfg_path)
+        else:
             cfg_path.parent.mkdir(parents=True, exist_ok=True)
             fd, tmp_name = tempfile.mkstemp(
                 prefix=cfg_path.name + ".tmp.",
@@ -347,7 +381,7 @@ def api_amp_config_post(self, body: dict[str, Any]) -> tuple[int, bytes]:
             )
             try:
                 with os.fdopen(fd, "w", encoding="utf-8") as out_fp:
-                    out_fp.write(rendered)
+                    out_fp.write(new_text)
                 os.replace(tmp_name, cfg_path)
             finally:
                 try:
@@ -356,8 +390,11 @@ def api_amp_config_post(self, body: dict[str, Any]) -> tuple[int, bytes]:
                 except Exception:
                     pass
 
-        typed = _read_policy_values(cfg_path)
+            typed = _read_policy_values(cfg_path)
+    except RunnerError as e:
+        return _err(f"amp_config_invalid: {e}")
     except Exception as e:
         return _err(f"amp_config_update_failed: {type(e).__name__}: {e}")
 
-    return _ok({"dry_run": dry_run, "values": typed, "updated": sorted(updates.keys())})
+    updated = sorted(updates_typed.keys())
+    return _ok({"dry_run": dry_run, "values": typed, "updated": updated})
