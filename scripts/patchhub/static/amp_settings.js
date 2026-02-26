@@ -74,6 +74,39 @@
     return s2.split(",").map(function (x) { return String(x || "").trim(); }).filter(Boolean);
   }
 
+  function humanizeKey(key) {
+    var s = String(key || "");
+    var parts = s.split("_").filter(function (t) { return !!t; });
+    var out = [];
+    parts.forEach(function (t) {
+      var token = String(t || "");
+      if (!token) return;
+      var first = token.charAt(0).toUpperCase();
+      var rest = token.slice(1).toLowerCase();
+      out.push(first + rest);
+    });
+    return out.join(" ");
+  }
+
+  function fallbackHelp(p, key) {
+    var o = p || {};
+    var type = (o && o.type != null) ? String(o.type) : "";
+    var defv = (o && Object.prototype.hasOwnProperty.call(o, "default"))
+      ? JSON.stringify(o.default)
+      : "";
+    var sec = (o && o.section != null) ? String(o.section) : "";
+    var ro = "";
+    if (o && Object.prototype.hasOwnProperty.call(o, "read_only")) {
+      ro = o.read_only ? "true" : "false";
+    }
+    return (
+      "Type: " + type + "; "
+      + "Default: " + defv + "; "
+      + "Section: " + sec + "; "
+      + "Read-only: " + ro
+    );
+  }
+
   function schemaToFields(schemaObj) {
     if (schemaObj && Array.isArray(schemaObj.fields)) {
       return schemaObj.fields;
@@ -83,11 +116,26 @@
       var out = [];
       Object.keys(schemaObj.policy).forEach(function (k) {
         var p = schemaObj.policy[k] || {};
+
+        var kind = "str";
+        if (Array.isArray(p.enum) && p.enum.length > 0) kind = "enum";
+        else if (p.type === "bool") kind = "bool";
+        else if (p.type === "int") kind = "int";
+        else if (p.type === "list[str]") kind = "list_str";
+
+        var label = "";
+        if (p.label && String(p.label).trim() && p.label !== k) label = String(p.label);
+        else label = humanizeKey(k);
+
+        var help = "";
+        if (p.help && String(p.help).trim()) help = String(p.help);
+        else help = fallbackHelp(p, k);
+
         out.push({
           key: k,
-          kind: p.kind || "str",
-          label: p.label || k,
-          help: p.help || "",
+          kind: kind,
+          label: label,
+          help: help,
           enum: Array.isArray(p.enum) ? p.enum : null,
           section: p.section || "",
           read_only: !!p.read_only
@@ -168,7 +216,11 @@
       var help = String((f.help != null) ? f.help : "");
       var readOnly = !!f.read_only;
 
-      if (ftxt && key.toLowerCase().indexOf(ftxt) < 0) return;
+      if (ftxt) {
+        var kHit = key.toLowerCase().indexOf(ftxt) >= 0;
+        var lHit = label.toLowerCase().indexOf(ftxt) >= 0;
+        if (!kHit && !lHit) return;
+      }
 
       var row = mk("div", "amp-row", null);
       row.id = "ampRow__" + key;
