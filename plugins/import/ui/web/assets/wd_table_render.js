@@ -69,7 +69,21 @@
         row.dataset.stepId = String(sid || "");
         row.classList.toggle("is-selected", String(selected || "") === String(sid || ""));
 
-        const cellOrder = text("div", "wdCellOrder", String(idx + 1));
+        const cellOrder = el("div", "wdCellOrder");
+        const handle = el("span", "wdDragHandle");
+        const gripSvg =
+          window.AM2WDDomIcons && window.AM2WDDomIcons.svgIcon
+            ? window.AM2WDDomIcons.svgIcon("grip", null, "Reorder")
+            : null;
+        if (gripSvg) {
+          handle.appendChild(gripSvg);
+        } else {
+          handle.appendChild(text("span", null, "==="));
+        }
+        const orderText = text("span", null, String(idx + 1));
+        cellOrder.appendChild(handle);
+        cellOrder.appendChild(orderText);
+
         const cellId = text("div", "wdCellId", String(sid || ""));
         const cellType = text(
           "div",
@@ -83,47 +97,39 @@
         );
         const cellActions = el("div", "wdCellActions");
 
-        const btnUp = text("button", "btn btnSmall", "Up");
-        btnUp.type = "button";
-        btnUp.disabled = idx === 0 || !(state.moveStepUp && typeof state.moveStepUp === "function");
-        btnUp.classList.toggle("is-disabled", btnUp.disabled);
-        btnUp.addEventListener("click", function () {
-          state.moveStepUp && state.moveStepUp(sid);
-        });
-
-        const btnDown = text("button", "btn btnSmall", "Down");
-        btnDown.type = "button";
-        btnDown.disabled =
-          idx === nodes.length - 1 ||
-          !(state.moveStepDown && typeof state.moveStepDown === "function");
-        btnDown.classList.toggle("is-disabled", btnDown.disabled);
-        btnDown.addEventListener("click", function () {
-          state.moveStepDown && state.moveStepDown(sid);
-        });
-
-        const btnSelect = text("button", "btn btnSmall", "Select");
-        btnSelect.type = "button";
-        btnSelect.addEventListener("click", function () {
-          state.setSelectedStep && state.setSelectedStep(sid);
-        });
-
-        const btnRemove = text("button", "btn btnSmall", "Remove");
+        const btnRemove = el("button", "btn btnSmall");
         btnRemove.type = "button";
+        btnRemove.title = "Remove";
+        const trashSvg =
+          window.AM2WDDomIcons && window.AM2WDDomIcons.svgIcon
+            ? window.AM2WDDomIcons.svgIcon("trash", null, "Remove")
+            : null;
+        if (trashSvg) {
+          btnRemove.appendChild(trashSvg);
+        } else {
+          btnRemove.appendChild(text("span", null, "X"));
+        }
         btnRemove.disabled = !(state.canRemove && state.canRemove(sid));
         btnRemove.classList.toggle("is-disabled", btnRemove.disabled);
-        btnRemove.addEventListener("click", function () {
+        btnRemove.addEventListener("click", function (e) {
+          e.stopPropagation();
           state.removeStep && state.removeStep(sid);
         });
 
-        cellActions.appendChild(btnUp);
-        cellActions.appendChild(btnDown);
-        cellActions.appendChild(btnSelect);
         cellActions.appendChild(btnRemove);
 
-        if (state.reorderStep && typeof state.reorderStep === "function") {
-          row.draggable = true;
+        row.addEventListener("click", function () {
+          state.setSelectedStep && state.setSelectedStep(sid);
+        });
 
-          row.addEventListener("dragstart", function (e) {
+        if (state.reorderStep && typeof state.reorderStep === "function") {
+          handle.draggable = true;
+
+          handle.addEventListener("click", function (e) {
+            e.stopPropagation();
+          });
+
+          handle.addEventListener("dragstart", function (e) {
             dragStepId = String(sid || "");
             row.classList.add("is-dragging");
             try {
@@ -133,7 +139,7 @@
             }
           });
 
-                    row.addEventListener("dragover", function (e) {
+          row.addEventListener("dragover", function (e) {
             e.preventDefault();
             dropBeforeId = String(sid || "");
             clearDropTargets();
@@ -161,7 +167,7 @@
             state.reorderStep && state.reorderStep(dragId, targetId);
           });
 
-          row.addEventListener("dragend", function () {
+          handle.addEventListener("dragend", function () {
             dragStepId = null;
             dropBeforeId = null;
             row.classList.remove("is-dragging");

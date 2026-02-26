@@ -462,6 +462,7 @@
     const ok2 = await loadDefinition();
     if (ok1 && ok2) {
       await loadHistory();
+      ensureV2();
       renderAll();
     }
     return !!(ok1 && ok2);

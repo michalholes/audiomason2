@@ -33,3 +33,5 @@ Notes:
   condition builder (no raw JSON), step details render full behavioral
   semantics, the palette shows extended metadata, unified config mode no longer
   mirrors JSON per keystroke, and Save gating is centralized in FlowEditorState.
+
+- Issue 267 refines Flow Editor row UX: click selects, explicit drag handle grip, and simplified row actions.
