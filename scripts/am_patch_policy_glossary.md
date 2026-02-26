@@ -1,0 +1,332 @@
+## Key: gates_allow_fail
+Key: gates_allow_fail
+Type: bool
+Default: false
+Meaning: If true, gate failures are reported but do not fail the runner result.
+Notes:
+- This changes the final exit status semantics.
+Related: gates_order, gates_skip_ruff, gates_skip_pytest, gates_skip_mypy
+
+## Key: gates_order
+Key: gates_order
+Type: list[str]
+Default: ["compile", "js", "ruff", "pytest", "mypy", "monolith", "docs"]
+Meaning: Ordered list of gate names to run when gating is enabled.
+Notes:
+- Unknown gate names are rejected by the runner.
+Related: gates_allow_fail, run_all_tests
+
+## Key: gates_skip_mypy
+Key: gates_skip_mypy
+Type: bool
+Default: false
+Meaning: If true, skip the mypy gate.
+Related: mypy_targets, run_all_tests
+
+## Key: gates_skip_pytest
+Key: gates_skip_pytest
+Type: bool
+Default: false
+Meaning: If true, skip the pytest gate.
+Related: pytest_targets, pytest_use_venv, run_all_tests
+
+## Key: gates_skip_ruff
+Key: gates_skip_ruff
+Type: bool
+Default: false
+Meaning: If true, skip the ruff gate.
+Related: ruff_autofix, ruff_format, run_all_tests
+
+## Key: mypy_targets
+Key: mypy_targets
+Type: list[str]
+Default: ["src"]
+Meaning: Paths passed to the mypy gate.
+Notes:
+- This is interpreted in the workspace repository root.
+Related: gates_skip_mypy
+
+## Key: pytest_targets
+Key: pytest_targets
+Type: list[str]
+Default: ["tests"]
+Meaning: Paths passed to the pytest gate.
+Notes:
+- This is interpreted in the workspace repository root.
+Related: gates_skip_pytest
+
+## Key: pytest_use_venv
+Key: pytest_use_venv
+Type: bool
+Default: true
+Meaning: If true, run pytest under the configured venv python.
+Related: venv_bootstrap_mode, venv_bootstrap_python
+
+## Key: run_all_tests
+Key: run_all_tests
+Type: bool
+Default: true
+Meaning: If true, run the configured gate sequence after applying the patch.
+Notes:
+- If false, the runner may skip gates entirely depending on other policy keys.
+Related: gates_order, gates_allow_fail
+
+## Key: allow_non_main
+Key: allow_non_main
+Type: bool
+Default: false
+Meaning: If true, allow running from a non-default branch.
+Notes:
+- This relaxes a safety invariant around branch discipline.
+Related: default_branch, enforce_main_branch
+
+## Key: enforce_main_branch
+Key: enforce_main_branch
+Type: bool
+Default: true
+Meaning: If true, require the repository to be on default_branch before running.
+Related: default_branch, allow_non_main
+
+## Key: require_up_to_date
+Key: require_up_to_date
+Type: bool
+Default: true
+Meaning: If true, require the local branch to be up-to-date with its upstream.
+Related: skip_up_to_date
+
+## Key: skip_up_to_date
+Key: skip_up_to_date
+Type: bool
+Default: false
+Meaning: If true, skip the up-to-date check even if require_up_to_date is true.
+Notes:
+- This exists for controlled environments and is a safety bypass.
+Related: require_up_to_date
+
+## Key: audit_rubric_guard
+Key: audit_rubric_guard
+Type: bool
+Default: true
+Meaning: If true, require the audit rubric file(s) to be present and unchanged.
+Notes:
+- This is a project governance safety check.
+Related: blessed_gate_outputs
+
+## Key: default_branch
+Key: default_branch
+Type: str
+Default: "main"
+Meaning: The branch name treated as the default (main) branch for safety checks.
+Related: enforce_main_branch, allow_non_main
+
+## Key: live_repo_guard
+Key: live_repo_guard
+Type: bool
+Default: true
+Meaning: If true, protect the live repository from being modified unexpectedly.
+Notes:
+- This checks for local changes and enforces the live changed policy.
+Related: fail_if_live_files_changed, live_repo_guard_scope
+
+## Key: live_repo_guard_scope
+Key: live_repo_guard_scope
+Type: str
+Default: "patch"
+Meaning: Scope string controlling how the live repo guard is applied.
+Notes:
+- Typical values are runner-defined strings such as "patch".
+Related: live_repo_guard
+
+## Key: repo_root
+Key: repo_root
+Type: optional[str]
+Default: null
+Meaning: Optional override for the repository root path.
+Notes:
+- If null, the runner infers the repo root from the invocation context.
+Related: patch_dir
+
+## Key: ruff_autofix
+Key: ruff_autofix
+Type: bool
+Default: true
+Meaning: If true, run ruff in autofix mode before other gates.
+Notes:
+- Autofix is applied only within the allowed patch scope.
+Related: ruff_autofix_legalize_outside, ruff_format, gates_skip_ruff
+
+## Key: ruff_autofix_legalize_outside
+Key: ruff_autofix_legalize_outside
+Type: bool
+Default: true
+Meaning: If true, allow ruff autofix to modify files outside the declared patch set.
+Notes:
+- This changes the scope safety boundary.
+Related: ruff_autofix, allow_outside_files
+
+## Key: ruff_format
+Key: ruff_format
+Type: bool
+Default: true
+Meaning: If true, run ruff format as part of the ruff gate workflow.
+Related: ruff_autofix, gates_skip_ruff
+
+## Key: ascii_only_patch
+Key: ascii_only_patch
+Type: bool
+Default: true
+Meaning: If true, enforce ASCII-only content in patches and related metadata.
+Notes:
+- This is a repository-wide encoding safety rule.
+Related: unified_patch
+
+## Key: unified_patch
+Key: unified_patch
+Type: bool
+Default: false
+Meaning: If true, apply a unified patch zip as a single combined patch operation.
+Related: unified_patch_continue, unified_patch_strip
+
+## Key: unified_patch_continue
+Key: unified_patch_continue
+Type: bool
+Default: true
+Meaning: If true, continue applying per-file patches after a unified patch step.
+Related: unified_patch
+
+## Key: unified_patch_strip
+Key: unified_patch_strip
+Type: optional[int]
+Default: null
+Meaning: Optional strip level override for patch application.
+Notes:
+- If null, the runner infers a strip value.
+Related: unified_patch
+
+## Key: unified_patch_touch_on_fail
+Key: unified_patch_touch_on_fail
+Type: bool
+Default: true
+Meaning: If true, touch patch output markers when unified patch apply fails.
+Related: unified_patch
+
+## Key: patch_jail
+Key: patch_jail
+Type: bool
+Default: true
+Meaning: If true, run patch application in an isolation boundary (sandbox).
+Notes:
+- This changes the security boundary of patch execution.
+Related: patch_jail_unshare_net
+
+## Key: patch_jail_unshare_net
+Key: patch_jail_unshare_net
+Type: bool
+Default: true
+Meaning: If true, disable network access inside the patch jail.
+Notes:
+- This is a defense-in-depth control.
+Related: patch_jail
+
+## Key: allow_declared_untouched
+Key: allow_declared_untouched
+Type: bool
+Default: false
+Meaning: If true, allow declaring files as untouched even if they were changed.
+Notes:
+- This weakens a scope integrity invariant.
+Related: declared_untouched_fail
+
+## Key: allow_no_op
+Key: allow_no_op
+Type: bool
+Default: false
+Meaning: If true, allow patches that result in no changes being applied.
+Related: no_op_fail
+
+## Key: allow_outside_files
+Key: allow_outside_files
+Type: bool
+Default: false
+Meaning: If true, allow patch application to modify files outside the declared set.
+Notes:
+- This changes the scope safety boundary.
+Related: enforce_allowed_files
+
+## Key: allow_push_fail
+Key: allow_push_fail
+Type: bool
+Default: true
+Meaning: If true, do not fail the run if git push fails after a successful commit.
+Related: commit_and_push
+
+## Key: declared_untouched_fail
+Key: declared_untouched_fail
+Type: bool
+Default: true
+Meaning: If true, fail the run when declared-untouched files are detected as changed.
+Related: allow_declared_untouched
+
+## Key: enforce_allowed_files
+Key: enforce_allowed_files
+Type: bool
+Default: true
+Meaning: If true, enforce the allowed-files list when applying patches.
+Related: allow_outside_files
+
+## Key: no_op_fail
+Key: no_op_fail
+Type: bool
+Default: true
+Meaning: If true, fail the run when the patch applies as a no-op.
+Related: allow_no_op
+
+## Key: no_rollback
+Key: no_rollback
+Type: bool
+Default: false
+Meaning: If true, disable automatic rollback behavior on failure.
+Notes:
+- This changes failure recovery semantics.
+Related: rollback_workspace_on_fail
+
+## Key: post_success_audit
+Key: post_success_audit
+Type: bool
+Default: true
+Meaning: If true, run post-success audit checks after gates succeed.
+Related: audit_rubric_guard
+
+## Key: soft_reset_workspace
+Key: soft_reset_workspace
+Type: bool
+Default: false
+Meaning: If true, perform a soft reset of the workspace before applying the patch.
+Notes:
+- This is typically a git reset that preserves untracked files.
+Related: update_workspace
+
+## Key: test_mode
+Key: test_mode
+Type: bool
+Default: false
+Meaning: If true, run the runner in a test-oriented mode for local development.
+Notes:
+- This may change defaults for safety and cleanup behaviors.
+Related: test_mode_isolate_patch_dir
+
+## Key: test_mode_isolate_patch_dir
+Key: test_mode_isolate_patch_dir
+Type: bool
+Default: true
+Meaning: If true, isolate patch_dir during test_mode to avoid cross-run interference.
+Related: test_mode
+
+## Key: update_workspace
+Key: update_workspace
+Type: bool
+Default: false
+Meaning: If true, update the workspace repository (fetch/pull) before running.
+Notes:
+- This may change the base revision used for gating.
+Related: soft_reset_workspace

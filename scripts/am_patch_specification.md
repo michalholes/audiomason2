@@ -936,6 +936,9 @@ explicitne pomenovan v hlavnch astiach tejto pecifikcie v ase auditu.
 
 ### A.2 Policy ke poloky chbajce v texte pecifikcie
 
+This appendix is resolved by the authoritative policy glossary:
+- scripts/am_patch_policy_glossary.md
+
 ### gates
 
 -   `gates_allow_fail` changes which gates run and in what order
@@ -1110,6 +1113,10 @@ Constant socket names:
 PatchHub may edit the runner configuration file:
 - scripts/am_patch/am_patch.toml
 
+The normative meaning of Policy keys is defined by the runner-owned glossary file:
+- scripts/am_patch_policy_glossary.md
+Schema export "help" strings MUST be consistent with that glossary.
+
 The runner provides an authoritative schema export describing the Policy surface and
 PatchHub-safe editing rules.
 
@@ -1133,3 +1140,5 @@ Editing engine:
 - validate_config_text_roundtrip(text: str) -> None
   - Parse TOML, flatten sections, build Policy.
   - Raise RunnerError on failure.
+
+------------------------------------------------------------------------

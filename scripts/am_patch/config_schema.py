@@ -170,6 +170,213 @@ _SECTION_BY_KEY: dict[str, str] = {
 }
 
 
+_LABEL_BY_KEY: dict[str, str] = {
+    "gates_allow_fail": "Gates: allow fail",
+    "gates_order": "Gates: order",
+    "gates_skip_mypy": "Gates: skip mypy",
+    "gates_skip_pytest": "Gates: skip pytest",
+    "gates_skip_ruff": "Gates: skip ruff",
+    "mypy_targets": "Mypy: targets",
+    "pytest_targets": "Pytest: targets",
+    "pytest_use_venv": "Pytest: use venv",
+    "run_all_tests": "Workflow: run all gates",
+    "allow_non_main": "Git safety: allow non-main",
+    "enforce_main_branch": "Git safety: enforce main branch",
+    "require_up_to_date": "Git safety: require up-to-date",
+    "skip_up_to_date": "Git safety: skip up-to-date",
+    "audit_rubric_guard": "Audit: rubric guard",
+    "default_branch": "Git: default branch",
+    "live_repo_guard": "Git safety: live repo guard",
+    "live_repo_guard_scope": "Git safety: live repo guard scope",
+    "repo_root": "Paths: repo root",
+    "ruff_autofix": "Ruff: autofix",
+    "ruff_autofix_legalize_outside": "Ruff: autofix legalize outside",
+    "ruff_format": "Ruff: format",
+    "ascii_only_patch": "Patch format: ASCII only",
+    "unified_patch": "Patch format: unified patch",
+    "unified_patch_continue": "Patch format: unified patch continue",
+    "unified_patch_strip": "Patch format: unified patch strip",
+    "unified_patch_touch_on_fail": "Patch format: unified patch touch on fail",
+    "patch_jail": "Sandbox: patch jail",
+    "patch_jail_unshare_net": "Sandbox: unshare net",
+    "allow_declared_untouched": "Scope: allow declared untouched",
+    "allow_no_op": "Scope: allow no-op",
+    "allow_outside_files": "Scope: allow outside files",
+    "allow_push_fail": "Promotion: allow push fail",
+    "declared_untouched_fail": "Scope: declared untouched fail",
+    "enforce_allowed_files": "Scope: enforce allowed files",
+    "no_op_fail": "Scope: no-op fail",
+    "no_rollback": "Rollback: disable rollback",
+    "post_success_audit": "Workflow: post-success audit",
+    "soft_reset_workspace": "Workflow: soft reset workspace",
+    "test_mode": "Workflow: test mode",
+    "test_mode_isolate_patch_dir": "Workflow: isolate patch dir in test mode",
+    "update_workspace": "Workflow: update workspace",
+}
+
+
+_HELP_BY_KEY: dict[str, str] = {
+    "gates_allow_fail": (
+        "Allow gates to fail without failing the overall run. "
+        "See: scripts/am_patch_policy_glossary.md## Key: gates_allow_fail"
+    ),
+    "gates_order": (
+        "Ordered list of gate names to run. "
+        "See: scripts/am_patch_policy_glossary.md## Key: gates_order"
+    ),
+    "gates_skip_mypy": (
+        "Skip the mypy gate. See: scripts/am_patch_policy_glossary.md## Key: gates_skip_mypy"
+    ),
+    "gates_skip_pytest": (
+        "Skip the pytest gate. See: scripts/am_patch_policy_glossary.md## Key: gates_skip_pytest"
+    ),
+    "gates_skip_ruff": (
+        "Skip the ruff gate. See: scripts/am_patch_policy_glossary.md## Key: gates_skip_ruff"
+    ),
+    "mypy_targets": (
+        "Targets passed to mypy. See: scripts/am_patch_policy_glossary.md## Key: mypy_targets"
+    ),
+    "pytest_targets": (
+        "Targets passed to pytest. See: scripts/am_patch_policy_glossary.md## Key: pytest_targets"
+    ),
+    "pytest_use_venv": (
+        "Run pytest under the configured venv python. "
+        "See: scripts/am_patch_policy_glossary.md## Key: pytest_use_venv"
+    ),
+    "run_all_tests": (
+        "Run the configured gate sequence after applying the patch. "
+        "See: scripts/am_patch_policy_glossary.md## Key: run_all_tests"
+    ),
+    "allow_non_main": (
+        "Allow running from a non-default branch. "
+        "See: scripts/am_patch_policy_glossary.md## Key: allow_non_main"
+    ),
+    "enforce_main_branch": (
+        "Require being on default_branch before running. "
+        "See: scripts/am_patch_policy_glossary.md## Key: enforce_main_branch"
+    ),
+    "require_up_to_date": (
+        "Require the local branch to be up-to-date with its upstream. "
+        "See: scripts/am_patch_policy_glossary.md## Key: require_up_to_date"
+    ),
+    "skip_up_to_date": (
+        "Skip the up-to-date check. See: scripts/am_patch_policy_glossary.md## Key: skip_up_to_date"
+    ),
+    "audit_rubric_guard": (
+        "Require audit rubric file(s) to be present and unchanged. "
+        "See: scripts/am_patch_policy_glossary.md## Key: audit_rubric_guard"
+    ),
+    "default_branch": (
+        "Default branch name used for safety checks. "
+        "See: scripts/am_patch_policy_glossary.md## Key: default_branch"
+    ),
+    "live_repo_guard": (
+        "Protect the live repository from unexpected modifications. "
+        "See: scripts/am_patch_policy_glossary.md## Key: live_repo_guard"
+    ),
+    "live_repo_guard_scope": (
+        "Scope controlling how the live repo guard is applied. "
+        "See: scripts/am_patch_policy_glossary.md## Key: live_repo_guard_scope"
+    ),
+    "repo_root": (
+        "Optional override for the repository root path. "
+        "See: scripts/am_patch_policy_glossary.md## Key: repo_root"
+    ),
+    "ruff_autofix": (
+        "Run ruff in autofix mode before other gates. "
+        "See: scripts/am_patch_policy_glossary.md## Key: ruff_autofix"
+    ),
+    "ruff_autofix_legalize_outside": (
+        "Allow ruff autofix to modify files outside the declared patch set. "
+        "See: scripts/am_patch_policy_glossary.md## Key: ruff_autofix_legalize_outside"
+    ),
+    "ruff_format": (
+        "Run ruff format as part of the ruff workflow. "
+        "See: scripts/am_patch_policy_glossary.md## Key: ruff_format"
+    ),
+    "ascii_only_patch": (
+        "Enforce ASCII-only content in patches and related metadata. "
+        "See: scripts/am_patch_policy_glossary.md## Key: ascii_only_patch"
+    ),
+    "unified_patch": (
+        "Apply patches in unified mode. "
+        "See: scripts/am_patch_policy_glossary.md## Key: unified_patch"
+    ),
+    "unified_patch_continue": (
+        "Continue after unified patch step. "
+        "See: scripts/am_patch_policy_glossary.md## Key: unified_patch_continue"
+    ),
+    "unified_patch_strip": (
+        "Optional strip override for patch application. "
+        "See: scripts/am_patch_policy_glossary.md## Key: unified_patch_strip"
+    ),
+    "unified_patch_touch_on_fail": (
+        "Touch patch markers when unified patch apply fails. "
+        "See: scripts/am_patch_policy_glossary.md## Key: unified_patch_touch_on_fail"
+    ),
+    "patch_jail": (
+        "Run patch application inside an isolation boundary. "
+        "See: scripts/am_patch_policy_glossary.md## Key: patch_jail"
+    ),
+    "patch_jail_unshare_net": (
+        "Disable network access inside the patch jail. "
+        "See: scripts/am_patch_policy_glossary.md## Key: patch_jail_unshare_net"
+    ),
+    "allow_declared_untouched": (
+        "Allow declaring files as untouched even if changed. "
+        "See: scripts/am_patch_policy_glossary.md## Key: allow_declared_untouched"
+    ),
+    "allow_no_op": (
+        "Allow patches that result in no changes being applied. "
+        "See: scripts/am_patch_policy_glossary.md## Key: allow_no_op"
+    ),
+    "allow_outside_files": (
+        "Allow modifying files outside the declared set. "
+        "See: scripts/am_patch_policy_glossary.md## Key: allow_outside_files"
+    ),
+    "allow_push_fail": (
+        "Do not fail the run if git push fails after a commit. "
+        "See: scripts/am_patch_policy_glossary.md## Key: allow_push_fail"
+    ),
+    "declared_untouched_fail": (
+        "Fail when declared-untouched files are detected as changed. "
+        "See: scripts/am_patch_policy_glossary.md## Key: declared_untouched_fail"
+    ),
+    "enforce_allowed_files": (
+        "Enforce the allowed-files list during patch application. "
+        "See: scripts/am_patch_policy_glossary.md## Key: enforce_allowed_files"
+    ),
+    "no_op_fail": (
+        "Fail when the patch applies as a no-op. "
+        "See: scripts/am_patch_policy_glossary.md## Key: no_op_fail"
+    ),
+    "no_rollback": (
+        "Disable automatic rollback behavior on failure. "
+        "See: scripts/am_patch_policy_glossary.md## Key: no_rollback"
+    ),
+    "post_success_audit": (
+        "Run post-success audit checks after gates succeed. "
+        "See: scripts/am_patch_policy_glossary.md## Key: post_success_audit"
+    ),
+    "soft_reset_workspace": (
+        "Perform a soft reset of the workspace before applying the patch. "
+        "See: scripts/am_patch_policy_glossary.md## Key: soft_reset_workspace"
+    ),
+    "test_mode": (
+        "Run the runner in a test-oriented mode. "
+        "See: scripts/am_patch_policy_glossary.md## Key: test_mode"
+    ),
+    "test_mode_isolate_patch_dir": (
+        "Isolate patch_dir during test_mode. "
+        "See: scripts/am_patch_policy_glossary.md## Key: test_mode_isolate_patch_dir"
+    ),
+    "update_workspace": (
+        "Update the workspace repository before running. "
+        "See: scripts/am_patch_policy_glossary.md## Key: update_workspace"
+    ),
+}
+
+
 # Explicit schema type overrides for fields that are not editable via PatchHub.
 _READ_ONLY_TYPE_BY_KEY: dict[str, str] = {
     "gate_monolith_areas": "str",
@@ -255,8 +462,8 @@ def get_policy_schema() -> dict[str, Any]:
             "type": type_name,
             "section": _SECTION_BY_KEY[f.name],
             "default": _get_default_value(f, defaults),
-            "label": f.name,
-            "help": "",
+            "label": _LABEL_BY_KEY.get(f.name, f.name),
+            "help": _HELP_BY_KEY.get(f.name, ""),
         }
         if f.name in _ENUM_BY_KEY:
             item["enum"] = list(_ENUM_BY_KEY[f.name])
