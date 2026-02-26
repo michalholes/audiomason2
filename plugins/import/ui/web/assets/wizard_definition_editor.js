@@ -5,8 +5,7 @@
   if (!H) return;
 
   function $(id) {
-    return document.getElementById(id);
-  }
+    return document.getElementById(id); }
 
   const ui = {
     ta: $("wdJson"),
@@ -21,20 +20,17 @@
   if (!ui.ta) return;
 
   function clear(node) {
-    while (node && node.firstChild) node.removeChild(node.firstChild);
-  }
+    while (node && node.firstChild) node.removeChild(node.firstChild); }
 
   function el(tag, cls) {
     const n = document.createElement(tag);
     if (cls) n.className = cls;
-    return n;
-  }
+    return n; }
 
   function text(tag, cls, s) {
     const n = el(tag, cls);
     n.textContent = String(s || "");
-    return n;
-  }
+    return n; }
 
   const svgIcon =
     window.AM2WDDomIcons && window.AM2WDDomIcons.svgIcon
@@ -63,32 +59,50 @@
           to_step_id: e.to_step_id,
           priority: typeof e.priority === "number" ? e.priority : 0,
           when: e.when === undefined ? null : e.when,
-        })),
-      },
-    };
-  }
+        })), },
+    }; }
 
   function defFromSteps(stepIds) {
-    return defFromGraph(stepIds || [], view.entry_step_id, view.edges || []);
-  }
+    return defFromGraph(stepIds || [], null, []); }
 
+  function deepClone(x) {
+    return x === undefined ? undefined : JSON.parse(JSON.stringify(x)); }
 
-  const view = {
-    draft: [],
-    palette: [],
-    selected: null,
-    dragId: null,
-    dropBeforeId: null,
-    showOptional: true,
-    validation: { ok: null, local: [], server: [] },
-    showRawError: false,
-    hasErrorDetails: false,
+  function ensureWizardUi(wd) {
+    if (!wd || typeof wd !== "object") return { showOptional: true };
+    if (!wd._am2_ui || typeof wd._am2_ui !== "object") {
+      wd._am2_ui = {
+        dragId: null,
+        dropBeforeId: null,
+        showOptional: true,
+        validation: { ok: null, local: [], server: [] },
+        showRawError: false,
+        hasErrorDetails: false,
+        rightTab: "details",
+        editingEdgeIdx: null,
+      }; }
+    return wd._am2_ui; }
 
-    entry_step_id: null,
-    edges: [],
-    rightTab: "details",
-    editingEdgeIdx: null,
-  };
+  function mutateUi(fn) {
+    const FE = window.AM2FlowEditorState;
+    if (!FE || !FE.mutateWizard) return;
+    FE.mutateWizard(function (wd) {
+      fn && fn(ensureWizardUi(wd), wd); }); }
+
+  function stripUi(defn) {
+    const x = deepClone(defn || {});
+    if (x && x._am2_ui) delete x._am2_ui;
+    return x; }
+
+  function snapshot() {
+    const FE = window.AM2FlowEditorState;
+    return FE && FE.getSnapshot ? FE.getSnapshot() : null; }
+
+  function wizardDraft() {
+    const s = snapshot();
+    return (s && s.wizardDraft) || {}; }
+
+  const palette = [];
 
   const layout = el("div", "wdLayout wdLayoutSingle");
   const leftCol = el("div", "wdLeftCol");
@@ -129,8 +143,7 @@
   const validationTitle = text(
     "div",
     "wdValidationTitle",
-    "Validation Messages"
-  );
+    "Validation Messages" );
   const validationCount = text("div", "wdValidationCount", "");
   const validationClear = text("button", "btn wdValidationClear", "Clear All");
   validationClear.type = "button";
@@ -178,239 +191,250 @@
   const transitionsPanel = el("div", "flowTransPanel");
 
   if (window.AM2WDSidebar && window.AM2WDSidebar.buildSidebarTabs) {
+    const sidebarState = {};
+    Object.defineProperty(sidebarState, "rightTab", {
+      get: function () {
+        const ui = (wizardDraft()._am2_ui || {});
+        return ui.rightTab || "details"; },
+      set: function (name) {
+        mutateUi(function (ui) { ui.rightTab = String(name || "details"); }); }, });
+    Object.defineProperty(sidebarState, "selected", {
+      get: function () {
+        const s = snapshot();
+        return (s && s.selectedStepId) || null; },
+      set: function (sid) {
+        const FE = window.AM2FlowEditorState;
+        if (FE && FE.setSelectedStep) FE.setSelectedStep(sid || null); }, });
     window.AM2WDSidebar.buildSidebarTabs({
       flowSidebar: flowSidebar,
       stepPanel: stepPanel,
       transitionsPanel: transitionsPanel,
       rightCol: rightCol,
-      state: view,
+      state: sidebarState,
       clear: clear,
       el: el,
       text: text,
       renderTransitions: function () {
-        renderTransitions();
-      },
-    });
-  }
+        renderTransitions(); }, }); }
   if (window.AM2WDSidebar && window.AM2WDSidebar.clearSidebar) {
-    window.AM2WDSidebar.clearSidebar(view);
-  }
+    window.AM2WDSidebar.clearSidebar({ selected: null }); }
 
   function setupRawErrorPanel() {
+    const rawErrorState = {};
+    Object.defineProperty(rawErrorState, "showRawError", {
+      get: function () {
+        return !!((wizardDraft()._am2_ui || {}).showRawError); },
+      set: function (on) { mutateUi(function (ui) { ui.showRawError = !!on; }); }, });
+    Object.defineProperty(rawErrorState, "hasErrorDetails", {
+      get: function () {
+        return !!((wizardDraft()._am2_ui || {}).hasErrorDetails); },
+      set: function (on) { mutateUi(function (ui) { ui.hasErrorDetails = !!on; }); }, });
     if (window.AM2WDRawError && window.AM2WDRawError.setupRawErrorPanel) {
-      window.AM2WDRawError.setupRawErrorPanel({ ui: ui, state: view, el: el, text: text });
-    }
-    setRawErrorVisible(false);
-  }
-
-  function setRawErrorVisible(on) {
-    view.showRawError = !!on;
+      window.AM2WDRawError.setupRawErrorPanel({
+        ui: ui,
+        state: rawErrorState,
+        el: el,
+        text: text,
+      }); }
+    rawErrorState.showRawError = false;
     if (!ui.err) return;
-    ui.err.classList.toggle("is-collapsed", !view.showRawError);
+    ui.err.classList.toggle("is-collapsed", !rawErrorState.showRawError);
 
     const btn = document.querySelector(".wdErrToggle");
-    if (btn) btn.textContent = view.showRawError ? "Hide Details" : "Details";
-  }
+    if (btn) btn.textContent = rawErrorState.showRawError ? "Hide Details" : "Details"; }
 
   function renderError(data, collapseByDefault) {
     H.renderError(ui.err, data);
-    view.hasErrorDetails = !!data;
-    if (!data) {
-      setRawErrorVisible(false);
-      return;
-    }
-    setRawErrorVisible(!collapseByDefault);
-  }
+    mutateUi(function (ui) {
+      ui.hasErrorDetails = !!data;
+      ui.showRawError = data ? !collapseByDefault : false; }); }
 
 
   setupRawErrorPanel();
-
-  function refreshFromFlowState() {
-    const FE = window.AM2FlowEditorState;
-    if (!FE || !FE.getSnapshot) return;
-    const s = FE.getSnapshot();
-    const defn = (s && s.wizardDraft) || {};
-    const g = stableGraph(defn);
-    view.draft = g.nodes.slice();
-    view.edges = Array.isArray(g.edges) ? g.edges.slice() : [];
-    view.entry_step_id = g.entry || null;
-    view.selected = (s && s.selectedStepId) || null;
-    normalizeEdges();
-  }
 
 
   function isDirty() {
     const FE = window.AM2FlowEditorState;
     if (!FE || !FE.getSnapshot) return false;
     const s = FE.getSnapshot();
-    return !!(s && s.draftDirty);
-  }
+    return !!(s && s.draftDirty); }
 
   function confirmIfDirty(actionName) {
     if (!isDirty()) return true;
-    return window.confirm("Unsaved changes. Continue: " + actionName + "?");
-  }
+    return window.confirm("Unsaved changes. Continue: " + actionName + "?"); }
+
+  function replaceObject(dst, src) {
+    if (!dst || typeof dst !== "object") return;
+    Object.keys(dst).forEach(function (k) {
+      try {
+        delete dst[k];
+      } catch (e) { } });
+    Object.keys(src || {}).forEach(function (k) {
+      dst[k] = src[k]; }); }
+
+  function currentGraph(defn) {
+    const g = stableGraph(defn || {});
+    return {
+      nodes: (g.nodes || []).slice(),
+      edges: Array.isArray(g.edges) ? g.edges.slice() : [],
+      entry: g.entry || null,
+    }; }
+
+  function normalizeEdges(nodes, edges) {
+    const fn =
+      window.AM2WDEdgesIntegrity && window.AM2WDEdgesIntegrity.normalizeEdges
+        ? window.AM2WDEdgesIntegrity.normalizeEdges
+        : null;
+    return fn ? fn(nodes || [], edges || []) : edges || []; }
+
+  function mutateGraph(mutatorFn) {
+    const FE = window.AM2FlowEditorState;
+    if (!FE || !FE.mutateWizard) return;
+    FE.mutateWizard(function (wd) {
+      const ui = ensureWizardUi(wd);
+      const g0 = currentGraph(stripUi(wd));
+      const g = {
+        nodes: g0.nodes,
+        edges: g0.edges,
+        entry: g0.entry,
+      };
+      mutatorFn && mutatorFn(g);
+      g.edges = normalizeEdges(g.nodes, g.edges);
+      if (!g.entry || g.nodes.indexOf(g.entry) < 0) g.entry = g.nodes[0] || null;
+      const next = defFromGraph(g.nodes, g.entry, g.edges);
+      next._am2_ui = ui;
+      replaceObject(wd, next); });
+    try {
+      window.dispatchEvent(new CustomEvent("am2:wd:changed", { detail: {} }));
+    } catch (e) { } }
 
   function kindOf(stepId) {
-    const item = view.palette.find((x) => x && x.step_id === stepId);
-    return item && item.kind ? String(item.kind) : "optional";
-  }
+    const item = palette.find((x) => x && x.step_id === stepId);
+    return item && item.kind ? String(item.kind) : "optional"; }
 
   function pinnedOf(stepId) {
-    const item = view.palette.find((x) => x && x.step_id === stepId);
-    return item && item.pinned ? String(item.pinned) : "none";
-  }
+    const item = palette.find((x) => x && x.step_id === stepId);
+    return item && item.pinned ? String(item.pinned) : "none"; }
 
   function isPinned(stepId) {
     const p = pinnedOf(stepId);
-    return p === "first" || p === "last";
-  }
+    return p === "first" || p === "last"; }
 
   function isMandatory(stepId) {
-    return kindOf(stepId) === "mandatory";
-  }
+    return kindOf(stepId) === "mandatory"; }
 
   function canRemove(stepId) {
     if (isPinned(stepId)) return false;
     if (isMandatory(stepId)) return false;
-    return true;
-  }
+    return true; }
 
   function idxOf(stepId) {
-    return view.draft.indexOf(stepId);
-  }
+    const g = currentGraph(stripUi(wizardDraft()));
+    return g.nodes.indexOf(stepId); }
 
   function clampDropIndex(idx) {
     const first = idxOf("select_authors");
     const last = idxOf("processing");
     const min = first >= 0 ? first + 1 : 0;
-    const max = last >= 0 ? last : view.draft.length;
+    const g = currentGraph(stripUi(wizardDraft()));
+    const max = last >= 0 ? last : g.nodes.length;
     if (idx < min) return min;
     if (idx > max) return max;
-    return idx;
-  }
+    return idx; }
 
   function syncTextarea() {
-    ui.ta.value = H.pretty(defFromGraph(view.draft, view.entry_step_id, view.edges));
-  }
+    const g = currentGraph(stripUi(wizardDraft()));
+    ui.ta.value = H.pretty(defFromGraph(g.nodes, g.entry, normalizeEdges(g.nodes, g.edges))); }
 
   function setSelected(stepId) {
     const FE = window.AM2FlowEditorState;
     const next = stepId || null;
     if (FE && FE.setSelectedStep) FE.setSelectedStep(next);
-    if (window.AM2WDSidebar && window.AM2WDSidebar.renderSidebar && next) {
-      window.AM2WDSidebar.renderSidebar(view, next);
-    } else if (window.AM2WDSidebar && window.AM2WDSidebar.clearSidebar) {
-      window.AM2WDSidebar.clearSidebar(view);
-    }
-    render();
-  }
-
-  function emitChanged() {
-    const FE = window.AM2FlowEditorState;
-    if (FE && FE.mutateWizard) {
-      const defn = defFromGraph(view.draft, view.entry_step_id, view.edges);
-      FE.mutateWizard(function (wd) {
-        const next = defn;
-        Object.keys(wd || {}).forEach(function (k) {
-          try {
-            delete wd[k];
-          } catch (e) {
-          }
-        });
-        Object.keys(next || {}).forEach(function (k) {
-          wd[k] = next[k];
-        });
-      });
-    }
-    try {
-      window.dispatchEvent(new CustomEvent("am2:wd:changed", { detail: {} }));
-    } catch (e) {
-      // ignore
-    }
-  }
+    render(); }
 
   function setValidation(ok, localItems, serverItems) {
-    view.validation = {
-      ok: typeof ok === "boolean" ? ok : null,
-      local: Array.isArray(localItems) ? localItems.slice() : [],
-      server: Array.isArray(serverItems) ? serverItems.slice() : [],
-    };
-    renderValidation();
-  }
+    const FE = window.AM2FlowEditorState;
+    if (!FE || !FE.mutateWizard) return;
+    FE.mutateWizard(function (wd) {
+      const ui = ensureWizardUi(wd);
+      ui.validation = {
+        ok: typeof ok === "boolean" ? ok : null,
+        local: Array.isArray(localItems) ? localItems.slice() : [],
+        server: Array.isArray(serverItems) ? serverItems.slice() : [],
+      }; });
+    renderValidation(); }
 
   function pushLocalValidation(msgText) {
-    const next = view.validation.local.slice();
+    const wd = wizardDraft();
+    const uiState = (wd && wd._am2_ui) || { validation: { local: [], server: [] } };
+    const next =
+      uiState.validation && Array.isArray(uiState.validation.local)
+        ? uiState.validation.local.slice()
+        : [];
     next.push(String(msgText || ""));
-    setValidation(false, next, view.validation.server);
-  }
+    setValidation(false, next, (uiState.validation && uiState.validation.server) || []); }
 
 
   function extractServerMessages(data) {
     try {
       return [JSON.stringify(data, null, 2)];
     } catch (e) {
-      return [String(data || "")];
-    }
-  }
+      return [String(data || "")]; } }
 
 
   function removeStep(stepId) {
     if (!canRemove(stepId)) return;
-    view.draft = view.draft.filter((x) => x !== stepId);
-    if (view.selected === stepId) setSelected(null);
-    emitChanged();
-    render();
-  }
+    const sid = String(stepId || "");
+    mutateGraph(function (g) {
+      g.nodes = g.nodes.filter((x) => x !== sid);
+      g.edges = (g.edges || []).filter(
+        (e) => e && e.from_step_id !== sid && e.to_step_id !== sid );
+      if (g.entry === sid) g.entry = g.nodes[0] || null; });
+    const s = snapshot();
+    if (s && s.selectedStepId === sid) setSelected(null); }
 
   function addStep(stepId) {
     const sid = String(stepId || "");
     if (!sid) return;
-    if (view.draft.includes(sid)) {
+    const g0 = currentGraph(stripUi(wizardDraft()));
+    if (g0.nodes.includes(sid)) {
       pushLocalValidation("Step already present: " + sid);
-      return;
-    }
+      return; }
 
-    let insertAt = view.draft.length;
-    const sel = view.selected;
-    if (sel && view.draft.includes(sel)) {
-      insertAt = idxOf(sel) + 1;
+    let insertAt = g0.nodes.length;
+    const s = snapshot();
+    const sel = (s && s.selectedStepId) || null;
+    if (sel && g0.nodes.includes(sel)) {
+      insertAt = g0.nodes.indexOf(sel) + 1;
     } else {
       const last = idxOf("processing");
-      insertAt = last >= 0 ? last : view.draft.length;
-    }
+      insertAt = last >= 0 ? last : g0.nodes.length; }
 
     insertAt = clampDropIndex(insertAt);
 
-    const next = view.draft.slice();
-    next.splice(insertAt, 0, sid);
-    view.draft = next;
-    normalizeEdges();
-    emitChanged();
-    render();
-  }
+    mutateGraph(function (g) {
+      const next = g.nodes.slice();
+      next.splice(insertAt, 0, sid);
+      g.nodes = next; }); }
 
   function moveStep(dragId, beforeId) {
     const from = idxOf(dragId);
     if (from < 0) return;
     if (isPinned(dragId)) return;
 
-    const filtered = view.draft.filter((x) => x !== dragId);
+    const g0 = currentGraph(stripUi(wizardDraft()));
+    const filtered = g0.nodes.filter((x) => x !== dragId);
 
     let to = filtered.length;
     if (beforeId) {
       const bi = filtered.indexOf(beforeId);
-      to = bi >= 0 ? bi : filtered.length;
-    }
+      to = bi >= 0 ? bi : filtered.length; }
 
     to = clampDropIndex(to);
 
     filtered.splice(to, 0, dragId);
-    view.draft = filtered;
-    normalizeEdges();
-    emitChanged();
-    render();
-  }
+    mutateGraph(function (g) {
+      g.nodes = filtered; }); }
 
   function historyRow(item) {
     const row = el("div", "historyItem");
@@ -419,51 +443,43 @@
     meta.appendChild(text("div", null, item.timestamp || ""));
     const btn = text("button", "btn", "Rollback");
     btn.addEventListener("click", async () => {
-      await rollback(String(item.id || ""));
-    });
+      await rollback(String(item.id || "")); });
     row.appendChild(meta);
     row.appendChild(btn);
-    return row;
-  }
+    return row; }
 
   async function loadHistory() {
     const out = await H.requestJSON("/import/ui/wizard-definition/history");
     if (!out.ok) {
       renderError(out.data, false);
-      return;
-    }
+      return; }
     clear(ui.history);
     const items = out.data && out.data.items ? out.data.items : [];
     (Array.isArray(items) ? items : []).forEach((it) => {
-      ui.history.appendChild(historyRow(it || {}));
-    });
-  }
+      ui.history.appendChild(historyRow(it || {})); }); }
 
   async function loadPalette() {
     const out = await H.requestJSON("/import/ui/steps-index");
     if (!out.ok) {
       renderError(out.data, false);
-      return false;
-    }
+      return false; }
     const items = out.data && out.data.items ? out.data.items : [];
-    view.palette = Array.isArray(items) ? items : [];
-    return true;
-  }
+    palette.length = 0;
+    (Array.isArray(items) ? items : []).forEach(function (it) {
+      palette.push(it); });
+    return true; }
 
   async function loadDefinition() {
     const out = await H.requestJSON("/import/ui/wizard-definition");
     if (!out.ok) {
       renderError(out.data, false);
-      return false;
-    }
+      return false; }
     const defn = out.data && out.data.definition ? out.data.definition : {};
     const FE = window.AM2FlowEditorState;
     if (FE && FE.loadAll && FE.getSnapshot) {
       const snap = FE.getSnapshot();
-      FE.loadAll({ wizardDefinition: defn, flowConfig: snap.configDraft });
-    }
-    return true;
-  }
+      FE.loadAll({ wizardDefinition: defn, flowConfig: snap.configDraft }); }
+    return true; }
 
   async function reloadAll() {
     if (!confirmIfDirty("Reload")) return;
@@ -473,31 +489,25 @@
     const ok2 = await loadDefinition();
     if (ok1 && ok2) {
       await loadHistory();
-      render();
-    }
-    return !!(ok1 && ok2);
-  }
+      render(); }
+    return !!(ok1 && ok2); }
 
   async function validateDraft() {
     renderError(null, false);
     setValidation(null, [], []);
-    const payload = {
-      definition: defFromGraph(view.draft, view.entry_step_id, view.edges),
-    };
+    const s = snapshot();
+    const payload = { definition: stripUi((s && s.wizardDraft) || {}) };
     const out = await H.requestJSON("/import/ui/wizard-definition/validate", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+      body: JSON.stringify(payload), });
     if (!out.ok) {
       renderError(out.data, true);
       setValidation(
         false,
         ["Validation failed. See error details above."],
-        extractServerMessages(out.data)
-      );
-      return false;
-    }
+        extractServerMessages(out.data) );
+      return false; }
     const defn = out.data && out.data.definition ? out.data.definition : {};
     const FE = window.AM2FlowEditorState;
     if (FE && FE.markValidated && FE.getSnapshot) {
@@ -505,36 +515,28 @@
       FE.markValidated({
         canonicalWizardDefinition: defn,
         canonicalFlowConfig: snap.configDraft,
-        validationEnvelope: { ok: true },
-      });
-    }
+        validationEnvelope: { ok: true }, }); }
     setValidation(true, [], []);
-    return true;
-  }
+    return true; }
 
   async function saveDraft() {
     if (!(await validateDraft())) return false;
-    const payload = {
-      definition: defFromGraph(view.draft, view.entry_step_id, view.edges),
-    };
+    const s = snapshot();
+    const payload = { definition: stripUi((s && s.wizardDraft) || {}) };
     const out = await H.requestJSON("/import/ui/wizard-definition", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(payload),
-    });
+      body: JSON.stringify(payload), });
     if (!out.ok) {
       renderError(out.data, false);
-      return false;
-    }
+      return false; }
     const defn = out.data && out.data.definition ? out.data.definition : {};
     const FE = window.AM2FlowEditorState;
     if (FE && FE.loadAll && FE.getSnapshot) {
       const snap = FE.getSnapshot();
-      FE.loadAll({ wizardDefinition: defn, flowConfig: snap.configDraft });
-    }
+      FE.loadAll({ wizardDefinition: defn, flowConfig: snap.configDraft }); }
     await loadHistory();
-    return true;
-  }
+    return true; }
 
   async function resetDefinition() {
     if (!confirmIfDirty("Reset")) return;
@@ -542,21 +544,17 @@
     renderError(null, false);
     setValidation(null, [], []);
     const out = await H.requestJSON("/import/ui/wizard-definition/reset", {
-      method: "POST",
-    });
+      method: "POST", });
     if (!out.ok) {
       renderError(out.data, false);
-      return false;
-    }
+      return false; }
     const defn = out.data && out.data.definition ? out.data.definition : {};
     const FE = window.AM2FlowEditorState;
     if (FE && FE.loadAll && FE.getSnapshot) {
       const snap = FE.getSnapshot();
-      FE.loadAll({ wizardDefinition: defn, flowConfig: snap.configDraft });
-    }
+      FE.loadAll({ wizardDefinition: defn, flowConfig: snap.configDraft }); }
     await loadHistory();
-    return true;
-  }
+    return true; }
 
   async function rollback(id) {
     if (!confirmIfDirty("Rollback")) return;
@@ -566,22 +564,23 @@
     const out = await H.requestJSON("/import/ui/wizard-definition/rollback", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ id: id }),
-    });
+      body: JSON.stringify({ id: id }), });
     if (!out.ok) {
       renderError(out.data, false);
-      return;
-    }
+      return; }
     const defn = out.data && out.data.definition ? out.data.definition : {};
     const FE = window.AM2FlowEditorState;
     if (FE && FE.loadAll && FE.getSnapshot) {
       const snap = FE.getSnapshot();
-      FE.loadAll({ wizardDefinition: defn, flowConfig: snap.configDraft });
-    }
-    await loadHistory();
-  }
+      FE.loadAll({ wizardDefinition: defn, flowConfig: snap.configDraft }); }
+    await loadHistory(); }
 
   function renderStepRow(stepId, idx) {
+    const s = snapshot();
+    const selected = (s && s.selectedStepId) || null;
+    const wd = (s && s.wizardDraft) || {};
+    const uiState = (wd && wd._am2_ui) || {};
+
     const row = el("div", "wdRow");
     row.dataset.stepId = stepId;
 
@@ -593,7 +592,7 @@
     if (pinned === "first") row.classList.add("is-pinned-first");
     if (pinned === "last") row.classList.add("is-pinned-last");
     if (isPinned(stepId)) row.classList.add("is-locked");
-    if (view.selected === stepId) row.classList.add("is-selected");
+    if (selected === stepId) row.classList.add("is-selected");
 
     const orderCell = el("div", "wdCellOrder");
     const handle = el("span", "wdDragHandle");
@@ -603,14 +602,16 @@
     if (!isPinned(stepId)) {
       handle.draggable = true;
       handle.addEventListener("dragstart", (e) => {
-        view.dragId = stepId;
-        view.dropBeforeId = stepId;
+        const FE = window.AM2FlowEditorState;
+        if (FE && FE.mutateWizard) {
+          FE.mutateWizard(function (wd2) {
+            const ui2 = ensureWizardUi(wd2);
+            ui2.dragId = stepId;
+            ui2.dropBeforeId = stepId; }); }
         e.dataTransfer.effectAllowed = "move";
-        dropHint.classList.add("is-visible");
-      });
+        dropHint.classList.add("is-visible"); });
     } else {
-      handle.classList.add("is-disabled");
-    }
+      handle.classList.add("is-disabled"); }
 
     orderCell.appendChild(handle);
     orderCell.appendChild(text("span", "wdOrderNum", String(idx + 1)));
@@ -629,8 +630,7 @@
     if (isPinned(stepId)) {
       req.appendChild(svgIcon("lock", "wdSvg", "Locked"));
     } else if (isMandatory(stepId)) {
-      req.appendChild(svgIcon("required", "wdSvg", "Required"));
-    }
+      req.appendChild(svgIcon("required", "wdSvg", "Required")); }
     reqCell.appendChild(req);
 
     const actCell = el("div", "wdCellActions");
@@ -643,12 +643,10 @@
       rm.appendChild(text("span", "srOnly", "Delete"));
       rm.addEventListener("click", (e) => {
         e.stopPropagation();
-        removeStep(stepId);
-      });
+        removeStep(stepId); });
       actCell.appendChild(rm);
     } else {
-      actCell.appendChild(el("span", "wdActionsPlaceholder"));
-    }
+      actCell.appendChild(el("span", "wdActionsPlaceholder")); }
 
     row.appendChild(orderCell);
     row.appendChild(idCell);
@@ -658,34 +656,47 @@
 
     row.addEventListener("click", () => setSelected(stepId));
     row.addEventListener("dragover", (e) => {
-      if (!view.dragId) return;
+      const dragId = uiState.dragId;
+      if (!dragId) return;
       e.preventDefault();
       e.dataTransfer.dropEffect = "move";
-      view.dropBeforeId = stepId;
-    });
+      const FE = window.AM2FlowEditorState;
+      if (FE && FE.mutateWizard) {
+        FE.mutateWizard(function (wd2) {
+          const ui2 = ensureWizardUi(wd2);
+          ui2.dropBeforeId = stepId; }); } });
 
     row.addEventListener("drop", (e) => {
-      if (!view.dragId) return;
+      const s2 = snapshot();
+      const wd2 = (s2 && s2.wizardDraft) || {};
+      const ui2 = (wd2 && wd2._am2_ui) || {};
+      if (!ui2.dragId) return;
       e.preventDefault();
-      const dragId = view.dragId;
-      const beforeId = view.dropBeforeId;
-      view.dragId = null;
-      view.dropBeforeId = null;
+      const dragId = ui2.dragId;
+      const beforeId = ui2.dropBeforeId;
+      const FE = window.AM2FlowEditorState;
+      if (FE && FE.mutateWizard) {
+        FE.mutateWizard(function (wd3) {
+          const ui3 = ensureWizardUi(wd3);
+          ui3.dragId = null;
+          ui3.dropBeforeId = null; }); }
       dropHint.classList.remove("is-visible");
-      moveStep(dragId, beforeId);
-    });
+      moveStep(dragId, beforeId); });
 
     row.addEventListener("dragend", () => {
-      view.dragId = null;
-      view.dropBeforeId = null;
-      dropHint.classList.remove("is-visible");
-    });
+      const FE = window.AM2FlowEditorState;
+      if (FE && FE.mutateWizard) {
+        FE.mutateWizard(function (wd2) {
+          const ui2 = ensureWizardUi(wd2);
+          ui2.dragId = null;
+          ui2.dropBeforeId = null; }); }
+      dropHint.classList.remove("is-visible"); });
 
-    return row;
-  }
+    return row; }
 
   function paletteButton(sid) {
-    const already = view.draft.includes(sid);
+    const g = currentGraph(stripUi(wizardDraft()));
+    const already = g.nodes.includes(sid);
 
     const add = el("button", "btn wdPaletteAdd");
     add.type = "button";
@@ -695,13 +706,11 @@
       add.disabled = true;
       add.appendChild(svgIcon("check", "wdSvg", "Added"));
       add.appendChild(text("span", "wdPaletteAddText", "Added"));
-      return add;
-    }
+      return add; }
 
     add.textContent = "+ Add";
     add.addEventListener("click", () => addStep(sid));
-    return add;
-  }
+    return add; }
 
   function renderPaletteGroup(titleText, kind, items) {
     const g = el("div", "wdPaletteGroup");
@@ -713,7 +722,9 @@
     items.forEach((it) => {
       const sid = String(it.step_id || "");
       if (!sid) return;
-      if (!view.showOptional && kind !== "mandatory") return;
+      const wd = wizardDraft();
+      const uiState = (wd && wd._am2_ui) || { showOptional: true };
+      if (uiState.showOptional === false && kind !== "mandatory") return;
 
       const item = el("div", "wdPaletteItem");
       if (kind === "mandatory") item.classList.add("kind-mandatory");
@@ -722,10 +733,8 @@
 
       item.appendChild(text("div", "wdPaletteItemId", sid));
       item.appendChild(paletteButton(sid));
-      g.appendChild(item);
-    });
-    return g;
-  }
+      g.appendChild(item); });
+    return g; }
 
   function validationGroup(titleText, items, groupClass) {
     const wrap = el("div", "wdValidationGroup");
@@ -734,23 +743,28 @@
 
     if (!items.length) {
       wrap.appendChild(text("div", "wdValidationItem", "None"));
-      return wrap;
-    }
+      return wrap; }
 
     items.forEach((s) => {
-      wrap.appendChild(text("div", "wdValidationItem", s));
-    });
-    return wrap;
-  }
+      wrap.appendChild(text("div", "wdValidationItem", s)); });
+    return wrap; }
 
   function renderValidation() {
     clear(validationList);
     validation.classList.remove("is-ok");
     validation.classList.remove("is-error");
 
-    const ok = view.validation.ok;
-    const localItems = view.validation.local;
-    const serverItems = view.validation.server;
+    const wd = wizardDraft();
+    const uiState = (wd && wd._am2_ui) || { validation: { ok: null, local: [], server: [] } };
+    const ok = uiState.validation && uiState.validation.ok;
+    const localItems =
+      uiState.validation && Array.isArray(uiState.validation.local)
+        ? uiState.validation.local
+        : [];
+    const serverItems =
+      uiState.validation && Array.isArray(uiState.validation.server)
+        ? uiState.validation.server
+        : [];
     const total = localItems.length + serverItems.length;
 
     validationClear.disabled = localItems.length === 0;
@@ -762,39 +776,38 @@
       okItem.appendChild(svgIcon("check", "wdSvg", "OK"));
       okItem.appendChild(text("span", "wdValidationOkText", "No validation errors."));
       validationList.appendChild(okItem);
-      return;
-    }
+      return; }
 
     if (total) {
       validation.classList.add("is-error");
       validationCount.textContent = String(total);
       validationList.appendChild(
-        validationGroup("Local UI Messages", localItems, "is-local")
-      );
+        validationGroup("Local UI Messages", localItems, "is-local") );
       validationList.appendChild(
-        validationGroup("Server Validation Messages", serverItems, "is-server")
-      );
-      return;
-    }
+        validationGroup("Server Validation Messages", serverItems, "is-server") );
+      return; }
 
-    validationCount.textContent = "";
-  }
+    validationCount.textContent = ""; }
 
   function render() {
-    refreshFromFlowState();
+    const s = snapshot();
+    const selected = (s && s.selectedStepId) || null;
+    const wd = (s && s.wizardDraft) || {};
+    const uiState = (wd && wd._am2_ui) || { showOptional: true };
+    const g = currentGraph(stripUi(wd));
+    const nodes = g.nodes;
     syncTextarea();
-    btnRemove.disabled = !view.selected || !canRemove(view.selected);
-    btnUp.disabled = !view.selected || isPinned(view.selected);
-    btnDown.disabled = !view.selected || isPinned(view.selected);
+    btnRemove.disabled = !selected || !canRemove(selected);
+    btnUp.disabled = !selected || isPinned(selected);
+    btnDown.disabled = !selected || isPinned(selected);
 
     clear(body);
-    view.draft.forEach((sid, idx) => {
-      body.appendChild(renderStepRow(sid, idx));
-    });
+    nodes.forEach((sid, idx) => {
+      body.appendChild(renderStepRow(sid, idx)); });
 
     clear(paletteGroups);
     const q = String(search.value || "").toLowerCase();
-    const filtered = view.palette
+    const filtered = palette
       .filter((it) => it && it.step_id)
       .filter((it) => String(it.step_id).toLowerCase().includes(q));
 
@@ -803,19 +816,17 @@
     const conditional = filtered.filter((it) => String(it.kind) === "conditional");
 
     paletteGroups.appendChild(
-      renderPaletteGroup("Mandatory", "mandatory", mandatory)
-    );
-    paletteGroups.appendChild(renderPaletteGroup("Optional", "optional", optional));
+      renderPaletteGroup("Mandatory", "mandatory", mandatory) );
+    if (uiState.showOptional !== false) {
+      paletteGroups.appendChild(
+        renderPaletteGroup("Optional", "optional", optional) ); }
     paletteGroups.appendChild(
-      renderPaletteGroup("Conditional", "conditional", conditional)
-    );
-  }
+      renderPaletteGroup("Conditional", "conditional", conditional) ); }
 
   function normPath(s) {
     const raw = String(s || "").trim();
     if (raw.startsWith("$.")) return raw.slice(2);
-    return raw;
-  }
+    return raw; }
 
   function condSummary(when) {
     if (when === null || when === undefined) return "Always";
@@ -826,28 +837,22 @@
     if (op === "eq" || op === "ne") {
       const p = when.path ? String(when.path) : "";
       const v = when.value;
-      return op + " " + p + " = " + String(v);
-    }
+      return op + " " + p + " = " + String(v); }
     if (op === "exists" || op === "truthy") {
-      return op + " " + String(when.path || "");
-    }
+      return op + " " + String(when.path || ""); }
     if (op === "not" && when.cond && typeof when.cond === "object") {
       const c = when.cond;
       const cop = c.op ? String(c.op) : "";
       if (cop === "truthy") return "falsy " + String(c.path || "");
-      if (cop === "exists") return "not_exists " + String(c.path || "");
-    }
+      if (cop === "exists") return "not_exists " + String(c.path || ""); }
     if (op === "or" && Array.isArray(when.conds)) {
       const conds = when.conds;
       const eqs = conds.filter((c) => c && c.op === "eq" && c.path);
       if (eqs.length === conds.length && eqs.length) {
         const path = String(eqs[0].path);
         const vals = eqs.map((c) => String(c.value));
-        return "in " + path + " [" + vals.join(", " ) + "]";
-      }
-    }
-    return "Custom";
-  }
+        return "in " + path + " [" + vals.join(", " ) + "]"; } }
+    return "Custom"; }
 
   function parseWhenToUI(when) {
     if (when === null || when === undefined) {
@@ -858,8 +863,7 @@
         valueType: "text",
         valueText: "",
         inList: [],
-      };
-    }
+      }; }
     if (!when || typeof when !== "object") {
       return {
         always: false,
@@ -868,8 +872,7 @@
         valueType: "text",
         valueText: "",
         inList: [],
-      };
-    }
+      }; }
     const op = when.op ? String(when.op) : "";
     if (op === "eq" || op === "ne") {
       const v = when.value;
@@ -881,8 +884,7 @@
           valueType: v ? "true" : "false",
           valueText: "",
           inList: [],
-        };
-      }
+        }; }
       return {
         always: false,
         op: op,
@@ -890,8 +892,7 @@
         valueType: "text",
         valueText: v === undefined || v === null ? "" : String(v),
         inList: [],
-      };
-    }
+      }; }
     if (op === "exists" || op === "truthy") {
       return {
         always: false,
@@ -900,8 +901,7 @@
         valueType: "text",
         valueText: "",
         inList: [],
-      };
-    }
+      }; }
     if (op === "not" && when.cond && typeof when.cond === "object") {
       const c = when.cond;
       const cop = c.op ? String(c.op) : "";
@@ -913,8 +913,7 @@
           valueType: "text",
           valueText: "",
           inList: [],
-        };
-      }
+        }; }
       if (cop === "exists") {
         return {
           always: false,
@@ -923,9 +922,7 @@
           valueType: "text",
           valueText: "",
           inList: [],
-        };
-      }
-    }
+        }; } }
     if (op === "or" && Array.isArray(when.conds)) {
       const conds = when.conds;
       const eqs = conds.filter((c) => c && c.op === "eq" && c.path);
@@ -939,9 +936,7 @@
           valueType: "text",
           valueText: "",
           inList: vals,
-        };
-      }
-    }
+        }; } }
     return {
       always: false,
       op: "eq",
@@ -949,8 +944,7 @@
       valueType: "text",
       valueText: "",
       inList: [],
-    };
-  }
+    }; }
 
   function buildWhenFromUI(d) {
     if (d.always) return null;
@@ -962,17 +956,13 @@
       let v = d.valueText;
       if (d.valueType === "true") v = true;
       if (d.valueType === "false") v = false;
-      return { op: op, path: path, value: v };
-    }
+      return { op: op, path: path, value: v }; }
     if (op === "exists" || op === "truthy") {
-      return { op: op, path: path };
-    }
+      return { op: op, path: path }; }
     if (op === "falsy") {
-      return { op: "not", cond: { op: "truthy", path: path } };
-    }
+      return { op: "not", cond: { op: "truthy", path: path } }; }
     if (op === "not_exists") {
-      return { op: "not", cond: { op: "exists", path: path } };
-    }
+      return { op: "not", cond: { op: "exists", path: path } }; }
     if (op === "in") {
       const items = Array.isArray(d.inList) ? d.inList : [];
       return {
@@ -980,31 +970,20 @@
         conds: items
           .filter((x) => String(x || "").trim())
           .map((x) => ({ op: "eq", path: path, value: String(x) })),
-      };
-    }
-    return null;
-  }
-
-  function normalizeEdges() {
-    const fn =
-      window.AM2WDEdgesIntegrity && window.AM2WDEdgesIntegrity.normalizeEdges
-        ? window.AM2WDEdgesIntegrity.normalizeEdges
-        : null;
-    if (fn) {
-      view.edges = fn(view.draft, view.edges);
-    }
-  }
-
-  function ensureEntryValid() {
-    if (!view.entry_step_id || view.draft.indexOf(view.entry_step_id) < 0) {
-      view.entry_step_id = view.draft[0] || null;
-    }
-  }
+      }; }
+    return null; }
 
   function renderTransitions() {
     if (!transitionsPanel) return;
     clear(transitionsPanel);
-    ensureEntryValid();
+
+    const s = snapshot();
+    const wd = (s && s.wizardDraft) || {};
+    const uiState = (wd && wd._am2_ui) || {};
+    const g0 = currentGraph(stripUi(wd));
+    const nodes = g0.nodes;
+    const entry = g0.entry && nodes.indexOf(g0.entry) >= 0 ? g0.entry : nodes[0] || null;
+    const edges = normalizeEdges(nodes, g0.edges);
 
     const header = el("div", "flowTransHeader");
     header.appendChild(text("div", "flowTransTitle", "Transitions"));
@@ -1012,17 +991,15 @@
     const entryWrap = el("div", "flowTransEntry");
     entryWrap.appendChild(text("label", "flowTransLabel", "Entry"));
     const entrySel = el("select", "flowTransSelect");
-    view.draft.forEach((sid) => {
+    nodes.forEach((sid) => {
       const opt = el("option", null);
       opt.value = sid;
       opt.textContent = sid;
-      if (sid === view.entry_step_id) opt.selected = true;
-      entrySel.appendChild(opt);
-    });
+      if (sid === entry) opt.selected = true;
+      entrySel.appendChild(opt); });
     entrySel.addEventListener("change", () => {
-      view.entry_step_id = entrySel.value || null;
-    emitChanged();
-    });
+      mutateGraph(function (g) {
+        g.entry = entrySel.value || null; }); });
     entryWrap.appendChild(entrySel);
     header.appendChild(entryWrap);
 
@@ -1034,7 +1011,7 @@
     priInp.min = "0";
     priInp.step = "1";
     priInp.value = "0";
-    view.draft.forEach((sid) => {
+    nodes.forEach((sid) => {
       const a = el("option", null);
       a.value = sid;
       a.textContent = sid;
@@ -1042,9 +1019,9 @@
       const b = el("option", null);
       b.value = sid;
       b.textContent = sid;
-      toSel.appendChild(b);
-    });
-    if (view.selected && view.draft.indexOf(view.selected) >= 0) fromSel.value = view.selected;
+      toSel.appendChild(b); });
+    const selected = (s && s.selectedStepId) || null;
+    if (selected && nodes.indexOf(selected) >= 0) fromSel.value = selected;
 
     addWrap.appendChild(text("label", "flowTransLabel", "From"));
     addWrap.appendChild(fromSel);
@@ -1062,21 +1039,16 @@
       if (!frm || !to) return;
       if (frm === to) {
         pushLocalValidation("Self-loop transitions are not allowed.");
-        return;
-      }
-      if (view.draft.indexOf(frm) < 0 || view.draft.indexOf(to) < 0) return;
-      view.edges = view.edges.concat([
-        {
-          from_step_id: frm,
-          to_step_id: to,
-          priority: Number.isFinite(prio) ? prio : 0,
-          when: null,
-        },
-      ]);
-      normalizeEdges();
-    emitChanged();
-      renderTransitions();
-    });
+        return; }
+      if (nodes.indexOf(frm) < 0 || nodes.indexOf(to) < 0) return;
+      mutateGraph(function (g) {
+        g.edges = (g.edges || []).concat([ {
+            from_step_id: frm,
+            to_step_id: to,
+            priority: Number.isFinite(prio) ? prio : 0,
+            when: null, },
+        ]); });
+      renderTransitions(); });
     addWrap.appendChild(btnAddEdge);
 
     transitionsPanel.appendChild(header);
@@ -1091,24 +1063,24 @@
     head.appendChild(text("div", "flowTransCellAct", "Actions"));
     table.appendChild(head);
 
-    normalizeEdges();
-
     function moveEdge(idx, dir) {
-      const e = view.edges[idx];
+      const e = edges[idx];
       if (!e) return;
       const frm = e.from_step_id;
       const swap = idx + dir;
-      const e2 = view.edges[swap];
+      const e2 = edges[swap];
       if (!e2 || e2.from_step_id !== frm) return;
-      const next = view.edges.slice();
-      next[idx] = e2;
-      next[swap] = e;
-      view.edges = next;
-    emitChanged();
-      renderTransitions();
-    }
+      mutateGraph(function (g) {
+        const next = (g.edges || []).slice();
+        const a = next[idx];
+        const b = next[swap];
+        if (!a || !b || a.from_step_id !== frm || b.from_step_id !== frm) return;
+        next[idx] = b;
+        next[swap] = a;
+        g.edges = next; });
+      renderTransitions(); }
 
-    view.edges.forEach((e, idx) => {
+    edges.forEach((e, idx) => {
       const row = el("div", "flowTransRow");
       row.appendChild(text("div", "flowTransCellPri", String(e.priority || 0)));
       row.appendChild(text("div", "flowTransCellFrom", e.from_step_id));
@@ -1118,9 +1090,12 @@
       const condBtn = text("button", "flowTransCondBtn", condSummary(e.when));
       condBtn.type = "button";
       condBtn.addEventListener("click", () => {
-        view.editingEdgeIdx = view.editingEdgeIdx === idx ? null : idx;
-        renderTransitions();
-      });
+        const FE = window.AM2FlowEditorState;
+        if (FE && FE.mutateWizard) {
+          FE.mutateWizard(function (wd2) {
+            const ui2 = ensureWizardUi(wd2);
+            ui2.editingEdgeIdx = ui2.editingEdgeIdx === idx ? null : idx; }); }
+        renderTransitions(); });
       condCell.appendChild(condBtn);
       row.appendChild(condCell);
 
@@ -1135,12 +1110,15 @@
       btnUpEdge.addEventListener("click", () => moveEdge(idx, -1));
       btnDownEdge.addEventListener("click", () => moveEdge(idx, +1));
       btnDel.addEventListener("click", () => {
-        view.edges = view.edges.filter((_, i) => i !== idx);
-        normalizeEdges();
-        view.editingEdgeIdx = null;
-    emitChanged();
-        renderTransitions();
-      });
+        mutateGraph(function (g) {
+          g.edges = (g.edges || []).filter(function (_, i) {
+            return i !== idx; }); });
+        const FE = window.AM2FlowEditorState;
+        if (FE && FE.mutateWizard) {
+          FE.mutateWizard(function (wd2) {
+            const ui2 = ensureWizardUi(wd2);
+            ui2.editingEdgeIdx = null; }); }
+        renderTransitions(); });
       act.appendChild(btnUpEdge);
       act.appendChild(btnDownEdge);
       act.appendChild(btnDel);
@@ -1148,7 +1126,7 @@
 
       table.appendChild(row);
 
-      if (view.editingEdgeIdx === idx) {
+      if (uiState.editingEdgeIdx === idx) {
         const ed = el("div", "flowTransEditor");
         const uiD = parseWhenToUI(e.when);
 
@@ -1165,24 +1143,21 @@
           o.value = k;
           o.textContent = k;
           if (k === uiD.op) o.selected = true;
-          opSel.appendChild(o);
-        });
+          opSel.appendChild(o); });
 
         const dlId = "flowPathDL";
         let dl = document.getElementById(dlId);
         if (!dl) {
           dl = el("datalist", null);
           dl.id = dlId;
-          (view.draft || []).forEach((sid) => {
+          nodes.forEach((sid) => {
             const o = el("option", null);
             o.value = "$.inputs." + sid + ".<field>";
-            dl.appendChild(o);
-          });
+            dl.appendChild(o); });
           const o2 = el("option", null);
-          o2.value = "$.view.<field>";
+          o2.value = "$.ctx.<field>";
           dl.appendChild(o2);
-          document.body.appendChild(dl);
-        }
+          document.body.appendChild(dl); }
 
         const pathInp = el("input", "flowTransPath");
         pathInp.type = "text";
@@ -1196,8 +1171,7 @@
           o.value = k;
           o.textContent = k;
           if (k === uiD.valueType) o.selected = true;
-          valType.appendChild(o);
-        });
+          valType.appendChild(o); });
         const valText = el("input", "flowTransValText");
         valText.type = "text";
         valText.value = uiD.valueText || "";
@@ -1215,26 +1189,21 @@
             t.type = "text";
             t.value = String(v || "");
             t.addEventListener("input", () => {
-              items[i] = t.value;
-            });
+              items[i] = t.value; });
             const del = text("button", "btn", "Remove");
             del.type = "button";
             del.addEventListener("click", () => {
               items.splice(i, 1);
-              renderInList(items);
-            });
+              renderInList(items); });
             r.appendChild(t);
             r.appendChild(del);
-            inList.appendChild(r);
-          });
-        }
+            inList.appendChild(r); }); }
 
         const inItems = (uiD.inList || []).slice();
         renderInList(inItems);
         btnAddIn.addEventListener("click", () => {
           inItems.push("");
-          renderInList(inItems);
-        });
+          renderInList(inItems); });
         inWrap.appendChild(inList);
         inWrap.appendChild(btnAddIn);
 
@@ -1250,13 +1219,23 @@
             inList: inItems,
           };
           const when = buildWhenFromUI(d);
-          const next = view.edges.slice();
-          next[idx] = { from_step_id: e.from_step_id, to_step_id: e.to_step_id, when: when };
-          view.edges = next;
-    emitChanged();
-          view.editingEdgeIdx = null;
-          renderTransitions();
-        });
+          mutateGraph(function (g) {
+            const next = (g.edges || []).slice();
+            const old = next[idx];
+            if (!old) return;
+            next[idx] = {
+              from_step_id: old.from_step_id,
+              to_step_id: old.to_step_id,
+              priority: old.priority,
+              when: when,
+            };
+            g.edges = next; });
+          const FE = window.AM2FlowEditorState;
+          if (FE && FE.mutateWizard) {
+            FE.mutateWizard(function (wd2) {
+              const ui2 = ensureWizardUi(wd2);
+              ui2.editingEdgeIdx = null; }); }
+          renderTransitions(); });
 
         function applyVisibility() {
           const dis = !!always.checked;
@@ -1270,8 +1249,7 @@
           inWrap.classList.toggle("is-hidden", dis || !needsIn);
 
           valType.disabled = dis || !needsValue;
-          valText.disabled = dis || !needsValue || valType.value !== "text";
-        }
+          valText.disabled = dis || !needsValue || valType.value !== "text"; }
 
         always.addEventListener("change", applyVisibility);
         opSel.addEventListener("change", applyVisibility);
@@ -1291,69 +1269,68 @@
         ed.appendChild(inWrap);
         ed.appendChild(btnApply);
 
-        table.appendChild(ed);
-      }
-    });
+        table.appendChild(ed); } });
 
-    transitionsPanel.appendChild(table);
-  }
+    transitionsPanel.appendChild(table); }
 
 
   search.addEventListener("input", () => render());
 
   optToggle.addEventListener("change", () => {
-    view.showOptional = !!optToggle.checked;
-    render();
-  });
+    const FE = window.AM2FlowEditorState;
+    if (FE && FE.mutateWizard) {
+      FE.mutateWizard(function (wd) {
+        const ui2 = ensureWizardUi(wd);
+        ui2.showOptional = !!optToggle.checked; }); }
+    render(); });
 
   validationClear.addEventListener("click", () => {
-    setValidation(false, [], view.validation.server);
-  });
+    const wd = wizardDraft();
+    const uiState = (wd && wd._am2_ui) || { validation: { server: [] } };
+    setValidation(false, [], (uiState.validation && uiState.validation.server) || []); });
 
   btnRemove.addEventListener("click", () => {
-    const sid = view.selected;
+    const s = snapshot();
+    const sid = (s && s.selectedStepId) || null;
     if (!sid) return;
     if (!canRemove(sid)) {
       pushLocalValidation("Cannot remove locked or mandatory step: " + sid);
-      return;
-    }
-    removeStep(sid);
-  });
+      return; }
+    removeStep(sid); });
 
   btnUp.addEventListener("click", () => {
-    const sid = view.selected;
+    const s = snapshot();
+    const sid = (s && s.selectedStepId) || null;
     if (!sid) return;
     if (isPinned(sid)) return;
     const from = idxOf(sid);
     if (from <= 0) return;
-    const target = view.draft[from - 1];
-    moveStep(sid, target);
-  });
+    const g = currentGraph(stripUi(wizardDraft()));
+    const target = g.nodes[from - 1];
+    moveStep(sid, target); });
 
   btnDown.addEventListener("click", () => {
-    const sid = view.selected;
+    const s = snapshot();
+    const sid = (s && s.selectedStepId) || null;
     if (!sid) return;
     if (isPinned(sid)) return;
     const from = idxOf(sid);
-    if (from < 0 || from >= view.draft.length - 1) return;
-    const target = view.draft[from + 2] || null;
-    moveStep(sid, target);
-  });
+    const g = currentGraph(stripUi(wizardDraft()));
+    if (from < 0 || from >= g.nodes.length - 1) return;
+    const target = g.nodes[from + 2] || null;
+    moveStep(sid, target); });
 
   btnAdd.addEventListener("click", () => {
     const q = String(search.value || "").toLowerCase();
-    const matches = view.palette
+    const matches = palette
       .filter((it) => it && it.step_id)
       .filter((it) => String(it.step_id).toLowerCase().includes(q));
 
     if (matches.length !== 1) {
       pushLocalValidation(
-        "Add Step requires search to match exactly one palette item."
-      );
-      return;
-    }
-    addStep(matches[0].step_id);
-  });
+        "Add Step requires search to match exactly one palette item." );
+      return; }
+    addStep(matches[0].step_id); });
 
   ui.reload && ui.reload.addEventListener("click", reloadAll);
   ui.validate && ui.validate.addEventListener("click", validateDraft);
@@ -1367,12 +1344,9 @@
     resetDefinition: resetDefinition,
   };
 
-  
-
   const FE = window.AM2FlowEditorState;
-  if (FE && FE.bindWizardEditorBridge) {
-    FE.bindWizardEditorBridge({ renderRequested: render });
-  }
+  if (FE && FE.registerWizardRender) {
+    FE.registerWizardRender(render); }
 
 reloadAll();
 })();

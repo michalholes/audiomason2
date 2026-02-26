@@ -16,15 +16,18 @@
     this.draftDirty = false;
     this.validationState = { lastOk: false, envelope: null };
 
-    this._wizardBridge = null;
-    this._configBridge = null;
+    this._wizardRenders = [];
+    this._configRenders = [];
   }
 
   FlowEditorState.prototype.loadAll = function loadAll(payload) {
     const wiz = payload && payload.wizardDefinition;
     const cfg = payload && payload.flowConfig;
-    this.wizardDraft = deepClone(wiz);
-    this.configDraft = deepClone(cfg);
+    this.wizardDraft = deepClone(wiz) || {};
+    if (!this.wizardDraft._am2_ui || typeof this.wizardDraft._am2_ui !== "object") {
+      this.wizardDraft._am2_ui = { showOptional: true, rightTab: "details" };
+    }
+    this.configDraft = deepClone(cfg) || {};
     this.selectedStepId = null;
     this.draftDirty = false;
     this.validationState = { lastOk: false, envelope: null };
@@ -50,24 +53,34 @@
     this.validationState = { lastOk: true, envelope: deepClone(nextState) };
   };
 
-  FlowEditorState.prototype.bindWizardEditorBridge = function bindWizardEditorBridge(bridge) {
-    this._wizardBridge = bridge || null;
-    this._requestWizardRender();
+  FlowEditorState.prototype.registerWizardRender = function registerWizardRender(fn) {
+    if (typeof fn !== "function") return;
+    this._wizardRenders.push(fn);
+    fn();
   };
 
-  FlowEditorState.prototype.bindConfigEditorBridge = function bindConfigEditorBridge(bridge) {
-    this._configBridge = bridge || null;
-    this._requestConfigRender();
+  FlowEditorState.prototype.registerConfigRender = function registerConfigRender(fn) {
+    if (typeof fn !== "function") return;
+    this._configRenders.push(fn);
+    fn();
   };
 
   FlowEditorState.prototype._requestWizardRender = function _requestWizardRender() {
-    const b = this._wizardBridge;
-    if (b && b.renderRequested) b.renderRequested();
+    (this._wizardRenders || []).forEach(function (fn) {
+      try {
+        fn();
+      } catch (e) {
+      }
+    });
   };
 
   FlowEditorState.prototype._requestConfigRender = function _requestConfigRender() {
-    const b = this._configBridge;
-    if (b && b.renderRequested) b.renderRequested();
+    (this._configRenders || []).forEach(function (fn) {
+      try {
+        fn();
+      } catch (e) {
+      }
+    });
   };
 
   FlowEditorState.prototype.setSelectedStep = function setSelectedStep(stepIdOrNull) {
@@ -77,18 +90,16 @@
   };
 
   FlowEditorState.prototype.mutateWizard = function mutateWizard(mutatorFn) {
-    const next = deepClone(this.wizardDraft);
-    mutatorFn && mutatorFn(next);
-    this.wizardDraft = next;
+    if (!this.wizardDraft) this.wizardDraft = {};
+    mutatorFn && mutatorFn(this.wizardDraft);
     this.draftDirty = true;
     this.validationState = { lastOk: false, envelope: null };
     this._requestWizardRender();
   };
 
   FlowEditorState.prototype.mutateConfig = function mutateConfig(mutatorFn) {
-    const next = deepClone(this.configDraft);
-    mutatorFn && mutatorFn(next);
-    this.configDraft = next;
+    if (!this.configDraft) this.configDraft = {};
+    mutatorFn && mutatorFn(this.configDraft);
     this.draftDirty = true;
     this.validationState = { lastOk: false, envelope: null };
     this._requestConfigRender();

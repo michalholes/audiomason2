@@ -30,23 +30,16 @@
 
   const unifiedMode = !!ui.stepPanel;
 
-  function refreshFromFlowState() {
-    const FE = window.AM2FlowEditorState;
-    if (!FE || !FE.getSnapshot) return;
-    const s = FE.getSnapshot();
-    const cfg = (s && s.configDraft) || {};
-    view.loaded = cfg;
-    view.draft = JSON.parse(JSON.stringify(cfg || {}));
-    view.selectedStepId = (s && s.selectedStepId) || null;
+  function deepClone(x) {
+    return x === undefined ? undefined : JSON.parse(JSON.stringify(x));
   }
 
+  function snapshot() {
+    const FE = window.AM2FlowEditorState;
+    return FE && FE.getSnapshot ? FE.getSnapshot() : null;
+  }
 
-  const view = {
-    loaded: null,
-    draft: null,
-    selectedStepId: null,
-    stepCache: {},
-  };
+  const stepCache = {};
 
   function clear(node) {
     while (node && node.firstChild) node.removeChild(node.firstChild);
@@ -101,7 +94,6 @@
       const snap = FE.getSnapshot();
       FE.loadAll({ wizardDefinition: snap.wizardDraft, flowConfig: cfg });
     }
-    refreshFromFlowState();
     await loadHistory();
     if (unifiedMode) renderSelectedStep();
     return true;
@@ -111,8 +103,8 @@
     H.renderError(ui.err, null);
     let payloadCfg = {};
     if (unifiedMode) {
-      refreshFromFlowState();
-      payloadCfg = view.draft || {};
+      const s = snapshot();
+      payloadCfg = (s && s.configDraft) || {};
     } else {
       try {
         payloadCfg = JSON.parse(ui.ta.value || "{}");
@@ -141,7 +133,6 @@
         validationEnvelope: { ok: true },
       });
     }
-    refreshFromFlowState();
 
     if (unifiedMode) renderSelectedStep();
     return true;
@@ -155,7 +146,8 @@
     }
     let payloadCfg = {};
     if (unifiedMode) {
-      payloadCfg = view.draft || {};
+      const s = snapshot();
+      payloadCfg = (s && s.configDraft) || {};
     } else {
       try {
         payloadCfg = JSON.parse(ui.ta.value || "{}");
@@ -174,13 +166,11 @@
       return false;
     }
     ui.ta.value = H.pretty(out.data.config || {});
-    view.loaded = out.data.config || {};
-    view.draft = JSON.parse(JSON.stringify(view.loaded || {}));
 
     const FE = window.AM2FlowEditorState;
     if (FE && FE.loadAll && FE.getSnapshot) {
       const snap = FE.getSnapshot();
-      FE.loadAll({ wizardDefinition: snap.wizardDraft, flowConfig: view.draft });
+      FE.loadAll({ wizardDefinition: snap.wizardDraft, flowConfig: out.data.config || {} });
     }
 
     await loadHistory();
@@ -196,13 +186,11 @@
       return false;
     }
     ui.ta.value = H.pretty(out.data.config || {});
-    view.loaded = out.data.config || {};
-    view.draft = JSON.parse(JSON.stringify(view.loaded || {}));
 
     const FE = window.AM2FlowEditorState;
     if (FE && FE.loadAll && FE.getSnapshot) {
       const snap = FE.getSnapshot();
-      FE.loadAll({ wizardDefinition: snap.wizardDraft, flowConfig: view.draft });
+      FE.loadAll({ wizardDefinition: snap.wizardDraft, flowConfig: out.data.config || {} });
     }
 
     await loadHistory();
@@ -222,13 +210,11 @@
       return;
     }
     ui.ta.value = H.pretty(out.data.config || {});
-    view.loaded = out.data.config || {};
-    view.draft = JSON.parse(JSON.stringify(view.loaded || {}));
 
     const FE = window.AM2FlowEditorState;
     if (FE && FE.loadAll && FE.getSnapshot) {
       const snap = FE.getSnapshot();
-      FE.loadAll({ wizardDefinition: snap.wizardDraft, flowConfig: view.draft });
+      FE.loadAll({ wizardDefinition: snap.wizardDraft, flowConfig: out.data.config || {} });
     }
 
     await loadHistory();
@@ -247,68 +233,44 @@
     return cfg.defaults;
   }
 
-  function setStepValue(stepId, key, value) {
-    if (!view.draft || typeof view.draft !== "object") view.draft = {};
-    const defaults = safeDefaultsRoot(view.draft);
-    if (!defaults[stepId] || typeof defaults[stepId] !== "object") {
-      defaults[stepId] = {};
-    }
-    defaults[stepId][key] = value;
-    ui.ta.value = H.pretty(view.draft || {});
+  function currentConfig() {
+    const s = snapshot();
+    return deepClone((s && s.configDraft) || {});
+  }
 
-    const FE = window.AM2FlowEditorState;
-    if (FE && FE.mutateConfig) {
-      const nextCfg = JSON.parse(JSON.stringify(view.draft || {}));
-      FE.mutateConfig(function (cfg) {
-        Object.keys(cfg || {}).forEach(function (k) {
-          try {
-            delete cfg[k];
-          } catch (e) {
-            // ignore
-          }
-        });
-        Object.keys(nextCfg || {}).forEach(function (k) {
-          cfg[k] = nextCfg[k];
-        });
-      });
-    }
-
+  function emitChanged() {
     try {
       window.dispatchEvent(new CustomEvent("am2:cfg:changed", { detail: {} }));
     } catch (e) {
-      // ignore
+    }
+  }
+
+  function setStepValue(stepId, key, value) {
+    const FE = window.AM2FlowEditorState;
+    if (FE && FE.mutateConfig) {
+      FE.mutateConfig(function (cfg) {
+        const defaults = safeDefaultsRoot(cfg);
+        if (!defaults[stepId] || typeof defaults[stepId] !== "object") defaults[stepId] = {};
+        defaults[stepId][key] = value;
+      });
     }
 
+    ui.ta.value = H.pretty(currentConfig());
+    emitChanged();
     updateApplyStatus(stepId);
   }
 
   function clearStepDefaults(stepId) {
     if (!stepId) return;
-    const defaults = safeDefaultsRoot(view.draft);
-    if (defaults[stepId]) delete defaults[stepId];
-    ui.ta.value = H.pretty(view.draft || {});
-
     const FE = window.AM2FlowEditorState;
     if (FE && FE.mutateConfig) {
-      const nextCfg = JSON.parse(JSON.stringify(view.draft || {}));
       FE.mutateConfig(function (cfg) {
-        Object.keys(cfg || {}).forEach(function (k) {
-          try {
-            delete cfg[k];
-          } catch (e) {
-            // ignore
-          }
-        });
-        Object.keys(nextCfg || {}).forEach(function (k) {
-          cfg[k] = nextCfg[k];
-        });
+        const defaults = safeDefaultsRoot(cfg);
+        if (defaults && defaults[stepId]) delete defaults[stepId];
       });
     }
-    try {
-      window.dispatchEvent(new CustomEvent("am2:cfg:changed", { detail: {} }));
-    } catch (e) {
-      // ignore
-    }
+    ui.ta.value = H.pretty(currentConfig());
+    emitChanged();
     renderSelectedStep();
   }
 
@@ -325,7 +287,8 @@
   }
 
   function getAppliedKeys(stepId) {
-    const defaults = safeDefaultsRoot(view.draft);
+    const cfg = currentConfig();
+    const defaults = safeDefaultsRoot(cfg);
     const o = defaults[stepId];
     if (!o || typeof o !== "object") return [];
     return Object.keys(o).sort();
@@ -348,7 +311,8 @@
     const inp = document.createElement("input");
     inp.className = "flowFieldInput";
 
-    const defaults = safeDefaultsRoot(view.draft);
+    const cfg = currentConfig();
+    const defaults = safeDefaultsRoot(cfg);
     const cur =
       defaults[stepId] && typeof defaults[stepId] === "object"
         ? defaults[stepId][field.key]
@@ -398,20 +362,21 @@
   async function fetchStepDetails(stepId) {
     const sid = String(stepId || "");
     if (!sid) return null;
-    if (view.stepCache[sid]) return view.stepCache[sid];
+    if (stepCache[sid]) return stepCache[sid];
     const out = await H.requestJSON("/import/ui/steps/" + encodeURIComponent(sid));
     if (!out.ok) {
       setStepError("Failed to load step details");
       return null;
     }
     const d = out.data && typeof out.data === "object" ? out.data : {};
-    view.stepCache[sid] = d;
+    stepCache[sid] = d;
     return d;
   }
 
   async function renderSelectedStep() {
     if (!unifiedMode) return;
-    const stepId = view.selectedStepId;
+    const s = snapshot();
+    const stepId = (s && s.selectedStepId) || null;
 
     if (!ui.stepHeader || !ui.stepDesc || !ui.stepForm || !ui.stepApply) return;
 
@@ -444,15 +409,13 @@
   }
 
   window.addEventListener("am2:wd:selected", async (e) => {
-    const d = e && e.detail ? e.detail : {};
-    const sid = typeof d.step_id === "string" ? d.step_id : null;
-    view.selectedStepId = sid;
     await renderSelectedStep();
   });
 
   ui.clearStep &&
     ui.clearStep.addEventListener("click", () => {
-      clearStepDefaults(view.selectedStepId);
+      const s = snapshot();
+      clearStepDefaults((s && s.selectedStepId) || null);
     });
 
   ui.reload && ui.reload.addEventListener("click", reload);
@@ -465,17 +428,14 @@
     validate: validateOnly,
     save: save,
     reset: reset,
-    _debug_getDraft: () => view.draft,
+    _debug_getDraft: () => currentConfig(),
   };
 
 
   const FE = window.AM2FlowEditorState;
-  if (FE && FE.bindConfigEditorBridge) {
-    FE.bindConfigEditorBridge({
-      renderRequested: function () {
-        refreshFromFlowState();
-        if (unifiedMode) renderSelectedStep();
-      },
+  if (FE && FE.registerConfigRender) {
+    FE.registerConfigRender(function () {
+      if (unifiedMode) renderSelectedStep();
     });
   }
 
