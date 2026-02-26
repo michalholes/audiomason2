@@ -111,7 +111,7 @@ body.dragging .drop-overlay { display: flex; }
 .linklike:hover { text-decoration: underline; }
 .muted { color: #aaa; font-size: 13px; }
 .lbl { width: 52px; color: #aaa; font-size: 13px; }
-.lbl-wide { width: 72px; }
+.lbl-wide { width: auto; }
 .details { margin-bottom: 8px; }
 
 .statusbar {
@@ -249,9 +249,31 @@ input::placeholder { color: #6f7f99; }
 
 .amp-fields { margin-top: 8px; }
 
-.amp-row { align-items: center; }
+.amp-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 280px) 1fr;
+  gap: 10px;
+  align-items: start;
+  margin-bottom: 8px;
+}
 
-.amp-list { flex: 1; }
+.amp-key {
+  overflow-wrap: anywhere;
+  white-space: normal;
+  font-size: 13px;
+  color: #b7c3d6;
+}
+
+.amp-control {
+  min-width: 0;
+}
+
+.amp-list { width: 100%; }
+
+.amp-dirty {
+  border-left: 3px solid #f1c40f;
+  padding-left: 7px;
+}
 
 .status-ok { color: #2ecc71; }
 

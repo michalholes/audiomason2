@@ -117,18 +117,27 @@
     redraw(normalizeList(values));
   }
 
-  function renderFields(schemaFields, values, onChange) {
+  function renderFields(schemaFields, baseValues, values, onChange, filterText) {
     var wrap = el("ampFields");
     if (!wrap) return;
     wrap.textContent = "";
+
+    var ftxt = String(filterText || "").toLowerCase();
 
     schemaFields.forEach(function (f) {
       var key = String(f.key || "");
       var kind = String(f.kind || "str");
       var enumVals = Array.isArray(f.enum) ? f.enum : null;
 
-      var row = mk("div", "row amp-row", null);
-      row.appendChild(mk("label", "lbl lbl-wide", key));
+      if (ftxt && key.toLowerCase().indexOf(ftxt) < 0) return;
+
+      var row = mk("div", "amp-row", null);
+      row.id = "ampRow__" + key;
+
+      var keyBox = mk("div", "amp-key", key);
+      row.appendChild(keyBox);
+
+      var ctl = mk("div", "amp-control", null);
 
       if (kind === "bool") {
         var sw = mk("label", "switch", null);
@@ -140,7 +149,7 @@
         });
         sw.appendChild(cb);
         sw.appendChild(mk("span", "slider", null));
-        row.appendChild(sw);
+        ctl.appendChild(sw);
       } else if (kind === "enum" && enumVals) {
         var sel = mk("select", "input", null);
         enumVals.forEach(function (optV) {
@@ -152,18 +161,20 @@
         sel.addEventListener("change", function () {
           onChange(key, String(sel.value));
         });
-        row.appendChild(sel);
+        ctl.appendChild(sel);
       } else if (kind === "int") {
         var ni = mk("input", "input", null);
         ni.type = "number";
         ni.value = String(values[key] == null ? "" : values[key]);
         ni.addEventListener("change", function () {
-          onChange(key, String(ni.value));
+          var raw = String(ni.value == null ? "" : ni.value);
+          var n = parseInt(raw, 10);
+          onChange(key, Number.isFinite(n) ? n : 0);
         });
-        row.appendChild(ni);
+        ctl.appendChild(ni);
       } else if (kind === "list_str") {
         var box = mk("div", "amp-list", null);
-        row.appendChild(box);
+        ctl.appendChild(box);
         renderChipList(box, key, values[key], onChange);
       } else {
         var ti = mk("input", "input", null);
@@ -172,14 +183,43 @@
         ti.addEventListener("change", function () {
           onChange(key, String(ti.value));
         });
-        row.appendChild(ti);
+        ctl.appendChild(ti);
+      }
+
+      row.appendChild(ctl);
+
+      if (baseValues) {
+        var baseV = baseValues[key];
+        var curV = values[key];
+        var dirty = false;
+        if (kind === "list_str") {
+          var a = normalizeList(baseV);
+          var b = normalizeList(curV);
+          if (a.length !== b.length) {
+            dirty = true;
+          } else {
+            for (var i = 0; i < a.length; i++) {
+              if (a[i] !== b[i]) {
+                dirty = true;
+                break;
+              }
+            }
+          }
+        } else if (kind === "bool") {
+          dirty = (!!baseV) !== (!!curV);
+        } else if (kind === "int") {
+          dirty = baseV !== curV;
+        } else {
+          dirty = String(baseV == null ? "" : baseV) !== String(curV == null ? "" : curV);
+        }
+        if (dirty) row.classList.add("amp-dirty");
       }
 
       wrap.appendChild(row);
     });
   }
 
-  function init() {
+function init() {
     var btnCollapse = el("ampCollapse");
     if (btnCollapse) {
       btnCollapse.addEventListener("click", function () {
@@ -190,9 +230,54 @@
     var schema = null;
     var baseValues = null;
     var curValues = {};
+    var fieldKinds = {};
+    var filterText = "";
+
+    function cloneValues(src) {
+      var out = {};
+      Object.keys(fieldKinds).forEach(function (k) {
+        var kind = fieldKinds[k];
+        var v = (src && Object.prototype.hasOwnProperty.call(src, k)) ? src[k] : undefined;
+        if (kind === "list_str") {
+          out[k] = normalizeList(v);
+        } else if (kind === "bool") {
+          out[k] = !!v;
+        } else if (kind === "int") {
+          out[k] = (typeof v === "number") ? v : 0;
+        } else {
+          out[k] = String(v == null ? "" : v);
+        }
+      });
+      return out;
+    }
+
+    function isDirty(k) {
+      var kind = fieldKinds[k] || "str";
+      var a = baseValues ? baseValues[k] : undefined;
+      var b = curValues[k];
+      if (kind === "list_str") {
+        var aa = normalizeList(a);
+        var bb = normalizeList(b);
+        if (aa.length !== bb.length) return true;
+        for (var i = 0; i < aa.length; i++) {
+          if (aa[i] !== bb[i]) return true;
+        }
+        return false;
+      }
+      if (kind === "bool") return (!!a) !== (!!b);
+      return a !== b;
+    }
+
+    function updateRowDirty(k) {
+      var row = el("ampRow__" + k);
+      if (!row) return;
+      if (isDirty(k)) row.classList.add("amp-dirty");
+      else row.classList.remove("amp-dirty");
+    }
 
     function setCur(k, v) {
       curValues[k] = v;
+      updateRowDirty(k);
     }
 
     function reload() {
@@ -208,12 +293,23 @@
             setStatus((c && c.error) ? c.error : "config load failed", true);
             return;
           }
-          baseValues = c.values || {};
-          curValues = {};
-          Object.keys(baseValues).forEach(function (k) {
-            curValues[k] = baseValues[k];
+          fieldKinds = {};
+          ((schema && schema.fields) ? schema.fields : []).forEach(function (f) {
+            var k = String(f.key || "");
+            var kind = String(f.kind || "str");
+            fieldKinds[k] = kind;
           });
-          renderFields((schema && schema.fields) ? schema.fields : [], curValues, setCur);
+
+          baseValues = cloneValues(c.values || {});
+          curValues = cloneValues(baseValues);
+
+          renderFields(
+            (schema && schema.fields) ? schema.fields : [],
+            baseValues,
+            curValues,
+            setCur,
+            filterText
+          );
           setStatus("Loaded", false);
         });
       });
@@ -251,12 +347,23 @@
     if (btnRevert) {
       btnRevert.addEventListener("click", function () {
         if (!baseValues || !schema) return;
-        curValues = {};
-        Object.keys(baseValues).forEach(function (k) {
-          curValues[k] = baseValues[k];
-        });
-        renderFields(schema.fields || [], curValues, setCur);
+        curValues = cloneValues(baseValues);
+        renderFields(schema.fields || [], baseValues, curValues, setCur, filterText);
         setStatus("Reverted", false);
+      });
+    }
+
+    var inpFilter = el("ampFilter");
+    if (inpFilter) {
+      inpFilter.addEventListener("input", function () {
+        filterText = String(inpFilter.value || "");
+        renderFields(
+          (schema && schema.fields) ? schema.fields : [],
+          baseValues,
+          curValues,
+          setCur,
+          filterText
+        );
       });
     }
 
