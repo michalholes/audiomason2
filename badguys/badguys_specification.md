@@ -248,6 +248,24 @@ Supported step types:
 - FuncStep(name=..., fn=callable)
 - ExpectPathExists(path=Path)
 
+#### CmdStep runner result determination (normative)
+
+When a CmdStep executes the AM Patch Runner (scripts/am_patch.py), BadGuys MUST determine the
+runner outcome primarily from the IPC socket event stream.
+
+Primary rule:
+- If an IPC event with type="result" is obtained, BadGuys MUST use:
+  - ok (boolean) as the authoritative PASS/FAIL signal, and
+  - return_code as the authoritative runner return code.
+
+Fallback rule:
+- If no IPC type="result" event is obtained, BadGuys MUST fall back to the subprocess exit code.
+
+BadGuys MUST NOT use stdout/stderr parsing as the authoritative decision source for PASS/FAIL.
+
+If the IPC result includes log_path and/or json_path, BadGuys MUST copy those artifacts into the
+per-test log directory with stable filenames (no timestamps) BEFORE cleanup deletes issue artifacts.
+
 The engine MUST execute steps in order.
 
 ### 7.3 Cleanup and isolation (normative)

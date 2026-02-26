@@ -7,6 +7,7 @@ import glob
 import shutil
 import subprocess
 import sys
+import threading
 import time
 import traceback
 from dataclasses import dataclass
@@ -44,6 +45,7 @@ class Ctx:
     cfg: SuiteCfg
     console_verbosity: str
     log_verbosity: str
+    runner_ipc_artifacts: dict[str, dict[str, Path]]
 
     def step_log_path(self, test_name: str) -> Path:
         # Per-test log name must be stable (no timestamp in filename).
@@ -93,6 +95,12 @@ def _make_cfg(
     runner_verbosity = _resolve_value(cli_runner_verbosity, suite.get("runner_verbosity"), "quiet").strip()
     if runner_verbosity:
         runner_cmd = runner_cmd + [f"--verbosity={runner_verbosity}"]
+
+    # Deterministic IPC socket naming for runner result detection.
+    runner_cmd = runner_cmd + [
+        "--ipc-socket-mode=patch_dir",
+        "--ipc-socket-name-template=am_patch_ipc_{issue}.sock",
+    ]
 
     # BadGuys console verbosity (short flags override this).
     console_verbosity = _resolve_value(cli_console_verbosity, suite.get("console_verbosity"), "normal").strip()
@@ -238,10 +246,28 @@ def _clear_heartbeat(ctx: Ctx, last_msg: Optional[str]) -> None:
     sys.stderr.flush()
 
 
-def _run_cmd_with_heartbeat(ctx: Ctx, *, test_name: str, argv: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
+def _run_cmd_with_heartbeat(ctx: Ctx, *, test_name: str, argv: list[str], cwd: Path) -> CmdOutcome:
     started = time.monotonic()
     last_msg: Optional[str] = None
     hb_interval = 5.0
+
+    ipc_holder: dict[str, dict | None] = {"result": None}
+    ipc_thread: threading.Thread | None = None
+    socket_path: Path | None = None
+    if _is_runner_cmd(ctx.cfg, argv):
+        from badguys.ipc_result_reader import read_ipc_result
+
+        socket_path = ctx.cfg.patches_dir / f"am_patch_ipc_{ctx.cfg.issue_id}.sock"
+
+        def _run_reader() -> None:
+            ipc_holder["result"] = read_ipc_result(
+                socket_path,
+                connect_timeout_s=3.0,
+                total_timeout_s=0.0,
+            )
+
+        ipc_thread = threading.Thread(target=_run_reader, name="badguys_ipc_reader", daemon=True)
+        ipc_thread.start()
 
     proc = subprocess.Popen(
         argv,
@@ -276,7 +302,42 @@ def _run_cmd_with_heartbeat(ctx: Ctx, *, test_name: str, argv: list[str], cwd: P
     finally:
         _clear_heartbeat(ctx, last_msg)
 
-    return subprocess.CompletedProcess(args=argv, returncode=int(rc), stdout=stdout, stderr=stderr)
+    if ipc_thread is not None:
+        ipc_thread.join(timeout=0.25)
+
+    ipc_result = ipc_holder["result"]
+    if ipc_result is not None:
+        try:
+            rc = int(ipc_result["return_code"])
+        except Exception:
+            pass
+
+        artifacts: dict[str, Path] = {}
+        log_path = ipc_result.get("log_path")
+        json_path = ipc_result.get("json_path")
+        if isinstance(log_path, str) and log_path:
+            artifacts["log_path"] = Path(log_path)
+        if isinstance(json_path, str) and json_path:
+            artifacts["json_path"] = Path(json_path)
+        if artifacts:
+            ctx.runner_ipc_artifacts[test_name] = artifacts
+
+    cp = subprocess.CompletedProcess(args=argv, returncode=int(rc), stdout=stdout, stderr=stderr)
+    return CmdOutcome(cp=cp, ipc_result=ipc_result)
+
+
+def _is_runner_cmd(cfg: SuiteCfg, argv: list[str]) -> bool:
+    if not argv:
+        return False
+    if len(argv) < len(cfg.runner_cmd):
+        return False
+    return argv[: len(cfg.runner_cmd)] == cfg.runner_cmd
+
+
+@dataclass(frozen=True)
+class CmdOutcome:
+    cp: subprocess.CompletedProcess[str]
+    ipc_result: dict | None
 def _log_banner(ctx: Ctx, test_name: str, title: str) -> None:
     _emit(
         ctx,
@@ -293,6 +354,20 @@ def _action(ctx: Ctx, *, test_name: Optional[str], kind: str, phase: str, msg: s
 
 
 def _cleanup_issue_artifacts(ctx: Ctx, *, issue_id: str, test_name: Optional[str]) -> None:
+    if test_name is not None:
+        artifacts = ctx.runner_ipc_artifacts.pop(test_name, None)
+        if artifacts:
+            dst_dir = ctx.cfg.logs_dir / test_name
+            dst_dir.mkdir(parents=True, exist_ok=True)
+
+            src_log = artifacts.get("log_path")
+            if src_log is not None and src_log.exists():
+                shutil.copy2(src_log, dst_dir / "runner.log")
+
+            src_json = artifacts.get("json_path")
+            if src_json is not None and src_json.exists():
+                shutil.copy2(src_json, dst_dir / "runner.jsonl")
+
     # Contract: after EACH test, the engine must delete:
     # - patches/workspaces/issue_666/
     # - patches/logs/issue_666*
@@ -376,7 +451,9 @@ def _run_test_plan(test, ctx: Ctx) -> bool:
             argv = step.argv
             cwd = step.cwd if step.cwd is not None else ctx.repo_root
             _log_banner(ctx, name, "cmd")
-            cp = _run_cmd_with_heartbeat(ctx, test_name=name, argv=list(argv), cwd=cwd)
+            out = _run_cmd_with_heartbeat(ctx, test_name=name, argv=list(argv), cwd=cwd)
+            cp = out.cp
+            ipc_result = out.ipc_result
 
             # CMD summary is always at least "$ ..." and "rc=..." in verbose+.
             if _want(ctx.log_verbosity, "verbose") or _want(ctx.console_verbosity, "verbose"):
@@ -389,14 +466,28 @@ def _run_test_plan(test, ctx: Ctx) -> bool:
                 _emit(ctx, level="verbose", test_name=name, text=cp.stdout.rstrip("\n") + "\n")
             if cp.stderr:
                 _emit(ctx, level="verbose", test_name=name, text=cp.stderr.rstrip("\n") + "\n")
-            if cp.returncode != step.expect_rc:
-                ok = False
-                _emit(
-                    ctx,
-                    level="verbose",
-                    test_name=name,
-                    text=f"FAIL: returncode={cp.returncode} expected={step.expect_rc}\n",
-                )
+
+            if ipc_result is not None and "ok" in ipc_result:
+                if not bool(ipc_result.get("ok")):
+                    ok = False
+                    _emit(
+                        ctx,
+                        level="verbose",
+                        test_name=name,
+                        text=(
+                            "FAIL: runner ipc ok=false "
+                            f"returncode={cp.returncode} expected={step.expect_rc}\n"
+                        ),
+                    )
+            else:
+                if cp.returncode != step.expect_rc:
+                    ok = False
+                    _emit(
+                        ctx,
+                        level="verbose",
+                        test_name=name,
+                        text=f"FAIL: returncode={cp.returncode} expected={step.expect_rc}\n",
+                    )
         elif isinstance(step, ExpectPathExists):
             _log_banner(ctx, name, "expect_path_exists")
             if not step.path.exists():
@@ -512,6 +603,7 @@ def main(argv: list[str]) -> int:
             cfg=cfg,
             console_verbosity=cfg.console_verbosity,
             log_verbosity=cfg.log_verbosity,
+            runner_ipc_artifacts={},
         )
         _emit(ctx, level="quiet", test_name=None, text="BadGuys start\n")
 
