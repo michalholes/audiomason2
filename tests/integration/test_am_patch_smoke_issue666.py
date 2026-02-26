@@ -1,4 +1,5 @@
 import contextlib
+import importlib.util
 import os
 import shutil
 import subprocess
@@ -53,6 +54,11 @@ def _cleanup(repo_root: Path) -> None:
 def test_am_patch_smoke_issue_666() -> None:
     if os.environ.get("AM_PATCH_PYTEST_GATE") == "1":
         pytest.skip("skip runner smoke test inside am_patch pytest gate")
+
+    if importlib.util.find_spec("ruff") is None:
+        pytest.skip("requires ruff module")
+    if importlib.util.find_spec("mypy") is None:
+        pytest.skip("requires mypy module")
 
     repo_root = Path(__file__).resolve().parents[2]
     if not (repo_root / ".git").exists():

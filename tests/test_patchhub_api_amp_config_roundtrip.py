@@ -58,7 +58,18 @@ class TestAmpConfigRoundtrip(unittest.TestCase):
             obj2 = json.loads(data2.decode("utf-8"))
             self.assertTrue(obj2.get("ok"))
             self.assertTrue(obj2.get("dry_run"))
-            self.assertEqual(obj2.get("values", {}).get("verbosity"), "normal")
+
+            # Dry-run returns typed values as-if the update was written.
+            self.assertEqual(obj2.get("values", {}).get("verbosity"), "quiet")
+
+            # No write happened.
+            self.assertIn('verbosity = "normal"', cfg_path.read_text(encoding="utf-8"))
+
+            st2b, data2b = api_amp_config_get(dummy)
+            self.assertEqual(st2b, 200)
+            obj2b = json.loads(data2b.decode("utf-8"))
+            self.assertTrue(obj2b.get("ok"))
+            self.assertEqual(obj2b.get("values", {}).get("verbosity"), "normal")
 
             # Save.
             st3, data3 = api_amp_config_post(

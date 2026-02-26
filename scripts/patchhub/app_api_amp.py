@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import os
 import tempfile
 import tomllib
@@ -38,199 +37,6 @@ def _norm_type(tp: object) -> str | None:
         return "list_str"
 
     return None
-
-
-def _enum_choices(key: str) -> list[str] | None:
-    enums: dict[str, list[str]] = {
-        "verbosity": ["quiet", "normal", "verbose", "debug"],
-        "log_level": ["quiet", "normal", "warning", "verbose", "debug"],
-        "console_color": ["auto", "always", "never"],
-        "venv_bootstrap_mode": ["auto", "always", "never"],
-        "ipc_socket_mode": ["patch_dir", "base_dir", "system_runtime"],
-        "ipc_socket_on_startup_exists": ["fail", "reuse", "unlink"],
-        "gate_monolith_mode": ["strict", "warn_only", "report_only"],
-        "gate_monolith_scan_scope": ["patch", "workspace"],
-        "gate_monolith_on_parse_error": ["fail", "warn"],
-        "rollback_workspace_on_fail": ["none-applied", "always", "never"],
-        "live_changed_resolution": ["fail", "overwrite_live", "overwrite_workspace"],
-        "gate_badguys_runner": ["auto", "off", "on"],
-    }
-    return enums.get(key)
-
-
-def _policy_fields() -> list[dict[str, Any]]:
-    from am_patch.config import Policy
-
-    tmap = get_type_hints(Policy)
-
-    out: list[dict[str, Any]] = []
-    for f in fields(Policy):
-        if f.name == "_src":
-            continue
-        tp = tmap.get(f.name, f.type)
-        norm = _norm_type(tp)
-        if norm is None:
-            continue
-
-        enum = _enum_choices(f.name)
-        if enum is not None:
-            kind = "enum"
-        elif norm == "bool":
-            kind = "bool"
-        elif norm == "int":
-            kind = "int"
-        elif norm == "str":
-            kind = "str"
-        else:
-            kind = "list_str"
-
-        out.append({"key": f.name, "kind": kind, "enum": enum})
-
-    out.sort(key=lambda d: cast(str, d.get("key", "")))
-    return out
-
-
-def _toml_quote(s: str) -> str:
-    return json.dumps(s, ensure_ascii=True)
-
-
-def _toml_inline_table(d: dict[str, Any]) -> str:
-    parts: list[str] = []
-    for k in sorted(d.keys()):
-        v = d[k]
-        parts.append(f"{k} = {_toml_value(v, inline=True)}")
-    return "{ " + ", ".join(parts) + " }"
-
-
-def _toml_list(v: list[Any], *, inline: bool) -> str:
-    if not v:
-        return "[]"
-
-    if all(isinstance(x, dict) for x in v):
-        items = [_toml_inline_table(cast(dict[str, Any], x)) for x in v]
-        if inline:
-            return "[" + ", ".join(items) + "]"
-        inner = ",\n".join(f"  {it}" for it in items)
-        return "[\n" + inner + ",\n]"
-
-    items = [_toml_value(x, inline=True) for x in v]
-    one = "[" + ", ".join(items) + "]"
-    if inline and len(one) <= 88:
-        return one
-    inner = ",\n".join(f"  {it}" for it in items)
-    return "[\n" + inner + ",\n]"
-
-
-def _toml_value(v: Any, *, inline: bool) -> str:
-    if isinstance(v, bool):
-        return "true" if v else "false"
-    if isinstance(v, int):
-        return str(v)
-    if isinstance(v, str):
-        return _toml_quote(v)
-    if isinstance(v, list):
-        return _toml_list(v, inline=inline)
-    if isinstance(v, dict):
-        return _toml_inline_table(v)
-    return _toml_quote(str(v))
-
-
-def _dump_toml(data: dict[str, Any]) -> str:
-    lines: list[str] = []
-
-    for k, v in data.items():
-        if isinstance(v, dict):
-            continue
-        lines.append(f"{k} = {_toml_value(v, inline=True)}")
-
-    for sec, sv in data.items():
-        if not isinstance(sv, dict):
-            continue
-        if lines and lines[-1] != "":
-            lines.append("")
-        lines.append(f"[{sec}]")
-        for k, v in sv.items():
-            lines.append(f"{k} = {_toml_value(v, inline=True)}")
-
-    if not lines:
-        return ""
-    return "\n".join(lines).rstrip() + "\n"
-
-
-def _coerce_value(kind: str, v: Any) -> Any:
-    if kind == "bool":
-        if isinstance(v, bool):
-            return v
-        if isinstance(v, str):
-            s = v.strip().lower()
-            if s in ("1", "true", "yes", "on"):
-                return True
-            if s in ("0", "false", "no", "off"):
-                return False
-        raise ValueError("invalid bool")
-
-    if kind == "int":
-        if isinstance(v, int):
-            return int(v)
-        if isinstance(v, str):
-            return int(v.strip())
-        raise ValueError("invalid int")
-
-    if kind == "list_str":
-        if isinstance(v, list):
-            out: list[str] = []
-            for x in v:
-                if not isinstance(x, str):
-                    continue
-                s = x.strip()
-                if s and s not in out:
-                    out.append(s)
-            return out
-        if isinstance(v, str):
-            parts = [p.strip() for p in v.split(",")]
-            return [p for p in parts if p]
-        raise ValueError("invalid list")
-
-    if v is None:
-        return ""
-    return str(v)
-
-
-def _key_container(raw: dict[str, Any], key: str) -> dict[str, Any]:
-    if key in raw and not isinstance(raw.get(key), dict):
-        return raw
-
-    for sec in (
-        "paths",
-        "git",
-        "workspace",
-        "scope",
-        "gates",
-        "promotion",
-        "security",
-        "logging",
-        "audit",
-    ):
-        sv = raw.get(sec)
-        if isinstance(sv, dict) and key in sv and not isinstance(sv.get(key), dict):
-            return sv
-
-    if key.startswith("gate_") or key.startswith("gates_"):
-        raw.setdefault("gates", {})
-        return cast(dict[str, Any], raw["gates"])
-    if key.endswith("_targets") or key.startswith(("ruff_", "pytest_", "mypy_")):
-        raw.setdefault("security", {})
-        return cast(dict[str, Any], raw["security"])
-    if key in (
-        "commit_and_push",
-        "fail_if_live_files_changed",
-        "live_changed_resolution",
-        "no_rollback",
-    ):
-        raw.setdefault("promotion", {})
-        return cast(dict[str, Any], raw["promotion"])
-
-    return raw
 
 
 def _read_policy_values(cfg_path: Path) -> dict[str, Any]:
@@ -304,32 +110,7 @@ def api_amp_schema(self) -> tuple[int, bytes]:
     if not isinstance(policy, dict):
         return _err("amp_schema_invalid: policy missing")
 
-    fields_out: list[dict[str, Any]] = []
-    for item in policy.values():
-        if not isinstance(item, dict):
-            continue
-        key = item.get("key")
-        if not isinstance(key, str) or not key:
-            continue
-
-        enum = item.get("enum")
-        typ = item.get("type")
-        if isinstance(enum, list) and all(isinstance(x, str) for x in enum):
-            kind = "enum"
-        elif typ == "bool":
-            kind = "bool"
-        elif typ == "int":
-            kind = "int"
-        elif typ in ("str", "optional[str]"):
-            kind = "str"
-        else:
-            # list[str] (and any unknown type) are exposed as list_str
-            kind = "list_str"
-
-        fields_out.append({"key": key, "kind": kind, "enum": enum if kind == "enum" else None})
-
-    fields_out.sort(key=lambda d: cast(str, d.get("key", "")))
-    return _ok({"schema": {"fields": fields_out}})
+    return _ok({"schema": schema})
 
 
 def api_amp_config_get(self) -> tuple[int, bytes]:
@@ -372,7 +153,7 @@ def api_amp_config_post(self, body: dict[str, Any]) -> tuple[int, bytes]:
 
         if dry_run:
             # Dry-run must validate without applying (and without writing).
-            typed = _read_policy_values(cfg_path)
+            typed = _read_policy_values_from_text(new_text)
         else:
             cfg_path.parent.mkdir(parents=True, exist_ok=True)
             fd, tmp_name = tempfile.mkstemp(

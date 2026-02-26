@@ -46,10 +46,17 @@ class TestAmpSchema(unittest.TestCase):
             self.assertTrue(obj.get("ok"))
             schema = obj.get("schema")
             self.assertIsInstance(schema, dict)
-            fields = schema.get("fields")
-            self.assertIsInstance(fields, list)
 
-            by_key = {f.get("key"): f for f in fields if isinstance(f, dict)}
-            self.assertIn("verbosity", by_key)
-            self.assertIn("console_color", by_key)
-            self.assertEqual(by_key["verbosity"].get("kind"), "enum")
+            self.assertIn("schema_version", schema)
+            self.assertIn("policy", schema)
+
+            policy = schema.get("policy")
+            self.assertIsInstance(policy, dict)
+
+            self.assertIn("verbosity", policy)
+            self.assertIn("console_color", policy)
+
+            verbosity = policy.get("verbosity")
+            self.assertIsInstance(verbosity, dict)
+            self.assertEqual(verbosity.get("key"), "verbosity")
+            self.assertIsInstance(verbosity.get("enum"), list)
