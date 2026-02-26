@@ -23,6 +23,36 @@
     let dragStepId = null;
     let dropBeforeId = null;
 
+    function clearDropTargets() {
+      Object.keys(rowById).forEach((k) => {
+        const r = rowById[k];
+        r && r.classList && r.classList.remove("is-drop-target");
+      });
+    }
+
+    if (state.reorderStep && typeof state.reorderStep === "function") {
+      body.addEventListener("dragover", function (e) {
+        e.preventDefault();
+        dropBeforeId = null;
+        try {
+          e.dataTransfer.dropEffect = "move";
+        } catch (err) {
+        }
+      });
+
+      body.addEventListener("drop", function (e) {
+        e.preventDefault();
+        let dragId = dragStepId;
+        try {
+          dragId = e.dataTransfer.getData("text/plain") || dragId;
+        } catch (err) {
+        }
+        clearDropTargets();
+        if (!dragId) return;
+        state.reorderStep && state.reorderStep(dragId, null);
+      });
+    }
+
     function renderAll() {
       clear(body);
       Object.keys(rowById).forEach((k) => delete rowById[k]);
@@ -64,7 +94,6 @@
         const btnDown = text("button", "btn btnSmall", "Down");
         btnDown.type = "button";
         btnDown.disabled =
-        btnDown.disabled =
           idx === nodes.length - 1 ||
           !(state.moveStepDown && typeof state.moveStepDown === "function");
         btnDown.classList.toggle("is-disabled", btnDown.disabled);
@@ -104,9 +133,10 @@
             }
           });
 
-          row.addEventListener("dragover", function (e) {
+                    row.addEventListener("dragover", function (e) {
             e.preventDefault();
             dropBeforeId = String(sid || "");
+            clearDropTargets();
             row.classList.add("is-drop-target");
             try {
               e.dataTransfer.dropEffect = "move";
@@ -135,10 +165,7 @@
             dragStepId = null;
             dropBeforeId = null;
             row.classList.remove("is-dragging");
-            Object.keys(rowById).forEach((k) => {
-              const r = rowById[k];
-              r && r.classList && r.classList.remove("is-drop-target");
-            });
+            clearDropTargets();
           });
         }
 

@@ -163,6 +163,7 @@
     this.emit("wizard_changed", { reason: "validated" });
     this.emit("config_changed", { reason: "validated" });
     this.emit("validation_changed", { reason: "validated" });
+    this._dispatchSelectionEvent(this.selectedStepId);
   };
 
   window.FlowEditorState = FlowEditorState;
