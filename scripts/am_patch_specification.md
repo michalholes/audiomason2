@@ -507,9 +507,10 @@ finalizeworkspace
 ### 6.1.5 Monolith gate (anti-monolith)
 
 -   Purpose: detect monolith growth and enforce ownership boundaries using read-only AST analysis.
--   Scan set (policy: gate_monolith_scan_scope):
-    -   patch: analyze only touched existing *.py files (decision_paths).
-    -   workspace: deterministic scan under prefixes listed in gate_monolith_areas.
+-   Scan set (policy: gate_monolith_scan_scope, gate_monolith_extensions):
+    -   patch: analyze only touched existing files whose suffix is in gate_monolith_extensions.
+    -   workspace: deterministic scan under prefixes listed in gate_monolith_areas, filtering by suffix.
+-   JS support: .js uses deterministic heuristics (no external parsers) for exports and internal relative imports.
 -   Baseline model (no git): compare new text (cwd/relpath) vs old text (repo_root/relpath).
 -   Metrics (old vs new): LOC (non-empty lines), EXPORTS (top-level public defs/classes), INTERNAL_IMPORTS (distinct internal modules), optional FANIN/FANOUT graph deltas.
 -   Parse errors: violation MONO.PARSE; severity controlled by gate_monolith_on_parse_error.
@@ -525,6 +526,7 @@ Controls (precedence: CLI > config > defaults):
 -   gate_monolith_enabled = true|false (default: true)
 -   gate_monolith_mode = strict|warn_only|report_only (default: strict)
 -   gate_monolith_scan_scope = patch|workspace (default: patch)
+-   gate_monolith_extensions = [".py", ".js", ...] (default: [".py", ".js"])
 -   gate_monolith_compute_fanin = true|false (default: true)
 -   gate_monolith_on_parse_error = fail|warn (default: fail)
 -   gate_monolith_areas = list[dict] (ownership roots; first match wins; plugins may be dynamic)

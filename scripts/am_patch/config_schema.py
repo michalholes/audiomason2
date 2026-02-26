@@ -144,6 +144,7 @@ _SECTION_BY_KEY: dict[str, str] = {
     "gate_monolith_enabled": "",
     "gate_monolith_mode": "",
     "gate_monolith_scan_scope": "",
+    "gate_monolith_extensions": "",
     "gate_monolith_compute_fanin": "",
     "gate_monolith_on_parse_error": "",
     "gate_monolith_areas": "",

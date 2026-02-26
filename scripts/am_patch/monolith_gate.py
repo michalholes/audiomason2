@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import ast
-from dataclasses import dataclass
+import re
+from collections.abc import Sequence
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from .errors import RunnerError
@@ -39,6 +41,25 @@ def _norm_relpath(p: str) -> str:
     if s.startswith("./"):
         s = s[2:]
     return s.strip("/")
+
+
+def _norm_extensions(exts: list[str]) -> list[str]:
+    out: list[str] = []
+    for item in exts:
+        s = str(item).strip()
+        if not s:
+            continue
+        if not s.startswith("."):
+            s = "." + s
+        s = s.lower()
+        if s not in out:
+            out.append(s)
+    return out
+
+
+def _has_allowed_suffix(relpath: str, exts: list[str]) -> bool:
+    rp = _norm_relpath(relpath).lower()
+    return any(rp.endswith(ext) for ext in exts)
 
 
 def _count_loc(text: str) -> int:
@@ -116,7 +137,7 @@ def _areas_from_policy(raw: list[dict[str, str]]) -> list[MonolithAreas]:
     return out
 
 
-def area_for_relpath(relpath: str, areas: list[MonolithAreas]) -> str:
+def area_for_relpath(relpath: str, areas: Sequence[MonolithAreas]) -> str:
     rp = _norm_relpath(relpath)
     rp2 = rp + "/" if not rp.endswith("/") else rp
     for a in areas:
@@ -189,7 +210,7 @@ def _module_to_rel_hint(mod: str) -> str | None:
     return None
 
 
-def _area_for_module(mod: str, areas: list[MonolithAreas]) -> str:
+def _area_for_module(mod: str, areas: Sequence[MonolithAreas]) -> str:
     hint = _module_to_rel_hint(mod)
     if not hint:
         return "other"
@@ -237,13 +258,15 @@ def _scan_candidates(
     *,
     decision_paths: list[str],
     scope: str,
-    areas: list[MonolithAreas],
+    areas: Sequence[MonolithAreas],
+    extensions: list[str],
 ) -> list[str]:
+    exts = _norm_extensions(extensions)
     if scope == "patch":
         out: list[str] = []
         for p in decision_paths:
             rp = _norm_relpath(p)
-            if not rp.endswith(".py"):
+            if not _has_allowed_suffix(rp, exts):
                 continue
             if (cwd / rp).exists() and rp not in out:
                 out.append(rp)
@@ -257,18 +280,78 @@ def _scan_candidates(
             root = cwd / pref.rstrip("/")
             if not root.exists():
                 continue
-            for f in sorted(root.rglob("*.py")):
-                if f.is_file():
-                    out_set.add(_norm_relpath(str(f.relative_to(cwd))))
+            for ext in exts:
+                for f in sorted(root.rglob(f"*{ext}")):
+                    if f.is_file():
+                        out_set.add(_norm_relpath(str(f.relative_to(cwd))))
         out = sorted(out_set)
         return out
 
     raise RunnerError("GATES", "MONOLITH", f"invalid gate_monolith_scan_scope={scope!r}")
 
 
-def _fan_graph(
-    root: Path,
+_RE_JS_IMPORT_FROM = re.compile(r"\bimport\b[^;\n]*\bfrom\s*[\"']([^\"']+)[\"']")
+_RE_JS_EXPORT_FROM = re.compile(r"\bexport\b[^;\n]*\bfrom\s*[\"']([^\"']+)[\"']")
+_RE_JS_REQUIRE = re.compile(r"\brequire\(\s*[\"']([^\"']+)[\"']\s*\)")
+
+
+def _js_internal_import_targets(
     *,
+    relpath: str,
+    text: str,
+    cwd: Path,
+    repo_root: Path,
+) -> set[str]:
+    specs: list[str] = []
+
+    def add(spec: str) -> None:
+        s = str(spec).strip()
+        if s and s not in specs:
+            specs.append(s)
+
+    for rx in (_RE_JS_IMPORT_FROM, _RE_JS_EXPORT_FROM, _RE_JS_REQUIRE):
+        for m in rx.finditer(text):
+            add(m.group(1))
+
+    base = Path(_norm_relpath(relpath)).parent
+    targets: set[str] = set()
+
+    def exists(rp: str) -> bool:
+        rpn = _norm_relpath(rp)
+        return (cwd / rpn).exists() or (repo_root / rpn).exists()
+
+    for spec in specs:
+        s = spec
+        if not (s.startswith("./") or s.startswith("../")):
+            continue
+        for sep in ("?", "#"):
+            if sep in s:
+                s = s.split(sep, 1)[0]
+
+        cand = Path(_norm_relpath(str((base / s).as_posix())))
+        if cand.suffix == ".js":
+            rp = _norm_relpath(str(cand))
+            if exists(rp):
+                targets.add(rp)
+            continue
+
+        rp1 = _norm_relpath(str(Path(str(cand) + ".js")))
+        if exists(rp1):
+            targets.add(rp1)
+            continue
+
+        rp2 = _norm_relpath(str(cand / "index.js"))
+        if exists(rp2):
+            targets.add(rp2)
+
+    return targets
+
+
+def _fan_graph(
+    text_root: Path,
+    *,
+    cwd: Path,
+    repo_root: Path,
     relpaths: list[str],
 ) -> tuple[dict[str, int], dict[str, int]]:
     # Build fanin/fanout based on internal imports among relpaths.
@@ -294,18 +377,28 @@ def _fan_graph(
 
     edges: dict[str, set[str]] = {rp: set[str]() for rp in relpaths}
     for rp in relpaths:
-        path = root / rp
+        path = text_root / rp
         if not path.exists():
             continue
         text = path.read_text(encoding="utf-8")
-        tree = _parse_tree(text)
-        if tree is None:
-            continue
-        cur_mod = rel_to_module.get(rp)
-        for mod in _iter_import_modules(tree, current_module=cur_mod):
-            tgt = resolve_target(mod)
-            if tgt and tgt != rp:
-                edges[rp].add(tgt)
+        if rp.endswith(".py"):
+            tree = _parse_tree(text)
+            if tree is None:
+                continue
+            cur_mod = rel_to_module.get(rp)
+            for mod in _iter_import_modules(tree, current_module=cur_mod):
+                tgt = resolve_target(mod)
+                if tgt and tgt != rp:
+                    edges[rp].add(tgt)
+        elif rp.endswith(".js"):
+            for tgt in _js_internal_import_targets(
+                relpath=rp,
+                text=text,
+                cwd=cwd,
+                repo_root=repo_root,
+            ):
+                if tgt in edges and tgt != rp:
+                    edges[rp].add(tgt)
 
     fanout: dict[str, int] = {rp: len(edges[rp]) for rp in relpaths}
     fanin: dict[str, int] = {rp: 0 for rp in relpaths}
@@ -320,10 +413,26 @@ def _analyze_file(
     *,
     relpath: str,
     text: str,
-    areas: list[MonolithAreas],
+    cwd: Path,
+    repo_root: Path,
+    areas: Sequence[MonolithAreas],
     fanin: int | None,
     fanout: int | None,
+    compute_fanin: bool,
 ) -> FileMetrics:
+    if relpath.endswith(".js"):
+        from .monolith_js_metrics import js_metrics
+
+        js_m = js_metrics(
+            relpath=relpath,
+            new_text=text,
+            cwd=cwd,
+            repo_root=repo_root,
+            areas=areas,
+            compute_fanin=compute_fanin,
+        )
+        return replace(js_m, fanin=fanin, fanout=fanout)
+
     tree = _parse_tree(text)
     if tree is None:
         return FileMetrics(
@@ -342,11 +451,11 @@ def _analyze_file(
 
     internal_mods: set[str] = set()
     imported_areas: set[str] = set()
-    for m in mods:
-        area = _area_for_module(m, areas)
+    for mod in mods:
+        area = _area_for_module(mod, areas)
         if area == "other":
             continue
-        internal_mods.add(m)
+        internal_mods.add(mod)
         imported_areas.add(area)
 
     return FileMetrics(
@@ -368,6 +477,7 @@ def run_monolith_gate(
     decision_paths: list[str],
     gate_monolith_mode: str,
     gate_monolith_scan_scope: str,
+    gate_monolith_extensions: list[str] | None = None,
     gate_monolith_compute_fanin: bool,
     gate_monolith_on_parse_error: str,
     gate_monolith_areas: list[dict[str, str]],
@@ -391,6 +501,9 @@ def run_monolith_gate(
     gate_monolith_catchall_dirs: list[str],
     gate_monolith_catchall_allowlist: list[str],
 ) -> bool:
+    if gate_monolith_extensions is None:
+        gate_monolith_extensions = [".py", ".js"]
+
     if gate_monolith_mode not in ("strict", "warn_only", "report_only"):
         raise RunnerError(
             "CONFIG",
@@ -416,11 +529,13 @@ def run_monolith_gate(
         decision_paths=decision_paths,
         scope=gate_monolith_scan_scope,
         areas=areas,
+        extensions=gate_monolith_extensions,
     )
 
     logger.section("GATE: MONOLITH")
     logger.line("gate_monolith_mode=" + gate_monolith_mode)
     logger.line("gate_monolith_scan_scope=" + gate_monolith_scan_scope)
+    logger.line("gate_monolith_extensions=" + str(_norm_extensions(gate_monolith_extensions)))
     logger.line("gate_monolith_candidates=" + str(len(candidates)))
 
     files_scanned = len(candidates)
@@ -441,8 +556,18 @@ def run_monolith_gate(
     fanin_map_old: dict[str, int] = {}
     fanout_map_old: dict[str, int] = {}
     if gate_monolith_compute_fanin and candidates:
-        fanin_map, fanout_map = _fan_graph(cwd, relpaths=candidates)
-        fanin_map_old, fanout_map_old = _fan_graph(repo_root, relpaths=candidates)
+        fanin_map, fanout_map = _fan_graph(
+            cwd,
+            cwd=cwd,
+            repo_root=repo_root,
+            relpaths=candidates,
+        )
+        fanin_map_old, fanout_map_old = _fan_graph(
+            repo_root,
+            cwd=cwd,
+            repo_root=repo_root,
+            relpaths=candidates,
+        )
 
     violations: list[Violation] = []
 
@@ -468,17 +593,23 @@ def run_monolith_gate(
         new_m = _analyze_file(
             relpath=rp,
             text=new_text,
+            cwd=cwd,
+            repo_root=repo_root,
             areas=areas,
             fanin=fanin_new,
             fanout=fanout_new,
+            compute_fanin=gate_monolith_compute_fanin,
         )
 
         old_m = _analyze_file(
             relpath=rp,
             text=old_text,
+            cwd=cwd,
+            repo_root=repo_root,
             areas=areas,
             fanin=None,
             fanout=None,
+            compute_fanin=gate_monolith_compute_fanin,
         )
 
         loc_total_new += new_m.loc
@@ -546,11 +677,14 @@ def run_monolith_gate(
         if not new_m.parse_ok or (old_path.exists() and not old_m.parse_ok):
             sev = "FAIL" if gate_monolith_on_parse_error == "fail" else "WARN"
             which = "new" if not new_m.parse_ok else "old"
-            hint = "fix_python_syntax_or_encoding"
+            if rp.endswith(".js"):
+                hint = "fix_js_syntax_or_encoding"
+            else:
+                hint = "fix_python_syntax_or_encoding"
             add(
                 "MONO.PARSE",
                 rp,
-                f"{metrics} ast_parse_failed on={which} hint={hint}",
+                f"{metrics} parse_failed on={which} hint={hint}",
                 sev,
             )
 
@@ -644,12 +778,22 @@ def run_monolith_gate(
 
         # MONO.CORE
         if file_area == "core":
-            cur_mod = _module_for_relpath(rp)
-            mods = []
-            tree = _parse_tree(new_text)
-            if tree is not None:
-                mods = _iter_import_modules(tree, current_module=cur_mod)
-            imported_areas = {_area_for_module(m, areas) for m in mods}
+            imported_areas: set[str] = set()
+            if rp.endswith(".py"):
+                cur_mod = _module_for_relpath(rp)
+                mods = []
+                tree = _parse_tree(new_text)
+                if tree is not None:
+                    mods = _iter_import_modules(tree, current_module=cur_mod)
+                imported_areas = {_area_for_module(m, areas) for m in mods}
+            elif rp.endswith(".js"):
+                for tgt in _js_internal_import_targets(
+                    relpath=rp,
+                    text=new_text,
+                    cwd=cwd,
+                    repo_root=repo_root,
+                ):
+                    imported_areas.add(area_for_relpath(tgt, areas))
             if any(a.startswith("plugins.") for a in imported_areas) or "runner" in imported_areas:
                 add(
                     "MONO.CORE",

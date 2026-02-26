@@ -161,6 +161,7 @@ class Policy:
     gate_monolith_enabled: bool = True
     gate_monolith_mode: str = "strict"  # strict|warn_only|report_only
     gate_monolith_scan_scope: str = "patch"  # patch|workspace
+    gate_monolith_extensions: list[str] = field(default_factory=lambda: [".py", ".js"])
     gate_monolith_compute_fanin: bool = True
     gate_monolith_on_parse_error: str = "fail"  # fail|warn
 
@@ -762,6 +763,26 @@ def build_policy(defaults: Policy, cfg: dict[str, Any]) -> Policy:
             ),
         )
 
+    if "gate_monolith_extensions" in cfg:
+        raw_ext = cfg["gate_monolith_extensions"]
+        if not isinstance(raw_ext, list) or not all(isinstance(x, str) for x in raw_ext):
+            raise RunnerError(
+                "CONFIG",
+                "INVALID",
+                "gate_monolith_extensions must be list[str]",
+            )
+        cleaned: list[str] = []
+        for item in raw_ext:
+            s = str(item).strip()
+            if not s:
+                continue
+            if not s.startswith("."):
+                s = "." + s
+            if s not in cleaned:
+                cleaned.append(s)
+        p.gate_monolith_extensions = cleaned
+        _mark_cfg(p, cfg, "gate_monolith_extensions")
+
     p.gate_monolith_compute_fanin = _as_bool(
         cfg, "gate_monolith_compute_fanin", p.gate_monolith_compute_fanin
     )
@@ -785,7 +806,7 @@ def build_policy(defaults: Policy, cfg: dict[str, Any]) -> Policy:
         raw = cfg["gate_monolith_areas"]
         if not isinstance(raw, list) or not all(isinstance(x, dict) for x in raw):
             raise RunnerError("CONFIG", "INVALID", "gate_monolith_areas must be list[dict]")
-        cleaned: list[dict[str, str]] = []
+        cleaned_areas: list[dict[str, str]] = []
         for item in raw:
             d: dict[str, str] = {}
             for k, v in item.items():
@@ -794,8 +815,8 @@ def build_policy(defaults: Policy, cfg: dict[str, Any]) -> Policy:
                         "CONFIG", "INVALID", "gate_monolith_areas entries must be str->str"
                     )
                 d[k] = v
-            cleaned.append(d)
-        p.gate_monolith_areas = cleaned
+            cleaned_areas.append(d)
+        p.gate_monolith_areas = cleaned_areas
         _mark_cfg(p, cfg, "gate_monolith_areas")
 
     for k in (

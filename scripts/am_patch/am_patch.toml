@@ -155,6 +155,7 @@ gates_skip_monolith = false
 gate_monolith_enabled = true
 gate_monolith_mode = "strict"
 gate_monolith_scan_scope = "patch"
+gate_monolith_extensions = [".py", ".js"]
 gate_monolith_compute_fanin = true
 gate_monolith_on_parse_error = "fail"
 

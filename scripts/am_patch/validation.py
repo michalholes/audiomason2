@@ -49,6 +49,7 @@ def run_validation(
         gate_monolith_enabled=policy.gate_monolith_enabled,
         gate_monolith_mode=policy.gate_monolith_mode,
         gate_monolith_scan_scope=policy.gate_monolith_scan_scope,
+        gate_monolith_extensions=policy.gate_monolith_extensions,
         gate_monolith_compute_fanin=policy.gate_monolith_compute_fanin,
         gate_monolith_on_parse_error=policy.gate_monolith_on_parse_error,
         gate_monolith_areas=policy.gate_monolith_areas,
