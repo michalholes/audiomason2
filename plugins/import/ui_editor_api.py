@@ -18,6 +18,7 @@ from .field_schema_validation import FieldSchemaValidationError
 from .flow_config_validation import normalize_flow_config
 from .wizard_definition_model import (
     DEFAULT_WIZARD_DEFINITION,
+    canonicalize_wizard_definition,
     load_or_bootstrap_wizard_definition,
     validate_wizard_definition_structure,
 )
@@ -309,15 +310,37 @@ def _get_step_details(step_id: Any) -> dict[str, Any]:
             details=[{"path": "$.step_id", "reason": "not_found", "meta": {}}],
         )
 
-    kind, pinned = _classify_step(sid)
+    required = {
+        "displayName",
+        "description",
+        "behavioralSummary",
+        "inputContract",
+        "outputContract",
+        "sideEffectsDescription",
+    }
+    missing = sorted(k for k in required if details.get(k) in (None, ""))
+    if missing:
+        return error_envelope(
+            "MISSING_BEHAVIORAL_FIELDS",
+            "MISSING_BEHAVIORAL_FIELDS: " + ",".join(missing),
+            details=[
+                {
+                    "path": "$.step_id",
+                    "reason": "missing_behavioral_fields",
+                    "meta": {"missing": missing},
+                }
+            ],
+        )
 
     # Deterministic key order as required by the wire contract.
     return {
-        "step_id": sid,
-        "title": str(details.get("title") or sid),
-        "kind": kind,
-        "pinned": pinned,
+        "id": sid,
+        "displayName": str(details.get("displayName") or ""),
         "description": str(details.get("description") or ""),
+        "behavioralSummary": str(details.get("behavioralSummary") or ""),
+        "inputContract": str(details.get("inputContract") or ""),
+        "outputContract": str(details.get("outputContract") or ""),
+        "sideEffectsDescription": str(details.get("sideEffectsDescription") or ""),
         "settings_schema": dict(details.get("settings_schema") or {}),
         "defaults_template": dict(details.get("defaults_template") or {}),
     }
@@ -353,7 +376,8 @@ def _validate_wizard_definition(engine: Any, body: Any) -> dict[str, Any]:
     )
     wd_any = obj.get("definition")
     validate_wizard_definition_structure(wd_any)
-    return {"definition": wd_any}
+    wd_canon = canonicalize_wizard_definition(wd_any)
+    return {"definition": wd_canon}
 
 
 def _reset_wizard_definition(engine: Any) -> dict[str, Any]:

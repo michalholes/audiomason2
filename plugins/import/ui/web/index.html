@@ -128,6 +128,12 @@
 
   <script src="/import/ui/assets/import_wizard.js"></script>
   <script src="/import/ui/assets/editor_http.js"></script>
+  <script src="/import/ui/assets/flow_editor_state.js"></script>
+  <script src="/import/ui/assets/wd_dom_icons.js"></script>
+  <script src="/import/ui/assets/wd_graph_stable.js"></script>
+  <script src="/import/ui/assets/wd_edges_integrity.js"></script>
+  <script src="/import/ui/assets/wd_sidebar.js"></script>
+  <script src="/import/ui/assets/wd_raw_error.js"></script>
   <script src="/import/ui/assets/config_editor.js"></script>
   <script src="/import/ui/assets/wizard_definition_editor.js"></script>
   <script>
@@ -146,18 +152,24 @@
         resetAll: $("flowResetAll"),
       };
 
-      const st = { lastValidateOk: false, dirty: false };
+      if (!window.AM2FlowEditorState && window.FlowEditorState) {
+        window.AM2FlowEditorState = new window.FlowEditorState();
+      }
+
+      function snap() {
+        const FE = window.AM2FlowEditorState;
+        return FE && FE.getSnapshot ? FE.getSnapshot() : { draftDirty: true, validationState: { lastOk: false } };
+      }
 
       function setSaveEnabled() {
         if (!ui.saveAll) return;
-        const ok = st.lastValidateOk === true && st.dirty === false;
+        const s = snap();
+        const ok = s.validationState && s.validationState.lastOk === true && s.draftDirty === false;
         ui.saveAll.disabled = !ok;
         ui.saveAll.classList.toggle("is-disabled", !ok);
       }
 
       function markDirty() {
-        st.dirty = true;
-        st.lastValidateOk = false;
         setSaveEnabled();
       }
 
@@ -169,8 +181,6 @@
       }
 
       async function doReloadAll() {
-        st.dirty = false;
-        st.lastValidateOk = false;
         setSaveEnabled();
         setStatus("", "");
         const W = window.AM2WizardDefinitionEditor;
@@ -180,26 +190,23 @@
       }
 
       async function doValidateAll() {
-        st.lastValidateOk = false;
-        st.dirty = true;
         setSaveEnabled();
         setStatus("Validating...", "");
         const W = window.AM2WizardDefinitionEditor;
         const C = window.AM2FlowConfigEditor;
         const okW = W && W.validateDraft ? await W.validateDraft() : false;
         const okC = C && C.validate ? await C.validate() : false;
-        st.lastValidateOk = okW && okC;
-        st.dirty = st.lastValidateOk ? false : true;
         setSaveEnabled();
-        setStatus(
-          st.lastValidateOk ? "Validate All: OK" : "Validate All: FAILED",
-          st.lastValidateOk ? "ok" : "bad"
-        );
-        return st.lastValidateOk;
+        const s = snap();
+        const ok = okW && okC && s.validationState && s.validationState.lastOk === true && s.draftDirty === false;
+        setSaveEnabled();
+        setStatus(ok ? "Validate All: OK" : "Validate All: FAILED", ok ? "ok" : "bad");
+        return ok;
       }
 
       async function doSaveAll() {
-        if (!(st.lastValidateOk === true && st.dirty === false)) {
+        const s0 = snap();
+        if (!(s0.validationState && s0.validationState.lastOk === true && s0.draftDirty === false)) {
           setStatus("Save blocked: run Validate All first.", "bad");
           setSaveEnabled();
           return;
@@ -210,17 +217,11 @@
         const okW = W && W.saveDraft ? await W.saveDraft() : false;
         const okC = C && C.save ? await C.save() : false;
         const ok = okW && okC;
-        if (!ok) {
-          st.lastValidateOk = false;
-          st.dirty = true;
-          setSaveEnabled();
-        }
+        setSaveEnabled();
         setStatus(ok ? "Save All: OK" : "Save All: FAILED", ok ? "ok" : "bad");
       }
 
       async function doResetAll() {
-        st.dirty = false;
-        st.lastValidateOk = false;
         setSaveEnabled();
         setStatus("Resetting...", "");
         const W = window.AM2WizardDefinitionEditor;

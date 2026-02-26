@@ -36,95 +36,19 @@
     return n;
   }
 
-  function svgIcon(name, cls, title) {
-    const ns = "http://www.w3.org/2000/svg";
-    const svg = document.createElementNS(ns, "svg");
-    svg.setAttribute("viewBox", "0 0 24 24");
-    svg.setAttribute("width", "16");
-    svg.setAttribute("height", "16");
-    svg.setAttribute("aria-hidden", "true");
-    if (cls) svg.setAttribute("class", cls);
+  const svgIcon =
+    window.AM2WDDomIcons && window.AM2WDDomIcons.svgIcon
+      ? window.AM2WDDomIcons.svgIcon
+      : function () {
+          return document.createElement("span");
+        };
 
-    if (title) {
-      const t = document.createElementNS(ns, "title");
-      t.textContent = String(title);
-      svg.appendChild(t);
-    }
-
-    const p = document.createElementNS(ns, "path");
-
-    if (name === "lock") {
-      p.setAttribute(
-        "d",
-        "M17 10V8a5 5 0 0 0-10 0v2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2h-1Zm-8 0V8a3 3 0 0 1 6 0v2H9Z"
-      );
-    } else if (name === "trash") {
-      p.setAttribute(
-        "d",
-        "M9 3h6l1 2h4v2h-2l-1 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L6 7H4V5h4l1-2Zm0 4 1 14h4l1-14H9Zm2 2h2v10h-2V9Z"
-      );
-    } else if (name === "check") {
-      p.setAttribute("d", "M9 16.2 4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4z");
-    } else if (name === "search") {
-      p.setAttribute(
-        "d",
-        "M10 2a8 8 0 1 0 4.9 14.3l4.4 4.4 1.4-1.4-4.4-4.4A8 8 0 0 0 10 2Zm0 2a6 6 0 1 1 0 12 6 6 0 0 1 0-12Z"
-      );
-    } else if (name === "grip") {
-      p.setAttribute(
-        "d",
-        "M9 5a1 1 0 1 1-2 0 1 1 0 0 1 2 0Zm0 7a1 1 0 1 1-2 0 1 1 0 0 1 2 0Zm0 7a1 1 0 1 1-2 0 1 1 0 0 1 2 0Zm8-14a1 1 0 1 1-2 0 1 1 0 0 1 2 0Zm0 7a1 1 0 1 1-2 0 1 1 0 0 1 2 0Zm0 7a1 1 0 1 1-2 0 1 1 0 0 1 2 0Z"
-      );
-    } else if (name === "required") {
-      p.setAttribute(
-        "d",
-        "M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm1 5v6h-2V7h2Zm0 8v2h-2v-2h2Z"
-      );
-    }
-
-    svg.appendChild(p);
-    return svg;
-  }
-
-  function stableGraph(defn) {
-    const root = defn && typeof defn === "object" ? defn : {};
-    const vAny = root.version;
-    const version = typeof vAny === "number" ? vAny : 1;
-
-    if (version === 2 && root.graph && typeof root.graph === "object") {
-      const g = root.graph;
-      const entry = typeof g.entry_step_id === "string" ? g.entry_step_id : null;
-
-      const nodesAny = Array.isArray(g.nodes) ? g.nodes : [];
-      const nodes = nodesAny
-        .map((n) => (n && typeof n.step_id === "string" ? n.step_id : ""))
-        .filter((x) => x);
-
-      const edgesAny = Array.isArray(g.edges) ? g.edges : [];
-      const edges = edgesAny
-        .map((e) => (e && typeof e === "object" ? e : null))
-        .filter((e) => e)
-        .map((e) => ({
-          from_step_id: typeof e.from_step_id === "string" ? e.from_step_id : "",
-          to_step_id: typeof e.to_step_id === "string" ? e.to_step_id : "",
-          when: e.when === undefined ? null : e.when,
-        }))
-        .filter((e) => e.from_step_id && e.to_step_id);
-
-      return { version: 2, entry: entry || (nodes[0] || null), nodes: nodes, edges: edges };
-    }
-
-    const steps = root && Array.isArray(root.steps) ? root.steps : [];
-    const nodes = steps
-      .map((x) => (x && typeof x.step_id === "string" ? x.step_id : ""))
-      .filter((x) => x);
-
-    const edges = [];
-    for (let i = 0; i < nodes.length - 1; i += 1) {
-      edges.push({ from_step_id: nodes[i], to_step_id: nodes[i + 1], when: null });
-    }
-    return { version: 1, entry: nodes[0] || null, nodes: nodes, edges: edges };
-  }
+  const stableGraph =
+    window.AM2WDGraphStable && window.AM2WDGraphStable.stableGraph
+      ? window.AM2WDGraphStable.stableGraph
+      : function () {
+          return { version: 1, nodes: [], edges: [], entry: null };
+        };
 
   function defFromGraph(nodes, entryStepId, edges) {
     const entry = entryStepId || (nodes && nodes[0]) || null;
@@ -137,6 +61,7 @@
         edges: (edges || []).map((e) => ({
           from_step_id: e.from_step_id,
           to_step_id: e.to_step_id,
+          priority: typeof e.priority === "number" ? e.priority : 0,
           when: e.when === undefined ? null : e.when,
         })),
       },
@@ -253,111 +178,29 @@
   const stepPanel = document.getElementById("flowStepPanel");
   const transitionsPanel = el("div", "flowTransPanel");
 
-  function buildSidebarTabs() {
-    if (!flowSidebar || !stepPanel) return;
-
-    const tabBar = el("div", "flowRightTabs");
-    const btnDetails = text("button", "flowRightTab", "Step Details");
-    const btnTrans = text("button", "flowRightTab", "Transitions");
-    const btnPalette = text("button", "flowRightTab", "Step Palette");
-    btnDetails.type = "button";
-    btnTrans.type = "button";
-    btnPalette.type = "button";
-
-    const panelDetails = el("div", "flowRightPanel");
-    panelDetails.dataset.tab = "details";
-    const panelTrans = el("div", "flowRightPanel");
-    panelTrans.dataset.tab = "transitions";
-    const panelPalette = el("div", "flowRightPanel");
-    panelPalette.dataset.tab = "palette";
-
-    panelDetails.appendChild(stepPanel);
-    panelTrans.appendChild(transitionsPanel);
-    panelPalette.appendChild(rightCol);
-
-    tabBar.appendChild(btnDetails);
-    tabBar.appendChild(btnTrans);
-    tabBar.appendChild(btnPalette);
-
-    clear(flowSidebar);
-    flowSidebar.appendChild(tabBar);
-    flowSidebar.appendChild(panelDetails);
-    flowSidebar.appendChild(panelTrans);
-    flowSidebar.appendChild(panelPalette);
-
-    function setTab(name) {
-      state.rightTab = name;
-      btnDetails.classList.toggle("is-active", name === "details");
-      btnTrans.classList.toggle("is-active", name === "transitions");
-      btnPalette.classList.toggle("is-active", name === "palette");
-      panelDetails.classList.toggle("is-active", name === "details");
-      panelTrans.classList.toggle("is-active", name === "transitions");
-      panelPalette.classList.toggle("is-active", name === "palette");
-      if (name === "transitions") renderTransitions();
-    }
-
-    btnDetails.addEventListener("click", () => setTab("details"));
-    btnTrans.addEventListener("click", () => setTab("transitions"));
-    btnPalette.addEventListener("click", () => setTab("palette"));
-
-    setTab(state.rightTab || "details");
+  if (window.AM2WDSidebar && window.AM2WDSidebar.buildSidebarTabs) {
+    window.AM2WDSidebar.buildSidebarTabs({
+      flowSidebar: flowSidebar,
+      stepPanel: stepPanel,
+      transitionsPanel: transitionsPanel,
+      rightCol: rightCol,
+      state: state,
+      clear: clear,
+      el: el,
+      text: text,
+      renderTransitions: function () {
+        renderTransitions();
+      },
+    });
   }
-
-  function clearSidebar() {
-    state.selected = null;
-    try {
-      window.dispatchEvent(
-        new CustomEvent("am2:wd:selected", {
-          detail: { step_id: null },
-        })
-      );
-    } catch (e) {
-      // ignore
-    }
+  if (window.AM2WDSidebar && window.AM2WDSidebar.clearSidebar) {
+    window.AM2WDSidebar.clearSidebar(state);
   }
-
-  function renderSidebar(stepId) {
-    state.selected = stepId || null;
-    try {
-      window.dispatchEvent(
-        new CustomEvent("am2:wd:selected", {
-          detail: { step_id: state.selected },
-        })
-      );
-    } catch (e) {
-      // ignore
-    }
-  }
-
-  buildSidebarTabs();
-  clearSidebar();
 
   function setupRawErrorPanel() {
-    if (!ui.err || !ui.err.parentNode) return;
-    const parent = ui.err.parentNode;
-
-    const wrap = el("div", "wdErrWrap");
-    const bar = el("div", "wdErrBar");
-    const title = text("div", "wdErrTitle", "Raw Error");
-    const toggle = text("button", "btn wdErrToggle", "Details");
-    toggle.type = "button";
-
-    bar.appendChild(title);
-    bar.appendChild(toggle);
-    wrap.appendChild(bar);
-
-    parent.insertBefore(wrap, ui.err);
-    wrap.appendChild(ui.err);
-
-    ui.err.classList.add("wdRawError");
-    ui.err.classList.add("is-collapsed");
-
-    toggle.addEventListener("click", () => {
-      setRawErrorVisible(!state.showRawError);
-    });
-
-    state.showRawError = false;
-    state.hasErrorDetails = false;
+    if (window.AM2WDRawError && window.AM2WDRawError.setupRawErrorPanel) {
+      window.AM2WDRawError.setupRawErrorPanel({ ui: ui, state: state, el: el, text: text });
+    }
     setRawErrorVisible(false);
   }
 
@@ -437,15 +280,34 @@
 
   function setSelected(stepId) {
     state.selected = stepId || null;
-    if (state.selected) {
-      renderSidebar(state.selected);
-    } else {
-      clearSidebar();
+    const FE = window.AM2FlowEditorState;
+    if (FE && FE.setSelectedStep) FE.setSelectedStep(state.selected);
+    if (window.AM2WDSidebar && window.AM2WDSidebar.renderSidebar && state.selected) {
+      window.AM2WDSidebar.renderSidebar(state, state.selected);
+    } else if (window.AM2WDSidebar && window.AM2WDSidebar.clearSidebar) {
+      window.AM2WDSidebar.clearSidebar(state);
     }
     render();
   }
 
   function emitChanged() {
+    const FE = window.AM2FlowEditorState;
+    if (FE && FE.mutateWizard) {
+      const defn = defFromGraph(state.draft, state.entry_step_id, state.edges);
+      FE.mutateWizard(function (wd) {
+        const next = defn;
+        Object.keys(wd || {}).forEach(function (k) {
+          try {
+            delete wd[k];
+          } catch (e) {
+            // ignore
+          }
+        });
+        Object.keys(next || {}).forEach(function (k) {
+          wd[k] = next[k];
+        });
+      });
+    }
     try {
       window.dispatchEvent(new CustomEvent("am2:wd:changed", { detail: {} }));
     } catch (e) {
@@ -594,6 +456,12 @@
     normalizeEdges();
 
     ui.ta.value = H.pretty(defFromGraph(state.draft, state.entry_step_id, state.edges));
+
+    const FE = window.AM2FlowEditorState;
+    if (FE && FE.loadAll && FE.getSnapshot) {
+      const snap = FE.getSnapshot();
+      FE.loadAll({ wizardDefinition: defn, flowConfig: snap.configDraft });
+    }
     return true;
   }
 
@@ -637,6 +505,17 @@
     normalizeEdges();
     state.entry_step_id = g.entry || null;
     ui.ta.value = H.pretty(defFromGraph(state.draft, state.entry_step_id, state.edges));
+
+    const FE = window.AM2FlowEditorState;
+    if (FE && FE.markValidated && FE.getSnapshot) {
+      const snap = FE.getSnapshot();
+      FE.markValidated({
+        canonicalWizardDefinition: defn,
+        canonicalFlowConfig: snap.configDraft,
+        validationEnvelope: { ok: true },
+      });
+    }
+
     setValidation(true, [], []);
     render();
     return true;
@@ -666,6 +545,12 @@
     state.entry_step_id = g.entry || null;
     setSelected(null);
     ui.ta.value = H.pretty(defFromGraph(state.draft, state.entry_step_id, state.edges));
+
+    const FE = window.AM2FlowEditorState;
+    if (FE && FE.loadAll && FE.getSnapshot) {
+      const snap = FE.getSnapshot();
+      FE.loadAll({ wizardDefinition: defn, flowConfig: snap.configDraft });
+    }
     await loadHistory();
     render();
     return true;
@@ -692,6 +577,12 @@
     state.entry_step_id = g.entry || null;
     setSelected(null);
     ui.ta.value = H.pretty(defFromGraph(state.draft, state.entry_step_id, state.edges));
+
+    const FE = window.AM2FlowEditorState;
+    if (FE && FE.loadAll && FE.getSnapshot) {
+      const snap = FE.getSnapshot();
+      FE.loadAll({ wizardDefinition: defn, flowConfig: snap.configDraft });
+    }
     await loadHistory();
     render();
     return true;
@@ -1127,31 +1018,13 @@
   }
 
   function normalizeEdges() {
-    const byFrom = {};
-    (state.edges || []).forEach((e) => {
-      if (!e || typeof e !== "object") return;
-      const frm = typeof e.from_step_id === "string" ? e.from_step_id : "";
-      const to = typeof e.to_step_id === "string" ? e.to_step_id : "";
-      if (!frm || !to) return;
-      if (!byFrom[frm]) byFrom[frm] = [];
-      byFrom[frm].push({
-        from_step_id: frm,
-        to_step_id: to,
-        when: e.when === undefined ? null : e.when,
-      });
-    });
-
-    const out = [];
-    (state.draft || []).forEach((sid) => {
-      (byFrom[sid] || []).forEach((e) => out.push(e));
-    });
-    Object.keys(byFrom)
-      .filter((k) => (state.draft || []).indexOf(k) < 0)
-      .sort()
-      .forEach((k) => {
-        (byFrom[k] || []).forEach((e) => out.push(e));
-      });
-    state.edges = out;
+    const fn =
+      window.AM2WDEdgesIntegrity && window.AM2WDEdgesIntegrity.normalizeEdges
+        ? window.AM2WDEdgesIntegrity.normalizeEdges
+        : null;
+    if (fn) {
+      state.edges = fn(state.draft, state.edges);
+    }
   }
 
   function ensureEntryValid() {
@@ -1189,6 +1062,11 @@
     const addWrap = el("div", "flowTransAdd");
     const fromSel = el("select", "flowTransSelect");
     const toSel = el("select", "flowTransSelect");
+    const priInp = el("input", "flowTransPri");
+    priInp.type = "number";
+    priInp.min = "0";
+    priInp.step = "1";
+    priInp.value = "0";
     state.draft.forEach((sid) => {
       const a = el("option", null);
       a.value = sid;
@@ -1205,12 +1083,15 @@
     addWrap.appendChild(fromSel);
     addWrap.appendChild(text("label", "flowTransLabel", "To"));
     addWrap.appendChild(toSel);
+    addWrap.appendChild(text("label", "flowTransLabel", "Priority"));
+    addWrap.appendChild(priInp);
 
     const btnAddEdge = text("button", "btn", "Add transition");
     btnAddEdge.type = "button";
     btnAddEdge.addEventListener("click", () => {
       const frm = fromSel.value || "";
       const to = toSel.value || "";
+      const prio = parseInt(String(priInp.value || "0"), 10);
       if (!frm || !to) return;
       if (frm === to) {
         pushLocalValidation("Self-loop transitions are not allowed.");
@@ -1218,7 +1099,12 @@
       }
       if (state.draft.indexOf(frm) < 0 || state.draft.indexOf(to) < 0) return;
       state.edges = state.edges.concat([
-        { from_step_id: frm, to_step_id: to, when: null },
+        {
+          from_step_id: frm,
+          to_step_id: to,
+          priority: Number.isFinite(prio) ? prio : 0,
+          when: null,
+        },
       ]);
       normalizeEdges();
       syncTextarea();
@@ -1241,17 +1127,6 @@
 
     normalizeEdges();
 
-    function priForEdgeAt(idx) {
-      const e = state.edges[idx];
-      if (!e) return 0;
-      const frm = e.from_step_id;
-      let n = 0;
-      for (let i = 0; i <= idx; i += 1) {
-        if (state.edges[i] && state.edges[i].from_step_id === frm) n += 1;
-      }
-      return n;
-    }
-
     function moveEdge(idx, dir) {
       const e = state.edges[idx];
       if (!e) return;
@@ -1270,7 +1145,7 @@
 
     state.edges.forEach((e, idx) => {
       const row = el("div", "flowTransRow");
-      row.appendChild(text("div", "flowTransCellPri", String(priForEdgeAt(idx))));
+      row.appendChild(text("div", "flowTransCellPri", String(e.priority || 0)));
       row.appendChild(text("div", "flowTransCellFrom", e.from_step_id));
       row.appendChild(text("div", "flowTransCellTo", e.to_step_id));
 

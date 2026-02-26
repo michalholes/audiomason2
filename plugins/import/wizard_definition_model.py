@@ -82,6 +82,53 @@ def validate_wizard_definition_structure(wd: Any) -> None:
     raise FinalizeError("wizard_definition version must be 1 or 2")
 
 
+def canonicalize_wizard_definition(wd: Any) -> Any:
+    """Return a canonicalized WizardDefinition.
+
+    Canonicalization is ordering-only. For v2 WizardDefinition, edges are
+    deterministically sorted by:
+      (from_step_id ASC, priority ASC, to_step_id ASC)
+
+    No nodes or edges are added or removed.
+    """
+
+    if not isinstance(wd, dict):
+        return wd
+
+    version_any = wd.get("version")
+    version = int(version_any) if isinstance(version_any, int) else 1
+    if version != 2:
+        return wd
+
+    graph_any = wd.get("graph")
+    if not isinstance(graph_any, dict):
+        return wd
+
+    edges_any = graph_any.get("edges")
+    if not isinstance(edges_any, list):
+        return wd
+
+    def edge_key(e: Any) -> tuple[str, int, str]:
+        if not isinstance(e, dict):
+            return ("", 0, "")
+        frm = e.get("from_step_id")
+        to = e.get("to_step_id")
+        prio_any = e.get("priority")
+        prio = int(prio_any) if isinstance(prio_any, int) else 0
+        return (
+            str(frm) if isinstance(frm, str) else "",
+            prio,
+            str(to) if isinstance(to, str) else "",
+        )
+
+    sorted_edges = sorted(list(edges_any), key=edge_key)
+    graph = dict(graph_any)
+    graph["edges"] = sorted_edges
+    out = dict(wd)
+    out["graph"] = graph
+    return out
+
+
 def build_effective_workflow_snapshot(
     *,
     wizard_definition: dict[str, Any],
