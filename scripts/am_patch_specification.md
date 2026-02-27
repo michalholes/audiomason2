@@ -16,7 +16,7 @@ Every runner behavior is controllable via: - CLI flags **or** -
 `--override KEY=VALUE` overrides, with precedence: **CLI \> config \>
 defaults**.
 
-# 
+#
 
 ### Phase 2: hardcoded settings must be configurable
 
@@ -747,28 +747,28 @@ or patch inputs.
 
 ## 7.5 Issue diff bundle (artifacts)
 
-On SUCCESS (in `workspace`, `--finalize-live`, and `-w` /
-`--finalize-workspace` modes; excluding `--test-mode`), the runner
-creates an issue diff bundle zip under `patches/artifacts/`.
+On SUCCESS (in `workspace`, `--finalize-live`, and `-w` / `--finalize-workspace` modes;
+excluding `--test-mode`), the runner creates an issue diff bundle zip under
+`patches/artifacts/`.
 
-Naming: - If ISSUE_ID is provided: `issue_<issue>_diff.zip` (with `_v2`,
-`_v3`, ... suffixes on collision). - If ISSUE_ID is not provided
-(finalize pseudo-issue): `issue_FINALIZE_<ts>_diff.zip`.
+Naming: `issue_<issue>_diff.zip` (suffix `_v2`, `_v3`, ... on collision);
+`issue_FINALIZE_<ts>_diff.zip` when ISSUE_ID is not provided (finalize pseudo-issue).
 
-Contents (high level): - A deterministic diff between `base_sha` and the
-final live repo state for the selected file set. - The relevant run
-log(s).
+Contents (normative):
+- `manifest.txt` (issue id, base sha, files list, diff entries list,
+  logs list, snapshot entries list)
+- `diff/` (per-file unified diffs: `diff/<repo_rel_path>.patch`)
+- `files/` (full file snapshots: `files/<repo_rel_path>`; MUST be byte-exact content of the file
+  as present in the working tree at bundle creation time)
+- `logs/` (the relevant run log(s))
 
-Required inputs: - `base_sha` MUST be set before posthook runs and MUST
-NOT be missing on SUCCESS. - `files_to_promote` MUST be the
-deterministic file set used for promotion/commit.
+Required inputs: `base_sha` MUST be set before posthook runs and MUST NOT be missing on SUCCESS.
+`files_to_promote` MUST be the deterministic file set used for promotion/commit.
 
-Base SHA by mode: - `workspace` and `-w` / `--finalize-workspace`:
-`base_sha = workspace_base_sha`. - `--finalize-live`:
-`base_sha = head_sha` captured at the start of finalize.
+Base SHA by mode: `workspace` and `-w` / `--finalize-workspace`:
+`base_sha = workspace_base_sha`. `--finalize-live`: `base_sha = head_sha` at finalize start.
 
-The runner MUST log the resolved `issue_diff_base_sha` and
-`issue_diff_paths_count` on SUCCESS before writing the diff bundle.
+Runner MUST log `issue_diff_base_sha` and `issue_diff_paths_count` before writing the diff bundle.
 
 ## 8. Git Behavior
 

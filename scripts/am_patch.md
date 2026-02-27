@@ -377,6 +377,7 @@ Naming:
 Contents:
 - `manifest.txt` (issue id, base sha, files list, diff entries list, logs list)
 - `diff/` (per-file unified diffs: `diff/<repo-path>.patch`)
+- `files/` (full file snapshots: `files/<repo-path>`)
 - `logs/` (all logs for the issue id; for `finalize`, only the current finalize log)
 
 Diff scope rules:
