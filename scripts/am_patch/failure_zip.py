@@ -101,7 +101,7 @@ def cleanup_for_issue(*, patch_dir: Path, policy: Any, issue: str) -> None:
 
     matches = sorted(
         (p for p in patch_dir.glob(pattern) if p.is_file()),
-        key=lambda p: p.name,
+        key=lambda p: (p.stat().st_mtime_ns, p.name),
         reverse=True,
     )
     for p in matches[keep:]:
