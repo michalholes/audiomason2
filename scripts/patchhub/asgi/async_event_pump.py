@@ -106,7 +106,6 @@ async def start_event_pump(
     """
 
     deadline = asyncio.get_running_loop().time() + max(connect_timeout_s, 0.0)
-    sleep_s = max(retry_sleep_s, 0.0)
     while True:
         try:
             await _connect_and_stream(socket_path, jsonl_path, publish)
@@ -122,5 +121,4 @@ async def start_event_pump(
             return
         if asyncio.get_running_loop().time() >= deadline:
             return
-        await asyncio.sleep(sleep_s)
-        sleep_s = min(sleep_s * 2.0, 2.0)
+        await asyncio.sleep(retry_sleep_s)
