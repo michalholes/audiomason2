@@ -11,16 +11,11 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from plugins.file_io.service import RootName
-
 from .errors import error_envelope
 from .field_schema_validation import FieldSchemaValidationError
 from .flow_config_validation import normalize_flow_config
 from .wizard_definition_model import (
-    DEFAULT_WIZARD_DEFINITION,
     canonicalize_wizard_definition,
-    load_or_bootstrap_wizard_definition,
-    migrate_v1_to_v2,
     validate_wizard_definition_structure,
 )
 
@@ -53,6 +48,10 @@ def bind_editor_routes(
     def reset_config():
         return call(lambda: _reset_flow_config(engine))
 
+    @router.post("/config/activate")
+    def activate_config():
+        return call(lambda: _activate_flow_config(engine))
+
     @router.get("/config/history")
     def config_history():
         return call(lambda: _flow_config_history(engine))
@@ -76,6 +75,10 @@ def bind_editor_routes(
     @router.post("/wizard-definition/reset")
     def reset_wizard_definition():
         return call(lambda: _reset_wizard_definition(engine))
+
+    @router.post("/wizard-definition/activate")
+    def activate_wizard_definition():
+        return call(lambda: _activate_wizard_definition(engine))
 
     @router.get("/wizard-definition/history")
     def wizard_definition_history():
@@ -208,23 +211,19 @@ def _engine_fs(engine: Any):
 
 
 def _get_flow_config(engine: Any) -> dict[str, Any]:
-    from .editor_storage import load_flow_config, reset_flow_config
+    from .editor_storage import get_flow_config_draft
 
     fs = _engine_fs(engine)
-    if not fs.exists(RootName.WIZARDS, "import/config/flow_config.json"):
-        reset_flow_config(fs)
-    cfg = load_flow_config(fs)
+    cfg = get_flow_config_draft(fs)
     return {"config": normalize_flow_config(cfg)}
 
 
 def _set_flow_config(engine: Any, body: Any) -> dict[str, Any]:
-    from .editor_storage import save_flow_config
+    from .editor_storage import put_flow_config_draft
 
     obj = _validate_wrapper(body=body, required_key="config", allowed_keys={"config"})
     cfg_any = obj.get("config")
-    cfg = normalize_flow_config(cfg_any)
-    fs = _engine_fs(engine)
-    save_flow_config(fs, cfg)
+    cfg = put_flow_config_draft(_engine_fs(engine), cfg_any)
     return {"config": cfg}
 
 
@@ -235,11 +234,18 @@ def _validate_flow_config(engine: Any, body: Any) -> dict[str, Any]:
 
 
 def _reset_flow_config(engine: Any) -> dict[str, Any]:
-    from .editor_storage import load_flow_config, reset_flow_config
+    from .editor_storage import reset_flow_config_draft
 
     fs = _engine_fs(engine)
-    reset_flow_config(fs)
-    cfg = load_flow_config(fs)
+    cfg = reset_flow_config_draft(fs)
+    return {"config": cfg}
+
+
+def _activate_flow_config(engine: Any) -> dict[str, Any]:
+    from .editor_storage import activate_flow_config_draft
+
+    fs = _engine_fs(engine)
+    cfg = activate_flow_config_draft(fs)
     return {"config": normalize_flow_config(cfg)}
 
 
@@ -252,7 +258,7 @@ def _flow_config_history(engine: Any) -> dict[str, Any]:
 
 
 def _rollback_flow_config(engine: Any, body: Any) -> dict[str, Any]:
-    from .editor_storage import list_history, load_flow_config, rollback
+    from .editor_storage import delete_flow_config_draft, list_history, load_flow_config, rollback
 
     obj = _validate_wrapper(body=body, required_key="id", allowed_keys={"id"})
     fid = obj.get("id")
@@ -271,7 +277,9 @@ def _rollback_flow_config(engine: Any, body: Any) -> dict[str, Any]:
             "not found",
             details=[{"path": "$.id", "reason": "not_found", "meta": {}}],
         )
+
     rollback(fs, kind="flow_config", fingerprint=fid)
+    delete_flow_config_draft(fs)
     cfg = load_flow_config(fs)
     return {"config": normalize_flow_config(cfg)}
 
@@ -369,13 +377,15 @@ def _get_step_details(step_id: Any) -> dict[str, Any]:
 
 
 def _get_wizard_definition(engine: Any) -> dict[str, Any]:
+    from .wizard_editor_storage import get_wizard_definition_draft
+
     fs = _engine_fs(engine)
-    wd = load_or_bootstrap_wizard_definition(fs)
+    wd = get_wizard_definition_draft(fs)
     return {"definition": wd}
 
 
 def _set_wizard_definition(engine: Any, body: Any) -> dict[str, Any]:
-    from .wizard_editor_storage import save_wizard_definition_with_history
+    from .wizard_editor_storage import put_wizard_definition_draft
 
     obj = _validate_wrapper(
         body=body,
@@ -383,24 +393,8 @@ def _set_wizard_definition(engine: Any, body: Any) -> dict[str, Any]:
         allowed_keys={"definition"},
     )
     wd_any = obj.get("definition")
-    validate_wizard_definition_structure(wd_any)
-    if not isinstance(wd_any, dict):
-        raise FieldSchemaValidationError(
-            message="definition must be an object",
-            path="$.definition",
-            reason="invalid_type",
-            meta={},
-        )
-    wd_obj: dict[str, Any] = wd_any
-
-    if wd_obj.get("version") == 1:
-        wd_obj = migrate_v1_to_v2(wd_obj)
-
-    wd_canon = canonicalize_wizard_definition(wd_obj)
-    fs = _engine_fs(engine)
-    save_wizard_definition_with_history(fs, wd_canon)
-
-    return {"definition": wd_canon}
+    wd = put_wizard_definition_draft(_engine_fs(engine), wd_any)
+    return {"definition": wd}
 
 
 def _validate_wizard_definition(engine: Any, body: Any) -> dict[str, Any]:
@@ -412,15 +406,29 @@ def _validate_wizard_definition(engine: Any, body: Any) -> dict[str, Any]:
     wd_any = obj.get("definition")
     validate_wizard_definition_structure(wd_any)
     wd_canon = canonicalize_wizard_definition(wd_any)
+    if not isinstance(wd_canon, dict) or wd_canon.get("version") != 2:
+        raise FieldSchemaValidationError(
+            message="definition must be WizardDefinition v2",
+            path="$.definition",
+            reason="invalid_structure",
+            meta={},
+        )
     return {"definition": wd_canon}
 
 
 def _reset_wizard_definition(engine: Any) -> dict[str, Any]:
-    from .wizard_editor_storage import reset_wizard_definition
+    from .wizard_editor_storage import reset_wizard_definition_draft
 
     fs = _engine_fs(engine)
-    reset_wizard_definition(fs, DEFAULT_WIZARD_DEFINITION)
-    wd = load_or_bootstrap_wizard_definition(fs)
+    wd = reset_wizard_definition_draft(fs)
+    return {"definition": wd}
+
+
+def _activate_wizard_definition(engine: Any) -> dict[str, Any]:
+    from .wizard_editor_storage import activate_wizard_definition_draft
+
+    fs = _engine_fs(engine)
+    wd = activate_wizard_definition_draft(fs)
     return {"definition": wd}
 
 
@@ -434,6 +442,7 @@ def _wizard_definition_history(engine: Any) -> dict[str, Any]:
 
 def _rollback_wizard_definition(engine: Any, body: Any) -> dict[str, Any]:
     from .wizard_editor_storage import (
+        delete_wizard_definition_draft,
         list_wizard_definition_history,
         load_wizard_definition,
         rollback_wizard_definition,
@@ -458,5 +467,6 @@ def _rollback_wizard_definition(engine: Any, body: Any) -> dict[str, Any]:
         )
 
     rollback_wizard_definition(fs, fingerprint=fid)
+    delete_wizard_definition_draft(fs)
     wd = load_wizard_definition(fs)
     return {"definition": wd}

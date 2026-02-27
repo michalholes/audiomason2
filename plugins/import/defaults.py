@@ -214,7 +214,6 @@ DEFAULT_FLOW_CONFIG: dict[str, Any] = {
     "version": 1,
     "steps": {},
     "defaults": {},
-    "ui": {},
 }
 
 

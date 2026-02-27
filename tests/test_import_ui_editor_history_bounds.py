@@ -77,10 +77,12 @@ def test_flow_config_history_is_bounded_and_ordered(tmp_path: Path) -> None:
     cfgs: list[dict] = []
     for i in range(6):
         cfg = dict(base)
-        cfg["ui"] = {"verbosity": f"v{i}"}
+        cfg["defaults"] = {"marker": i}
         cfgs.append(cfg)
         r = client.post("/import/ui/config", json={"config": cfg})
         assert r.status_code == 200
+        a = client.post("/import/ui/config/activate", json={})
+        assert a.status_code == 200
 
     hist = client.get("/import/ui/config/history").json()["items"]
     ids = [it["id"] for it in hist]
@@ -97,7 +99,7 @@ def test_flow_config_history_is_bounded_and_ordered(tmp_path: Path) -> None:
     rb = client.post("/import/ui/config/rollback", json={"id": expected[2]})
     assert rb.status_code == 200
     out = rb.json()["config"]
-    assert out.get("ui") == {"verbosity": "v2"}
+    assert (out.get("defaults") or {}).get("marker") == 2
 
     nf = client.post("/import/ui/config/rollback", json={"id": "nope"})
     assert nf.status_code == 404
@@ -141,6 +143,8 @@ def test_wizard_definition_history_is_bounded_and_ordered(tmp_path: Path) -> Non
         defs.append(canonicalize_wizard_definition(d))
         r = client.post("/import/ui/wizard-definition", json={"definition": d})
         assert r.status_code == 200
+        a = client.post("/import/ui/wizard-definition/activate", json={})
+        assert a.status_code == 200
     hist = client.get("/import/ui/wizard-definition/history").json()["items"]
     ids = [it["id"] for it in hist]
 

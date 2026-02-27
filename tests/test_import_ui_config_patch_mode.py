@@ -52,16 +52,18 @@ def test_patch_mode_sets_fields_atomically(tmp_path: Path) -> None:
         {
             "mode": "patch",
             "ops": [
-                {"op": "set", "path": "ui.verbosity", "value": "normal"},
+                {"op": "set", "path": "steps.optional_step.enabled", "value": True},
             ],
         }
     )
     assert isinstance(out, dict)
     assert "error" not in out
-    assert (out.get("ui") or {}).get("verbosity") == "normal"
+    steps = out.get("steps") or {}
+    assert (steps.get("optional_step") or {}).get("enabled") is True
 
     after = engine.get_flow_config()
-    assert (after.get("ui") or {}).get("verbosity") == "normal"
+    steps_after = after.get("steps") or {}
+    assert (steps_after.get("optional_step") or {}).get("enabled") is True
 
 
 def test_patch_mode_rejects_unknown_path(tmp_path: Path) -> None:
@@ -81,7 +83,13 @@ def test_patch_mode_rejects_type_mismatch(tmp_path: Path) -> None:
     out = engine.set_flow_config(
         {
             "mode": "patch",
-            "ops": [{"op": "set", "path": "ui.verbosity", "value": 123}],
+            "ops": [
+                {
+                    "op": "set",
+                    "path": "steps.optional_step.enabled",
+                    "value": 123,
+                }
+            ],
         }
     )
     err = out.get("error")
@@ -93,7 +101,16 @@ def test_patch_mode_rejects_unknown_op(tmp_path: Path) -> None:
     engine = _make_engine(tmp_path)
     _ = engine.reset_flow_config()
     out = engine.set_flow_config(
-        {"mode": "patch", "ops": [{"op": "add", "path": "ui.verbosity", "value": "x"}]}
+        {
+            "mode": "patch",
+            "ops": [
+                {
+                    "op": "add",
+                    "path": "steps.optional_step.enabled",
+                    "value": True,
+                }
+            ],
+        }
     )
     err = out.get("error")
     assert isinstance(err, dict)

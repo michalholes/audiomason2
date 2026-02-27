@@ -246,13 +246,30 @@
           return;
         }
         setStatus("Saving...", "");
-        const W = window.AM2WizardDefinitionEditor;
-        const C = window.AM2FlowConfigEditor;
-        const okW = W && W.saveDraft ? await W.saveDraft() : false;
-        const okC = C && C.save ? await C.save() : false;
-        const ok = okW && okC;
+
+        const H = window.AM2EditorHTTP;
+        if (!H || !H.requestJSON) {
+          setStatus("Save failed: missing HTTP client.", "bad");
+          return;
+        }
+
+        const ok1 = await H.requestJSON("/import/ui/config/activate", { method: "POST" });
+        if (!ok1.ok) {
+          setStatus("Save All: FAILED", "bad");
+          return;
+        }
+
+        const ok2 = await H.requestJSON("/import/ui/wizard-definition/activate", {
+          method: "POST",
+        });
+        if (!ok2.ok) {
+          setStatus("Save All: FAILED", "bad");
+          return;
+        }
+
+        await doReloadAll();
         setSaveEnabled();
-        setStatus(ok ? "Save All: OK" : "Save All: FAILED", ok ? "ok" : "bad");
+        setStatus("Save All: OK", "ok");
       }
 
       async function doResetAll() {

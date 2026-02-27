@@ -23,7 +23,10 @@ def normalize_flow_config(raw: Any) -> dict[str, Any]:
     if not isinstance(raw, dict):
         raise ValueError("flow_config must be an object")
 
-    allowed_keys = {"version", "steps", "defaults", "ui"}
+    allowed_keys = {"version", "steps", "defaults"}
+    if "ui" in raw:
+        raise ValueError("flow_config prohibits key: ui")
+
     unknown = sorted(set(raw.keys()) - allowed_keys)
     if unknown:
         raise ValueError("flow_config contains unknown key(s): " + ", ".join(unknown))
@@ -54,31 +57,13 @@ def normalize_flow_config(raw: Any) -> dict[str, Any]:
         steps[step_id] = {"enabled": bool(enabled)}
 
     defaults_any = raw.get("defaults", {})
-    ui_any = raw.get("ui", {})
     if defaults_any is None:
         defaults_any = {}
-    if ui_any is None:
-        ui_any = {}
     if not isinstance(defaults_any, dict):
         raise ValueError("flow_config.defaults must be an object")
-    if not isinstance(ui_any, dict):
-        raise ValueError("flow_config.ui must be an object")
-
-    ui: dict[str, Any] = dict(ui_any)
-    verbosity_any = ui_any.get("verbosity")
-    if verbosity_any is not None:
-        if not isinstance(verbosity_any, str) or not verbosity_any.strip():
-            raise ValueError("flow_config.ui.verbosity must be a non-empty string")
-        verbosity = verbosity_any.strip().lower()
-        try:
-            verbosity.encode("ascii")
-        except UnicodeEncodeError as e:
-            raise ValueError("flow_config.ui.verbosity must be ASCII-only") from e
-        ui["verbosity"] = verbosity
 
     return {
         "version": 1,
         "steps": steps,
         "defaults": defaults_any,
-        "ui": ui,
     }

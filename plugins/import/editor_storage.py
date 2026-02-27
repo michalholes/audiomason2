@@ -21,10 +21,12 @@ from plugins.file_io.service import FileService, RootName
 
 from .defaults import DEFAULT_FLOW_CONFIG
 from .fingerprints import fingerprint_json
+from .flow_config_validation import normalize_flow_config
 
 CATALOG_REL_PATH = "import/catalog/catalog.json"
 FLOW_REL_PATH = "import/flow/current.json"
 FLOW_CONFIG_REL_PATH = "import/config/flow_config.json"
+FLOW_CONFIG_DRAFT_REL_PATH = "import/config/flow_config.draft.json"
 
 HISTORY_DIR = "import/editor_history"
 HISTORY_LIMIT = 5
@@ -51,6 +53,12 @@ def load_flow_config(fs: FileService) -> Any:
 
 
 def save_flow_config(fs: FileService, obj: Any) -> None:
+    """Save ACTIVE flow_config with history.
+
+    This legacy helper persists directly to the ACTIVE file. It is still
+    used for rollback and bootstrap flows.
+    """
+
     _save_with_history(fs, kind="flow_config", rel_path=FLOW_CONFIG_REL_PATH, obj=obj)
 
 
@@ -78,6 +86,83 @@ def rollback(fs: FileService, *, kind: str, fingerprint: str) -> None:
         save_flow_config(fs, obj)
     else:
         raise ValueError("unknown kind")
+
+
+# ---------------------------------------------------------------------------
+# Deterministic Draft/Active/History lifecycle (FlowConfig)
+# ---------------------------------------------------------------------------
+
+
+def _strip_legacy_ui(obj: Any) -> Any:
+    if isinstance(obj, dict) and "ui" in obj:
+        out = dict(obj)
+        out.pop("ui", None)
+        return out
+    return obj
+
+
+def ensure_flow_config_active_exists(fs: FileService) -> dict[str, Any]:
+    if not fs.exists(RootName.WIZARDS, FLOW_CONFIG_REL_PATH):
+        boot = _strip_legacy_ui(DEFAULT_FLOW_CONFIG)
+        canon = normalize_flow_config(boot)
+        _atomic_write_json(fs, RootName.WIZARDS, FLOW_CONFIG_REL_PATH, canon)
+        return canon
+
+    raw = _load_json(fs, RootName.WIZARDS, FLOW_CONFIG_REL_PATH)
+    had_ui = isinstance(raw, dict) and "ui" in raw
+    cfg = normalize_flow_config(_strip_legacy_ui(raw))
+
+    if had_ui:
+        _atomic_write_json(fs, RootName.WIZARDS, FLOW_CONFIG_REL_PATH, cfg)
+
+    return cfg
+
+
+def get_flow_config_draft(fs: FileService) -> dict[str, Any]:
+    active = ensure_flow_config_active_exists(fs)
+    if fs.exists(RootName.WIZARDS, FLOW_CONFIG_DRAFT_REL_PATH):
+        draft_any = _load_json(fs, RootName.WIZARDS, FLOW_CONFIG_DRAFT_REL_PATH)
+        draft_any = _strip_legacy_ui(draft_any)
+        return normalize_flow_config(draft_any)
+    return active
+
+
+def put_flow_config_draft(fs: FileService, obj: Any) -> dict[str, Any]:
+    canon = normalize_flow_config(obj)
+    _atomic_write_json(fs, RootName.WIZARDS, FLOW_CONFIG_DRAFT_REL_PATH, canon)
+    return canon
+
+
+def reset_flow_config_draft(fs: FileService) -> dict[str, Any]:
+    canon = normalize_flow_config(_strip_legacy_ui(DEFAULT_FLOW_CONFIG))
+    _atomic_write_json(fs, RootName.WIZARDS, FLOW_CONFIG_DRAFT_REL_PATH, canon)
+    return canon
+
+
+def activate_flow_config_draft(fs: FileService) -> dict[str, Any]:
+    active = ensure_flow_config_active_exists(fs)
+
+    if not fs.exists(RootName.WIZARDS, FLOW_CONFIG_DRAFT_REL_PATH):
+        raise ValueError("flow_config draft does not exist")
+
+    draft_any = _load_json(fs, RootName.WIZARDS, FLOW_CONFIG_DRAFT_REL_PATH)
+    draft_any = _strip_legacy_ui(draft_any)
+    draft = normalize_flow_config(draft_any)
+
+    cur_fp = fingerprint_json(active)
+    new_fp = fingerprint_json(draft)
+    if cur_fp != new_fp:
+        _store_history_entry(fs, kind="flow_config", fingerprint=cur_fp, obj=active)
+        _atomic_write_json(fs, RootName.WIZARDS, FLOW_CONFIG_REL_PATH, draft)
+        active = draft
+
+    fs.delete_file(RootName.WIZARDS, FLOW_CONFIG_DRAFT_REL_PATH)
+    return active
+
+
+def delete_flow_config_draft(fs: FileService) -> None:
+    if fs.exists(RootName.WIZARDS, FLOW_CONFIG_DRAFT_REL_PATH):
+        fs.delete_file(RootName.WIZARDS, FLOW_CONFIG_DRAFT_REL_PATH)
 
 
 def _load_json(fs: FileService, root: RootName, rel_path: str) -> Any:

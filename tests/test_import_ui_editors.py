@@ -71,15 +71,15 @@ def test_flow_config_validate_does_not_persist(tmp_path: Path) -> None:
 
     base = client.get("/import/ui/config").json()["config"]
     changed = dict(base)
-    changed["ui"] = {"verbosity": "normal"}
+    changed["defaults"] = {"marker": 1}
 
     r = client.post("/import/ui/config/validate", json={"config": changed})
     assert r.status_code == 200
     out = r.json()["config"]
-    assert out.get("ui") == {"verbosity": "normal"}
+    assert (out.get("defaults") or {}).get("marker") == 1
 
     after = client.get("/import/ui/config").json()["config"]
-    assert after.get("ui") != {"verbosity": "normal"}
+    assert (after.get("defaults") or {}).get("marker") != 1
 
 
 @pytest.mark.skipif((not _HAS_FASTAPI) or (not _HAS_HTTPX), reason="fastapi+httpx required")
@@ -94,12 +94,14 @@ def test_flow_config_history_and_rollback(tmp_path: Path) -> None:
 
     base = client.post("/import/ui/config/reset", json={}).json()["config"]
     cfg1 = dict(base)
-    cfg1["ui"] = {"verbosity": "normal"}
+    cfg1["defaults"] = {"marker": 1}
     cfg2 = dict(base)
-    cfg2["ui"] = {"verbosity": "verbose"}
+    cfg2["defaults"] = {"marker": 2}
 
     assert client.post("/import/ui/config", json={"config": cfg1}).status_code == 200
+    assert client.post("/import/ui/config/activate", json={}).status_code == 200
     assert client.post("/import/ui/config", json={"config": cfg2}).status_code == 200
+    assert client.post("/import/ui/config/activate", json={}).status_code == 200
 
     hist = client.get("/import/ui/config/history").json()["items"]
     ids = [it["id"] for it in hist]
@@ -109,7 +111,7 @@ def test_flow_config_history_and_rollback(tmp_path: Path) -> None:
     rb = client.post("/import/ui/config/rollback", json={"id": rid})
     assert rb.status_code == 200
     cur = rb.json()["config"]
-    assert cur.get("ui") == {"verbosity": "normal"}
+    assert (cur.get("defaults") or {}).get("marker") == 1
 
     nf = client.post("/import/ui/config/rollback", json={"id": "nope"})
     assert nf.status_code == 404
@@ -154,7 +156,9 @@ def test_wizard_definition_history_and_rollback(tmp_path: Path) -> None:
     d2 = _with_priority(1, 2)
 
     assert client.post("/import/ui/wizard-definition", json={"definition": d1}).status_code == 200
+    assert client.post("/import/ui/wizard-definition/activate", json={}).status_code == 200
     assert client.post("/import/ui/wizard-definition", json={"definition": d2}).status_code == 200
+    assert client.post("/import/ui/wizard-definition/activate", json={}).status_code == 200
 
     hist = client.get("/import/ui/wizard-definition/history").json()["items"]
     ids = [it["id"] for it in hist]

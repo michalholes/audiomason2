@@ -69,6 +69,7 @@ def load_or_bootstrap_wizard_definition(fs: FileService) -> dict[str, Any]:
 
     The file is a runtime artifact located under the wizards root.
     """
+
     from .wizard_editor_storage import save_wizard_definition_with_history
 
     atomic_write_json_if_missing(
@@ -92,24 +93,38 @@ def load_or_bootstrap_wizard_definition(fs: FileService) -> dict[str, Any]:
     return wd
 
 
+def _assert_exact_keys(
+    *,
+    obj: dict[str, Any],
+    allowed: set[str],
+    context: str,
+) -> None:
+    unknown = sorted(set(obj.keys()) - allowed)
+    if unknown:
+        raise FinalizeError(context + " contains unknown key(s): " + ", ".join(unknown))
+
+
 def validate_wizard_definition_structure(wd: Any) -> None:
     """Validate WizardDefinition v1/v2 structure and invariants."""
+
     _validate_step_catalog_behavioral_fields()
     if not isinstance(wd, dict):
         raise FinalizeError("wizard_definition must be a JSON object")
-
-    wizard_id = wd.get("wizard_id")
-    if wizard_id is not None and wizard_id != "import":
-        raise FinalizeError("wizard_definition wizard_id must be 'import'")
 
     version_any = wd.get("version")
     version = int(version_any) if isinstance(version_any, int) else 1
 
     if version == 1:
+        wizard_id = wd.get("wizard_id")
+        if wizard_id is not None and wizard_id != "import":
+            raise FinalizeError("wizard_definition wizard_id must be 'import'")
         _validate_v1_steps(wd)
         return
 
     if version == 2:
+        if "wizard_id" in wd:
+            raise FinalizeError("wizard_definition v2 prohibits wizard_id")
+        _assert_exact_keys(obj=wd, allowed={"version", "graph"}, context="wizard_definition")
         _validate_v2_graph(wd)
         return
 
@@ -195,6 +210,7 @@ def build_effective_workflow_snapshot(
 
     Applies flow_config optional-step enable/disable rules.
     """
+
     version_any = wizard_definition.get("version")
     version = int(version_any) if isinstance(version_any, int) else 1
 
@@ -237,6 +253,7 @@ def build_effective_workflow_snapshot(
 
 def enforce_mandatory_constraints(step_order: list[str]) -> None:
     """Enforce mandatory constraints from specification section 10.3."""
+
     if not step_order:
         raise FinalizeError("wizard_definition step_order must be non-empty")
     if step_order[0] != "select_authors":
@@ -286,6 +303,12 @@ def _validate_v2_graph(wd: dict[str, Any]) -> None:
     if not isinstance(graph_any, dict):
         raise FinalizeError("wizard_definition graph must be an object")
 
+    _assert_exact_keys(
+        obj=graph_any,
+        allowed={"entry_step_id", "nodes", "edges"},
+        context="wizard_definition graph",
+    )
+
     entry_any = graph_any.get("entry_step_id")
     if not isinstance(entry_any, str) or not entry_any:
         raise FinalizeError("wizard_definition graph entry_step_id must be a string")
@@ -301,6 +324,9 @@ def _validate_v2_graph(wd: dict[str, Any]) -> None:
     for n in nodes_any:
         if not isinstance(n, dict):
             raise FinalizeError("wizard_definition graph nodes must be objects")
+
+        _assert_exact_keys(obj=n, allowed={"step_id"}, context="wizard_definition graph node")
+
         sid = n.get("step_id")
         if not isinstance(sid, str) or not sid:
             raise FinalizeError("wizard_definition graph node step_id must be a string")
@@ -326,6 +352,13 @@ def _validate_v2_graph(wd: dict[str, Any]) -> None:
     for e in edges_any:
         if not isinstance(e, dict):
             raise FinalizeError("wizard_definition graph edges must be objects")
+
+        _assert_exact_keys(
+            obj=e,
+            allowed={"from_step_id", "to_step_id", "priority", "when"},
+            context="wizard_definition graph edge",
+        )
+
         frm = e.get("from_step_id")
         to = e.get("to_step_id")
         if not isinstance(frm, str) or not frm:

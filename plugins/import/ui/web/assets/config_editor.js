@@ -116,6 +116,7 @@
         return false;
       }
     }
+    if (payloadCfg && typeof payloadCfg === "object") { delete payloadCfg.ui; }
     const out = await H.requestJSON("/import/ui/config/validate", {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -159,6 +160,7 @@
         return false;
       }
     }
+    if (payloadCfg && typeof payloadCfg === "object") { delete payloadCfg.ui; }
     const out = await H.requestJSON("/import/ui/config", {
       method: "POST",
       headers: { "content-type": "application/json" },
