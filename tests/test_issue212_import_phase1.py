@@ -156,6 +156,11 @@ def test_config_reset_uses_builtin_defaults(tmp_path: Path) -> None:
     fs = engine.get_file_service()
     ensure_default_models(fs)
 
+    # Make ACTIVE non-default so the test can prove that /config/reset only touches DRAFT.
+    atomic_write_json = import_module("plugins.import.storage").atomic_write_json
+    active_marker = {"version": 1, "steps": {}, "defaults": {"marker": 9}}
+    atomic_write_json(fs, RootName.WIZARDS, "import/config/flow_config.json", active_marker)
+
     app = FastAPI()
     app.include_router(build_router(engine=engine))
     client = TestClient(app)
@@ -167,8 +172,13 @@ def test_config_reset_uses_builtin_defaults(tmp_path: Path) -> None:
     assert isinstance(data, dict)
     assert data == engine._normalize_flow_config(DEFAULT_FLOW_CONFIG)
 
-    stored = read_json(fs, RootName.WIZARDS, "import/config/flow_config.json")
-    assert stored == data
+    # ACTIVE must remain unchanged until /config/activate.
+    stored_active = read_json(fs, RootName.WIZARDS, "import/config/flow_config.json")
+    assert stored_active == active_marker
+
+    client.post("/import/ui/config/activate")
+    stored_after = read_json(fs, RootName.WIZARDS, "import/config/flow_config.json")
+    assert stored_after == data
 
 
 def test_cli_renderer_finalize_calls_start_processing_only() -> None:

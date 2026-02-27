@@ -170,6 +170,7 @@ def test_wizard_definition_history_and_rollback(tmp_path: Path) -> None:
     )
     assert rb.status_code == 200
     cur = rb.json()["definition"]
+    assert cur.get("version") == 2
     assert fingerprint_json(cur) == fingerprint_json(d1)
 
     nf = client.post(

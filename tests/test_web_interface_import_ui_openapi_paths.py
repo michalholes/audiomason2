@@ -18,10 +18,12 @@ def test_web_interface_openapi_contains_import_ui_editor_paths() -> None:
     required = {
         "/import/ui/config/history",
         "/import/ui/config/rollback",
+        "/import/ui/config/activate",
         "/import/ui/wizard-definition",
         "/import/ui/steps-index",
         "/import/ui/wizard-definition/validate",
         "/import/ui/wizard-definition/reset",
+        "/import/ui/wizard-definition/activate",
         "/import/ui/wizard-definition/history",
         "/import/ui/wizard-definition/rollback",
     }

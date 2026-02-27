@@ -217,17 +217,23 @@
         setStatus("Validating...", "");
         const W = window.AM2WizardDefinitionEditor;
         const C = window.AM2FlowConfigEditor;
-        const okW = W && W.validateDraft ? await W.validateDraft() : false;
-        const okC = C && C.validate ? await C.validate() : false;
+
+        // Validate Draft artifacts on the server by saving Draft after validation.
+        const okW =
+          W && W.saveDraft
+            ? await W.saveDraft()
+            : W && W.validateDraft
+              ? await W.validateDraft()
+              : false;
+        const okC =
+          C && C.save
+            ? await C.save()
+            : C && C.validate
+              ? await C.validate()
+              : false;
+
         setSaveEnabled();
-        const s = snap();
-        const ok =
-          okW &&
-          okC &&
-          s.validationState &&
-          s.validationState.lastOk === true &&
-          s.draftDirty === false;
-        setSaveEnabled();
+        const ok = !!(okW && okC);
         setStatus(ok ? "Validate All: OK" : "Validate All: FAILED", ok ? "ok" : "bad");
         return ok;
       }
