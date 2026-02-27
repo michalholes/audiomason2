@@ -56,7 +56,7 @@ tiebreaker = "lex_name"
 # Derivation
 derive_enabled = true
 issue_regex = "^issue_(\\d+)_"
-commit_regex = "^issue_\\d+_(.+)\\.(zip|patch|diff|py)$"
+commit_regex = "^issue_\\d+_(.+)\\.(zip|patch|diff)$"
 commit_replace_underscores = true
 commit_replace_dashes = true
 commit_collapse_spaces = true
