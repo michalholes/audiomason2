@@ -102,6 +102,8 @@ def make_issue_diff_zip(
 
     diff_entries: list[str] = []
     log_entries: list[str] = []
+    snapshot_manifest: list[str] = []
+    snapshot_entries = 0
 
     tmp_path = _tmp_path_for_atomic_write(dest)
     with contextlib.suppress(FileNotFoundError):
@@ -126,6 +128,18 @@ def make_issue_diff_zip(
                 z.write(p, arcname=f"logs/{p.name}")
                 log_entries.append(f"logs/{p.name}")
 
+            # Full-file snapshots (raw bytes)
+            for rel in rel_paths:
+                src_path = repo_root / rel
+                if src_path.is_file():
+                    data = src_path.read_bytes()
+                    arcname = f"files/{rel}"
+                    z.writestr(arcname, data)
+                    snapshot_entries += 1
+                    snapshot_manifest.append(f"SNAP {arcname} bytes={len(data)}")
+                else:
+                    snapshot_manifest.append(f"SNAP_MISSING {rel}")
+
             # Manifest
             lines: list[str] = []
             lines.append(f"issue_id={issue_id}")
@@ -139,6 +153,9 @@ def make_issue_diff_zip(
             lines.append(f"logs={len(log_entries)}")
             for log_name in sorted(log_entries):
                 lines.append(f"LOG {log_name}")
+
+            lines.append(f"snapshot_entries={snapshot_entries}")
+            lines.extend(snapshot_manifest)
             lines.append("")
             z.writestr("manifest.txt", "\n".join(lines).encode("utf-8"))
 
