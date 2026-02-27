@@ -3,7 +3,7 @@ Status: AUTHORITATIVE SPECIFICATION
 Applies to: scripts/patchhub/*
 Language: ENGLISH (ASCII ONLY)
 
-Specification Version: 1.3.1-spec
+Specification Version: 1.3.2-spec
 Code Baseline: audiomason2-main.zip (as provided in this chat)
 
 -------------------------------------------------------------------------------
@@ -59,6 +59,14 @@ Versioning uses SemVer: MAJOR.MINOR.PATCH
 - PATCH: backward compatible bug fix
 
 The runtime version MUST NOT be hardcoded in code.
+
+2.2 Idle and Background Activity (HARD)
+
+- PatchHub server MUST NOT use timeout-based polling for the main job queue idle loop.
+- The job queue idle loop MUST block on queue.get() and MUST wake only on new work or on stop.
+- When the PatchHub UI document is hidden (document.hidden == true), the UI MUST pause all periodic refresh timers and MUST close any active SSE/EventSource connections.
+- When the document becomes visible again, the UI MUST resume timers and refresh UI state.
+- Timer creation MUST be centralized to prevent duplicated timers across multiple hide/show cycles.
 
 -------------------------------------------------------------------------------
 
