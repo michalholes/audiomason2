@@ -316,6 +316,9 @@ function loadLiveLevel() {
     setRunsVisible: setRunsVisible,
     setJobsVisible: setJobsVisible,
     saveRunsVisible: saveRunsVisible,
-    saveJobsVisible: saveJobsVisible
+    saveJobsVisible: saveJobsVisible,
+    loadLiveLevel: loadLiveLevel,
+    loadLiveJobId: loadLiveJobId,
+    saveLiveJobId: saveLiveJobId
   };
 })();

@@ -106,6 +106,27 @@ function setJobsVisible(v) {
   return null;
 }
 
+function loadLiveLevel() {
+  if (window.PatchHubEvents && typeof window.PatchHubEvents.loadLiveLevel === "function") {
+    return window.PatchHubEvents.loadLiveLevel();
+  }
+  return null;
+}
+
+function loadLiveJobId() {
+  if (window.PatchHubEvents && typeof window.PatchHubEvents.loadLiveJobId === "function") {
+    return window.PatchHubEvents.loadLiveJobId();
+  }
+  return null;
+}
+
+function saveLiveJobId(jobId) {
+  if (window.PatchHubEvents && typeof window.PatchHubEvents.saveLiveJobId === "function") {
+    return window.PatchHubEvents.saveLiveJobId(jobId);
+  }
+  return null;
+}
+
 
 function openLiveStream(jobId) {
   if (!jobId) {
