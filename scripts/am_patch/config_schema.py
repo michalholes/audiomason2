@@ -147,7 +147,9 @@ _SECTION_BY_KEY: dict[str, str] = {
     "gate_monolith_extensions": "",
     "gate_monolith_compute_fanin": "",
     "gate_monolith_on_parse_error": "",
-    "gate_monolith_areas": "",
+    "gate_monolith_areas_prefixes": "",
+    "gate_monolith_areas_names": "",
+    "gate_monolith_areas_dynamic": "",
     "gate_monolith_large_loc": "",
     "gate_monolith_huge_loc": "",
     "gate_monolith_large_allow_loc_increase": "",
@@ -378,9 +380,7 @@ _HELP_BY_KEY: dict[str, str] = {
 
 
 # Explicit schema type overrides for fields that are not editable via PatchHub.
-_READ_ONLY_TYPE_BY_KEY: dict[str, str] = {
-    "gate_monolith_areas": "str",
-}
+_READ_ONLY_TYPE_BY_KEY: dict[str, str] = {}
 
 
 # Explicit enum allow-lists for enum-like Policy fields.

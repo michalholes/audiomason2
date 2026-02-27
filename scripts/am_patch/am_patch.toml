@@ -184,13 +184,30 @@ gate_monolith_catchall_basenames = ["utils.py", "common.py", "helpers.py", "misc
 gate_monolith_catchall_dirs = ["utils", "common", "helpers", "misc"]
 gate_monolith_catchall_allowlist = []
 
+
 # Ownership areas (first match wins)
-gate_monolith_areas = [
-  { prefix = "src/audiomason/", area = "core" },
-  { prefix = "scripts/am_patch/", area = "runner" },
-  { prefix = "plugins/", area = "plugins", dynamic = "plugins.<name>" },
-  { prefix = "tests/", area = "tests" },
-  { prefix = "scripts/", area = "tooling" },
+gate_monolith_areas_prefixes = [
+  "src/audiomason/",
+  "scripts/am_patch/",
+  "plugins/",
+  "tests/",
+  "scripts/",
+]
+
+gate_monolith_areas_names = [
+  "core",
+  "runner",
+  "plugins",
+  "tests",
+  "tooling",
+]
+
+gate_monolith_areas_dynamic = [
+  "",
+  "",
+  "plugins.<name>",
+  "",
+  "",
 ]
 
 

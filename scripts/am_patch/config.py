@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .config_monolith_areas import parse_monolith_areas
 from .errors import RunnerError
 from .success_archive_retention import validate_success_archive_retention
 
@@ -164,16 +165,9 @@ class Policy:
     gate_monolith_extensions: list[str] = field(default_factory=lambda: [".py", ".js"])
     gate_monolith_compute_fanin: bool = True
     gate_monolith_on_parse_error: str = "fail"  # fail|warn
-
-    gate_monolith_areas: list[dict[str, str]] = field(
-        default_factory=lambda: [
-            {"prefix": "src/audiomason/", "area": "core"},
-            {"prefix": "scripts/am_patch/", "area": "runner"},
-            {"prefix": "plugins/", "area": "plugins", "dynamic": "plugins.<name>"},
-            {"prefix": "tests/", "area": "tests"},
-            {"prefix": "scripts/", "area": "tooling"},
-        ]
-    )
+    gate_monolith_areas_prefixes: list[str] = field(default_factory=list)
+    gate_monolith_areas_names: list[str] = field(default_factory=list)
+    gate_monolith_areas_dynamic: list[str] = field(default_factory=list)
 
     gate_monolith_large_loc: int = 900
     gate_monolith_huge_loc: int = 1300
@@ -808,22 +802,13 @@ def build_policy(defaults: Policy, cfg: dict[str, Any]) -> Policy:
             ),
         )
 
-    if "gate_monolith_areas" in cfg:
-        raw = cfg["gate_monolith_areas"]
-        if not isinstance(raw, list) or not all(isinstance(x, dict) for x in raw):
-            raise RunnerError("CONFIG", "INVALID", "gate_monolith_areas must be list[dict]")
-        cleaned_areas: list[dict[str, str]] = []
-        for item in raw:
-            d: dict[str, str] = {}
-            for k, v in item.items():
-                if not isinstance(k, str) or not isinstance(v, str):
-                    raise RunnerError(
-                        "CONFIG", "INVALID", "gate_monolith_areas entries must be str->str"
-                    )
-                d[k] = v
-            cleaned_areas.append(d)
-        p.gate_monolith_areas = cleaned_areas
-        _mark_cfg(p, cfg, "gate_monolith_areas")
+    prefixes, names, dynamic = parse_monolith_areas(cfg)
+    p.gate_monolith_areas_prefixes = prefixes
+    _mark_cfg(p, cfg, "gate_monolith_areas_prefixes")
+    p.gate_monolith_areas_names = names
+    _mark_cfg(p, cfg, "gate_monolith_areas_names")
+    p.gate_monolith_areas_dynamic = dynamic
+    _mark_cfg(p, cfg, "gate_monolith_areas_dynamic")
 
     for k in (
         "gate_monolith_large_loc",

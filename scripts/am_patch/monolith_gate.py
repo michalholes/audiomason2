@@ -125,12 +125,17 @@ def _iter_import_modules(tree: ast.AST, *, current_module: str | None) -> list[s
     return out
 
 
-def _areas_from_policy(raw: list[dict[str, str]]) -> list[MonolithAreas]:
+def _areas_from_policy(
+    prefixes: list[str],
+    names: list[str],
+    dynamic: list[str],
+) -> list[MonolithAreas]:
     out: list[MonolithAreas] = []
-    for item in raw:
-        prefix = _norm_relpath(item.get("prefix", ""))
-        area = str(item.get("area", "")).strip()
-        dyn = str(item.get("dynamic", "")).strip() or None
+    for i in range(len(prefixes)):
+        prefix = _norm_relpath(prefixes[i])
+        area = str(names[i]).strip()
+        dyn_s = str(dynamic[i]).strip()
+        dyn = None if dyn_s == "" else dyn_s
         if not prefix or not area:
             continue
         out.append(MonolithAreas(rel_prefix=prefix.rstrip("/") + "/", area=area, dynamic=dyn))
@@ -423,7 +428,9 @@ def run_monolith_gate(
     gate_monolith_extensions: list[str] | None = None,
     gate_monolith_compute_fanin: bool,
     gate_monolith_on_parse_error: str,
-    gate_monolith_areas: list[dict[str, str]],
+    gate_monolith_areas_prefixes: list[str],
+    gate_monolith_areas_names: list[str],
+    gate_monolith_areas_dynamic: list[str],
     gate_monolith_large_loc: int,
     gate_monolith_huge_loc: int,
     gate_monolith_large_allow_loc_increase: int,
@@ -466,7 +473,11 @@ def run_monolith_gate(
             ),
         )
 
-    areas = _areas_from_policy(gate_monolith_areas)
+    areas = _areas_from_policy(
+        gate_monolith_areas_prefixes,
+        gate_monolith_areas_names,
+        gate_monolith_areas_dynamic,
+    )
     candidates = _scan_candidates(
         cwd,
         decision_paths=decision_paths,
