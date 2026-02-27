@@ -149,6 +149,62 @@ function scheduleParseDebounced(raw) {
 }
 
 
+function uploadFile(file) {
+  if (typeof window.uploadFile === "function") {
+    return window.uploadFile(file);
+  }
+  setFsHint("upload not available");
+  return null;
+}
+
+function refreshPatchStat() {
+  var Refresh = window.PatchHubRefresh || {};
+  if (typeof Refresh.refreshStats === "function") {
+    Refresh.refreshStats();
+  }
+}
+
+function fsOpenSelectedDir() {
+  var Core2 = window.PatchHubCore || {};
+  var el2 = Core2.el;
+  if (typeof el2 !== "function") {
+    setFsHint("open dir failed: missing core");
+    return;
+  }
+
+  var selected = String(window.fsSelected || "");
+  if (!selected) {
+    setFsHint("no selection");
+    return;
+  }
+
+  var isDirMap = window.fsLastIsDir || {};
+  var isDir = !!isDirMap[selected];
+
+  var target = "";
+  if (isDir) {
+    target = selected;
+  } else {
+    var parent = parentRel(selected);
+    target = parent || "";
+  }
+
+  var pathNode = el2("fsPath");
+  if (!pathNode) {
+    setFsHint("open dir failed: missing fsPath");
+    return;
+  }
+
+  pathNode.value = target;
+  window.fsSelected = "";
+  fsUpdateSelCount();
+  if (window.PatchHubRefresh && typeof window.PatchHubRefresh.refreshFs === "function") {
+    window.PatchHubRefresh.refreshFs();
+  }
+}
+
+
+
   window.PatchHubFs = {
     setFsHint: setFsHint,
     fsDownloadSelected: fsDownloadSelected,

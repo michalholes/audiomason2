@@ -26,11 +26,13 @@ function refreshFs() {
     }
     var items = r.items || [];
     fsLastRels = [];
+    fsLastIsDir = {};
     var html = items.map(function (it) {
       var name = it.name;
       var isDir = !!it.is_dir;
       var rel = joinRel(path, name);
       fsLastRels.push(rel);
+      fsLastIsDir[rel] = isDir;
 
       var displayName = isDir ? (name + "/") : name;
       var isSelected = (fsSelected === rel);

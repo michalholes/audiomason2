@@ -221,6 +221,15 @@ function deriveProgressFromEvents(events) {
 }
 
 
+function updateProgressPanelFromEvents(events) {
+  var Events = window.PatchHubEvents || {};
+  if (typeof Events.updateProgressPanelFromEvents === "function") {
+    Events.updateProgressPanelFromEvents(events);
+  }
+}
+
+
+
   window.PatchHubAmpSettings = {
     renderAmpSettings: renderAmpSettings,
     parseProgressFromText: parseProgressFromText,

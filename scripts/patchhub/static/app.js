@@ -20,6 +20,7 @@ var issueRegex = null;
 var fsSelected = "";
 var fsChecked = {};
 var fsLastRels = [];
+var fsLastIsDir = {};
 var runsCache = [];
 var selectedRun = null;
 var tailLines = 200;
@@ -84,6 +85,27 @@ var updateProgressFromEvents = PatchHubEvents.updateProgressFromEvents;
 
 var updateProgressPanelFromEvents = PatchHubAmpSettings.updateProgressPanelFromEvents;
 var updateShortProgressFromText = PatchHubAmpSettings.updateShortProgressFromText;
+function loadUiVisibility() {
+  if (window.PatchHubEvents && typeof window.PatchHubEvents.loadUiVisibility === "function") {
+    return window.PatchHubEvents.loadUiVisibility();
+  }
+  return null;
+}
+
+function setRunsVisible(v) {
+  if (window.PatchHubEvents && typeof window.PatchHubEvents.setRunsVisible === "function") {
+    return window.PatchHubEvents.setRunsVisible(v);
+  }
+  return null;
+}
+
+function setJobsVisible(v) {
+  if (window.PatchHubEvents && typeof window.PatchHubEvents.setJobsVisible === "function") {
+    return window.PatchHubEvents.setJobsVisible(v);
+  }
+  return null;
+}
+
 
 function openLiveStream(jobId) {
   if (!jobId) {

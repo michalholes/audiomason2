@@ -10,7 +10,7 @@
   var apiGet = Core.apiGet;
   var apiPost = Core.apiPost;
   var formatLocalTime = Core.formatLocalTime;
-  var updateProgressPanelFromEvents = Amp.updateProgressPanelFromEvents;
+  var ampUpdateProgressPanelFromEvents = Amp.updateProgressPanelFromEvents;
 
   function deriveProgressSummaryFromEvents(events, progress) {
     var lastResult = null;
@@ -308,8 +308,14 @@ function loadLiveLevel() {
     closeLiveStream: closeLiveStream,
     renderLiveLog: renderLiveLog,
     updateProgressFromEvents: updateProgressFromEvents,
+    updateProgressPanelFromEvents: updateProgressPanelFromEvents,
     filterLiveEvent: filterLiveEvent,
     setLiveStreamStatus: setLiveStreamStatus,
-    getLiveJobId: getLiveJobId
+    getLiveJobId: getLiveJobId,
+    loadUiVisibility: loadUiVisibility,
+    setRunsVisible: setRunsVisible,
+    setJobsVisible: setJobsVisible,
+    saveRunsVisible: saveRunsVisible,
+    saveJobsVisible: saveJobsVisible
   };
 })();
