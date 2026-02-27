@@ -199,24 +199,36 @@ class AsyncJobQueue:
         await asyncio.to_thread(_persist_job_sync, job_dir, job)
 
     async def _wait_for_runner_slot(self) -> None:
+        sleep_s = 0.25
         while True:
             if self._stop.is_set():
                 return
             if await self._executor.is_running():
-                await asyncio.sleep(0.25)
+                await asyncio.sleep(sleep_s)
+                sleep_s = min(sleep_s * 2.0, 2.0)
                 continue
 
             held = await asyncio.to_thread(is_lock_held_sync, self._lock_path)
             if not held:
                 return
-            await asyncio.sleep(0.25)
+            await asyncio.sleep(sleep_s)
+            sleep_s = min(sleep_s * 2.0, 2.0)
 
     async def _run_loop(self) -> None:
         while not self._stop.is_set():
-            try:
-                job_id = await asyncio.wait_for(self._q.get(), timeout=0.5)
-            except TimeoutError:
-                continue
+            job_id_task = asyncio.create_task(self._q.get())
+            stop_task = asyncio.create_task(self._stop.wait())
+            done, pending = await asyncio.wait(
+                {job_id_task, stop_task},
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            for p in pending:
+                p.cancel()
+                with contextlib.suppress(Exception):
+                    await p
+            if stop_task in done:
+                return
+            job_id = job_id_task.result()
 
             async with self._mu:
                 job = self._jobs.get(job_id)

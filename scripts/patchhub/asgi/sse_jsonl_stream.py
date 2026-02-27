@@ -28,6 +28,7 @@ async def stream_job_events_sse(
     offset = 0
     last_growth = asyncio.get_running_loop().time()
     last_ping = asyncio.get_running_loop().time()
+    sleep_s = poll_interval_s
 
     while True:
         status = await job_status()
@@ -42,7 +43,8 @@ async def stream_job_events_sse(
             if now - last_ping >= ping_interval_s:
                 yield b": ping\n\n"
                 last_ping = now
-            await asyncio.sleep(poll_interval_s)
+            await asyncio.sleep(sleep_s)
+            sleep_s = min(sleep_s * 2.0, 2.0)
             continue
 
         if not exists:
@@ -62,6 +64,7 @@ async def stream_job_events_sse(
             return
 
         if chunk:
+            sleep_s = poll_interval_s
             last_growth = asyncio.get_running_loop().time()
             parts = chunk.split(b"\n")
             if chunk.endswith(b"\n"):
@@ -81,6 +84,9 @@ async def stream_job_events_sse(
                 yield f"data: {s}\n\n".encode()
             offset = end_pos - len(tail)
 
+        if not chunk:
+            sleep_s = min(sleep_s * 2.0, 2.0)
+
         now = asyncio.get_running_loop().time()
         if now - last_ping >= ping_interval_s:
             yield b": ping\n\n"
@@ -91,4 +97,4 @@ async def stream_job_events_sse(
             yield f"event: end\ndata: {data}\n\n".encode()
             return
 
-        await asyncio.sleep(poll_interval_s)
+        await asyncio.sleep(sleep_s)
