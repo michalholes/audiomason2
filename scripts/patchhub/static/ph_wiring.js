@@ -24,17 +24,29 @@
   var refreshJobs = Refresh.refreshJobs;
   var refreshTail = Refresh.refreshTail;
   var refreshHeader = Refresh.refreshHeader;
-  var renderIssueDetail = window.renderIssueDetail;
-  var validateAndPreview = window.validateAndPreview;
-  var openLiveStream = window.openLiveStream;
   var getLiveJobId = Events.getLiveJobId;
   var closeLiveStream = Events.closeLiveStream;
   var renderLiveLog = Events.renderLiveLog;
   var updateProgressFromEvents = Events.updateProgressFromEvents;
   var updateProgressPanelFromEvents = Amp.updateProgressPanelFromEvents;
-  var startAutofillPolling = window.startAutofillPolling;
 
-function wireButtons() {
+
+function wireButtons(ctx) {
+  ctx = ctx || {};
+  var renderIssueDetail = ctx.renderIssueDetail;
+  var validateAndPreview = ctx.validateAndPreview;
+  var openLiveStream = ctx.openLiveStream;
+  var startAutofillPolling = ctx.startAutofillPolling;
+
+  function requireFn(fn, name) {
+    if (typeof fn !== "function") {
+      setUiError("internal wiring error: missing " + name);
+      return false;
+    }
+    return true;
+  }
+
+
   el("fsRefresh").addEventListener("click", refreshFs);
   el("fsUp").addEventListener("click", function () {
     var p = el("fsPath").value || "";
@@ -248,6 +260,12 @@ function wireButtons() {
       }, 0);
     });
   }
+
+  // Functions provided by app.js; validate presence before wiring handlers.
+  if (!requireFn(validateAndPreview, "validateAndPreview")) return;
+  if (!requireFn(renderIssueDetail, "renderIssueDetail")) return;
+  if (!requireFn(openLiveStream, "openLiveStream")) return;
+  if (typeof startAutofillPolling !== "function") startAutofillPolling = null;
 
   el("mode").addEventListener("change", validateAndPreview);
   el("issueId").addEventListener("input", function () {

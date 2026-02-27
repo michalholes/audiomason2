@@ -817,7 +817,25 @@ function renderIssueDetail() {
 
 function init() {
   setupUpload();
-  PatchHubWiring.wireButtons();
+
+  var ctx = {
+    tailLines: tailLines,
+    refreshFs: refreshFs,
+    refreshRuns: refreshRuns,
+    refreshStats: refreshStats,
+    refreshJobs: refreshJobs,
+    refreshTail: refreshTail,
+    refreshHeader: refreshHeader,
+    renderIssueDetail: renderIssueDetail,
+    validateAndPreview: validateAndPreview,
+    openLiveStream: openLiveStream,
+    startAutofillPolling: startAutofillPolling,
+    stopAutofillPolling: stopAutofillPolling,
+    tickMissingPatchClear: tickMissingPatchClear,
+    closeLiveStream: closeLiveStream
+  };
+
+  PatchHubWiring.wireButtons(ctx);
   setPreviewVisible(false);
   loadUiVisibility();
   setRunsVisible(runsVisible);
@@ -838,22 +856,6 @@ function init() {
         // Best-effort: do not break main UI if AMP settings init fails.
       }
     }
-
-    var ctx = {
-      tailLines: tailLines,
-      refreshFs: refreshFs,
-      refreshRuns: refreshRuns,
-      refreshStats: refreshStats,
-      refreshJobs: refreshJobs,
-      refreshTail: refreshTail,
-      refreshHeader: refreshHeader,
-      renderIssueDetail: renderIssueDetail,
-      validateAndPreview: validateAndPreview,
-      startAutofillPolling: startAutofillPolling,
-      stopAutofillPolling: stopAutofillPolling,
-      tickMissingPatchClear: tickMissingPatchClear,
-      closeLiveStream: closeLiveStream
-    };
 
     PatchHubWiring.installVisibilityGating(ctx);
   });
