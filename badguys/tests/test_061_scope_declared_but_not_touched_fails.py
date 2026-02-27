@@ -14,7 +14,7 @@ def run(ctx) -> Plan:
 
     body = """
 (REPO / 'docs/badguys_batch1/scope_touched.txt').parent.mkdir(parents=True, exist_ok=True)
-(REPO / 'docs/badguys_batch1/scope_touched.txt').write_text('touched\n', encoding='utf-8')
+(REPO / 'docs/badguys_batch1/scope_touched.txt').write_text('touched\\\\n', encoding='utf-8')
 # declared_untouched.txt is declared but intentionally not touched
 """
     write_patch_script(
