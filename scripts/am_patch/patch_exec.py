@@ -436,7 +436,8 @@ def run_unified_patch_bundle(
         patch_path = (workspace_repo / ".am_patch" / "inputs" / name).resolve()
         _write_atomic(patch_path, rewritten_text.encode("utf-8"))
 
-        git_argv = ["git", "apply", "--whitespace=nowarn", str(patch_path)]
+        patch_rel = patch_path.relative_to(workspace_repo)
+        git_argv = ["git", "apply", "--whitespace=nowarn", str(patch_rel)]
         if getattr(policy, "patch_jail", False):
             cmd = _build_bwrap_cmd(
                 workspace_repo=workspace_repo,
