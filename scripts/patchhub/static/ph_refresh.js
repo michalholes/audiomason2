@@ -300,7 +300,7 @@ function refreshJobs() {
     var jobs = r.jobs || [];
 
     var active = jobs.find(function (j) {
-      return j.status === "running";
+      return String(j.status || "").trim().toLowerCase() === "running";
     }) || null;
     var activeId = active ? String(active.job_id || "") : "";
 

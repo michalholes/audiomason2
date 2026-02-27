@@ -69,7 +69,7 @@
   }
 
   function updateProgressPanelFromEvents() {
-    var progress = deriveProgressFromEvents(liveEvents);
+    var progress = (typeof Amp.deriveProgressFromEvents === "function") ? Amp.deriveProgressFromEvents(liveEvents) : { order: [], state: {} };
     renderProgressSteps(progress);
     var summary = deriveProgressSummaryFromEvents(liveEvents, progress);
     renderProgressSummary(summary.text);

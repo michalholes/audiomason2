@@ -177,8 +177,11 @@ function wireButtons(ctx) {
 
   if (el("runsCollapse")) {
     el("runsCollapse").addEventListener("click", function () {
-      setRunsVisible(!runsVisible);
-      saveRunsVisible(runsVisible);
+      var wrap = el("runsWrap");
+      var nowVisible = !(wrap && wrap.classList.contains("hidden"));
+      var nextVisible = !nowVisible;
+      if (typeof Events.setRunsVisible === "function") Events.setRunsVisible(nextVisible);
+      if (typeof Events.saveRunsVisible === "function") Events.saveRunsVisible(nextVisible);
     });
   }
 
@@ -197,8 +200,11 @@ function wireButtons(ctx) {
 
   if (el("jobsCollapse")) {
     el("jobsCollapse").addEventListener("click", function () {
-      setJobsVisible(!jobsVisible);
-      saveJobsVisible(jobsVisible);
+      var wrap = el("jobsWrap");
+      var nowVisible = !(wrap && wrap.classList.contains("hidden"));
+      var nextVisible = !nowVisible;
+      if (typeof Events.setJobsVisible === "function") Events.setJobsVisible(nextVisible);
+      if (typeof Events.saveJobsVisible === "function") Events.saveJobsVisible(nextVisible);
     });
   }
 
