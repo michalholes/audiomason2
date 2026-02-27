@@ -645,6 +645,8 @@ def main(argv: list[str]) -> int:
     from badguys.discovery import discover_tests
     from badguys._util import acquire_lock, fail_commit_limit, format_result_line, release_lock
 
+    live_repo_root: Optional[Path] = None
+
     acquire_lock(
         repo_root,
         path=cfg.lock_path,
@@ -667,6 +669,8 @@ def main(argv: list[str]) -> int:
             for t in tests:
                 print(t.name)
             return 0
+
+        live_repo_root = _prepare_hermetic_live_repo(repo_root)
 
         # Debug: log resolved config details
         ctx = Ctx(
@@ -745,7 +749,8 @@ def main(argv: list[str]) -> int:
             return 130
         return 0 if ok_all else 1
     finally:
-        shutil.rmtree(live_repo_root, ignore_errors=True)
+        if live_repo_root is not None:
+            shutil.rmtree(live_repo_root, ignore_errors=True)
         release_lock(repo_root)
 
 
