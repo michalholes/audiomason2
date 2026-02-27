@@ -248,6 +248,20 @@ Supported step types:
 - FuncStep(name=..., fn=callable)
 - ExpectPathExists(path=Path)
 
+#### CmdStep git working tree requirement (normative)
+
+When a CmdStep executes the AM Patch Runner (scripts/am_patch.py), BadGuys MUST run it from a
+hermetic Git working tree created by BadGuys.
+
+- BadGuys MUST NOT rely on repo_root being a Git working tree (i.e. it MAY lack .git/).
+- The hermetic working tree MUST be created deterministically and MUST contain a committed snapshot
+  of the files needed by the runner and the test.
+- The bootstrap procedure MUST be deterministic: git init, git add -A, git commit with fixed author
+  and committer identity and fixed timestamps (no time dependence).
+
+Rationale (non-normative): CI checkouts and workspace snapshots may omit .git/, but the runner uses
+Git commands and therefore requires a real Git repository.
+
 #### CmdStep runner result determination (normative)
 
 When a CmdStep executes the AM Patch Runner (scripts/am_patch.py), BadGuys MUST determine the
