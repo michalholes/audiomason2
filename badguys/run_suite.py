@@ -40,6 +40,7 @@ class SuiteCfg:
 @dataclass
 class Ctx:
     repo_root: Path
+    live_repo_root: Path
     run_id: str
     central_log: Path
     cfg: SuiteCfg
@@ -162,6 +163,73 @@ def _ensure_repo_root_in_syspath(repo_root: Path) -> None:
         sys.path.insert(0, s)
 
 
+
+def _is_am_patch_runner_argv(argv: list[str]) -> bool:
+    # Detect nested am_patch runner invocations launched by BadGuys tests.
+    # Deterministic: purely based on argv content.
+    for a in argv:
+        if a == "scripts/am_patch.py" or a.endswith("/scripts/am_patch.py"):
+            return True
+    return False
+
+
+def _run_git(argv: list[str], *, cwd: Path) -> None:
+    cp = subprocess.run(argv, cwd=str(cwd), capture_output=True, text=True)
+    if cp.returncode != 0:
+        msg = (cp.stdout or "").rstrip("\n") + "\n" + (cp.stderr or "").rstrip("\n")
+        raise SystemExit(f"FAIL: git command failed: {' '.join(argv)}\n{msg}")
+
+
+def _prepare_hermetic_live_repo(repo_root: Path) -> Path:
+    # BadGuys is often executed in environments where the checkout has no .git (e.g. source exports).
+    # Many runner flows require a git working tree. Create a hermetic git repo copy for runner invocations.
+    live_repo = repo_root / ".badguys_live_repo"
+    shutil.rmtree(live_repo, ignore_errors=True)
+
+    def _ignore(dirpath: str, names: list[str]) -> set[str]:
+        ignore: set[str] = set()
+        base = os.path.basename(dirpath)
+        # Global ignores
+        for n in names:
+            if n in {"patches", ".badguys_live_repo", "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", ".venv", "venv", ".tox", "node_modules"}:
+                ignore.add(n)
+        return ignore
+
+    shutil.copytree(repo_root, live_repo, symlinks=True, ignore=_ignore)
+
+    # Reuse the main patches directory (inputs/outputs/logs/locks) so existing cleanup logic and paths remain valid.
+    patches_link = live_repo / "patches"
+    if patches_link.exists() or patches_link.is_symlink():
+        patches_link.unlink()
+    os.symlink(str(repo_root / "patches"), str(patches_link))
+
+    _run_git(["git", "init"], cwd=live_repo)
+    _run_git(["git", "add", "-A"], cwd=live_repo)
+
+    env = os.environ.copy()
+    env["GIT_AUTHOR_NAME"] = "BadGuys"
+    env["GIT_AUTHOR_EMAIL"] = "badguys@example.invalid"
+    env["GIT_COMMITTER_NAME"] = "BadGuys"
+    env["GIT_COMMITTER_EMAIL"] = "badguys@example.invalid"
+    # Fixed timestamp for deterministic commit SHA across environments.
+    env["GIT_AUTHOR_DATE"] = "2000-01-01T00:00:00+00:00"
+    env["GIT_COMMITTER_DATE"] = "2000-01-01T00:00:00+00:00"
+
+    cp = subprocess.run(
+        ["git", "commit", "-m", "badguys: hermetic live repo bootstrap", "--no-gpg-sign"],
+        cwd=str(live_repo),
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    if cp.returncode != 0:
+        msg = (cp.stdout or "").rstrip("\n") + "\n" + (cp.stderr or "").rstrip("\n")
+        raise SystemExit(f"FAIL: git commit failed in hermetic live repo\n{msg}")
+
+    return live_repo
+
+
+
 def _init_logs(cfg: SuiteCfg, run_id: str) -> Path:
     logs_dir = cfg.logs_dir
     if logs_dir.exists():
@@ -268,6 +336,11 @@ def _run_cmd_with_heartbeat(ctx: Ctx, *, test_name: str, argv: list[str], cwd: P
 
         ipc_thread = threading.Thread(target=_run_reader, name="badguys_ipc_reader", daemon=True)
         ipc_thread.start()
+
+
+    # Hermetic git bootstrap: nested am_patch runner invocations require a git working tree.
+    if cwd == ctx.repo_root and _is_am_patch_runner_argv(argv):
+        cwd = ctx.live_repo_root
 
     proc = subprocess.Popen(
         argv,
@@ -598,6 +671,7 @@ def main(argv: list[str]) -> int:
         # Debug: log resolved config details
         ctx = Ctx(
             repo_root=repo_root,
+            live_repo_root=live_repo_root,
             run_id=run_id,
             central_log=central_log,
             cfg=cfg,
@@ -671,6 +745,7 @@ def main(argv: list[str]) -> int:
             return 130
         return 0 if ok_all else 1
     finally:
+        shutil.rmtree(live_repo_root, ignore_errors=True)
         release_lock(repo_root)
 
 
