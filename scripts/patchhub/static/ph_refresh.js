@@ -58,7 +58,7 @@ function refreshFs() {
     }).join("");
 
     el("fsList").innerHTML = html || "<div class=\"muted\">(empty)</div>";
-    fsUpdateSelCount();
+    if (Fs.fsUpdateSelCount) Fs.fsUpdateSelCount();
 
     Array.from(el("fsList").querySelectorAll(".fsChk")).forEach(function (node) {
       node.addEventListener("click", function (ev) {
@@ -70,7 +70,7 @@ function refreshFs() {
         } else {
           delete fsChecked[rel];
         }
-        fsUpdateSelCount();
+        if (Fs.fsUpdateSelCount) Fs.fsUpdateSelCount();
       });
     });
 
@@ -294,7 +294,7 @@ function refreshJobs() {
   apiGet("/api/jobs").then(function (r) {
     if (!r || r.ok === false) {
       setPre("jobsList", r);
-      renderActiveJob([]);
+      if (window.PatchHubEvents && window.PatchHubEvents.renderActiveJob) window.PatchHubEvents.renderActiveJob([]);
       return;
     }
     var jobs = r.jobs || [];
@@ -313,7 +313,7 @@ function refreshJobs() {
 
     if (!selectedJobId && activeId) {
       selectedJobId = activeId;
-      saveLiveJobId(selectedJobId);
+      if (window.PatchHubEvents && window.PatchHubEvents.saveLiveJobId) window.PatchHubEvents.saveLiveJobId(selectedJobId);
       suppressIdleOutput = false;
     }
 
@@ -322,10 +322,10 @@ function refreshJobs() {
         return String(a.created_utc || "").localeCompare(String(b.created_utc || ""));
       });
       selectedJobId = String(jobs[jobs.length - 1].job_id || "");
-      if (selectedJobId) saveLiveJobId(selectedJobId);
+      if (selectedJobId && window.PatchHubEvents && window.PatchHubEvents.saveLiveJobId) window.PatchHubEvents.saveLiveJobId(selectedJobId);
       suppressIdleOutput = false;
     }
-    renderActiveJob(jobs);
+    if (window.PatchHubEvents && window.PatchHubEvents.renderActiveJob) window.PatchHubEvents.renderActiveJob(jobs);
     ensureAutoRefresh(jobs);
 
     var html = jobs.map(function (j) {
@@ -402,7 +402,7 @@ function refreshJobs() {
         var jid = n.getAttribute("data-jobid") || "";
         if (!jid) return;
         selectedJobId = String(jid);
-        saveLiveJobId(selectedJobId);
+        if (window.PatchHubEvents && window.PatchHubEvents.saveLiveJobId) window.PatchHubEvents.saveLiveJobId(selectedJobId);
         suppressIdleOutput = false;
         openLiveStream(selectedJobId);
         refreshTail();

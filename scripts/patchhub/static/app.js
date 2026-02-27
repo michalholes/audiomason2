@@ -299,6 +299,13 @@ var browse = el("browsePatch");
 if (browse) browse.disabled = !patchEnabled;
 }
 
+
+function getRawCommand() {
+  var t = el("rawCommand");
+  if (!t) return "";
+  return String(t.value || "").trim();
+}
+
 function validateAndPreview() {
   var mode = String(el("mode").value || "patch");
   var issueId = String(el("issueId").value || "").trim();

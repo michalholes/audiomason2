@@ -107,7 +107,7 @@
     if (cancelBtn && active && active.job_id) {
       cancelBtn.addEventListener("click", function () {
         apiPost("/api/jobs/cancel", { job_id: active.job_id }).then(function () {
-          refreshJobs();
+          if (window.PatchHubRefresh && window.PatchHubRefresh.refreshJobs) window.PatchHubRefresh.refreshJobs();
         });
       });
     }
@@ -307,6 +307,8 @@ function loadLiveLevel() {
     isJobActive: isJobActive,
     closeLiveStream: closeLiveStream,
     renderLiveLog: renderLiveLog,
+    renderActiveJob: renderActiveJob,
+    saveLiveJobId: saveLiveJobId,
     updateProgressFromEvents: updateProgressFromEvents,
     updateProgressPanelFromEvents: updateProgressPanelFromEvents,
     filterLiveEvent: filterLiveEvent,
