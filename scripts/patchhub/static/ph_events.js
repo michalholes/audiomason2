@@ -76,36 +76,6 @@
     setProgressSummaryState(summary);
   }
 
-  function refreshStats() {
-    apiGet("/api/debug/diagnostics").then(function (r) {
-      if (!r || r.ok === false) {
-        setPre("stats", r);
-        return;
-      }
-      var s = (r.stats || {});
-      var all = s.all_time || {};
-      var lines = [];
-      lines.push({ k: "all_time.total", v: String(all.total || 0) });
-      lines.push({ k: "all_time.success", v: String(all.success || 0) });
-      lines.push({ k: "all_time.fail", v: String(all.fail || 0) });
-      lines.push({ k: "all_time.unknown", v: String(all.unknown || 0) });
-      lines.push({ k: "all_time.canceled", v: String(all.canceled || 0) });
-
-      (s.windows || []).forEach(function (w) {
-        var d = w.days;
-        lines.push({ k: String(d) + "d.total", v: String(w.total || 0) });
-        lines.push({ k: String(d) + "d.success", v: String(w.success || 0) });
-        lines.push({ k: String(d) + "d.fail", v: String(w.fail || 0) });
-        lines.push({ k: String(d) + "d.unknown", v: String(w.unknown || 0) });
-        lines.push({ k: String(d) + "d.canceled", v: String(w.canceled || 0) });
-      });
-
-      el("stats").innerHTML = lines.map(function (x) {
-        return "<div class=\"rowline\"><span class=\"k\">" + escapeHtml(x.k) + "</span><span class=\"v\">" + escapeHtml(x.v) + "</span></div>";
-      }).join("");
-    });
-  }
-
   function renderActiveJob(jobs) {
     var active = (jobs || []).find(function (j) { return j.status === "running"; }) || null;
     activeJobId = active ? String(active.job_id || "") : null;

@@ -193,87 +193,6 @@ function jobSummaryDurationSeconds(startUtc, endUtc) {
 }
 
 
-function refreshJobs() {
-  apiGet("/api/jobs").then(function (r) {
-    if (!r || r.ok === false) {
-      setPre("jobsList", r);
-      renderActiveJob([]);
-      return;
-    }
-    var jobs = r.jobs || [];
-
-    var active = jobs.find(function (j) { return j.status === "running"; }) || null;
-    var activeId = active ? String(active.job_id || "") : "";
-
-    var idleAutoSelect = !!(cfg && cfg.ui && cfg.ui.idle_auto_select_last_job);
-
-    if (!selectedJobId) {
-      var saved = loadLiveJobId();
-      if (saved) selectedJobId = saved;
-    }
-
-    if (!selectedJobId && activeId) {
-      selectedJobId = activeId;
-      saveLiveJobId(selectedJobId);
-      suppressIdleOutput = false;
-    }
-
-    if (!selectedJobId && jobs.length && idleAutoSelect) {
-      jobs.sort(function (a, b) {
-        return String(a.created_utc || "").localeCompare(String(b.created_utc || ""));
-      });
-      selectedJobId = String(jobs[jobs.length - 1].job_id || "");
-      if (selectedJobId) saveLiveJobId(selectedJobId);
-      suppressIdleOutput = false;
-    }
-    renderActiveJob(jobs);
-    ensureAutoRefresh(jobs);
-
-    var html = jobs.map(function (j) {
-      var jobId = String(j.job_id || "");
-      var isSel = selectedJobId && String(selectedJobId) === jobId;
-      var cls = "item job-item" + (isSel ? " selected" : "");
-
-      var issueId = String(j.issue_id || "").trim();
-      var issueText = issueId ? ("#" + issueId) : "(no issue)";
-
-      var stRaw = String(j.status || "").trim().toLowerCase();
-      var statusText = stRaw ? stRaw.toUpperCase() : "UNKNOWN";
-      var statusCls = "job-status st-" + (stRaw || "unknown");
-
-      var commit = jobSummaryCommit(j.commit_message || "");
-      var patchName = jobSummaryPatchName(j.patch_path || "");
-
-      var metaParts = [];
-      metaParts.push("mode=" + String(j.mode || ""));
-      if (patchName) metaParts.push("patch=" + patchName);
-
-      var dur = jobSummaryDurationSeconds(j.started_utc, j.ended_utc);
-      if (dur) metaParts.push("dur=" + dur + "s");
-
-      var meta = metaParts.join(" | ");
-
-      var line = "<div class=\"" + cls + "\">";
-      line += "<div class=\"name job-name\" data-jobid=\"" + escapeHtml(jobId) + "\">";
-      line += "<div class=\"job-lines\">";
-      line += "<div class=\"job-top\">";
-      line += "<span class=\"job-issue\">" + escapeHtml(issueText) + "</span>";
-      line += "<span class=\"" + escapeHtml(statusCls) + "\">" + escapeHtml(statusText) + "</span>";
-      line += "</div>";
-      if (commit) {
-        line += "<div class=\"job-title\">" + escapeHtml(commit) + "</div>";
-      }
-      line += "<div class=\"job-meta\">" + escapeHtml(meta) + "</div>";
-      line += "</div>";
-      line += "</div>";
-      line += "</div>";
-      return line;
-    }).join("");
-    el("jobsList").innerHTML = html || "<div class=\"muted\">(none)</div>";
-  });
-}
-
-
 function ensureAutoRefresh(jobs) {
   var id = getLiveJobId();
   var st = "";
@@ -729,31 +648,6 @@ function stopAutofillPolling() {
     clearInterval(autofillTimer);
     autofillTimer = null;
   }
-}
-
-function refreshHeader() {
-  var base = "";
-  if (cfg && cfg.server && cfg.server.host && cfg.server.port) {
-    base = "server: " + cfg.server.host + ":" + cfg.server.port;
-  }
-
-  apiGet("/api/debug/diagnostics").then(function (d) {
-    if (!d || d.ok === false) return;
-    var lock = d.lock || {};
-    var disk = d.disk || {};
-    var held = lock.held ? "LOCK:held" : "LOCK:free";
-    var pct = "";
-    if (disk.total && disk.used) {
-      pct = "disk:" + String(Math.round((disk.used / disk.total) * 100)) + "%";
-    }
-
-    var meta = base;
-    if (cfg && cfg.paths && cfg.paths.patches_root) meta += " | patches: " + cfg.paths.patches_root;
-    meta += " | " + held;
-    if (pct) meta += " | " + pct;
-
-    if (el("hdrMeta")) el("hdrMeta").textContent = meta;
-  });
 }
 
 function setTabActive(which) {
