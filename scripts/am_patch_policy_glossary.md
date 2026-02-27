@@ -217,6 +217,8 @@ Default: true
 Meaning: If true, run patch application in an isolation boundary (sandbox).
 Notes:
 - This changes the security boundary of patch execution.
+- This requires a working bwrap; if bwrap is missing or AM_PATCH_BWRAP is invalid, the runner fails
+  deterministically with PREFLIGHT/BWRAP.
 Related: patch_jail_unshare_net
 
 ## Key: patch_jail_unshare_net

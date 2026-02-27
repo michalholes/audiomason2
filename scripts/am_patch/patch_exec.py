@@ -52,16 +52,32 @@ def _write_atomic(path: Path, data: bytes) -> None:
 
 
 def _find_bwrap() -> str | None:
-    # Respect explicit override first.
+    """Resolve a usable bwrap binary.
+
+    This must never return a non-existent / non-executable value.
+    """
+
     env = os.environ.get("AM_PATCH_BWRAP")
     if env:
-        return env
+        v = str(env).strip()
+        if not v:
+            return None
+
+        # If it looks like a path, require it to exist and be executable.
+        if "/" in v or Path(v).is_absolute():
+            p = Path(v)
+            if p.exists() and p.is_file() and os.access(str(p), os.X_OK):
+                return str(p)
+            return None
+
+        # Otherwise treat it as a binary name and resolve it via PATH.
+        resolved = shutil.which(v)
+        return resolved or None
+
     return shutil.which("bwrap")
 
 
-def _build_bwrap_cmd(
-    *, workspace_repo: Path, python_argv: list[str], unshare_net: bool
-) -> list[str]:
+def _build_bwrap_cmd(*, workspace_repo: Path, argv: list[str], unshare_net: bool) -> list[str]:
     bwrap = _find_bwrap()
     if not bwrap:
         raise RunnerError(
@@ -83,7 +99,7 @@ def _build_bwrap_cmd(
     # Provide a writable repo mount at /repo (the ONLY intended write location).
     cmd += ["--bind", str(workspace_repo), "/repo", "--chdir", "/repo"]
 
-    cmd += ["--"] + python_argv
+    cmd += ["--"] + argv
     return cmd
 
 
@@ -118,13 +134,20 @@ def run_patch(
         python_argv = ["python3", f"/repo/{exec_path.relative_to(workspace_repo)}"]
         cmd = _build_bwrap_cmd(
             workspace_repo=workspace_repo,
-            python_argv=python_argv,
+            argv=python_argv,
             unshare_net=getattr(policy, "patch_jail_unshare_net", True),
         )
         logger.section("PATCH EXEC (JAILED)")
         logger.line("cmd=" + " ".join(cmd))
         logger.line("patch_exec=JAILED")
-        r = logger.run_logged(cmd, cwd=workspace_repo)
+        try:
+            r = logger.run_logged(cmd, cwd=workspace_repo)
+        except FileNotFoundError as e:
+            raise RunnerError(
+                "PREFLIGHT",
+                "BWRAP",
+                "bwrap not found (install bubblewrap or disable patch_jail)",
+            ) from e
     else:
         logger.section("PATCH EXEC")
         logger.line("patch_exec=RUN")
@@ -413,9 +436,23 @@ def run_unified_patch_bundle(
         patch_path = (workspace_repo / ".am_patch" / "inputs" / name).resolve()
         _write_atomic(patch_path, rewritten_text.encode("utf-8"))
 
-        r = logger.run_logged(
-            ["git", "apply", "--whitespace=nowarn", str(patch_path)], cwd=workspace_repo
-        )
+        git_argv = ["git", "apply", "--whitespace=nowarn", str(patch_path)]
+        if getattr(policy, "patch_jail", False):
+            cmd = _build_bwrap_cmd(
+                workspace_repo=workspace_repo,
+                argv=git_argv,
+                unshare_net=getattr(policy, "patch_jail_unshare_net", True),
+            )
+            try:
+                r = logger.run_logged(cmd, cwd=workspace_repo)
+            except FileNotFoundError as e:
+                raise RunnerError(
+                    "PREFLIGHT",
+                    "BWRAP",
+                    "bwrap not found (install bubblewrap or disable patch_jail)",
+                ) from e
+        else:
+            r = logger.run_logged(git_argv, cwd=workspace_repo)
         if r.returncode != 0:
             applied_fail += 1
             reason = f"git apply failed (rc={r.returncode})"
