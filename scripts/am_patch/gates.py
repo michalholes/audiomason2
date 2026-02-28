@@ -208,6 +208,70 @@ def run_js_syntax_gate(
     return True
 
 
+def check_file_scoped_gate(
+    decision_paths: list[str],
+    *,
+    extensions: list[str],
+) -> tuple[bool, list[str]]:
+    """Return (triggered, matched_paths).
+
+    The gate triggers if at least one changed path ends with one of the extensions.
+    Returned paths are normalized repo-relative paths (forward slashes, no leading ./).
+    """
+    exts = _norm_js_extensions(extensions)
+    if not exts:
+        return False, []
+
+    paths = _norm_rel_paths(decision_paths)
+    matched: list[str] = []
+    for p in paths:
+        pl = p.lower()
+        if any(pl.endswith(e) for e in exts):
+            matched.append(p)
+
+    if not matched:
+        return False, []
+    matched.sort()
+    return True, matched
+
+
+def run_file_scoped_gate(
+    logger: Logger,
+    cwd: Path,
+    *,
+    name: str,
+    decision_paths: list[str],
+    extensions: list[str],
+    command: list[str],
+) -> bool:
+    triggered, paths = check_file_scoped_gate(decision_paths, extensions=extensions)
+    if not triggered:
+        logger.warning_core(f"gate_{name}=SKIP (no_matching_files)")
+        return True
+
+    existing: list[str] = []
+    for rel in paths:
+        if (cwd / rel).is_file():
+            existing.append(rel)
+
+    if not existing:
+        logger.warning_core(f"gate_{name}=SKIP (no_existing_files)")
+        return True
+
+    cmd0 = [str(x) for x in command if str(x).strip()]
+    if not cmd0:
+        raise RunnerError("GATES", "CMD", f"gate_{name}_command must be non-empty")
+
+    logger.section(f"GATE: {name}")
+    logger.line(f"gate_{name}_extensions=" + ",".join(_norm_js_extensions(extensions)))
+    logger.line(f"gate_{name}_cmd=" + " ".join(cmd0))
+    for rel in existing:
+        logger.line(f"gate_{name}_file=" + rel)
+
+    r = logger.run_logged([*cmd0, *existing], cwd=cwd)
+    return r.returncode == 0
+
+
 def _select_python_for_gate(
     *,
     repo_root: Path,
@@ -373,7 +437,17 @@ def _norm_gate_name(s: str) -> str:
 def _norm_gates_order(order: list[str] | None) -> list[str]:
     if not order:
         return []
-    allowed = {"compile", "js", "ruff", "pytest", "mypy", "docs", "monolith"}
+    allowed = {
+        "compile",
+        "js",
+        "biome",
+        "typescript",
+        "ruff",
+        "pytest",
+        "mypy",
+        "docs",
+        "monolith",
+    }
     out: list[str] = []
     for item in order:
         name = _norm_gate_name(item)
@@ -394,6 +468,8 @@ def run_gates(
     allow_fail: bool,
     skip_ruff: bool,
     skip_js: bool,
+    skip_biome: bool = True,
+    skip_typescript: bool = True,
     skip_pytest: bool,
     skip_mypy: bool,
     skip_docs: bool,
@@ -431,6 +507,10 @@ def run_gates(
     docs_required_files: list[str],
     js_extensions: list[str],
     js_command: list[str],
+    biome_extensions: list[str] | None = None,
+    biome_command: list[str] | None = None,
+    typescript_extensions: list[str] | None = None,
+    typescript_command: list[str] | None = None,
     ruff_format: bool,
     ruff_autofix: bool,
     ruff_targets: list[str],
@@ -445,6 +525,10 @@ def run_gates(
     skipped: list[str] = []
 
     order = _norm_gates_order(gates_order)
+    biome_exts = biome_extensions or []
+    biome_cmd = biome_command or []
+    ts_exts = typescript_extensions or []
+    ts_cmd = typescript_command or []
     if not order:
         logger.section("GATES: SKIPPED (gates_order empty)")
         logger.warning_core("GATES: SKIPPED (gates_order empty)")
@@ -475,6 +559,34 @@ def run_gates(
                 decision_paths=decision_paths,
                 extensions=js_extensions,
                 command=js_command,
+            )
+
+        if name == "biome":
+            if skip_biome:
+                skipped.append("biome")
+                logger.warning_core("gate_biome=SKIP (skipped_by_user)")
+                return True
+            return run_file_scoped_gate(
+                logger,
+                cwd=cwd,
+                name="biome",
+                decision_paths=decision_paths,
+                extensions=biome_exts,
+                command=biome_cmd,
+            )
+
+        if name == "typescript":
+            if skip_typescript:
+                skipped.append("typescript")
+                logger.warning_core("gate_typescript=SKIP (skipped_by_user)")
+                return True
+            return run_file_scoped_gate(
+                logger,
+                cwd=cwd,
+                name="typescript",
+                decision_paths=decision_paths,
+                extensions=ts_exts,
+                command=ts_cmd,
             )
 
         if name == "ruff":
@@ -548,7 +660,9 @@ def run_gates(
                 gate_monolith_hub_fanout_delta=gate_monolith_hub_fanout_delta,
                 gate_monolith_hub_exports_delta_min=gate_monolith_hub_exports_delta_min,
                 gate_monolith_hub_loc_delta_min=gate_monolith_hub_loc_delta_min,
-                gate_monolith_crossarea_min_distinct_areas=gate_monolith_crossarea_min_distinct_areas,
+                gate_monolith_crossarea_min_distinct_areas=(
+                    gate_monolith_crossarea_min_distinct_areas
+                ),
                 gate_monolith_catchall_basenames=gate_monolith_catchall_basenames,
                 gate_monolith_catchall_dirs=gate_monolith_catchall_dirs,
                 gate_monolith_catchall_allowlist=gate_monolith_catchall_allowlist,
@@ -576,7 +690,17 @@ def run_gates(
 
         return True
 
-    for gate in ("compile", "js", "ruff", "pytest", "mypy", "docs", "monolith"):
+    for gate in (
+        "compile",
+        "js",
+        "biome",
+        "typescript",
+        "ruff",
+        "pytest",
+        "mypy",
+        "docs",
+        "monolith",
+    ):
         if gate not in order:
             skipped.append(gate)
             logger.warning_core(f"gate_{gate}=SKIP (not in gates_order)")

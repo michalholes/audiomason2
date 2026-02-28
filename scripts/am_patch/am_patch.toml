@@ -55,7 +55,8 @@ success_archive_keep_count = 1
 allow_push_fail = true
 default_branch = "main"
 
-# NOTE: present in your file; in the runner policy this is ignored (fetch behavior is unconditional).
+# NOTE: present in your file; in the runner policy this is ignored.
+# Fetch behavior is unconditional.
 fetch_always = true
 
 require_up_to_date = true
@@ -106,9 +107,9 @@ allow_no_op = false
 # Legacy alias (runner maps order -> gates_order)
 # order = []
 # order = ["pytest"]
-order = ["compile", "js", "ruff", "pytest", "mypy", "monolith", "docs"]
+order = ["compile", "js", "biome", "typescript", "ruff", "pytest", "mypy", "monolith", "docs"]
 # Canonical (supported by runner; missing in your file)
-gates_order = ["compile", "js", "ruff", "pytest", "mypy", "monolith", "docs"]
+gates_order = ["compile", "js", "biome", "typescript", "ruff", "pytest", "mypy", "monolith", "docs"]
 
 # Canonical (supported by runner; missing in your file)
 run_all_tests = true
@@ -140,6 +141,14 @@ gates_skip_mypy = false
 gates_skip_js = false
 gate_js_extensions = [".js"]
 gate_js_command = ["node", "--check"]
+
+gates_skip_biome = true
+gate_biome_extensions = [".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx"]
+gate_biome_command = ["npm", "run", "lint", "--"]
+
+gates_skip_typescript = true
+gate_typescript_extensions = [".ts", ".tsx", ".mts", ".cts"]
+gate_typescript_command = ["tsc", "--noEmit", "--pretty", "false"]
 
 # Documentation gate (docs) - required updates when watched paths change
 gates_skip_docs = true
@@ -303,7 +312,13 @@ success_archive_keep_count = 0
 # workspace_history_patches_dir = "patches"
 # workspace_history_oldpatches_dir = "oldpatches"
 # blessed_gate_outputs = ["audit/results/pytest_junit.xml"]
-# scope_ignore_prefixes = [".am_patch/", ".pytest_cache/", ".mypy_cache/", ".ruff_cache/", "__pycache__/"]
+# scope_ignore_prefixes = [
+#   ".am_patch/",
+#   ".pytest_cache/",
+#   ".mypy_cache/",
+#   ".ruff_cache/",
+#   "__pycache__/",
+# ]
 # scope_ignore_suffixes = [".pyc"]
 # scope_ignore_contains = ["/__pycache__/"]
 venv_bootstrap_mode = "auto"  # auto|always|never

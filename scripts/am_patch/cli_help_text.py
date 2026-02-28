@@ -130,6 +130,26 @@ GATES / EXECUTION
       Skip JS gate.
       [default: OFF]
 
+  --skip-biome
+      Skip biome gate (Variant B, file-scoped).
+      [default: ON]
+
+  --skip-typescript
+      Skip typescript gate (Variant B, file-scoped).
+      [default: ON]
+
+  --gate-biome-extensions EXT[,EXT...]
+      Override biome file extensions (comma-separated).
+
+  --gate-biome-command TOK[,TOK...]
+      Override biome command tokens (comma-separated).
+
+  --gate-typescript-extensions EXT[,EXT...]
+      Override typescript file extensions (comma-separated).
+
+  --gate-typescript-command TOK[,TOK...]
+      Override typescript command tokens (comma-separated).
+
   --skip-docs
       Skip docs gate.
       [default: OFF]

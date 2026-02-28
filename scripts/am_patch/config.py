@@ -9,6 +9,7 @@ from typing import Any
 
 from .config_monolith_areas import parse_monolith_areas
 from .errors import RunnerError
+from .policy_monolith_mixin import PolicyMonolithMixin
 from .success_archive_retention import validate_success_archive_retention
 
 
@@ -30,7 +31,7 @@ def resolve_config_path(cli_config: str | None, repo_root: Path, scripts_dir: Pa
 
 
 @dataclass
-class Policy:
+class Policy(PolicyMonolithMixin):
     _src: dict[str, str] = field(default_factory=dict, init=False, repr=False)
 
     def __post_init__(self) -> None:
@@ -158,49 +159,23 @@ class Policy:
     gates_skip_mypy: bool = False
     gates_skip_docs: bool = False
 
-    gates_skip_monolith: bool = False
-    gate_monolith_enabled: bool = True
-    gate_monolith_mode: str = "strict"  # strict|warn_only|report_only
-    gate_monolith_scan_scope: str = "patch"  # patch|workspace
-    gate_monolith_extensions: list[str] = field(default_factory=lambda: [".py", ".js"])
-    gate_monolith_compute_fanin: bool = True
-    gate_monolith_on_parse_error: str = "fail"  # fail|warn
-    gate_monolith_areas_prefixes: list[str] = field(default_factory=list)
-    gate_monolith_areas_names: list[str] = field(default_factory=list)
-    gate_monolith_areas_dynamic: list[str] = field(default_factory=list)
-
-    gate_monolith_large_loc: int = 900
-    gate_monolith_huge_loc: int = 1300
-
-    gate_monolith_large_allow_loc_increase: int = 20
-    gate_monolith_huge_allow_loc_increase: int = 0
-    gate_monolith_large_allow_exports_delta: int = 2
-    gate_monolith_huge_allow_exports_delta: int = 0
-    gate_monolith_large_allow_imports_delta: int = 1
-    gate_monolith_huge_allow_imports_delta: int = 0
-
-    gate_monolith_new_file_max_loc: int = 400
-    gate_monolith_new_file_max_exports: int = 25
-    gate_monolith_new_file_max_imports: int = 15
-
-    gate_monolith_hub_fanin_delta: int = 5
-    gate_monolith_hub_fanout_delta: int = 5
-    gate_monolith_hub_exports_delta_min: int = 3
-    gate_monolith_hub_loc_delta_min: int = 100
-
-    gate_monolith_crossarea_min_distinct_areas: int = 3
-
-    gate_monolith_catchall_basenames: list[str] = field(
-        default_factory=lambda: ["utils.py", "common.py", "helpers.py", "misc.py"]
-    )
-    gate_monolith_catchall_dirs: list[str] = field(
-        default_factory=lambda: ["utils", "common", "helpers", "misc"]
-    )
-    gate_monolith_catchall_allowlist: list[str] = field(default_factory=list)
-
     gates_skip_js: bool = False
     gate_js_extensions: list[str] = field(default_factory=lambda: [".js"])
     gate_js_command: list[str] = field(default_factory=lambda: ["node", "--check"])
+
+    gates_skip_biome: bool = True
+    gate_biome_extensions: list[str] = field(
+        default_factory=lambda: [".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx"]
+    )
+    gate_biome_command: list[str] = field(default_factory=lambda: ["npm", "run", "lint", "--"])
+
+    gates_skip_typescript: bool = True
+    gate_typescript_extensions: list[str] = field(
+        default_factory=lambda: [".ts", ".tsx", ".mts", ".cts"]
+    )
+    gate_typescript_command: list[str] = field(
+        default_factory=lambda: ["tsc", "--noEmit", "--pretty", "false"]
+    )
     gates_on_partial_apply: bool = False
     gates_on_zero_apply: bool = False
     gate_docs_include: list[str] = field(default_factory=lambda: ["src", "plugins"])
@@ -209,7 +184,17 @@ class Policy:
         default_factory=lambda: ["docs/changes.md", "docs/specification.md"]
     )
     gates_order: list[str] = field(
-        default_factory=lambda: ["compile", "js", "ruff", "pytest", "mypy", "monolith", "docs"]
+        default_factory=lambda: [
+            "compile",
+            "js",
+            "biome",
+            "typescript",
+            "ruff",
+            "pytest",
+            "mypy",
+            "monolith",
+            "docs",
+        ]
     )
 
     gate_badguys_runner: str = "auto"
@@ -868,6 +853,51 @@ def build_policy(defaults: Policy, cfg: dict[str, Any]) -> Policy:
             raise RunnerError("CONFIG", "INVALID", "gate_js_command must be non-empty")
         p.gate_js_command = cmd_list
         _mark_cfg(p, cfg, "gate_js_command")
+    p.gates_skip_biome = _as_bool(cfg, "gates_skip_biome", p.gates_skip_biome)
+    _mark_cfg(p, cfg, "gates_skip_biome")
+
+    p.gate_biome_extensions = _as_list_str(cfg, "gate_biome_extensions", p.gate_biome_extensions)
+    _mark_cfg(p, cfg, "gate_biome_extensions")
+
+    if "gate_biome_command" in cfg:
+        raw_cmd = cfg["gate_biome_command"]
+        if isinstance(raw_cmd, str):
+            cmd_list = shlex.split(raw_cmd)
+        elif isinstance(raw_cmd, list) and all(isinstance(x, str) for x in raw_cmd):
+            cmd_list = raw_cmd
+        else:
+            raise RunnerError(
+                "CONFIG", "INVALID", "gate_biome_command must be a string or list[str]"
+            )
+        if not cmd_list:
+            raise RunnerError("CONFIG", "INVALID", "gate_biome_command must be non-empty")
+        p.gate_biome_command = cmd_list
+        _mark_cfg(p, cfg, "gate_biome_command")
+
+    p.gates_skip_typescript = _as_bool(cfg, "gates_skip_typescript", p.gates_skip_typescript)
+    _mark_cfg(p, cfg, "gates_skip_typescript")
+
+    p.gate_typescript_extensions = _as_list_str(
+        cfg, "gate_typescript_extensions", p.gate_typescript_extensions
+    )
+    _mark_cfg(p, cfg, "gate_typescript_extensions")
+
+    if "gate_typescript_command" in cfg:
+        raw_cmd = cfg["gate_typescript_command"]
+        if isinstance(raw_cmd, str):
+            cmd_list = shlex.split(raw_cmd)
+        elif isinstance(raw_cmd, list) and all(isinstance(x, str) for x in raw_cmd):
+            cmd_list = raw_cmd
+        else:
+            raise RunnerError(
+                "CONFIG",
+                "INVALID",
+                "gate_typescript_command must be a string or list[str]",
+            )
+        if not cmd_list:
+            raise RunnerError("CONFIG", "INVALID", "gate_typescript_command must be non-empty")
+        p.gate_typescript_command = cmd_list
+        _mark_cfg(p, cfg, "gate_typescript_command")
 
     p.gate_docs_include = _as_list_str(cfg, "gate_docs_include", p.gate_docs_include)
     _mark_cfg(p, cfg, "gate_docs_include")

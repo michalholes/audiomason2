@@ -525,6 +525,42 @@ def parse_args(argv: list[str]) -> CliArgs:
     p.add_argument("--skip-docs", dest="skip_docs", action="store_true", default=None)
     p.add_argument("--skip-monolith", dest="skip_monolith", action="store_true", default=None)
 
+    p.add_argument("--skip-biome", dest="skip_biome", action="store_true", default=None)
+    p.add_argument("--skip-typescript", dest="skip_typescript", action="store_true", default=None)
+
+    p.add_argument(
+        "--gate-biome-extensions",
+        dest="gate_biome_extensions",
+        nargs="?",
+        const="",
+        default=None,
+        help="Comma-separated extensions for biome file-scoped gate.",
+    )
+    p.add_argument(
+        "--gate-biome-command",
+        dest="gate_biome_command",
+        nargs="?",
+        const="",
+        default=None,
+        help="Comma-separated command tokens for biome gate (Variant B).",
+    )
+    p.add_argument(
+        "--gate-typescript-extensions",
+        dest="gate_typescript_extensions",
+        nargs="?",
+        const="",
+        default=None,
+        help="Comma-separated extensions for typescript file-scoped gate.",
+    )
+    p.add_argument(
+        "--gate-typescript-command",
+        dest="gate_typescript_command",
+        nargs="?",
+        const="",
+        default=None,
+        help="Comma-separated command tokens for typescript gate (Variant B).",
+    )
+
     p.add_argument(
         "--gates-on-partial-apply",
         dest="gates_on_partial_apply",
@@ -657,6 +693,30 @@ def parse_args(argv: list[str]) -> CliArgs:
             else:
                 norm.append(str(item))
         ns.overrides = norm
+
+    # Map explicit gate flags into overrides so engine.py does not need changes.
+    # Precedence: CLI flags > config > defaults (apply_cli_overrides marks these as src=cli).
+    if getattr(ns, "skip_biome", None):
+        ns.overrides = (ns.overrides or []) + ["gates_skip_biome=true"]
+    if getattr(ns, "skip_typescript", None):
+        ns.overrides = (ns.overrides or []) + ["gates_skip_typescript=true"]
+
+    if getattr(ns, "gate_biome_extensions", None) is not None:
+        ns.overrides = (ns.overrides or []) + [
+            f"gate_biome_extensions={str(ns.gate_biome_extensions).strip()}"
+        ]
+    if getattr(ns, "gate_biome_command", None) is not None:
+        ns.overrides = (ns.overrides or []) + [
+            f"gate_biome_command={str(ns.gate_biome_command).strip()}"
+        ]
+    if getattr(ns, "gate_typescript_extensions", None) is not None:
+        ns.overrides = (ns.overrides or []) + [
+            f"gate_typescript_extensions={str(ns.gate_typescript_extensions).strip()}"
+        ]
+    if getattr(ns, "gate_typescript_command", None) is not None:
+        ns.overrides = (ns.overrides or []) + [
+            f"gate_typescript_command={str(ns.gate_typescript_command).strip()}"
+        ]
 
     if ns.show_config:
         return CliArgs(

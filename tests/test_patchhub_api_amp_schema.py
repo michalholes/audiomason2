@@ -56,6 +56,14 @@ class TestAmpSchema(unittest.TestCase):
             self.assertIn("verbosity", policy)
             self.assertIn("console_color", policy)
 
+            # Variant B file-scoped gates
+            self.assertIn("gates_skip_biome", policy)
+            self.assertIn("gate_biome_extensions", policy)
+            self.assertIn("gate_biome_command", policy)
+            self.assertIn("gates_skip_typescript", policy)
+            self.assertIn("gate_typescript_extensions", policy)
+            self.assertIn("gate_typescript_command", policy)
+
             verbosity = policy.get("verbosity")
             self.assertIsInstance(verbosity, dict)
             self.assertEqual(verbosity.get("key"), "verbosity")
