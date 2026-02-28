@@ -3,7 +3,7 @@ Status: AUTHORITATIVE SPECIFICATION
 Applies to: scripts/patchhub/*
 Language: ENGLISH (ASCII ONLY)
 
-Specification Version: 1.3.2-spec
+Specification Version: 1.3.3-spec
 Code Baseline: audiomason2-main.zip (as provided in this chat)
 
 -------------------------------------------------------------------------------
@@ -67,6 +67,64 @@ The runtime version MUST NOT be hardcoded in code.
 - When the PatchHub UI document is hidden (document.hidden == true), the UI MUST pause all periodic refresh timers and MUST close any active SSE/EventSource connections.
 - When the document becomes visible again, the UI MUST resume timers and refresh UI state.
 - Timer creation MUST be centralized to prevent duplicated timers across multiple hide/show cycles.
+
+2.3 Client Fault Tolerance (HARD)
+
+- PatchHub UI MUST remain functional if any optional client module fails to load
+  or throws at runtime ("degraded mode").
+- Failures MUST NOT be silently swallowed.
+- The UI MUST surface client faults visibly (banner/panel) and MUST also log them
+  via console.error.
+- A "degraded mode" indicator MUST be shown whenever a client module is missing
+  or failed.
+- A fault-tolerance bootstrap script MUST be loaded before any other UI scripts
+  and MUST:
+  - register window "error" and "unhandledrejection" handlers,
+  - provide a safe accessor for optional modules (missing module => visible
+    fault + fallback no-op behavior),
+  - keep a bounded in-memory list of recent client faults for display.
+
+2.4 Refresh Policy: ACTIVE vs IDLE (HARD)
+
+- The UI MUST implement two refresh modes:
+  - ACTIVE: while a patching job is running (or an active job is selected), the
+    UI MUST provide near-realtime updates for:
+    - live logs,
+    - job state/progress (top-right),
+    - stop/cancel responsiveness.
+  - IDLE: when no patching is active, the UI MUST refresh at most once every
+    10 seconds.
+- In IDLE mode, the UI MUST NOT re-fetch or re-render data that has not changed
+  ("conditional refresh").
+- Timer creation MUST remain centralized and MUST NOT duplicate refresh loops.
+
+2.5 Conditional Refresh Tokens (HARD)
+
+- APIs that return frequently refreshed UI data MUST expose a stable "version
+  token" for each logical payload, including at minimum:
+  - runs list,
+  - jobs list,
+  - header/status summary,
+  - latest patch discovery.
+- The UI MUST supply the last-seen token on refresh.
+- If the token matches (no changes), the server MUST return an "unchanged"
+  response without recomputing expensive payloads.
+- The UI MUST skip DOM updates if the data is unchanged.
+
+2.6 Runs Indexing: Tail Scan and Cache (HARD)
+
+- Runs result parsing MUST scan from end-of-file and MUST stop as soon as RESULT
+  is found.
+- Unchanged logs MUST NOT be re-read. Caching MUST be keyed by deterministic file
+  metadata (e.g. mtime_ns and size).
+- The runs list MUST be able to scale to thousands of logs without full file
+  reads on each refresh.
+
+2.7 Live Events Rendering Limits (HARD)
+
+- The UI MUST throttle high-frequency live event rendering and MUST bound
+  in-memory live event storage (ring buffer).
+- Throttling MUST NOT break stop/cancel responsiveness.
 
 -------------------------------------------------------------------------------
 
