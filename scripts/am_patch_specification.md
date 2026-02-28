@@ -451,20 +451,42 @@ scope accordingly - Should be used deliberately and sparingly
     execute any external tool.
 -   Variant B execution semantics (file-scoped):
     -   Runner builds a deterministic lexicographically sorted list of matched changed files.
-    -   Runner executes the gate exactly once:
+    -   When biome_autofix=false: Runner executes the gate exactly once:
         `<argv...> <changed_file_1> <changed_file_2> ...`
+    -   When biome_autofix=true:
+        -   Runner executes: `GATE: BIOME (check)` exactly once:
+            `<argv...> <changed_file_1> <changed_file_2> ...`
+        -   If (check) fails: Runner executes: `GATE: BIOME_AUTOFIX (apply)` exactly once:
+            `<fix_argv...> <changed_file_1> <changed_file_2> ...`
+        -   Runner executes: `GATE: BIOME (final)` exactly once:
+            `<argv...> <changed_file_1> <changed_file_2> ...`
+        -   Gate result is determined only by (final).
 -   Controls (precedence: CLI > config > defaults):
     -   `gates_skip_biome = true|false` (default: true)
     -   `gate_biome_extensions = [".js", ...]`
         (default: `[".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx"]`)
     -   `gate_biome_command = list[str] | str`
-        (default: `["npm", "run", "lint", "--"]`)
+        (default: `["npm", "run", "lint:files", "--"]`)
         -   If a string is used (cfg or CLI), it is parsed using shell-like splitting (shlex).
         -   The value must be non-empty and is treated as argv including the tool.
+    -   `biome_autofix = true|false` (default: true)
+    -   `gate_biome_fix_command = list[str] | str`
+        (default: `["npm", "run", "lint:files:fix", "--"]`)
+        -   If a string is used (cfg or CLI), it is parsed using shell-like splitting (shlex).
+        -   The value must be non-empty and is treated as argv including the tool.
+    -   `biome_autofix_legalize_outside = true|false` (default: true)
+        -   When true, files modified by BIOME_AUTOFIX (apply) outside the changed paths set
+            are legalized only if their extension matches gate_biome_extensions.
+        -   Runner MUST emit: `legalized_biome_autofix_files=[...]` (sorted, repo-relative).
 -   CLI (explicit flags; no `--override` required for these options):
     -   `--skip-biome` (equivalent to setting `gates_skip_biome=true`)
     -   `--gate-biome-extensions CSV_OR_REPEATABLE` sets `gate_biome_extensions`
     -   `--gate-biome-command STR` sets `gate_biome_command`
+    -   `--biome-autofix` sets `biome_autofix=true`
+    -   `--no-biome-autofix` sets `biome_autofix=false`
+    -   `--biome-autofix-legalize-outside` sets `biome_autofix_legalize_outside=true`
+    -   `--no-biome-autofix-legalize-outside` sets `biome_autofix_legalize_outside=false`
+    -   `--gate-biome-fix-command STR` sets `gate_biome_fix_command`
 
 ### 6.1.4 TypeScript gate
 

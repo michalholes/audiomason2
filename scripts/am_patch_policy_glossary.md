@@ -332,3 +332,35 @@ Meaning: If true, update the workspace repository (fetch/pull) before running.
 Notes:
 - This may change the base revision used for gating.
 Related: soft_reset_workspace
+
+## Key: biome_autofix
+Key: biome_autofix
+Type: bool
+Default: true
+Meaning: If true, the Biome gate may run an autofix phase when the initial check fails.
+Interactions:
+- When false, the Biome gate executes exactly once using gate_biome_command.
+- When true, the gate may run check/apply/final phases using gate_biome_command and
+  gate_biome_fix_command.
+Related: gate_biome_command, gate_biome_fix_command, biome_autofix_legalize_outside
+
+## Key: gate_biome_fix_command
+Key: gate_biome_fix_command
+Type: list[str] | str
+Default: ["npm", "run", "lint:files:fix", "--"]
+Meaning: Command argv for the BIOME_AUTOFIX (apply) phase of the Biome gate.
+Interactions:
+- Used only when biome_autofix=true and the BIOME (check) phase fails.
+- String values are parsed using shell-like splitting (shlex), like gate_biome_command.
+Related: biome_autofix, gate_biome_command
+
+## Key: biome_autofix_legalize_outside
+Key: biome_autofix_legalize_outside
+Type: bool
+Default: true
+Meaning: If true, allow BIOME_AUTOFIX (apply) to modify additional Biome-scoped files
+outside the changed paths set.
+Interactions:
+- Applies only when biome_autofix=true.
+- Legalized files must match gate_biome_extensions (case-insensitive suffix match).
+Related: biome_autofix, gate_biome_extensions
