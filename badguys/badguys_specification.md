@@ -262,6 +262,13 @@ hermetic Git working tree created by BadGuys.
 Rationale (non-normative): CI checkouts and workspace snapshots may omit .git/, but the runner uses
 Git commands and therefore requires a real Git repository.
 
+Additional requirement (normative):
+- The hermetic working tree MUST contain a real directory named "patches/".
+- This directory MUST NOT be a symlink to any other patches directory.
+- The hermetic patches directory MUST be the parent for runner outputs, including:
+  - patches/logs/
+  - patches/workspaces/
+
 #### CmdStep runner result determination (normative)
 
 When a CmdStep executes the AM Patch Runner (scripts/am_patch.py), BadGuys MUST determine the
