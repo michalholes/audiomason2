@@ -54,6 +54,8 @@ def run_validation(
         skip_biome=policy.gates_skip_biome,
         biome_extensions=policy.gate_biome_extensions,
         biome_command=policy.gate_biome_command,
+        biome_autofix=policy.biome_autofix,
+        biome_fix_command=policy.gate_biome_fix_command,
         skip_typescript=policy.gates_skip_typescript,
         typescript_extensions=policy.gate_typescript_extensions,
         typescript_command=policy.gate_typescript_command,

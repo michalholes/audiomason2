@@ -69,6 +69,9 @@ _SECTION_BY_KEY: dict[str, str] = {
     "gates_skip_biome": "",
     "gate_biome_extensions": "",
     "gate_biome_command": "",
+    "biome_autofix": "",
+    "biome_autofix_legalize_outside": "",
+    "gate_biome_fix_command": "",
     "gates_skip_typescript": "",
     "gate_typescript_extensions": "",
     "gate_typescript_command": "",
@@ -200,6 +203,9 @@ _LABEL_BY_KEY: dict[str, str] = {
     "ruff_autofix": "Ruff: autofix",
     "ruff_autofix_legalize_outside": "Ruff: autofix legalize outside",
     "ruff_format": "Ruff: format",
+    "biome_autofix": "Biome: autofix",
+    "biome_autofix_legalize_outside": "Biome: autofix legalize outside",
+    "gate_biome_fix_command": "Biome: fix command",
     "ascii_only_patch": "Patch format: ASCII only",
     "unified_patch": "Patch format: unified patch",
     "unified_patch_continue": "Patch format: unified patch continue",
@@ -240,6 +246,14 @@ _HELP_BY_KEY: dict[str, str] = {
     ),
     "gates_skip_ruff": (
         "Skip the ruff gate. See: scripts/am_patch_policy_glossary.md## Key: gates_skip_ruff"
+    ),
+    "biome_autofix": (
+        "Run biome in autofix mode when the initial check fails. "
+        "See: scripts/am_patch_policy_glossary.md## Key: biome_autofix"
+    ),
+    "biome_autofix_legalize_outside": (
+        "Allow biome autofix to modify files outside the declared patch set. "
+        "See: scripts/am_patch_policy_glossary.md## Key: biome_autofix_legalize_outside"
     ),
     "mypy_targets": (
         "Targets passed to mypy. See: scripts/am_patch_policy_glossary.md## Key: mypy_targets"

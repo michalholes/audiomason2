@@ -529,6 +529,19 @@ def parse_args(argv: list[str]) -> CliArgs:
     p.add_argument("--skip-typescript", dest="skip_typescript", action="store_true", default=None)
 
     p.add_argument(
+        "--biome-autofix",
+        dest="biome_autofix",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+    )
+    p.add_argument(
+        "--biome-autofix-legalize-outside",
+        dest="biome_autofix_legalize_outside",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+    )
+
+    p.add_argument(
         "--gate-biome-extensions",
         dest="gate_biome_extensions",
         nargs="?",
@@ -543,6 +556,14 @@ def parse_args(argv: list[str]) -> CliArgs:
         const="",
         default=None,
         help="Comma-separated command tokens for biome gate (Variant B).",
+    )
+    p.add_argument(
+        "--gate-biome-fix-command",
+        dest="gate_biome_fix_command",
+        nargs="?",
+        const="",
+        default=None,
+        help="Comma-separated command tokens for biome autofix gate (Variant B).",
     )
     p.add_argument(
         "--gate-typescript-extensions",
@@ -705,9 +726,19 @@ def parse_args(argv: list[str]) -> CliArgs:
         ns.overrides = (ns.overrides or []) + [
             f"gate_biome_extensions={str(ns.gate_biome_extensions).strip()}"
         ]
+    if getattr(ns, "biome_autofix", None) is not None:
+        v = "true" if bool(ns.biome_autofix) else "false"
+        ns.overrides = (ns.overrides or []) + [f"biome_autofix={v}"]
+    if getattr(ns, "biome_autofix_legalize_outside", None) is not None:
+        v = "true" if bool(ns.biome_autofix_legalize_outside) else "false"
+        ns.overrides = (ns.overrides or []) + [f"biome_autofix_legalize_outside={v}"]
     if getattr(ns, "gate_biome_command", None) is not None:
         ns.overrides = (ns.overrides or []) + [
             f"gate_biome_command={str(ns.gate_biome_command).strip()}"
+        ]
+    if getattr(ns, "gate_biome_fix_command", None) is not None:
+        ns.overrides = (ns.overrides or []) + [
+            f"gate_biome_fix_command={str(ns.gate_biome_fix_command).strip()}"
         ]
     if getattr(ns, "gate_typescript_extensions", None) is not None:
         ns.overrides = (ns.overrides or []) + [

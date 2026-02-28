@@ -779,6 +779,19 @@ def run_mode(ctx: RunContext) -> dict[str, Any]:
                     st = update_union(st, legalized)
                     save_state(ws.root, st)
                     logger.line(f"legalized_ruff_autofix_files={legalized}")
+        if policy.biome_autofix and getattr(policy, "biome_autofix_legalize_outside", True):
+            patch_set = set(dirty_after_patch)
+            now_set = set(dirty_all)
+            biome_only = sorted(p for p in (now_set - patch_set) if p)
+            if biome_only:
+                exts = [str(e).lower() for e in policy.gate_biome_extensions]
+                legalized = sorted(
+                    [p for p in biome_only if any(p.lower().endswith(e) for e in exts)]
+                )
+                if legalized:
+                    st = update_union(st, legalized)
+                    save_state(ws.root, st)
+                    logger.line(f"legalized_biome_autofix_files={legalized}")
         if defer_patch_apply_failure:
             # Ensure failure archive includes any gate-induced changes.
             files_for_fail_zip = sorted(set(files_for_fail_zip) | set(dirty_all))

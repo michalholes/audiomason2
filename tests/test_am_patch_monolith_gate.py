@@ -464,6 +464,8 @@ def test_monolith_skip_monolith_flag_is_wired(tmp_path: Path) -> None:
             docs_required_files=[],
             js_extensions=[],
             js_command=[],
+            biome_autofix=True,
+            biome_fix_command=[],
             ruff_format=False,
             ruff_autofix=False,
             ruff_targets=[],

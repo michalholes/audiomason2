@@ -321,6 +321,58 @@ def run_ruff(
     return r2.returncode == 0
 
 
+def run_biome(
+    logger: Logger,
+    cwd: Path,
+    *,
+    decision_paths: list[str],
+    extensions: list[str],
+    command: list[str],
+    autofix: bool,
+    fix_command: list[str],
+) -> bool:
+    triggered, paths = check_file_scoped_gate(decision_paths, extensions=extensions)
+    if not triggered:
+        logger.warning_core("gate_biome=SKIP (no_matching_files)")
+        return True
+
+    existing: list[str] = []
+    for rel in paths:
+        if (cwd / rel).is_file():
+            existing.append(rel)
+    if not existing:
+        logger.warning_core("gate_biome=SKIP (no_existing_files)")
+        return True
+
+    cmd0 = [str(x) for x in command if str(x).strip()]
+    if not cmd0:
+        raise RunnerError("GATES", "CMD", "gate_biome_command must be non-empty")
+
+    logger.section("GATE: BIOME (check)")
+    logger.line("gate_biome_extensions=" + ",".join(_norm_js_extensions(extensions)))
+    logger.line("gate_biome_cmd=" + " ".join(cmd0))
+    for rel in existing:
+        logger.line("gate_biome_file=" + rel)
+
+    r = logger.run_logged([*cmd0, *existing], cwd=cwd)
+    if r.returncode == 0:
+        return True
+    if not autofix:
+        return False
+
+    fix_cmd0 = [str(x) for x in fix_command if str(x).strip()]
+    if not fix_cmd0:
+        raise RunnerError("GATES", "CMD", "gate_biome_fix_command must be non-empty")
+
+    logger.section("GATE: BIOME_AUTOFIX (apply)")
+    logger.line("gate_biome_fix_cmd=" + " ".join(fix_cmd0))
+    _ = logger.run_logged([*fix_cmd0, *existing], cwd=cwd)
+
+    logger.section("GATE: BIOME (final)")
+    r2 = logger.run_logged([*cmd0, *existing], cwd=cwd)
+    return r2.returncode == 0
+
+
 def run_pytest(
     logger: Logger, cwd: Path, *, repo_root: Path, pytest_use_venv: bool, targets: list[str]
 ) -> bool:
@@ -509,6 +561,8 @@ def run_gates(
     js_command: list[str],
     biome_extensions: list[str] | None = None,
     biome_command: list[str] | None = None,
+    biome_autofix: bool = True,
+    biome_fix_command: list[str] | None = None,
     typescript_extensions: list[str] | None = None,
     typescript_command: list[str] | None = None,
     ruff_format: bool,
@@ -527,6 +581,7 @@ def run_gates(
     order = _norm_gates_order(gates_order)
     biome_exts = biome_extensions or []
     biome_cmd = biome_command or []
+    biome_fix_cmd = biome_fix_command or []
     ts_exts = typescript_extensions or []
     ts_cmd = typescript_command or []
     if not order:
@@ -566,13 +621,14 @@ def run_gates(
                 skipped.append("biome")
                 logger.warning_core("gate_biome=SKIP (skipped_by_user)")
                 return True
-            return run_file_scoped_gate(
+            return run_biome(
                 logger,
                 cwd=cwd,
-                name="biome",
                 decision_paths=decision_paths,
                 extensions=biome_exts,
                 command=biome_cmd,
+                autofix=biome_autofix,
+                fix_command=biome_fix_cmd,
             )
 
         if name == "typescript":

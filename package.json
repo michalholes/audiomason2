@@ -10,6 +10,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "lint": "biome lint .",
+    "lint:files": "biome lint",
+    "lint:files:fix": "biome lint --write",
     "format": "biome format .",
     "typecheck": "tsc --noEmit"
   },

@@ -167,7 +167,14 @@ class Policy(PolicyMonolithMixin):
     gate_biome_extensions: list[str] = field(
         default_factory=lambda: [".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx"]
     )
-    gate_biome_command: list[str] = field(default_factory=lambda: ["npm", "run", "lint", "--"])
+    gate_biome_command: list[str] = field(
+        default_factory=lambda: ["npm", "run", "lint:files", "--"]
+    )
+    biome_autofix: bool = True
+    biome_autofix_legalize_outside: bool = True
+    gate_biome_fix_command: list[str] = field(
+        default_factory=lambda: ["npm", "run", "lint:files:fix", "--"]
+    )
 
     gates_skip_typescript: bool = True
     gate_typescript_extensions: list[str] = field(
@@ -859,20 +866,27 @@ def build_policy(defaults: Policy, cfg: dict[str, Any]) -> Policy:
     p.gate_biome_extensions = _as_list_str(cfg, "gate_biome_extensions", p.gate_biome_extensions)
     _mark_cfg(p, cfg, "gate_biome_extensions")
 
-    if "gate_biome_command" in cfg:
-        raw_cmd = cfg["gate_biome_command"]
+    p.biome_autofix = _as_bool(cfg, "biome_autofix", p.biome_autofix)
+    _mark_cfg(p, cfg, "biome_autofix")
+    p.biome_autofix_legalize_outside = _as_bool(
+        cfg, "biome_autofix_legalize_outside", p.biome_autofix_legalize_outside
+    )
+    _mark_cfg(p, cfg, "biome_autofix_legalize_outside")
+
+    for k in ("gate_biome_command", "gate_biome_fix_command"):
+        if k not in cfg:
+            continue
+        raw_cmd = cfg[k]
         if isinstance(raw_cmd, str):
             cmd_list = shlex.split(raw_cmd)
         elif isinstance(raw_cmd, list) and all(isinstance(x, str) for x in raw_cmd):
             cmd_list = raw_cmd
         else:
-            raise RunnerError(
-                "CONFIG", "INVALID", "gate_biome_command must be a string or list[str]"
-            )
+            raise RunnerError("CONFIG", "INVALID", f"{k} must be a string or list[str]")
         if not cmd_list:
-            raise RunnerError("CONFIG", "INVALID", "gate_biome_command must be non-empty")
-        p.gate_biome_command = cmd_list
-        _mark_cfg(p, cfg, "gate_biome_command")
+            raise RunnerError("CONFIG", "INVALID", f"{k} must be non-empty")
+        setattr(p, k, cmd_list)
+        _mark_cfg(p, cfg, k)
 
     p.gates_skip_typescript = _as_bool(cfg, "gates_skip_typescript", p.gates_skip_typescript)
     _mark_cfg(p, cfg, "gates_skip_typescript")
