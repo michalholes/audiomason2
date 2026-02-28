@@ -142,7 +142,7 @@ gates_skip_js = false
 gate_js_extensions = [".js"]
 gate_js_command = ["node", "--check"]
 
-gates_skip_biome = true
+gates_skip_biome = false
 gate_biome_extensions = [".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx"]
 gate_biome_command = ["npm", "run", "lint", "--"]
 

@@ -1,5 +1,5 @@
-(function () {
-  "use strict";
+(() => {
+  
 
   var errors = [];
   var net = [];
@@ -9,21 +9,21 @@
     el(id).textContent = typeof obj === "string" ? obj : JSON.stringify(obj, null, 2);
   }
 
-  window.addEventListener("error", function (e) {
+  window.addEventListener("error", (e) => {
     errors.push({ message: String(e.message || "error"), source: String(e.filename || ""), line: e.lineno || 0, col: e.colno || 0 });
     if (errors.length > 200) errors.shift();
     setPre("clientErrors", errors);
   });
 
   var origFetch = window.fetch;
-  window.fetch = function (url, opts) {
+  window.fetch = (url, opts) => {
     var started = Date.now();
-    return origFetch(url, opts).then(function (r) {
+    return origFetch(url, opts).then((r) => {
       net.push({ method: (opts && opts.method) || "GET", url: String(url), status: r.status, ms: Date.now() - started });
       if (net.length > 200) net.shift();
       setPre("clientNet", net);
       return r;
-    }).catch(function (e) {
+    }).catch((e) => {
       net.push({ method: (opts && opts.method) || "GET", url: String(url), status: 0, ms: Date.now() - started, error: String(e) });
       if (net.length > 200) net.shift();
       setPre("clientNet", net);
@@ -32,27 +32,27 @@
   };
 
   function apiGet(url) {
-    return fetch(url, { headers: { "Accept": "application/json" } }).then(function (r) { return r.json(); });
+    return fetch(url, { headers: { "Accept": "application/json" } }).then((r) => r.json());
   }
   function apiPost(url, obj) {
     return fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json", "Accept": "application/json" },
       body: JSON.stringify(obj)
-    }).then(function (r) { return r.json(); });
+    }).then((r) => r.json());
   }
 
   function refreshDiag() {
-    apiGet("/api/debug/diagnostics").then(function (r) { setPre("serverDiag", r); });
+    apiGet("/api/debug/diagnostics").then((r) => { setPre("serverDiag", r); });
   }
 
   function refreshTail() {
-    apiGet("/api/runner/tail?lines=200").then(function (r) { setPre("tail", r.events || []); });
+    apiGet("/api/runner/tail?lines=200").then((r) => { setPre("tail", r.events || []); });
   }
 
   function parseCmd() {
     var raw = el("raw").value;
-    apiPost("/api/parse_command", { raw: raw }).then(function (r) { setPre("parsed", r); });
+    apiPost("/api/parse_command", { raw: raw }).then((r) => { setPre("parsed", r); });
   }
 
   function init() {

@@ -1,19 +1,17 @@
-(function () {
-  "use strict";
+(() => {
+  
 
   function el(id) { return document.getElementById(id); }
 
   function apiGet(path) {
     return fetch(path, { headers: { "Accept": "application/json" } })
-      .then(function (r) {
-        return r.text().then(function (t) {
+      .then((r) => r.text().then((t) => {
           try {
             return JSON.parse(t);
           } catch (e) {
             return { ok: false, error: "bad json", raw: t, status: r.status };
           }
-        });
-      });
+        }));
   }
 
   function apiPost(path, body) {
@@ -21,15 +19,13 @@
       method: "POST",
       headers: { "Content-Type": "application/json", "Accept": "application/json" },
       body: JSON.stringify(body || {})
-    }).then(function (r) {
-      return r.text().then(function (t) {
+    }).then((r) => r.text().then((t) => {
         try {
           return JSON.parse(t);
         } catch (e) {
           return { ok: false, error: "bad json", raw: t, status: r.status };
         }
-      });
-    });
+      }));
   }
 
   function setStatus(msg, isError) {
@@ -63,7 +59,7 @@
   function normalizeList(v) {
     if (Array.isArray(v)) {
       var out = [];
-      v.forEach(function (x) {
+      v.forEach((x) => {
         var s = String(x || "").trim();
         if (s && out.indexOf(s) < 0) out.push(s);
       });
@@ -71,14 +67,14 @@
     }
     var s2 = String(v || "").trim();
     if (!s2) return [];
-    return s2.split(",").map(function (x) { return String(x || "").trim(); }).filter(Boolean);
+    return s2.split(",").map((x) => String(x || "").trim()).filter(Boolean);
   }
 
   function humanizeKey(key) {
     var s = String(key || "");
-    var parts = s.split("_").filter(function (t) { return !!t; });
+    var parts = s.split("_").filter((t) => !!t);
     var out = [];
-    parts.forEach(function (t) {
+    parts.forEach((t) => {
       var token = String(t || "");
       if (!token) return;
       var first = token.charAt(0).toUpperCase();
@@ -91,12 +87,12 @@
   function fallbackHelp(p, key) {
     var o = p || {};
     var type = (o && o.type != null) ? String(o.type) : "";
-    var defv = (o && Object.prototype.hasOwnProperty.call(o, "default"))
+    var defv = (o && Object.hasOwn(o, "default"))
       ? JSON.stringify(o.default)
       : "";
     var sec = (o && o.section != null) ? String(o.section) : "";
     var ro = "";
-    if (o && Object.prototype.hasOwnProperty.call(o, "read_only")) {
+    if (o && Object.hasOwn(o, "read_only")) {
       ro = o.read_only ? "true" : "false";
     }
     return (
@@ -114,7 +110,7 @@
 
     if (schemaObj && schemaObj.policy && typeof schemaObj.policy === "object") {
       var out = [];
-      Object.keys(schemaObj.policy).forEach(function (k) {
+      Object.keys(schemaObj.policy).forEach((k) => {
         var p = schemaObj.policy[k] || {};
 
         var kind = "str";
@@ -141,7 +137,7 @@
           read_only: !!p.read_only
         });
       });
-      out.sort(function (a, b) {
+      out.sort((a, b) => {
         var as = String(a.section || "");
         var bs = String(b.section || "");
         if (as < bs) return -1;
@@ -166,13 +162,13 @@
 
     function redraw(list) {
       chips.textContent = "";
-      list.forEach(function (v) {
+      list.forEach((v) => {
         var chip = mk("span", "chip", null);
         chip.appendChild(mk("span", "chip-text", v));
         var x = mk("button", "chip-x", "x");
         x.type = "button";
-        x.addEventListener("click", function () {
-          var next = list.filter(function (t) { return t !== v; });
+        x.addEventListener("click", () => {
+          var next = list.filter((t) => t !== v);
           onChange(key, next);
           redraw(next);
         });
@@ -184,7 +180,7 @@
     var row = mk("div", "row", null);
     var inp = mk("input", "input", null);
     inp.placeholder = "Add item and press Enter";
-    inp.addEventListener("keydown", function (ev) {
+    inp.addEventListener("keydown", (ev) => {
       if (ev.key !== "Enter") return;
       ev.preventDefault();
       var v = String(inp.value || "").trim();
@@ -208,7 +204,7 @@
 
     var ftxt = String(filterText || "").toLowerCase();
 
-    schemaFields.forEach(function (f) {
+    schemaFields.forEach((f) => {
       var key = String(f.key || "");
       var kind = String(f.kind || "str");
       var enumVals = Array.isArray(f.enum) ? f.enum : null;
@@ -250,7 +246,7 @@
         var cb = mk("input", null, null);
         cb.type = "checkbox";
         cb.checked = !!values[key];
-        cb.addEventListener("change", function () {
+        cb.addEventListener("change", () => {
           onChange(key, !!cb.checked);
         });
         sw.appendChild(cb);
@@ -258,13 +254,13 @@
         ctl.appendChild(sw);
       } else if (kind === "enum" && enumVals) {
         var sel = mk("select", "input", null);
-        enumVals.forEach(function (optV) {
+        enumVals.forEach((optV) => {
           var opt = mk("option", null, String(optV));
           opt.value = String(optV);
           sel.appendChild(opt);
         });
         sel.value = String(values[key] == null ? "" : values[key]);
-        sel.addEventListener("change", function () {
+        sel.addEventListener("change", () => {
           onChange(key, String(sel.value));
         });
         ctl.appendChild(sel);
@@ -272,7 +268,7 @@
         var ni = mk("input", "input", null);
         ni.type = "number";
         ni.value = String(values[key] == null ? "" : values[key]);
-        ni.addEventListener("change", function () {
+        ni.addEventListener("change", () => {
           var raw = String(ni.value == null ? "" : ni.value);
           var n = parseInt(raw, 10);
           onChange(key, Number.isFinite(n) ? n : 0);
@@ -286,7 +282,7 @@
         var ti = mk("input", "input", null);
         ti.type = "text";
         ti.value = String(values[key] == null ? "" : values[key]);
-        ti.addEventListener("change", function () {
+        ti.addEventListener("change", () => {
           onChange(key, String(ti.value));
         });
         ctl.appendChild(ti);
@@ -328,7 +324,7 @@
 function init() {
     var btnCollapse = el("ampCollapse");
     if (btnCollapse) {
-      btnCollapse.addEventListener("click", function () {
+      btnCollapse.addEventListener("click", () => {
         toggleVisible("ampCollapse", "ampWrap");
       });
     }
@@ -341,9 +337,9 @@ function init() {
 
     function cloneValues(src) {
       var out = {};
-      Object.keys(fieldKinds).forEach(function (k) {
+      Object.keys(fieldKinds).forEach((k) => {
         var kind = fieldKinds[k];
-        var v = (src && Object.prototype.hasOwnProperty.call(src, k)) ? src[k] : undefined;
+        var v = (src && Object.hasOwn(src, k)) ? src[k] : undefined;
         if (kind === "list_str") {
           out[k] = normalizeList(v);
         } else if (kind === "bool") {
@@ -388,20 +384,20 @@ function init() {
 
     function reload() {
       clearStatus();
-      return apiGet("/api/amp/schema").then(function (s) {
+      return apiGet("/api/amp/schema").then((s) => {
         if (!s || s.ok === false) {
           setStatus((s && s.error) ? s.error : "schema load failed", true);
           return;
         }
         schema = s.schema;
-        return apiGet("/api/amp/config").then(function (c) {
+        return apiGet("/api/amp/config").then((c) => {
           if (!c || c.ok === false) {
             setStatus((c && c.error) ? c.error : "config load failed", true);
             return;
           }
           var fields = schemaToFields(schema || {});
           fieldKinds = {};
-          fields.forEach(function (f) {
+          fields.forEach((f) => {
             var k = String(f.key || "");
             var kind = String(f.kind || "str");
             fieldKinds[k] = kind;
@@ -424,7 +420,7 @@ function init() {
 
     function post(dry) {
       clearStatus();
-      return apiPost("/api/amp/config", { values: curValues, dry_run: !!dry }).then(function (r) {
+      return apiPost("/api/amp/config", { values: curValues, dry_run: !!dry }).then((r) => {
         if (!r || r.ok === false) {
           setStatus((r && r.error) ? r.error : "update failed", true);
           return;
@@ -443,14 +439,14 @@ function init() {
     if (btnReload) btnReload.addEventListener("click", reload);
 
     var btnValidate = el("ampValidate");
-    if (btnValidate) btnValidate.addEventListener("click", function () { post(true); });
+    if (btnValidate) btnValidate.addEventListener("click", () => { post(true); });
 
     var btnSave = el("ampSave");
-    if (btnSave) btnSave.addEventListener("click", function () { post(false); });
+    if (btnSave) btnSave.addEventListener("click", () => { post(false); });
 
     var btnRevert = el("ampRevert");
     if (btnRevert) {
-      btnRevert.addEventListener("click", function () {
+      btnRevert.addEventListener("click", () => {
         if (!baseValues || !schema) return;
         curValues = cloneValues(baseValues);
         renderFields(schemaToFields(schema || {}), baseValues, curValues, setCur, filterText);
@@ -460,7 +456,7 @@ function init() {
 
     var inpFilter = el("ampFilter");
     if (inpFilter) {
-      inpFilter.addEventListener("input", function () {
+      inpFilter.addEventListener("input", () => {
         filterText = String(inpFilter.value || "");
         renderFields(
           schemaToFields(schema || {}),

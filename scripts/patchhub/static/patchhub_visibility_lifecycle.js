@@ -1,4 +1,4 @@
-(function () {
+(() => {
   function safeClearTimer(ctx, key) {
     try {
       if (ctx && ctx[key]) {
@@ -49,20 +49,20 @@
     if (!ctx) return;
 
     if (!ctx.patchStatTimer) {
-      ctx.patchStatTimer = setInterval(function () {
+      ctx.patchStatTimer = setInterval(() => {
         safeCall(ctx.tickMissingPatchClear);
       }, 1000);
     }
 
     if (!ctx.jobsTailTimer) {
-      ctx.jobsTailTimer = setInterval(function () {
+      ctx.jobsTailTimer = setInterval(() => {
         safeCall(ctx.refreshJobs);
         safeCall1(ctx.refreshTail, ctx.tailLines);
       }, 2000);
     }
 
     if (!ctx.headerTimer) {
-      ctx.headerTimer = setInterval(function () {
+      ctx.headerTimer = setInterval(() => {
         safeCall(ctx.refreshHeader);
       }, 5000);
     }

@@ -1,5 +1,5 @@
-(function () {
-  "use strict";
+(() => {
+  
 
   var activeJobId = null;
   var timers = {
@@ -97,8 +97,7 @@
 
   function apiGet(path) {
     return fetch(path, { headers: { "Accept": "application/json" } })
-      .then(function (r) {
-        return r.text().then(function (t) {
+      .then((r) => r.text().then((t) => {
           try {
             return JSON.parse(t);
           } catch (e) {
@@ -109,8 +108,7 @@
               status: r.status
             };
           }
-        });
-      });
+        }));
   }
 
   function apiPost(path, body) {
@@ -118,8 +116,7 @@
       method: "POST",
       headers: { "Content-Type": "application/json", "Accept": "application/json" },
       body: JSON.stringify(body || {})
-    }).then(function (r) {
-      return r.text().then(function (t) {
+    }).then((r) => r.text().then((t) => {
         try {
           return JSON.parse(t);
         } catch (e) {
@@ -130,8 +127,7 @@
             status: r.status
           };
         }
-      });
-    });
+      }));
   }
 
   function joinRel(a, b) {
@@ -154,7 +150,7 @@
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;")
-      .replace(/\"/g, "&quot;")
+      .replace(/"/g, "&quot;")
       .replace(/'/g, "&#39;");
   }
 
@@ -218,11 +214,11 @@
     var rel = stripPatchesPrefix(full);
 
     patchStatInFlight = true;
-    apiGet("/api/fs/stat?path=" + encodeURIComponent(rel)).then(function (r) {
+    apiGet("/api/fs/stat?path=" + encodeURIComponent(rel)).then((r) => {
       patchStatInFlight = false;
       if (!r || r.ok === false) return;
       if (r.exists === false) clearRunFieldsBecauseMissingPatch();
-    }).catch(function () {
+    }).catch(() => {
       patchStatInFlight = false;
     });
   }
@@ -235,7 +231,7 @@
   function fsUpdateSelCount() {
     var n = 0;
     for (var k in fsChecked) {
-      if (Object.prototype.hasOwnProperty.call(fsChecked, k)) n += 1;
+      if (Object.hasOwn(fsChecked, k)) n += 1;
     }
     var node = el("fsSelCount");
     if (node) {
@@ -252,7 +248,7 @@
   function fsDownloadSelected() {
     var paths = [];
     for (var k in fsChecked) {
-      if (Object.prototype.hasOwnProperty.call(fsChecked, k)) paths.push(k);
+      if (Object.hasOwn(fsChecked, k)) paths.push(k);
     }
     if (!paths.length) {
       setFsHint("select at least one item");
@@ -264,13 +260,13 @@
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ paths: paths })
-    }).then(function (r) {
+    }).then((r) => {
       if (!r.ok) {
-        return r.text().then(function (t) {
+        return r.text().then((t) => {
           setFsHint("archive failed: " + String(t || r.status));
         });
       }
-      return r.blob().then(function (blob) {
+      return r.blob().then((blob) => {
         var url = URL.createObjectURL(blob);
         var a = document.createElement("a");
         a.href = url;
@@ -278,9 +274,9 @@
         document.body.appendChild(a);
         a.click();
         a.remove();
-        setTimeout(function () { URL.revokeObjectURL(url); }, 1000);
+        setTimeout(() => { URL.revokeObjectURL(url); }, 1000);
       });
-    }).catch(function (e) {
+    }).catch((e) => {
       setFsHint("archive failed: " + String(e));
     });
   }
@@ -319,7 +315,7 @@
 
     parseSeq += 1;
     var mySeq = parseSeq;
-    apiPost("/api/parse_command", { raw: raw }).then(function (r) {
+    apiPost("/api/parse_command", { raw: raw }).then((r) => {
       if (mySeq !== parseSeq) return;
       parseInFlight = false;
 
@@ -358,7 +354,7 @@
       clearTimeout(parseTimer);
       parseTimer = null;
     }
-    parseTimer = setTimeout(function () {
+    parseTimer = setTimeout(() => {
       parseTimer = null;
       triggerParse(raw);
     }, 350);
@@ -366,14 +362,14 @@
 
   function refreshFs() {
     var path = el("fsPath").value || "";
-    apiGet("/api/fs/list?path=" + encodeURIComponent(path)).then(function (r) {
+    apiGet("/api/fs/list?path=" + encodeURIComponent(path)).then((r) => {
       if (!r || r.ok === false) {
         setPre("fsList", r);
         return;
       }
       var items = r.items || [];
       fsLastRels = [];
-      var html = items.map(function (it) {
+      var html = items.map((it) => {
         var name = it.name;
         var isDir = !!it.is_dir;
         var rel = joinRel(path, name);
@@ -405,8 +401,8 @@
       el("fsList").innerHTML = html || "<div class=\"muted\">(empty)</div>";
       fsUpdateSelCount();
 
-      Array.from(el("fsList").querySelectorAll(".fsChk")).forEach(function (node) {
-        node.addEventListener("click", function (ev) {
+      Array.from(el("fsList").querySelectorAll(".fsChk")).forEach((node) => {
+        node.addEventListener("click", (ev) => {
           ev.stopPropagation();
           var rel = node.getAttribute("data-rel") || "";
           if (!rel) return;
@@ -419,8 +415,8 @@
         });
       });
 
-      Array.from(el("fsList").querySelectorAll(".fsDl")).forEach(function (node) {
-        node.addEventListener("click", function (ev) {
+      Array.from(el("fsList").querySelectorAll(".fsDl")).forEach((node) => {
+        node.addEventListener("click", (ev) => {
           ev.stopPropagation();
           var rel = node.getAttribute("data-rel") || "";
           if (!rel) return;
@@ -428,8 +424,8 @@
         });
       });
 
-      Array.from(el("fsList").querySelectorAll(".fsitem .name")).forEach(function (node) {
-        node.addEventListener("click", function () {
+      Array.from(el("fsList").querySelectorAll(".fsitem .name")).forEach((node) => {
+        node.addEventListener("click", () => {
           var item = node.parentElement;
           var rel = item.getAttribute("data-rel") || "";
           var isDir = (item.getAttribute("data-isdir") || "0") === "1";
@@ -474,14 +470,14 @@
     if (res) q.push("result=" + encodeURIComponent(res));
     q.push("limit=80");
 
-    apiGet("/api/runs?" + q.join("&")).then(function (r) {
+    apiGet("/api/runs?" + q.join("&")).then((r) => {
       if (!r || r.ok === false) {
         setPre("runsList", r);
         return;
       }
       runsCache = r.runs || [];
 
-      var html = runsCache.map(function (x, idx) {
+      var html = runsCache.map((x, idx) => {
         var log = x.log_rel_path || "";
         var link = log ? "<a class=\"linklike\" href=\"/api/fs/download?path=" + encodeURIComponent(log) + "\">log</a>" : "";
         var sel = (selectedRun && selectedRun.issue_id === x.issue_id && selectedRun.mtime_utc === x.mtime_utc) ? " *" : "";
@@ -495,8 +491,8 @@
 
       el("runsList").innerHTML = html || "<div class=\"muted\">(none)</div>";
 
-      Array.from(el("runsList").querySelectorAll(".runitem .name")).forEach(function (node) {
-        node.addEventListener("click", function () {
+      Array.from(el("runsList").querySelectorAll(".runitem .name")).forEach((node) => {
+        node.addEventListener("click", () => {
           var item = node.parentElement;
           var idx = parseInt(item.getAttribute("data-idx") || "-1", 10);
           if (idx >= 0 && idx < runsCache.length) {
@@ -510,7 +506,7 @@
   }
 
   function refreshLastRunLog() {
-    apiGet("/api/runs?limit=1").then(function (r) {
+    apiGet("/api/runs?limit=1").then((r) => {
       if (!r || r.ok === false) {
         setPre("lastRunLog", r);
         return;
@@ -532,7 +528,7 @@
       var box = el("lastRunLog");
       var wantFollow = isNearBottom(box, 24);
       var url = "/api/fs/read_text?path=" + encodeURIComponent(logRel) + "&tail_lines=2000";
-      apiGet(url).then(function (rt) {
+      apiGet(url).then((rt) => {
         if (!rt || rt.ok === false) {
           setPre("lastRunLog", rt);
           return;
@@ -561,7 +557,7 @@
     if (jid) {
       url = "/api/jobs/" + encodeURIComponent(String(jid)) + "/log_tail?lines=" + linesQ;
     }
-    apiGet(url).then(function (r) {
+    apiGet(url).then((r) => {
       if (!r || r.ok === false) {
         setPre("tail", r);
         return;
@@ -584,7 +580,7 @@
 
     function ensureStep(name) {
       if (!name) return;
-      if (!Object.prototype.hasOwnProperty.call(state, name)) {
+      if (!Object.hasOwn(state, name)) {
         state[name] = "pending";
       }
       if (order.indexOf(name) < 0) order.push(name);
@@ -625,7 +621,6 @@
 
       if (s.indexOf("ERROR:") === 0 || s === "FAIL" || s.indexOf("FAIL ") === 0) {
         if (currentRunning) setState(currentRunning, "fail");
-        continue;
       }
     }
 
@@ -640,7 +635,7 @@
 
     for (var k = 0; k < order.length; k++) {
       var nm2 = order[k];
-      if (!Object.prototype.hasOwnProperty.call(state, nm2)) state[nm2] = "pending";
+      if (!Object.hasOwn(state, nm2)) state[nm2] = "pending";
     }
 
     return { order: order, state: state };
@@ -713,7 +708,7 @@
 
     function ensureStep(name) {
       if (!name) return;
-      if (!Object.prototype.hasOwnProperty.call(state, name)) {
+      if (!Object.hasOwn(state, name)) {
         state[name] = "pending";
       }
       if (order.indexOf(name) < 0) order.push(name);
@@ -759,7 +754,6 @@
       if (kind === "FAIL") {
         setState(stage, "fail");
         if (currentRunning === stage) currentRunning = "";
-        continue;
       }
     }
 
@@ -774,7 +768,7 @@
 
     for (var k = 0; k < order.length; k++) {
       var nm2 = order[k];
-      if (!Object.prototype.hasOwnProperty.call(state, nm2)) state[nm2] = "pending";
+      if (!Object.hasOwn(state, nm2)) state[nm2] = "pending";
     }
 
     return { order: order, state: state, resultStatus: resultStatus };
@@ -845,7 +839,7 @@
   }
 
   function refreshStats() {
-    apiGet("/api/debug/diagnostics").then(function (r) {
+    apiGet("/api/debug/diagnostics").then((r) => {
       if (!r || r.ok === false) {
         setPre("stats", r);
         return;
@@ -859,7 +853,7 @@
       lines.push({ k: "all_time.unknown", v: String(all.unknown || 0) });
       lines.push({ k: "all_time.canceled", v: String(all.canceled || 0) });
 
-      (s.windows || []).forEach(function (w) {
+      (s.windows || []).forEach((w) => {
         var d = w.days;
         lines.push({ k: String(d) + "d.total", v: String(w.total || 0) });
         lines.push({ k: String(d) + "d.success", v: String(w.success || 0) });
@@ -868,16 +862,14 @@
         lines.push({ k: String(d) + "d.canceled", v: String(w.canceled || 0) });
       });
 
-      el("stats").innerHTML = lines.map(function (x) {
-        return "<div class=\"rowline\"><span class=\"k\">" + escapeHtml(x.k) + "</span><span class=\"v\">" + escapeHtml(x.v) + "</span></div>";
-      }).join("");
+      el("stats").innerHTML = lines.map((x) => "<div class=\"rowline\"><span class=\"k\">" + escapeHtml(x.k) + "</span><span class=\"v\">" + escapeHtml(x.v) + "</span></div>").join("");
     });
   }
 
   function renderActiveJob(jobs) {
-    var active = (jobs || []).find(function (j) { return j.status === "running"; }) || null;
+    var active = (jobs || []).find((j) => j.status === "running") || null;
     activeJobId = active ? String(active.job_id || "") : null;
-    var queued = (jobs || []).filter(function (j) { return j.status === "queued"; });
+    var queued = (jobs || []).filter((j) => j.status === "queued");
 
     var box = el("activeJob");
     if (!box) return;
@@ -903,8 +895,8 @@
 
     var cancelBtn = el("cancelActive");
     if (cancelBtn && active && active.job_id) {
-      cancelBtn.addEventListener("click", function () {
-        apiPost("/api/jobs/cancel", { job_id: active.job_id }).then(function () {
+      cancelBtn.addEventListener("click", () => {
+        apiPost("/api/jobs/cancel", { job_id: active.job_id }).then(() => {
           refreshJobs();
         });
       });
@@ -1117,7 +1109,7 @@ function loadLiveLevel() {
     var es = new EventSource(url);
     liveES = es;
 
-    es.onmessage = function (e) {
+    es.onmessage = (e) => {
       if (!e || !e.data) return;
       var obj = null;
       try { obj = JSON.parse(String(e.data)); } catch (err) { obj = null; }
@@ -1130,7 +1122,7 @@ function loadLiveLevel() {
       setLiveStreamStatus("streaming");
     };
 
-    es.addEventListener("end", function (e) {
+    es.addEventListener("end", (e) => {
       var reason = "";
       var status = "";
       if (e && e.data) {
@@ -1152,8 +1144,8 @@ function loadLiveLevel() {
       }
     });
 
-    es.onerror = function () {
-      apiGet("/api/jobs/" + encodeURIComponent(jobId)).then(function (r) {
+    es.onerror = () => {
+      apiGet("/api/jobs/" + encodeURIComponent(jobId)).then((r) => {
         if (!r || r.ok === false) {
           closeLiveStream();
           setLiveStreamStatus("ended [job_not_found]");
@@ -1202,7 +1194,7 @@ function loadLiveLevel() {
 
 
 function refreshJobs() {
-    apiGet("/api/jobs").then(function (r) {
+    apiGet("/api/jobs").then((r) => {
       if (!r || r.ok === false) {
         setPre("jobsList", r);
         renderActiveJob([]);
@@ -1210,7 +1202,7 @@ function refreshJobs() {
       }
       var jobs = r.jobs || [];
 
-      var active = jobs.find(function (j) { return j.status === "running"; }) || null;
+      var active = jobs.find((j) => j.status === "running") || null;
       var activeId = active ? String(active.job_id || "") : "";
 
       var idleAutoSelect = !!(cfg && cfg.ui && cfg.ui.idle_auto_select_last_job);
@@ -1227,9 +1219,7 @@ function refreshJobs() {
       }
 
       if (!selectedJobId && jobs.length && idleAutoSelect) {
-        jobs.sort(function (a, b) {
-          return String(a.created_utc || "").localeCompare(String(b.created_utc || ""));
-        });
+        jobs.sort((a, b) => String(a.created_utc || "").localeCompare(String(b.created_utc || "")));
         selectedJobId = String(jobs[jobs.length - 1].job_id || "");
         if (selectedJobId) saveLiveJobId(selectedJobId);
         suppressIdleOutput = false;
@@ -1237,7 +1227,7 @@ function refreshJobs() {
       renderActiveJob(jobs);
       ensureAutoRefresh(jobs);
 
-      var html = jobs.map(function (j) {
+      var html = jobs.map((j) => {
         var jobId = String(j.job_id || "");
         var isSel = selectedJobId && String(selectedJobId) === jobId;
         var cls = "item job-item" + (isSel ? " selected" : "");
@@ -1286,7 +1276,7 @@ function refreshJobs() {
     var id = getLiveJobId();
     var st = "";
     if (id && jobs && jobs.length) {
-      var j = jobs.find(function (x) { return String(x.job_id || "") === String(id); }) || null;
+      var j = jobs.find((x) => String(x.job_id || "") === String(id)) || null;
       st = j ? String(j.status || "") : "";
     }
     if (st === "running" || st === "queued") openLiveStream(id);
@@ -1294,7 +1284,7 @@ function refreshJobs() {
 
     if (activeJobId) {
       if (!timers.autoRefreshTimer) {
-        timers.autoRefreshTimer = setInterval(function () {
+        timers.autoRefreshTimer = setInterval(() => {
           refreshJobs();
           refreshRuns();
         }, 1500);
@@ -1468,7 +1458,7 @@ if (mode === "patch" || mode === "repair") {
   body.issue_id = String(el("issueId").value || "").trim();
 }
 
-    apiPost("/api/jobs/enqueue", body).then(function (r) {
+    apiPost("/api/jobs/enqueue", body).then((r) => {
       pushApiStatus(r);
       setPre("previewRight", r);
       if (r && r.ok !== false && r.job_id) {
@@ -1494,8 +1484,7 @@ if (mode === "patch" || mode === "repair") {
       body: fd,
       headers: { "Accept": "application/json" }
     })
-      .then(function (r) {
-        return r.text().then(function (t) {
+      .then((r) => r.text().then((t) => {
           try {
             return JSON.parse(t);
           } catch (e) {
@@ -1506,9 +1495,8 @@ if (mode === "patch" || mode === "repair") {
               status: r.status
             };
           }
-        });
-      })
-      .then(function (j) {
+        }))
+      .then((j) => {
         pushApiStatus(j);
         setText(
           "uploadHint",
@@ -1537,7 +1525,7 @@ if (mode === "patch" || mode === "repair") {
         applyAutofillFromPayload(j);
         refreshFs();
       })
-      .catch(function (e) {
+      .catch((e) => {
         setPre("uploadResult", String(e));
         setUiError(String(e));
       });
@@ -1549,18 +1537,18 @@ if (mode === "patch" || mode === "repair") {
     function show() { document.body.classList.add("dragging"); }
     function hide() { document.body.classList.remove("dragging"); }
 
-    document.addEventListener("dragenter", function (e) {
+    document.addEventListener("dragenter", (e) => {
       e.preventDefault();
       counter += 1;
       show();
     });
 
-    document.addEventListener("dragover", function (e) {
+    document.addEventListener("dragover", (e) => {
       e.preventDefault();
       show();
     });
 
-    document.addEventListener("dragleave", function (e) {
+    document.addEventListener("dragleave", (e) => {
       e.preventDefault();
       counter -= 1;
       if (counter <= 0) {
@@ -1569,7 +1557,7 @@ if (mode === "patch" || mode === "repair") {
       }
     });
 
-    document.addEventListener("drop", function (e) {
+    document.addEventListener("drop", (e) => {
       e.preventDefault();
       counter = 0;
       hide();
@@ -1590,20 +1578,20 @@ if (mode === "patch" || mode === "repair") {
     }
 
     if (browse) {
-      browse.addEventListener("click", function () { openPicker(); });
+      browse.addEventListener("click", () => { openPicker(); });
     }
     if (zone) {
-      zone.addEventListener("click", function () { openPicker(); });
+      zone.addEventListener("click", () => { openPicker(); });
 
       function setDrag(on) {
         if (on) zone.classList.add("dragover");
         else zone.classList.remove("dragover");
       }
 
-      zone.addEventListener("dragenter", function (e) { e.preventDefault(); setDrag(true); });
-      zone.addEventListener("dragleave", function (e) { e.preventDefault(); setDrag(false); });
-      zone.addEventListener("dragover", function (e) { e.preventDefault(); setDrag(true); });
-      zone.addEventListener("drop", function (e) {
+      zone.addEventListener("dragenter", (e) => { e.preventDefault(); setDrag(true); });
+      zone.addEventListener("dragleave", (e) => { e.preventDefault(); setDrag(false); });
+      zone.addEventListener("dragover", (e) => { e.preventDefault(); setDrag(true); });
+      zone.addEventListener("drop", (e) => {
         e.preventDefault();
         setDrag(false);
         var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
@@ -1612,17 +1600,17 @@ if (mode === "patch" || mode === "repair") {
     }
 
     if (input) {
-      input.addEventListener("change", function () {
+      input.addEventListener("change", () => {
         if (input.files && input.files[0]) uploadFile(input.files[0]);
       });
     }
 
-    window.addEventListener("dragover", function (e) { e.preventDefault(); });
-    window.addEventListener("drop", function (e) { e.preventDefault(); });
+    window.addEventListener("dragover", (e) => { e.preventDefault(); });
+    window.addEventListener("drop", (e) => { e.preventDefault(); });
   }
 
   function loadConfig() {
-    return apiGet("/api/config").then(function (r) {
+    return apiGet("/api/config").then((r) => {
       cfg = r || null;
       if (cfg && cfg.issue && cfg.issue.default_regex) {
         try { issueRegex = new RegExp(cfg.issue.default_regex); } catch (e) { issueRegex = null; }
@@ -1640,7 +1628,7 @@ if (mode === "patch" || mode === "repair") {
         }
       }
       return cfg;
-    }).catch(function () {
+    }).catch(() => {
       cfg = null;
       return null;
     });
@@ -1698,7 +1686,7 @@ if (mode === "patch" || mode === "repair") {
 
   function pollLatestPatchOnce() {
     if (!cfg || !cfg.autofill || !cfg.autofill.enabled) return;
-    apiGet("/api/patches/latest").then(function (r) {
+    apiGet("/api/patches/latest").then((r) => {
       if (!r || r.ok === false) {
         setUiError(String((r && r.error) || "autofill scan failed"));
         return;
@@ -1738,7 +1726,7 @@ if (mode === "patch" || mode === "repair") {
       base = "server: " + cfg.server.host + ":" + cfg.server.port;
     }
 
-    apiGet("/api/debug/diagnostics").then(function (d) {
+    apiGet("/api/debug/diagnostics").then((d) => {
       if (!d || d.ok === false) return;
       var lock = d.lock || {};
       var disk = d.disk || {};
@@ -1759,7 +1747,7 @@ if (mode === "patch" || mode === "repair") {
 
   function setTabActive(which) {
     var tabs = ["Overview", "Logs", "Patch", "Diff", "Files"];
-    tabs.forEach(function (t) {
+    tabs.forEach((t) => {
       var btn = el("tab" + t);
       if (btn) {
         if (t === which) btn.classList.add("active");
@@ -1819,7 +1807,7 @@ if (mode === "patch" || mode === "repair") {
       }
       var p = String(selectedRun.log_rel_path);
       var url = "/api/fs/read_text?path=" + encodeURIComponent(p) + "&tail_lines=2000";
-      apiGet(url).then(function (r) {
+      apiGet(url).then((r) => {
         if (!r || r.ok === false) {
           setPre("issueTabBody", r);
           return;
@@ -1881,7 +1869,7 @@ if (mode === "patch" || mode === "repair") {
 
   function wireButtons() {
     el("fsRefresh").addEventListener("click", refreshFs);
-    el("fsUp").addEventListener("click", function () {
+    el("fsUp").addEventListener("click", () => {
       var p = el("fsPath").value || "";
       el("fsPath").value = parentRel(p);
       fsSelected = "";
@@ -1891,31 +1879,31 @@ if (mode === "patch" || mode === "repair") {
 
 
     if (el("fsSelectAll")) {
-      el("fsSelectAll").addEventListener("click", function () {
-        fsLastRels.forEach(function (rel) { fsChecked[rel] = true; });
+      el("fsSelectAll").addEventListener("click", () => {
+        fsLastRels.forEach((rel) => { fsChecked[rel] = true; });
         fsUpdateSelCount();
         refreshFs();
       });
     }
     if (el("fsClear")) {
-      el("fsClear").addEventListener("click", function () {
+      el("fsClear").addEventListener("click", () => {
         fsClearSelection();
         refreshFs();
       });
     }
     if (el("fsDownloadSelected")) {
-      el("fsDownloadSelected").addEventListener("click", function () {
+      el("fsDownloadSelected").addEventListener("click", () => {
         fsDownloadSelected();
       });
     }
 
     if (el("fsMkdir")) {
-      el("fsMkdir").addEventListener("click", function () {
+      el("fsMkdir").addEventListener("click", () => {
         var base = String(el("fsPath").value || "");
         var name = prompt("New directory name");
         if (!name) return;
         var rel = joinRel(base, name);
-        apiPost("/api/fs/mkdir", { path: rel }).then(function (r) {
+        apiPost("/api/fs/mkdir", { path: rel }).then((r) => {
           if (!r || r.ok === false) {
             setFsHint("mkdir failed");
             return;
@@ -1926,7 +1914,7 @@ if (mode === "patch" || mode === "repair") {
     }
 
     if (el("fsRename")) {
-      el("fsRename").addEventListener("click", function () {
+      el("fsRename").addEventListener("click", () => {
         if (!fsSelected) {
           setFsHint("focus an item first");
           return;
@@ -1936,7 +1924,7 @@ if (mode === "patch" || mode === "repair") {
         var dstName = prompt("New name", curName || "");
         if (!dstName) return;
         var dst = joinRel(base, dstName);
-        apiPost("/api/fs/rename", { src: fsSelected, dst: dst }).then(function (r) {
+        apiPost("/api/fs/rename", { src: fsSelected, dst: dst }).then((r) => {
           if (!r || r.ok === false) {
             setFsHint("rename failed");
             return;
@@ -1948,10 +1936,10 @@ if (mode === "patch" || mode === "repair") {
     }
 
     if (el("fsDelete")) {
-      el("fsDelete").addEventListener("click", function () {
+      el("fsDelete").addEventListener("click", () => {
         var paths = [];
         for (var k in fsChecked) {
-          if (Object.prototype.hasOwnProperty.call(fsChecked, k)) paths.push(k);
+          if (Object.hasOwn(fsChecked, k)) paths.push(k);
         }
         if (!paths.length && fsSelected) paths = [fsSelected];
         if (!paths.length) {
@@ -1961,23 +1949,21 @@ if (mode === "patch" || mode === "repair") {
         if (!confirm("Delete selected item(s)?")) return;
 
         var seq = Promise.resolve();
-        paths.sort().forEach(function (p) {
-          seq = seq.then(function () {
-            return apiPost("/api/fs/delete", { path: p }).then(function (r) {
+        paths.sort().forEach((p) => {
+          seq = seq.then(() => apiPost("/api/fs/delete", { path: p }).then((r) => {
               if (!r || r.ok !== true) {
                 var err = (r && r.error) ? String(r.error) : "unknown error";
                 setFsHint("delete failed: " + err);
                 throw new Error(err);
               }
               return r;
-            });
-          });
+            }));
         });
-        seq.then(function () {
+        seq.then(() => {
           fsClearSelection();
           fsSelected = "";
           refreshFs();
-        }).catch(function (e) {
+        }).catch((e) => {
           if (e && e.message) {
             setFsHint("delete failed: " + String(e.message));
           } else {
@@ -1988,7 +1974,7 @@ if (mode === "patch" || mode === "repair") {
     }
 
     if (el("fsUnzip")) {
-      el("fsUnzip").addEventListener("click", function () {
+      el("fsUnzip").addEventListener("click", () => {
         if (!fsSelected || !/\.zip$/i.test(fsSelected)) {
           setFsHint("focus a .zip file first");
           return;
@@ -1997,7 +1983,7 @@ if (mode === "patch" || mode === "repair") {
         var dst = prompt("Destination directory", base || "");
         if (dst === null) return;
         apiPost("/api/fs/unzip", { zip_path: fsSelected, dest_dir: String(dst || "") })
-          .then(function (r) {
+          .then((r) => {
             if (!r || r.ok === false) {
               setFsHint("unzip failed");
               return;
@@ -2009,19 +1995,19 @@ if (mode === "patch" || mode === "repair") {
     el("runsRefresh").addEventListener("click", refreshRuns);
 
     if (el("runsCollapse")) {
-      el("runsCollapse").addEventListener("click", function () {
+      el("runsCollapse").addEventListener("click", () => {
         setRunsVisible(!runsVisible);
         saveRunsVisible(runsVisible);
       });
     }
 
         if (el("previewToggle")) {
-      el("previewToggle").addEventListener("click", function () {
+      el("previewToggle").addEventListener("click", () => {
         setPreviewVisible(!previewVisible);
       });
     }
     if (el("previewCollapse")) {
-      el("previewCollapse").addEventListener("click", function () {
+      el("previewCollapse").addEventListener("click", () => {
         setPreviewVisible(!previewVisible);
       });
     }
@@ -2029,14 +2015,14 @@ if (mode === "patch" || mode === "repair") {
     el("jobsRefresh").addEventListener("click", refreshJobs);
 
     if (el("jobsCollapse")) {
-      el("jobsCollapse").addEventListener("click", function () {
+      el("jobsCollapse").addEventListener("click", () => {
         setJobsVisible(!jobsVisible);
         saveJobsVisible(jobsVisible);
       });
     }
 
     if (el("liveLevel")) {
-      el("liveLevel").addEventListener("change", function () {
+      el("liveLevel").addEventListener("change", () => {
         liveLevel = String(el("liveLevel").value || "normal");
         try { localStorage.setItem("amp.liveLogLevel", liveLevel); } catch (e) {}
         renderLiveLog();
@@ -2045,7 +2031,7 @@ if (mode === "patch" || mode === "repair") {
     }
 
     if (el("jobsList")) {
-      el("jobsList").addEventListener("click", function (e) {
+      el("jobsList").addEventListener("click", (e) => {
         var t = e && e.target ? e.target : null;
         while (t && t !== el("jobsList")) {
           var jobId = t.getAttribute && t.getAttribute("data-jobid");
@@ -2066,13 +2052,13 @@ if (mode === "patch" || mode === "repair") {
     el("enqueueBtn").addEventListener("click", enqueue);
 
     if (el("parseBtn")) {
-      el("parseBtn").addEventListener("click", function () {
+      el("parseBtn").addEventListener("click", () => {
         triggerParse(getRawCommand());
       });
     }
 
     if (el("rawCommand")) {
-      el("rawCommand").addEventListener("input", function () {
+      el("rawCommand").addEventListener("input", () => {
         var raw = getRawCommand();
         if (raw !== lastParsedRaw) {
           lastParsed = null;
@@ -2087,30 +2073,30 @@ if (mode === "patch" || mode === "repair") {
         scheduleParseDebounced(raw);
       });
 
-      el("rawCommand").addEventListener("paste", function () {
-        setTimeout(function () {
+      el("rawCommand").addEventListener("paste", () => {
+        setTimeout(() => {
           triggerParse(getRawCommand());
         }, 0);
       });
     }
 
     el("mode").addEventListener("change", validateAndPreview);
-    el("issueId").addEventListener("input", function () {
+    el("issueId").addEventListener("input", () => {
       dirty.issueId = true;
       validateAndPreview();
     });
-    el("commitMsg").addEventListener("input", function () {
+    el("commitMsg").addEventListener("input", () => {
       dirty.commitMsg = true;
       validateAndPreview();
     });
-    el("patchPath").addEventListener("input", function () {
+    el("patchPath").addEventListener("input", () => {
       dirty.patchPath = true;
       validateAndPreview();
     });
 
     var browse = el("browsePatch");
     if (browse) {
-      browse.addEventListener("click", function () {
+      browse.addEventListener("click", () => {
         if (!fsSelected) {
           setFsHint("select a patch file first");
           return;
@@ -2122,7 +2108,7 @@ if (mode === "patch" || mode === "repair") {
     }
 
     if (el("refreshAll")) {
-      el("refreshAll").addEventListener("click", function () {
+      el("refreshAll").addEventListener("click", () => {
         refreshFs();
         refreshRuns();
         refreshStats();
@@ -2149,7 +2135,7 @@ if (mode === "patch" || mode === "repair") {
       el("liveLevel").value = liveLevel;
     }
 
-    loadConfig().then(function () {
+    loadConfig().then(() => {
       refreshFs();
       refreshRuns();
       refreshStats();
