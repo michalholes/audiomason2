@@ -52,7 +52,7 @@
   }
 
   function setUiError(errorText) {
-    setUiStatus("ERROR: " + String(errorText || ""));
+    setUiStatus(`ERROR: ${String(errorText || "")}`);
   }
 
   function pushApiStatus(payload) {
@@ -135,7 +135,7 @@
     b = String(b || "").replace(/^\/+/, "");
     if (!a) return b;
     if (!b) return a;
-    return a + "/" + b;
+    return `${a}/${b}`;
   }
 
   function parentRel(p) {
@@ -185,7 +185,7 @@
     var pfx = patchesRootRel();
     var p = String(path || "").replace(/^\/+/, "");
     if (p === pfx) return "";
-    if (p.indexOf(pfx + "/") === 0) return p.slice(pfx.length + 1);
+    if (p.indexOf(`${pfx}/`) === 0) return p.slice(pfx.length + 1);
     return p;
   }
 
@@ -195,7 +195,7 @@
 
     var pfx = patchesRootRel();
     if (p === pfx) return pfx;
-    if (p.indexOf(pfx + "/") === 0) return p;
+    if (p.indexOf(`${pfx}/`) === 0) return p;
     return joinRel(pfx, p);
   }
 
@@ -214,7 +214,7 @@
     var rel = stripPatchesPrefix(full);
 
     patchStatInFlight = true;
-    apiGet("/api/fs/stat?path=" + encodeURIComponent(rel)).then((r) => {
+    apiGet(`/api/fs/stat?path=${encodeURIComponent(rel)}`).then((r) => {
       patchStatInFlight = false;
       if (!r || r.ok === false) return;
       if (r.exists === false) clearRunFieldsBecauseMissingPatch();
@@ -235,7 +235,7 @@
     }
     var node = el("fsSelCount");
     if (node) {
-      node.textContent = n ? ("selected: " + String(n)) : "";
+      node.textContent = n ? (`selected: ${String(n)}`) : "";
     }
     return n;
   }
@@ -263,7 +263,7 @@
     }).then((r) => {
       if (!r.ok) {
         return r.text().then((t) => {
-          setFsHint("archive failed: " + String(t || r.status));
+          setFsHint(`archive failed: ${String(t || r.status)}`);
         });
       }
       return r.blob().then((blob) => {
@@ -277,7 +277,7 @@
         setTimeout(() => { URL.revokeObjectURL(url); }, 1000);
       });
     }).catch((e) => {
-      setFsHint("archive failed: " + String(e));
+      setFsHint(`archive failed: ${String(e)}`);
     });
   }
 
@@ -321,7 +321,7 @@
 
       if (!r || r.ok === false) {
         clearParsedState();
-        setParseHint("Parse failed: " + String((r && r.error) || ""));
+        setParseHint(`Parse failed: ${String((r && r.error) || "")}`);
         setUiError(String((r && r.error) || "parse failed"));
         validateAndPreview();
         return;
@@ -362,7 +362,7 @@
 
   function refreshFs() {
     var path = el("fsPath").value || "";
-    apiGet("/api/fs/list?path=" + encodeURIComponent(path)).then((r) => {
+    apiGet(`/api/fs/list?path=${encodeURIComponent(path)}`).then((r) => {
       if (!r || r.ok === false) {
         setPre("fsList", r);
         return;
@@ -375,9 +375,9 @@
         var rel = joinRel(path, name);
         fsLastRels.push(rel);
 
-        var displayName = isDir ? (name + "/") : name;
+        var displayName = isDir ? (`${name}/`) : name;
         var isSelected = (fsSelected === rel);
-        var cls = "item fsitem" + (isSelected ? " selected" : "");
+        var cls = `item fsitem${isSelected ? " selected" : ""}`;
         var checked = fsChecked[rel] ? " checked" : "";
 
         var dl = "";
@@ -420,7 +420,7 @@
           ev.stopPropagation();
           var rel = node.getAttribute("data-rel") || "";
           if (!rel) return;
-          window.location.href = "/api/fs/download?path=" + encodeURIComponent(rel);
+          window.location.href = `/api/fs/download?path=${encodeURIComponent(rel)}`;
         });
       });
 
@@ -438,7 +438,7 @@
           }
 
           fsSelected = rel;
-          setFsHint("focused: " + rel);
+          setFsHint(`focused: ${rel}`);
 
           if (/\.(zip|patch|diff)$/i.test(rel)) {
             el("patchPath").value = normalizePatchPath(rel);
@@ -466,11 +466,11 @@
     var q = [];
     var issue = String(el("runsIssue").value || "").trim();
     var res = String(el("runsResult").value || "");
-    if (issue) q.push("issue_id=" + encodeURIComponent(issue));
-    if (res) q.push("result=" + encodeURIComponent(res));
+    if (issue) q.push(`issue_id=${encodeURIComponent(issue)}`);
+    if (res) q.push(`result=${encodeURIComponent(res)}`);
     q.push("limit=80");
 
-    apiGet("/api/runs?" + q.join("&")).then((r) => {
+    apiGet(`/api/runs?${q.join("&")}`).then((r) => {
       if (!r || r.ok === false) {
         setPre("runsList", r);
         return;
@@ -479,7 +479,7 @@
 
       var html = runsCache.map((x, idx) => {
         var log = x.log_rel_path || "";
-        var link = log ? "<a class=\"linklike\" href=\"/api/fs/download?path=" + encodeURIComponent(log) + "\">log</a>" : "";
+        var link = log ? `<a class=\"linklike\" href=\"/api/fs/download?path=${encodeURIComponent(log)}\">log</a>` : "";
         var sel = (selectedRun && selectedRun.issue_id === x.issue_id && selectedRun.mtime_utc === x.mtime_utc) ? " *" : "";
         return (
           "<div class=\"item runitem\" data-idx=\"" + String(idx) + "\">" +
@@ -527,7 +527,7 @@
       lastRunLogPath = logRel;
       var box = el("lastRunLog");
       var wantFollow = isNearBottom(box, 24);
-      var url = "/api/fs/read_text?path=" + encodeURIComponent(logRel) + "&tail_lines=2000";
+      var url = `/api/fs/read_text?path=${encodeURIComponent(logRel)}&tail_lines=2000`;
       apiGet(url).then((rt) => {
         if (!rt || rt.ok === false) {
           setPre("lastRunLog", rt);
@@ -553,9 +553,9 @@
     }
 
     var linesQ = encodeURIComponent(String(tailLines));
-    var url = "/api/runner/tail?lines=" + linesQ;
+    var url = `/api/runner/tail?lines=${linesQ}`;
     if (jid) {
-      url = "/api/jobs/" + encodeURIComponent(String(jid)) + "/log_tail?lines=" + linesQ;
+      url = `/api/jobs/${encodeURIComponent(String(jid))}/log_tail?lines=${linesQ}`;
     }
     apiGet(url).then((r) => {
       if (!r || r.ok === false) {
@@ -673,8 +673,8 @@
       const name = order[i];
       const st = state[name] || "pending";
       html += "<div class=\"step\">";
-      html += "<span class=\"dot " + escapeHtml(st) + "\"></span>";
-      html += "<span class=\"step-name\">" + escapeHtml(name) + "</span>";
+      html += `<span class=\"dot ${escapeHtml(st)}\"></span>`;
+      html += `<span class=\"step-name\">${escapeHtml(name)}</span>`;
       if (st === "running") {
         html += "<span class=\"pill running\">RUNNING</span>";
       }
@@ -805,13 +805,13 @@
       const stage = normStepName(lastLog.stage || "");
       const kind = String(lastLog.kind || "");
       if (kind === "FAIL") {
-        return { text: "FAIL: " + stage, status: "fail" };
+        return { text: `FAIL: ${stage}`, status: "fail" };
       }
       if (kind === "OK") {
-        return { text: "OK: " + stage, status: "running" };
+        return { text: `OK: ${stage}`, status: "running" };
       }
       if (kind === "DO") {
-        return { text: "DO: " + stage, status: "running" };
+        return { text: `DO: ${stage}`, status: "running" };
       }
     }
 
@@ -855,14 +855,14 @@
 
       (s.windows || []).forEach((w) => {
         var d = w.days;
-        lines.push({ k: String(d) + "d.total", v: String(w.total || 0) });
-        lines.push({ k: String(d) + "d.success", v: String(w.success || 0) });
-        lines.push({ k: String(d) + "d.fail", v: String(w.fail || 0) });
-        lines.push({ k: String(d) + "d.unknown", v: String(w.unknown || 0) });
-        lines.push({ k: String(d) + "d.canceled", v: String(w.canceled || 0) });
+        lines.push({ k: `${String(d)}d.total`, v: String(w.total || 0) });
+        lines.push({ k: `${String(d)}d.success`, v: String(w.success || 0) });
+        lines.push({ k: `${String(d)}d.fail`, v: String(w.fail || 0) });
+        lines.push({ k: `${String(d)}d.unknown`, v: String(w.unknown || 0) });
+        lines.push({ k: `${String(d)}d.canceled`, v: String(w.canceled || 0) });
       });
 
-      el("stats").innerHTML = lines.map((x) => "<div class=\"rowline\"><span class=\"k\">" + escapeHtml(x.k) + "</span><span class=\"v\">" + escapeHtml(x.v) + "</span></div>").join("");
+      el("stats").innerHTML = lines.map((x) => `<div class=\"rowline\"><span class=\"k\">${escapeHtml(x.k)}</span><span class=\"v\">${escapeHtml(x.v)}</span></div>`).join("");
     });
   }
 
@@ -881,14 +881,14 @@
 
     var html = "";
     if (active) {
-      html += "<div><b>running</b> " + escapeHtml(active.job_id || "") + "</div>";
-      html += "<div class=\"muted\">mode=" + escapeHtml(active.mode || "") + " issue=" + escapeHtml(active.issue_id || "") + "</div>";
+      html += `<div><b>running</b> ${escapeHtml(active.job_id || "")}</div>`;
+      html += `<div class=\"muted\">mode=${escapeHtml(active.mode || "")} issue=${escapeHtml(active.issue_id || "")}</div>`;
       html += "<div class=\"row\"><button class=\"btn btn-small\" id=\"cancelActive\">Cancel</button>";
-      html += "<a class=\"linklike\" href=\"/api/jobs/log_tail?job_id=" + encodeURIComponent(active.job_id || "") + "\">log</a></div>";
+      html += `<a class=\"linklike\" href=\"/api/jobs/log_tail?job_id=${encodeURIComponent(active.job_id || "")}\">log</a></div>`;
     }
 
     if (queued.length) {
-      html += "<div style=\"margin-top:6px\"><b>queued</b>: " + String(queued.length) + "</div>";
+      html += `<div style=\"margin-top:6px\"><b>queued</b>: ${String(queued.length)}</div>`;
     }
 
     box.innerHTML = html;
@@ -1017,7 +1017,7 @@ function loadLiveLevel() {
     }
     if (t === "result") {
       var ok = ev.ok ? "SUCCESS" : "FAIL";
-      return "RESULT: " + ok + " rc=" + String(ev.return_code);
+      return `RESULT: ${ok} rc=${String(ev.return_code)}`;
     }
 
     var showPrefixes = liveLevel === "debug";
@@ -1041,8 +1041,8 @@ function loadLiveLevel() {
     if (ev.stdout || ev.stderr) {
       var out = [];
       out.push(line);
-      if (ev.stdout) out.push("STDOUT:\n" + String(ev.stdout));
-      if (ev.stderr) out.push("STDERR:\n" + String(ev.stderr));
+      if (ev.stdout) out.push(`STDOUT:\n${String(ev.stdout)}`);
+      if (ev.stderr) out.push(`STDERR:\n${String(ev.stderr)}`);
       return out.join("\n");
     }
     return line;
@@ -1078,7 +1078,7 @@ function loadLiveLevel() {
         var stage = String(ev.stage || "");
         const kind = String(ev.kind || "");
         if (stage || kind) {
-          box.textContent = (stage ? stage : "") + (kind ? " / " + kind : "");
+          box.textContent = (stage ? stage : "") + (kind ? ` / ${kind}` : "");
           return;
         }
       }
@@ -1105,7 +1105,7 @@ function loadLiveLevel() {
     updateProgressPanelFromEvents();
     setLiveStreamStatus("connecting...");
 
-    var url = "/api/jobs/" + encodeURIComponent(jobId) + "/events";
+    var url = `/api/jobs/${encodeURIComponent(jobId)}/events`;
     var es = new EventSource(url);
     liveES = es;
 
@@ -1135,8 +1135,8 @@ function loadLiveLevel() {
         } catch {}
       }
       var msg = "ended";
-      if (status) msg += " (" + status + ")";
-      if (reason) msg += " [" + reason + "]";
+      if (status) msg += ` (${status})`;
+      if (reason) msg += ` [${reason}]`;
       setLiveStreamStatus(msg);
       try { es.close(); } catch {}
       if (liveES === es) {
@@ -1145,7 +1145,7 @@ function loadLiveLevel() {
     });
 
     es.onerror = () => {
-      apiGet("/api/jobs/" + encodeURIComponent(jobId)).then((r) => {
+      apiGet(`/api/jobs/${encodeURIComponent(jobId)}`).then((r) => {
         if (!r || r.ok === false) {
           closeLiveStream();
           setLiveStreamStatus("ended [job_not_found]");
@@ -1155,7 +1155,7 @@ function loadLiveLevel() {
         var st = String(j.status || "");
         if (st && st !== "running" && st !== "queued") {
           closeLiveStream();
-          setLiveStreamStatus("ended (" + st + ") [job_completed]");
+          setLiveStreamStatus(`ended (${st}) [job_completed]`);
           return;
         }
         setLiveStreamStatus("reconnecting...");
@@ -1169,7 +1169,7 @@ function loadLiveLevel() {
     msg = msg.replace(/\s+/g, " ").trim();
     if (!msg) return "";
     if (msg.length <= 60) return msg;
-    return msg.slice(0, 57) + "...";
+    return `${msg.slice(0, 57)}...`;
   }
 
   function jobSummaryPatchName(p) {
@@ -1230,38 +1230,38 @@ function refreshJobs() {
       var html = jobs.map((j) => {
         var jobId = String(j.job_id || "");
         var isSel = selectedJobId && String(selectedJobId) === jobId;
-        var cls = "item job-item" + (isSel ? " selected" : "");
+        var cls = `item job-item${isSel ? " selected" : ""}`;
 
         var issueId = String(j.issue_id || "").trim();
-        var issueText = issueId ? ("#" + issueId) : "(no issue)";
+        var issueText = issueId ? (`#${issueId}`) : "(no issue)";
 
         var stRaw = String(j.status || "").trim().toLowerCase();
         var statusText = stRaw ? stRaw.toUpperCase() : "UNKNOWN";
-        var statusCls = "job-status st-" + (stRaw || "unknown");
+        var statusCls = `job-status st-${stRaw || "unknown"}`;
 
         var commit = jobSummaryCommit(j.commit_message || "");
         var patchName = jobSummaryPatchName(j.patch_path || "");
 
         var metaParts = [];
-        metaParts.push("mode=" + String(j.mode || ""));
-        if (patchName) metaParts.push("patch=" + patchName);
+        metaParts.push(`mode=${String(j.mode || "")}`);
+        if (patchName) metaParts.push(`patch=${patchName}`);
 
         var dur = jobSummaryDurationSeconds(j.started_utc, j.ended_utc);
-        if (dur) metaParts.push("dur=" + dur + "s");
+        if (dur) metaParts.push(`dur=${dur}s`);
 
         var meta = metaParts.join(" | ");
 
-        var line = "<div class=\"" + cls + "\">";
-        line += "<div class=\"name job-name\" data-jobid=\"" + escapeHtml(jobId) + "\">";
+        var line = `<div class=\"${cls}\">`;
+        line += `<div class=\"name job-name\" data-jobid=\"${escapeHtml(jobId)}\">`;
         line += "<div class=\"job-lines\">";
         line += "<div class=\"job-top\">";
-        line += "<span class=\"job-issue\">" + escapeHtml(issueText) + "</span>";
-        line += "<span class=\"" + escapeHtml(statusCls) + "\">" + escapeHtml(statusText) + "</span>";
+        line += `<span class=\"job-issue\">${escapeHtml(issueText)}</span>`;
+        line += `<span class=\"${escapeHtml(statusCls)}\">${escapeHtml(statusText)}</span>`;
         line += "</div>";
         if (commit) {
-          line += "<div class=\"job-title\">" + escapeHtml(commit) + "</div>";
+          line += `<div class=\"job-title\">${escapeHtml(commit)}</div>`;
         }
-        line += "<div class=\"job-meta\">" + escapeHtml(meta) + "</div>";
+        line += `<div class=\"job-meta\">${escapeHtml(meta)}</div>`;
         line += "</div>";
         line += "</div>";
         line += "</div>";
@@ -1445,7 +1445,7 @@ var ok = true;
       raw_command: (el("rawCommand") ? String(el("rawCommand").value || "").trim() : "")
     };
 
-    setUiStatus("enqueue: started mode=" + mode);
+    setUiStatus(`enqueue: started mode=${mode}`);
 
 
 if (mode === "patch" || mode === "repair") {
@@ -1462,7 +1462,7 @@ if (mode === "patch" || mode === "repair") {
       pushApiStatus(r);
       setPre("previewRight", r);
       if (r && r.ok !== false && r.job_id) {
-        setUiStatus("enqueue: ok job_id=" + String(r.job_id));
+        setUiStatus(`enqueue: ok job_id=${String(r.job_id)}`);
         selectedJobId = String(r.job_id);
         saveLiveJobId(selectedJobId);
         suppressIdleOutput = false;
@@ -1478,7 +1478,7 @@ if (mode === "patch" || mode === "repair") {
   function uploadFile(file) {
     var fd = new FormData();
     fd.append("file", file);
-    setUiStatus("upload: started " + String((file && file.name) || ""));
+    setUiStatus(`upload: started ${String((file && file.name) || "")}`);
     fetch("/api/upload/patch", {
       method: "POST",
       body: fd,
@@ -1501,8 +1501,8 @@ if (mode === "patch" || mode === "repair") {
         setText(
           "uploadHint",
           (j && j.ok)
-            ? ("Uploaded: " + String(j.stored_rel_path || ""))
-            : ("Upload failed: " + String((j && j.error) || ""))
+            ? (`Uploaded: ${String(j.stored_rel_path || "")}`)
+            : (`Upload failed: ${String((j && j.error) || "")}`)
         );
         if (j && j.ok) {
           setUiStatus("upload: ok");
@@ -1616,12 +1616,12 @@ if (mode === "patch" || mode === "repair") {
         try { issueRegex = new RegExp(cfg.issue.default_regex); } catch { issueRegex = null; }
       }
       if (cfg && cfg.meta && cfg.meta.version) {
-        setText("ampWebVersion", "v" + String(cfg.meta.version));
+        setText("ampWebVersion", `v${String(cfg.meta.version)}`);
       }
       refreshHeader();
       if (cfg && cfg.ui) {
         if (cfg.ui.base_font_px) {
-          document.documentElement.style.fontSize = String(cfg.ui.base_font_px) + "px";
+          document.documentElement.style.fontSize = `${String(cfg.ui.base_font_px)}px`;
         }
         if (cfg.ui.drop_overlay_enabled) {
           enableGlobalDropOverlay();
@@ -1723,7 +1723,7 @@ if (mode === "patch" || mode === "repair") {
   function refreshHeader() {
     var base = "";
     if (cfg && cfg.server && cfg.server.host && cfg.server.port) {
-      base = "server: " + cfg.server.host + ":" + cfg.server.port;
+      base = `server: ${cfg.server.host}:${cfg.server.port}`;
     }
 
     apiGet("/api/debug/diagnostics").then((d) => {
@@ -1733,13 +1733,13 @@ if (mode === "patch" || mode === "repair") {
       var held = lock.held ? "LOCK:held" : "LOCK:free";
       var pct = "";
       if (disk.total && disk.used) {
-        pct = "disk:" + String(Math.round((disk.used / disk.total) * 100)) + "%";
+        pct = `disk:${String(Math.round((disk.used / disk.total) * 100))}%`;
       }
 
       var meta = base;
-      if (cfg && cfg.paths && cfg.paths.patches_root) meta += " | patches: " + cfg.paths.patches_root;
-      meta += " | " + held;
-      if (pct) meta += " | " + pct;
+      if (cfg && cfg.paths && cfg.paths.patches_root) meta += ` | patches: ${cfg.paths.patches_root}`;
+      meta += ` | ${held}`;
+      if (pct) meta += ` | ${pct}`;
 
       if (el("hdrMeta")) el("hdrMeta").textContent = meta;
     });
@@ -1750,7 +1750,7 @@ if (mode === "patch" || mode === "repair") {
   function setTabActive(which) {
     var tabs = ["Overview", "Logs", "Patch", "Diff", "Files"];
     tabs.forEach((t) => {
-      var btn = el("tab" + t);
+      var btn = el(`tab${t}`);
       if (btn) {
         if (t === which) btn.classList.add("active");
         else btn.classList.remove("active");
@@ -1772,7 +1772,7 @@ if (mode === "patch" || mode === "repair") {
     }
 
     if (cardTitle) {
-      cardTitle.textContent = "Issue #" + String(selectedRun.issue_id) + " (" + String(selectedRun.result || "") + ")";
+      cardTitle.textContent = `Issue #${String(selectedRun.issue_id)} (${String(selectedRun.result || "")})`;
     }
     if (tabs) tabs.style.display = "flex";
     if (content) content.style.display = "block";
@@ -1782,7 +1782,7 @@ if (mode === "patch" || mode === "repair") {
 
       function add(label, rel) {
         if (!rel) return;
-        parts.push("<a class=\"linklike\" href=\"/api/fs/download?path=" + encodeURIComponent(rel) + "\">" + escapeHtml(label) + "</a>");
+        parts.push(`<a class=\"linklike\" href=\"/api/fs/download?path=${encodeURIComponent(rel)}\">${escapeHtml(label)}</a>`);
       }
 
       add("log", selectedRun.log_rel_path);
@@ -1807,7 +1807,7 @@ if (mode === "patch" || mode === "repair") {
         return;
       }
       var p = String(selectedRun.log_rel_path);
-      var url = "/api/fs/read_text?path=" + encodeURIComponent(p) + "&tail_lines=2000";
+      var url = `/api/fs/read_text?path=${encodeURIComponent(p)}&tail_lines=2000`;
       apiGet(url).then((r) => {
         if (!r || r.ok === false) {
           setPre("issueTabBody", r);
@@ -1825,7 +1825,7 @@ if (mode === "patch" || mode === "repair") {
       setTabActive("Patch");
       renderLinks();
       if (selectedRun.archived_patch_rel_path) {
-        setPre("issueTabBody", "Download: /api/fs/download?path=" + selectedRun.archived_patch_rel_path);
+        setPre("issueTabBody", `Download: /api/fs/download?path=${selectedRun.archived_patch_rel_path}`);
       } else {
         setPre("issueTabBody", "(no archived patch)");
       }
@@ -1835,7 +1835,7 @@ if (mode === "patch" || mode === "repair") {
       setTabActive("Diff");
       renderLinks();
       if (selectedRun.diff_bundle_rel_path) {
-        setPre("issueTabBody", "Download: /api/fs/download?path=" + selectedRun.diff_bundle_rel_path);
+        setPre("issueTabBody", `Download: /api/fs/download?path=${selectedRun.diff_bundle_rel_path}`);
       } else {
         setPre("issueTabBody", "(no diff bundle)");
       }
@@ -1855,7 +1855,7 @@ if (mode === "patch" || mode === "repair") {
         setFsHint("");
         refreshFs();
       }
-      setPre("issueTabBody", "File manager path set to: " + String(el("fsPath").value || ""));
+      setPre("issueTabBody", `File manager path set to: ${String(el("fsPath").value || "")}`);
     }
 
     el("tabOverview").onclick = renderOverview;
@@ -1954,7 +1954,7 @@ if (mode === "patch" || mode === "repair") {
           seq = seq.then(() => apiPost("/api/fs/delete", { path: p }).then((r) => {
               if (!r || r.ok !== true) {
                 var err = (r && r.error) ? String(r.error) : "unknown error";
-                setFsHint("delete failed: " + err);
+                setFsHint(`delete failed: ${err}`);
                 throw new Error(err);
               }
               return r;
@@ -1966,7 +1966,7 @@ if (mode === "patch" || mode === "repair") {
           refreshFs();
         }).catch((e) => {
           if (e && e.message) {
-            setFsHint("delete failed: " + String(e.message));
+            setFsHint(`delete failed: ${String(e.message)}`);
           } else {
             setFsHint("delete failed");
           }
