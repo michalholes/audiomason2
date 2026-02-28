@@ -192,6 +192,7 @@ def _prepare_hermetic_live_repo(repo_root: Path) -> Path:
         # Global ignores
         for n in names:
             if n in {
+                ".git",
                 "patches",
                 ".badguys_live_repo",
                 "__pycache__",
@@ -205,6 +206,14 @@ def _prepare_hermetic_live_repo(repo_root: Path) -> Path:
         return ignore
 
     shutil.copytree(repo_root, live_repo, symlinks=True, ignore=_ignore)
+
+    # Safety reset: if a .git directory is present for any reason, remove it before git init.
+    git_dir = live_repo / ".git"
+    if git_dir.exists() or git_dir.is_symlink():
+        if git_dir.is_dir() and not git_dir.is_symlink():
+            shutil.rmtree(git_dir)
+        else:
+            git_dir.unlink()
 
     # Hermetic patches directory.
     #
@@ -241,7 +250,14 @@ def _prepare_hermetic_live_repo(repo_root: Path) -> Path:
     env["GIT_COMMITTER_DATE"] = "2000-01-01T00:00:00+00:00"
 
     cp = subprocess.run(
-        ["git", "commit", "-m", "badguys: hermetic live repo bootstrap", "--no-gpg-sign"],
+        [
+            "git",
+            "commit",
+            "--allow-empty",
+            "-m",
+            "badguys: hermetic live repo bootstrap",
+            "--no-gpg-sign",
+        ],
         cwd=str(live_repo),
         capture_output=True,
         text=True,
