@@ -257,7 +257,7 @@ The default behavior is minimal-scope modification based on failing gate logs.
 -   Automatic full-tree restoration or overlay merging is prohibited.
 
 
-## Ruff / Mypy failures (default-minimal workflow)
+## Ruff / Mypy /Biome / Typescript failures (default-minimal workflow)
 
 If the failing gates include `ruff` and/or `mypy`, the agent MUST:
 
@@ -267,7 +267,7 @@ If the failing gates include `ruff` and/or `mypy`, the agent MUST:
 4.  Avoid unpacking or reconstructing the full workspace unless the log
     explicitly references files outside `patched_issue{ISSUE}_*.zip`.
 
-Fixing pure ruff/mypy failures MUST NOT trigger full repository rebuild.
+Fixing pure ruff/mypy/biome/typescript failures MUST NOT trigger full repository rebuild.
 
 
 ## Pytest failures (triage workflow)
