@@ -2,7 +2,13 @@
   "use strict";
 
   var activeJobId = null;
-  var autoRefreshTimer = null;
+  var timers = {
+    autoRefreshTimer: null,
+    autofillTimer: null,
+    patchStatTimer: null,
+    jobsTailTimer: null,
+    headerTimer: null,
+  };
 
   var uiStatusLatest = "";
 
@@ -164,9 +170,6 @@
   var dirty = { issueId: false, commitMsg: false, patchPath: false };
   var latestToken = "";
   var lastAutofillClearedToken = "";
-  var autofillTimer = null;
-
-  var patchStatTimer = null;
   var patchStatInFlight = false;
 
   var suppressIdleOutput = false;
@@ -1290,17 +1293,17 @@ function refreshJobs() {
     else closeLiveStream();
 
     if (activeJobId) {
-      if (!autoRefreshTimer) {
-        autoRefreshTimer = setInterval(function () {
+      if (!timers.autoRefreshTimer) {
+        timers.autoRefreshTimer = setInterval(function () {
           refreshJobs();
           refreshRuns();
         }, 1500);
       }
       return;
     }
-    if (autoRefreshTimer) {
-      clearInterval(autoRefreshTimer);
-      autoRefreshTimer = null;
+    if (timers.autoRefreshTimer) {
+      clearInterval(timers.autoRefreshTimer);
+      timers.autoRefreshTimer = null;
     }
   }
 
@@ -1718,14 +1721,14 @@ if (mode === "patch" || mode === "repair") {
   }
 
   function startAutofillPolling() {
-    if (autofillTimer) {
-      clearInterval(autofillTimer);
-      autofillTimer = null;
+    if (timers.autofillTimer) {
+      clearInterval(timers.autofillTimer);
+      timers.autofillTimer = null;
     }
     if (!cfg || !cfg.autofill || !cfg.autofill.enabled) return;
     var sec = parseInt(String(cfg.autofill.poll_interval_seconds || "10"), 10);
     if (isNaN(sec) || sec < 1) sec = 10;
-    autofillTimer = setInterval(pollLatestPatchOnce, sec * 1000);
+    timers.autofillTimer = setInterval(pollLatestPatchOnce, sec * 1000);
     pollLatestPatchOnce();
   }
 
@@ -2155,22 +2158,16 @@ if (mode === "patch" || mode === "repair") {
       refreshHeader();
       renderIssueDetail();
       validateAndPreview();
-      startAutofillPolling();
 
-      if (patchStatTimer) {
-        clearInterval(patchStatTimer);
-        patchStatTimer = null;
-      }
-      patchStatTimer = setInterval(tickMissingPatchClear, 1000);
+      timers.closeLiveStream = closeLiveStream;
+      timers.startAutofillPolling = startAutofillPolling;
+      timers.tickMissingPatchClear = tickMissingPatchClear;
+      timers.refreshJobs = refreshJobs;
+      timers.refreshTail = refreshTail;
+      timers.refreshHeader = refreshHeader;
+      timers.tailLines = tailLines;
 
-      setInterval(function () {
-        refreshJobs();
-        refreshTail(tailLines);
-      }, 2000);
-
-      setInterval(function () {
-        refreshHeader();
-      }, 5000);
+      if (window.PatchHubVisibilityLifecycle) window.PatchHubVisibilityLifecycle.install(timers);
 
       if (window.AmpSettings && typeof window.AmpSettings.init === "function") {
         try {
