@@ -60,6 +60,7 @@ jobs:
         run: |
           mkdir -p ci_artifacts
           cp -a patches/logs/*.log ci_artifacts/ || true
+          cp -a .badguys_live_repo/patches/logs/*.log ci_artifacts/ || true
           ls -la ci_artifacts || true
 
       - name: Upload artifacts (always)

@@ -10,7 +10,7 @@ import sys
 import threading
 import time
 import traceback
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Optional
 
@@ -191,17 +191,42 @@ def _prepare_hermetic_live_repo(repo_root: Path) -> Path:
         base = os.path.basename(dirpath)
         # Global ignores
         for n in names:
-            if n in {"patches", ".badguys_live_repo", "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", ".venv", "venv", ".tox", "node_modules"}:
+            if n in {
+                "patches",
+                ".badguys_live_repo",
+                "__pycache__",
+                ".pytest_cache",
+                ".mypy_cache",
+                ".ruff_cache",
+                ".tox",
+                "node_modules",
+            }:
                 ignore.add(n)
         return ignore
 
     shutil.copytree(repo_root, live_repo, symlinks=True, ignore=_ignore)
 
-    # Reuse the main patches directory (inputs/outputs/logs/locks) so existing cleanup logic and paths remain valid.
-    patches_link = live_repo / "patches"
-    if patches_link.exists() or patches_link.is_symlink():
-        patches_link.unlink()
-    os.symlink(str(repo_root / "patches"), str(patches_link))
+    # Hermetic patches directory.
+    #
+    # BadGuys runs the am_patch runner inside the hermetic repo. The runner relies on
+    # Path.relative_to() in a few places, and mixing symlink paths with resolved real
+    # paths can raise ValueError. Keep patches/ as a real directory inside the hermetic
+    # repo to avoid symlink prefix mismatches.
+    patches_dir = live_repo / "patches"
+    if patches_dir.exists() or patches_dir.is_symlink():
+        if patches_dir.is_symlink():
+            patches_dir.unlink()
+        else:
+            shutil.rmtree(patches_dir)
+    patches_dir.mkdir(parents=True, exist_ok=True)
+    for rel in [
+        "logs",
+        "workspaces",
+        "successful",
+        "unsuccessful",
+        "_test_mode",
+    ]:
+        (patches_dir / rel).mkdir(parents=True, exist_ok=True)
 
     _run_git(["git", "init"], cwd=live_repo)
     _run_git(["git", "add", "-A"], cwd=live_repo)
@@ -225,6 +250,11 @@ def _prepare_hermetic_live_repo(repo_root: Path) -> Path:
     if cp.returncode != 0:
         msg = (cp.stdout or "").rstrip("\n") + "\n" + (cp.stderr or "").rstrip("\n")
         raise SystemExit(f"FAIL: git commit failed in hermetic live repo\n{msg}")
+
+    # The runner expects to compare main vs origin/main for up-to-date checks.
+    # Provide a deterministic local origin/main ref with zero divergence.
+    _run_git(["git", "branch", "-M", "main"], cwd=live_repo)
+    _run_git(["git", "update-ref", "refs/remotes/origin/main", "HEAD"], cwd=live_repo)
 
     return live_repo
 
@@ -446,7 +476,7 @@ def _cleanup_issue_artifacts(ctx: Ctx, *, issue_id: str, test_name: Optional[str
     # - patches/logs/issue_666*
     # - patches/successful/issue_666*
     # - patches/unsuccessful/issue_666*
-    repo_root = ctx.repo_root
+    repo_root = ctx.live_repo_root
     ws = repo_root / "patches" / "workspaces" / f"issue_{issue_id}"
     _action(ctx, test_name=test_name, kind="CLEANUP", phase="DO", msg=f"rm -rf {ws}")
     shutil.rmtree(ws, ignore_errors=True)
@@ -672,13 +702,15 @@ def main(argv: list[str]) -> int:
 
         live_repo_root = _prepare_hermetic_live_repo(repo_root)
 
+        cfg_live = replace(cfg, patches_dir=live_repo_root / "patches")
+
         # Debug: log resolved config details
         ctx = Ctx(
             repo_root=repo_root,
             live_repo_root=live_repo_root,
             run_id=run_id,
             central_log=central_log,
-            cfg=cfg,
+            cfg=cfg_live,
             console_verbosity=cfg.console_verbosity,
             log_verbosity=cfg.log_verbosity,
             runner_ipc_artifacts={},
