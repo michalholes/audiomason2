@@ -10,7 +10,7 @@ import sys
 import threading
 import time
 import traceback
-from dataclasses import dataclass, replace
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
@@ -40,7 +40,6 @@ class SuiteCfg:
 @dataclass
 class Ctx:
     repo_root: Path
-    live_repo_root: Path
     run_id: str
     central_log: Path
     cfg: SuiteCfg
@@ -163,119 +162,6 @@ def _ensure_repo_root_in_syspath(repo_root: Path) -> None:
         sys.path.insert(0, s)
 
 
-
-def _is_am_patch_runner_argv(argv: list[str]) -> bool:
-    # Detect nested am_patch runner invocations launched by BadGuys tests.
-    # Deterministic: purely based on argv content.
-    for a in argv:
-        if a == "scripts/am_patch.py" or a.endswith("/scripts/am_patch.py"):
-            return True
-    return False
-
-
-def _run_git(argv: list[str], *, cwd: Path) -> None:
-    cp = subprocess.run(argv, cwd=str(cwd), capture_output=True, text=True)
-    if cp.returncode != 0:
-        msg = (cp.stdout or "").rstrip("\n") + "\n" + (cp.stderr or "").rstrip("\n")
-        raise SystemExit(f"FAIL: git command failed: {' '.join(argv)}\n{msg}")
-
-
-def _prepare_hermetic_live_repo(repo_root: Path) -> Path:
-    # BadGuys is often executed in environments where the checkout has no .git (e.g. source exports).
-    # Many runner flows require a git working tree. Create a hermetic git repo copy for runner invocations.
-    live_repo = repo_root / ".badguys_live_repo"
-    shutil.rmtree(live_repo, ignore_errors=True)
-
-    def _ignore(dirpath: str, names: list[str]) -> set[str]:
-        ignore: set[str] = set()
-        base = os.path.basename(dirpath)
-        # Global ignores
-        for n in names:
-            if n in {
-                ".git",
-                "patches",
-                ".badguys_live_repo",
-                "__pycache__",
-                ".pytest_cache",
-                ".mypy_cache",
-                ".ruff_cache",
-                ".tox",
-                "node_modules",
-            }:
-                ignore.add(n)
-        return ignore
-
-    shutil.copytree(repo_root, live_repo, symlinks=True, ignore=_ignore)
-
-    # Safety reset: if a .git directory is present for any reason, remove it before git init.
-    git_dir = live_repo / ".git"
-    if git_dir.exists() or git_dir.is_symlink():
-        if git_dir.is_dir() and not git_dir.is_symlink():
-            shutil.rmtree(git_dir)
-        else:
-            git_dir.unlink()
-
-    # Hermetic patches directory.
-    #
-    # BadGuys runs the am_patch runner inside the hermetic repo. The runner relies on
-    # Path.relative_to() in a few places, and mixing symlink paths with resolved real
-    # paths can raise ValueError. Keep patches/ as a real directory inside the hermetic
-    # repo to avoid symlink prefix mismatches.
-    patches_dir = live_repo / "patches"
-    if patches_dir.exists() or patches_dir.is_symlink():
-        if patches_dir.is_symlink():
-            patches_dir.unlink()
-        else:
-            shutil.rmtree(patches_dir)
-    patches_dir.mkdir(parents=True, exist_ok=True)
-    for rel in [
-        "logs",
-        "workspaces",
-        "successful",
-        "unsuccessful",
-        "_test_mode",
-    ]:
-        (patches_dir / rel).mkdir(parents=True, exist_ok=True)
-
-    _run_git(["git", "init"], cwd=live_repo)
-    _run_git(["git", "add", "-A"], cwd=live_repo)
-
-    env = os.environ.copy()
-    env["GIT_AUTHOR_NAME"] = "BadGuys"
-    env["GIT_AUTHOR_EMAIL"] = "badguys@example.invalid"
-    env["GIT_COMMITTER_NAME"] = "BadGuys"
-    env["GIT_COMMITTER_EMAIL"] = "badguys@example.invalid"
-    # Fixed timestamp for deterministic commit SHA across environments.
-    env["GIT_AUTHOR_DATE"] = "2000-01-01T00:00:00+00:00"
-    env["GIT_COMMITTER_DATE"] = "2000-01-01T00:00:00+00:00"
-
-    cp = subprocess.run(
-        [
-            "git",
-            "commit",
-            "--allow-empty",
-            "-m",
-            "badguys: hermetic live repo bootstrap",
-            "--no-gpg-sign",
-        ],
-        cwd=str(live_repo),
-        capture_output=True,
-        text=True,
-        env=env,
-    )
-    if cp.returncode != 0:
-        msg = (cp.stdout or "").rstrip("\n") + "\n" + (cp.stderr or "").rstrip("\n")
-        raise SystemExit(f"FAIL: git commit failed in hermetic live repo\n{msg}")
-
-    # The runner expects to compare main vs origin/main for up-to-date checks.
-    # Provide a deterministic local origin/main ref with zero divergence.
-    _run_git(["git", "branch", "-M", "main"], cwd=live_repo)
-    _run_git(["git", "update-ref", "refs/remotes/origin/main", "HEAD"], cwd=live_repo)
-
-    return live_repo
-
-
-
 def _init_logs(cfg: SuiteCfg, run_id: str) -> Path:
     logs_dir = cfg.logs_dir
     if logs_dir.exists():
@@ -383,11 +269,6 @@ def _run_cmd_with_heartbeat(ctx: Ctx, *, test_name: str, argv: list[str], cwd: P
         ipc_thread = threading.Thread(target=_run_reader, name="badguys_ipc_reader", daemon=True)
         ipc_thread.start()
 
-
-    # Hermetic git bootstrap: nested am_patch runner invocations require a git working tree.
-    if cwd == ctx.repo_root and _is_am_patch_runner_argv(argv):
-        cwd = ctx.live_repo_root
-
     proc = subprocess.Popen(
         argv,
         cwd=str(cwd),
@@ -492,7 +373,7 @@ def _cleanup_issue_artifacts(ctx: Ctx, *, issue_id: str, test_name: Optional[str
     # - patches/logs/issue_666*
     # - patches/successful/issue_666*
     # - patches/unsuccessful/issue_666*
-    repo_root = ctx.live_repo_root
+    repo_root = ctx.repo_root
     ws = repo_root / "patches" / "workspaces" / f"issue_{issue_id}"
     _action(ctx, test_name=test_name, kind="CLEANUP", phase="DO", msg=f"rm -rf {ws}")
     shutil.rmtree(ws, ignore_errors=True)
@@ -586,20 +467,8 @@ def _run_test_plan(test, ctx: Ctx) -> bool:
             if cp.stderr:
                 _emit(ctx, level="verbose", test_name=name, text=cp.stderr.rstrip("\n") + "\n")
 
-            if cp.returncode != step.expect_rc:
-                ok = False
-                _emit(
-                    ctx,
-                    level="verbose",
-                    test_name=name,
-                    text=f"FAIL: returncode={cp.returncode} expected={step.expect_rc}\n",
-                )
-
             if ipc_result is not None and "ok" in ipc_result:
-                # Preserve strict semantics for positive commands:
-                # expect_rc == 0 and ipc ok=false must fail.
-                # For negative commands (expect_rc != 0), ipc ok=false is expected.
-                if step.expect_rc == 0 and not bool(ipc_result.get("ok")):
+                if not bool(ipc_result.get("ok")):
                     ok = False
                     _emit(
                         ctx,
@@ -609,6 +478,15 @@ def _run_test_plan(test, ctx: Ctx) -> bool:
                             "FAIL: runner ipc ok=false "
                             f"returncode={cp.returncode} expected={step.expect_rc}\n"
                         ),
+                    )
+            else:
+                if cp.returncode != step.expect_rc:
+                    ok = False
+                    _emit(
+                        ctx,
+                        level="verbose",
+                        test_name=name,
+                        text=f"FAIL: returncode={cp.returncode} expected={step.expect_rc}\n",
                     )
         elif isinstance(step, ExpectPathExists):
             _log_banner(ctx, name, "expect_path_exists")
@@ -694,8 +572,6 @@ def main(argv: list[str]) -> int:
     from badguys.discovery import discover_tests
     from badguys._util import acquire_lock, fail_commit_limit, format_result_line, release_lock
 
-    live_repo_root: Optional[Path] = None
-
     acquire_lock(
         repo_root,
         path=cfg.lock_path,
@@ -719,17 +595,12 @@ def main(argv: list[str]) -> int:
                 print(t.name)
             return 0
 
-        live_repo_root = _prepare_hermetic_live_repo(repo_root)
-
-        cfg_live = replace(cfg, patches_dir=live_repo_root / "patches")
-
         # Debug: log resolved config details
         ctx = Ctx(
             repo_root=repo_root,
-            live_repo_root=live_repo_root,
             run_id=run_id,
             central_log=central_log,
-            cfg=cfg_live,
+            cfg=cfg,
             console_verbosity=cfg.console_verbosity,
             log_verbosity=cfg.log_verbosity,
             runner_ipc_artifacts={},
@@ -800,8 +671,6 @@ def main(argv: list[str]) -> int:
             return 130
         return 0 if ok_all else 1
     finally:
-        if live_repo_root is not None:
-            shutil.rmtree(live_repo_root, ignore_errors=True)
         release_lock(repo_root)
 
 
