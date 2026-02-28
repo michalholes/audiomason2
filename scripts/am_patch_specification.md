@@ -559,6 +559,7 @@ finalizeworkspace
     -   `gate_docs_include = ["src", "plugins"]` (default)
     -   `gate_docs_exclude = ["badguys", "patches"]` (default)
     -   `gate_docs_required_files = ["docs/changes.md", "docs/specification.md"]`
+
         (default)
 -   CLI (optional convenience flags; equivalent overrides are also
     supported):
