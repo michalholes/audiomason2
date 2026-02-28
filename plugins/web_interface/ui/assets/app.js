@@ -360,7 +360,9 @@ window.onerror = function (msg, src, line, col, err) {
         else node.setAttribute(k, v);
       }
     }
-    (children || []).forEach((c) => node.appendChild(typeof c === "string" ? document.createTextNode(c) : c));
+    (children || []).forEach((c) => {
+      node.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
+    });
     return node;
   }
 
@@ -413,7 +415,9 @@ window.onerror = function (msg, src, line, col, err) {
     const table = el("table", { class: "table" });
     const thead = el("thead");
     const trh = el("tr");
-    cols.forEach((c) => trh.appendChild(el("th", { text: c.header || c.key })));
+    cols.forEach((c) => {
+      trh.appendChild(el("th", { text: c.header || c.key }));
+    });
     thead.appendChild(trh);
     table.appendChild(thead);
     const tbody = el("tbody");
@@ -909,7 +913,9 @@ async function renderJobsLogViewer(content, notify) {
     const table = el("table", { class: "table" });
     const thead = el("thead");
     const trh = el("tr");
-    ["job_id", "type", "state"].forEach((h) => trh.appendChild(el("th", { text: h })));
+    ["job_id", "type", "state"].forEach((h) => {
+      trh.appendChild(el("th", { text: h }));
+    });
     thead.appendChild(trh);
     table.appendChild(thead);
     const tbody = el("tbody");
@@ -1008,7 +1014,9 @@ async function renderPluginManager(content, notify) {
     const table = el("table", { class: "table" });
     const thead = el("thead");
     const trh = el("tr");
-    ["name","version","source","enabled","interfaces","actions"].forEach((h)=>trh.appendChild(el("th",{text:h})));
+    ["name", "version", "source", "enabled", "interfaces", "actions"].forEach((h) => {
+      trh.appendChild(el("th", { text: h }));
+    });
     thead.appendChild(trh);
     table.appendChild(thead);
     const tbody = el("tbody");
@@ -1103,7 +1111,9 @@ async function renderStageManager(content, notify) {
     const table = el("table", { class: "table" });
     const thead = el("thead");
     const trh = el("tr");
-    ["name","size","mtime_ts","actions"].forEach((h)=>trh.appendChild(el("th",{text:h})));
+    ["name", "size", "mtime_ts", "actions"].forEach((h) => {
+      trh.appendChild(el("th", { text: h }));
+    });
     thead.appendChild(trh);
     table.appendChild(thead);
     const tbody = el("tbody");
@@ -1390,99 +1400,6 @@ async function renderAmConfig(content, notify) {
   return wrap;
 }
 
-
-async function renderJobsLogViewer(content, notify) {
-  const root = el("div", { class: "wizardManager" });
-
-  const header = el("div", { class: "toolbar" }, [
-    el("button", { class: "btn", text: "Refresh" }),
-  ]);
-
-  const listPane = el("div", { class: "wizardList" });
-  const detailPane = el("div", { class: "wizardDetail" });
-  const logPane = el("div", { class: "wizardYaml" });
-  const main = el("div", { class: "wizardGrid" }, [
-    el("div", { class: "wizardCol" }, [listPane]),
-    el("div", { class: "wizardColWide" }, [detailPane, logPane]),
-  ]);
-
-  root.appendChild(header);
-  root.appendChild(main);
-
-  let currentJobId = null;
-  let currentOffset = 0;
-
-  function renderJobList(items) {
-    clear(listPane);
-    if (!items.length) {
-      listPane.appendChild(el("div", { class: "hint", text: "No jobs." }));
-      return;
-    }
-    for (const j of items) {
-      const jid = j.job_id || j.id || "";
-      const label = `${jid} (${j.state || ""})`;
-      const row = el("div", { class: "stepRow", text: label });
-      row.addEventListener("click", async ()=>{
-        currentJobId = jid;
-        currentOffset = 0;
-        await loadJob();
-      });
-      listPane.appendChild(row);
-    }
-  }
-
-  async function loadList() {
-    const data = await API.getJson("/api/jobs");
-    const items = Array.isArray(data.items) ? data.items : [];
-    renderJobList(items);
-  }
-
-  async function loadJob() {
-    clear(detailPane);
-    clear(logPane);
-    if (!currentJobId) {
-      detailPane.appendChild(el("div", { class: "hint", text: "Select a job." }));
-      return;
-    }
-    const job = await API.getJson(`/api/jobs/${encodeURIComponent(currentJobId)}`);
-    const item = job.item || {};
-    detailPane.appendChild(el("div", { class: "subTitle", text: "Job" }));
-    detailPane.appendChild(el("pre", { class: "codeBlock", text: JSON.stringify(item, null, 2) }));
-
-    const logHdr = el("div", { class: "toolbar" });
-    const moreBtn = el("button", { class: "btn", text: "Load more" });
-    logHdr.appendChild(moreBtn);
-    logPane.appendChild(logHdr);
-    const pre = el("pre", { class: "logBox", text: "" });
-    logPane.appendChild(pre);
-
-    async function appendLog() {
-      const r = await API.getJson(`/api/jobs/${encodeURIComponent(currentJobId)}/log?offset=${currentOffset}`);
-      pre.textContent += (r.text || "");
-      currentOffset = r.next_offset || currentOffset;
-      pre.scrollTop = pre.scrollHeight;
-    }
-
-    moreBtn.addEventListener("click", async ()=>{
-      try { await appendLog(); } catch(e){ notify(String(e)); }
-    });
-
-    await appendLog();
-  }
-
-  header.firstChild.addEventListener("click", async ()=>{
-    try {
-      await loadList();
-      await loadJob();
-    } catch(e) {
-      notify(String(e));
-    }
-  });
-
-  await loadList();
-  await loadJob();
-  return root;
-}
 
 async function renderWizardManager(content, notify) {
   // content is the card body element provided by the layout renderer

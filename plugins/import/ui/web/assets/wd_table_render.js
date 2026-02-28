@@ -55,7 +55,9 @@
 
     function renderAll() {
       clear(body);
-      Object.keys(rowById).forEach((k) => delete rowById[k]);
+      Object.keys(rowById).forEach((k) => {
+        delete rowById[k];
+      });
       const wd = state.getWizardDraft ? state.getWizardDraft() : {};
       const g = stableGraph(wd);
       const nodes = Array.isArray(g.nodes) ? g.nodes : [];

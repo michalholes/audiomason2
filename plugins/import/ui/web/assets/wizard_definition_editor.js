@@ -121,7 +121,9 @@
       const edges = Array.isArray(g.edges) ? g.edges.slice(0) : [];
       const v2 = defFromGraph(nodes, g.entry, edges);
       v2._am2_ui = uiState;
-      Object.keys(wd).forEach((k) => delete wd[k]);
+      Object.keys(wd).forEach((k) => {
+        delete wd[k];
+      });
       Object.assign(wd, v2);
     });
   }
@@ -182,7 +184,9 @@
       nodes.splice(nodes.length - 1, 0, sid);
       const next = defFromGraph(nodes, g.entry, g.edges);
       next._am2_ui = uiState;
-      Object.keys(wd).forEach((k) => delete wd[k]);
+      Object.keys(wd).forEach((k) => {
+        delete wd[k];
+      });
       Object.assign(wd, next);
     });
   }
@@ -202,7 +206,9 @@
       });
       const next = defFromGraph(nodes, g.entry, edges);
       next._am2_ui = uiState;
-      Object.keys(wd).forEach((k) => delete wd[k]);
+      Object.keys(wd).forEach((k) => {
+        delete wd[k];
+      });
       Object.assign(wd, next);
       if (selectedStepId() === sid) setSelectedStep(null);
     });
@@ -229,7 +235,9 @@
       }
       const next = defFromGraph(nodes, g.entry, g.edges);
       next._am2_ui = uiState;
-      Object.keys(wd).forEach((k) => delete wd[k]);
+      Object.keys(wd).forEach((k) => {
+        delete wd[k];
+      });
       Object.assign(wd, next);
     });
   }
@@ -247,7 +255,9 @@
       nodes[idx] = tmp;
       const next = defFromGraph(nodes, g.entry, g.edges);
       next._am2_ui = uiState;
-      Object.keys(wd).forEach((k) => delete wd[k]);
+      Object.keys(wd).forEach((k) => {
+        delete wd[k];
+      });
       Object.assign(wd, next);
     });
   }
@@ -265,7 +275,9 @@
       nodes[idx] = tmp;
       const next = defFromGraph(nodes, g.entry, g.edges);
       next._am2_ui = uiState;
-      Object.keys(wd).forEach((k) => delete wd[k]);
+      Object.keys(wd).forEach((k) => {
+        delete wd[k];
+      });
       Object.assign(wd, next);
     });
   }
@@ -282,7 +294,9 @@
       });
       const next = defFromGraph(g.nodes, g.entry, edges);
       next._am2_ui = uiState;
-      Object.keys(wd).forEach((k) => delete wd[k]);
+      Object.keys(wd).forEach((k) => {
+        delete wd[k];
+      });
       Object.assign(wd, next);
     });
   }
@@ -301,7 +315,9 @@
       edgesAll.splice(idx, 1);
       const next = defFromGraph(g.nodes, g.entry, edgesAll);
       next._am2_ui = uiState;
-      Object.keys(wd).forEach((k) => delete wd[k]);
+      Object.keys(wd).forEach((k) => {
+        delete wd[k];
+      });
       Object.assign(wd, next);
     });
   }
@@ -320,8 +336,12 @@
     const u = ensureWizardUi(wizardDraft());
     const v = u.validation || {};
     const msgs = [];
-    (Array.isArray(v.local) ? v.local : []).forEach((m) => msgs.push(m));
-    (Array.isArray(v.server) ? v.server : []).forEach((m) => msgs.push(m));
+    (Array.isArray(v.local) ? v.local : []).forEach((m) => {
+      msgs.push(m);
+    });
+    (Array.isArray(v.server) ? v.server : []).forEach((m) => {
+      msgs.push(m);
+    });
     return msgs;
   }
 

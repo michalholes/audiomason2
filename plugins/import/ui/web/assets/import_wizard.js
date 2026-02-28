@@ -32,7 +32,9 @@
         else n.setAttribute(k, String(v));
       }
     }
-    (children || []).forEach((c) => n.appendChild(c));
+    (children || []).forEach((c) => {
+      n.appendChild(c);
+    });
     return n;
   }
 
@@ -116,8 +118,12 @@
     const panels = Array.from(document.querySelectorAll(".tabPanel"));
 
     function activate(tab) {
-      btns.forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
-      panels.forEach((p) => p.classList.toggle("active", p.dataset.panel === tab));
+      btns.forEach((b) => {
+        b.classList.toggle("active", b.dataset.tab === tab);
+      });
+      panels.forEach((p) => {
+        p.classList.toggle("active", p.dataset.panel === tab);
+      });
     }
 
     btns.forEach((b) => {

@@ -14,8 +14,8 @@
     </div>
 
     <div class="tabs" id="tabs">
-      <button class="tabBtn" data-tab="run">Run Wizard</button>
-      <button class="tabBtn" data-tab="flow">Flow Editor</button>
+      <button type="button" class="tabBtn" data-tab="run">Run Wizard</button>
+      <button type="button" class="tabBtn" data-tab="flow">Flow Editor</button>
     </div>
 
     <div class="tabPanel" data-panel="run">
@@ -33,8 +33,8 @@
           <option value="stage">stage</option>
           <option value="inplace">inplace</option>
         </select>
-        <button id="start" class="btn">Start</button>
-        <button id="reload" class="btn">Reload</button>
+        <button type="button" id="start" class="btn">Start</button>
+        <button type="button" id="reload" class="btn">Reload</button>
       </div>
       <div id="status" class="status"></div>
     </div>
@@ -43,8 +43,8 @@
       <div class="cardTitle">Step</div>
       <div id="step" class="step"></div>
       <div class="buttonRow">
-        <button id="submit" class="btn">Submit</button>
-        <button id="startProcessing" class="btn">Start processing</button>
+        <button type="button" id="submit" class="btn">Submit</button>
+        <button type="button" id="startProcessing" class="btn">Start processing</button>
       </div>
       <div id="stepError" class="error"></div>
     </div>
@@ -59,10 +59,10 @@
     <div class="tabPanel" data-panel="flow">
       <div class="card">
         <div class="buttonRow">
-          <button id="flowReloadAll" class="btn">Reload All</button>
-          <button id="flowValidateAll" class="btn">Validate All</button>
-          <button id="flowSaveAll" class="btn">Save All</button>
-          <button id="flowResetAll" class="btn">Reset All</button>
+          <button type="button" id="flowReloadAll" class="btn">Reload All</button>
+          <button type="button" id="flowValidateAll" class="btn">Validate All</button>
+          <button type="button" id="flowSaveAll" class="btn">Save All</button>
+          <button type="button" id="flowResetAll" class="btn">Reset All</button>
         </div>
         <div id="flowAllStatus" class="status"></div>
 
@@ -105,7 +105,7 @@
                   <div class="flowStepSectionTitle">Apply status</div>
                   <div class="flowStepApply" id="flowStepApply"></div>
                   <div class="buttonRow">
-                    <button id="flowClearStep" class="btn">Clear Settings</button>
+                    <button type="button" id="flowClearStep" class="btn">Clear Settings</button>
                   </div>
                 </div>
 
@@ -119,14 +119,14 @@
         </div>
 
         <!-- Hidden controls used by existing editor modules (API-driven in Flow Editor) -->
-        <button id="cfgReload" class="btn is-hidden">Reload</button>
-        <button id="cfgValidate" class="btn is-hidden">Validate</button>
-        <button id="cfgSave" class="btn is-hidden">Save</button>
-        <button id="cfgReset" class="btn is-hidden">Reset</button>
-        <button id="wdReload" class="btn is-hidden">Reload</button>
-        <button id="wdValidate" class="btn is-hidden">Validate</button>
-        <button id="wdSave" class="btn is-hidden">Save</button>
-        <button id="wdReset" class="btn is-hidden">Reset</button>
+        <button type="button" id="cfgReload" class="btn is-hidden">Reload</button>
+        <button type="button" id="cfgValidate" class="btn is-hidden">Validate</button>
+        <button type="button" id="cfgSave" class="btn is-hidden">Save</button>
+        <button type="button" id="cfgReset" class="btn is-hidden">Reset</button>
+        <button type="button" id="wdReload" class="btn is-hidden">Reload</button>
+        <button type="button" id="wdValidate" class="btn is-hidden">Validate</button>
+        <button type="button" id="wdSave" class="btn is-hidden">Save</button>
+        <button type="button" id="wdReset" class="btn is-hidden">Reset</button>
 
         <textarea id="cfgJson" class="jsonEditor is-hidden" rows="6"></textarea>
         <div id="cfgError" class="error"></div>
