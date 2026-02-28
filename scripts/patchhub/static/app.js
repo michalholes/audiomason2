@@ -70,7 +70,7 @@
     }
     try {
       node.textContent = JSON.stringify(obj, null, 2);
-    } catch (e) {
+    } catch {
       node.textContent = String(obj);
     }
   }
@@ -84,7 +84,7 @@
   function formatLocalTime(isoUtc) {
     if (!isoUtc) return "";
     var d = new Date(String(isoUtc));
-    if (isNaN(d.getTime())) return String(isoUtc);
+    if (Number.isNaN(d.getTime())) return String(isoUtc);
     return d.toLocaleString(undefined, {
       year: "numeric",
       month: "2-digit",
@@ -100,7 +100,7 @@
       .then((r) => r.text().then((t) => {
           try {
             return JSON.parse(t);
-          } catch (e) {
+          } catch {
             return {
               ok: false,
               error: "bad json",
@@ -119,7 +119,7 @@
     }).then((r) => r.text().then((t) => {
         try {
           return JSON.parse(t);
-        } catch (e) {
+        } catch {
           return {
             ok: false,
             error: "bad json",
@@ -230,7 +230,7 @@
 
   function fsUpdateSelCount() {
     var n = 0;
-    for (var k in fsChecked) {
+    for (let k in fsChecked) {
       if (Object.hasOwn(fsChecked, k)) n += 1;
     }
     var node = el("fsSelCount");
@@ -247,7 +247,7 @@
 
   function fsDownloadSelected() {
     var paths = [];
-    for (var k in fsChecked) {
+    for (let k in fsChecked) {
       if (Object.hasOwn(fsChecked, k)) paths.push(k);
     }
     if (!paths.length) {
@@ -443,9 +443,9 @@
           if (/\.(zip|patch|diff)$/i.test(rel)) {
             el("patchPath").value = normalizePatchPath(rel);
 
-            var m = null;
+            let m = null;
             if (issueRegex) {
-              try { m = issueRegex.exec(rel); } catch (e) { m = null; }
+              try { m = issueRegex.exec(rel); } catch { m = null; }
             }
             if (!m) {
               m = /(?:issue_|#)(\d+)/i.exec(rel) || /(\d{3,6})/.exec(rel);
@@ -593,27 +593,27 @@
       state[name] = st;
     }
 
-    for (var i = 0; i < lines.length; i++) {
-      var raw = String(lines[i] || "");
-      var s = raw.trim();
+    for (let i = 0; i < lines.length; i++) {
+      const raw = String(lines[i] || "");
+      const s = raw.trim();
       if (!s) continue;
 
       if (s.indexOf("DO:") === 0) {
-        var stepDo = normStepName(s.slice(3));
+        const stepDo = normStepName(s.slice(3));
         setState(stepDo, "running");
         currentRunning = stepDo;
         continue;
       }
 
       if (s.indexOf("OK:") === 0) {
-        var stepOk = normStepName(s.slice(3));
+        const stepOk = normStepName(s.slice(3));
         setState(stepOk, "ok");
         if (currentRunning === stepOk) currentRunning = "";
         continue;
       }
 
       if (s.indexOf("FAIL:") === 0) {
-        var stepFail = normStepName(s.slice(5));
+        const stepFail = normStepName(s.slice(5));
         setState(stepFail, "fail");
         if (currentRunning === stepFail) currentRunning = "";
         continue;
@@ -625,16 +625,16 @@
     }
 
     if (currentRunning) {
-      for (var j = 0; j < order.length; j++) {
-        var nm = order[j];
+      for (let j = 0; j < order.length; j++) {
+        const nm = order[j];
         if (state[nm] === "running" && nm !== currentRunning) {
           state[nm] = "pending";
         }
       }
     }
 
-    for (var k = 0; k < order.length; k++) {
-      var nm2 = order[k];
+    for (let k = 0; k < order.length; k++) {
+      const nm2 = order[k];
       if (!Object.hasOwn(state, nm2)) state[nm2] = "pending";
     }
 
@@ -643,8 +643,8 @@
 
   function pickProgressSummaryLine(text) {
     var lines = String(text || "").split(/\r?\n/);
-    for (var i = lines.length - 1; i >= 0; i--) {
-      var s = String(lines[i] || "").trim();
+    for (let i = lines.length - 1; i >= 0; i--) {
+      const s = String(lines[i] || "").trim();
       if (!s) continue;
 
       if (s.indexOf("RESULT:") === 0) return s;
@@ -669,9 +669,9 @@
     }
 
     var html = "";
-    for (var i = 0; i < order.length; i++) {
-      var name = order[i];
-      var st = state[name] || "pending";
+    for (let i = 0; i < order.length; i++) {
+      const name = order[i];
+      const st = state[name] || "pending";
       html += "<div class=\"step\">";
       html += "<span class=\"dot " + escapeHtml(st) + "\"></span>";
       html += "<span class=\"step-name\">" + escapeHtml(name) + "</span>";
@@ -721,10 +721,10 @@
       state[name] = st;
     }
 
-    for (var i = 0; i < (events || []).length; i++) {
-      var ev = events[i];
+    for (let i = 0; i < (events || []).length; i++) {
+      const ev = events[i];
       if (!ev || typeof ev !== "object") continue;
-      var t = String(ev.type || "");
+      const t = String(ev.type || "");
 
       if (t === "result") {
         resultStatus = ev.ok ? "success" : "fail";
@@ -733,10 +733,10 @@
 
       if (t !== "log") continue;
 
-      var kind = String(ev.kind || "");
+      const kind = String(ev.kind || "");
       if (kind !== "DO" && kind !== "OK" && kind !== "FAIL") continue;
 
-      var stage = normStepName(ev.stage || "");
+      const stage = normStepName(ev.stage || "");
       if (!stage) continue;
 
       if (kind === "DO") {
@@ -758,16 +758,16 @@
     }
 
     if (currentRunning) {
-      for (var j = 0; j < order.length; j++) {
-        var nm = order[j];
+      for (let j = 0; j < order.length; j++) {
+        const nm = order[j];
         if (state[nm] === "running" && nm !== currentRunning) {
           state[nm] = "pending";
         }
       }
     }
 
-    for (var k = 0; k < order.length; k++) {
-      var nm2 = order[k];
+    for (let k = 0; k < order.length; k++) {
+      const nm2 = order[k];
       if (!Object.hasOwn(state, nm2)) state[nm2] = "pending";
     }
 
@@ -777,16 +777,16 @@
   function deriveProgressSummaryFromEvents(events, progress) {
     var lastResult = null;
     var lastLog = null;
-    for (var i = (events || []).length - 1; i >= 0; i--) {
-      var ev = events[i];
+    for (let i = (events || []).length - 1; i >= 0; i--) {
+      const ev = events[i];
       if (!ev || typeof ev !== "object") continue;
-      var t = String(ev.type || "");
+      const t = String(ev.type || "");
       if (t === "result") {
         lastResult = ev;
         break;
       }
       if (t === "log") {
-        var kind = String(ev.kind || "");
+        const kind = String(ev.kind || "");
         if (kind === "DO" || kind === "OK" || kind === "FAIL") {
           lastLog = ev;
           break;
@@ -802,8 +802,8 @@
     }
 
     if (lastLog) {
-      var stage = normStepName(lastLog.stage || "");
-      var kind = String(lastLog.kind || "");
+      const stage = normStepName(lastLog.stage || "");
+      const kind = String(lastLog.kind || "");
       if (kind === "FAIL") {
         return { text: "FAIL: " + stage, status: "fail" };
       }
@@ -906,18 +906,18 @@
   
   function loadLiveJobId() {
   var v = null;
-  try { v = localStorage.getItem("amp.liveJobId"); } catch (e) { v = null; }
+  try { v = localStorage.getItem("amp.liveJobId"); } catch { v = null; }
   if (!v) return null;
   return String(v);
 }
 
 function saveLiveJobId(jobId) {
-  try { localStorage.setItem("amp.liveJobId", String(jobId || "")); } catch (e) {}
+  try { localStorage.setItem("amp.liveJobId", String(jobId || "")); } catch {}
 }
 
 function loadLiveLevel() {
     var v = null;
-    try { v = localStorage.getItem("amp.liveLogLevel"); } catch (e) { v = null; }
+    try { v = localStorage.getItem("amp.liveLogLevel"); } catch { v = null; }
     if (!v) return;
     v = String(v);
     if (["quiet", "normal", "warning", "verbose", "debug"].indexOf(v) >= 0) {
@@ -927,22 +927,22 @@ function loadLiveLevel() {
 
   function loadUiVisibility() {
     var v = null;
-    try { v = localStorage.getItem("amp.ui.runsVisible"); } catch (e) { v = null; }
+    try { v = localStorage.getItem("amp.ui.runsVisible"); } catch { v = null; }
     if (v === "1") runsVisible = true;
     else if (v === "0") runsVisible = false;
 
     v = null;
-    try { v = localStorage.getItem("amp.ui.jobsVisible"); } catch (e) { v = null; }
+    try { v = localStorage.getItem("amp.ui.jobsVisible"); } catch { v = null; }
     if (v === "1") jobsVisible = true;
     else if (v === "0") jobsVisible = false;
   }
 
   function saveRunsVisible(v) {
-    try { localStorage.setItem("amp.ui.runsVisible", v ? "1" : "0"); } catch (e) {}
+    try { localStorage.setItem("amp.ui.runsVisible", v ? "1" : "0"); } catch {}
   }
 
   function saveJobsVisible(v) {
-    try { localStorage.setItem("amp.ui.jobsVisible", v ? "1" : "0"); } catch (e) {}
+    try { localStorage.setItem("amp.ui.jobsVisible", v ? "1" : "0"); } catch {}
   }
 
   function setRunsVisible(v) {
@@ -973,7 +973,7 @@ function loadLiveLevel() {
 
   function closeLiveStream() {
     if (liveES) {
-      try { liveES.close(); } catch (e) {}
+      try { liveES.close(); } catch {}
     }
     liveES = null;
     liveStreamJobId = null;
@@ -1026,7 +1026,7 @@ function loadLiveLevel() {
     if (showPrefixes) {
       var parts = [];
       var stage = String(ev.stage || "");
-      var kind = String(ev.kind || "");
+      const kind = String(ev.kind || "");
       var sev = String(ev.sev || "");
       var msg = String(ev.msg || "");
       if (stage) parts.push(stage);
@@ -1052,7 +1052,7 @@ function loadLiveLevel() {
     var box = el("liveLog");
     if (!box) return;
     var lines = [];
-    for (var i = 0; i < liveEvents.length; i++) {
+    for (let i = 0; i < liveEvents.length; i++) {
       var ev = liveEvents[i];
       if (!filterLiveEvent(ev)) continue;
       lines.push(formatLiveEvent(ev));
@@ -1067,7 +1067,7 @@ function loadLiveLevel() {
   function updateProgressFromEvents() {
     var box = el("activeStage");
     if (!box) return;
-    for (var i = liveEvents.length - 1; i >= 0; i--) {
+    for (let i = liveEvents.length - 1; i >= 0; i--) {
       var ev = liveEvents[i];
       if (!ev) continue;
       if (String(ev.type || "") === "result") {
@@ -1076,7 +1076,7 @@ function loadLiveLevel() {
       }
       if (String(ev.type || "") === "log") {
         var stage = String(ev.stage || "");
-        var kind = String(ev.kind || "");
+        const kind = String(ev.kind || "");
         if (stage || kind) {
           box.textContent = (stage ? stage : "") + (kind ? " / " + kind : "");
           return;
@@ -1112,7 +1112,7 @@ function loadLiveLevel() {
     es.onmessage = (e) => {
       if (!e || !e.data) return;
       var obj = null;
-      try { obj = JSON.parse(String(e.data)); } catch (err) { obj = null; }
+      try { obj = JSON.parse(String(e.data)); } catch { obj = null; }
       if (!obj) return;
       liveEvents.push(obj);
       if (filterLiveEvent(obj)) {
@@ -1132,13 +1132,13 @@ function loadLiveLevel() {
             reason = String(p.reason || "");
             status = String(p.status || "");
           }
-        } catch (err) {}
+        } catch {}
       }
       var msg = "ended";
       if (status) msg += " (" + status + ")";
       if (reason) msg += " [" + reason + "]";
       setLiveStreamStatus(msg);
-      try { es.close(); } catch (e2) {}
+      try { es.close(); } catch {}
       if (liveES === es) {
         liveES = null;
       }
@@ -1185,7 +1185,7 @@ function loadLiveLevel() {
     if (!startUtc || !endUtc) return "";
     var a = new Date(String(startUtc));
     var b = new Date(String(endUtc));
-    if (isNaN(a.getTime()) || isNaN(b.getTime())) return "";
+    if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return "";
     var sec = (b.getTime() - a.getTime()) / 1000;
     if (sec < 0) return "";
     var s = Math.round(sec * 10) / 10;
@@ -1487,7 +1487,7 @@ if (mode === "patch" || mode === "repair") {
       .then((r) => r.text().then((t) => {
           try {
             return JSON.parse(t);
-          } catch (e) {
+          } catch {
             return {
               ok: false,
               error: "bad json",
@@ -1583,7 +1583,7 @@ if (mode === "patch" || mode === "repair") {
     if (zone) {
       zone.addEventListener("click", () => { openPicker(); });
 
-      function setDrag(on) {
+      const setDrag = (on) => {
         if (on) zone.classList.add("dragover");
         else zone.classList.remove("dragover");
       }
@@ -1613,7 +1613,7 @@ if (mode === "patch" || mode === "repair") {
     return apiGet("/api/config").then((r) => {
       cfg = r || null;
       if (cfg && cfg.issue && cfg.issue.default_regex) {
-        try { issueRegex = new RegExp(cfg.issue.default_regex); } catch (e) { issueRegex = null; }
+        try { issueRegex = new RegExp(cfg.issue.default_regex); } catch { issueRegex = null; }
       }
       if (cfg && cfg.meta && cfg.meta.version) {
         setText("ampWebVersion", "v" + String(cfg.meta.version));
@@ -1715,7 +1715,7 @@ if (mode === "patch" || mode === "repair") {
     }
     if (!cfg || !cfg.autofill || !cfg.autofill.enabled) return;
     var sec = parseInt(String(cfg.autofill.poll_interval_seconds || "10"), 10);
-    if (isNaN(sec) || sec < 1) sec = 10;
+    if (Number.isNaN(sec) || sec < 1) sec = 10;
     timers.autofillTimer = setInterval(pollLatestPatchOnce, sec * 1000);
     pollLatestPatchOnce();
   }
@@ -1743,6 +1743,8 @@ if (mode === "patch" || mode === "repair") {
 
       if (el("hdrMeta")) el("hdrMeta").textContent = meta;
     });
+
+    refreshLastRunLog();
   }
 
   function setTabActive(which) {
@@ -1761,7 +1763,6 @@ if (mode === "patch" || mode === "repair") {
     var tabs = el("issueTabs");
     var content = el("issueTabContent");
     var links = el("issueTabLinks");
-    var body = el("issueTabBody");
 
     if (!selectedRun) {
       if (cardTitle) cardTitle.textContent = "Select a run on the left.";
@@ -1938,7 +1939,7 @@ if (mode === "patch" || mode === "repair") {
     if (el("fsDelete")) {
       el("fsDelete").addEventListener("click", () => {
         var paths = [];
-        for (var k in fsChecked) {
+        for (let k in fsChecked) {
           if (Object.hasOwn(fsChecked, k)) paths.push(k);
         }
         if (!paths.length && fsSelected) paths = [fsSelected];
@@ -2024,7 +2025,7 @@ if (mode === "patch" || mode === "repair") {
     if (el("liveLevel")) {
       el("liveLevel").addEventListener("change", () => {
         liveLevel = String(el("liveLevel").value || "normal");
-        try { localStorage.setItem("amp.liveLogLevel", liveLevel); } catch (e) {}
+        try { localStorage.setItem("amp.liveLogLevel", liveLevel); } catch {}
         renderLiveLog();
         updateProgressFromEvents();
       });
@@ -2158,7 +2159,7 @@ if (mode === "patch" || mode === "repair") {
       if (window.AmpSettings && typeof window.AmpSettings.init === "function") {
         try {
           window.AmpSettings.init();
-        } catch (e) {
+        } catch {
           // Best-effort: do not break main UI if AMP settings init fails.
         }
       }

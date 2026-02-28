@@ -8,7 +8,7 @@
       .then((r) => r.text().then((t) => {
           try {
             return JSON.parse(t);
-          } catch (e) {
+          } catch {
             return { ok: false, error: "bad json", raw: t, status: r.status };
           }
         }));
@@ -22,7 +22,7 @@
     }).then((r) => r.text().then((t) => {
         try {
           return JSON.parse(t);
-        } catch (e) {
+        } catch {
           return { ok: false, error: "bad json", raw: t, status: r.status };
         }
       }));
@@ -58,9 +58,9 @@
 
   function normalizeList(v) {
     if (Array.isArray(v)) {
-      var out = [];
+      const out = [];
       v.forEach((x) => {
-        var s = String(x || "").trim();
+        const s = String(x || "").trim();
         if (s && out.indexOf(s) < 0) out.push(s);
       });
       return out;
@@ -84,7 +84,7 @@
     return out.join(" ");
   }
 
-  function fallbackHelp(p, key) {
+  function fallbackHelp(p, _key) {
     var o = p || {};
     var type = (o && o.type != null) ? String(o.type) : "";
     var defv = (o && Object.hasOwn(o, "default"))
@@ -109,21 +109,21 @@
     }
 
     if (schemaObj && schemaObj.policy && typeof schemaObj.policy === "object") {
-      var out = [];
+      const out = [];
       Object.keys(schemaObj.policy).forEach((k) => {
-        var p = schemaObj.policy[k] || {};
+        const p = schemaObj.policy[k] || {};
 
-        var kind = "str";
+        let kind = "str";
         if (Array.isArray(p.enum) && p.enum.length > 0) kind = "enum";
         else if (p.type === "bool") kind = "bool";
         else if (p.type === "int") kind = "int";
         else if (p.type === "list[str]") kind = "list_str";
 
-        var label = "";
+        let label = "";
         if (p.label && String(p.label).trim() && p.label !== k) label = String(p.label);
         else label = humanizeKey(k);
 
-        var help = "";
+        let help = "";
         if (p.help && String(p.help).trim()) help = String(p.help);
         else help = fallbackHelp(p, k);
 
@@ -213,25 +213,25 @@
       var readOnly = !!f.read_only;
 
       if (ftxt) {
-        var kHit = key.toLowerCase().indexOf(ftxt) >= 0;
-        var lHit = label.toLowerCase().indexOf(ftxt) >= 0;
+        const kHit = key.toLowerCase().indexOf(ftxt) >= 0;
+        const lHit = label.toLowerCase().indexOf(ftxt) >= 0;
         if (!kHit && !lHit) return;
       }
 
       var row = mk("div", "amp-row", null);
-      row.id = "ampRow__" + key;
+      row.id = `ampRow__${key}`;
       if (help) row.title = help;
       if (readOnly) row.classList.add("amp-readonly");
 
       var keyBox = mk("div", "amp-key", label);
-      keyBox.title = "Key: " + key;
+      keyBox.title = `Key: ${key}`;
       keyBox.appendChild(mk("div", "amp-key-sub", key));
       row.appendChild(keyBox);
 
       var ctl = mk("div", "amp-control", null);
 
       if (readOnly) {
-        var ro = "";
+        let ro = "";
         if (kind === "list_str") ro = normalizeList(values[key]).join(", ");
         else if (kind === "bool") ro = (!!values[key]) ? "true" : "false";
         else ro = String(values[key] == null ? "" : values[key]);
@@ -242,8 +242,8 @@
       }
 
       if (kind === "bool") {
-        var sw = mk("label", "switch", null);
-        var cb = mk("input", null, null);
+        const sw = mk("label", "switch", null);
+        const cb = mk("input", null, null);
         cb.type = "checkbox";
         cb.checked = !!values[key];
         cb.addEventListener("change", () => {
@@ -253,9 +253,9 @@
         sw.appendChild(mk("span", "slider", null));
         ctl.appendChild(sw);
       } else if (kind === "enum" && enumVals) {
-        var sel = mk("select", "input", null);
+        const sel = mk("select", "input", null);
         enumVals.forEach((optV) => {
-          var opt = mk("option", null, String(optV));
+          const opt = mk("option", null, String(optV));
           opt.value = String(optV);
           sel.appendChild(opt);
         });
@@ -265,7 +265,7 @@
         });
         ctl.appendChild(sel);
       } else if (kind === "int") {
-        var ni = mk("input", "input", null);
+        const ni = mk("input", "input", null);
         ni.type = "number";
         ni.value = String(values[key] == null ? "" : values[key]);
         ni.addEventListener("change", () => {
@@ -275,11 +275,11 @@
         });
         ctl.appendChild(ni);
       } else if (kind === "list_str") {
-        var box = mk("div", "amp-list", null);
+        const box = mk("div", "amp-list", null);
         ctl.appendChild(box);
         renderChipList(box, key, values[key], onChange);
       } else {
-        var ti = mk("input", "input", null);
+        const ti = mk("input", "input", null);
         ti.type = "text";
         ti.value = String(values[key] == null ? "" : values[key]);
         ti.addEventListener("change", () => {
@@ -291,16 +291,16 @@
       row.appendChild(ctl);
 
       if (baseValues) {
-        var baseV = baseValues[key];
-        var curV = values[key];
-        var dirty = false;
+        const baseV = baseValues[key];
+        const curV = values[key];
+        let dirty = false;
         if (kind === "list_str") {
-          var a = normalizeList(baseV);
-          var b = normalizeList(curV);
+          const a = normalizeList(baseV);
+          const b = normalizeList(curV);
           if (a.length !== b.length) {
             dirty = true;
           } else {
-            for (var i = 0; i < a.length; i++) {
+            for (let i = 0; i < a.length; i++) {
               if (a[i] !== b[i]) {
                 dirty = true;
                 break;
@@ -371,7 +371,7 @@ function init() {
     }
 
     function updateRowDirty(k) {
-      var row = el("ampRow__" + k);
+      var row = el(`ampRow__${k}`);
       if (!row) return;
       if (isDirty(k)) row.classList.add("amp-dirty");
       else row.classList.remove("amp-dirty");
@@ -395,7 +395,7 @@ function init() {
             setStatus((c && c.error) ? c.error : "config load failed", true);
             return;
           }
-          var fields = schemaToFields(schema || {});
+          const fields = schemaToFields(schema || {});
           fieldKinds = {};
           fields.forEach((f) => {
             var k = String(f.key || "");
@@ -427,7 +427,7 @@ function init() {
         }
         baseValues = r.values || baseValues;
         if (!dry) {
-          var fields = schemaToFields(schema || {});
+          const fields = schemaToFields(schema || {});
           curValues = cloneValues(baseValues);
           renderFields(fields, baseValues, curValues, setCur, filterText);
         }

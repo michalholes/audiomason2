@@ -4,14 +4,14 @@
       if (ctx && ctx[key]) {
         clearInterval(ctx[key]);
       }
-    } catch (e) {
+    } catch {
       // best-effort
     }
     try {
       if (ctx) {
         ctx[key] = null;
       }
-    } catch (e2) {
+    } catch {
       // best-effort
     }
   }
@@ -21,7 +21,7 @@
       if (typeof fn === "function") {
         fn();
       }
-    } catch (e) {
+    } catch {
       // best-effort
     }
   }
@@ -31,7 +31,7 @@
       if (typeof fn === "function") {
         fn(a1);
       }
-    } catch (e) {
+    } catch {
       // best-effort
     }
   }
@@ -84,7 +84,7 @@
 
     try {
       document.addEventListener("visibilitychange", onVisibility);
-    } catch (e) {
+    } catch {
       // best-effort
     }
 
