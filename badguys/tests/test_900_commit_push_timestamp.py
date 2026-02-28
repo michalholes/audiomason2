@@ -38,12 +38,12 @@ def run(ctx) -> Plan:
     seed_patch = patches_dir / f"issue_{issue_id}__badguys_seed_fail__{stamp}.patch"
 
     bundle_name = f"issue_{issue_id}__badguys_latest_bundle__{stamp}.zip"
-    unsuccessful_dir = ctx.repo_root / "patches" / "unsuccessful"
+    unsuccessful_dir = ctx.live_repo_root / "patches" / "unsuccessful"
     unsuccessful_dir.mkdir(parents=True, exist_ok=True)
     bundle_path = unsuccessful_dir / bundle_name
 
     marker_rel = "badguys/artifacts/commit_marker.txt"
-    ws_repo = ctx.repo_root / "patches" / "workspaces" / f"issue_{issue_id}" / "repo"
+    ws_repo = ctx.live_repo_root / "patches" / "workspaces" / f"issue_{issue_id}" / "repo"
     ws_marker = ws_repo / marker_rel
 
     inner_patch_name = f"issue_{issue_id}__badguys_fix_marker__{stamp}.patch"
@@ -59,7 +59,7 @@ def run(ctx) -> Plan:
     ]
 
     def _run_cmd_capture(argv: list[str]) -> subprocess.CompletedProcess[str]:
-        return subprocess.run(argv, cwd=str(ctx.repo_root), capture_output=True, text=True)
+        return subprocess.run(argv, cwd=str(ctx.live_repo_root), capture_output=True, text=True)
 
     def _assert_run1_fails() -> None:
         cp = _run_cmd_capture(argv1)

@@ -586,8 +586,20 @@ def _run_test_plan(test, ctx: Ctx) -> bool:
             if cp.stderr:
                 _emit(ctx, level="verbose", test_name=name, text=cp.stderr.rstrip("\n") + "\n")
 
+            if cp.returncode != step.expect_rc:
+                ok = False
+                _emit(
+                    ctx,
+                    level="verbose",
+                    test_name=name,
+                    text=f"FAIL: returncode={cp.returncode} expected={step.expect_rc}\n",
+                )
+
             if ipc_result is not None and "ok" in ipc_result:
-                if not bool(ipc_result.get("ok")):
+                # Preserve strict semantics for positive commands:
+                # expect_rc == 0 and ipc ok=false must fail.
+                # For negative commands (expect_rc != 0), ipc ok=false is expected.
+                if step.expect_rc == 0 and not bool(ipc_result.get("ok")):
                     ok = False
                     _emit(
                         ctx,
@@ -597,15 +609,6 @@ def _run_test_plan(test, ctx: Ctx) -> bool:
                             "FAIL: runner ipc ok=false "
                             f"returncode={cp.returncode} expected={step.expect_rc}\n"
                         ),
-                    )
-            else:
-                if cp.returncode != step.expect_rc:
-                    ok = False
-                    _emit(
-                        ctx,
-                        level="verbose",
-                        test_name=name,
-                        text=f"FAIL: returncode={cp.returncode} expected={step.expect_rc}\n",
                     )
         elif isinstance(step, ExpectPathExists):
             _log_banner(ctx, name, "expect_path_exists")
