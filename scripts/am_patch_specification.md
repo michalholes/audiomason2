@@ -67,6 +67,12 @@ partial reads.
 -   workspace_history_patches_dir = "patches"
 -   workspace_history_oldpatches_dir = "oldpatches"
 -   blessed_gate_outputs = \["audit/results/pytest_junit.xml"\]
+-   gates_skip_biome = true
+-   gate_biome_extensions = [".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx"]
+-   gate_biome_command = ["npm", "run", "lint", "--"]
+-   gates_skip_typescript = true
+-   gate_typescript_extensions = [".ts", ".tsx", ".mts", ".cts"]
+-   gate_typescript_command = ["tsc", "--noEmit", "--pretty", "false"]
 -   scope_ignore_prefixes = \[".am_patch/", ".pytest_cache/",
     ".mypy_cache/", ".ruff_cache/", "**pycache**/"\]
 -   scope_ignore_suffixes = \[".pyc"\]
@@ -281,7 +287,12 @@ Rules:
 -   Options not in short help are long-only (no short aliases).
 -   Full help shows options in long form; for short-help options, the
     short alias is shown in parentheses.
--   Short help does not show defaults.
+ -   Short help does not show defaults.
+
+Help-all completeness: all supported options that affect behavior, including gate control flags
+such as `--skip-biome`, `--skip-typescript`, `--gate-biome-extensions`,
+`--gate-typescript-extensions`, `--gate-biome-command`, and `--gate-typescript-command`,
+MUST appear in `--help-all` output.
 
 ### 3.2.2 Config introspection
 
@@ -377,11 +388,13 @@ scope accordingly - Should be used deliberately and sparingly
 -   Default gate order is:
     1)  COMPILE (python bytecode compilation)
     2)  JS syntax (only when JS files are touched)
-    3)  Ruff
-    4)  Pytest
-    5)  Mypy
-    6)  Monolith (anti-monolith AST gate)
-    7)  Docs (documentation obligation)
+    3)  Biome (only when configured and matching files are touched)
+    4)  TypeScript (only when configured and matching files are touched)
+    5)  Ruff
+    6)  Pytest
+    7)  Mypy
+    8)  Monolith (anti-monolith AST gate)
+    9)  Docs (documentation obligation)
 -   Individual gates may be configured on/off.
 
 ### 6.1.1 COMPILE gate
@@ -427,7 +440,59 @@ scope accordingly - Should be used deliberately and sparingly
 -   CLI:
     -   `--skip-js` (equivalent to `--override gates_skip_js=true`)
 
-### 6.1.3 BADGUYS gate (runner-only)
+### 6.1.3 Biome gate
+
+-   Purpose: run Biome lint/format checks when a patch touches supported files.
+-   Trigger: the gate is evaluated only when at least one changed path ends with an extension
+    listed in `gate_biome_extensions` (case-insensitive suffix match).
+-   If not triggered, the gate is SKIPPED and MUST NOT execute any external tool.
+-   Changed paths that do not exist as files after patch application are ignored (e.g.,
+    deletions). If all matched paths are non-existent, the gate is SKIPPED and MUST NOT
+    execute any external tool.
+-   Variant B execution semantics (file-scoped):
+    -   Runner builds a deterministic lexicographically sorted list of matched changed files.
+    -   Runner executes the gate exactly once:
+        `<argv...> <changed_file_1> <changed_file_2> ...`
+-   Controls (precedence: CLI > config > defaults):
+    -   `gates_skip_biome = true|false` (default: true)
+    -   `gate_biome_extensions = [".js", ...]`
+        (default: `[".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx"]`)
+    -   `gate_biome_command = list[str] | str`
+        (default: `["npm", "run", "lint", "--"]`)
+        -   If a string is used (cfg or CLI), it is parsed using shell-like splitting (shlex).
+        -   The value must be non-empty and is treated as argv including the tool.
+-   CLI (explicit flags; no `--override` required for these options):
+    -   `--skip-biome` (equivalent to setting `gates_skip_biome=true`)
+    -   `--gate-biome-extensions CSV_OR_REPEATABLE` sets `gate_biome_extensions`
+    -   `--gate-biome-command STR` sets `gate_biome_command`
+
+### 6.1.4 TypeScript gate
+
+-   Purpose: run TypeScript typechecking when a patch touches TypeScript files.
+-   Trigger: the gate is evaluated only when at least one changed path ends with an extension
+    listed in `gate_typescript_extensions` (case-insensitive suffix match).
+-   If not triggered, the gate is SKIPPED and MUST NOT execute any external tool.
+-   Changed paths that do not exist as files after patch application are ignored (e.g.,
+    deletions). If all matched paths are non-existent, the gate is SKIPPED and MUST NOT
+    execute any external tool.
+-   Variant B execution semantics (file-scoped):
+    -   Runner builds a deterministic lexicographically sorted list of matched changed files.
+    -   Runner executes the gate exactly once:
+        `<argv...> <changed_file_1> <changed_file_2> ...`
+-   Controls (precedence: CLI > config > defaults):
+    -   `gates_skip_typescript = true|false` (default: true)
+    -   `gate_typescript_extensions = [".ts", ...]`
+        (default: `[".ts", ".tsx", ".mts", ".cts"]`)
+    -   `gate_typescript_command = list[str] | str`
+        (default: `["tsc", "--noEmit", "--pretty", "false"]`)
+        -   If a string is used (cfg or CLI), it is parsed using shell-like splitting (shlex).
+        -   The value must be non-empty and is treated as argv including the tool.
+-   CLI (explicit flags; no `--override` required for these options):
+    -   `--skip-typescript` (equivalent to setting `gates_skip_typescript=true`)
+    -   `--gate-typescript-extensions CSV_OR_REPEATABLE` sets `gate_typescript_extensions`
+    -   `--gate-typescript-command STR` sets `gate_typescript_command`
+
+### 6.1.5 BADGUYS gate (runner-only)
 
 -   Purpose: protect the runner itself by running the badguys suite when
     the runner is modified.
@@ -479,7 +544,7 @@ finalizeworkspace
 
 ------------------------------------------------------------------------
 
-### 6.1.4 Docs gate (documentation obligation)
+### 6.1.6 Docs gate (documentation obligation)
 
 -   Purpose: enforce that documentation is updated when watched code
     areas change.
@@ -504,7 +569,7 @@ finalizeworkspace
     `-g/--allow-gates-fail`).
 
 
-### 6.1.5 Monolith gate (anti-monolith)
+### 6.1.7 Monolith gate (anti-monolith)
 
 -   Purpose: detect monolith growth and enforce ownership boundaries using read-only AST analysis.
 -   Scan set (policy: gate_monolith_scan_scope, gate_monolith_extensions):
