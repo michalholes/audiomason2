@@ -7,7 +7,7 @@
   };
 
   var PatchHubFT = window.PatchHubFT || {
-    getGlobal: (name, fallback) => fallback,
+    getGlobal: (_name, fallback) => fallback,
     report: () => {},
   };
 
