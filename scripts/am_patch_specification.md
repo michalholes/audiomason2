@@ -519,6 +519,69 @@ scope accordingly - Should be used deliberately and sparingly
     -   `--gate-typescript-extensions CSV_OR_REPEATABLE` sets `gate_typescript_extensions`
     -   `--gate-typescript-command STR` sets `gate_typescript_command`
 
+### Python gates - auto mode
+
+This section defines file-scoped triggering semantics for Ruff, Mypy, and Pytest when the
+corresponding mode policy key is set to "auto". Types, defaults, and allowed values are
+defined in scripts/am_patch_policy_glossary.md.
+
+Policy keys:
+- gate_ruff_mode in {auto, always}
+- gate_mypy_mode in {auto, always}
+- gate_pytest_mode in {auto, always}
+- gate_pytest_js_prefixes: list[str] (default [])
+
+Mode semantics:
+- always: the gate executes whenever it is not skipped by existing skip_* mechanisms.
+- auto: the gate executes only when its trigger matches. If not triggered, the gate MUST be
+  skipped and MUST emit the exact log line shown below.
+
+Auto mode triggers (decision-only; deterministic):
+
+- Ruff (gate_ruff_mode=auto) triggers if any changed path is:
+  - pyproject.toml, or
+  - a .py file under any directory prefix listed in ruff_targets.
+  If not triggered: `gate_ruff=SKIP (no_matching_files)`
+
+- Mypy (gate_mypy_mode=auto) triggers if any changed path is:
+  - pyproject.toml, or
+  - a .py file under any directory prefix listed in mypy_targets.
+  If not triggered: `gate_mypy=SKIP (no_matching_files)`
+
+- Pytest (gate_pytest_mode=auto) triggers if any changed path is:
+  - pyproject.toml or pytest.ini, or
+  - a .py file under any directory prefix listed in pytest_targets, or
+  - a .py file under src/ or plugins/ or scripts/, or
+  - a .js/.mjs/.cjs file under any directory prefix listed in gate_pytest_js_prefixes.
+  If not triggered: `gate_pytest=SKIP (no_matching_files)`
+
+Notes:
+- In auto mode, trigger evaluation uses the changed paths set for the run (after scope ignore
+  filtering), and does not require the files to exist after patch application (deletions may
+  still trigger).
+- gate_pytest_js_prefixes uses directory-prefix matching: a prefix matches "prefix" exactly
+  or any path starting with "prefix/".
+
+### Dedicated CLI flags + precedence
+
+Precedence is fixed: CLI flags > config file (am_patch.toml) > defaults.
+
+Dedicated UX flags are provided so users do not need to use `--override KEY=VALUE` for the
+most common mode switches. The flags map to policy keys as follows:
+
+- `--ruff-mode {auto,always}` -> gate_ruff_mode
+- `--mypy-mode {auto,always}` -> gate_mypy_mode
+- `--pytest-mode {auto,always}` -> gate_pytest_mode
+- `--pytest-js-prefixes CSV` -> gate_pytest_js_prefixes
+
+`--pytest-js-prefixes` semantics:
+- CSV is a comma-separated list of directory prefixes (example:
+  `scripts/patchhub/static,plugins/import/ui/web/assets`).
+- Matching uses the same directory-prefix rule as above: "prefix" or "prefix/...".
+- Default is an empty list.
+
+These flags MUST override any config file values for the mapped keys.
+
 ### 6.1.5 BADGUYS gate (runner-only)
 
 -   Purpose: protect the runner itself by running the badguys suite when

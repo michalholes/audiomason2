@@ -37,6 +37,49 @@ Default: false
 Meaning: If true, skip the ruff gate.
 Related: ruff_autofix, ruff_format, run_all_tests
 
+## Key: gate_ruff_mode
+Key: gate_ruff_mode
+Type: str
+Default: "auto"
+Allowed: "auto" | "always"
+Meaning: Controls when the ruff gate runs.
+Notes:
+- In mode "auto", the gate runs only when a file-scoped trigger matches.
+- Trigger semantics are defined in scripts/am_patch_specification.md (Python gates - auto mode).
+Related: gates_skip_ruff, ruff_autofix, ruff_format, ruff_targets
+
+## Key: gate_mypy_mode
+Key: gate_mypy_mode
+Type: str
+Default: "auto"
+Allowed: "auto" | "always"
+Meaning: Controls when the mypy gate runs.
+Notes:
+- In mode "auto", the gate runs only when a file-scoped trigger matches.
+- Trigger semantics are defined in scripts/am_patch_specification.md (Python gates - auto mode).
+Related: gates_skip_mypy, mypy_targets
+
+## Key: gate_pytest_mode
+Key: gate_pytest_mode
+Type: str
+Default: "auto"
+Allowed: "auto" | "always"
+Meaning: Controls when the pytest gate runs.
+Notes:
+- In mode "auto", the gate runs only when a file-scoped trigger matches.
+- Trigger semantics are defined in scripts/am_patch_specification.md (Python gates - auto mode).
+Related: gates_skip_pytest, pytest_targets, gate_pytest_js_prefixes
+
+## Key: gate_pytest_js_prefixes
+Key: gate_pytest_js_prefixes
+Type: list[str]
+Default: []
+Meaning: In gate_pytest_mode="auto", a JS change under a listed prefix triggers pytest.
+Notes:
+- Prefix match is a directory-prefix match: "prefix" or "prefix/...".
+- Trigger semantics are defined in scripts/am_patch_specification.md (Python gates - auto mode).
+Related: gate_pytest_mode, pytest_targets
+
 ## Key: mypy_targets
 Key: mypy_targets
 Type: list[str]
