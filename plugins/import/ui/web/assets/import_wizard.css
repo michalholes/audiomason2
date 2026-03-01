@@ -1,299 +1,282 @@
 body {
-  margin: 0;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
-  background: #0f1420;
-  color: #e6e9ef;
+	margin: 0;
+	font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+	background: #0f1420;
+	color: #e6e9ef;
 }
 
 .container {
-  max-width: 980px;
-  margin: 0 auto;
-  padding: 18px;
+	max-width: 980px;
+	margin: 0 auto;
+	padding: 18px;
 }
 
 .tabs {
-  display: flex;
-  gap: 8px;
-  margin: 10px 0 16px 0;
+	display: flex;
+	gap: 8px;
+	margin: 10px 0 16px 0;
 }
 
 .tabBtn {
-  background: #0f1626;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 10px;
-  color: #e6e9ef;
-  padding: 9px 12px;
-  cursor: pointer;
+	background: #0f1626;
+	border: 1px solid rgba(255, 255, 255, 0.12);
+	border-radius: 10px;
+	color: #e6e9ef;
+	padding: 9px 12px;
+	cursor: pointer;
 }
 
 .tabBtn.active {
-  background: #2a3b62;
+	background: #2a3b62;
 }
 
 .tabPanel {
-  display: none;
+	display: none;
 }
 
 .tabPanel.active {
-  display: block;
+	display: block;
 }
 
 .header {
-  margin-bottom: 14px;
+	margin-bottom: 14px;
 }
 
 .title {
-  font-size: 22px;
-  font-weight: 700;
+	font-size: 22px;
+	font-weight: 700;
 }
 
 .subtitle {
-  opacity: 0.8;
-  margin-top: 4px;
+	opacity: 0.8;
+	margin-top: 4px;
 }
 
 .card {
-  background: #162033;
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  border-radius: 12px;
-  padding: 14px;
-  margin-top: 12px;
+	background: #162033;
+	border: 1px solid rgba(255, 255, 255, 0.1);
+	border-radius: 12px;
+	padding: 14px;
+	margin-top: 12px;
 }
 
 .cardTitle {
-  font-weight: 700;
-  margin-bottom: 10px;
+	font-weight: 700;
+	margin-bottom: 10px;
 }
 
 .row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	align-items: center;
 }
 
 label {
-  opacity: 0.85;
+	opacity: 0.85;
 }
 
-input, select, textarea {
-  background: #0f1626;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 10px;
-  color: #e6e9ef;
-  padding: 9px 10px;
+input,
+select,
+textarea {
+	background: #0f1626;
+	border: 1px solid rgba(255, 255, 255, 0.12);
+	border-radius: 10px;
+	color: #e6e9ef;
+	padding: 9px 10px;
 }
 
 textarea {
-  width: 100%;
-  font-family:
-    ui-monospace,
-    SFMono-Regular,
-    Menlo,
-    Monaco,
-    Consolas,
-    "Liberation Mono",
-    "Courier New",
-    monospace;
+	width: 100%;
+	font-family:
+		ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+		"Courier New", monospace;
 }
 
 .btn {
-  background: #2a3b62;
-  border: 1px solid rgba(255, 255, 255, 0.14);
-  border-radius: 10px;
-  color: #fff;
-  padding: 9px 12px;
-  cursor: pointer;
+	background: #2a3b62;
+	border: 1px solid rgba(255, 255, 255, 0.14);
+	border-radius: 10px;
+	color: #fff;
+	padding: 9px 12px;
+	cursor: pointer;
 }
 
 .btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
+	opacity: 0.6;
+	cursor: not-allowed;
 }
 
 .status {
-  margin-top: 10px;
-  opacity: 0.9;
+	margin-top: 10px;
+	opacity: 0.9;
 }
 
 .step {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
 }
 
 .field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 10px;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	padding: 10px;
+	border-radius: 10px;
+	border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .fieldName {
-  font-weight: 700;
+	font-weight: 700;
 }
 
 .hint {
-  opacity: 0.8;
+	opacity: 0.8;
 }
 
 .choiceList {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
 }
 
 .choiceItem {
-  display: flex;
-  gap: 8px;
-  align-items: center;
+	display: flex;
+	gap: 8px;
+	align-items: center;
 }
 
 .buttonRow {
-  display: flex;
-  gap: 8px;
-  margin-top: 10px;
+	display: flex;
+	gap: 8px;
+	margin-top: 10px;
 }
 
 .error {
-  margin-top: 10px;
-  color: #ff9aa2;
-  white-space: pre-wrap;
+	margin-top: 10px;
+	color: #ff9aa2;
+	white-space: pre-wrap;
 }
 
 .pre {
-  margin: 0;
-  white-space: pre-wrap;
-  word-break: break-word;
-  font-family:
-    ui-monospace,
-    SFMono-Regular,
-    Menlo,
-    Monaco,
-    Consolas,
-    "Liberation Mono",
-    "Courier New",
-    monospace;
-  font-size: 13px;
+	margin: 0;
+	white-space: pre-wrap;
+	word-break: break-word;
+	font-family:
+		ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+		"Courier New", monospace;
+	font-size: 13px;
 }
 
 .jsonEditor {
-  width: 100%;
-  font-size: 12px;
-  min-height: 320px;
+	width: 100%;
+	font-size: 12px;
+	min-height: 320px;
 }
 
 .history {
-  font-family:
-    ui-monospace,
-    SFMono-Regular,
-    Menlo,
-    Monaco,
-    Consolas,
-    "Liberation Mono",
-    "Courier New",
-    monospace;
-  font-size: 12px;
+	font-family:
+		ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+		"Courier New", monospace;
+	font-size: 12px;
 }
 
 .historyItem {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 8px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	padding: 8px 0;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .historyMeta {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
 }
 
 /* WizardDefinition editor (Variant 1: Compact Column Editor) */
 
 .wdHidden {
-  display: none;
+	display: none;
 }
 
 .wdLayout {
-  display: grid;
-  grid-template-columns: 1fr 320px;
-  gap: 12px;
-  margin-top: 12px;
+	display: grid;
+	grid-template-columns: 1fr 320px;
+	gap: 12px;
+	margin-top: 12px;
 }
 
 .wdLayout.wdLayoutSingle {
-  grid-template-columns: 1fr;
+	grid-template-columns: 1fr;
 }
 
 .wdToolbar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-  margin-bottom: 10px;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	align-items: center;
+	margin-bottom: 10px;
 }
 
 .wdToggle {
-  display: inline-flex;
-  gap: 8px;
-  align-items: center;
-  opacity: 0.9;
-  user-select: none;
+	display: inline-flex;
+	gap: 8px;
+	align-items: center;
+	opacity: 0.9;
+	user-select: none;
 }
 
 .wdToggleInput {
-  margin: 0;
+	margin: 0;
 }
 
 .wdTable {
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  border-radius: 12px;
-  overflow: hidden;
+	border: 1px solid rgba(255, 255, 255, 0.1);
+	border-radius: 12px;
+	overflow: hidden;
 }
 
 .wdHead,
 .wdRow {
-  display: grid;
-  grid-template-columns: 90px 1fr 110px 90px 110px;
-  gap: 0;
-  align-items: center;
+	display: grid;
+	grid-template-columns: 90px 1fr 110px 90px 110px;
+	gap: 0;
+	align-items: center;
 }
 
 .wdHead {
-  background: #0f1626;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  font-weight: 700;
+	background: #0f1626;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+	font-weight: 700;
 }
 
 .wdBody {
-  background: #162033;
+	background: #162033;
 }
 
 .wdRow {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+	border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-
 .wdRow.is-drop-target {
-  outline: 2px dashed rgba(255, 255, 255, 0.35);
-  outline-offset: -2px;
+	outline: 2px dashed rgba(255, 255, 255, 0.35);
+	outline-offset: -2px;
 }
 
 .wdRow.is-dragging {
-  opacity: 0.6;
+	opacity: 0.6;
 }
 .wdRow:last-child {
-  border-bottom: 0;
+	border-bottom: 0;
 }
 
 .wdRow.is-selected {
-  outline: 2px solid rgba(255, 255, 255, 0.20);
-  outline-offset: -2px;
+	outline: 2px solid rgba(255, 255, 255, 0.2);
+	outline-offset: -2px;
 }
 
 .wdCellOrder,
@@ -301,302 +284,295 @@ textarea {
 .wdCellType,
 .wdCellReq,
 .wdCellActions {
-  padding: 10px;
+	padding: 10px;
 }
 
 .wdCellOrder {
-  display: inline-flex;
-  gap: 10px;
-  align-items: center;
+	display: inline-flex;
+	gap: 10px;
+	align-items: center;
 }
 
 .wdDragHandle {
-  display: inline-block;
-  opacity: 0.85;
-  cursor: grab;
-  user-select: none;
-  padding: 2px 6px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.10);
+	display: inline-block;
+	opacity: 0.85;
+	cursor: grab;
+	user-select: none;
+	padding: 2px 6px;
+	border-radius: 8px;
+	border: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .wdDragHandle.is-disabled {
-  opacity: 0.35;
-  cursor: not-allowed;
+	opacity: 0.35;
+	cursor: not-allowed;
 }
 
 .wdOrderNum {
-  opacity: 0.85;
+	opacity: 0.85;
 }
 
 .wdTypeBadge {
-  display: inline-block;
-  padding: 2px 8px;
-  border-radius: 999px;
-  font-size: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  opacity: 0.95;
+	display: inline-block;
+	padding: 2px 8px;
+	border-radius: 999px;
+	font-size: 12px;
+	border: 1px solid rgba(255, 255, 255, 0.12);
+	opacity: 0.95;
 }
 
 .wdRow.kind-mandatory .wdTypeBadge {
-  background: rgba(68, 170, 255, 0.14);
+	background: rgba(68, 170, 255, 0.14);
 }
 
 .wdRow.kind-optional .wdTypeBadge {
-  background: rgba(255, 255, 255, 0.06);
+	background: rgba(255, 255, 255, 0.06);
 }
 
 .wdRow.kind-conditional .wdTypeBadge {
-  background: rgba(255, 187, 68, 0.14);
+	background: rgba(255, 187, 68, 0.14);
 }
 
 .wdReqIcon {
-  opacity: 0.9;
+	opacity: 0.9;
 }
 
 .wdRow.is-locked .wdReqIcon {
-  font-weight: 700;
+	font-weight: 700;
 }
 
 .wdDropHint {
-  margin-top: 10px;
-  padding: 10px 12px;
-  border: 1px dashed rgba(255, 255, 255, 0.22);
-  border-radius: 12px;
-  opacity: 0;
-  pointer-events: none;
+	margin-top: 10px;
+	padding: 10px 12px;
+	border: 1px dashed rgba(255, 255, 255, 0.22);
+	border-radius: 12px;
+	opacity: 0;
+	pointer-events: none;
 }
 
 .wdDropHint.is-visible {
-  opacity: 1;
+	opacity: 1;
 }
 
 .wdValidation {
-  margin-top: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  border-radius: 12px;
-  overflow: hidden;
+	margin-top: 10px;
+	border: 1px solid rgba(255, 255, 255, 0.1);
+	border-radius: 12px;
+	overflow: hidden;
 }
 
 .wdValidationHeader {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 10px 12px;
-  background: #0f1626;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+	display: flex;
+	justify-content: space-between;
+	gap: 8px;
+	padding: 10px 12px;
+	background: #0f1626;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .wdValidationCount {
-  opacity: 0.85;
+	opacity: 0.85;
 }
 
 .wdValidationList {
-  padding: 10px 12px;
+	padding: 10px 12px;
 }
 
 .wdValidationItem {
-  padding: 6px 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+	padding: 6px 0;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .wdValidationItem:last-child {
-  border-bottom: 0;
+	border-bottom: 0;
 }
 
 .wdValidation.is-ok {
-  border-color: rgba(80, 220, 120, 0.40);
+	border-color: rgba(80, 220, 120, 0.4);
 }
 
 .wdValidation.is-error {
-  border-color: rgba(255, 154, 162, 0.40);
+	border-color: rgba(255, 154, 162, 0.4);
 }
 
 .wdPalette {
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  border-radius: 12px;
-  padding: 12px;
-  background: #162033;
+	border: 1px solid rgba(255, 255, 255, 0.1);
+	border-radius: 12px;
+	padding: 12px;
+	background: #162033;
 }
 
 .wdPaletteSearch {
-  margin-bottom: 10px;
+	margin-bottom: 10px;
 }
 
 .wdPaletteSearchInput {
-  width: 100%;
+	width: 100%;
 }
 
 .wdPaletteGroups {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
 }
 
 .wdPaletteGroupTitle {
-  font-weight: 700;
-  margin-bottom: 6px;
+	font-weight: 700;
+	margin-bottom: 6px;
 }
 
 .wdPaletteItem {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  align-items: center;
-  padding: 8px 10px;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(0, 0, 0, 0.08);
+	display: flex;
+	justify-content: space-between;
+	gap: 10px;
+	align-items: center;
+	padding: 8px 10px;
+	border-radius: 10px;
+	border: 1px solid rgba(255, 255, 255, 0.08);
+	background: rgba(0, 0, 0, 0.08);
 }
 
 .wdPaletteItemId {
-  font-family:
-    ui-monospace,
-    SFMono-Regular,
-    Menlo,
-    Monaco,
-    Consolas,
-    "Liberation Mono",
-    "Courier New",
-    monospace;
-  font-size: 12px;
-  opacity: 0.95;
+	font-family:
+		ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+		"Courier New", monospace;
+	font-size: 12px;
+	opacity: 0.95;
 }
 
 .wdPaletteItemDesc {
-  font-size: 12px;
-  opacity: 0.80;
-  margin-top: 2px;
+	font-size: 12px;
+	opacity: 0.8;
+	margin-top: 2px;
 }
 
 .wdPaletteAdd {
-  padding: 7px 10px;
+	padding: 7px 10px;
 }
 
 .wdRow {
-  min-height: 40px;
+	min-height: 40px;
 }
 
 .wdRow:hover {
-  background: rgba(255, 255, 255, 0.04);
+	background: rgba(255, 255, 255, 0.04);
 }
 
 .wdRow.is-selected {
-  background: rgba(255, 255, 255, 0.06);
+	background: rgba(255, 255, 255, 0.06);
 }
 
 .wdRow.is-locked {
-  background: rgba(255, 255, 255, 0.02);
+	background: rgba(255, 255, 255, 0.02);
 }
 
 .wdReqIcon {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
 }
 
 .wdSvg {
-  fill: currentColor;
-  opacity: 0.9;
+	fill: currentColor;
+	opacity: 0.9;
 }
 
 .wdIconBtn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  padding: 7px 10px;
-  border-radius: 10px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	gap: 6px;
+	padding: 7px 10px;
+	border-radius: 10px;
 }
 
 .wdIconBtn .wdSvg {
-  opacity: 0.95;
+	opacity: 0.95;
 }
 
 .wdIconBtn:disabled .wdSvg {
-  opacity: 0.45;
+	opacity: 0.45;
 }
 
 .srOnly {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	padding: 0;
+	margin: -1px;
+	overflow: hidden;
+	clip: rect(0, 0, 0, 0);
+	white-space: nowrap;
+	border: 0;
 }
 
 .wdPaletteSearch {
-  display: flex;
-  gap: 8px;
-  align-items: center;
+	display: flex;
+	gap: 8px;
+	align-items: center;
 }
 
 .wdSearchIcon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: #0f1626;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 36px;
+	height: 36px;
+	border-radius: 10px;
+	border: 1px solid rgba(255, 255, 255, 0.12);
+	background: #0f1626;
 }
 
 .wdPaletteAdd.is-added {
-  opacity: 0.75;
+	opacity: 0.75;
 }
 
 .wdPaletteAdd.is-added .wdSvg {
-  margin-right: 6px;
+	margin-right: 6px;
 }
 
 .wdValidationHeader {
-  align-items: center;
+	align-items: center;
 }
 
 .wdValidationCount {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 28px;
-  height: 22px;
-  padding: 0 8px;
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  font-size: 12px;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 28px;
+	height: 22px;
+	padding: 0 8px;
+	border-radius: 999px;
+	background: rgba(255, 255, 255, 0.06);
+	border: 1px solid rgba(255, 255, 255, 0.1);
+	font-size: 12px;
 }
 
 .wdValidationClear {
-  padding: 7px 10px;
+	padding: 7px 10px;
 }
 
 .wdValidationGroup {
-  padding: 8px 0;
+	padding: 8px 0;
 }
 
 .wdValidationGroupTitle {
-  font-weight: 700;
-  opacity: 0.9;
-  margin-bottom: 6px;
+	font-weight: 700;
+	opacity: 0.9;
+	margin-bottom: 6px;
 }
 
 .wdValidationOk {
-  display: inline-flex;
-  gap: 8px;
-  align-items: center;
+	display: inline-flex;
+	gap: 8px;
+	align-items: center;
 }
-
 
 /* Issue 249: Wizard editor polish */
 
 .wdHead {
-  background: rgba(15, 22, 38, 0.98);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+	background: rgba(15, 22, 38, 0.98);
+	border-bottom: 1px solid rgba(255, 255, 255, 0.14);
 }
 
 .wdHead .wdCellOrder,
@@ -604,501 +580,501 @@ textarea {
 .wdHead .wdCellType,
 .wdHead .wdCellReq,
 .wdHead .wdCellActions {
-  padding-top: 12px;
-  padding-bottom: 12px;
+	padding-top: 12px;
+	padding-bottom: 12px;
 }
 
 .wdRow {
-  min-height: 44px;
+	min-height: 44px;
 }
 
 .wdRow:hover {
-  background: rgba(255, 255, 255, 0.05);
+	background: rgba(255, 255, 255, 0.05);
 }
 
 .wdRow.is-selected {
-  background: rgba(255, 255, 255, 0.08);
+	background: rgba(255, 255, 255, 0.08);
 }
 
 .wdDragHandle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  padding: 0;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 28px;
+	height: 28px;
+	padding: 0;
 }
 
 .wdGrip {
-  opacity: 0.9;
+	opacity: 0.9;
 }
 
 .wdTypeBadge {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 3px 10px;
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	padding: 3px 10px;
 }
 
 .wdBadgeIcon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-  border-radius: 6px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  background: rgba(0, 0, 0, 0.12);
-  font-size: 10px;
-  line-height: 1;
-  opacity: 0.9;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 16px;
+	height: 16px;
+	border-radius: 6px;
+	border: 1px solid rgba(255, 255, 255, 0.18);
+	background: rgba(0, 0, 0, 0.12);
+	font-size: 10px;
+	line-height: 1;
+	opacity: 0.9;
 }
 
 .wdTypeBadge[data-kind="mandatory"] .wdBadgeIcon::before {
-  content: "M";
+	content: "M";
 }
 
 .wdTypeBadge[data-kind="optional"] .wdBadgeIcon::before {
-  content: "O";
+	content: "O";
 }
 
 .wdTypeBadge[data-kind="conditional"] .wdBadgeIcon::before {
-  content: "C";
+	content: "C";
 }
 
 .wdCellActions {
-  display: flex;
-  align-items: center;
-  justify-content: flex-end;
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
 }
 
 .wdActionsPlaceholder {
-  display: inline-block;
-  width: 1px;
-  height: 1px;
+	display: inline-block;
+	width: 1px;
+	height: 1px;
 }
 
 .wdDeleteBtn {
-  opacity: 0.25;
-  transition: opacity 120ms ease-in-out;
+	opacity: 0.25;
+	transition: opacity 120ms ease-in-out;
 }
 
 .wdRow:hover .wdDeleteBtn,
 .wdRow.is-selected .wdDeleteBtn {
-  opacity: 1;
+	opacity: 1;
 }
 
 .wdPalette {
-  padding: 0;
-  overflow: hidden;
+	padding: 0;
+	overflow: hidden;
 }
 
 .wdPaletteHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px 12px 10px 12px;
-  background: rgba(15, 22, 38, 0.98);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.10);
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 12px 12px 10px 12px;
+	background: rgba(15, 22, 38, 0.98);
+	border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .wdPaletteTitle {
-  font-weight: 800;
-  letter-spacing: 0.2px;
+	font-weight: 800;
+	letter-spacing: 0.2px;
 }
 
 .wdPaletteSpacer {
-  width: 24px;
-  height: 24px;
-  opacity: 0.0;
+	width: 24px;
+	height: 24px;
+	opacity: 0;
 }
 
 .wdPaletteSearch {
-  padding: 12px;
-  margin: 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+	padding: 12px;
+	margin: 0;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .wdPaletteGroups {
-  padding: 12px;
-  gap: 12px;
+	padding: 12px;
+	gap: 12px;
 }
 
 .wdPaletteGroup {
-  padding-bottom: 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+	padding-bottom: 12px;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
 
 .wdPaletteGroup:last-child {
-  border-bottom: 0;
-  padding-bottom: 0;
+	border-bottom: 0;
+	padding-bottom: 0;
 }
 
 .wdPaletteGroupTitle {
-  font-weight: 800;
-  opacity: 0.95;
-  margin-bottom: 8px;
-  letter-spacing: 0.2px;
+	font-weight: 800;
+	opacity: 0.95;
+	margin-bottom: 8px;
+	letter-spacing: 0.2px;
 }
 
 .wdPaletteAdd {
-  border-radius: 999px;
+	border-radius: 999px;
 }
 
 .wdPaletteAdd.is-added {
-  background: rgba(80, 220, 120, 0.18);
-  border-color: rgba(80, 220, 120, 0.35);
+	background: rgba(80, 220, 120, 0.18);
+	border-color: rgba(80, 220, 120, 0.35);
 }
 
 .wdErrWrap {
-  margin-top: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  border-radius: 12px;
-  overflow: hidden;
+	margin-top: 10px;
+	border: 1px solid rgba(255, 255, 255, 0.1);
+	border-radius: 12px;
+	overflow: hidden;
 }
 
 .wdErrBar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 10px 12px;
-  background: rgba(15, 22, 38, 0.98);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	padding: 10px 12px;
+	background: rgba(15, 22, 38, 0.98);
+	border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .wdErrTitle {
-  font-weight: 800;
-  opacity: 0.95;
+	font-weight: 800;
+	opacity: 0.95;
 }
 
 .wdErrToggle {
-  padding: 7px 10px;
+	padding: 7px 10px;
 }
 
 .wdRawError.is-collapsed {
-  display: none;
+	display: none;
 }
 
 .is-hidden {
-  display: none !important;
+	display: none !important;
 }
 
 .flow-editor-layout {
-  display: grid;
-  grid-template-columns: 1fr 380px;
-  gap: 16px;
-  margin-top: 10px;
-  align-items: start;
+	display: grid;
+	grid-template-columns: 1fr 380px;
+	gap: 16px;
+	margin-top: 10px;
+	align-items: start;
 }
 
 .flow-editor-main {
-  min-width: 520px;
+	min-width: 520px;
 }
 
 .flow-editor-sidebar {
-  position: relative;
+	position: relative;
 }
 
 .flowSidebarSection {
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  border-radius: 12px;
-  overflow: hidden;
-  margin-bottom: 12px;
+	border: 1px solid rgba(255, 255, 255, 0.1);
+	border-radius: 12px;
+	overflow: hidden;
+	margin-bottom: 12px;
 }
 
 .flowSidebarSectionHead {
-  padding: 10px 12px;
-  background: rgba(15, 22, 38, 0.98);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+	padding: 10px 12px;
+	background: rgba(15, 22, 38, 0.98);
+	border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .flowSidebarSectionTitle {
-  font-weight: 800;
+	font-weight: 800;
 }
 
 .flowStepContract {
-  margin: 0;
-  padding: 10px 12px;
-  white-space: pre-wrap;
-  word-break: break-word;
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  border-radius: 10px;
-  background: rgba(15, 22, 38, 0.60);
+	margin: 0;
+	padding: 10px 12px;
+	white-space: pre-wrap;
+	word-break: break-word;
+	border: 1px solid rgba(255, 255, 255, 0.1);
+	border-radius: 10px;
+	background: rgba(15, 22, 38, 0.6);
 }
 
 .wdPaletteAttention {
-  outline: 2px solid rgba(255, 255, 255, 0.18);
-  outline-offset: 3px;
+	outline: 2px solid rgba(255, 255, 255, 0.18);
+	outline-offset: 3px;
 }
 
 .wdLayoutRoot {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
 }
 
 .flowLayout {
-  display: flex;
-  gap: 14px;
-  margin-top: 10px;
+	display: flex;
+	gap: 14px;
+	margin-top: 10px;
 }
 
 .flowLeft {
-  flex: 1 1 62%;
-  min-width: 520px;
+	flex: 1 1 62%;
+	min-width: 520px;
 }
 
 .flowRight {
-  flex: 0 0 38%;
-  min-width: 320px;
+	flex: 0 0 38%;
+	min-width: 320px;
 }
 
 .flowRightTabs {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 10px;
+	display: flex;
+	gap: 8px;
+	margin-bottom: 10px;
 }
 
 .flowRightTab {
-  background: rgba(15, 22, 38, 0.98);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 10px;
-  color: #e6e9ef;
-  padding: 8px 10px;
-  cursor: pointer;
+	background: rgba(15, 22, 38, 0.98);
+	border: 1px solid rgba(255, 255, 255, 0.12);
+	border-radius: 10px;
+	color: #e6e9ef;
+	padding: 8px 10px;
+	cursor: pointer;
 }
 
 .flowRightTab.is-active {
-  background: #2a3b62;
+	background: #2a3b62;
 }
 
 .flowRightPanel {
-  display: none;
+	display: none;
 }
 
 .flowRightPanel.is-active {
-  display: block;
+	display: block;
 }
 
 .flowTransPanel {
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  border-radius: 12px;
-  overflow: hidden;
+	border: 1px solid rgba(255, 255, 255, 0.1);
+	border-radius: 12px;
+	overflow: hidden;
 }
 
 .flowTransHeader {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  padding: 10px 12px;
-  background: rgba(15, 22, 38, 0.98);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 10px;
+	padding: 10px 12px;
+	background: rgba(15, 22, 38, 0.98);
+	border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .flowTransTitle {
-  font-weight: 800;
+	font-weight: 800;
 }
 
 .flowTransEntry {
-  display: flex;
-  gap: 8px;
-  align-items: center;
+	display: flex;
+	gap: 8px;
+	align-items: center;
 }
 
 .flowTransAdd {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  align-items: center;
-  padding: 12px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	align-items: center;
+	padding: 12px;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .flowTransLabel {
-  opacity: 0.85;
-  font-size: 12px;
+	opacity: 0.85;
+	font-size: 12px;
 }
 
 .flowTransSelect {
-  min-width: 140px;
+	min-width: 140px;
 }
 
 .flowTransTable {
-  padding: 12px;
+	padding: 12px;
 }
 
 .flowTransRow {
-  display: grid;
-  grid-template-columns: 70px 1.1fr 1.1fr 2fr 1.3fr;
-  gap: 10px;
-  align-items: center;
-  padding: 8px 6px;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+	display: grid;
+	grid-template-columns: 70px 1.1fr 1.1fr 2fr 1.3fr;
+	gap: 10px;
+	align-items: center;
+	padding: 8px 6px;
+	border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .flowTransCellPri {
-  opacity: 0.85;
-  font-variant-numeric: tabular-nums;
-  text-align: right;
+	opacity: 0.85;
+	font-variant-numeric: tabular-nums;
+	text-align: right;
 }
 
 .flowTransPri {
-  width: 90px;
-  text-align: right;
+	width: 90px;
+	text-align: right;
 }
 
 @media (max-width: 1280px) {
-  .flowLayout {
-    flex-direction: column;
-  }
+	.flowLayout {
+		flex-direction: column;
+	}
 
-  .flowLeft,
-  .flowRight {
-    min-width: 0;
-    flex: 1 1 auto;
-  }
+	.flowLeft,
+	.flowRight {
+		min-width: 0;
+		flex: 1 1 auto;
+	}
 
-  .flow-editor-layout {
-    grid-template-columns: 1fr;
-  }
+	.flow-editor-layout {
+		grid-template-columns: 1fr;
+	}
 
-  .flow-editor-main {
-    min-width: 0;
-  }
+	.flow-editor-main {
+		min-width: 0;
+	}
 
-  .wdLayout {
-    grid-template-columns: 1fr;
-  }
+	.wdLayout {
+		grid-template-columns: 1fr;
+	}
 }
 
 .flowTransHead {
-  font-weight: 800;
-  opacity: 0.95;
+	font-weight: 800;
+	opacity: 0.95;
 }
 
 .flowTransCondBtn {
-  width: 100%;
-  text-align: left;
-  background: rgba(15, 22, 38, 0.98);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 10px;
-  color: #e6e9ef;
-  padding: 7px 10px;
-  cursor: pointer;
+	width: 100%;
+	text-align: left;
+	background: rgba(15, 22, 38, 0.98);
+	border: 1px solid rgba(255, 255, 255, 0.12);
+	border-radius: 10px;
+	color: #e6e9ef;
+	padding: 7px 10px;
+	cursor: pointer;
 }
 
 .flowTransCellAct {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
+	display: flex;
+	gap: 8px;
+	justify-content: flex-end;
 }
 
 .flowTransEditor {
-  margin: 10px 0 14px 0;
-  padding: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  border-radius: 12px;
-  display: grid;
-  gap: 8px;
+	margin: 10px 0 14px 0;
+	padding: 10px;
+	border: 1px solid rgba(255, 255, 255, 0.1);
+	border-radius: 12px;
+	display: grid;
+	gap: 8px;
 }
 
 .flowTransAlways {
-  display: inline-flex;
-  gap: 8px;
-  align-items: center;
+	display: inline-flex;
+	gap: 8px;
+	align-items: center;
 }
 
 .flowTransPath,
 .flowTransValText,
 .flowTransInText {
-  width: 100%;
+	width: 100%;
 }
 
 .flowTransInList {
-  display: grid;
-  gap: 8px;
+	display: grid;
+	gap: 8px;
 }
 
 .flowTransInRow {
-  display: flex;
-  gap: 8px;
-  align-items: center;
+	display: flex;
+	gap: 8px;
+	align-items: center;
 }
 
 .flowStepPanel {
-  border: 1px solid rgba(255, 255, 255, 0.10);
-  border-radius: 12px;
-  overflow: hidden;
+	border: 1px solid rgba(255, 255, 255, 0.1);
+	border-radius: 12px;
+	overflow: hidden;
 }
 
 .flowStepHeader {
-  padding: 10px 12px;
-  background: rgba(15, 22, 38, 0.98);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-  font-weight: 800;
-  letter-spacing: 0.2px;
+	padding: 10px 12px;
+	background: rgba(15, 22, 38, 0.98);
+	border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+	font-weight: 800;
+	letter-spacing: 0.2px;
 }
 
 .flowStepBody {
-  padding: 12px;
+	padding: 12px;
 }
 
 .flowStepSection {
-  margin-bottom: 14px;
+	margin-bottom: 14px;
 }
 
 .flowStepSectionTitle {
-  font-weight: 800;
-  margin-bottom: 8px;
-  opacity: 0.95;
+	font-weight: 800;
+	margin-bottom: 8px;
+	opacity: 0.95;
 }
 
 .flowStepDesc {
-  opacity: 0.95;
-  line-height: 1.35;
-  white-space: pre-wrap;
+	opacity: 0.95;
+	line-height: 1.35;
+	white-space: pre-wrap;
 }
 
 .flowStepForm {
-  display: grid;
-  gap: 10px;
+	display: grid;
+	gap: 10px;
 }
 
 .flowField {
-  display: grid;
-  gap: 6px;
-  padding: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
+	display: grid;
+	gap: 6px;
+	padding: 10px;
+	border: 1px solid rgba(255, 255, 255, 0.08);
+	border-radius: 10px;
 }
 
 .flowFieldLabel {
-  font-weight: 800;
+	font-weight: 800;
 }
 
 .flowFieldMeta {
-  opacity: 0.75;
-  font-size: 12px;
+	opacity: 0.75;
+	font-size: 12px;
 }
 
 .flowFieldInput {
-  width: 100%;
+	width: 100%;
 }
 
 .flowStepApply {
-  opacity: 0.90;
-  line-height: 1.35;
-  margin-bottom: 8px;
+	opacity: 0.9;
+	line-height: 1.35;
+	margin-bottom: 8px;
 }
 
 .status.is-ok {
-  background: rgba(80, 220, 120, 0.10);
-  border-color: rgba(80, 220, 120, 0.22);
+	background: rgba(80, 220, 120, 0.1);
+	border-color: rgba(80, 220, 120, 0.22);
 }
 
 .status.is-bad {
-  background: rgba(220, 90, 90, 0.12);
-  border-color: rgba(220, 90, 90, 0.26);
+	background: rgba(220, 90, 90, 0.12);
+	border-color: rgba(220, 90, 90, 0.26);
 }
