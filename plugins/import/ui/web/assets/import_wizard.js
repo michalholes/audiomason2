@@ -1,6 +1,4 @@
-(function () {
-	"use strict";
-
+(() => {
 	async function fetchJSON(url, opts) {
 		const r = await fetch(url, opts || {});
 		const ct = (r.headers.get("content-type") || "").toLowerCase();
@@ -23,8 +21,10 @@
 			const msg =
 				data && data.error && data.error.message
 					? String(data.error.message)
-					: text || r.status + " " + r.statusText;
-			const err = new Error(msg);
+					: text || `${r.status} ${r.statusText}`;
+			const err = /** @type {Error & {status?: number, data?: unknown}} */ (
+				new Error(msg)
+			);
 			err.status = r.status;
 			err.data = data;
 			throw err;
@@ -118,13 +118,27 @@
 	}
 
 	const ui = {
-		root: document.getElementById("root"),
-		path: document.getElementById("path"),
-		mode: document.getElementById("mode"),
-		start: document.getElementById("start"),
-		reload: document.getElementById("reload"),
-		submit: document.getElementById("submit"),
-		startProcessing: document.getElementById("startProcessing"),
+		root: /** @type {HTMLInputElement|null} */ (
+			document.getElementById("root")
+		),
+		path: /** @type {HTMLInputElement|null} */ (
+			document.getElementById("path")
+		),
+		mode: /** @type {HTMLSelectElement|null} */ (
+			document.getElementById("mode")
+		),
+		start: /** @type {HTMLButtonElement|null} */ (
+			document.getElementById("start")
+		),
+		reload: /** @type {HTMLButtonElement|null} */ (
+			document.getElementById("reload")
+		),
+		submit: /** @type {HTMLButtonElement|null} */ (
+			document.getElementById("submit")
+		),
+		startProcessing: /** @type {HTMLButtonElement|null} */ (
+			document.getElementById("startProcessing")
+		),
 		step: document.getElementById("step"),
 	};
 
@@ -187,7 +201,7 @@
 			return;
 		}
 		const sid = encodeURIComponent(sessionId);
-		state = await fetchJSON("/import/ui/session/" + sid + "/state");
+		state = await fetchJSON(`/import/ui/session/${sid}/state`);
 		sessionEffectiveModel =
 			state && typeof state.effective_model === "object"
 				? state.effective_model
@@ -310,7 +324,7 @@
 			box.appendChild(
 				el("div", {
 					class: "hint",
-					text: "Selection is sent as " + name + "_ids",
+					text: `Selection is sent as ${name}_ids`,
 				}),
 			);
 			return box;
@@ -384,7 +398,7 @@
 		});
 
 		for (const [name, ids] of Object.entries(grouped)) {
-			payload[name + "_ids"] = ids;
+			payload[`${name}_ids`] = ids;
 		}
 
 		return payload;
@@ -395,7 +409,7 @@
 		const sid = encodeURIComponent(sessionId);
 		const pid = encodeURIComponent(currentStep);
 		const payload = collectPayload(currentStep);
-		const r = await fetchJSON("/import/ui/session/" + sid + "/step/" + pid, {
+		const r = await fetchJSON(`/import/ui/session/${sid}/step/${pid}`, {
 			method: "POST",
 			headers: { "content-type": "application/json" },
 			body: JSON.stringify(payload),
@@ -413,16 +427,13 @@
 	async function startProcessing() {
 		if (!sessionId) return;
 		const sid = encodeURIComponent(sessionId);
-		const r = await fetchJSON(
-			"/import/ui/session/" + sid + "/start_processing",
-			{
-				method: "POST",
-				headers: { "content-type": "application/json" },
-				body: "{}",
-			},
-		);
+		const r = await fetchJSON(`/import/ui/session/${sid}/start_processing`, {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: "{}",
+		});
 		const ids = r && Array.isArray(r.job_ids) ? r.job_ids.join(", ") : "";
-		setText("status", "job_ids: " + ids);
+		setText("status", `job_ids: ${ids}`);
 	}
 
 	async function refresh() {
@@ -441,7 +452,7 @@
 		currentStep = String(state.current_step_id || "");
 		const step = findStep(currentStep);
 		const title = step && step.title ? String(step.title) : currentStep;
-		ui.step.appendChild(el("div", { class: "hint", text: "Step: " + title }));
+		ui.step.appendChild(el("div", { class: "hint", text: `Step: ${title}` }));
 
 		const fields = step && Array.isArray(step.fields) ? step.fields : [];
 		const supported = {
@@ -462,7 +473,7 @@
 			ui.step.appendChild(renderField(fld, currentStep));
 		}
 
-		setText("status", "session_id: " + sessionId);
+		setText("status", `session_id: ${sessionId}`);
 	}
 
 	async function startSession() {

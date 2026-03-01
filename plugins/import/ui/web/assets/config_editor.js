@@ -1,6 +1,4 @@
-(function () {
-	"use strict";
-
+(() => {
 	const H = window.AM2EditorHTTP;
 	if (!H) return;
 
@@ -9,7 +7,7 @@
 	}
 
 	const ui = {
-		ta: $("cfgJson"),
+		ta: /** @type {HTMLTextAreaElement|null} */ ($("cfgJson")),
 		err: $("cfgError"),
 		history: $("cfgHistory"),
 		reload: $("cfgReload"),
@@ -104,7 +102,7 @@
 
 	async function validateOnly() {
 		H.renderError(ui.err, null);
-		let payloadCfg = {};
+		let payloadCfg = /** @type {any} */ ({});
 		if (unifiedMode) {
 			const s = snapshot();
 			payloadCfg = (s && s.configDraft) || {};
@@ -117,7 +115,7 @@
 			}
 		}
 		if (payloadCfg && typeof payloadCfg === "object") {
-			delete payloadCfg.ui;
+			delete (/** @type {any} */ (payloadCfg).ui);
 		}
 		const out = await H.requestJSON("/import/ui/config/validate", {
 			method: "POST",
@@ -150,7 +148,7 @@
 			const ok = await validateOnly();
 			if (!ok) return false;
 		}
-		let payloadCfg = {};
+		let payloadCfg = /** @type {any} */ ({});
 		if (unifiedMode) {
 			const s = snapshot();
 			payloadCfg = (s && s.configDraft) || {};
@@ -163,7 +161,7 @@
 			}
 		}
 		if (payloadCfg && typeof payloadCfg === "object") {
-			delete payloadCfg.ui;
+			delete (/** @type {any} */ (payloadCfg).ui);
 		}
 		const out = await H.requestJSON("/import/ui/config", {
 			method: "POST",
@@ -267,7 +265,7 @@
 	function setStepValue(stepId, key, value) {
 		const FE = window.AM2FlowEditorState;
 		if (FE && FE.mutateConfig) {
-			FE.mutateConfig(function (cfg) {
+			FE.mutateConfig((cfg) => {
 				const defaults = safeDefaultsRoot(cfg);
 				if (!defaults[stepId] || typeof defaults[stepId] !== "object")
 					defaults[stepId] = {};
@@ -286,7 +284,7 @@
 		if (!stepId) return;
 		const FE = window.AM2FlowEditorState;
 		if (FE && FE.mutateConfig) {
-			FE.mutateConfig(function (cfg) {
+			FE.mutateConfig((cfg) => {
 				const defaults = safeDefaultsRoot(cfg);
 				if (defaults && defaults[stepId]) delete defaults[stepId];
 			});
@@ -476,7 +474,7 @@
 
 	const FE = window.AM2FlowEditorState;
 	if (FE && FE.registerConfigRender) {
-		FE.registerConfigRender(function () {
+		FE.registerConfigRender(() => {
 			if (unifiedMode) renderSelectedStep();
 		});
 	}

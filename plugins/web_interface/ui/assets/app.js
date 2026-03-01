@@ -211,7 +211,7 @@ function _amInstallDebugFetchCapture(notify) {
 	const orig = window.fetch;
 	if (typeof orig !== "function") return;
 
-	window.fetch = async function (input, init) {
+	window.fetch = async (input, init) => {
 		const ts = new Date().toISOString();
 		let url = "";
 		let method = "GET";
@@ -311,7 +311,7 @@ function _amInstallDebugFetchCapture(notify) {
 	};
 }
 
-window.addEventListener("unhandledrejection", function (ev) {
+window.addEventListener("unhandledrejection", (ev) => {
 	const r = ev ? ev.reason : null;
 	const isErr = r && typeof r === "object" && "stack" in r;
 	const msg =
@@ -329,7 +329,7 @@ window.addEventListener("unhandledrejection", function (ev) {
 	});
 });
 
-window.onerror = function (msg, src, line, col, err) {
+window.onerror = (msg, src, line, col, err) => {
 	const e = err && typeof err === "object" ? err : null;
 	_amPushAnyJsError({
 		ts: new Date().toISOString(),
@@ -342,7 +342,7 @@ window.onerror = function (msg, src, line, col, err) {
 	});
 	return false;
 };
-(async function () {
+(async () => {
 	const API = {
 		async _readErrorDetail(r) {
 			const status = r && typeof r.status === "number" ? r.status : 0;
@@ -2501,7 +2501,7 @@ window.onerror = function (msg, src, line, col, err) {
 			a.addEventListener("click", (ev) => {
 				ev.preventDefault();
 				if (item && item.route === "/import") {
-					window.location = "/import/ui/";
+					window.location.href = "/import/ui/";
 					return;
 				}
 				history.pushState({}, "", item.route);
