@@ -33,6 +33,22 @@ class JobRecord:
         return asdict(self)
 
 
+def job_to_list_item_json(j: JobRecord) -> dict[str, Any]:
+    # Thin DTO for list endpoints (spec: JobListItem JSON).
+    # Manual mapping to avoid dataclasses.asdict() overhead.
+    return {
+        "job_id": j.job_id,
+        "status": j.status,
+        "created_utc": j.created_utc,
+        "started_utc": j.started_utc,
+        "ended_utc": j.ended_utc,
+        "mode": j.mode,
+        "issue_id": j.issue_id,
+        "commit_message": j.commit_message,
+        "patch_path": j.patch_path,
+    }
+
+
 @dataclass
 class RunEntry:
     issue_id: int

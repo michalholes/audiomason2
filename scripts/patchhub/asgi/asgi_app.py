@@ -18,6 +18,7 @@ from fastapi.responses import (
 )
 
 from patchhub.app_support import read_tail
+from patchhub.models import job_to_list_item_json
 
 from .async_app_core import AsyncAppCore
 from .async_offload import to_thread
@@ -183,7 +184,7 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
 
         jobs = mem + disk
         jobs.sort(key=lambda j: str(j.created_utc or ""), reverse=True)
-        return JSONResponse({"ok": True, "jobs": [j.to_json() for j in jobs]})
+        return JSONResponse({"ok": True, "jobs": [job_to_list_item_json(j) for j in jobs]})
 
     @app.get("/api/jobs/{job_id}")
     async def api_jobs_get(job_id: str) -> JSONResponse:

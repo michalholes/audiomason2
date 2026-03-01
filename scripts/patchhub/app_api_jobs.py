@@ -12,7 +12,7 @@ from .command_parse import (
 from .issue_alloc import allocate_next_issue_id
 from .job_ids import new_job_id
 from .job_store import list_job_jsons, load_job_json
-from .models import JobMode, JobRecord
+from .models import JobMode, JobRecord, job_to_list_item_json
 from .zip_commit_message import (
     ZipCommitConfig,
     ZipIssueConfig,
@@ -258,7 +258,7 @@ def api_jobs_list(self) -> tuple[int, bytes]:
 
     jobs = mem + disk
     jobs.sort(key=lambda j: str(j.created_utc or ""), reverse=True)
-    return _ok({"jobs": [j.to_json() for j in jobs]})
+    return _ok({"jobs": [job_to_list_item_json(j) for j in jobs]})
 
 
 def api_jobs_get(self, job_id: str) -> tuple[int, bytes]:
