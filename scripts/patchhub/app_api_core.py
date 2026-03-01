@@ -32,6 +32,18 @@ _RUNS_PAYLOAD_CACHE: dict[tuple[str, str, str, int], bytes] = {}
 _PATCHES_LATEST_PAYLOAD_CACHE: dict[str, bytes] = {}
 _CONFIG_PAYLOAD_CACHE: dict[str, bytes] = {}
 
+_DIAGNOSTICS_PAYLOAD_CACHE: dict[tuple[str, str], bytes] = {}
+
+
+def _stable_token_from_obj(obj: object) -> str:
+    basis = json.dumps(
+        obj,
+        ensure_ascii=True,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    return hashlib.sha1(basis).hexdigest()
+
 
 def _autofill_scan_dir_rel(self) -> str | None:
     scan_dir = str(self.cfg.autofill.scan_dir or "").strip().replace("\\", "/")
@@ -468,20 +480,51 @@ def api_parse_command(self, body: dict[str, Any]) -> tuple[int, bytes]:
 
 def api_runs(self, qs: dict[str, str]) -> tuple[int, bytes]:
     token = compute_runs_directory_token(self.patches_root)
+
+    issue_id = qs.get("issue_id") or ""
+    result = qs.get("result") or ""
+    limit_s = qs.get("limit", "100")
+    try:
+        limit = int(limit_s)
+    except ValueError:
+        return _err("Invalid limit", status=400)
+
+    cache_limit_allowlist = {25, 50, 100, 200, 500}
+    cache_limit = limit if limit in cache_limit_allowlist else 0
+    cache_issue_id = "" if issue_id == "" else "!"
+    cache_result = result if result in ("", "success", "fail", "unknown", "canceled") else "!"
+    cache_key = (token, cache_issue_id, cache_result, cache_limit)
+
     last_token = qs.get("last_token")
     if last_token == token:
-        cached = _RUNS_PAYLOAD_CACHE.get((token, "", "", 0))
+        cached = _RUNS_PAYLOAD_CACHE.get(cache_key)
         if cached is None:
             cached = json.dumps(
                 {"unchanged": True, "token": token},
                 ensure_ascii=True,
                 separators=(",", ":"),
             ).encode("utf-8")
-            _RUNS_PAYLOAD_CACHE[(token, "", "", 0)] = cached
+            if cache_key[1] != "!" and cache_key[2] != "!":
+                _RUNS_PAYLOAD_CACHE[cache_key] = cached
         return 200, cached
 
     runs = iter_runs(self.patches_root, self.cfg.indexing.log_filename_regex)
     runs.extend(_iter_canceled_runs(self.patches_root))
+
+    if issue_id:
+        try:
+            iid = int(issue_id)
+        except ValueError:
+            return _err("Invalid issue_id", status=400)
+        runs = [r for r in runs if r.issue_id == iid]
+
+    if result:
+        if result not in ("success", "fail", "unknown", "canceled"):
+            return _err("Invalid result filter", status=400)
+        runs = [r for r in runs if r.result == result]
+
+    runs.sort(key=lambda r: (r.mtime_utc, r.issue_id), reverse=True)
+    runs = runs[: max(1, min(limit, 500))]
 
     runner_cfg_path = (self.repo_root / self.cfg.runner.runner_config_toml).resolve()
     success_rel = compute_success_archive_rel(
@@ -492,27 +535,12 @@ def api_runs(self, qs: dict[str, str]) -> tuple[int, bytes]:
         _decorate_run(r, patches_root=self.patches_root, success_zip_rel=success_rel) for r in runs
     ]
 
-    issue_id = qs.get("issue_id")
-    result = qs.get("result")
-    limit = int(qs.get("limit", "100"))
-
-    if issue_id:
-        try:
-            iid = int(issue_id)
-        except ValueError:
-            return _err("Invalid issue_id", status=400)
-        runs = [r for r in runs if r.issue_id == iid]
-    if result:
-        if result not in ("success", "fail", "unknown", "canceled"):
-            return _err("Invalid result filter", status=400)
-        runs = [r for r in runs if r.result == result]
-
-    runs.sort(key=lambda r: (r.mtime_utc, r.issue_id), reverse=True)
-    runs = runs[: max(1, min(limit, 500))]
     payload_obj = {"runs": [r.__dict__ for r in runs], "token": token}
     status, payload = _ok(payload_obj)
-    if not issue_id and not result and limit == 100:
-        _RUNS_PAYLOAD_CACHE[(token, "", "", 0)] = payload
+
+    if cache_key[1] != "!" and cache_key[2] != "!":
+        _RUNS_PAYLOAD_CACHE[cache_key] = payload
+
     return status, payload
 
 
@@ -525,6 +553,71 @@ def api_runner_tail(self, qs: dict[str, str]) -> tuple[int, bytes]:
         cache_max_entries=self.cfg.server.tail_cache_max_entries,
     )
     return _ok({"path": str(Path(self.cfg.paths.patches_root) / "am_patch.log"), "tail": tail})
+
+
+def api_debug_diagnostics(
+    self,
+    qs: dict[str, str],
+    queue_part: dict[str, int] | None = None,
+) -> tuple[int, bytes]:
+    include_stats = str(qs.get("include_stats", "0")) == "1"
+    queue_part = queue_part or {"queued": 0, "running": 0}
+
+    lock_held = False
+    try:
+        from .job_ids import is_lock_held
+
+        lock_held = is_lock_held(self.jail.lock_path())
+    except Exception:
+        lock_held = False
+
+    usage = shutil.disk_usage(str(self.patches_root))
+    base: dict[str, Any] = {
+        "queue": {
+            "queued": int(queue_part.get("queued", 0)),
+            "running": int(queue_part.get("running", 0)),
+        },
+        "lock": {
+            "path": str(Path(self.cfg.paths.patches_root) / "am_patch.lock"),
+            "held": lock_held,
+        },
+        "disk": {"total": int(usage.total), "used": int(usage.used), "free": int(usage.free)},
+    }
+
+    token_obj: dict[str, Any] = {"mode": "stats" if include_stats else "cheap", "base": base}
+    runs_token = ""
+    if include_stats:
+        runs_token = compute_runs_directory_token(self.patches_root)
+        token_obj["runs_token"] = runs_token
+
+    token = _stable_token_from_obj(token_obj)
+    last_token = qs.get("last_token")
+    cache_key = (token, "stats" if include_stats else "cheap")
+    if last_token == token:
+        cached = _DIAGNOSTICS_PAYLOAD_CACHE.get(cache_key)
+        if cached is None:
+            cached = json.dumps(
+                {"unchanged": True, "token": token},
+                ensure_ascii=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+            _DIAGNOSTICS_PAYLOAD_CACHE[cache_key] = cached
+        return 200, cached
+
+    payload_obj: dict[str, Any] = {**base, "token": token}
+    if include_stats:
+        runs = iter_runs(self.patches_root, self.cfg.indexing.log_filename_regex)
+        stats = compute_stats(runs, self.cfg.indexing.stats_windows_days)
+        payload_obj["runs"] = {"count": len(runs)}
+        payload_obj["stats"] = {
+            "all_time": stats.all_time.__dict__,
+            "windows": [w.__dict__ for w in stats.windows],
+        }
+        payload_obj["runs_token"] = runs_token
+
+    status, payload = _ok(payload_obj)
+    _DIAGNOSTICS_PAYLOAD_CACHE[cache_key] = payload
+    return status, payload
 
 
 def diagnostics(self) -> dict[str, Any]:

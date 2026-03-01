@@ -18,6 +18,7 @@ from fastapi.responses import (
     StreamingResponse,
 )
 
+from patchhub import app_api_core as _core_api
 from patchhub.app_support import read_tail
 
 from .async_app_core import AsyncAppCore
@@ -396,8 +397,12 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
         return Response(content=data, media_type="application/zip", headers=headers)
 
     @app.get("/api/debug/diagnostics")
-    async def api_debug_diagnostics() -> JSONResponse:
-        return JSONResponse(await core.diagnostics(), status_code=200)
+    async def api_debug_diagnostics(request: Request) -> Response:
+        qs = dict(request.query_params)
+        qstate = await core.queue.state()
+        queue_part = {"queued": int(qstate.queued), "running": int(qstate.running)}
+        status, data = await to_thread(_core_api.api_debug_diagnostics, core, qs, queue_part)
+        return _json_bytes_response(status, data)
 
     @app.get("/api/jobs/{job_id}/events")
     async def api_jobs_events(job_id: str) -> StreamingResponse:
