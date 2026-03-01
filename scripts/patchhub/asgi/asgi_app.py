@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import mimetypes
 import os
@@ -33,6 +34,25 @@ def _json_bytes_response(status: int, data: bytes) -> Response:
 def _guess_content_type(path: Path) -> str:
     ctype, _ = mimetypes.guess_type(path.name)
     return ctype or "application/octet-stream"
+
+
+def _read_head_limited(path: Path, *, max_lines: int, max_bytes: int) -> str:
+    if max_lines <= 0 or max_bytes <= 0:
+        return ""
+    if not path.exists() or not path.is_file():
+        return ""
+    out_lines: list[str] = []
+    read_bytes = 0
+    with path.open("r", encoding="utf-8", errors="replace") as f:
+        for _ in range(max_lines):
+            line = f.readline()
+            if not line:
+                break
+            read_bytes += len(line.encode("utf-8", errors="replace"))
+            if read_bytes > max_bytes:
+                break
+            out_lines.append(line.rstrip("\n"))
+    return "\n".join(out_lines)
 
 
 def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
@@ -75,8 +95,9 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
         return FileResponse(p, media_type=_guess_content_type(p))
 
     @app.get("/api/config")
-    async def api_config() -> Response:
-        status, data = await to_thread(core.api_config)
+    async def api_config(request: Request) -> Response:
+        qs = dict(request.query_params)
+        status, data = await to_thread(core.api_config, qs)
         return _json_bytes_response(status, data)
 
     @app.get("/api/amp/schema")
@@ -105,8 +126,9 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
         return _json_bytes_response(status, data)
 
     @app.get("/api/patches/latest")
-    async def api_patches_latest() -> Response:
-        status, data = await to_thread(core.api_patches_latest)
+    async def api_patches_latest(request: Request) -> Response:
+        qs = dict(request.query_params)
+        status, data = await to_thread(core.api_patches_latest, qs)
         return _json_bytes_response(status, data)
 
     @app.get("/api/fs/read_text")
@@ -145,7 +167,7 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
         return _json_bytes_response(status, data)
 
     @app.get("/api/jobs")
-    async def api_jobs_list() -> JSONResponse:
+    async def api_jobs_list(request: Request) -> JSONResponse:
         mem = await core.queue.list_jobs()
         mem_by_id = {j.job_id: j for j in mem}
 
@@ -183,7 +205,30 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
 
         jobs = mem + disk
         jobs.sort(key=lambda j: str(j.created_utc or ""), reverse=True)
-        return JSONResponse({"ok": True, "jobs": [j.to_json() for j in jobs]})
+
+        token_items: list[tuple[str, str, str, str]] = []
+        for j in jobs:
+            token_items.append(
+                (
+                    str(getattr(j, "job_id", "")),
+                    str(getattr(j, "status", "")),
+                    str(getattr(j, "created_utc", "")),
+                    str(getattr(j, "ended_utc", "")),
+                )
+            )
+        token_items.sort()
+        token = hashlib.sha1(
+            json.dumps(
+                token_items,
+                ensure_ascii=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        last_token = request.query_params.get("last_token")
+        if last_token == token:
+            return JSONResponse({"unchanged": True, "token": token})
+
+        return JSONResponse({"ok": True, "jobs": [j.to_json() for j in jobs], "token": token})
 
     @app.get("/api/jobs/{job_id}")
     async def api_jobs_get(job_id: str) -> JSONResponse:
@@ -400,9 +445,14 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
                     yield chunk
                 return
 
-            tail = await to_thread(read_tail, jsonl_path, 500)
-            if tail:
-                for line in tail.splitlines():
+            head = await to_thread(
+                _read_head_limited,
+                jsonl_path,
+                max_lines=2000,
+                max_bytes=512 * 1024,
+            )
+            if head:
+                for line in head.splitlines():
                     if not line.strip():
                         continue
                     yield f"data: {line}\n\n".encode()

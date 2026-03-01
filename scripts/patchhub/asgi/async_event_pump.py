@@ -96,31 +96,24 @@ async def start_event_pump(
     socket_path: str,
     jsonl_path: Path,
     publish: Callable[[str], None] | None = None,
-    connect_timeout_s: float = 10.0,
+    connect_timeout_s: float = 0.0,
     retry_sleep_s: float = 0.25,
 ) -> None:
     """Start an async event pump that persists runner IPC events to a JSONL file.
 
     If publish is provided, each non-empty line is also forwarded immediately.
-    The function returns when the stream ends or when connect timeout elapses.
+    The function returns when the stream ends or when cancelled.
     """
 
-    deadline = asyncio.get_running_loop().time() + max(connect_timeout_s, 0.0)
+    # Retry connecting until success or explicit task cancellation.
+    #
+    # connect_timeout_s is kept for backward compatibility but is intentionally ignored
+    # to avoid dropping early runner events when the socket comes up late.
     sleep_s = max(retry_sleep_s, 0.0)
     while True:
         try:
             await _connect_and_stream(socket_path, jsonl_path, publish)
             return
-        except FileNotFoundError:
-            pass
-        except ConnectionRefusedError:
-            pass
-        except OSError:
-            pass
-
-        if connect_timeout_s <= 0:
-            return
-        if asyncio.get_running_loop().time() >= deadline:
-            return
-        await asyncio.sleep(sleep_s)
-        sleep_s = min(sleep_s * 2.0, 2.0)
+        except (FileNotFoundError, ConnectionRefusedError, OSError):
+            await asyncio.sleep(sleep_s)
+            sleep_s = min(sleep_s * 2.0, 2.0)

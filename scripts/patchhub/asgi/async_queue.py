@@ -283,6 +283,7 @@ class AsyncJobQueue:
                         socket_path=str(sock_path),
                         jsonl_path=jsonl_path,
                         publish=broker.publish,
+                        connect_timeout_s=0.0,
                     ),
                     name=f"patchhub_event_pump_{job_id}",
                 )

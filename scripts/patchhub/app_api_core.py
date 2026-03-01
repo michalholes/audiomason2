@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import re
 import shutil
@@ -17,7 +19,7 @@ from .app_support import (
     read_tail,
 )
 from .command_parse import CommandParseError, parse_runner_command
-from .indexing import compute_stats, iter_runs
+from .indexing import compute_runs_directory_token, compute_stats, iter_runs
 from .zip_commit_message import (
     ZipCommitConfig,
     ZipIssueConfig,
@@ -25,6 +27,10 @@ from .zip_commit_message import (
     read_issue_number_from_zip_path,
     zip_contains_patch_file,
 )
+
+_RUNS_PAYLOAD_CACHE: dict[tuple[str, str, str, int], bytes] = {}
+_PATCHES_LATEST_PAYLOAD_CACHE: dict[str, bytes] = {}
+_CONFIG_PAYLOAD_CACHE: dict[str, bytes] = {}
 
 
 def _autofill_scan_dir_rel(self) -> str | None:
@@ -99,7 +105,7 @@ def _derive_from_filename(self, filename: str) -> tuple[str | None, str | None]:
 # ---------------- API ----------------
 
 
-def api_config(self) -> tuple[int, bytes]:
+def api_config(self, qs: dict[str, str] | None = None) -> tuple[int, bytes]:
     runner_cfg_path = (self.repo_root / self.cfg.runner.runner_config_toml).resolve()
     success_rel = compute_success_archive_rel(
         self.repo_root, runner_cfg_path, self.cfg.paths.patches_root
@@ -168,16 +174,41 @@ def api_config(self) -> tuple[int, bytes]:
             "commit_default_if_no_match": self.cfg.autofill.commit_default_if_no_match,
         },
     }
-    return _json_bytes(data)
+    qs = qs or {}
+    basis = json.dumps(
+        data,
+        ensure_ascii=True,
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")
+    token = hashlib.sha1(basis).hexdigest()
+    last_token = qs.get("last_token")
+    if last_token == token:
+        cached = _CONFIG_PAYLOAD_CACHE.get(token)
+        if cached is None:
+            _CONFIG_PAYLOAD_CACHE[token] = json.dumps(
+                {"unchanged": True, "token": token},
+                ensure_ascii=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+            cached = _CONFIG_PAYLOAD_CACHE[token]
+        return 200, cached
+
+    data["token"] = token
+    status, payload = _json_bytes(data)
+    _CONFIG_PAYLOAD_CACHE[token] = payload
+    return status, payload
 
 
-def api_patches_latest(self) -> tuple[int, bytes]:
+def api_patches_latest(self, qs: dict[str, str] | None = None) -> tuple[int, bytes]:
     if not self.cfg.autofill.enabled:
         return _ok({"found": False, "disabled": True})
     if self.cfg.autofill.choose_strategy != "mtime_ns":
         return _err("Unsupported choose_strategy", status=400)
     if self.cfg.autofill.tiebreaker != "lex_name":
         return _err("Unsupported tiebreaker", status=400)
+
+    qs = qs or {}
 
     rel = self._autofill_scan_dir_rel()
     if rel is None:
@@ -195,7 +226,40 @@ def api_patches_latest(self) -> tuple[int, bytes]:
                 "ignored_ext=0 ignored_zip_no_patch=0 selected=none",
             ],
         }
-        return _ok(payload_nf)
+        token_basis = {
+            "rel": str(rel),
+            "best_name": None,
+            "best_mtime_ns": -1,
+            "scanned": 0,
+            "ignored_name": 0,
+            "ignored_prefix": 0,
+            "ignored_ext": 0,
+            "ignored_zip_no_patch": 0,
+        }
+        token = hashlib.sha1(
+            json.dumps(
+                token_basis,
+                ensure_ascii=True,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        last_token = qs.get("last_token")
+        if last_token == token:
+            cached = _PATCHES_LATEST_PAYLOAD_CACHE.get(token)
+            if cached is None:
+                cached = json.dumps(
+                    {"unchanged": True, "token": token},
+                    ensure_ascii=True,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+                _PATCHES_LATEST_PAYLOAD_CACHE[token] = cached
+            return 200, cached
+
+        payload_nf["token"] = token
+        status, payload_bytes = _ok(payload_nf)
+        _PATCHES_LATEST_PAYLOAD_CACHE[token] = payload_bytes
+        return status, payload_bytes
 
     exts = {str(x).lower() for x in self.cfg.autofill.scan_extensions}
     ignore_names = {str(x) for x in self.cfg.autofill.scan_ignore_filenames}
@@ -247,7 +311,40 @@ def api_patches_latest(self) -> tuple[int, bytes]:
                 "selected=none",
             ],
         }
-        return _ok(payload_nf2)
+        token_basis = {
+            "rel": str(rel),
+            "best_name": None,
+            "best_mtime_ns": -1,
+            "scanned": scanned,
+            "ignored_name": ignored_name,
+            "ignored_prefix": ignored_prefix,
+            "ignored_ext": ignored_ext,
+            "ignored_zip_no_patch": ignored_zip_no_patch,
+        }
+        token = hashlib.sha1(
+            json.dumps(
+                token_basis,
+                ensure_ascii=True,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        last_token = qs.get("last_token")
+        if last_token == token:
+            cached = _PATCHES_LATEST_PAYLOAD_CACHE.get(token)
+            if cached is None:
+                cached = json.dumps(
+                    {"unchanged": True, "token": token},
+                    ensure_ascii=True,
+                    separators=(",", ":"),
+                ).encode("utf-8")
+                _PATCHES_LATEST_PAYLOAD_CACHE[token] = cached
+            return 200, cached
+
+        payload_nf2["token"] = token
+        status, payload_bytes = _ok(payload_nf2)
+        _PATCHES_LATEST_PAYLOAD_CACHE[token] = payload_bytes
+        return status, payload_bytes
 
     rel_dir = self.cfg.autofill.scan_dir.rstrip("/")
     stored_rel = str(Path(rel_dir) / best_name)
@@ -310,7 +407,40 @@ def api_patches_latest(self) -> tuple[int, bytes]:
         payload["status"].append(f"autofill: issue from zip {self.cfg.autofill.zip_issue_filename}")
     elif zip_issue_err:
         payload["status"].append(f"autofill: zip issue ignored ({zip_issue_err})")
-    return _ok(payload)
+    token_basis = {
+        "rel": str(rel),
+        "best_name": best_name,
+        "best_mtime_ns": best_m,
+        "scanned": scanned,
+        "ignored_name": ignored_name,
+        "ignored_prefix": ignored_prefix,
+        "ignored_ext": ignored_ext,
+        "ignored_zip_no_patch": ignored_zip_no_patch,
+    }
+    token = hashlib.sha1(
+        json.dumps(
+            token_basis,
+            ensure_ascii=True,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+    last_token = qs.get("last_token")
+    if last_token == token:
+        cached = _PATCHES_LATEST_PAYLOAD_CACHE.get(token)
+        if cached is None:
+            cached = json.dumps(
+                {"unchanged": True, "token": token},
+                ensure_ascii=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+            _PATCHES_LATEST_PAYLOAD_CACHE[token] = cached
+        return 200, cached
+
+    payload["token"] = token
+    status, payload_bytes = _ok(payload)
+    _PATCHES_LATEST_PAYLOAD_CACHE[token] = payload_bytes
+    return status, payload_bytes
 
 
 def api_parse_command(self, body: dict[str, Any]) -> tuple[int, bytes]:
@@ -337,6 +467,19 @@ def api_parse_command(self, body: dict[str, Any]) -> tuple[int, bytes]:
 
 
 def api_runs(self, qs: dict[str, str]) -> tuple[int, bytes]:
+    token = compute_runs_directory_token(self.patches_root)
+    last_token = qs.get("last_token")
+    if last_token == token:
+        cached = _RUNS_PAYLOAD_CACHE.get((token, "", "", 0))
+        if cached is None:
+            cached = json.dumps(
+                {"unchanged": True, "token": token},
+                ensure_ascii=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+            _RUNS_PAYLOAD_CACHE[(token, "", "", 0)] = cached
+        return 200, cached
+
     runs = iter_runs(self.patches_root, self.cfg.indexing.log_filename_regex)
     runs.extend(_iter_canceled_runs(self.patches_root))
 
@@ -366,7 +509,11 @@ def api_runs(self, qs: dict[str, str]) -> tuple[int, bytes]:
 
     runs.sort(key=lambda r: (r.mtime_utc, r.issue_id), reverse=True)
     runs = runs[: max(1, min(limit, 500))]
-    return _ok({"runs": [r.__dict__ for r in runs]})
+    payload_obj = {"runs": [r.__dict__ for r in runs], "token": token}
+    status, payload = _ok(payload_obj)
+    if not issue_id and not result and limit == 100:
+        _RUNS_PAYLOAD_CACHE[(token, "", "", 0)] = payload
+    return status, payload
 
 
 def api_runner_tail(self, qs: dict[str, str]) -> tuple[int, bytes]:
