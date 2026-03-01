@@ -8,8 +8,10 @@ This manual describes how *you* use the new runner day-to-day so that runs are d
 ### Gates and COMPILE
 - After the patch is applied, the runner executes gates.
 - Optional diagnostics: if patch apply fails, you can still run workspace gates for diagnostics:
-  - --gates-on-partial-apply (or cfg key gates_on_partial_apply=true)
-  - --gates-on-zero-apply (or cfg key gates_on_zero_apply=true)
+  - --apply-failure-partial-gates-policy {never,always,repair_only}
+  - --apply-failure-zero-gates-policy {never,always,repair_only}
+  - Config keys: apply_failure_partial_gates_policy / apply_failure_zero_gates_policy
+  - repair_only: run gates only when workspace_attempt >= 2 (ws.attempt).
   - The run remains FAIL with PATCH_APPLY as the primary reason.
 - Gate: COMPILE runs `python -m compileall -q` in the workspace repo root to catch syntax errors early.
 - Default: enabled.
