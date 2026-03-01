@@ -146,6 +146,7 @@
     function computeMode() {
       if (!ctx) return "IDLE";
       var isActive = false;
+      var v = null;
       try {
         if (typeof ctx.isActive === "function") {
           isActive = !!ctx.isActive();
@@ -154,6 +155,12 @@
         }
       } catch {
         isActive = false;
+      }
+      if (!isActive) {
+        try {
+          v = localStorage.getItem("amp.liveJobId");
+          if (v && String(v).trim()) isActive = true;
+        } catch {}
       }
       return isActive ? "ACTIVE" : "IDLE";
     }

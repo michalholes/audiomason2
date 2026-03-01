@@ -16,6 +16,21 @@ from .async_runner_exec import AsyncRunnerExecutor
 from .job_event_broker import JobEventBroker
 
 
+def _job_jsonl_path(job: JobRecord, job_dir: Path) -> Path:
+    if job.mode in ("finalize_live", "finalize_workspace"):
+        return job_dir / "am_patch_finalize.jsonl"
+    issue_s = str(job.issue_id or "")
+    if issue_s.isdigit():
+        return job_dir / ("am_patch_issue_" + issue_s + ".jsonl")
+    return job_dir / "am_patch_finalize.jsonl"
+
+
+def _append_jsonl_sync(path: Path, obj: dict) -> None:
+    line = json.dumps(obj, ensure_ascii=True)
+    with path.open("ab") as fp:
+        fp.write((line + "\n").encode("utf-8"))
+
+
 def utc_now() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
@@ -138,6 +153,23 @@ class AsyncJobQueue:
         async with self._mu:
             self._jobs[job.job_id] = job
             await self._persist(job)
+            job_dir = self._job_dir(job.job_id)
+            jsonl_path = _job_jsonl_path(job, job_dir)
+            await asyncio.to_thread(
+                _append_jsonl_sync,
+                jsonl_path,
+                {
+                    "type": "log",
+                    "ch": "CORE",
+                    "sev": "INFO",
+                    "kind": "DO",
+                    "stage": "QUEUED",
+                    "msg": "Job accepted (queued)",
+                    "job_id": job.job_id,
+                    "mode": str(job.mode),
+                    "issue_id": job.issue_id,
+                },
+            )
         await self._q.put(job.job_id)
 
     async def cancel(self, job_id: str) -> bool:
@@ -253,17 +285,27 @@ class AsyncJobQueue:
                 job.status = "running"
                 job.started_utc = utc_now()
                 await self._persist(job)
+                jsonl_path = _job_jsonl_path(job, self._job_dir(job.job_id))
+                await asyncio.to_thread(
+                    _append_jsonl_sync,
+                    jsonl_path,
+                    {
+                        "type": "log",
+                        "ch": "CORE",
+                        "sev": "INFO",
+                        "kind": "OK",
+                        "stage": "QUEUED",
+                        "msg": "Job started (running)",
+                        "job_id": job.job_id,
+                        "mode": str(job.mode),
+                        "issue_id": job.issue_id,
+                    },
+                )
 
             job_dir = self._job_dir(job_id)
             runner_log = job_dir / "runner.log"
 
-            def _job_jsonl_path(j: JobRecord, job_dir: Path = job_dir) -> Path:
-                if j.mode in ("finalize_live", "finalize_workspace"):
-                    return job_dir / "am_patch_finalize.jsonl"
-                issue_s = str(j.issue_id or "")
-                if issue_s.isdigit():
-                    return job_dir / ("am_patch_issue_" + issue_s + ".jsonl")
-                return job_dir / "am_patch_finalize.jsonl"
+            jsonl_path = _job_jsonl_path(job, job_dir)
 
             try:
                 effective_cmd = _inject_web_overrides(job.canonical_command, job_id)
@@ -273,8 +315,6 @@ class AsyncJobQueue:
                 if sock_path.exists() or sock_path.is_symlink():
                     with contextlib.suppress(Exception):
                         sock_path.unlink()
-
-                jsonl_path = _job_jsonl_path(job)
                 broker = JobEventBroker()
                 async with self._mu:
                     self._brokers[job_id] = broker

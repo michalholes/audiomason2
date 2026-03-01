@@ -38,7 +38,7 @@ async def stream_job_events_sse(
             return
 
         exists = await asyncio.to_thread(_path_exists_sync, jsonl_path)
-        if status == "running" and not exists:
+        if status in ("running", "queued") and not exists:
             now = asyncio.get_running_loop().time()
             if now - last_ping >= ping_interval_s:
                 yield b": ping\n\n"

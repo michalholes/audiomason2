@@ -3,7 +3,7 @@ Status: AUTHORITATIVE SPECIFICATION
 Applies to: scripts/patchhub/*
 Language: ENGLISH (ASCII ONLY)
 
-Specification Version: 1.3.3-spec
+Specification Version: 1.3.4-spec
 Code Baseline: audiomason2-main.zip (as provided in this chat)
 
 -------------------------------------------------------------------------------
@@ -751,6 +751,11 @@ Semantics (server_events.py):
     event: end
     data: {"reason":"job_not_found"}
 - Otherwise:
+- On enqueue (job created and queued), the server MUST ensure the job JSONL exists
+  and contains at least one "queued/accepted" event line, so that clients see
+  immediate output without waiting for the job to enter "running".
+- While job status is "queued" (or "running"), the server MUST NOT emit an "end"
+  event solely because the JSONL file does not yet exist.
   - Streams "data: <json line>" for each complete line appended to the job jsonl.
   - On connection, the server SHOULD replay a recent tail of persisted JSONL events
     (default: last 500 lines) before switching to broker live streaming.
