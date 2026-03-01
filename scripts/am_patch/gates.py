@@ -353,7 +353,9 @@ def run_biome(
     if biome_format:
         fmt_cmd0 = [str(x) for x in format_command if str(x).strip()]
         if not fmt_cmd0:
-            raise RunnerError("GATES", "CMD", "gate_biome_format_command must be non-empty")
+            # Defensive fallback: older policy overlays may omit the format command.
+            # Keep deterministic behavior by using the Policy default.
+            fmt_cmd0 = ["npm", "exec", "--", "biome", "format", "--write"]
 
         logger.section("GATE: BIOME FORMAT")
         logger.line("gate_biome_format_cmd=" + " ".join(fmt_cmd0))
