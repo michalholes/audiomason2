@@ -77,6 +77,9 @@ _SECTION_BY_KEY: dict[str, str] = {
     "gate_typescript_command": "",
     "apply_failure_partial_gates_policy": "",
     "apply_failure_zero_gates_policy": "",
+    "gate_ruff_mode": "",
+    "gate_mypy_mode": "",
+    "gate_pytest_mode": "",
     "gate_docs_include": "",
     "gate_docs_exclude": "",
     "gate_docs_required_files": "",
@@ -87,6 +90,7 @@ _SECTION_BY_KEY: dict[str, str] = {
     "ruff_targets": "",
     "pytest_targets": "",
     "mypy_targets": "",
+    "gate_pytest_js_prefixes": "",
     "pytest_use_venv": "",
     "fail_if_live_files_changed": "",
     "live_changed_resolution": "",
@@ -418,6 +422,9 @@ _ENUM_BY_KEY: dict[str, list[str]] = {
     "live_changed_resolution": ["fail", "overwrite_live", "overwrite_workspace"],
     "apply_failure_partial_gates_policy": ["never", "always", "repair_only"],
     "apply_failure_zero_gates_policy": ["never", "always", "repair_only"],
+    "gate_ruff_mode": ["auto", "always"],
+    "gate_mypy_mode": ["auto", "always"],
+    "gate_pytest_mode": ["auto", "always"],
 }
 
 

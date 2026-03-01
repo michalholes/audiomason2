@@ -570,6 +570,10 @@ def run_gates(
     ruff_targets: list[str],
     pytest_targets: list[str],
     mypy_targets: list[str],
+    gate_ruff_mode: str = "auto",
+    gate_mypy_mode: str = "auto",
+    gate_pytest_mode: str = "auto",
+    gate_pytest_js_prefixes: list[str] | None = None,
     gates_order: list[str] | None,
     pytest_use_venv: bool,
     decision_paths: list[str],
@@ -588,6 +592,22 @@ def run_gates(
         logger.section("GATES: SKIPPED (gates_order empty)")
         logger.warning_core("GATES: SKIPPED (gates_order empty)")
         return
+
+    _norm_decision_paths = [p.replace("\\", "/").lstrip("./") for p in decision_paths]
+    gate_pytest_js_prefixes = gate_pytest_js_prefixes or []
+
+    def _has_changed_basename(names: tuple[str, ...]) -> bool:
+        return any(pth in names for pth in _norm_decision_paths)
+
+    def _has_changed_file(exts: tuple[str, ...], prefixes: list[str]) -> bool:
+        norm_prefixes = [x.rstrip("/").lstrip("./") for x in prefixes if x]
+        for pth in _norm_decision_paths:
+            if not pth.endswith(exts):
+                continue
+            for pfx in norm_prefixes:
+                if pth == pfx or pth.startswith(pfx + "/"):
+                    return True
+        return False
 
     def _run_gate(name: str) -> bool:
         if name == "compile":
@@ -650,6 +670,14 @@ def run_gates(
                 skipped.append("ruff")
                 logger.warning_core("gate_ruff=SKIP (skipped_by_user)")
                 return True
+            if gate_ruff_mode != "always":
+                trigger = _has_changed_basename(("pyproject.toml",)) or _has_changed_file(
+                    (".py",), ruff_targets
+                )
+                if not trigger:
+                    skipped.append("ruff")
+                    logger.warning_core("gate_ruff=SKIP (no_matching_files)")
+                    return True
             return run_ruff(
                 logger,
                 cwd,
@@ -664,6 +692,20 @@ def run_gates(
                 skipped.append("pytest")
                 logger.warning_core("gate_pytest=SKIP (skipped_by_user)")
                 return True
+            if gate_pytest_mode != "always":
+                py_triggers_prefixes = list(
+                    dict.fromkeys(pytest_targets + ["src", "plugins", "scripts"])
+                )
+                trigger_py = _has_changed_basename(
+                    ("pyproject.toml", "pytest.ini")
+                ) or _has_changed_file((".py",), py_triggers_prefixes)
+                trigger_js = bool(gate_pytest_js_prefixes) and _has_changed_file(
+                    (".js", ".mjs", ".cjs"), gate_pytest_js_prefixes
+                )
+                if not trigger_py and not trigger_js:
+                    skipped.append("pytest")
+                    logger.warning_core("gate_pytest=SKIP (no_matching_files)")
+                    return True
             return run_pytest(
                 logger,
                 cwd,
@@ -677,6 +719,14 @@ def run_gates(
                 skipped.append("mypy")
                 logger.warning_core("gate_mypy=SKIP (skipped_by_user)")
                 return True
+            if gate_mypy_mode != "always":
+                trigger = _has_changed_basename(("pyproject.toml",)) or _has_changed_file(
+                    (".py",), mypy_targets
+                )
+                if not trigger:
+                    skipped.append("mypy")
+                    logger.warning_core("gate_mypy=SKIP (no_matching_files)")
+                    return True
             return run_mypy(logger, cwd, repo_root=repo_root, targets=mypy_targets)
 
         if name == "monolith":
@@ -729,7 +779,7 @@ def run_gates(
                 skipped.append("docs")
                 logger.warning_core("gate_docs=SKIP (skipped_by_user)")
                 return True
-            ok, missing, trigger = check_docs_gate(
+            ok, missing, trigger_reason = check_docs_gate(
                 decision_paths,
                 include=docs_include,
                 exclude=docs_exclude,
@@ -738,7 +788,7 @@ def run_gates(
             if ok:
                 logger.line("gate_docs=OK")
                 return True
-            trig = trigger or "unknown"
+            trig = trigger_reason or "unknown"
             logger.error_core("gate_docs=FAIL")
             logger.error_core("gate_docs_trigger=" + trig)
             logger.error_core("gate_docs_missing=" + ",".join(missing))

@@ -262,6 +262,11 @@ allow_non_main = false
 
 
 # Gate targets
+gate_ruff_mode = "auto"
+gate_mypy_mode = "auto"
+gate_pytest_mode = "auto"
+gate_pytest_js_prefixes = []
+
 ruff_targets = ["src", "plugins", "scripts", "tests"]
 pytest_targets = ["tests"]
 mypy_targets = ["src", "plugins", "scripts"]

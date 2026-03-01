@@ -202,6 +202,34 @@ def parse_args(argv: list[str]) -> CliArgs:
     p.add_argument(
         "--override", dest="overrides", action="append", default=None, metavar="KEY=VALUE"
     )
+    p.add_argument(
+        "--ruff-mode",
+        action=AppendOverride,
+        key="gate_ruff_mode",
+        dest="overrides",
+        choices=("auto", "always"),
+    )
+    p.add_argument(
+        "--mypy-mode",
+        action=AppendOverride,
+        key="gate_mypy_mode",
+        dest="overrides",
+        choices=("auto", "always"),
+    )
+    p.add_argument(
+        "--pytest-mode",
+        action=AppendOverride,
+        key="gate_pytest_mode",
+        dest="overrides",
+        choices=("auto", "always"),
+    )
+    p.add_argument(
+        "--pytest-js-prefixes",
+        action=AppendOverride,
+        key="gate_pytest_js_prefixes",
+        dest="overrides",
+        metavar="CSV",
+    )
 
     p.add_argument("--ipc-socket", action=AppendOverride, key="ipc_socket_path", dest="overrides")
     p.add_argument(

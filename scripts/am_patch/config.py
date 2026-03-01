@@ -213,6 +213,11 @@ class Policy(PolicyMonolithMixin):
     pytest_targets: list[str] = field(default_factory=lambda: ["tests"])
     mypy_targets: list[str] = field(default_factory=lambda: ["src"])
 
+    gate_ruff_mode: str = "auto"
+    gate_mypy_mode: str = "auto"
+    gate_pytest_mode: str = "auto"
+    gate_pytest_js_prefixes: list[str] = field(default_factory=list)
+
     pytest_use_venv: bool = True
 
     fail_if_live_files_changed: bool = True
@@ -969,8 +974,8 @@ def build_policy(defaults: Policy, cfg: dict[str, Any]) -> Policy:
                 "CONFIG",
                 "INVALID",
                 (
-                    f"invalid gate_badguys_cwd={p.gate_badguys_cwd!r}; "
-                    "allowed: auto|workspace|clone|live"
+                    f"invalid gate_badguys_cwd={p.gate_badguys_cwd!r}; allowed: "
+                    "auto|workspace|clone|live"
                 ),
             )
 
@@ -985,6 +990,10 @@ def build_policy(defaults: Policy, cfg: dict[str, Any]) -> Policy:
     _mark_cfg(p, cfg, "pytest_targets")
     p.mypy_targets = _as_list_str(cfg, "mypy_targets", p.mypy_targets)
     _mark_cfg(p, cfg, "mypy_targets")
+
+    from .policy_gate_modes import apply_gate_modes
+
+    apply_gate_modes(cfg, p, _mark_cfg)
 
     p.pytest_use_venv = _as_bool(cfg, "pytest_use_venv", p.pytest_use_venv)
     _mark_cfg(p, cfg, "pytest_use_venv")
@@ -1001,8 +1010,8 @@ def build_policy(defaults: Policy, cfg: dict[str, Any]) -> Policy:
             "CONFIG",
             "INVALID_LIVE_CHANGED_RESOLUTION",
             (
-                f"invalid live_changed_resolution={p.live_changed_resolution!r}; "
-                "allowed: fail|overwrite_live|overwrite_workspace"
+                f"invalid live_changed_resolution={p.live_changed_resolution!r}; allowed: "
+                "fail|overwrite_live|overwrite_workspace"
             ),
         )
     p.commit_and_push = _as_bool(cfg, "commit_and_push", p.commit_and_push)

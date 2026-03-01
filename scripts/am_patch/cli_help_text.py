@@ -216,6 +216,19 @@ FORMAT / TOOLS
   --ruff-format
       Run ruff format gate.
 
+  --ruff-mode auto|always
+      Control ruff gate trigger mode (auto=file-scoped; always=force run).
+
+  --mypy-mode auto|always
+      Control mypy gate trigger mode (auto=file-scoped; always=force run).
+
+  --pytest-mode auto|always
+      Control pytest gate trigger mode (auto=file-scoped; always=force run).
+
+  --pytest-js-prefixes CSV
+      JS triggers for pytest (CSV prefixes; e.g. scripts/patchhub/static,
+      plugins/import/ui/web/assets).
+
   --pytest-use-venv
       Run pytest using venv python.
 
