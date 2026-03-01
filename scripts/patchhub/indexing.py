@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import re
 from datetime import UTC, datetime
 from pathlib import Path
@@ -25,6 +26,72 @@ def parse_run_result_from_log_text(
     text: str,
 ) -> tuple[Literal["success", "fail", "unknown"], str | None]:
     lines = [strip_ansi(line_text).strip() for line_text in text.splitlines() if line_text.strip()]
+    result_line: str | None = None
+    for line in reversed(lines[-200:]):
+        if line.startswith("RESULT:"):
+            result_line = line
+            break
+    if result_line == "RESULT: SUCCESS":
+        return "success", result_line
+    if result_line == "RESULT: FAIL":
+        return "fail", result_line
+    return "unknown", result_line
+
+
+def _tail_path(log_path: Path, *, tail_suffix: str = ".tail.txt") -> Path:
+    return log_path.with_name(log_path.name + tail_suffix)
+
+
+def _read_sanitized_tail_text(log_path: Path) -> str | None:
+    tail_path = _tail_path(log_path)
+    if not tail_path.exists() or not tail_path.is_file():
+        return None
+    return tail_path.read_text(encoding="utf-8", errors="replace")
+
+
+def _write_sanitized_tail_text(log_path: Path, text: str) -> None:
+    tail_path = _tail_path(log_path)
+    tmp_path = tail_path.with_name(tail_path.name + ".tmp")
+    tmp_path.write_text(text, encoding="utf-8", errors="replace")
+    tmp_path.replace(tail_path)
+
+
+def _build_sanitized_tail_from_log(log_path: Path) -> str:
+    # Read only the tail of the log (bounded IO) and strip ANSI only for those lines.
+    max_bytes = 256 * 1024
+    data: bytes
+    with log_path.open("rb") as f:
+        try:
+            f.seek(0, 2)
+            size = f.tell()
+            f.seek(max(0, size - max_bytes))
+        except Exception:
+            f.seek(0)
+        data = f.read()
+    chunk = data.decode("utf-8", errors="replace")
+    raw_lines = [ln for ln in chunk.splitlines() if ln.strip()]
+    # Keep enough context for RESULT parsing while keeping compute bounded.
+    tail_lines = raw_lines[-400:]
+    sanitized = [strip_ansi(ln).rstrip() for ln in tail_lines]
+    return "\n".join(sanitized) + "\n"
+
+
+def _ensure_sanitized_tail_text(log_path: Path) -> str:
+    existing = _read_sanitized_tail_text(log_path)
+    if existing is not None:
+        return existing
+    text = _build_sanitized_tail_from_log(log_path)
+    # Best-effort cache; indexing must still succeed.
+    with contextlib.suppress(Exception):
+        _write_sanitized_tail_text(log_path, text)
+    return text
+
+
+def parse_run_result_from_sanitized_text(
+    text: str,
+) -> tuple[Literal["success", "fail", "unknown"], str | None]:
+    # Input is already ANSI-free.
+    lines = [line_text.strip() for line_text in text.splitlines() if line_text.strip()]
     result_line: str | None = None
     for line in reversed(lines[-200:]):
         if line.startswith("RESULT:"):
@@ -77,8 +144,8 @@ def iter_runs(patches_root: Path, log_filename_regex: str) -> list[RunEntry]:
             issue_id = int(m.group(1))
         except (ValueError, IndexError):
             continue
-        text = log_path.read_text(encoding="utf-8", errors="replace")
-        result, result_line = parse_run_result_from_log_text(text)
+        tail = _ensure_sanitized_tail_text(log_path)
+        result, result_line = parse_run_result_from_sanitized_text(tail)
         st = log_path.stat()
         runs.append(
             RunEntry(
