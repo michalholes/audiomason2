@@ -28,7 +28,7 @@ from am_patch.failure_zip import cleanup_on_success_commit as cleanup_failure_zi
 from am_patch.gates import run_badguys
 from am_patch.ipc_socket import IpcController, resolve_socket_path
 from am_patch.lock import FileLock
-from am_patch.log import Logger, new_log_file
+from am_patch.log import Logger, new_log_file, write_sanitized_log_tail
 from am_patch.patch_archive_select import select_latest_issue_patch
 from am_patch.patch_exec import run_patch, run_unified_patch_bundle
 from am_patch.patch_input import resolve_patch_plan
@@ -1290,6 +1290,11 @@ def finalize_and_report(ctx: RunContext, result: dict[str, Any]) -> int:
         pass
 
     logger.close()
+
+    # PatchHub indexing optimization: store a small ANSI-free tail next to the full log.
+    # This avoids stripping ANSI over large logs on every UI refresh.
+    with suppress(Exception):
+        write_sanitized_log_tail(log_path)
 
     if policy.test_mode and isolated_work_patch_dir is not None:
         with suppress(Exception):
