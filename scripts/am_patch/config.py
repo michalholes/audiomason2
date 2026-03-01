@@ -911,9 +911,11 @@ def build_policy(defaults: Policy, cfg: dict[str, Any]) -> Policy:
             cmd_list = raw_cmd
         else:
             raise RunnerError("CONFIG", "INVALID", f"{k} must be a string or list[str]")
-        if not cmd_list:
+        # Normalize away empty/whitespace tokens so we fail early (CONFIG) instead of later (GATES).
+        cmd_list0 = [str(x).strip() for x in cmd_list if str(x).strip()]
+        if not cmd_list0:
             raise RunnerError("CONFIG", "INVALID", f"{k} must be non-empty")
-        setattr(p, k, cmd_list)
+        setattr(p, k, cmd_list0)
         _mark_cfg(p, cfg, k)
 
     p.gates_skip_typescript = _as_bool(cfg, "gates_skip_typescript", p.gates_skip_typescript)
