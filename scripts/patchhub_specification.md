@@ -3,7 +3,7 @@ Status: AUTHORITATIVE SPECIFICATION
 Applies to: scripts/patchhub/*
 Language: ENGLISH (ASCII ONLY)
 
-Specification Version: 1.4.0-spec
+Specification Version: 1.4.1-spec
 Code Baseline: audiomason2-main.zip (as provided in this chat)
 
 -------------------------------------------------------------------------------
@@ -146,6 +146,11 @@ Primary modules:
 - queue.py: job queue, lock, override injection, job persistence
 - runner_exec.py: runner subprocess executor
 - indexing.py: historical runs indexing from patches/logs
+  - Uses deterministic in-process caching for /api/runs results.
+  - Cache invalidation is signature-based: (count, max mtime_ns) of matching log files.
+- job_store.py: on-disk job.json reader and job listing
+  - Uses deterministic in-process caching for /api/jobs/list disk scans.
+  - Cache invalidation is signature-based: (count, max mtime_ns) of job.json files.
 - issue_alloc.py: issue id allocation by scanning patches dirs
 - models.py: dataclasses for JobRecord, RunEntry, AppStats
 
