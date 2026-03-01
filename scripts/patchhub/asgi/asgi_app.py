@@ -465,6 +465,15 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
             async for line in broker.subscribe():
                 yield f"data: {line}\n\n".encode()
 
+            final_status = await job_status()
+            if final_status is None:
+                # Should not happen if queue finalization ordering is correct;
+                # fall back deterministically.
+                final_status = "fail"
+            yield b"event: end\n"
+            yield (f'data: {{"reason":"job_completed","status":"{final_status}"}}\n\n').encode()
+            return
+
         return StreamingResponse(gen(), media_type="text/event-stream")
 
     return app

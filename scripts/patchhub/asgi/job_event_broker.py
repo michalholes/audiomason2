@@ -61,9 +61,18 @@ class JobEventBroker:
         if self._closed:
             return
         self._closed = True
+
+        # Deterministic termination: never drop the termination sentinel.
+        # Backpressure may drop data lines, but close MUST end subscriber loops.
         for q in list(self._subs):
-            with contextlib.suppress(Exception):
-                q.put_nowait(None)
+            while True:
+                try:
+                    q.put_nowait(None)
+                    break
+                except asyncio.QueueFull:
+                    with contextlib.suppress(Exception):
+                        q.get_nowait()
+
         self._subs.clear()
 
     def dropped_total(self) -> int:

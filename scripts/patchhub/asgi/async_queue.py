@@ -337,11 +337,6 @@ class AsyncJobQueue:
                     await pump_task
 
                 async with self._mu:
-                    broker_to_close = self._brokers.pop(job_id) if job_id in self._brokers else None
-                if broker_to_close is not None:
-                    broker_to_close.close()
-
-                async with self._mu:
                     job = self._jobs.get(job_id)
                     if job is None:
                         continue
@@ -355,12 +350,12 @@ class AsyncJobQueue:
                         job.status = "fail"
                         job.ended_utc = utc_now()
                     await self._persist(job)
-            except Exception as e:
+
                 async with self._mu:
                     broker_to_close = self._brokers.pop(job_id) if job_id in self._brokers else None
                 if broker_to_close is not None:
                     broker_to_close.close()
-
+            except Exception as e:
                 async with self._mu:
                     job = self._jobs.get(job_id)
                     if job is None:
@@ -369,3 +364,8 @@ class AsyncJobQueue:
                     job.ended_utc = utc_now()
                     job.error = f"{type(e).__name__}: {e}"
                     await self._persist(job)
+
+                async with self._mu:
+                    broker_to_close = self._brokers.pop(job_id) if job_id in self._brokers else None
+                if broker_to_close is not None:
+                    broker_to_close.close()
