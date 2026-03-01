@@ -379,10 +379,15 @@ scope accordingly - Should be used deliberately and sparingly
 -   Gates run after the patch is applied (unified or script).
 -   If patch apply fails, gates may still run only when explicitly
     enabled by policy:
-    -   gates_on_partial_apply: run gates after partial apply failure
-        (some files applied).
-    -   gates_on_zero_apply: run gates after zero apply failure (nothing
-        applied).
+    -   apply_failure_partial_gates_policy = "never|always|repair_only"
+    -   apply_failure_zero_gates_policy = "never|always|repair_only"
+-   repair_only means: run gates after PATCH_APPLY failure only when
+    workspace_attempt >= 2 (workspace_attempt is the workspace meta.json
+    attempt counter exposed as ws.attempt).
+-   Defaults:
+    -   apply_failure_partial_gates_policy = "repair_only"
+    -   apply_failure_zero_gates_policy = "never"
+-   These keys follow 0.1 precedence: CLI > config > defaults.
 -   When gates run after patch apply failure, the run remains FAIL with
     PATCH_APPLY as the primary reason.
 -   Default gate order is:
