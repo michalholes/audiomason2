@@ -211,6 +211,9 @@
         if (W && W.reloadAll) await W.reloadAll();
         if (C && C.reload) await C.reload();
       }
+      window.AM2UI = window.AM2UI || {};
+      window.AM2UI.doReloadAll = doReloadAll;
+
 
       async function doValidateAll() {
         setSaveEnabled();

@@ -134,6 +134,19 @@
 		const btns = Array.from(wrap.querySelectorAll(".tabBtn"));
 		const panels = Array.from(document.querySelectorAll(".tabPanel"));
 
+		let flowAutoLoaded = false;
+
+		function tryFlowAutoReload(attempt) {
+			const fn = window.AM2UI && window.AM2UI.doReloadAll;
+			if (typeof fn === "function") {
+				void fn();
+				return;
+			}
+			if (attempt >= 3) return;
+			const delays = [0, 50, 200];
+			setTimeout(() => tryFlowAutoReload(attempt + 1), delays[attempt] || 0);
+		}
+
 		function activate(tab) {
 			btns.forEach((b) => {
 				b.classList.toggle("active", b.dataset.tab === tab);
@@ -141,6 +154,11 @@
 			panels.forEach((p) => {
 				p.classList.toggle("active", p.dataset.panel === tab);
 			});
+
+			if (tab === "flow" && !flowAutoLoaded) {
+				flowAutoLoaded = true;
+				queueMicrotask(() => tryFlowAutoReload(0));
+			}
 		}
 
 		btns.forEach((b) => {
