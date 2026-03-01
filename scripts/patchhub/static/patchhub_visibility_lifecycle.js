@@ -1,31 +1,4 @@
 (() => {
-  function safeClearTimer(ctx, key) {
-    try {
-      if (ctx && ctx[key]) {
-        clearInterval(ctx[key]);
-      }
-    } catch {
-      // best-effort
-    }
-    try {
-      if (ctx) {
-        ctx[key] = null;
-      }
-    } catch {
-      // best-effort
-    }
-  }
-
-  function safeCall(fn) {
-    try {
-      if (typeof fn === "function") {
-        fn();
-      }
-    } catch {
-      // best-effort
-    }
-  }
-
   function safeCall1(fn, a1) {
     try {
       if (typeof fn === "function") {
@@ -36,50 +9,13 @@
     }
   }
 
-  function pause(ctx) {
-    safeClearTimer(ctx, "autoRefreshTimer");
-    safeClearTimer(ctx, "autofillTimer");
-    safeClearTimer(ctx, "patchStatTimer");
-    safeClearTimer(ctx, "jobsTailTimer");
-    safeClearTimer(ctx, "headerTimer");
-    safeCall(ctx && ctx.closeLiveStream);
-  }
-
-  function resume(ctx) {
-    if (!ctx) return;
-
-    if (!ctx.patchStatTimer) {
-      ctx.patchStatTimer = setInterval(() => {
-        safeCall(ctx.tickMissingPatchClear);
-      }, 1000);
-    }
-
-    if (!ctx.jobsTailTimer) {
-      ctx.jobsTailTimer = setInterval(() => {
-        safeCall(ctx.refreshJobs);
-        safeCall1(ctx.refreshTail, ctx.tailLines);
-      }, 2000);
-    }
-
-    if (!ctx.headerTimer) {
-      ctx.headerTimer = setInterval(() => {
-        safeCall(ctx.refreshHeader);
-      }, 5000);
-    }
-
-    safeCall(ctx.startAutofillPolling);
-    safeCall(ctx.refreshJobs);
-    safeCall1(ctx.refreshTail, ctx.tailLines);
-    safeCall(ctx.refreshHeader);
-  }
-
   function install(ctx) {
+    var FT = (window.PatchHubFT ?? null);
+    var RP = FT ? FT.getGlobal("PatchHubRefreshPolicy", null) : (window.PatchHubRefreshPolicy ?? null);
+
     function onVisibility() {
-      if (document.hidden) {
-        pause(ctx);
-      } else {
-        resume(ctx);
-      }
+      var isVisible = !document.hidden;
+      safeCall1(RP?.setVisible, isVisible);
     }
 
     try {
@@ -88,12 +24,12 @@
       // best-effort
     }
 
+    // Install scheduler context once; visibility only gates it.
+    safeCall1(RP?.install, ctx);
     onVisibility();
   }
 
   window.PatchHubVisibilityLifecycle = {
     install: install,
-    pause: pause,
-    resume: resume,
   };
 })();

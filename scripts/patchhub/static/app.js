@@ -3,12 +3,43 @@
 
   var activeJobId = null;
   var timers = {
-    autoRefreshTimer: null,
     autofillTimer: null,
-    patchStatTimer: null,
-    jobsTailTimer: null,
-    headerTimer: null,
   };
+
+  var PatchHubFT = window.PatchHubFT || {
+    getGlobal: (name, fallback) => fallback,
+    report: () => {},
+  };
+
+  var PatchHubProgress = PatchHubFT.getGlobal("PatchHubProgress", {
+    parseProgressFromText: () => ({ order: [], state: {} }),
+    pickProgressSummaryLine: () => "",
+    renderProgressSteps: () => {},
+    renderProgressSummary: () => {},
+    updateShortProgressFromText: () => {},
+    deriveProgressFromEvents: () => ({ order: [], state: {} }),
+    deriveProgressSummaryFromEvents: () => ({ text: "", level: "idle" }),
+    setProgressSummaryState: () => {},
+    updateProgressPanelFromEvents: () => {},
+  });
+
+  var PatchHubLive = PatchHubFT.getGlobal("PatchHubLive", {
+    openLiveStream: () => ({ close: () => {}, getEvents: () => [] }),
+  });
+
+  var PatchHubRunsUI = PatchHubFT.getGlobal("PatchHubRunsUI", {
+    bindRunsList: () => {},
+  });
+
+  var PatchHubRefreshPolicy = PatchHubFT.getGlobal("PatchHubRefreshPolicy", {
+    tokenGetJson: null,
+    setHtmlIfChanged: null,
+    setTextIfChanged: null,
+    ensureAutoRefresh: null,
+    install: () => {},
+    setVisible: () => {},
+    pokeSoon: () => {},
+  });
 
   var uiStatusLatest = "";
 
@@ -230,7 +261,7 @@
 
   function fsUpdateSelCount() {
     var n = 0;
-    for (let k in fsChecked) {
+    for (const k in fsChecked) {
       if (Object.hasOwn(fsChecked, k)) n += 1;
     }
     var node = el("fsSelCount");
@@ -247,7 +278,7 @@
 
   function fsDownloadSelected() {
     var paths = [];
-    for (let k in fsChecked) {
+    for (const k in fsChecked) {
       if (Object.hasOwn(fsChecked, k)) paths.push(k);
     }
     if (!paths.length) {
@@ -470,7 +501,13 @@
     if (res) q.push(`result=${encodeURIComponent(res)}`);
     q.push("limit=80");
 
-    apiGet(`/api/runs?${q.join("&")}`).then((r) => {
+    var url = `/api/runs?${q.join("&")}`;
+
+    var fetcher = (PatchHubRefreshPolicy && PatchHubRefreshPolicy.tokenGetJson)
+      ? (cb) => PatchHubRefreshPolicy.tokenGetJson(url, `runs:${q.join("&")}`).then((res) => cb(res && res.data))
+      : (cb) => apiGet(url).then(cb);
+
+    fetcher((r) => {
       if (!r || r.ok === false) {
         setPre("runsList", r);
         return;
@@ -479,7 +516,7 @@
 
       var html = runsCache.map((x, idx) => {
         var log = x.log_rel_path || "";
-        var link = log ? `<a class=\"linklike\" href=\"/api/fs/download?path=${encodeURIComponent(log)}\">log</a>` : "";
+        var link = log ? `<a class="linklike" href="/api/fs/download?path=${encodeURIComponent(log)}">log</a>` : "";
         var sel = (selectedRun && selectedRun.issue_id === x.issue_id && selectedRun.mtime_utc === x.mtime_utc) ? " *" : "";
         return (
           "<div class=\"item runitem\" data-idx=\"" + String(idx) + "\">" +
@@ -489,19 +526,22 @@
         );
       }).join("");
 
-      el("runsList").innerHTML = html || "<div class=\"muted\">(none)</div>";
+      var node = el("runsList");
 
-      Array.from(el("runsList").querySelectorAll(".runitem .name")).forEach((node) => {
-        node.addEventListener("click", () => {
-          var item = node.parentElement;
-          var idx = parseInt(item.getAttribute("data-idx") || "-1", 10);
-          if (idx >= 0 && idx < runsCache.length) {
-            selectedRun = runsCache[idx];
-            renderIssueDetail();
-            refreshRuns();
-          }
+      var out = html || "<div class=\"muted\">(none)</div>";
+      if (PatchHubRefreshPolicy && PatchHubRefreshPolicy.setHtmlIfChanged) {
+        PatchHubRefreshPolicy.setHtmlIfChanged(node, out, "runsList");
+      } else if (node) {
+        node.innerHTML = out;
+      }
+
+      if (PatchHubRunsUI && typeof PatchHubRunsUI.bindRunsList === "function") {
+        PatchHubRunsUI.bindRunsList("runsList", () => runsCache, (run) => {
+          selectedRun = run;
+          renderIssueDetail();
+          refreshRuns();
         });
-      });
+      }
     });
   }
 
@@ -567,275 +607,24 @@
     });
   }
 
-
-  function parseProgressFromText(text) {
-    var lines = String(text || "").split(/\r?\n/);
-    var order = [];
-    var state = {};
-    var currentRunning = "";
-
-    function normStepName(s) {
-      return String(s || "").replace(/\s+/g, " ").trim();
-    }
-
-    function ensureStep(name) {
-      if (!name) return;
-      if (!Object.hasOwn(state, name)) {
-        state[name] = "pending";
-      }
-      if (order.indexOf(name) < 0) order.push(name);
-    }
-
-    function setState(name, st) {
-      name = normStepName(name);
-      if (!name) return;
-      ensureStep(name);
-      state[name] = st;
-    }
-
-    for (let i = 0; i < lines.length; i++) {
-      const raw = String(lines[i] || "");
-      const s = raw.trim();
-      if (!s) continue;
-
-      if (s.indexOf("DO:") === 0) {
-        const stepDo = normStepName(s.slice(3));
-        setState(stepDo, "running");
-        currentRunning = stepDo;
-        continue;
-      }
-
-      if (s.indexOf("OK:") === 0) {
-        const stepOk = normStepName(s.slice(3));
-        setState(stepOk, "ok");
-        if (currentRunning === stepOk) currentRunning = "";
-        continue;
-      }
-
-      if (s.indexOf("FAIL:") === 0) {
-        const stepFail = normStepName(s.slice(5));
-        setState(stepFail, "fail");
-        if (currentRunning === stepFail) currentRunning = "";
-        continue;
-      }
-
-      if (s.indexOf("ERROR:") === 0 || s === "FAIL" || s.indexOf("FAIL ") === 0) {
-        if (currentRunning) setState(currentRunning, "fail");
-      }
-    }
-
-    if (currentRunning) {
-      for (let j = 0; j < order.length; j++) {
-        const nm = order[j];
-        if (state[nm] === "running" && nm !== currentRunning) {
-          state[nm] = "pending";
-        }
-      }
-    }
-
-    for (let k = 0; k < order.length; k++) {
-      const nm2 = order[k];
-      if (!Object.hasOwn(state, nm2)) state[nm2] = "pending";
-    }
-
-    return { order: order, state: state };
-  }
-
-  function pickProgressSummaryLine(text) {
-    var lines = String(text || "").split(/\r?\n/);
-    for (let i = lines.length - 1; i >= 0; i--) {
-      const s = String(lines[i] || "").trim();
-      if (!s) continue;
-
-      if (s.indexOf("RESULT:") === 0) return s;
-      if (s.indexOf("STATUS:") === 0) return s;
-      if (s.indexOf("FAIL:") === 0) return s;
-      if (s.indexOf("OK:") === 0) return s;
-      if (s.indexOf("DO:") === 0) return s;
-    }
-    return "(idle)";
-  }
-
-  function renderProgressSteps(progress) {
-    var box = el("progressSteps");
-    if (!box) return;
-
-    var order = (progress && progress.order) ? progress.order : [];
-    var state = (progress && progress.state) ? progress.state : {};
-
-    if (!order.length) {
-      box.innerHTML = "";
-      return;
-    }
-
-    var html = "";
-    for (let i = 0; i < order.length; i++) {
-      const name = order[i];
-      const st = state[name] || "pending";
-      html += "<div class=\"step\">";
-      html += `<span class=\"dot ${escapeHtml(st)}\"></span>`;
-      html += `<span class=\"step-name\">${escapeHtml(name)}</span>`;
-      if (st === "running") {
-        html += "<span class=\"pill running\">RUNNING</span>";
-      }
-      html += "</div>";
-    }
-
-    box.innerHTML = html;
-  }
-
-  function renderProgressSummary(summaryLine) {
-    var node = el("progressSummary");
-    if (!node) return;
-    node.textContent = summaryLine || "(idle)";
-  }
-
   function updateShortProgressFromText(text) {
-    var progress = parseProgressFromText(text);
-    renderProgressSteps(progress);
-    renderProgressSummary(pickProgressSummaryLine(text));
-  }
-
-  function normStepName(s) {
-    return String(s || "").replace(/\s+/g, " ").trim();
+    return PatchHubProgress.updateShortProgressFromText(text);
   }
 
   function deriveProgressFromEvents(events) {
-    var order = [];
-    var state = {};
-    var currentRunning = "";
-    var resultStatus = "";
-
-    function ensureStep(name) {
-      if (!name) return;
-      if (!Object.hasOwn(state, name)) {
-        state[name] = "pending";
-      }
-      if (order.indexOf(name) < 0) order.push(name);
-    }
-
-    function setState(name, st) {
-      name = normStepName(name);
-      if (!name) return;
-      ensureStep(name);
-      state[name] = st;
-    }
-
-    for (let i = 0; i < (events || []).length; i++) {
-      const ev = events[i];
-      if (!ev || typeof ev !== "object") continue;
-      const t = String(ev.type || "");
-
-      if (t === "result") {
-        resultStatus = ev.ok ? "success" : "fail";
-        continue;
-      }
-
-      if (t !== "log") continue;
-
-      const kind = String(ev.kind || "");
-      if (kind !== "DO" && kind !== "OK" && kind !== "FAIL") continue;
-
-      const stage = normStepName(ev.stage || "");
-      if (!stage) continue;
-
-      if (kind === "DO") {
-        setState(stage, "running");
-        currentRunning = stage;
-        continue;
-      }
-
-      if (kind === "OK") {
-        setState(stage, "ok");
-        if (currentRunning === stage) currentRunning = "";
-        continue;
-      }
-
-      if (kind === "FAIL") {
-        setState(stage, "fail");
-        if (currentRunning === stage) currentRunning = "";
-      }
-    }
-
-    if (currentRunning) {
-      for (let j = 0; j < order.length; j++) {
-        const nm = order[j];
-        if (state[nm] === "running" && nm !== currentRunning) {
-          state[nm] = "pending";
-        }
-      }
-    }
-
-    for (let k = 0; k < order.length; k++) {
-      const nm2 = order[k];
-      if (!Object.hasOwn(state, nm2)) state[nm2] = "pending";
-    }
-
-    return { order: order, state: state, resultStatus: resultStatus };
+    return PatchHubProgress.deriveProgressFromEvents(events);
   }
 
   function deriveProgressSummaryFromEvents(events, progress) {
-    var lastResult = null;
-    var lastLog = null;
-    for (let i = (events || []).length - 1; i >= 0; i--) {
-      const ev = events[i];
-      if (!ev || typeof ev !== "object") continue;
-      const t = String(ev.type || "");
-      if (t === "result") {
-        lastResult = ev;
-        break;
-      }
-      if (t === "log") {
-        const kind = String(ev.kind || "");
-        if (kind === "DO" || kind === "OK" || kind === "FAIL") {
-          lastLog = ev;
-          break;
-        }
-      }
-    }
-
-    if (lastResult) {
-      return {
-        text: lastResult.ok ? "RESULT: SUCCESS" : "RESULT: FAIL",
-        status: lastResult.ok ? "success" : "fail"
-      };
-    }
-
-    if (lastLog) {
-      const stage = normStepName(lastLog.stage || "");
-      const kind = String(lastLog.kind || "");
-      if (kind === "FAIL") {
-        return { text: `FAIL: ${stage}`, status: "fail" };
-      }
-      if (kind === "OK") {
-        return { text: `OK: ${stage}`, status: "running" };
-      }
-      if (kind === "DO") {
-        return { text: `DO: ${stage}`, status: "running" };
-      }
-    }
-
-    if (progress && progress.order && progress.order.length) {
-      return { text: "STATUS: RUNNING", status: "running" };
-    }
-    return { text: "(idle)", status: "idle" };
+    return PatchHubProgress.deriveProgressSummaryFromEvents(events, progress);
   }
 
   function setProgressSummaryState(summary) {
-    var node = el("progressSummary");
-    if (!node) return;
-    var st = (summary && summary.status) ? String(summary.status) : "idle";
-    node.classList.remove("success", "fail", "running", "idle", "muted");
-    node.classList.add(st);
-    if (st === "idle") node.classList.add("muted");
+    return PatchHubProgress.setProgressSummaryState(summary);
   }
 
   function updateProgressPanelFromEvents() {
-    var progress = deriveProgressFromEvents(liveEvents);
-    renderProgressSteps(progress);
-    var summary = deriveProgressSummaryFromEvents(liveEvents, progress);
-    renderProgressSummary(summary.text);
-    setProgressSummaryState(summary);
+    return PatchHubProgress.updateProgressPanelFromEvents(liveEvents);
   }
 
   function refreshStats() {
@@ -846,7 +635,7 @@
       }
       var s = (r.stats || {});
       var all = s.all_time || {};
-      var lines = [];
+      const lines = [];
       lines.push({ k: "all_time.total", v: String(all.total || 0) });
       lines.push({ k: "all_time.success", v: String(all.success || 0) });
       lines.push({ k: "all_time.fail", v: String(all.fail || 0) });
@@ -862,7 +651,7 @@
         lines.push({ k: `${String(d)}d.canceled`, v: String(w.canceled || 0) });
       });
 
-      el("stats").innerHTML = lines.map((x) => `<div class=\"rowline\"><span class=\"k\">${escapeHtml(x.k)}</span><span class=\"v\">${escapeHtml(x.v)}</span></div>`).join("");
+      el("stats").innerHTML = lines.map((x) => `<div class="rowline"><span class="k">${escapeHtml(x.k)}</span><span class="v">${escapeHtml(x.v)}</span></div>`).join("");
     });
   }
 
@@ -882,13 +671,13 @@
     var html = "";
     if (active) {
       html += `<div><b>running</b> ${escapeHtml(active.job_id || "")}</div>`;
-      html += `<div class=\"muted\">mode=${escapeHtml(active.mode || "")} issue=${escapeHtml(active.issue_id || "")}</div>`;
+      html += `<div class="muted">mode=${escapeHtml(active.mode || "")} issue=${escapeHtml(active.issue_id || "")}</div>`;
       html += "<div class=\"row\"><button class=\"btn btn-small\" id=\"cancelActive\">Cancel</button>";
-      html += `<a class=\"linklike\" href=\"/api/jobs/log_tail?job_id=${encodeURIComponent(active.job_id || "")}\">log</a></div>`;
+      html += `<a class="linklike" href="/api/jobs/log_tail?job_id=${encodeURIComponent(active.job_id || "")}">log</a></div>`;
     }
 
     if (queued.length) {
-      html += `<div style=\"margin-top:6px\"><b>queued</b>: ${String(queued.length)}</div>`;
+      html += `<div style="margin-top:6px"><b>queued</b>: ${String(queued.length)}</div>`;
     }
 
     box.innerHTML = html;
@@ -971,17 +760,9 @@ function loadLiveLevel() {
     return selectedJobId || activeJobId || null;
   }
 
-  function closeLiveStream() {
-    if (liveES) {
-      try { liveES.close(); } catch {}
-    }
-    liveES = null;
-    liveStreamJobId = null;
-  }
-
   function filterLiveEvent(ev) {
     if (!ev) return false;
-    var t = String(ev.type || "");
+    const t = String(ev.type || "");
     if (t === "result") return true;
     if (t === "hello") return liveLevel === "debug";
     if (t !== "log") return liveLevel === "debug";
@@ -1009,26 +790,28 @@ function loadLiveLevel() {
 
 
   function formatLiveEvent(ev) {
-    var t = String(ev.type || "");
+    const t = String(ev.type || "");
     if (t === "hello") {
-      return "HELLO protocol=" + String(ev.protocol || "") +
-        " mode=" + String(ev.runner_mode || "") +
-        " issue=" + String(ev.issue_id || "");
+      return (
+        `HELLO protocol=${String(ev.protocol || "")}`
+        + ` mode=${String(ev.runner_mode || "")}`
+        + ` issue=${String(ev.issue_id || "")}`
+      );
     }
     if (t === "result") {
-      var ok = ev.ok ? "SUCCESS" : "FAIL";
+      const ok = ev.ok ? "SUCCESS" : "FAIL";
       return `RESULT: ${ok} rc=${String(ev.return_code)}`;
     }
 
-    var showPrefixes = liveLevel === "debug";
-    var line = "";
+    const showPrefixes = liveLevel === "debug";
+    let line = "";
 
     if (showPrefixes) {
-      var parts = [];
-      var stage = String(ev.stage || "");
+      const parts = [];
+      const stage = String(ev.stage || "");
       const kind = String(ev.kind || "");
-      var sev = String(ev.sev || "");
-      var msg = String(ev.msg || "");
+      const sev = String(ev.sev || "");
+      const msg = String(ev.msg || "");
       if (stage) parts.push(stage);
       if (kind) parts.push(kind);
       if (sev) parts.push(sev);
@@ -1039,7 +822,7 @@ function loadLiveLevel() {
     }
 
     if (ev.stdout || ev.stderr) {
-      var out = [];
+      const out = [];
       out.push(line);
       if (ev.stdout) out.push(`STDOUT:\n${String(ev.stdout)}`);
       if (ev.stderr) out.push(`STDERR:\n${String(ev.stderr)}`);
@@ -1049,33 +832,33 @@ function loadLiveLevel() {
   }
 
   function renderLiveLog() {
-    var box = el("liveLog");
+    const box = el("liveLog");
     if (!box) return;
-    var lines = [];
+    const lines = [];
     for (let i = 0; i < liveEvents.length; i++) {
-      var ev = liveEvents[i];
+      const ev = liveEvents[i];
       if (!filterLiveEvent(ev)) continue;
       lines.push(formatLiveEvent(ev));
     }
     box.textContent = lines.join("\n");
-    var wrap = box.parentElement;
+    const wrap = box.parentElement;
     if (wrap && wrap.classList && wrap.classList.contains("card-tight")) {
       // no-op
     }
   }
 
   function updateProgressFromEvents() {
-    var box = el("activeStage");
+    const box = el("activeStage");
     if (!box) return;
     for (let i = liveEvents.length - 1; i >= 0; i--) {
-      var ev = liveEvents[i];
+      const ev = liveEvents[i];
       if (!ev) continue;
       if (String(ev.type || "") === "result") {
         box.textContent = (ev.ok ? "RESULT: SUCCESS" : "RESULT: FAIL");
         return;
       }
       if (String(ev.type || "") === "log") {
-        var stage = String(ev.stage || "");
+        const stage = String(ev.stage || "");
         const kind = String(ev.kind || "");
         if (stage || kind) {
           box.textContent = (stage ? stage : "") + (kind ? ` / ${kind}` : "");
@@ -1085,84 +868,54 @@ function loadLiveLevel() {
     }
   }
 
+  var liveCtx = { es: null, jobId: "", getEvents: () => [] };
+
+  function closeLiveStream() {
+    try {
+      if (liveCtx && typeof liveCtx.close === "function") {
+        liveCtx.close();
+      }
+    } catch (e) {
+      PatchHubFT.report(e, "closeLiveStream");
+    }
+    liveStreamJobId = null;
+    liveES = null;
+  }
+
   function openLiveStream(jobId) {
+    if (!PatchHubLive || typeof PatchHubLive.openLiveStream !== "function") {
+      return;
+    }
+
+    var ctx = {
+      es: liveES,
+      jobId: liveStreamJobId ? String(liveStreamJobId) : "",
+      setStatus: setLiveStreamStatus,
+      onLogMaybe: (events) => {
+        liveEvents = events || [];
+        renderLiveLog();
+      },
+      onProgress: (events) => {
+        liveEvents = events || [];
+        updateProgressPanelFromEvents();
+      },
+      filterEvent: filterLiveEvent,
+      fetchJob: (id) => apiGet(`/api/jobs/${encodeURIComponent(String(id))}`),
+      maxEvents: 2000,
+      renderMaxHz: 8,
+    };
+
+    var handle = PatchHubLive.openLiveStream(jobId, ctx);
+    liveCtx = Object.assign({ close: () => {}, getEvents: () => [] }, handle || {});
+    liveES = ctx.es || null;
+    liveStreamJobId = ctx.jobId || null;
     if (!jobId) {
-      closeLiveStream();
       liveEvents = [];
       renderLiveLog();
       updateProgressPanelFromEvents();
       setLiveStreamStatus("");
-      return;
     }
-    jobId = String(jobId);
-
-    if (liveStreamJobId === jobId && liveES) return;
-
-    closeLiveStream();
-    liveStreamJobId = jobId;
-    liveEvents = [];
-    renderLiveLog();
-    updateProgressPanelFromEvents();
-    setLiveStreamStatus("connecting...");
-
-    var url = `/api/jobs/${encodeURIComponent(jobId)}/events`;
-    var es = new EventSource(url);
-    liveES = es;
-
-    es.onmessage = (e) => {
-      if (!e || !e.data) return;
-      var obj = null;
-      try { obj = JSON.parse(String(e.data)); } catch { obj = null; }
-      if (!obj) return;
-      liveEvents.push(obj);
-      if (filterLiveEvent(obj)) {
-        renderLiveLog();
-      }
-      updateProgressPanelFromEvents();
-      setLiveStreamStatus("streaming");
-    };
-
-    es.addEventListener("end", (e) => {
-      var reason = "";
-      var status = "";
-      if (e && e.data) {
-        try {
-          var p = JSON.parse(String(e.data));
-          if (p && typeof p === "object") {
-            reason = String(p.reason || "");
-            status = String(p.status || "");
-          }
-        } catch {}
-      }
-      var msg = "ended";
-      if (status) msg += ` (${status})`;
-      if (reason) msg += ` [${reason}]`;
-      setLiveStreamStatus(msg);
-      try { es.close(); } catch {}
-      if (liveES === es) {
-        liveES = null;
-      }
-    });
-
-    es.onerror = () => {
-      apiGet(`/api/jobs/${encodeURIComponent(jobId)}`).then((r) => {
-        if (!r || r.ok === false) {
-          closeLiveStream();
-          setLiveStreamStatus("ended [job_not_found]");
-          return;
-        }
-        var j = r.job || {};
-        var st = String(j.status || "");
-        if (st && st !== "running" && st !== "queued") {
-          closeLiveStream();
-          setLiveStreamStatus(`ended (${st}) [job_completed]`);
-          return;
-        }
-        setLiveStreamStatus("reconnecting...");
-      });
-    };
   }
-
 
   function jobSummaryCommit(msg) {
     msg = String(msg || "");
@@ -1194,7 +947,11 @@ function loadLiveLevel() {
 
 
 function refreshJobs() {
-    apiGet("/api/jobs").then((r) => {
+    var fetcher = (PatchHubRefreshPolicy && PatchHubRefreshPolicy.tokenGetJson)
+      ? (cb) => PatchHubRefreshPolicy.tokenGetJson("/api/jobs", "jobs").then((res) => cb(res && res.data))
+      : (cb) => apiGet("/api/jobs").then(cb);
+
+    fetcher((r) => {
       if (!r || r.ok === false) {
         setPre("jobsList", r);
         renderActiveJob([]);
@@ -1208,7 +965,7 @@ function refreshJobs() {
       var idleAutoSelect = !!(cfg && cfg.ui && cfg.ui.idle_auto_select_last_job);
 
       if (!selectedJobId) {
-        var saved = loadLiveJobId();
+        const saved = loadLiveJobId();
         if (saved) selectedJobId = saved;
       }
 
@@ -1251,50 +1008,50 @@ function refreshJobs() {
 
         var meta = metaParts.join(" | ");
 
-        var line = `<div class=\"${cls}\">`;
-        line += `<div class=\"name job-name\" data-jobid=\"${escapeHtml(jobId)}\">`;
+        var line = `<div class="${cls}">`;
+        line += `<div class="name job-name" data-jobid="${escapeHtml(jobId)}">`;
         line += "<div class=\"job-lines\">";
         line += "<div class=\"job-top\">";
-        line += `<span class=\"job-issue\">${escapeHtml(issueText)}</span>`;
-        line += `<span class=\"${escapeHtml(statusCls)}\">${escapeHtml(statusText)}</span>`;
+        line += `<span class="job-issue">${escapeHtml(issueText)}</span>`;
+        line += `<span class="${escapeHtml(statusCls)}">${escapeHtml(statusText)}</span>`;
         line += "</div>";
         if (commit) {
-          line += `<div class=\"job-title\">${escapeHtml(commit)}</div>`;
+          line += `<div class="job-title">${escapeHtml(commit)}</div>`;
         }
-        line += `<div class=\"job-meta\">${escapeHtml(meta)}</div>`;
+        line += `<div class="job-meta">${escapeHtml(meta)}</div>`;
         line += "</div>";
         line += "</div>";
         line += "</div>";
         return line;
       }).join("");
-      el("jobsList").innerHTML = html || "<div class=\"muted\">(none)</div>";
+      var node = el("jobsList");
+
+      var out = html || "<div class=\"muted\">(none)</div>";
+      if (PatchHubRefreshPolicy && PatchHubRefreshPolicy.setHtmlIfChanged) {
+        PatchHubRefreshPolicy.setHtmlIfChanged(node, out, "jobsList");
+      } else if (node) {
+        node.innerHTML = out;
+      }
     });
   }
 
-
   function ensureAutoRefresh(jobs) {
-    var id = getLiveJobId();
-    var st = "";
-    if (id && jobs && jobs.length) {
-      var j = jobs.find((x) => String(x.job_id || "") === String(id)) || null;
-      st = j ? String(j.status || "") : "";
-    }
-    if (st === "running" || st === "queued") openLiveStream(id);
-    else closeLiveStream();
-
-    if (activeJobId) {
-      if (!timers.autoRefreshTimer) {
-        timers.autoRefreshTimer = setInterval(() => {
-          refreshJobs();
-          refreshRuns();
-        }, 1500);
-      }
+    if (!PatchHubRefreshPolicy || typeof PatchHubRefreshPolicy.ensureAutoRefresh !== "function") {
       return;
     }
-    if (timers.autoRefreshTimer) {
-      clearInterval(timers.autoRefreshTimer);
-      timers.autoRefreshTimer = null;
-    }
+    PatchHubRefreshPolicy.ensureAutoRefresh(jobs, {
+      getLiveJobId: getLiveJobId,
+      openLiveStream: openLiveStream,
+      closeLiveStream: closeLiveStream,
+      setActive: (isActive) => {
+        activeJobId = isActive ? (getLiveJobId() || activeJobId) : null;
+      },
+      pokeSoon: () => {
+        if (PatchHubRefreshPolicy && typeof PatchHubRefreshPolicy.pokeSoon === "function") {
+          PatchHubRefreshPolicy.pokeSoon();
+        }
+      },
+    });
   }
 
   function computeCanonicalPreview(mode, issueId, commitMsg, patchPath) {
@@ -1367,13 +1124,13 @@ var ok = true;
     if (raw) {
       ok = !parseInFlight && !!lastParsed && (lastParsedRaw === raw);
       if (ok) {
-        var p = lastParsed.parsed || {};
-        var c = lastParsed.canonical || {};
+        const p = lastParsed.parsed || {};
+        const c = lastParsed.canonical || {};
         canonical = c.argv ? c.argv : [];
-        var pMode = p.mode ? p.mode : mode;
-        var pIssue = p.issue_id ? p.issue_id : issueId;
-        var pMsg = p.commit_message ? p.commit_message : commitMsg;
-        var pPatch = p.patch_path ? p.patch_path : patchPath;
+        const pMode = p.mode ? p.mode : mode;
+        const pIssue = p.issue_id ? p.issue_id : issueId;
+        const pMsg = p.commit_message ? p.commit_message : commitMsg;
+        const pPatch = p.patch_path ? p.patch_path : patchPath;
         preview = {
           mode: pMode,
           issue_id: pIssue,
@@ -1510,14 +1267,14 @@ if (mode === "patch" || mode === "repair") {
           setUiError(String((j && j.error) || "upload failed"));
         }
         if (j && j.stored_rel_path) {
-          var stored = String(j.stored_rel_path);
-          var n = el("patchPath");
+          const stored = String(j.stored_rel_path);
+          const n = el("patchPath");
           if (n && shouldOverwrite("patchPath", n)) {
             n.value = stored;
           }
 
-          var relUnderRoot = stripPatchesPrefix(stored);
-          var parent = parentRel(relUnderRoot);
+          const relUnderRoot = stripPatchesPrefix(stored);
+          const parent = parentRel(relUnderRoot);
           if (String(el("fsPath").value || "") === "") {
             el("fsPath").value = parent;
           }
@@ -1646,21 +1403,21 @@ if (mode === "patch" || mode === "repair") {
     if (!cfg || !cfg.autofill || !p) return;
 
     if (cfg.autofill.fill_patch_path && p.stored_rel_path) {
-      var n1 = el("patchPath");
+      const n1 = el("patchPath");
       if (n1 && shouldOverwrite("patchPath", n1)) {
         n1.value = String(p.stored_rel_path);
       }
     }
 
     if (cfg.autofill.fill_issue_id && p.derived_issue != null) {
-      var n2 = el("issueId");
+      const n2 = el("issueId");
       if (n2 && shouldOverwrite("issueId", n2)) {
         n2.value = String(p.derived_issue || "");
       }
     }
 
     if (cfg.autofill.fill_commit_message && p.derived_commit_message != null) {
-      var n3 = el("commitMsg");
+      const n3 = el("commitMsg");
       if (n3 && shouldOverwrite("commitMsg", n3)) {
         n3.value = String(p.derived_commit_message || "");
       }
@@ -1725,8 +1482,11 @@ if (mode === "patch" || mode === "repair") {
     if (cfg && cfg.server && cfg.server.host && cfg.server.port) {
       base = `server: ${cfg.server.host}:${cfg.server.port}`;
     }
+    var fetcher = (PatchHubRefreshPolicy && PatchHubRefreshPolicy.tokenGetJson)
+      ? (cb) => PatchHubRefreshPolicy.tokenGetJson("/api/debug/diagnostics", "header").then((res) => cb(res && res.data))
+      : (cb) => apiGet("/api/debug/diagnostics").then(cb);
 
-    apiGet("/api/debug/diagnostics").then((d) => {
+    fetcher((d) => {
       if (!d || d.ok === false) return;
       var lock = d.lock || {};
       var disk = d.disk || {};
@@ -1741,7 +1501,12 @@ if (mode === "patch" || mode === "repair") {
       meta += ` | ${held}`;
       if (pct) meta += ` | ${pct}`;
 
-      if (el("hdrMeta")) el("hdrMeta").textContent = meta;
+      var node = el("hdrMeta");
+      if (PatchHubRefreshPolicy && PatchHubRefreshPolicy.setTextIfChanged) {
+        PatchHubRefreshPolicy.setTextIfChanged(node, meta, "hdrMeta");
+      } else if (node) {
+        node.textContent = meta;
+      }
     });
 
     refreshLastRunLog();
@@ -1782,7 +1547,7 @@ if (mode === "patch" || mode === "repair") {
 
       function add(label, rel) {
         if (!rel) return;
-        parts.push(`<a class=\"linklike\" href=\"/api/fs/download?path=${encodeURIComponent(rel)}\">${escapeHtml(label)}</a>`);
+        parts.push(`<a class="linklike" href="/api/fs/download?path=${encodeURIComponent(rel)}">${escapeHtml(label)}</a>`);
       }
 
       add("log", selectedRun.log_rel_path);
@@ -1939,7 +1704,7 @@ if (mode === "patch" || mode === "repair") {
     if (el("fsDelete")) {
       el("fsDelete").addEventListener("click", () => {
         var paths = [];
-        for (let k in fsChecked) {
+        for (const k in fsChecked) {
           if (Object.hasOwn(fsChecked, k)) paths.push(k);
         }
         if (!paths.length && fsSelected) paths = [fsSelected];
@@ -1953,7 +1718,7 @@ if (mode === "patch" || mode === "repair") {
         paths.sort().forEach((p) => {
           seq = seq.then(() => apiPost("/api/fs/delete", { path: p }).then((r) => {
               if (!r || r.ok !== true) {
-                var err = (r && r.error) ? String(r.error) : "unknown error";
+                const err = (r && r.error) ? String(r.error) : "unknown error";
                 setFsHint(`delete failed: ${err}`);
                 throw new Error(err);
               }
@@ -2035,7 +1800,7 @@ if (mode === "patch" || mode === "repair") {
       el("jobsList").addEventListener("click", (e) => {
         var t = e && e.target ? e.target : null;
         while (t && t !== el("jobsList")) {
-          var jobId = t.getAttribute && t.getAttribute("data-jobid");
+          const jobId = t.getAttribute && t.getAttribute("data-jobid");
           if (jobId) {
             selectedJobId = String(jobId);
             saveLiveJobId(selectedJobId);
@@ -2145,16 +1910,18 @@ if (mode === "patch" || mode === "repair") {
       refreshHeader();
       renderIssueDetail();
       validateAndPreview();
+      startAutofillPolling();
+      var rpCtx = {
+        refreshRuns: refreshRuns,
+        refreshJobs: refreshJobs,
+        refreshHeader: refreshHeader,
+        refreshTail: () => refreshTail(tailLines),
+        tickMissingPatchClear: tickMissingPatchClear,
+        pauseLiveStream: closeLiveStream,
+        isActive: () => !!activeJobId,
+      };
 
-      timers.closeLiveStream = closeLiveStream;
-      timers.startAutofillPolling = startAutofillPolling;
-      timers.tickMissingPatchClear = tickMissingPatchClear;
-      timers.refreshJobs = refreshJobs;
-      timers.refreshTail = refreshTail;
-      timers.refreshHeader = refreshHeader;
-      timers.tailLines = tailLines;
-
-      if (window.PatchHubVisibilityLifecycle) window.PatchHubVisibilityLifecycle.install(timers);
+      if (window.PatchHubVisibilityLifecycle) window.PatchHubVisibilityLifecycle.install(rpCtx);
 
       if (window.AmpSettings && typeof window.AmpSettings.init === "function") {
         try {
