@@ -174,9 +174,13 @@ Both use the same semantics table (severity+channel filtering):
 -   `verbose`: warning + allow DETAIL(INFO). Deny DEBUG.
 -   `debug`: allow everything.
 
-Full error detail bypass (non-filterable): - Full stdout/stderr of a
-failed step MUST be emitted with a bypass flag so it is visible even in
-quiet.
+Full error detail bypass (non-filterable):
+
+- By default, full stdout/stderr of a failed step MUST be emitted with a bypass flag so it
+  is visible even in quiet.
+- Exception (autofix/autoformat failure dump): for Ruff/Biome autoformat/autofix steps,
+  failed-step stdout/stderr MUST NOT bypass filtering. It MUST be emitted as
+  DETAIL+WARNING so it is visible only at warning/verbose/debug.
 
 Status indicator: - TTY: single-line overwrite on stderr:
 `STATUS: <STAGE>  ELAPSED: <mm:ss>` - non-TTY: periodic heartbeat on
@@ -1205,7 +1209,10 @@ Location:
 Behavior:
 - The NDJSON file is current-only and is truncated at the start of each run.
 - The NDJSON sink is debug-complete: it records every Logger.emit(...) call (no filtering by verbosity/log_level).
-- Full error detail (failed step stdout/stderr) must be included and must bypass filtering.
+- Full error detail (failed step stdout/stderr) must be included.
+- By default it must bypass filtering.
+- Exception: for Ruff/Biome autoformat/autofix steps, the failed-step dump must be
+  emitted without bypass, using DETAIL+WARNING.
 - The JSON sink is best-effort; failures to write NDJSON must not change runner behavior.
 
 Format:
