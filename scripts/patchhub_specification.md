@@ -3,7 +3,7 @@ Status: AUTHORITATIVE SPECIFICATION
 Applies to: scripts/patchhub/*
 Language: ENGLISH (ASCII ONLY)
 
-Specification Version: 1.4.1-spec
+Specification Version: 1.4.2-spec
 Code Baseline: audiomason2-main.zip (as provided in this chat)
 
 -------------------------------------------------------------------------------
@@ -92,8 +92,9 @@ The runtime version MUST NOT be hardcoded in code.
     - live logs,
     - job state/progress (top-right),
     - stop/cancel responsiveness.
-  - IDLE: when no patching is active, the UI MUST refresh at most once every
-    10 seconds.
+  - IDLE: when no patching is active, the UI MUST use a deterministic
+    backoff policy for visible-tab refresh (see 2.5.1). The UI MUST NOT
+    refresh more frequently than the first backoff interval.
 - In IDLE mode, the UI MUST NOT re-fetch or re-render data that has not changed
   ("conditional refresh").
 - Timer creation MUST remain centralized and MUST NOT duplicate refresh loops.
@@ -110,6 +111,38 @@ The runtime version MUST NOT be hardcoded in code.
 - If the token matches (no changes), the server MUST return an "unchanged"
   response without recomputing expensive payloads.
 - The UI MUST skip DOM updates if the data is unchanged.
+
+
+2.5.1 Deterministic IDLE Visible Backoff (HARD)
+
+Scope
+- Applies only when the UI is in IDLE mode and document.hidden == false.
+- ACTIVE mode behavior MUST NOT be changed by this policy.
+
+Backoff sequence
+- The UI MUST use a fixed, deterministic sequence of refresh intervals
+  (no jitter). Default sequence: 2s, 5s, 15s, 30s, 60s.
+- The sequence MUST be controlled by a single JS constant to enable rollback
+  by editing one value.
+
+Reset and advance rules
+- The UI MUST track last-seen change tokens (sig) for: jobs, runs, header.
+- On a refresh attempt, if all sig values are unchanged, the UI MUST advance
+  one step in the backoff sequence (capped at the last element).
+- If any sig value changes, the UI MUST reset to the first element.
+- The UI MUST NOT update the DOM when the server indicates unchanged=true.
+
+Failure mode
+- If a sig is incorrect (false-unchanged), UI updates will be delayed.
+- Therefore, sig MUST cover all user-visible state for that payload, including
+  memory-resident queue jobs and on-disk job.json files.
+
+Server contract (transport)
+- Each refresh API MUST return a stable string token field: sig.
+- The UI MUST send the last-seen token via query parameter since_sig.
+- If since_sig matches current sig, the server MUST respond with:
+  { ok: true, unchanged: true, sig: <sig> }
+  and MUST NOT compute expensive payload fields.
 
 2.6 Runs Indexing: Tail Scan and Cache (HARD)
 
