@@ -3,7 +3,7 @@ Status: AUTHORITATIVE SPECIFICATION
 Applies to: scripts/patchhub/*
 Language: ENGLISH (ASCII ONLY)
 
-Specification Version: 1.3.4-spec
+Specification Version: 1.4.0-spec
 Code Baseline: audiomason2-main.zip (as provided in this chat)
 
 -------------------------------------------------------------------------------
@@ -773,6 +773,24 @@ Runner IPC event persistence robustness (HARD):
   - Ends with:
     event: end
     data: {"reason":"job_completed","status":"<job.status>"}
+
+Lifecycle invariants (HARD):
+- The server MUST treat tail-based streaming and broker-based streaming as
+  equivalent with respect to termination semantics.
+- Completion ordering MUST be:
+  1) Set final job status (success|fail|canceled)
+  2) Persist final job state to disk
+  3) Close the live broker (if any)
+  4) Emit SSE end trailer:
+     event: end
+     data: {"reason":"job_completed","status":"<job.status>"}
+  The status carried in the end trailer MUST be the final persisted status.
+- Silent termination (stream ends without an explicit "event: end") is forbidden.
+- Broker close MUST be deterministic:
+  - Backpressure MAY drop data lines,
+  - but MUST NOT drop the broker termination signal (subscriber loops MUST end).
+- After successful enqueue (HTTP 200 for POST /api/jobs/enqueue),
+  GET /api/jobs/<job_id>/events MUST NOT return {"reason":"job_not_found"}
 
 SSE source rule (HARD):
 - SSE MUST NOT connect to the runner IPC socket directly.
