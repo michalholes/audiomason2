@@ -39,8 +39,43 @@ def iter_job_dirs(jobs_root: Path) -> list[Path]:
     return out
 
 
+# Deterministic in-process cache for on-disk job.json scans.
+# Invalidation is signature-based: (count, max mtime_ns) across job.json files.
+_LIST_CACHE: dict[str, tuple[tuple[int, int], int, list[dict[str, Any]]]] = {}
+
+
+def _job_json_signature(jobs_root: Path) -> tuple[int, int]:
+    if not jobs_root.exists() or not jobs_root.is_dir():
+        return (0, 0)
+    count = 0
+    max_mtime_ns = 0
+    for d in jobs_root.iterdir():
+        if not d.is_dir():
+            continue
+        jp = d / "job.json"
+        if not jp.exists() or not jp.is_file():
+            continue
+        try:
+            st = jp.stat()
+        except Exception:
+            continue
+        count += 1
+        if st.st_mtime_ns > max_mtime_ns:
+            max_mtime_ns = st.st_mtime_ns
+    return (count, max_mtime_ns)
+
+
 def list_job_jsons(jobs_root: Path, *, limit: int = 200) -> list[dict[str, Any]]:
     limit = max(1, min(int(limit), 2000))
+    key = str(jobs_root)
+
+    sig = _job_json_signature(jobs_root)
+    cached = _LIST_CACHE.get(key)
+    if cached is not None:
+        cached_sig, cached_limit, cached_val = cached
+        if cached_sig == sig and limit <= cached_limit:
+            return list(cached_val[:limit])
+
     out: list[dict[str, Any]] = []
     for d in iter_job_dirs(jobs_root):
         obj = _read_json_file(d / "job.json")
@@ -49,4 +84,6 @@ def list_job_jsons(jobs_root: Path, *, limit: int = 200) -> list[dict[str, Any]]
         out.append(obj)
         if len(out) >= limit:
             break
+
+    _LIST_CACHE[key] = (sig, limit, out)
     return out

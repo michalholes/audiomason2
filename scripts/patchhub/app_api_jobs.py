@@ -82,12 +82,40 @@ def _job_jsonl_path_from_fields(self, job_id: str, mode: str, issue_id: str) -> 
 
 
 def _load_job_from_disk(self, job_id: str) -> JobRecord | None:
+    job_id = str(job_id)
+    if not job_id:
+        return None
+
+    cache_any: Any = getattr(self, "_disk_job_cache", None)
+    cache: dict[str, tuple[int, JobRecord]]
+    if isinstance(cache_any, dict):
+        cache = cast(dict[str, tuple[int, JobRecord]], cache_any)
+    else:
+        cache = {}
+        self._disk_job_cache = cache
+
+    job_json_path = self.jobs_root / job_id / "job.json"
+    if not job_json_path.exists() or not job_json_path.is_file():
+        cache.pop(job_id, None)
+        return None
+    try:
+        st = job_json_path.stat()
+    except Exception:
+        return None
+
+    cached = cache.get(job_id)
+    if cached is not None and cached[0] == st.st_mtime_ns:
+        return cached[1]
+
     raw = load_job_json(self.jobs_root, job_id)
     if raw is None:
+        cache.pop(job_id, None)
         return None
     try:
         # The on-disk schema matches JobRecord.to_json().
-        return JobRecord(**raw)
+        job = JobRecord(**raw)
+        cache[job_id] = (st.st_mtime_ns, job)
+        return job
     except Exception:
         # Be tolerant: return minimal info if schema drifted.
         try:
@@ -117,6 +145,7 @@ def _load_job_from_disk(self, job_id: str) -> JobRecord | None:
             jr.ended_utc = raw.get("ended_utc")
             jr.return_code = raw.get("return_code")
             jr.error = raw.get("error")
+            cache[job_id] = (st.st_mtime_ns, jr)
             return jr
         except Exception:
             return None

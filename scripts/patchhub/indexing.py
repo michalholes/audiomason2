@@ -8,6 +8,9 @@ from typing import Literal
 from .models import AppStats, RunEntry, StatsWindow
 
 _ANSI_RX = re.compile(r"\x1b\[[0-9;]*m")
+# Deterministic in-process cache for historical runs indexing.
+# Invalidation is signature-based: (count, max mtime_ns) across matching log files.
+_RUNS_CACHE: dict[tuple[str, str], tuple[tuple[int, int], list[RunEntry]]] = {}
 
 
 def _utc_iso(ts: float) -> str:
@@ -40,10 +43,33 @@ def iter_runs(patches_root: Path, log_filename_regex: str) -> list[RunEntry]:
     if not logs_dir.exists():
         return []
 
-    runs: list[RunEntry] = []
-    for log_path in sorted(logs_dir.iterdir()):
+    count = 0
+    max_mtime_ns = 0
+    matched_paths: list[Path] = []
+    for log_path in logs_dir.iterdir():
         if not log_path.is_file():
             continue
+        if not rx.search(log_path.name):
+            continue
+        try:
+            st = log_path.stat()
+        except Exception:
+            continue
+        matched_paths.append(log_path)
+        count += 1
+        if st.st_mtime_ns > max_mtime_ns:
+            max_mtime_ns = st.st_mtime_ns
+
+    key = (str(patches_root), log_filename_regex)
+    sig = (count, max_mtime_ns)
+    cached = _RUNS_CACHE.get(key)
+    if cached is not None:
+        cached_sig, cached_runs = cached
+        if cached_sig == sig:
+            return list(cached_runs)
+
+    runs: list[RunEntry] = []
+    for log_path in sorted(matched_paths):
         m = rx.search(log_path.name)
         if not m:
             continue
@@ -65,6 +91,7 @@ def iter_runs(patches_root: Path, log_filename_regex: str) -> list[RunEntry]:
         )
 
     runs.sort(key=lambda r: (r.mtime_utc, r.issue_id), reverse=True)
+    _RUNS_CACHE[key] = (sig, runs)
     return runs
 
 
