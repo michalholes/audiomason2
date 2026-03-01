@@ -978,15 +978,6 @@ Pull/rebase only when explicitly enabled.
 
 ## 10. Logging Contract
 
-In addition to the primary log file under `patch_layout_logs_dir`, the runner writes
-an ANSI-free tail file next to it:
-
-- Tail filename: `<log_filename>.tail.txt`
-- Purpose: support PatchHub historical runs indexing without reading or sanitizing
-  full log files on every refresh.
-- Contents: last N lines from the log (bounded by a fixed max-bytes window), with
-  ANSI escape sequences removed.
-
 A single primary log includes: - runner version - effective
 configuration with sources - declared FILES - gate execution results -
 promotion plan - commit SHA (if any)

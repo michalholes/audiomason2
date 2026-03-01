@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import contextlib
 import json
-import re
 import subprocess
 import sys
 import time
@@ -12,55 +11,6 @@ from pathlib import Path
 from typing import Any
 
 from .console import colorize_console_message, stdout_color_enabled
-
-_ANSI_RX = re.compile(r"\x1b\[[0-9;]*m")
-
-
-def write_sanitized_log_tail(
-    log_path: Path,
-    *,
-    tail_suffix: str = ".tail.txt",
-    max_bytes: int = 65536,
-    max_lines: int = 600,
-) -> Path:
-    """Write a small ANSI-free tail file next to the full log.
-
-    The output is used by PatchHub to avoid calling strip_ansi over large logs
-    on every refresh.
-
-    Deterministic behavior:
-    - fixed max_bytes / max_lines
-    - stable newline normalization (LF)
-    """
-
-    p = Path(log_path)
-    if not p.exists() or not p.is_file():
-        raise FileNotFoundError(str(p))
-
-    raw = b""
-    with open(p, "rb") as f:  # noqa: PTH123
-        try:
-            f.seek(0, 2)
-            size = int(f.tell())
-            start = max(0, size - int(max_bytes))
-            f.seek(start)
-        except Exception:
-            # Fall back to reading the whole file (best effort).
-            f.seek(0)
-        raw = f.read()
-
-    text = raw.decode("utf-8", errors="replace")
-    # Normalize line endings deterministically.
-    text = text.replace("\r\n", "\n").replace("\r", "\n")
-    lines = text.split("\n")
-    if max_lines > 0 and len(lines) > max_lines:
-        lines = lines[-max_lines:]
-    sanitized = [_ANSI_RX.sub("", line) for line in lines]
-    out = "\n".join(sanitized).rstrip("\n") + "\n"
-
-    tail_path = p.with_name(p.name + tail_suffix)
-    tail_path.write_text(out, encoding="utf-8", errors="replace")
-    return tail_path
 
 
 @dataclass

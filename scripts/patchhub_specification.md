@@ -148,9 +148,6 @@ Primary modules:
 - indexing.py: historical runs indexing from patches/logs
   - Uses deterministic in-process caching for /api/runs results.
   - Cache invalidation is signature-based: (count, max mtime_ns) of matching log files.
-  - If a companion ANSI-free tail file exists for a log
-    ("<log_filename>.tail.txt" in the same directory), PatchHub MUST read the tail
-    instead of the full log to determine RESULT (success/fail/unknown).
 - job_store.py: on-disk job.json reader and job listing
   - Uses deterministic in-process caching for /api/jobs/list disk scans.
   - Cache invalidation is signature-based: (count, max mtime_ns) of job.json files.
