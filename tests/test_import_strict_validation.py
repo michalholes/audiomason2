@@ -65,3 +65,18 @@ def test_wizard_definition_v2_rejects_unknown_keys() -> None:
                 },
             }
         )
+
+
+def test_wizard_definition_v2_rejects_editor_metadata() -> None:
+    with pytest.raises(FinalizeError):
+        validate_wizard_definition_structure(
+            {
+                "version": 2,
+                "graph": {
+                    "entry_step_id": "select_authors",
+                    "nodes": [{"step_id": "select_authors"}],
+                    "edges": [],
+                },
+                "_am2_ui": {"showOptional": True},
+            }
+        )

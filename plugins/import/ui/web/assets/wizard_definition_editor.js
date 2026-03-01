@@ -83,12 +83,15 @@
 		return (s && s.selectedStepId) || null;
 	}
 
-	function mutateWizard(fn) {
+	function mutateWizard(fn, opts) {
 		const FE = window.AM2FlowEditorState;
 		if (!FE || !FE.mutateWizard) return;
-		FE.mutateWizard(function (wd) {
-			fn && fn(ensureWizardUi(wd), wd);
-		});
+		FE.mutateWizard(
+			function (wd) {
+				fn && fn(ensureWizardUi(wd), wd);
+			},
+			opts || null,
+		);
 	}
 
 	function setSelectedStep(stepIdOrNull) {
@@ -100,7 +103,6 @@
 		const entry = entryStepId || (nodes && nodes[0]) || "";
 		return {
 			version: 2,
-			wizard_id: "import",
 			graph: {
 				entry_step_id: String(entry || ""),
 				nodes: (nodes || []).map((sid) => ({ step_id: sid })),
@@ -114,18 +116,41 @@
 		};
 	}
 
+
 	function ensureV2() {
-		mutateWizard(function (uiState, wd) {
-			const g = stableGraph(wd);
-			const nodes = Array.isArray(g.nodes) ? g.nodes.slice(0) : [];
-			const edges = Array.isArray(g.edges) ? g.edges.slice(0) : [];
-			const v2 = defFromGraph(nodes, g.entry, edges);
-			v2._am2_ui = uiState;
-			Object.keys(wd).forEach((k) => {
-				delete wd[k];
-			});
-			Object.assign(wd, v2);
-		});
+		mutateWizard(
+			function (uiState, wd) {
+				// Only normalize when required; avoid marking the draft dirty for
+				// internal idempotent migrations.
+				if (wd && typeof wd === "object") {
+					const v2 = wd.version === 2;
+					const hasWizardId = Object.prototype.hasOwnProperty.call(wd, "wizard_id");
+					const g = wd.graph;
+					const graphOk =
+						g &&
+						typeof g === "object" &&
+						Array.isArray(g.nodes) &&
+						Array.isArray(g.edges) &&
+						typeof g.entry_step_id === "string";
+					const keys = Object.keys(wd);
+					const onlyKnownKeys = keys.every(function (k) {
+						return k === "version" || k === "graph" || k === "_am2_ui";
+					});
+					if (v2 && !hasWizardId && graphOk && onlyKnownKeys) return;
+				}
+
+				const g = stableGraph(wd);
+				const nodes = Array.isArray(g.nodes) ? g.nodes.slice(0) : [];
+				const edges = Array.isArray(g.edges) ? g.edges.slice(0) : [];
+				const next = defFromGraph(nodes, g.entry, edges);
+				next._am2_ui = uiState;
+				Object.keys(wd).forEach((k) => {
+					delete wd[k];
+				});
+				Object.assign(wd, next);
+			},
+			{ markDirty: false, resetValidation: false, reason: "normalize_v2" },
+		);
 	}
 
 	const paletteItems = [];

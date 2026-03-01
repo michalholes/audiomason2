@@ -138,22 +138,44 @@
 		this._dispatchSelectionEvent(this.selectedStepId);
 	};
 
-	FlowEditorState.prototype.mutateWizard = function mutateWizard(mutatorFn) {
+	FlowEditorState.prototype.mutateWizard = function mutateWizard(mutatorFn, opts) {
 		if (!this.wizardDraft) this.wizardDraft = {};
 		mutatorFn && mutatorFn(this.wizardDraft);
-		this.draftDirty = true;
-		this.validationState = { lastOk: false, envelope: null };
-		this.emit("wizard_changed", { reason: "mutate_wizard" });
-		this.emit("validation_changed", { reason: "dirty" });
+
+		const o = opts && typeof opts === "object" ? opts : {};
+		const markDirty = o.markDirty !== false;
+		const resetValidation = o.resetValidation !== false;
+		const reason = o.reason ? String(o.reason) : "mutate_wizard";
+
+		if (markDirty) this.draftDirty = true;
+		if (resetValidation) this.validationState = { lastOk: false, envelope: null };
+
+		this.emit("wizard_changed", { reason: reason });
+		if (markDirty || resetValidation) {
+			this.emit("validation_changed", {
+				reason: markDirty ? "dirty" : "validation_state",
+			});
+		}
 	};
 
-	FlowEditorState.prototype.mutateConfig = function mutateConfig(mutatorFn) {
+	FlowEditorState.prototype.mutateConfig = function mutateConfig(mutatorFn, opts) {
 		if (!this.configDraft) this.configDraft = {};
 		mutatorFn && mutatorFn(this.configDraft);
-		this.draftDirty = true;
-		this.validationState = { lastOk: false, envelope: null };
-		this.emit("config_changed", { reason: "mutate_config" });
-		this.emit("validation_changed", { reason: "dirty" });
+
+		const o = opts && typeof opts === "object" ? opts : {};
+		const markDirty = o.markDirty !== false;
+		const resetValidation = o.resetValidation !== false;
+		const reason = o.reason ? String(o.reason) : "mutate_config";
+
+		if (markDirty) this.draftDirty = true;
+		if (resetValidation) this.validationState = { lastOk: false, envelope: null };
+
+		this.emit("config_changed", { reason: reason });
+		if (markDirty || resetValidation) {
+			this.emit("validation_changed", {
+				reason: markDirty ? "dirty" : "validation_state",
+			});
+		}
 	};
 
 	FlowEditorState.prototype.markValidated = function markValidated(payload) {
