@@ -440,7 +440,7 @@
           if (/\.(zip|patch|diff)$/i.test(rel)) {
             el("patchPath").value = normalizePatchPath(rel);
 
-            var m = null;
+				let m = null;
             if (issueRegex) {
               try { m = issueRegex.exec(rel); } catch (e) { m = null; }
             }
@@ -590,27 +590,27 @@
       state[name] = st;
     }
 
-    for (var i = 0; i < lines.length; i++) {
-      var raw = String(lines[i] || "");
-      var s = raw.trim();
+		for (let i = 0; i < lines.length; i++) {
+			const raw = String(lines[i] || "");
+			const s = raw.trim();
       if (!s) continue;
 
       if (s.indexOf("DO:") === 0) {
-        var stepDo = normStepName(s.slice(3));
+				const stepDo = normStepName(s.slice(3));
         setState(stepDo, "running");
         currentRunning = stepDo;
         continue;
       }
 
       if (s.indexOf("OK:") === 0) {
-        var stepOk = normStepName(s.slice(3));
+				const stepOk = normStepName(s.slice(3));
         setState(stepOk, "ok");
         if (currentRunning === stepOk) currentRunning = "";
         continue;
       }
 
       if (s.indexOf("FAIL:") === 0) {
-        var stepFail = normStepName(s.slice(5));
+				const stepFail = normStepName(s.slice(5));
         setState(stepFail, "fail");
         if (currentRunning === stepFail) currentRunning = "";
         continue;
@@ -622,16 +622,16 @@
     }
 
     if (currentRunning) {
-      for (var j = 0; j < order.length; j++) {
-        var nm = order[j];
+			for (let j = 0; j < order.length; j++) {
+				const nm = order[j];
         if (state[nm] === "running" && nm !== currentRunning) {
           state[nm] = "pending";
         }
       }
     }
 
-    for (var k = 0; k < order.length; k++) {
-      var nm2 = order[k];
+		for (let k = 0; k < order.length; k++) {
+			const nm2 = order[k];
       if (!Object.hasOwn(state, nm2)) state[nm2] = "pending";
     }
 
@@ -640,8 +640,8 @@
 
   function pickProgressSummaryLine(text) {
     var lines = String(text || "").split(/\r?\n/);
-    for (var i = lines.length - 1; i >= 0; i--) {
-      var s = String(lines[i] || "").trim();
+		for (let i = lines.length - 1; i >= 0; i--) {
+			const s = String(lines[i] || "").trim();
       if (!s) continue;
 
       if (s.indexOf("RESULT:") === 0) return s;
@@ -666,9 +666,9 @@
     }
 
     var html = "";
-    for (var i = 0; i < order.length; i++) {
-      var name = order[i];
-      var st = state[name] || "pending";
+		for (let i = 0; i < order.length; i++) {
+			const name = order[i];
+			const st = state[name] || "pending";
       html += "<div class=\"step\">";
       html += "<span class=\"dot " + escapeHtml(st) + "\"></span>";
       html += "<span class=\"step-name\">" + escapeHtml(name) + "</span>";
@@ -718,10 +718,10 @@
       state[name] = st;
     }
 
-    for (var i = 0; i < (events || []).length; i++) {
-      var ev = events[i];
+		for (let i = 0; i < (events || []).length; i++) {
+			const ev = events[i];
       if (!ev || typeof ev !== "object") continue;
-      var t = String(ev.type || "");
+			const t = String(ev.type || "");
 
       if (t === "result") {
         resultStatus = ev.ok ? "success" : "fail";
@@ -730,10 +730,10 @@
 
       if (t !== "log") continue;
 
-      var kind = String(ev.kind || "");
+			const kind = String(ev.kind || "");
       if (kind !== "DO" && kind !== "OK" && kind !== "FAIL") continue;
 
-      var stage = normStepName(ev.stage || "");
+			const stage = normStepName(ev.stage || "");
       if (!stage) continue;
 
       if (kind === "DO") {
@@ -755,16 +755,16 @@
     }
 
     if (currentRunning) {
-      for (var j = 0; j < order.length; j++) {
-        var nm = order[j];
+			for (let j = 0; j < order.length; j++) {
+				const nm = order[j];
         if (state[nm] === "running" && nm !== currentRunning) {
           state[nm] = "pending";
         }
       }
     }
 
-    for (var k = 0; k < order.length; k++) {
-      var nm2 = order[k];
+		for (let k = 0; k < order.length; k++) {
+			const nm2 = order[k];
       if (!Object.hasOwn(state, nm2)) state[nm2] = "pending";
     }
 
@@ -774,16 +774,16 @@
   function deriveProgressSummaryFromEvents(events, progress) {
     var lastResult = null;
     var lastLog = null;
-    for (var i = (events || []).length - 1; i >= 0; i--) {
-      var ev = events[i];
+		for (let i = (events || []).length - 1; i >= 0; i--) {
+			const ev = events[i];
       if (!ev || typeof ev !== "object") continue;
-      var t = String(ev.type || "");
+			const t = String(ev.type || "");
       if (t === "result") {
         lastResult = ev;
         break;
       }
       if (t === "log") {
-        var kind = String(ev.kind || "");
+				const kind = String(ev.kind || "");
         if (kind === "DO" || kind === "OK" || kind === "FAIL") {
           lastLog = ev;
           break;
@@ -799,8 +799,8 @@
     }
 
     if (lastLog) {
-      var stage = normStepName(lastLog.stage || "");
-      var kind = String(lastLog.kind || "");
+			const stage = normStepName(lastLog.stage || "");
+			const kind = String(lastLog.kind || "");
       if (kind === "FAIL") {
         return { text: "FAIL: " + stage, status: "fail" };
       }
@@ -1013,7 +1013,7 @@ function loadLiveLevel() {
         " issue=" + String(ev.issue_id || "");
     }
     if (t === "result") {
-      var ok = ev.ok ? "SUCCESS" : "FAIL";
+			const ok = ev.ok ? "SUCCESS" : "FAIL";
       return "RESULT: " + ok + " rc=" + String(ev.return_code);
     }
 
@@ -1021,11 +1021,11 @@ function loadLiveLevel() {
     var line = "";
 
     if (showPrefixes) {
-      var parts = [];
-      var stage = String(ev.stage || "");
-      var kind = String(ev.kind || "");
-      var sev = String(ev.sev || "");
-      var msg = String(ev.msg || "");
+			const parts = [];
+			const stage = String(ev.stage || "");
+			const kind = String(ev.kind || "");
+			const sev = String(ev.sev || "");
+			const msg = String(ev.msg || "");
       if (stage) parts.push(stage);
       if (kind) parts.push(kind);
       if (sev) parts.push(sev);
@@ -1036,7 +1036,7 @@ function loadLiveLevel() {
     }
 
     if (ev.stdout || ev.stderr) {
-      var out = [];
+			const out = [];
       out.push(line);
       if (ev.stdout) out.push("STDOUT:\n" + String(ev.stdout));
       if (ev.stderr) out.push("STDERR:\n" + String(ev.stderr));
@@ -1049,8 +1049,8 @@ function loadLiveLevel() {
     var box = el("liveLog");
     if (!box) return;
     var lines = [];
-    for (var i = 0; i < liveEvents.length; i++) {
-      var ev = liveEvents[i];
+		for (let i = 0; i < liveEvents.length; i++) {
+			const ev = liveEvents[i];
       if (!filterLiveEvent(ev)) continue;
       lines.push(formatLiveEvent(ev));
     }
@@ -1064,16 +1064,16 @@ function loadLiveLevel() {
   function updateProgressFromEvents() {
     var box = el("activeStage");
     if (!box) return;
-    for (var i = liveEvents.length - 1; i >= 0; i--) {
-      var ev = liveEvents[i];
+		for (let i = liveEvents.length - 1; i >= 0; i--) {
+			const ev = liveEvents[i];
       if (!ev) continue;
       if (String(ev.type || "") === "result") {
         box.textContent = (ev.ok ? "RESULT: SUCCESS" : "RESULT: FAIL");
         return;
       }
       if (String(ev.type || "") === "log") {
-        var stage = String(ev.stage || "");
-        var kind = String(ev.kind || "");
+				const stage = String(ev.stage || "");
+				const kind = String(ev.kind || "");
         if (stage || kind) {
           box.textContent = (stage ? stage : "") + (kind ? " / " + kind : "");
           return;
@@ -1124,7 +1124,7 @@ function loadLiveLevel() {
       var status = "";
       if (e && e.data) {
         try {
-          var p = JSON.parse(String(e.data));
+					const p = JSON.parse(String(e.data));
           if (p && typeof p === "object") {
             reason = String(p.reason || "");
             status = String(p.status || "");
@@ -1205,7 +1205,7 @@ function refreshJobs() {
       var idleAutoSelect = !!(cfg && cfg.ui && cfg.ui.idle_auto_select_last_job);
 
       if (!selectedJobId) {
-        var saved = loadLiveJobId();
+			const saved = loadLiveJobId();
         if (saved) selectedJobId = saved;
       }
 
@@ -1273,7 +1273,7 @@ function refreshJobs() {
     var id = getLiveJobId();
     var st = "";
     if (id && jobs && jobs.length) {
-      var j = jobs.find((x) => String(x.job_id || "") === String(id)) || null;
+			const j = jobs.find((x) => String(x.job_id || "") === String(id)) || null;
       st = j ? String(j.status || "") : "";
     }
     if (st === "running" || st === "queued") openLiveStream(id);
@@ -1364,13 +1364,13 @@ var ok = true;
     if (raw) {
       ok = !parseInFlight && !!lastParsed && (lastParsedRaw === raw);
       if (ok) {
-        var p = lastParsed.parsed || {};
-        var c = lastParsed.canonical || {};
+				const p = lastParsed.parsed || {};
+				const c = lastParsed.canonical || {};
         canonical = c.argv ? c.argv : [];
-        var pMode = p.mode ? p.mode : mode;
-        var pIssue = p.issue_id ? p.issue_id : issueId;
-        var pMsg = p.commit_message ? p.commit_message : commitMsg;
-        var pPatch = p.patch_path ? p.patch_path : patchPath;
+				const pMode = p.mode ? p.mode : mode;
+				const pIssue = p.issue_id ? p.issue_id : issueId;
+				const pMsg = p.commit_message ? p.commit_message : commitMsg;
+				const pPatch = p.patch_path ? p.patch_path : patchPath;
         preview = {
           mode: pMode,
           issue_id: pIssue,
@@ -1507,14 +1507,14 @@ if (mode === "patch" || mode === "repair") {
           setUiError(String((j && j.error) || "upload failed"));
         }
         if (j && j.stored_rel_path) {
-          var stored = String(j.stored_rel_path);
-          var n = el("patchPath");
+				const stored = String(j.stored_rel_path);
+				const n = el("patchPath");
           if (n && shouldOverwrite("patchPath", n)) {
             n.value = stored;
           }
 
-          var relUnderRoot = stripPatchesPrefix(stored);
-          var parent = parentRel(relUnderRoot);
+				const relUnderRoot = stripPatchesPrefix(stored);
+				const parent = parentRel(relUnderRoot);
           if (String(el("fsPath").value || "") === "") {
             el("fsPath").value = parent;
           }
@@ -1643,21 +1643,21 @@ if (mode === "patch" || mode === "repair") {
     if (!cfg || !cfg.autofill || !p) return;
 
     if (cfg.autofill.fill_patch_path && p.stored_rel_path) {
-      var n1 = el("patchPath");
+			const n1 = el("patchPath");
       if (n1 && shouldOverwrite("patchPath", n1)) {
         n1.value = String(p.stored_rel_path);
       }
     }
 
     if (cfg.autofill.fill_issue_id && p.derived_issue != null) {
-      var n2 = el("issueId");
+			const n2 = el("issueId");
       if (n2 && shouldOverwrite("issueId", n2)) {
         n2.value = String(p.derived_issue || "");
       }
     }
 
     if (cfg.autofill.fill_commit_message && p.derived_commit_message != null) {
-      var n3 = el("commitMsg");
+			const n3 = el("commitMsg");
       if (n3 && shouldOverwrite("commitMsg", n3)) {
         n3.value = String(p.derived_commit_message || "");
       }
@@ -1949,7 +1949,7 @@ if (mode === "patch" || mode === "repair") {
         paths.sort().forEach((p) => {
           seq = seq.then(() => apiPost("/api/fs/delete", { path: p }).then((r) => {
               if (!r || r.ok !== true) {
-                var err = (r && r.error) ? String(r.error) : "unknown error";
+							const err = (r && r.error) ? String(r.error) : "unknown error";
                 setFsHint("delete failed: " + err);
                 throw new Error(err);
               }
@@ -2031,7 +2031,7 @@ if (mode === "patch" || mode === "repair") {
       el("jobsList").addEventListener("click", (e) => {
         var t = e && e.target ? e.target : null;
         while (t && t !== el("jobsList")) {
-          var jobId = t.getAttribute && t.getAttribute("data-jobid");
+					const jobId = t.getAttribute && t.getAttribute("data-jobid");
           if (jobId) {
             selectedJobId = String(jobId);
             saveLiveJobId(selectedJobId);

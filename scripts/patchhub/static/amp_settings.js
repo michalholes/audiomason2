@@ -58,7 +58,7 @@
 
   function normalizeList(v) {
     if (Array.isArray(v)) {
-      var out = [];
+			const out = [];
       v.forEach((x) => {
         var s = String(x || "").trim();
         if (s && out.indexOf(s) < 0) out.push(s);
@@ -109,7 +109,7 @@
     }
 
     if (schemaObj && schemaObj.policy && typeof schemaObj.policy === "object") {
-      var out = [];
+			const out = [];
       Object.keys(schemaObj.policy).forEach((k) => {
         var p = schemaObj.policy[k] || {};
 
@@ -213,8 +213,8 @@
       var readOnly = !!f.read_only;
 
       if (ftxt) {
-        var kHit = key.toLowerCase().indexOf(ftxt) >= 0;
-        var lHit = label.toLowerCase().indexOf(ftxt) >= 0;
+				const kHit = key.toLowerCase().indexOf(ftxt) >= 0;
+				const lHit = label.toLowerCase().indexOf(ftxt) >= 0;
         if (!kHit && !lHit) return;
       }
 
@@ -231,7 +231,7 @@
       var ctl = mk("div", "amp-control", null);
 
       if (readOnly) {
-        var ro = "";
+				let ro = "";
         if (kind === "list_str") ro = normalizeList(values[key]).join(", ");
         else if (kind === "bool") ro = (!!values[key]) ? "true" : "false";
         else ro = String(values[key] == null ? "" : values[key]);
@@ -242,8 +242,8 @@
       }
 
       if (kind === "bool") {
-        var sw = mk("label", "switch", null);
-        var cb = mk("input", null, null);
+				const sw = mk("label", "switch", null);
+				const cb = mk("input", null, null);
         cb.type = "checkbox";
         cb.checked = !!values[key];
         cb.addEventListener("change", () => {
@@ -253,7 +253,7 @@
         sw.appendChild(mk("span", "slider", null));
         ctl.appendChild(sw);
       } else if (kind === "enum" && enumVals) {
-        var sel = mk("select", "input", null);
+				const sel = mk("select", "input", null);
         enumVals.forEach((optV) => {
           var opt = mk("option", null, String(optV));
           opt.value = String(optV);
@@ -265,7 +265,7 @@
         });
         ctl.appendChild(sel);
       } else if (kind === "int") {
-        var ni = mk("input", "input", null);
+        const ni = mk("input", "input", null);
         ni.type = "number";
         ni.value = String(values[key] == null ? "" : values[key]);
         ni.addEventListener("change", () => {
@@ -275,11 +275,11 @@
         });
         ctl.appendChild(ni);
       } else if (kind === "list_str") {
-        var box = mk("div", "amp-list", null);
+				const box = mk("div", "amp-list", null);
         ctl.appendChild(box);
         renderChipList(box, key, values[key], onChange);
       } else {
-        var ti = mk("input", "input", null);
+				const ti = mk("input", "input", null);
         ti.type = "text";
         ti.value = String(values[key] == null ? "" : values[key]);
         ti.addEventListener("change", () => {
@@ -291,16 +291,16 @@
       row.appendChild(ctl);
 
       if (baseValues) {
-        var baseV = baseValues[key];
-        var curV = values[key];
-        var dirty = false;
+				const baseV = baseValues[key];
+				const curV = values[key];
+				let dirty = false;
         if (kind === "list_str") {
-          var a = normalizeList(baseV);
-          var b = normalizeList(curV);
+					const a = normalizeList(baseV);
+					const b = normalizeList(curV);
           if (a.length !== b.length) {
             dirty = true;
           } else {
-            for (var i = 0; i < a.length; i++) {
+						for (let i = 0; i < a.length; i++) {
               if (a[i] !== b[i]) {
                 dirty = true;
                 break;
@@ -358,10 +358,10 @@ function init() {
       var a = baseValues ? baseValues[k] : undefined;
       var b = curValues[k];
       if (kind === "list_str") {
-        var aa = normalizeList(a);
-        var bb = normalizeList(b);
+				const aa = normalizeList(a);
+				const bb = normalizeList(b);
         if (aa.length !== bb.length) return true;
-        for (var i = 0; i < aa.length; i++) {
+				for (let i = 0; i < aa.length; i++) {
           if (aa[i] !== bb[i]) return true;
         }
         return false;
@@ -427,7 +427,7 @@ function init() {
         }
         baseValues = r.values || baseValues;
         if (!dry) {
-          var fields = schemaToFields(schema || {});
+				const fields = schemaToFields(schema || {});
           curValues = cloneValues(baseValues);
           renderFields(fields, baseValues, curValues, setCur, filterText);
         }
