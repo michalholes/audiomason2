@@ -407,3 +407,33 @@ Interactions:
 - Applies only when biome_autofix=true.
 - Legalized files must match gate_biome_extensions (case-insensitive suffix match).
 Related: biome_autofix, gate_biome_extensions
+
+## Key: biome_format
+Key: biome_format
+Type: bool
+Default: true
+Meaning: If true, run a BIOME_FORMAT (write) phase before the BIOME (check) phase.
+Notes:
+- This key only controls the Biome format phase. It does not affect BIOME_AUTOFIX.
+Related: gate_biome_format_command, biome_format_legalize_outside
+
+## Key: gate_biome_format_command
+Key: gate_biome_format_command
+Type: list[str] | str
+Default: ["npm", "exec", "--", "biome", "format", "--write"]
+Meaning: Command argv for the BIOME_FORMAT (write) phase of the Biome gate.
+Interactions:
+- Used only when biome_format=true.
+- String values are parsed using shell-like splitting (shlex), like gate_biome_command.
+Related: biome_format, gate_biome_command
+
+## Key: biome_format_legalize_outside
+Key: biome_format_legalize_outside
+Type: bool
+Default: true
+Meaning: If true, allow BIOME_FORMAT (write) to modify additional Biome-scoped files
+outside the changed paths set.
+Interactions:
+- Applies only when biome_format=true.
+- Legalized files must match gate_biome_extensions (case-insensitive suffix match).
+Related: biome_format, gate_biome_extensions

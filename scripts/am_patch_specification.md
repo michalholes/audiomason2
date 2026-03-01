@@ -456,6 +456,8 @@ scope accordingly - Should be used deliberately and sparingly
     execute any external tool.
 -   Variant B execution semantics (file-scoped):
     -   Runner builds a deterministic lexicographically sorted list of matched changed files.
+    -   When biome_format=true: Runner executes: `GATE: BIOME_FORMAT (write)` exactly once:
+        `<format_argv...> <changed_file_1> <changed_file_2> ...`
     -   When biome_autofix=false: Runner executes the gate exactly once:
         `<argv...> <changed_file_1> <changed_file_2> ...`
     -   When biome_autofix=true:
@@ -474,6 +476,15 @@ scope accordingly - Should be used deliberately and sparingly
         (default: `["npm", "run", "lint:files", "--"]`)
         -   If a string is used (cfg or CLI), it is parsed using shell-like splitting (shlex).
         -   The value must be non-empty and is treated as argv including the tool.
+    -   `biome_format = true|false` (default: true)
+    -   `gate_biome_format_command = list[str] | str`
+        (default: `["npm", "exec", "--", "biome", "format", "--write"]`)
+        -   If a string is used (cfg or CLI), it is parsed using shell-like splitting (shlex).
+        -   The value must be non-empty and is treated as argv including the tool.
+    -   `biome_format_legalize_outside = true|false` (default: true)
+        -   When true, files modified by BIOME_FORMAT (write) outside the changed paths set
+            are legalized only if their extension matches gate_biome_extensions.
+        -   Runner MUST emit: `legalized_biome_format_files=[...]` (sorted, repo-relative).
     -   `biome_autofix = true|false` (default: true)
     -   `gate_biome_fix_command = list[str] | str`
         (default: `["npm", "run", "lint:files:fix", "--"]`)
@@ -487,6 +498,11 @@ scope accordingly - Should be used deliberately and sparingly
     -   `--skip-biome` (equivalent to setting `gates_skip_biome=true`)
     -   `--gate-biome-extensions CSV_OR_REPEATABLE` sets `gate_biome_extensions`
     -   `--gate-biome-command STR` sets `gate_biome_command`
+    -   `--biome-format` sets `biome_format=true`
+    -   `--no-biome-format` sets `biome_format=false`
+    -   `--biome-format-legalize-outside` sets `biome_format_legalize_outside=true`
+    -   `--no-biome-format-legalize-outside` sets `biome_format_legalize_outside=false`
+    -   `--gate-biome-format-command STR` sets `gate_biome_format_command`
     -   `--biome-autofix` sets `biome_autofix=true`
     -   `--no-biome-autofix` sets `biome_autofix=false`
     -   `--biome-autofix-legalize-outside` sets `biome_autofix_legalize_outside=true`
