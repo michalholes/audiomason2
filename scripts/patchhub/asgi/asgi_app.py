@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import json
 import mimetypes
 import os
@@ -18,7 +17,6 @@ from fastapi.responses import (
     StreamingResponse,
 )
 
-from patchhub import app_api_core as _core_api
 from patchhub.app_support import read_tail
 
 from .async_app_core import AsyncAppCore
@@ -35,25 +33,6 @@ def _json_bytes_response(status: int, data: bytes) -> Response:
 def _guess_content_type(path: Path) -> str:
     ctype, _ = mimetypes.guess_type(path.name)
     return ctype or "application/octet-stream"
-
-
-def _read_head_limited(path: Path, *, max_lines: int, max_bytes: int) -> str:
-    if max_lines <= 0 or max_bytes <= 0:
-        return ""
-    if not path.exists() or not path.is_file():
-        return ""
-    out_lines: list[str] = []
-    read_bytes = 0
-    with path.open("r", encoding="utf-8", errors="replace") as f:
-        for _ in range(max_lines):
-            line = f.readline()
-            if not line:
-                break
-            read_bytes += len(line.encode("utf-8", errors="replace"))
-            if read_bytes > max_bytes:
-                break
-            out_lines.append(line.rstrip("\n"))
-    return "\n".join(out_lines)
 
 
 def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
@@ -96,9 +75,8 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
         return FileResponse(p, media_type=_guess_content_type(p))
 
     @app.get("/api/config")
-    async def api_config(request: Request) -> Response:
-        qs = dict(request.query_params)
-        status, data = await to_thread(core.api_config, qs)
+    async def api_config() -> Response:
+        status, data = await to_thread(core.api_config)
         return _json_bytes_response(status, data)
 
     @app.get("/api/amp/schema")
@@ -127,9 +105,8 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
         return _json_bytes_response(status, data)
 
     @app.get("/api/patches/latest")
-    async def api_patches_latest(request: Request) -> Response:
-        qs = dict(request.query_params)
-        status, data = await to_thread(core.api_patches_latest, qs)
+    async def api_patches_latest() -> Response:
+        status, data = await to_thread(core.api_patches_latest)
         return _json_bytes_response(status, data)
 
     @app.get("/api/fs/read_text")
@@ -168,7 +145,7 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
         return _json_bytes_response(status, data)
 
     @app.get("/api/jobs")
-    async def api_jobs_list(request: Request) -> JSONResponse:
+    async def api_jobs_list() -> JSONResponse:
         mem = await core.queue.list_jobs()
         mem_by_id = {j.job_id: j for j in mem}
 
@@ -206,30 +183,7 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
 
         jobs = mem + disk
         jobs.sort(key=lambda j: str(j.created_utc or ""), reverse=True)
-
-        token_items: list[tuple[str, str, str, str]] = []
-        for j in jobs:
-            token_items.append(
-                (
-                    str(getattr(j, "job_id", "")),
-                    str(getattr(j, "status", "")),
-                    str(getattr(j, "created_utc", "")),
-                    str(getattr(j, "ended_utc", "")),
-                )
-            )
-        token_items.sort()
-        token = hashlib.sha1(
-            json.dumps(
-                token_items,
-                ensure_ascii=True,
-                separators=(",", ":"),
-            ).encode("utf-8")
-        ).hexdigest()
-        last_token = request.query_params.get("last_token")
-        if last_token == token:
-            return JSONResponse({"unchanged": True, "token": token})
-
-        return JSONResponse({"ok": True, "jobs": [j.to_json() for j in jobs], "token": token})
+        return JSONResponse({"ok": True, "jobs": [j.to_json() for j in jobs]})
 
     @app.get("/api/jobs/{job_id}")
     async def api_jobs_get(job_id: str) -> JSONResponse:
@@ -397,12 +351,8 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
         return Response(content=data, media_type="application/zip", headers=headers)
 
     @app.get("/api/debug/diagnostics")
-    async def api_debug_diagnostics(request: Request) -> Response:
-        qs = dict(request.query_params)
-        qstate = await core.queue.state()
-        queue_part = {"queued": int(qstate.queued), "running": int(qstate.running)}
-        status, data = await to_thread(_core_api.api_debug_diagnostics, core, qs, queue_part)
-        return _json_bytes_response(status, data)
+    async def api_debug_diagnostics() -> JSONResponse:
+        return JSONResponse(await core.diagnostics(), status_code=200)
 
     @app.get("/api/jobs/{job_id}/events")
     async def api_jobs_events(job_id: str) -> StreamingResponse:
@@ -450,29 +400,15 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
                     yield chunk
                 return
 
-            head = await to_thread(
-                _read_head_limited,
-                jsonl_path,
-                max_lines=2000,
-                max_bytes=512 * 1024,
-            )
-            if head:
-                for line in head.splitlines():
+            tail = await to_thread(read_tail, jsonl_path, 500)
+            if tail:
+                for line in tail.splitlines():
                     if not line.strip():
                         continue
                     yield f"data: {line}\n\n".encode()
 
             async for line in broker.subscribe():
                 yield f"data: {line}\n\n".encode()
-
-            final_status = await job_status()
-            if final_status is None:
-                # Should not happen if queue finalization ordering is correct;
-                # fall back deterministically.
-                final_status = "fail"
-            yield b"event: end\n"
-            yield (f'data: {{"reason":"job_completed","status":"{final_status}"}}\n\n').encode()
-            return
 
         return StreamingResponse(gen(), media_type="text/event-stream")
 

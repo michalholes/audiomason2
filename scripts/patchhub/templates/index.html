@@ -22,7 +22,7 @@
         <h2>Active job</h2>
         <div id="activeJob" class="muted">(none)</div>
         <div class="row">
-          <button type="button" id="refreshAll" class="btn btn-small">Refresh all</button>
+          <button id="refreshAll" class="btn btn-small">Refresh all</button>
         </div>
       </section>
 
@@ -30,7 +30,7 @@
         <div class="row">
           <h2 style="margin:0">Runs</h2>
           <span class="spacer"></span>
-          <button type="button" id="runsCollapse" class="btn btn-small">Show</button>
+          <button id="runsCollapse" class="btn btn-small">Show</button>
         </div>
         <div id="runsWrap" class="hidden">
           <div class="row">
@@ -44,7 +44,7 @@
             </select>
           </div>
           <div class="row">
-            <button type="button" id="runsRefresh" class="btn btn-small">Refresh</button>
+            <button id="runsRefresh" class="btn btn-small">Refresh</button>
           </div>
           <div id="runsList" class="scroll scroll-tall"></div>
         </div>
@@ -60,7 +60,7 @@
       <section class="card">
         <h2>A) Upload patch</h2>
         <div class="row">
-          <button type="button" id="uploadBrowse" class="btn primary">Browse</button>
+          <button id="uploadBrowse" class="btn primary">Browse</button>
           <span class="muted">You can also drag &amp; drop a file anywhere in this window.</span>
         </div>
         <input id="uploadInput" type="file" style="display:none" />
@@ -88,12 +88,12 @@
         <div class="row">
           <input id="issueId" class="input" placeholder="issue id (auto if empty for patch/repair; required for -w)" />
           <input id="commitMsg" class="input" placeholder="message (required for patch/repair and -f)" />
-          <button type="button" id="enqueueBtn" class="btn btn-danger btn-start" disabled>Start</button>
+          <button id="enqueueBtn" class="btn btn-danger btn-start" disabled>Start</button>
         </div>
 
         <div class="row">
           <input id="patchPath" class="input" placeholder="patch path (e.g. patches/incoming/issue_1000.zip)" />
-          <button type="button" id="browsePatch" class="btn btn-small">From file manager</button>
+          <button id="browsePatch" class="btn btn-small">From file manager</button>
         </div>
 
         <details class="details">
@@ -102,8 +102,8 @@
         </details>
 
         <div class="row">
-          <button type="button" id="parseBtn" class="btn btn-small">Parse</button>
-          <button type="button" id="previewToggle" class="btn btn-small">Preview</button>
+          <button id="parseBtn" class="btn btn-small">Parse</button>
+          <button id="previewToggle" class="btn btn-small">Preview</button>
           <span id="parseHint" class="muted"></span>
           <span id="enqueueHint" class="muted"></span>
         </div>
@@ -130,14 +130,14 @@
         <div class="row">
           <h2 style="margin:0">AMP settings</h2>
           <span class="spacer"></span>
-          <button type="button" id="ampCollapse" class="btn btn-small">Show</button>
+          <button id="ampCollapse" class="btn btn-small">Show</button>
         </div>
         <div id="ampWrap" class="hidden">
           <div class="row">
-            <button type="button" id="ampReload" class="btn btn-small">Reload</button>
-            <button type="button" id="ampValidate" class="btn btn-small">Validate</button>
-            <button type="button" id="ampSave" class="btn btn-danger">Save</button>
-            <button type="button" id="ampRevert" class="btn btn-small">Revert</button>
+            <button id="ampReload" class="btn btn-small">Reload</button>
+            <button id="ampValidate" class="btn btn-small">Validate</button>
+            <button id="ampSave" class="btn btn-danger">Save</button>
+            <button id="ampRevert" class="btn btn-small">Revert</button>
             <span id="ampStatus" class="muted"></span>
           </div>
           <div class="row">
@@ -150,21 +150,21 @@
       <section class="card">
         <h2>C) Files</h2>
         <div class="row">
-          <button type="button" id="fsUp" class="btn btn-small" title="Up">Up</button>
+          <button id="fsUp" class="btn btn-small" title="Up">Up</button>
           <input id="fsPath" class="input" value="" placeholder="path under patches/ (e.g. incoming, logs)" />
-          <button type="button" id="fsRefresh" class="btn btn-small">Refresh</button>
+          <button id="fsRefresh" class="btn btn-small">Refresh</button>
         </div>
         <div class="row">
-          <button type="button" id="fsMkdir" class="btn btn-small">Mkdir</button>
-          <button type="button" id="fsRename" class="btn btn-small">Rename</button>
-          <button type="button" id="fsDelete" class="btn btn-small">Delete</button>
-          <button type="button" id="fsUnzip" class="btn btn-small">Unzip</button>
+          <button id="fsMkdir" class="btn btn-small">Mkdir</button>
+          <button id="fsRename" class="btn btn-small">Rename</button>
+          <button id="fsDelete" class="btn btn-small">Delete</button>
+          <button id="fsUnzip" class="btn btn-small">Unzip</button>
           <span id="fsHint" class="muted"></span>
         </div>
         <div class="row">
-          <button type="button" id="fsSelectAll" class="btn btn-small">Select all</button>
-          <button type="button" id="fsClear" class="btn btn-small">Clear</button>
-          <button type="button" id="fsDownloadSelected" class="btn btn-small">Download selected as zip</button>
+          <button id="fsSelectAll" class="btn btn-small">Select all</button>
+          <button id="fsClear" class="btn btn-small">Clear</button>
+          <button id="fsDownloadSelected" class="btn btn-small">Download selected as zip</button>
           <span id="fsSelCount" class="muted"></span>
         </div>
         <div id="fsList" class="scroll scroll-tall"></div>
@@ -174,11 +174,11 @@
         <h2>C) Issue detail</h2>
         <div id="issueDetailTitle" class="muted">Select a run on the left.</div>
         <div class="tabs" id="issueTabs" style="display:none">
-          <button type="button" class="tabbtn" id="tabOverview">Overview</button>
-          <button type="button" class="tabbtn" id="tabLogs">Logs</button>
-          <button type="button" class="tabbtn" id="tabPatch">Patch</button>
-          <button type="button" class="tabbtn" id="tabDiff">Diff bundle</button>
-          <button type="button" class="tabbtn" id="tabFiles">Files</button>
+          <button class="tabbtn" id="tabOverview">Overview</button>
+          <button class="tabbtn" id="tabLogs">Logs</button>
+          <button class="tabbtn" id="tabPatch">Patch</button>
+          <button class="tabbtn" id="tabDiff">Diff bundle</button>
+          <button class="tabbtn" id="tabFiles">Files</button>
         </div>
         <div id="issueTabContent" class="tabcontent" style="display:none">
           <div id="issueTabLinks" class="row"></div>
@@ -198,7 +198,7 @@
         <div class="row">
           <h2 style="margin:0">Preview</h2>
           <span class="spacer"></span>
-          <button type="button" id="previewCollapse" class="btn btn-small">Show</button>
+          <button id="previewCollapse" class="btn btn-small">Show</button>
         </div>
         <div id="previewWrapRight" class="hidden">
           <pre id="previewRight" class="pre pre-box"></pre>
@@ -209,24 +209,19 @@
         <div class="row">
           <h2 style="margin:0">Jobs</h2>
           <span class="spacer"></span>
-          <button type="button" id="jobsCollapse" class="btn btn-small">Show</button>
+          <button id="jobsCollapse" class="btn btn-small">Show</button>
         </div>
         <div id="jobsWrap" class="hidden">
           <div class="row">
-            <button type="button" id="jobsRefresh" class="btn btn-small">Refresh</button>
+            <button id="jobsRefresh" class="btn btn-small">Refresh</button>
           </div>
           <div id="jobsList" class="scroll"></div>
         </div>
       </section>
     </aside>
   </main>
-  <script src="/static/patchhub_fault_tolerance.js"></script>
-  <script src="/static/patchhub_progress.js"></script>
-  <script src="/static/patchhub_live_events.js"></script>
-  <script src="/static/patchhub_runs_ui.js"></script>
-  <script src="/static/patchhub_refresh_policy.js"></script>
+
   <script src="/static/amp_settings.js"></script>
-  <script src="/static/patchhub_visibility_lifecycle.js"></script>
   <script src="/static/app.js"></script>
 </body>
 </html>

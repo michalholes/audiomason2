@@ -2,44 +2,7 @@
   
 
   var activeJobId = null;
-  var timers = {
-    autofillTimer: null,
-  };
-
-  var PatchHubFT = window.PatchHubFT || {
-    getGlobal: (_name, fallback) => fallback,
-    report: () => {},
-  };
-
-  var PatchHubProgress = PatchHubFT.getGlobal("PatchHubProgress", {
-    parseProgressFromText: () => ({ order: [], state: {} }),
-    pickProgressSummaryLine: () => "",
-    renderProgressSteps: () => {},
-    renderProgressSummary: () => {},
-    updateShortProgressFromText: () => {},
-    deriveProgressFromEvents: () => ({ order: [], state: {} }),
-    deriveProgressSummaryFromEvents: () => ({ text: "", level: "idle" }),
-    setProgressSummaryState: () => {},
-    updateProgressPanelFromEvents: () => {},
-  });
-
-  var PatchHubLive = PatchHubFT.getGlobal("PatchHubLive", {
-    openLiveStream: () => ({ close: () => {}, getEvents: () => [] }),
-  });
-
-  var PatchHubRunsUI = PatchHubFT.getGlobal("PatchHubRunsUI", {
-    bindRunsList: () => {},
-  });
-
-  var PatchHubRefreshPolicy = PatchHubFT.getGlobal("PatchHubRefreshPolicy", {
-    tokenGetJson: null,
-    setHtmlIfChanged: null,
-    setTextIfChanged: null,
-    ensureAutoRefresh: null,
-    install: () => {},
-    setVisible: () => {},
-    pokeSoon: () => {},
-  });
+  var autoRefreshTimer = null;
 
   var uiStatusLatest = "";
 
@@ -83,7 +46,7 @@
   }
 
   function setUiError(errorText) {
-    setUiStatus(`ERROR: ${String(errorText || "")}`);
+    setUiStatus("ERROR: " + String(errorText || ""));
   }
 
   function pushApiStatus(payload) {
@@ -101,7 +64,7 @@
     }
     try {
       node.textContent = JSON.stringify(obj, null, 2);
-    } catch {
+    } catch (e) {
       node.textContent = String(obj);
     }
   }
@@ -115,7 +78,7 @@
   function formatLocalTime(isoUtc) {
     if (!isoUtc) return "";
     var d = new Date(String(isoUtc));
-    if (Number.isNaN(d.getTime())) return String(isoUtc);
+    if (isNaN(d.getTime())) return String(isoUtc);
     return d.toLocaleString(undefined, {
       year: "numeric",
       month: "2-digit",
@@ -131,7 +94,7 @@
       .then((r) => r.text().then((t) => {
           try {
             return JSON.parse(t);
-          } catch {
+          } catch (e) {
             return {
               ok: false,
               error: "bad json",
@@ -150,7 +113,7 @@
     }).then((r) => r.text().then((t) => {
         try {
           return JSON.parse(t);
-        } catch {
+        } catch (e) {
           return {
             ok: false,
             error: "bad json",
@@ -166,7 +129,7 @@
     b = String(b || "").replace(/^\/+/, "");
     if (!a) return b;
     if (!b) return a;
-    return `${a}/${b}`;
+    return a + "/" + b;
   }
 
   function parentRel(p) {
@@ -197,6 +160,9 @@
   var dirty = { issueId: false, commitMsg: false, patchPath: false };
   var latestToken = "";
   var lastAutofillClearedToken = "";
+  var autofillTimer = null;
+
+  var patchStatTimer = null;
   var patchStatInFlight = false;
 
   var suppressIdleOutput = false;
@@ -208,7 +174,7 @@
   var parseSeq = 0;
 
   function patchesRootRel() {
-    var p = (cfg?.paths?.patches_root) ? String(cfg.paths.patches_root) : "patches";
+    var p = (cfg && cfg.paths && cfg.paths.patches_root) ? String(cfg.paths.patches_root) : "patches";
     return p.replace(/\/+$/, "");
   }
 
@@ -216,7 +182,7 @@
     var pfx = patchesRootRel();
     var p = String(path || "").replace(/^\/+/, "");
     if (p === pfx) return "";
-    if (p.indexOf(`${pfx}/`) === 0) return p.slice(pfx.length + 1);
+    if (p.indexOf(pfx + "/") === 0) return p.slice(pfx.length + 1);
     return p;
   }
 
@@ -226,7 +192,7 @@
 
     var pfx = patchesRootRel();
     if (p === pfx) return pfx;
-    if (p.indexOf(`${pfx}/`) === 0) return p;
+    if (p.indexOf(pfx + "/") === 0) return p;
     return joinRel(pfx, p);
   }
 
@@ -245,7 +211,7 @@
     var rel = stripPatchesPrefix(full);
 
     patchStatInFlight = true;
-    apiGet(`/api/fs/stat?path=${encodeURIComponent(rel)}`).then((r) => {
+    apiGet("/api/fs/stat?path=" + encodeURIComponent(rel)).then((r) => {
       patchStatInFlight = false;
       if (!r || r.ok === false) return;
       if (r.exists === false) clearRunFieldsBecauseMissingPatch();
@@ -261,12 +227,12 @@
 
   function fsUpdateSelCount() {
     var n = 0;
-    for (const k in fsChecked) {
+    for (var k in fsChecked) {
       if (Object.hasOwn(fsChecked, k)) n += 1;
     }
     var node = el("fsSelCount");
     if (node) {
-      node.textContent = n ? (`selected: ${String(n)}`) : "";
+      node.textContent = n ? ("selected: " + String(n)) : "";
     }
     return n;
   }
@@ -278,7 +244,7 @@
 
   function fsDownloadSelected() {
     var paths = [];
-    for (const k in fsChecked) {
+    for (var k in fsChecked) {
       if (Object.hasOwn(fsChecked, k)) paths.push(k);
     }
     if (!paths.length) {
@@ -294,7 +260,7 @@
     }).then((r) => {
       if (!r.ok) {
         return r.text().then((t) => {
-          setFsHint(`archive failed: ${String(t || r.status)}`);
+          setFsHint("archive failed: " + String(t || r.status));
         });
       }
       return r.blob().then((blob) => {
@@ -308,7 +274,7 @@
         setTimeout(() => { URL.revokeObjectURL(url); }, 1000);
       });
     }).catch((e) => {
-      setFsHint(`archive failed: ${String(e)}`);
+      setFsHint("archive failed: " + String(e));
     });
   }
 
@@ -352,8 +318,8 @@
 
       if (!r || r.ok === false) {
         clearParsedState();
-        setParseHint(`Parse failed: ${String((r?.error) || "")}`);
-        setUiError(String((r?.error) || "parse failed"));
+        setParseHint("Parse failed: " + String((r && r.error) || ""));
+        setUiError(String((r && r.error) || "parse failed"));
         validateAndPreview();
         return;
       }
@@ -393,7 +359,7 @@
 
   function refreshFs() {
     var path = el("fsPath").value || "";
-    apiGet(`/api/fs/list?path=${encodeURIComponent(path)}`).then((r) => {
+    apiGet("/api/fs/list?path=" + encodeURIComponent(path)).then((r) => {
       if (!r || r.ok === false) {
         setPre("fsList", r);
         return;
@@ -406,9 +372,9 @@
         var rel = joinRel(path, name);
         fsLastRels.push(rel);
 
-        var displayName = isDir ? (`${name}/`) : name;
+        var displayName = isDir ? (name + "/") : name;
         var isSelected = (fsSelected === rel);
-        var cls = `item fsitem${isSelected ? " selected" : ""}`;
+        var cls = "item fsitem" + (isSelected ? " selected" : "");
         var checked = fsChecked[rel] ? " checked" : "";
 
         var dl = "";
@@ -451,7 +417,7 @@
           ev.stopPropagation();
           var rel = node.getAttribute("data-rel") || "";
           if (!rel) return;
-          window.location.href = `/api/fs/download?path=${encodeURIComponent(rel)}`;
+          window.location.href = "/api/fs/download?path=" + encodeURIComponent(rel);
         });
       });
 
@@ -469,19 +435,19 @@
           }
 
           fsSelected = rel;
-          setFsHint(`focused: ${rel}`);
+          setFsHint("focused: " + rel);
 
           if (/\.(zip|patch|diff)$/i.test(rel)) {
             el("patchPath").value = normalizePatchPath(rel);
 
-            let m = null;
+            var m = null;
             if (issueRegex) {
-              try { m = issueRegex.exec(rel); } catch { m = null; }
+              try { m = issueRegex.exec(rel); } catch (e) { m = null; }
             }
             if (!m) {
               m = /(?:issue_|#)(\d+)/i.exec(rel) || /(\d{3,6})/.exec(rel);
             }
-            if (m?.[1] && !String(el("issueId").value || "").trim()) {
+            if (m && m[1] && !String(el("issueId").value || "").trim()) {
               el("issueId").value = String(m[1]);
             }
             validateAndPreview();
@@ -497,15 +463,11 @@
     var q = [];
     var issue = String(el("runsIssue").value || "").trim();
     var res = String(el("runsResult").value || "");
-    if (issue) q.push(`issue_id=${encodeURIComponent(issue)}`);
-    if (res) q.push(`result=${encodeURIComponent(res)}`);
+    if (issue) q.push("issue_id=" + encodeURIComponent(issue));
+    if (res) q.push("result=" + encodeURIComponent(res));
     q.push("limit=80");
 
-    var url = `/api/runs?${q.join("&")}`;
-
-    var fetcher = PatchHubRefreshPolicy?.tokenGetJson ? (cb) => PatchHubRefreshPolicy.tokenGetJson(url, `runs:${q.join("&")}`).then((r) => cb(r?.data)) : (cb) => apiGet(url).then(cb);
-
-    fetcher((r) => {
+    apiGet("/api/runs?" + q.join("&")).then((r) => {
       if (!r || r.ok === false) {
         setPre("runsList", r);
         return;
@@ -514,7 +476,7 @@
 
       var html = runsCache.map((x, idx) => {
         var log = x.log_rel_path || "";
-        var link = log ? `<a class="linklike" href="/api/fs/download?path=${encodeURIComponent(log)}">log</a>` : "";
+        var link = log ? "<a class=\"linklike\" href=\"/api/fs/download?path=" + encodeURIComponent(log) + "\">log</a>" : "";
         var sel = (selectedRun && selectedRun.issue_id === x.issue_id && selectedRun.mtime_utc === x.mtime_utc) ? " *" : "";
         return (
           "<div class=\"item runitem\" data-idx=\"" + String(idx) + "\">" +
@@ -524,19 +486,19 @@
         );
       }).join("");
 
-      var node = el("runsList");
+      el("runsList").innerHTML = html || "<div class=\"muted\">(none)</div>";
 
-      var out = html || "<div class=\"muted\">(none)</div>";
-      if (PatchHubRefreshPolicy?.setHtmlIfChanged) PatchHubRefreshPolicy.setHtmlIfChanged(node, out, "runsList");
-      else if (node) node.innerHTML = out;
-
-      if (PatchHubRunsUI && typeof PatchHubRunsUI.bindRunsList === "function") {
-        PatchHubRunsUI.bindRunsList("runsList", () => runsCache, (run) => {
-          selectedRun = run;
-          renderIssueDetail();
-          refreshRuns();
+      Array.from(el("runsList").querySelectorAll(".runitem .name")).forEach((node) => {
+        node.addEventListener("click", () => {
+          var item = node.parentElement;
+          var idx = parseInt(item.getAttribute("data-idx") || "-1", 10);
+          if (idx >= 0 && idx < runsCache.length) {
+            selectedRun = runsCache[idx];
+            renderIssueDetail();
+            refreshRuns();
+          }
         });
-      }
+      });
     });
   }
 
@@ -562,7 +524,7 @@
       lastRunLogPath = logRel;
       var box = el("lastRunLog");
       var wantFollow = isNearBottom(box, 24);
-      var url = `/api/fs/read_text?path=${encodeURIComponent(logRel)}&tail_lines=2000`;
+      var url = "/api/fs/read_text?path=" + encodeURIComponent(logRel) + "&tail_lines=2000";
       apiGet(url).then((rt) => {
         if (!rt || rt.ok === false) {
           setPre("lastRunLog", rt);
@@ -588,9 +550,9 @@
     }
 
     var linesQ = encodeURIComponent(String(tailLines));
-    var url = `/api/runner/tail?lines=${linesQ}`;
+    var url = "/api/runner/tail?lines=" + linesQ;
     if (jid) {
-      url = `/api/jobs/${encodeURIComponent(String(jid))}/log_tail?lines=${linesQ}`;
+      url = "/api/jobs/" + encodeURIComponent(String(jid)) + "/log_tail?lines=" + linesQ;
     }
     apiGet(url).then((r) => {
       if (!r || r.ok === false) {
@@ -602,35 +564,286 @@
     });
   }
 
+
+  function parseProgressFromText(text) {
+    var lines = String(text || "").split(/\r?\n/);
+    var order = [];
+    var state = {};
+    var currentRunning = "";
+
+    function normStepName(s) {
+      return String(s || "").replace(/\s+/g, " ").trim();
+    }
+
+    function ensureStep(name) {
+      if (!name) return;
+      if (!Object.hasOwn(state, name)) {
+        state[name] = "pending";
+      }
+      if (order.indexOf(name) < 0) order.push(name);
+    }
+
+    function setState(name, st) {
+      name = normStepName(name);
+      if (!name) return;
+      ensureStep(name);
+      state[name] = st;
+    }
+
+    for (var i = 0; i < lines.length; i++) {
+      var raw = String(lines[i] || "");
+      var s = raw.trim();
+      if (!s) continue;
+
+      if (s.indexOf("DO:") === 0) {
+        var stepDo = normStepName(s.slice(3));
+        setState(stepDo, "running");
+        currentRunning = stepDo;
+        continue;
+      }
+
+      if (s.indexOf("OK:") === 0) {
+        var stepOk = normStepName(s.slice(3));
+        setState(stepOk, "ok");
+        if (currentRunning === stepOk) currentRunning = "";
+        continue;
+      }
+
+      if (s.indexOf("FAIL:") === 0) {
+        var stepFail = normStepName(s.slice(5));
+        setState(stepFail, "fail");
+        if (currentRunning === stepFail) currentRunning = "";
+        continue;
+      }
+
+      if (s.indexOf("ERROR:") === 0 || s === "FAIL" || s.indexOf("FAIL ") === 0) {
+        if (currentRunning) setState(currentRunning, "fail");
+      }
+    }
+
+    if (currentRunning) {
+      for (var j = 0; j < order.length; j++) {
+        var nm = order[j];
+        if (state[nm] === "running" && nm !== currentRunning) {
+          state[nm] = "pending";
+        }
+      }
+    }
+
+    for (var k = 0; k < order.length; k++) {
+      var nm2 = order[k];
+      if (!Object.hasOwn(state, nm2)) state[nm2] = "pending";
+    }
+
+    return { order: order, state: state };
+  }
+
+  function pickProgressSummaryLine(text) {
+    var lines = String(text || "").split(/\r?\n/);
+    for (var i = lines.length - 1; i >= 0; i--) {
+      var s = String(lines[i] || "").trim();
+      if (!s) continue;
+
+      if (s.indexOf("RESULT:") === 0) return s;
+      if (s.indexOf("STATUS:") === 0) return s;
+      if (s.indexOf("FAIL:") === 0) return s;
+      if (s.indexOf("OK:") === 0) return s;
+      if (s.indexOf("DO:") === 0) return s;
+    }
+    return "(idle)";
+  }
+
+  function renderProgressSteps(progress) {
+    var box = el("progressSteps");
+    if (!box) return;
+
+    var order = (progress && progress.order) ? progress.order : [];
+    var state = (progress && progress.state) ? progress.state : {};
+
+    if (!order.length) {
+      box.innerHTML = "";
+      return;
+    }
+
+    var html = "";
+    for (var i = 0; i < order.length; i++) {
+      var name = order[i];
+      var st = state[name] || "pending";
+      html += "<div class=\"step\">";
+      html += "<span class=\"dot " + escapeHtml(st) + "\"></span>";
+      html += "<span class=\"step-name\">" + escapeHtml(name) + "</span>";
+      if (st === "running") {
+        html += "<span class=\"pill running\">RUNNING</span>";
+      }
+      html += "</div>";
+    }
+
+    box.innerHTML = html;
+  }
+
+  function renderProgressSummary(summaryLine) {
+    var node = el("progressSummary");
+    if (!node) return;
+    node.textContent = summaryLine || "(idle)";
+  }
+
   function updateShortProgressFromText(text) {
-    return PatchHubProgress.updateShortProgressFromText(text);
+    var progress = parseProgressFromText(text);
+    renderProgressSteps(progress);
+    renderProgressSummary(pickProgressSummaryLine(text));
+  }
+
+  function normStepName(s) {
+    return String(s || "").replace(/\s+/g, " ").trim();
   }
 
   function deriveProgressFromEvents(events) {
-    return PatchHubProgress.deriveProgressFromEvents(events);
+    var order = [];
+    var state = {};
+    var currentRunning = "";
+    var resultStatus = "";
+
+    function ensureStep(name) {
+      if (!name) return;
+      if (!Object.hasOwn(state, name)) {
+        state[name] = "pending";
+      }
+      if (order.indexOf(name) < 0) order.push(name);
+    }
+
+    function setState(name, st) {
+      name = normStepName(name);
+      if (!name) return;
+      ensureStep(name);
+      state[name] = st;
+    }
+
+    for (var i = 0; i < (events || []).length; i++) {
+      var ev = events[i];
+      if (!ev || typeof ev !== "object") continue;
+      var t = String(ev.type || "");
+
+      if (t === "result") {
+        resultStatus = ev.ok ? "success" : "fail";
+        continue;
+      }
+
+      if (t !== "log") continue;
+
+      var kind = String(ev.kind || "");
+      if (kind !== "DO" && kind !== "OK" && kind !== "FAIL") continue;
+
+      var stage = normStepName(ev.stage || "");
+      if (!stage) continue;
+
+      if (kind === "DO") {
+        setState(stage, "running");
+        currentRunning = stage;
+        continue;
+      }
+
+      if (kind === "OK") {
+        setState(stage, "ok");
+        if (currentRunning === stage) currentRunning = "";
+        continue;
+      }
+
+      if (kind === "FAIL") {
+        setState(stage, "fail");
+        if (currentRunning === stage) currentRunning = "";
+      }
+    }
+
+    if (currentRunning) {
+      for (var j = 0; j < order.length; j++) {
+        var nm = order[j];
+        if (state[nm] === "running" && nm !== currentRunning) {
+          state[nm] = "pending";
+        }
+      }
+    }
+
+    for (var k = 0; k < order.length; k++) {
+      var nm2 = order[k];
+      if (!Object.hasOwn(state, nm2)) state[nm2] = "pending";
+    }
+
+    return { order: order, state: state, resultStatus: resultStatus };
   }
 
   function deriveProgressSummaryFromEvents(events, progress) {
-    return PatchHubProgress.deriveProgressSummaryFromEvents(events, progress);
+    var lastResult = null;
+    var lastLog = null;
+    for (var i = (events || []).length - 1; i >= 0; i--) {
+      var ev = events[i];
+      if (!ev || typeof ev !== "object") continue;
+      var t = String(ev.type || "");
+      if (t === "result") {
+        lastResult = ev;
+        break;
+      }
+      if (t === "log") {
+        var kind = String(ev.kind || "");
+        if (kind === "DO" || kind === "OK" || kind === "FAIL") {
+          lastLog = ev;
+          break;
+        }
+      }
+    }
+
+    if (lastResult) {
+      return {
+        text: lastResult.ok ? "RESULT: SUCCESS" : "RESULT: FAIL",
+        status: lastResult.ok ? "success" : "fail"
+      };
+    }
+
+    if (lastLog) {
+      var stage = normStepName(lastLog.stage || "");
+      var kind = String(lastLog.kind || "");
+      if (kind === "FAIL") {
+        return { text: "FAIL: " + stage, status: "fail" };
+      }
+      if (kind === "OK") {
+        return { text: "OK: " + stage, status: "running" };
+      }
+      if (kind === "DO") {
+        return { text: "DO: " + stage, status: "running" };
+      }
+    }
+
+    if (progress && progress.order && progress.order.length) {
+      return { text: "STATUS: RUNNING", status: "running" };
+    }
+    return { text: "(idle)", status: "idle" };
   }
 
   function setProgressSummaryState(summary) {
-    return PatchHubProgress.setProgressSummaryState(summary);
+    var node = el("progressSummary");
+    if (!node) return;
+    var st = (summary && summary.status) ? String(summary.status) : "idle";
+    node.classList.remove("success", "fail", "running", "idle", "muted");
+    node.classList.add(st);
+    if (st === "idle") node.classList.add("muted");
   }
 
   function updateProgressPanelFromEvents() {
-    return PatchHubProgress.updateProgressPanelFromEvents(liveEvents);
+    var progress = deriveProgressFromEvents(liveEvents);
+    renderProgressSteps(progress);
+    var summary = deriveProgressSummaryFromEvents(liveEvents, progress);
+    renderProgressSummary(summary.text);
+    setProgressSummaryState(summary);
   }
 
   function refreshStats() {
-    apiGet("/api/debug/diagnostics?include_stats=1").then((r) => {
+    apiGet("/api/debug/diagnostics").then((r) => {
       if (!r || r.ok === false) {
         setPre("stats", r);
         return;
       }
       var s = (r.stats || {});
       var all = s.all_time || {};
-      const lines = [];
+      var lines = [];
       lines.push({ k: "all_time.total", v: String(all.total || 0) });
       lines.push({ k: "all_time.success", v: String(all.success || 0) });
       lines.push({ k: "all_time.fail", v: String(all.fail || 0) });
@@ -639,14 +852,14 @@
 
       (s.windows || []).forEach((w) => {
         var d = w.days;
-        lines.push({ k: `${String(d)}d.total`, v: String(w.total || 0) });
-        lines.push({ k: `${String(d)}d.success`, v: String(w.success || 0) });
-        lines.push({ k: `${String(d)}d.fail`, v: String(w.fail || 0) });
-        lines.push({ k: `${String(d)}d.unknown`, v: String(w.unknown || 0) });
-        lines.push({ k: `${String(d)}d.canceled`, v: String(w.canceled || 0) });
+        lines.push({ k: String(d) + "d.total", v: String(w.total || 0) });
+        lines.push({ k: String(d) + "d.success", v: String(w.success || 0) });
+        lines.push({ k: String(d) + "d.fail", v: String(w.fail || 0) });
+        lines.push({ k: String(d) + "d.unknown", v: String(w.unknown || 0) });
+        lines.push({ k: String(d) + "d.canceled", v: String(w.canceled || 0) });
       });
 
-      el("stats").innerHTML = lines.map((x) => `<div class="rowline"><span class="k">${escapeHtml(x.k)}</span><span class="v">${escapeHtml(x.v)}</span></div>`).join("");
+      el("stats").innerHTML = lines.map((x) => "<div class=\"rowline\"><span class=\"k\">" + escapeHtml(x.k) + "</span><span class=\"v\">" + escapeHtml(x.v) + "</span></div>").join("");
     });
   }
 
@@ -665,14 +878,14 @@
 
     var html = "";
     if (active) {
-      html += `<div><b>running</b> ${escapeHtml(active.job_id || "")}</div>`;
-      html += `<div class="muted">mode=${escapeHtml(active.mode || "")} issue=${escapeHtml(active.issue_id || "")}</div>`;
+      html += "<div><b>running</b> " + escapeHtml(active.job_id || "") + "</div>";
+      html += "<div class=\"muted\">mode=" + escapeHtml(active.mode || "") + " issue=" + escapeHtml(active.issue_id || "") + "</div>";
       html += "<div class=\"row\"><button class=\"btn btn-small\" id=\"cancelActive\">Cancel</button>";
-      html += `<a class="linklike" href="/api/jobs/log_tail?job_id=${encodeURIComponent(active.job_id || "")}">log</a></div>`;
+      html += "<a class=\"linklike\" href=\"/api/jobs/log_tail?job_id=" + encodeURIComponent(active.job_id || "") + "\">log</a></div>";
     }
 
     if (queued.length) {
-      html += `<div style="margin-top:6px"><b>queued</b>: ${String(queued.length)}</div>`;
+      html += "<div style=\"margin-top:6px\"><b>queued</b>: " + String(queued.length) + "</div>";
     }
 
     box.innerHTML = html;
@@ -690,18 +903,18 @@
   
   function loadLiveJobId() {
   var v = null;
-  try { v = localStorage.getItem("amp.liveJobId"); } catch { v = null; }
+  try { v = localStorage.getItem("amp.liveJobId"); } catch (e) { v = null; }
   if (!v) return null;
   return String(v);
 }
 
 function saveLiveJobId(jobId) {
-  try { localStorage.setItem("amp.liveJobId", String(jobId || "")); } catch {}
+  try { localStorage.setItem("amp.liveJobId", String(jobId || "")); } catch (e) {}
 }
 
 function loadLiveLevel() {
     var v = null;
-    try { v = localStorage.getItem("amp.liveLogLevel"); } catch { v = null; }
+    try { v = localStorage.getItem("amp.liveLogLevel"); } catch (e) { v = null; }
     if (!v) return;
     v = String(v);
     if (["quiet", "normal", "warning", "verbose", "debug"].indexOf(v) >= 0) {
@@ -711,22 +924,22 @@ function loadLiveLevel() {
 
   function loadUiVisibility() {
     var v = null;
-    try { v = localStorage.getItem("amp.ui.runsVisible"); } catch { v = null; }
+    try { v = localStorage.getItem("amp.ui.runsVisible"); } catch (e) { v = null; }
     if (v === "1") runsVisible = true;
     else if (v === "0") runsVisible = false;
 
     v = null;
-    try { v = localStorage.getItem("amp.ui.jobsVisible"); } catch { v = null; }
+    try { v = localStorage.getItem("amp.ui.jobsVisible"); } catch (e) { v = null; }
     if (v === "1") jobsVisible = true;
     else if (v === "0") jobsVisible = false;
   }
 
   function saveRunsVisible(v) {
-    try { localStorage.setItem("amp.ui.runsVisible", v ? "1" : "0"); } catch {}
+    try { localStorage.setItem("amp.ui.runsVisible", v ? "1" : "0"); } catch (e) {}
   }
 
   function saveJobsVisible(v) {
-    try { localStorage.setItem("amp.ui.jobsVisible", v ? "1" : "0"); } catch {}
+    try { localStorage.setItem("amp.ui.jobsVisible", v ? "1" : "0"); } catch (e) {}
   }
 
   function setRunsVisible(v) {
@@ -755,9 +968,17 @@ function loadLiveLevel() {
     return selectedJobId || activeJobId || null;
   }
 
+  function closeLiveStream() {
+    if (liveES) {
+      try { liveES.close(); } catch (e) {}
+    }
+    liveES = null;
+    liveStreamJobId = null;
+  }
+
   function filterLiveEvent(ev) {
     if (!ev) return false;
-    const t = String(ev.type || "");
+    var t = String(ev.type || "");
     if (t === "result") return true;
     if (t === "hello") return liveLevel === "debug";
     if (t !== "log") return liveLevel === "debug";
@@ -785,28 +1006,26 @@ function loadLiveLevel() {
 
 
   function formatLiveEvent(ev) {
-    const t = String(ev.type || "");
+    var t = String(ev.type || "");
     if (t === "hello") {
-      return (
-        `HELLO protocol=${String(ev.protocol || "")}`
-        + ` mode=${String(ev.runner_mode || "")}`
-        + ` issue=${String(ev.issue_id || "")}`
-      );
+      return "HELLO protocol=" + String(ev.protocol || "") +
+        " mode=" + String(ev.runner_mode || "") +
+        " issue=" + String(ev.issue_id || "");
     }
     if (t === "result") {
-      const ok = ev.ok ? "SUCCESS" : "FAIL";
-      return `RESULT: ${ok} rc=${String(ev.return_code)}`;
+      var ok = ev.ok ? "SUCCESS" : "FAIL";
+      return "RESULT: " + ok + " rc=" + String(ev.return_code);
     }
 
-    const showPrefixes = liveLevel === "debug";
-    let line = "";
+    var showPrefixes = liveLevel === "debug";
+    var line = "";
 
     if (showPrefixes) {
-      const parts = [];
-      const stage = String(ev.stage || "");
-      const kind = String(ev.kind || "");
-      const sev = String(ev.sev || "");
-      const msg = String(ev.msg || "");
+      var parts = [];
+      var stage = String(ev.stage || "");
+      var kind = String(ev.kind || "");
+      var sev = String(ev.sev || "");
+      var msg = String(ev.msg || "");
       if (stage) parts.push(stage);
       if (kind) parts.push(kind);
       if (sev) parts.push(sev);
@@ -817,107 +1036,137 @@ function loadLiveLevel() {
     }
 
     if (ev.stdout || ev.stderr) {
-      const out = [];
+      var out = [];
       out.push(line);
-      if (ev.stdout) out.push(`STDOUT:\n${String(ev.stdout)}`);
-      if (ev.stderr) out.push(`STDERR:\n${String(ev.stderr)}`);
+      if (ev.stdout) out.push("STDOUT:\n" + String(ev.stdout));
+      if (ev.stderr) out.push("STDERR:\n" + String(ev.stderr));
       return out.join("\n");
     }
     return line;
   }
 
   function renderLiveLog() {
-    const box = el("liveLog");
+    var box = el("liveLog");
     if (!box) return;
-    const lines = [];
-    for (let i = 0; i < liveEvents.length; i++) {
-      const ev = liveEvents[i];
+    var lines = [];
+    for (var i = 0; i < liveEvents.length; i++) {
+      var ev = liveEvents[i];
       if (!filterLiveEvent(ev)) continue;
       lines.push(formatLiveEvent(ev));
     }
     box.textContent = lines.join("\n");
-    const wrap = box.parentElement;
+    var wrap = box.parentElement;
     if (wrap && wrap.classList && wrap.classList.contains("card-tight")) {
       // no-op
     }
   }
 
   function updateProgressFromEvents() {
-    const box = el("activeStage");
+    var box = el("activeStage");
     if (!box) return;
-    for (let i = liveEvents.length - 1; i >= 0; i--) {
-      const ev = liveEvents[i];
+    for (var i = liveEvents.length - 1; i >= 0; i--) {
+      var ev = liveEvents[i];
       if (!ev) continue;
       if (String(ev.type || "") === "result") {
         box.textContent = (ev.ok ? "RESULT: SUCCESS" : "RESULT: FAIL");
         return;
       }
       if (String(ev.type || "") === "log") {
-        const stage = String(ev.stage || "");
-        const kind = String(ev.kind || "");
+        var stage = String(ev.stage || "");
+        var kind = String(ev.kind || "");
         if (stage || kind) {
-          box.textContent = (stage ? stage : "") + (kind ? ` / ${kind}` : "");
+          box.textContent = (stage ? stage : "") + (kind ? " / " + kind : "");
           return;
         }
       }
     }
   }
 
-  var liveCtx = { es: null, jobId: "", getEvents: () => [] };
-
-  function closeLiveStream() {
-    try {
-      if (liveCtx && typeof liveCtx.close === "function") {
-        liveCtx.close();
-      }
-    } catch (e) {
-      PatchHubFT.report(e, "closeLiveStream");
-    }
-    liveStreamJobId = null;
-    liveES = null;
-  }
-
   function openLiveStream(jobId) {
-    if (!PatchHubLive || typeof PatchHubLive.openLiveStream !== "function") {
-      return;
-    }
-
-    var ctx = {
-      es: liveES,
-      jobId: liveStreamJobId ? String(liveStreamJobId) : "",
-      setStatus: setLiveStreamStatus,
-      onLogMaybe: (events) => {
-        liveEvents = events || [];
-        renderLiveLog();
-      },
-      onProgress: (events) => {
-        liveEvents = events || [];
-        updateProgressPanelFromEvents();
-      },
-      filterEvent: filterLiveEvent,
-      fetchJob: (id) => apiGet(`/api/jobs/${encodeURIComponent(String(id))}`),
-      maxEvents: 2000,
-      renderMaxHz: 8,
-    };
-
-    var handle = PatchHubLive.openLiveStream(jobId, ctx);
-    liveCtx = Object.assign({ close: () => {}, getEvents: () => [] }, handle || {});
-    liveES = ctx.es || null;
-    liveStreamJobId = ctx.jobId || null;
     if (!jobId) {
+      closeLiveStream();
       liveEvents = [];
       renderLiveLog();
       updateProgressPanelFromEvents();
       setLiveStreamStatus("");
+      return;
     }
+    jobId = String(jobId);
+
+    if (liveStreamJobId === jobId && liveES) return;
+
+    closeLiveStream();
+    liveStreamJobId = jobId;
+    liveEvents = [];
+    renderLiveLog();
+    updateProgressPanelFromEvents();
+    setLiveStreamStatus("connecting...");
+
+    var url = "/api/jobs/" + encodeURIComponent(jobId) + "/events";
+    var es = new EventSource(url);
+    liveES = es;
+
+    es.onmessage = (e) => {
+      if (!e || !e.data) return;
+      var obj = null;
+      try { obj = JSON.parse(String(e.data)); } catch (err) { obj = null; }
+      if (!obj) return;
+      liveEvents.push(obj);
+      if (filterLiveEvent(obj)) {
+        renderLiveLog();
+      }
+      updateProgressPanelFromEvents();
+      setLiveStreamStatus("streaming");
+    };
+
+    es.addEventListener("end", (e) => {
+      var reason = "";
+      var status = "";
+      if (e && e.data) {
+        try {
+          var p = JSON.parse(String(e.data));
+          if (p && typeof p === "object") {
+            reason = String(p.reason || "");
+            status = String(p.status || "");
+          }
+        } catch (err) {}
+      }
+      var msg = "ended";
+      if (status) msg += " (" + status + ")";
+      if (reason) msg += " [" + reason + "]";
+      setLiveStreamStatus(msg);
+      try { es.close(); } catch (e2) {}
+      if (liveES === es) {
+        liveES = null;
+      }
+    });
+
+    es.onerror = () => {
+      apiGet("/api/jobs/" + encodeURIComponent(jobId)).then((r) => {
+        if (!r || r.ok === false) {
+          closeLiveStream();
+          setLiveStreamStatus("ended [job_not_found]");
+          return;
+        }
+        var j = r.job || {};
+        var st = String(j.status || "");
+        if (st && st !== "running" && st !== "queued") {
+          closeLiveStream();
+          setLiveStreamStatus("ended (" + st + ") [job_completed]");
+          return;
+        }
+        setLiveStreamStatus("reconnecting...");
+      });
+    };
   }
+
 
   function jobSummaryCommit(msg) {
     msg = String(msg || "");
     msg = msg.replace(/\s+/g, " ").trim();
     if (!msg) return "";
     if (msg.length <= 60) return msg;
-    return `${msg.slice(0, 57)}...`;
+    return msg.slice(0, 57) + "...";
   }
 
   function jobSummaryPatchName(p) {
@@ -933,7 +1182,7 @@ function loadLiveLevel() {
     if (!startUtc || !endUtc) return "";
     var a = new Date(String(startUtc));
     var b = new Date(String(endUtc));
-    if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime())) return "";
+    if (isNaN(a.getTime()) || isNaN(b.getTime())) return "";
     var sec = (b.getTime() - a.getTime()) / 1000;
     if (sec < 0) return "";
     var s = Math.round(sec * 10) / 10;
@@ -942,9 +1191,7 @@ function loadLiveLevel() {
 
 
 function refreshJobs() {
-    var fetcher = PatchHubRefreshPolicy?.tokenGetJson ? (cb) => PatchHubRefreshPolicy.tokenGetJson("/api/jobs", "jobs").then((r) => cb(r?.data)) : (cb) => apiGet("/api/jobs").then(cb);
-
-    fetcher((r) => {
+    apiGet("/api/jobs").then((r) => {
       if (!r || r.ok === false) {
         setPre("jobsList", r);
         renderActiveJob([]);
@@ -958,7 +1205,7 @@ function refreshJobs() {
       var idleAutoSelect = !!(cfg && cfg.ui && cfg.ui.idle_auto_select_last_job);
 
       if (!selectedJobId) {
-        const saved = loadLiveJobId();
+        var saved = loadLiveJobId();
         if (saved) selectedJobId = saved;
       }
 
@@ -980,71 +1227,71 @@ function refreshJobs() {
       var html = jobs.map((j) => {
         var jobId = String(j.job_id || "");
         var isSel = selectedJobId && String(selectedJobId) === jobId;
-        var cls = `item job-item${isSel ? " selected" : ""}`;
+        var cls = "item job-item" + (isSel ? " selected" : "");
 
         var issueId = String(j.issue_id || "").trim();
-        var issueText = issueId ? (`#${issueId}`) : "(no issue)";
+        var issueText = issueId ? ("#" + issueId) : "(no issue)";
 
         var stRaw = String(j.status || "").trim().toLowerCase();
         var statusText = stRaw ? stRaw.toUpperCase() : "UNKNOWN";
-        var statusCls = `job-status st-${stRaw || "unknown"}`;
+        var statusCls = "job-status st-" + (stRaw || "unknown");
 
         var commit = jobSummaryCommit(j.commit_message || "");
         var patchName = jobSummaryPatchName(j.patch_path || "");
 
         var metaParts = [];
-        metaParts.push(`mode=${String(j.mode || "")}`);
-        if (patchName) metaParts.push(`patch=${patchName}`);
+        metaParts.push("mode=" + String(j.mode || ""));
+        if (patchName) metaParts.push("patch=" + patchName);
 
         var dur = jobSummaryDurationSeconds(j.started_utc, j.ended_utc);
-        if (dur) metaParts.push(`dur=${dur}s`);
+        if (dur) metaParts.push("dur=" + dur + "s");
 
         var meta = metaParts.join(" | ");
 
-        var line = `<div class="${cls}">`;
-        line += `<div class="name job-name" data-jobid="${escapeHtml(jobId)}">`;
+        var line = "<div class=\"" + cls + "\">";
+        line += "<div class=\"name job-name\" data-jobid=\"" + escapeHtml(jobId) + "\">";
         line += "<div class=\"job-lines\">";
         line += "<div class=\"job-top\">";
-        line += `<span class="job-issue">${escapeHtml(issueText)}</span>`;
-        line += `<span class="${escapeHtml(statusCls)}">${escapeHtml(statusText)}</span>`;
+        line += "<span class=\"job-issue\">" + escapeHtml(issueText) + "</span>";
+        line += "<span class=\"" + escapeHtml(statusCls) + "\">" + escapeHtml(statusText) + "</span>";
         line += "</div>";
         if (commit) {
-          line += `<div class="job-title">${escapeHtml(commit)}</div>`;
+          line += "<div class=\"job-title\">" + escapeHtml(commit) + "</div>";
         }
-        line += `<div class="job-meta">${escapeHtml(meta)}</div>`;
+        line += "<div class=\"job-meta\">" + escapeHtml(meta) + "</div>";
         line += "</div>";
         line += "</div>";
         line += "</div>";
         return line;
       }).join("");
-      var node = el("jobsList");
-
-      var out = html || "<div class=\"muted\">(none)</div>";
-      if (PatchHubRefreshPolicy?.setHtmlIfChanged) {
-        PatchHubRefreshPolicy.setHtmlIfChanged(node, out, "jobsList");
-      } else if (node) {
-        node.innerHTML = out;
-      }
+      el("jobsList").innerHTML = html || "<div class=\"muted\">(none)</div>";
     });
   }
 
+
   function ensureAutoRefresh(jobs) {
-    if (!PatchHubRefreshPolicy || typeof PatchHubRefreshPolicy.ensureAutoRefresh !== "function") {
+    var id = getLiveJobId();
+    var st = "";
+    if (id && jobs && jobs.length) {
+      var j = jobs.find((x) => String(x.job_id || "") === String(id)) || null;
+      st = j ? String(j.status || "") : "";
+    }
+    if (st === "running" || st === "queued") openLiveStream(id);
+    else closeLiveStream();
+
+    if (activeJobId) {
+      if (!autoRefreshTimer) {
+        autoRefreshTimer = setInterval(() => {
+          refreshJobs();
+          refreshRuns();
+        }, 1500);
+      }
       return;
     }
-    PatchHubRefreshPolicy.ensureAutoRefresh(jobs, {
-      getLiveJobId: getLiveJobId,
-      openLiveStream: openLiveStream,
-      closeLiveStream: closeLiveStream,
-      setActive: (isActive) => {
-        activeJobId = isActive ? (getLiveJobId() || activeJobId) : null;
-      },
-      pokeSoon: () => {
-        if (typeof PatchHubRefreshPolicy?.pokeSoon === "function") {
-          PatchHubRefreshPolicy.pokeSoon();
-        }
-      },
-    });
+    if (autoRefreshTimer) {
+      clearInterval(autoRefreshTimer);
+      autoRefreshTimer = null;
+    }
   }
 
   function computeCanonicalPreview(mode, issueId, commitMsg, patchPath) {
@@ -1117,13 +1364,13 @@ var ok = true;
     if (raw) {
       ok = !parseInFlight && !!lastParsed && (lastParsedRaw === raw);
       if (ok) {
-        const p = lastParsed.parsed || {};
-        const c = lastParsed.canonical || {};
+        var p = lastParsed.parsed || {};
+        var c = lastParsed.canonical || {};
         canonical = c.argv ? c.argv : [];
-        const pMode = p.mode ? p.mode : mode;
-        const pIssue = p.issue_id ? p.issue_id : issueId;
-        const pMsg = p.commit_message ? p.commit_message : commitMsg;
-        const pPatch = p.patch_path ? p.patch_path : patchPath;
+        var pMode = p.mode ? p.mode : mode;
+        var pIssue = p.issue_id ? p.issue_id : issueId;
+        var pMsg = p.commit_message ? p.commit_message : commitMsg;
+        var pPatch = p.patch_path ? p.patch_path : patchPath;
         preview = {
           mode: pMode,
           issue_id: pIssue,
@@ -1195,7 +1442,7 @@ var ok = true;
       raw_command: (el("rawCommand") ? String(el("rawCommand").value || "").trim() : "")
     };
 
-    setUiStatus(`enqueue: started mode=${mode}`);
+    setUiStatus("enqueue: started mode=" + mode);
 
 
 if (mode === "patch" || mode === "repair") {
@@ -1212,25 +1459,23 @@ if (mode === "patch" || mode === "repair") {
       pushApiStatus(r);
       setPre("previewRight", r);
       if (r && r.ok !== false && r.job_id) {
-        setUiStatus(`enqueue: ok job_id=${String(r.job_id)}`);
+        setUiStatus("enqueue: ok job_id=" + String(r.job_id));
         selectedJobId = String(r.job_id);
         saveLiveJobId(selectedJobId);
         suppressIdleOutput = false;
         openLiveStream(selectedJobId);
         refreshTail(tailLines);
-        activeJobId = selectedJobId;
-        PatchHubRefreshPolicy.pokeSoon();
-        refreshJobs();
       } else {
-        setUiError(String((r?.error) || "enqueue failed"));
+        setUiError(String((r && r.error) || "enqueue failed"));
       }
+      refreshJobs();
     });
   }
 
   function uploadFile(file) {
     var fd = new FormData();
     fd.append("file", file);
-    setUiStatus(`upload: started ${String((file && file.name) || "")}`);
+    setUiStatus("upload: started " + String((file && file.name) || ""));
     fetch("/api/upload/patch", {
       method: "POST",
       body: fd,
@@ -1239,7 +1484,7 @@ if (mode === "patch" || mode === "repair") {
       .then((r) => r.text().then((t) => {
           try {
             return JSON.parse(t);
-          } catch {
+          } catch (e) {
             return {
               ok: false,
               error: "bad json",
@@ -1253,8 +1498,8 @@ if (mode === "patch" || mode === "repair") {
         setText(
           "uploadHint",
           (j && j.ok)
-            ? (`Uploaded: ${String(j.stored_rel_path || "")}`)
-            : (`Upload failed: ${String((j && j.error) || "")}`)
+            ? ("Uploaded: " + String(j.stored_rel_path || ""))
+            : ("Upload failed: " + String((j && j.error) || ""))
         );
         if (j && j.ok) {
           setUiStatus("upload: ok");
@@ -1262,14 +1507,14 @@ if (mode === "patch" || mode === "repair") {
           setUiError(String((j && j.error) || "upload failed"));
         }
         if (j && j.stored_rel_path) {
-          const stored = String(j.stored_rel_path);
-          const n = el("patchPath");
+          var stored = String(j.stored_rel_path);
+          var n = el("patchPath");
           if (n && shouldOverwrite("patchPath", n)) {
             n.value = stored;
           }
 
-          const relUnderRoot = stripPatchesPrefix(stored);
-          const parent = parentRel(relUnderRoot);
+          var relUnderRoot = stripPatchesPrefix(stored);
+          var parent = parentRel(relUnderRoot);
           if (String(el("fsPath").value || "") === "") {
             el("fsPath").value = parent;
           }
@@ -1335,7 +1580,7 @@ if (mode === "patch" || mode === "repair") {
     if (zone) {
       zone.addEventListener("click", () => { openPicker(); });
 
-      const setDrag = (on) => {
+      function setDrag(on) {
         if (on) zone.classList.add("dragover");
         else zone.classList.remove("dragover");
       }
@@ -1365,15 +1610,15 @@ if (mode === "patch" || mode === "repair") {
     return apiGet("/api/config").then((r) => {
       cfg = r || null;
       if (cfg && cfg.issue && cfg.issue.default_regex) {
-        try { issueRegex = new RegExp(cfg.issue.default_regex); } catch { issueRegex = null; }
+        try { issueRegex = new RegExp(cfg.issue.default_regex); } catch (e) { issueRegex = null; }
       }
       if (cfg && cfg.meta && cfg.meta.version) {
-        setText("ampWebVersion", `v${String(cfg.meta.version)}`);
+        setText("ampWebVersion", "v" + String(cfg.meta.version));
       }
       refreshHeader();
       if (cfg && cfg.ui) {
         if (cfg.ui.base_font_px) {
-          document.documentElement.style.fontSize = `${String(cfg.ui.base_font_px)}px`;
+          document.documentElement.style.fontSize = String(cfg.ui.base_font_px) + "px";
         }
         if (cfg.ui.drop_overlay_enabled) {
           enableGlobalDropOverlay();
@@ -1398,21 +1643,21 @@ if (mode === "patch" || mode === "repair") {
     if (!cfg || !cfg.autofill || !p) return;
 
     if (cfg.autofill.fill_patch_path && p.stored_rel_path) {
-      const n1 = el("patchPath");
+      var n1 = el("patchPath");
       if (n1 && shouldOverwrite("patchPath", n1)) {
         n1.value = String(p.stored_rel_path);
       }
     }
 
     if (cfg.autofill.fill_issue_id && p.derived_issue != null) {
-      const n2 = el("issueId");
+      var n2 = el("issueId");
       if (n2 && shouldOverwrite("issueId", n2)) {
         n2.value = String(p.derived_issue || "");
       }
     }
 
     if (cfg.autofill.fill_commit_message && p.derived_commit_message != null) {
-      const n3 = el("commitMsg");
+      var n3 = el("commitMsg");
       if (n3 && shouldOverwrite("commitMsg", n3)) {
         n3.value = String(p.derived_commit_message || "");
       }
@@ -1436,81 +1681,71 @@ if (mode === "patch" || mode === "repair") {
     }
   }
 
-    function pollLatestPatchOnce() {
-      if (!cfg || !cfg.autofill || !cfg.autofill.enabled) return;
+  function pollLatestPatchOnce() {
+    if (!cfg || !cfg.autofill || !cfg.autofill.enabled) return;
+    apiGet("/api/patches/latest").then((r) => {
+      if (!r || r.ok === false) {
+        setUiError(String((r && r.error) || "autofill scan failed"));
+        return;
+      }
 
-      var fetcher = (PatchHubRefreshPolicy?.tokenGetJson)
-        ? () => PatchHubRefreshPolicy.tokenGetJson("/api/patches/latest", "latest_patch")
-          .then((res) => (res ? res.data : null))
-        : () => apiGet("/api/patches/latest");
+      pushApiStatus(r);
+      if (!r.found) return;
+      var token = String(r.token || "");
+      if (!token || token === latestToken) return;
+      latestToken = token;
+      applyAutofillFromPayload(r);
 
-      fetcher().then((r) => {
-        if (!r || r.unchanged === true) return;
-        if (r.ok === false) { setUiError(String(r.error || "autofill scan failed")); return; }
-
-        pushApiStatus(r);
-        if (!r.found) return;
-        var token = String(r.token || "");
-        if (!token || token === latestToken) return;
-        latestToken = token; applyAutofillFromPayload(r);
-
-        if (cfg && cfg.ui && cfg.ui.clear_output_on_autofill && token !== lastAutofillClearedToken) {
+      if (cfg && cfg.ui && cfg.ui.clear_output_on_autofill) {
+        if (token !== lastAutofillClearedToken) {
           resetOutputForNewPatch();
           lastAutofillClearedToken = token;
         }
-      });
-    }
+      }
+    });
+  }
 
-    function startAutofillPolling() {
-    if (timers.autofillTimer) {
-      clearInterval(timers.autofillTimer);
-      timers.autofillTimer = null;
+  function startAutofillPolling() {
+    if (autofillTimer) {
+      clearInterval(autofillTimer);
+      autofillTimer = null;
     }
     if (!cfg || !cfg.autofill || !cfg.autofill.enabled) return;
     var sec = parseInt(String(cfg.autofill.poll_interval_seconds || "10"), 10);
-    if (Number.isNaN(sec) || sec < 1) sec = 10;
-    timers.autofillTimer = setInterval(pollLatestPatchOnce, sec * 1000);
+    if (isNaN(sec) || sec < 1) sec = 10;
+    autofillTimer = setInterval(pollLatestPatchOnce, sec * 1000);
     pollLatestPatchOnce();
   }
 
-    function refreshHeader() {
-      var base = (cfg && cfg.server && cfg.server.host && cfg.server.port)
-        ? `server: ${cfg.server.host}:${cfg.server.port}`
-        : "";
-      var fetcher = (PatchHubRefreshPolicy?.tokenGetJson)
-        ? (cb) => PatchHubRefreshPolicy
-          .tokenGetJson("/api/debug/diagnostics?include_stats=0", "header")
-          .then((res) => cb(res?.data))
-        : (cb) => apiGet("/api/debug/diagnostics?include_stats=0").then(cb);
-
-      fetcher((d) => {
-        if (!d || d.unchanged === true || d.ok === false) return;
-        var lock = d.lock || {}, disk = d.disk || {};
-        var held = lock.held ? "LOCK:held" : "LOCK:free";
-        var pct = "";
-        if (disk.total && disk.used) {
-          pct = `disk:${String(Math.round((disk.used / disk.total) * 100))}%`;
-        }
-
-        var meta = base;
-        if (cfg && cfg.paths && cfg.paths.patches_root) meta += ` | patches: ${cfg.paths.patches_root}`;
-        meta += ` | ${held}`; if (pct) meta += ` | ${pct}`;
-
-        var node = el("hdrMeta");
-        if (PatchHubRefreshPolicy?.setTextIfChanged) {
-          PatchHubRefreshPolicy.setTextIfChanged(node, meta, "hdrMeta");
-        } else if (node) {
-          node.textContent = meta;
-        }
-      });
-
-      refreshLastRunLog();
+  function refreshHeader() {
+    var base = "";
+    if (cfg && cfg.server && cfg.server.host && cfg.server.port) {
+      base = "server: " + cfg.server.host + ":" + cfg.server.port;
     }
 
-    function setTabActive(which) {
+    apiGet("/api/debug/diagnostics").then((d) => {
+      if (!d || d.ok === false) return;
+      var lock = d.lock || {};
+      var disk = d.disk || {};
+      var held = lock.held ? "LOCK:held" : "LOCK:free";
+      var pct = "";
+      if (disk.total && disk.used) {
+        pct = "disk:" + String(Math.round((disk.used / disk.total) * 100)) + "%";
+      }
+
+      var meta = base;
+      if (cfg && cfg.paths && cfg.paths.patches_root) meta += " | patches: " + cfg.paths.patches_root;
+      meta += " | " + held;
+      if (pct) meta += " | " + pct;
+
+      if (el("hdrMeta")) el("hdrMeta").textContent = meta;
+    });
+  }
+
+  function setTabActive(which) {
     var tabs = ["Overview", "Logs", "Patch", "Diff", "Files"];
     tabs.forEach((t) => {
-      var btn = el(`tab${t}`);
+      var btn = el("tab" + t);
       if (btn) {
         if (t === which) btn.classList.add("active");
         else btn.classList.remove("active");
@@ -1523,6 +1758,7 @@ if (mode === "patch" || mode === "repair") {
     var tabs = el("issueTabs");
     var content = el("issueTabContent");
     var links = el("issueTabLinks");
+    var body = el("issueTabBody");
 
     if (!selectedRun) {
       if (cardTitle) cardTitle.textContent = "Select a run on the left.";
@@ -1532,7 +1768,7 @@ if (mode === "patch" || mode === "repair") {
     }
 
     if (cardTitle) {
-      cardTitle.textContent = `Issue #${String(selectedRun.issue_id)} (${String(selectedRun.result || "")})`;
+      cardTitle.textContent = "Issue #" + String(selectedRun.issue_id) + " (" + String(selectedRun.result || "") + ")";
     }
     if (tabs) tabs.style.display = "flex";
     if (content) content.style.display = "block";
@@ -1542,7 +1778,7 @@ if (mode === "patch" || mode === "repair") {
 
       function add(label, rel) {
         if (!rel) return;
-        parts.push(`<a class="linklike" href="/api/fs/download?path=${encodeURIComponent(rel)}">${escapeHtml(label)}</a>`);
+        parts.push("<a class=\"linklike\" href=\"/api/fs/download?path=" + encodeURIComponent(rel) + "\">" + escapeHtml(label) + "</a>");
       }
 
       add("log", selectedRun.log_rel_path);
@@ -1567,7 +1803,7 @@ if (mode === "patch" || mode === "repair") {
         return;
       }
       var p = String(selectedRun.log_rel_path);
-      var url = `/api/fs/read_text?path=${encodeURIComponent(p)}&tail_lines=2000`;
+      var url = "/api/fs/read_text?path=" + encodeURIComponent(p) + "&tail_lines=2000";
       apiGet(url).then((r) => {
         if (!r || r.ok === false) {
           setPre("issueTabBody", r);
@@ -1585,7 +1821,7 @@ if (mode === "patch" || mode === "repair") {
       setTabActive("Patch");
       renderLinks();
       if (selectedRun.archived_patch_rel_path) {
-        setPre("issueTabBody", `Download: /api/fs/download?path=${selectedRun.archived_patch_rel_path}`);
+        setPre("issueTabBody", "Download: /api/fs/download?path=" + selectedRun.archived_patch_rel_path);
       } else {
         setPre("issueTabBody", "(no archived patch)");
       }
@@ -1595,7 +1831,7 @@ if (mode === "patch" || mode === "repair") {
       setTabActive("Diff");
       renderLinks();
       if (selectedRun.diff_bundle_rel_path) {
-        setPre("issueTabBody", `Download: /api/fs/download?path=${selectedRun.diff_bundle_rel_path}`);
+        setPre("issueTabBody", "Download: /api/fs/download?path=" + selectedRun.diff_bundle_rel_path);
       } else {
         setPre("issueTabBody", "(no diff bundle)");
       }
@@ -1615,7 +1851,7 @@ if (mode === "patch" || mode === "repair") {
         setFsHint("");
         refreshFs();
       }
-      setPre("issueTabBody", `File manager path set to: ${String(el("fsPath").value || "")}`);
+      setPre("issueTabBody", "File manager path set to: " + String(el("fsPath").value || ""));
     }
 
     el("tabOverview").onclick = renderOverview;
@@ -1699,7 +1935,7 @@ if (mode === "patch" || mode === "repair") {
     if (el("fsDelete")) {
       el("fsDelete").addEventListener("click", () => {
         var paths = [];
-        for (const k in fsChecked) {
+        for (var k in fsChecked) {
           if (Object.hasOwn(fsChecked, k)) paths.push(k);
         }
         if (!paths.length && fsSelected) paths = [fsSelected];
@@ -1713,8 +1949,8 @@ if (mode === "patch" || mode === "repair") {
         paths.sort().forEach((p) => {
           seq = seq.then(() => apiPost("/api/fs/delete", { path: p }).then((r) => {
               if (!r || r.ok !== true) {
-                const err = (r && r.error) ? String(r.error) : "unknown error";
-                setFsHint(`delete failed: ${err}`);
+                var err = (r && r.error) ? String(r.error) : "unknown error";
+                setFsHint("delete failed: " + err);
                 throw new Error(err);
               }
               return r;
@@ -1726,7 +1962,7 @@ if (mode === "patch" || mode === "repair") {
           refreshFs();
         }).catch((e) => {
           if (e && e.message) {
-            setFsHint(`delete failed: ${String(e.message)}`);
+            setFsHint("delete failed: " + String(e.message));
           } else {
             setFsHint("delete failed");
           }
@@ -1785,7 +2021,7 @@ if (mode === "patch" || mode === "repair") {
     if (el("liveLevel")) {
       el("liveLevel").addEventListener("change", () => {
         liveLevel = String(el("liveLevel").value || "normal");
-        try { localStorage.setItem("amp.liveLogLevel", liveLevel); } catch {}
+        try { localStorage.setItem("amp.liveLogLevel", liveLevel); } catch (e) {}
         renderLiveLog();
         updateProgressFromEvents();
       });
@@ -1795,7 +2031,7 @@ if (mode === "patch" || mode === "repair") {
       el("jobsList").addEventListener("click", (e) => {
         var t = e && e.target ? e.target : null;
         while (t && t !== el("jobsList")) {
-          const jobId = t.getAttribute && t.getAttribute("data-jobid");
+          var jobId = t.getAttribute && t.getAttribute("data-jobid");
           if (jobId) {
             selectedJobId = String(jobId);
             saveLiveJobId(selectedJobId);
@@ -1803,9 +2039,6 @@ if (mode === "patch" || mode === "repair") {
             refreshJobs();
             openLiveStream(getLiveJobId());
             refreshTail(tailLines);
-        activeJobId = selectedJobId;
-        PatchHubRefreshPolicy.pokeSoon();
-        refreshJobs();
             return;
           }
           t = t.parentElement;
@@ -1909,22 +2142,26 @@ if (mode === "patch" || mode === "repair") {
       renderIssueDetail();
       validateAndPreview();
       startAutofillPolling();
-      var rpCtx = {
-        refreshRuns: refreshRuns,
-        refreshJobs: refreshJobs,
-        refreshHeader: refreshHeader,
-        refreshTail: () => refreshTail(tailLines),
-        tickMissingPatchClear: tickMissingPatchClear,
-        pauseLiveStream: closeLiveStream,
-        isActive: () => !!activeJobId,
-      };
 
-      if (window.PatchHubVisibilityLifecycle) window.PatchHubVisibilityLifecycle.install(rpCtx);
+      if (patchStatTimer) {
+        clearInterval(patchStatTimer);
+        patchStatTimer = null;
+      }
+      patchStatTimer = setInterval(tickMissingPatchClear, 1000);
+
+      setInterval(() => {
+        refreshJobs();
+        refreshTail(tailLines);
+      }, 2000);
+
+      setInterval(() => {
+        refreshHeader();
+      }, 5000);
 
       if (window.AmpSettings && typeof window.AmpSettings.init === "function") {
         try {
           window.AmpSettings.init();
-        } catch {
+        } catch (e) {
           // Best-effort: do not break main UI if AMP settings init fails.
         }
       }
