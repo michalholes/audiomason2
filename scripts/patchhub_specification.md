@@ -727,7 +727,7 @@ Note:
 Output:
 {
   "ok": true,
-  "jobs": [ <JobRecord JSON>, ... ]
+  "jobs": [ <JobListItem JSON>, ... ]
 }
 Jobs are the union of:
 - in-memory queue jobs, plus
@@ -911,6 +911,23 @@ JobRecord JSON schema (models.JobRecord):
 
 Notes:
 - created_utc/started_utc/ended_utc use format "%Y-%m-%dT%H:%M:%SZ".
+
+JobListItem JSON schema (used by Section 7.2.8 GET /api/jobs):
+{
+  "job_id": "<string>",
+  "status": "queued|running|success|fail|canceled|unknown",
+  "created_utc": "<UTC ISO Z string>",
+  "started_utc": "<UTC ISO Z string|null>",
+  "ended_utc": "<UTC ISO Z string|null>",
+  "mode": "patch|repair|finalize_live|finalize_workspace|rerun_latest",
+  "issue_id": "<string>",
+  "commit_message": "<string>",
+  "patch_path": "<string>"
+}
+
+Contract:
+- GET /api/jobs MUST return JobListItem JSON objects (not JobRecord JSON).
+- GET /api/jobs MUST NOT include additional keys in list items; full details are available via GET /api/jobs/<job_id>.
 
 7.3.3 POST /api/jobs/<job_id>/cancel
 Output (success):
