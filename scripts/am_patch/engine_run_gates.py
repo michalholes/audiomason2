@@ -70,6 +70,8 @@ def run_finalize_gates(
         js_command=policy.gate_js_command,
         biome_extensions=policy.gate_biome_extensions,
         biome_command=policy.gate_biome_command,
+        biome_format=policy.biome_format,
+        biome_format_command=policy.gate_biome_format_command,
         biome_autofix=policy.biome_autofix,
         biome_fix_command=policy.gate_biome_fix_command,
         typescript_extensions=policy.gate_typescript_extensions,

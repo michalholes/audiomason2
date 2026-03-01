@@ -57,6 +57,9 @@ _SECTION_BY_KEY: dict[str, str] = {
     "ruff_autofix": "",
     "ruff_autofix_legalize_outside": "",
     "ruff_format": "",
+    "biome_format": "",
+    "biome_format_legalize_outside": "",
+    "gate_biome_format_command": "",
     "gates_allow_fail": "",
     "gates_skip_ruff": "",
     "gates_skip_pytest": "",
@@ -207,6 +210,9 @@ _LABEL_BY_KEY: dict[str, str] = {
     "ruff_autofix": "Ruff: autofix",
     "ruff_autofix_legalize_outside": "Ruff: autofix legalize outside",
     "ruff_format": "Ruff: format",
+    "biome_format": "Biome: format",
+    "biome_format_legalize_outside": "Biome: format legalize outside",
+    "gate_biome_format_command": "Biome: format command",
     "biome_autofix": "Biome: autofix",
     "biome_autofix_legalize_outside": "Biome: autofix legalize outside",
     "gate_biome_fix_command": "Biome: fix command",
@@ -255,9 +261,21 @@ _HELP_BY_KEY: dict[str, str] = {
         "Run biome in autofix mode when the initial check fails. "
         "See: scripts/am_patch_policy_glossary.md## Key: biome_autofix"
     ),
+    "biome_format": (
+        "Run biome format before biome check. "
+        "See: scripts/am_patch_policy_glossary.md## Key: biome_format"
+    ),
     "biome_autofix_legalize_outside": (
         "Allow biome autofix to modify files outside the declared patch set. "
         "See: scripts/am_patch_policy_glossary.md## Key: biome_autofix_legalize_outside"
+    ),
+    "biome_format_legalize_outside": (
+        "Allow biome format to modify files outside the declared patch set. "
+        "See: scripts/am_patch_policy_glossary.md## Key: biome_format_legalize_outside"
+    ),
+    "gate_biome_format_command": (
+        "Command used for biome format gate. "
+        "See: scripts/am_patch_policy_glossary.md## Key: gate_biome_format_command"
     ),
     "mypy_targets": (
         "Targets passed to mypy. See: scripts/am_patch_policy_glossary.md## Key: mypy_targets"

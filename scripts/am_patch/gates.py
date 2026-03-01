@@ -328,6 +328,8 @@ def run_biome(
     decision_paths: list[str],
     extensions: list[str],
     command: list[str],
+    biome_format: bool,
+    format_command: list[str],
     autofix: bool,
     fix_command: list[str],
 ) -> bool:
@@ -347,6 +349,17 @@ def run_biome(
     cmd0 = [str(x) for x in command if str(x).strip()]
     if not cmd0:
         raise RunnerError("GATES", "CMD", "gate_biome_command must be non-empty")
+
+    if biome_format:
+        fmt_cmd0 = [str(x) for x in format_command if str(x).strip()]
+        if not fmt_cmd0:
+            raise RunnerError("GATES", "CMD", "gate_biome_format_command must be non-empty")
+
+        logger.section("GATE: BIOME FORMAT")
+        logger.line("gate_biome_format_cmd=" + " ".join(fmt_cmd0))
+        r0 = logger.run_logged([*fmt_cmd0, *existing], cwd=cwd)
+        if r0.returncode != 0:
+            return False
 
     logger.section("GATE: BIOME (check)")
     logger.line("gate_biome_extensions=" + ",".join(_norm_js_extensions(extensions)))
@@ -561,6 +574,8 @@ def run_gates(
     js_command: list[str],
     biome_extensions: list[str] | None = None,
     biome_command: list[str] | None = None,
+    biome_format: bool = True,
+    biome_format_command: list[str] | None = None,
     biome_autofix: bool = True,
     biome_fix_command: list[str] | None = None,
     typescript_extensions: list[str] | None = None,
@@ -585,6 +600,7 @@ def run_gates(
     order = _norm_gates_order(gates_order)
     biome_exts = biome_extensions or []
     biome_cmd = biome_command or []
+    biome_fmt_cmd = biome_format_command or []
     biome_fix_cmd = biome_fix_command or []
     ts_exts = typescript_extensions or []
     ts_cmd = typescript_command or []
@@ -647,6 +663,8 @@ def run_gates(
                 decision_paths=decision_paths,
                 extensions=biome_exts,
                 command=biome_cmd,
+                biome_format=biome_format,
+                format_command=biome_fmt_cmd,
                 autofix=biome_autofix,
                 fix_command=biome_fix_cmd,
             )

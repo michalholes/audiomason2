@@ -563,8 +563,20 @@ def parse_args(argv: list[str]) -> CliArgs:
         default=None,
     )
     p.add_argument(
+        "--biome-format",
+        dest="biome_format",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+    )
+    p.add_argument(
         "--biome-autofix-legalize-outside",
         dest="biome_autofix_legalize_outside",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+    )
+    p.add_argument(
+        "--biome-format-legalize-outside",
+        dest="biome_format_legalize_outside",
         action=argparse.BooleanOptionalAction,
         default=None,
     )
@@ -592,6 +604,14 @@ def parse_args(argv: list[str]) -> CliArgs:
         const="",
         default=None,
         help="Comma-separated command tokens for biome autofix gate (Variant B).",
+    )
+    p.add_argument(
+        "--gate-biome-format-command",
+        dest="gate_biome_format_command",
+        nargs="?",
+        const="",
+        default=None,
+        help="Comma-separated command tokens for biome format gate (Variant B).",
     )
     p.add_argument(
         "--gate-typescript-extensions",
@@ -761,9 +781,15 @@ def parse_args(argv: list[str]) -> CliArgs:
     if getattr(ns, "biome_autofix", None) is not None:
         v = "true" if bool(ns.biome_autofix) else "false"
         ns.overrides = (ns.overrides or []) + [f"biome_autofix={v}"]
+    if getattr(ns, "biome_format", None) is not None:
+        v = "true" if bool(ns.biome_format) else "false"
+        ns.overrides = (ns.overrides or []) + [f"biome_format={v}"]
     if getattr(ns, "biome_autofix_legalize_outside", None) is not None:
         v = "true" if bool(ns.biome_autofix_legalize_outside) else "false"
         ns.overrides = (ns.overrides or []) + [f"biome_autofix_legalize_outside={v}"]
+    if getattr(ns, "biome_format_legalize_outside", None) is not None:
+        v = "true" if bool(ns.biome_format_legalize_outside) else "false"
+        ns.overrides = (ns.overrides or []) + [f"biome_format_legalize_outside={v}"]
     if getattr(ns, "gate_biome_command", None) is not None:
         ns.overrides = (ns.overrides or []) + [
             f"gate_biome_command={str(ns.gate_biome_command).strip()}"
@@ -771,6 +797,10 @@ def parse_args(argv: list[str]) -> CliArgs:
     if getattr(ns, "gate_biome_fix_command", None) is not None:
         ns.overrides = (ns.overrides or []) + [
             f"gate_biome_fix_command={str(ns.gate_biome_fix_command).strip()}"
+        ]
+    if getattr(ns, "gate_biome_format_command", None) is not None:
+        ns.overrides = (ns.overrides or []) + [
+            f"gate_biome_format_command={str(ns.gate_biome_format_command).strip()}"
         ]
     if getattr(ns, "gate_typescript_extensions", None) is not None:
         ns.overrides = (ns.overrides or []) + [

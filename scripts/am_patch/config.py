@@ -153,6 +153,12 @@ class Policy(PolicyMonolithMixin):
 
     ruff_format: bool = True
 
+    biome_format: bool = True
+    biome_format_legalize_outside: bool = True
+    gate_biome_format_command: list[str] = field(
+        default_factory=lambda: ["npm", "exec", "--", "biome", "format", "--write"]
+    )
+
     gates_allow_fail: bool = False
     gates_skip_ruff: bool = False
     gates_skip_pytest: bool = False
@@ -888,7 +894,14 @@ def build_policy(defaults: Policy, cfg: dict[str, Any]) -> Policy:
     )
     _mark_cfg(p, cfg, "biome_autofix_legalize_outside")
 
-    for k in ("gate_biome_command", "gate_biome_fix_command"):
+    p.biome_format = _as_bool(cfg, "biome_format", p.biome_format)
+    _mark_cfg(p, cfg, "biome_format")
+    p.biome_format_legalize_outside = _as_bool(
+        cfg, "biome_format_legalize_outside", p.biome_format_legalize_outside
+    )
+    _mark_cfg(p, cfg, "biome_format_legalize_outside")
+
+    for k in ("gate_biome_command", "gate_biome_fix_command", "gate_biome_format_command"):
         if k not in cfg:
             continue
         raw_cmd = cfg[k]
