@@ -1,4 +1,6 @@
 (() => {
+  var FT = (window.PatchHubFT || null);
+  try {
   function el(id) {
     return document.getElementById(String(id));
   }
@@ -295,4 +297,20 @@
     setProgressSummaryState: setProgressSummaryState,
     updateProgressPanelFromEvents: updateProgressPanelFromEvents,
   };
+
+  } catch (e) {
+    if (FT) FT.report(e, "patchhub_progress.js");
+    try { console.error(e); } catch {}
+    window.PatchHubProgress = {
+      parseProgressFromText: () => ({ order: [], state: {} }),
+      pickProgressSummaryLine: () => "(idle)",
+      renderProgressSteps: () => {},
+      renderProgressSummary: () => {},
+      updateShortProgressFromText: () => {},
+      deriveProgressFromEvents: () => ({ order: [], state: {}, resultStatus: "" }),
+      deriveProgressSummaryFromEvents: () => ({ text: "(idle)", status: "idle" }),
+      setProgressSummaryState: () => {},
+      updateProgressPanelFromEvents: () => {},
+    };
+  }
 })();

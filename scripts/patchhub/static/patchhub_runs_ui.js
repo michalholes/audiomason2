@@ -1,5 +1,7 @@
 (() => {
   var FT = (window.PatchHubFT || null);
+  try {
+
 
   function el(id) {
     return document.getElementById(String(id));
@@ -44,6 +46,12 @@
     installSafe();
   } catch (e) {
     if (FT) FT.report(e, "runs.install");
+    window.PatchHubRunsUI = { bindRunsList: () => {} };
+  }
+
+  } catch (e) {
+    if (FT) FT.report(e, "patchhub_runs_ui.js");
+    try { console.error(e); } catch {}
     window.PatchHubRunsUI = { bindRunsList: () => {} };
   }
 })();

@@ -628,7 +628,7 @@
   }
 
   function refreshStats() {
-    apiGet("/api/debug/diagnostics").then((r) => {
+    apiGet("/api/debug/diagnostics?include_stats=1").then((r) => {
       if (!r || r.ok === false) {
         setPre("stats", r);
         return;
@@ -1441,31 +1441,32 @@ if (mode === "patch" || mode === "repair") {
     }
   }
 
-  function pollLatestPatchOnce() {
-    if (!cfg || !cfg.autofill || !cfg.autofill.enabled) return;
-    apiGet("/api/patches/latest").then((r) => {
-      if (!r || r.ok === false) {
-        setUiError(String((r && r.error) || "autofill scan failed"));
-        return;
-      }
+    function pollLatestPatchOnce() {
+      if (!cfg || !cfg.autofill || !cfg.autofill.enabled) return;
 
-      pushApiStatus(r);
-      if (!r.found) return;
-      var token = String(r.token || "");
-      if (!token || token === latestToken) return;
-      latestToken = token;
-      applyAutofillFromPayload(r);
+      var fetcher = (PatchHubRefreshPolicy && PatchHubRefreshPolicy.tokenGetJson)
+        ? () => PatchHubRefreshPolicy.tokenGetJson("/api/patches/latest", "latest_patch")
+          .then((res) => (res ? res.data : null))
+        : () => apiGet("/api/patches/latest");
 
-      if (cfg && cfg.ui && cfg.ui.clear_output_on_autofill) {
-        if (token !== lastAutofillClearedToken) {
+      fetcher().then((r) => {
+        if (!r || r.unchanged === true) return;
+        if (r.ok === false) { setUiError(String(r.error || "autofill scan failed")); return; }
+
+        pushApiStatus(r);
+        if (!r.found) return;
+        var token = String(r.token || "");
+        if (!token || token === latestToken) return;
+        latestToken = token; applyAutofillFromPayload(r);
+
+        if (cfg && cfg.ui && cfg.ui.clear_output_on_autofill && token !== lastAutofillClearedToken) {
           resetOutputForNewPatch();
           lastAutofillClearedToken = token;
         }
-      }
-    });
-  }
+      });
+    }
 
-  function startAutofillPolling() {
+    function startAutofillPolling() {
     if (timers.autofillTimer) {
       clearInterval(timers.autofillTimer);
       timers.autofillTimer = null;
@@ -1477,42 +1478,41 @@ if (mode === "patch" || mode === "repair") {
     pollLatestPatchOnce();
   }
 
-  function refreshHeader() {
-    var base = "";
-    if (cfg && cfg.server && cfg.server.host && cfg.server.port) {
-      base = `server: ${cfg.server.host}:${cfg.server.port}`;
+    function refreshHeader() {
+      var base = (cfg && cfg.server && cfg.server.host && cfg.server.port)
+        ? `server: ${cfg.server.host}:${cfg.server.port}`
+        : "";
+      var fetcher = (PatchHubRefreshPolicy && PatchHubRefreshPolicy.tokenGetJson)
+        ? (cb) => PatchHubRefreshPolicy
+          .tokenGetJson("/api/debug/diagnostics?include_stats=0", "header")
+          .then((res) => cb(res && res.data))
+        : (cb) => apiGet("/api/debug/diagnostics?include_stats=0").then(cb);
+
+      fetcher((d) => {
+        if (!d || d.unchanged === true || d.ok === false) return;
+        var lock = d.lock || {}, disk = d.disk || {};
+        var held = lock.held ? "LOCK:held" : "LOCK:free";
+        var pct = "";
+        if (disk.total && disk.used) {
+          pct = `disk:${String(Math.round((disk.used / disk.total) * 100))}%`;
+        }
+
+        var meta = base;
+        if (cfg && cfg.paths && cfg.paths.patches_root) meta += ` | patches: ${cfg.paths.patches_root}`;
+        meta += ` | ${held}`; if (pct) meta += ` | ${pct}`;
+
+        var node = el("hdrMeta");
+        if (PatchHubRefreshPolicy && PatchHubRefreshPolicy.setTextIfChanged) {
+          PatchHubRefreshPolicy.setTextIfChanged(node, meta, "hdrMeta");
+        } else if (node) {
+          node.textContent = meta;
+        }
+      });
+
+      refreshLastRunLog();
     }
-    var fetcher = (PatchHubRefreshPolicy && PatchHubRefreshPolicy.tokenGetJson)
-      ? (cb) => PatchHubRefreshPolicy.tokenGetJson("/api/debug/diagnostics", "header").then((res) => cb(res && res.data))
-      : (cb) => apiGet("/api/debug/diagnostics").then(cb);
 
-    fetcher((d) => {
-      if (!d || d.ok === false) return;
-      var lock = d.lock || {};
-      var disk = d.disk || {};
-      var held = lock.held ? "LOCK:held" : "LOCK:free";
-      var pct = "";
-      if (disk.total && disk.used) {
-        pct = `disk:${String(Math.round((disk.used / disk.total) * 100))}%`;
-      }
-
-      var meta = base;
-      if (cfg && cfg.paths && cfg.paths.patches_root) meta += ` | patches: ${cfg.paths.patches_root}`;
-      meta += ` | ${held}`;
-      if (pct) meta += ` | ${pct}`;
-
-      var node = el("hdrMeta");
-      if (PatchHubRefreshPolicy && PatchHubRefreshPolicy.setTextIfChanged) {
-        PatchHubRefreshPolicy.setTextIfChanged(node, meta, "hdrMeta");
-      } else if (node) {
-        node.textContent = meta;
-      }
-    });
-
-    refreshLastRunLog();
-  }
-
-  function setTabActive(which) {
+    function setTabActive(which) {
     var tabs = ["Overview", "Logs", "Patch", "Diff", "Files"];
     tabs.forEach((t) => {
       var btn = el(`tab${t}`);

@@ -1,5 +1,7 @@
 (() => {
   var FT = (window.PatchHubFT || null);
+  try {
+
 
   function noop() {}
 
@@ -190,6 +192,13 @@
     installSafe();
   } catch (e) {
     if (FT) FT.report(e, "live.install_outer");
+    window.PatchHubLive = { openLiveStream: () => ({ close: noop, getEvents: () => [] }) };
+  }
+
+  } catch (e) {
+    if (FT) FT.report(e, "patchhub_live_events.js");
+    try { console.error(e); } catch {}
+    function noop() {}
     window.PatchHubLive = { openLiveStream: () => ({ close: noop, getEvents: () => [] }) };
   }
 })();

@@ -33,7 +33,7 @@
   function buildUrlWithToken(path, token) {
     if (!token) return path;
     var sep = path.includes("?") ? "&" : "?";
-    return `${path}${sep}token=${encodeURIComponent(String(token))}`;
+    return `${path}${sep}last_token=${encodeURIComponent(String(token))}`;
   }
 
   function createTokenClient() {
