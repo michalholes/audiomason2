@@ -75,8 +75,8 @@ _SECTION_BY_KEY: dict[str, str] = {
     "gates_skip_typescript": "",
     "gate_typescript_extensions": "",
     "gate_typescript_command": "",
-    "gates_on_partial_apply": "",
-    "gates_on_zero_apply": "",
+    "apply_failure_partial_gates_policy": "",
+    "apply_failure_zero_gates_policy": "",
     "gate_docs_include": "",
     "gate_docs_exclude": "",
     "gate_docs_required_files": "",
@@ -416,6 +416,8 @@ _ENUM_BY_KEY: dict[str, list[str]] = {
     "gate_monolith_scan_scope": ["patch", "workspace"],
     "gate_monolith_on_parse_error": ["fail", "warn"],
     "live_changed_resolution": ["fail", "overwrite_live", "overwrite_workspace"],
+    "apply_failure_partial_gates_policy": ["never", "always", "repair_only"],
+    "apply_failure_zero_gates_policy": ["never", "always", "repair_only"],
 }
 
 

@@ -183,8 +183,8 @@ class Policy(PolicyMonolithMixin):
     gate_typescript_command: list[str] = field(
         default_factory=lambda: ["tsc", "--noEmit", "--pretty", "false"]
     )
-    gates_on_partial_apply: bool = False
-    gates_on_zero_apply: bool = False
+    apply_failure_partial_gates_policy: str = "repair_only"
+    apply_failure_zero_gates_policy: str = "never"
     gate_docs_include: list[str] = field(default_factory=lambda: ["src", "plugins"])
     gate_docs_exclude: list[str] = field(default_factory=lambda: ["badguys", "patches"])
     gate_docs_required_files: list[str] = field(
@@ -250,6 +250,12 @@ def _as_bool(d: dict[str, Any], k: str, default: bool) -> bool:
 def _as_str(d: dict[str, Any], k: str, default: str | None) -> str | None:
     v = d.get(k, default)
     return None if v is None else str(v)
+
+
+def _as_str_required(d: dict[str, Any], k: str, default: str) -> str:
+    v = _as_str(d, k, default)
+    assert v is not None
+    return v
 
 
 def _as_rollback_mode(d: dict[str, Any], k: str, default: str) -> str:
@@ -703,10 +709,14 @@ def build_policy(defaults: Policy, cfg: dict[str, Any]) -> Policy:
 
     p.gates_allow_fail = _as_bool(cfg, "gates_allow_fail", p.gates_allow_fail)
     _mark_cfg(p, cfg, "gates_allow_fail")
-    p.gates_on_partial_apply = _as_bool(cfg, "gates_on_partial_apply", p.gates_on_partial_apply)
-    _mark_cfg(p, cfg, "gates_on_partial_apply")
-    p.gates_on_zero_apply = _as_bool(cfg, "gates_on_zero_apply", p.gates_on_zero_apply)
-    _mark_cfg(p, cfg, "gates_on_zero_apply")
+    p.apply_failure_partial_gates_policy = _as_str_required(
+        cfg, "apply_failure_partial_gates_policy", p.apply_failure_partial_gates_policy
+    )
+    _mark_cfg(p, cfg, "apply_failure_partial_gates_policy")
+    p.apply_failure_zero_gates_policy = _as_str_required(
+        cfg, "apply_failure_zero_gates_policy", p.apply_failure_zero_gates_policy
+    )
+    _mark_cfg(p, cfg, "apply_failure_zero_gates_policy")
 
     p.gates_skip_ruff = _as_bool(cfg, "gates_skip_ruff", p.gates_skip_ruff)
     _mark_cfg(p, cfg, "gates_skip_ruff")

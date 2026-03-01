@@ -130,8 +130,8 @@ pytest_use_venv = true
 
 # Canonical (supported by runner; missing in your file)
 gates_allow_fail = false
-gates_on_partial_apply = true
-gates_on_zero_apply = false
+apply_failure_partial_gates_policy = "repair_only"
+apply_failure_zero_gates_policy = "never"
 
 gates_skip_ruff = false
 # Canonical (supported by runner; missing in your file)

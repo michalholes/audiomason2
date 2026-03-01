@@ -102,8 +102,8 @@ class CliArgs:
     skip_js: bool | None
     skip_docs: bool | None
     skip_monolith: bool | None
-    gates_on_partial_apply: bool | None
-    gates_on_zero_apply: bool | None
+    apply_failure_partial_gates_policy: str | None
+    apply_failure_zero_gates_policy: str | None
     docs_include: str | None
     docs_exclude: str | None
     gates_order: str | None
@@ -583,16 +583,20 @@ def parse_args(argv: list[str]) -> CliArgs:
     )
 
     p.add_argument(
-        "--gates-on-partial-apply",
-        dest="gates_on_partial_apply",
-        action="store_true",
+        "--apply-failure-partial-gates-policy",
+        dest="apply_failure_partial_gates_policy",
+        choices=["never", "always", "repair_only"],
+        type=str,
         default=None,
+        metavar="{never,always,repair_only}",
     )
     p.add_argument(
-        "--gates-on-zero-apply",
-        dest="gates_on_zero_apply",
-        action="store_true",
+        "--apply-failure-zero-gates-policy",
+        dest="apply_failure_zero_gates_policy",
+        choices=["never", "always", "repair_only"],
+        type=str,
         default=None,
+        metavar="{never,always,repair_only}",
     )
     p.add_argument("--docs-include", dest="docs_include", nargs="?", const="", default=None)
     p.add_argument("--docs-exclude", dest="docs_exclude", nargs="?", const="", default=None)
@@ -793,8 +797,10 @@ def parse_args(argv: list[str]) -> CliArgs:
             skip_js=getattr(ns, "skip_js", None),
             skip_docs=getattr(ns, "skip_docs", None),
             skip_monolith=getattr(ns, "skip_monolith", None),
-            gates_on_partial_apply=getattr(ns, "gates_on_partial_apply", None),
-            gates_on_zero_apply=getattr(ns, "gates_on_zero_apply", None),
+            apply_failure_partial_gates_policy=getattr(
+                ns, "apply_failure_partial_gates_policy", None
+            ),
+            apply_failure_zero_gates_policy=getattr(ns, "apply_failure_zero_gates_policy", None),
             docs_include=getattr(ns, "docs_include", None),
             docs_exclude=getattr(ns, "docs_exclude", None),
             gates_order=ns.gates_order,
@@ -880,8 +886,8 @@ def parse_args(argv: list[str]) -> CliArgs:
         skip_js=getattr(ns, "skip_js", None),
         skip_docs=getattr(ns, "skip_docs", None),
         skip_monolith=getattr(ns, "skip_monolith", None),
-        gates_on_partial_apply=getattr(ns, "gates_on_partial_apply", None),
-        gates_on_zero_apply=getattr(ns, "gates_on_zero_apply", None),
+        apply_failure_partial_gates_policy=getattr(ns, "apply_failure_partial_gates_policy", None),
+        apply_failure_zero_gates_policy=getattr(ns, "apply_failure_zero_gates_policy", None),
         docs_include=getattr(ns, "docs_include", None),
         docs_exclude=getattr(ns, "docs_exclude", None),
         gates_order=ns.gates_order,

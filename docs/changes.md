@@ -1,3 +1,7 @@
+## 2026-03-01T00:00:00+01:00
+
+- spec/tooling: Replace gates_on_partial_apply/gates_on_zero_apply with apply_failure_*_gates_policy (defaults: repair_only/never).
+
 ## 2026-02-26T00:00:00+01:00
 
 - Issue 267: Import UI Flow Editor - row click selects step, drag handle grip for reorder, and per-row actions reduced to trash only.

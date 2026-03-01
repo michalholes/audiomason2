@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from am_patch import git_ops, runtime
+from am_patch.apply_failure_gates_policy import evaluate_apply_failure_gates_policy_audited
 from am_patch.archive import archive_patch
 from am_patch.artifacts import build_artifacts
 from am_patch.audit_rubric_check import check_audit_rubric_coverage
@@ -130,8 +131,12 @@ def build_effective_policy(argv: list[str]) -> int | tuple[Any, Policy, Path, st
             "gates_skip_js": getattr(cli, "skip_js", None),
             "gates_skip_docs": getattr(cli, "skip_docs", None),
             "gates_skip_monolith": getattr(cli, "skip_monolith", None),
-            "gates_on_partial_apply": getattr(cli, "gates_on_partial_apply", None),
-            "gates_on_zero_apply": getattr(cli, "gates_on_zero_apply", None),
+            "apply_failure_partial_gates_policy": getattr(
+                cli, "apply_failure_partial_gates_policy", None
+            ),
+            "apply_failure_zero_gates_policy": getattr(
+                cli, "apply_failure_zero_gates_policy", None
+            ),
             "gates_order": (
                 []
                 if (
@@ -706,9 +711,14 @@ def run_mode(ctx: RunContext) -> dict[str, Any]:
                 for stg, msg in secondary_failures:
                     logger.line(f"{stg}: {msg}")
 
-            should_run_gates = (patch_applied_any and policy.gates_on_partial_apply) or (
-                (not patch_applied_any) and policy.gates_on_zero_apply
+            should_run_gates, audit_line = evaluate_apply_failure_gates_policy_audited(
+                patch_applied_any=patch_applied_any,
+                workspace_attempt=ws.attempt,
+                partial_policy=policy.apply_failure_partial_gates_policy,
+                zero_policy=policy.apply_failure_zero_gates_policy,
             )
+            logger.line(audit_line)
+
             if not should_run_gates:
                 # Defer rollback until after diagnostics archive is created.
                 rollback_ckpt_for_posthook = ckpt
