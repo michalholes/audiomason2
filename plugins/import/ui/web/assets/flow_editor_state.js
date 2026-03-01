@@ -50,7 +50,7 @@
 			} catch (e) {}
 		};
 
-	FlowEditorState.prototype.loadAll = function loadAll(payload) {
+	FlowEditorState.prototype.loadAll = function loadAll(payload, opts) {
 		const wiz = payload && payload.wizardDefinition;
 		const cfg = payload && payload.flowConfig;
 		this.wizardDraft =
@@ -65,7 +65,10 @@
 			cfg && typeof cfg === "object" ? JSON.parse(JSON.stringify(cfg)) : {};
 		this.selectedStepId = null;
 		this.draftDirty = false;
-		this.validationState = { lastOk: false, envelope: null };
+		const preserveValidation = !!(opts && opts.preserveValidation === true);
+		if (!preserveValidation) {
+			this.validationState = { lastOk: false, envelope: null };
+		}
 
 		this.emit("wizard_changed", { reason: "load_all" });
 		this.emit("config_changed", { reason: "load_all" });
@@ -138,7 +141,10 @@
 		this._dispatchSelectionEvent(this.selectedStepId);
 	};
 
-	FlowEditorState.prototype.mutateWizard = function mutateWizard(mutatorFn, opts) {
+	FlowEditorState.prototype.mutateWizard = function mutateWizard(
+		mutatorFn,
+		opts,
+	) {
 		if (!this.wizardDraft) this.wizardDraft = {};
 		mutatorFn && mutatorFn(this.wizardDraft);
 
@@ -148,7 +154,8 @@
 		const reason = o.reason ? String(o.reason) : "mutate_wizard";
 
 		if (markDirty) this.draftDirty = true;
-		if (resetValidation) this.validationState = { lastOk: false, envelope: null };
+		if (resetValidation)
+			this.validationState = { lastOk: false, envelope: null };
 
 		this.emit("wizard_changed", { reason: reason });
 		if (markDirty || resetValidation) {
@@ -158,7 +165,10 @@
 		}
 	};
 
-	FlowEditorState.prototype.mutateConfig = function mutateConfig(mutatorFn, opts) {
+	FlowEditorState.prototype.mutateConfig = function mutateConfig(
+		mutatorFn,
+		opts,
+	) {
 		if (!this.configDraft) this.configDraft = {};
 		mutatorFn && mutatorFn(this.configDraft);
 
@@ -168,7 +178,8 @@
 		const reason = o.reason ? String(o.reason) : "mutate_config";
 
 		if (markDirty) this.draftDirty = true;
-		if (resetValidation) this.validationState = { lastOk: false, envelope: null };
+		if (resetValidation)
+			this.validationState = { lastOk: false, envelope: null };
 
 		this.emit("config_changed", { reason: reason });
 		if (markDirty || resetValidation) {

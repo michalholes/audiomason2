@@ -177,10 +177,13 @@
 		const FE = window.AM2FlowEditorState;
 		if (FE && FE.loadAll && FE.getSnapshot) {
 			const snap = FE.getSnapshot();
-			FE.loadAll({
-				wizardDefinition: snap.wizardDraft,
-				flowConfig: out.data.config || {},
-			});
+			FE.loadAll(
+				{
+					wizardDefinition: snap.wizardDraft,
+					flowConfig: out.data.config || {},
+				},
+				{ preserveValidation: true },
+			);
 		}
 
 		await loadHistory();

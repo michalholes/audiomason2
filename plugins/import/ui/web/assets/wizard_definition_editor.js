@@ -86,12 +86,9 @@
 	function mutateWizard(fn, opts) {
 		const FE = window.AM2FlowEditorState;
 		if (!FE || !FE.mutateWizard) return;
-		FE.mutateWizard(
-			function (wd) {
-				fn && fn(ensureWizardUi(wd), wd);
-			},
-			opts || null,
-		);
+		FE.mutateWizard(function (wd) {
+			fn && fn(ensureWizardUi(wd), wd);
+		}, opts || null);
 	}
 
 	function setSelectedStep(stepIdOrNull) {
@@ -116,7 +113,6 @@
 		};
 	}
 
-
 	function ensureV2() {
 		mutateWizard(
 			function (uiState, wd) {
@@ -124,7 +120,10 @@
 				// internal idempotent migrations.
 				if (wd && typeof wd === "object") {
 					const v2 = wd.version === 2;
-					const hasWizardId = Object.prototype.hasOwnProperty.call(wd, "wizard_id");
+					const hasWizardId = Object.prototype.hasOwnProperty.call(
+						wd,
+						"wizard_id",
+					);
 					const g = wd.graph;
 					const graphOk =
 						g &&
@@ -508,7 +507,10 @@
 		const FE = window.AM2FlowEditorState;
 		if (FE && FE.loadAll && FE.getSnapshot) {
 			const snap = FE.getSnapshot();
-			FE.loadAll({ wizardDefinition: defn, flowConfig: snap.configDraft });
+			FE.loadAll(
+				{ wizardDefinition: defn, flowConfig: snap.configDraft },
+				{ preserveValidation: true },
+			);
 		}
 		return true;
 	}
@@ -579,7 +581,10 @@
 		const FE = window.AM2FlowEditorState;
 		if (FE && FE.loadAll && FE.getSnapshot) {
 			const snap = FE.getSnapshot();
-			FE.loadAll({ wizardDefinition: defn, flowConfig: snap.configDraft });
+			FE.loadAll(
+				{ wizardDefinition: defn, flowConfig: snap.configDraft },
+				{ preserveValidation: true },
+			);
 		}
 		await loadHistory();
 		renderAll();
@@ -602,7 +607,10 @@
 		const FE = window.AM2FlowEditorState;
 		if (FE && FE.loadAll && FE.getSnapshot) {
 			const snap = FE.getSnapshot();
-			FE.loadAll({ wizardDefinition: defn, flowConfig: snap.configDraft });
+			FE.loadAll(
+				{ wizardDefinition: defn, flowConfig: snap.configDraft },
+				{ preserveValidation: true },
+			);
 		}
 		await loadHistory();
 		renderAll();
@@ -627,7 +635,10 @@
 		const FE = window.AM2FlowEditorState;
 		if (FE && FE.loadAll && FE.getSnapshot) {
 			const snap = FE.getSnapshot();
-			FE.loadAll({ wizardDefinition: defn, flowConfig: snap.configDraft });
+			FE.loadAll(
+				{ wizardDefinition: defn, flowConfig: snap.configDraft },
+				{ preserveValidation: true },
+			);
 		}
 		await loadHistory();
 		renderAll();
