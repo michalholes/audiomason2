@@ -39,7 +39,11 @@ def parse_run_result_from_log_text(
 
 
 def _tail_path(log_path: Path, *, tail_suffix: str = ".tail.txt") -> Path:
-    return log_path.with_name(log_path.name + tail_suffix)
+    # Idempotent: avoid runaway ".tail.txt.tail.txt..." if caller passes a tail file.
+    name = log_path.name
+    if name.endswith(tail_suffix):
+        return log_path
+    return log_path.with_name(name + tail_suffix)
 
 
 def _read_sanitized_tail_text(log_path: Path) -> str | None:
@@ -115,6 +119,9 @@ def iter_runs(patches_root: Path, log_filename_regex: str) -> list[RunEntry]:
     matched_paths: list[Path] = []
     for log_path in logs_dir.iterdir():
         if not log_path.is_file():
+            continue
+        if log_path.name.endswith(".tail.txt"):
+            # Cache artifact, not a primary log.
             continue
         if not rx.search(log_path.name):
             continue
