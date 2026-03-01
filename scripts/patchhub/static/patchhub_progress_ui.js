@@ -1,0 +1,225 @@
+(() => {
+	var ui = window.AMP_PATCHHUB_UI;
+	if (!ui) {
+		ui = {};
+		window.AMP_PATCHHUB_UI = ui;
+	}
+
+	function deriveProgressFromEvents(events) {
+		var order = [];
+		var state = {};
+		var currentRunning = "";
+		var resultStatus = "";
+
+		function ensureStep(name) {
+			if (!name) return;
+			if (!Object.hasOwn(state, name)) {
+				state[name] = "pending";
+			}
+			if (order.indexOf(name) < 0) order.push(name);
+		}
+
+		function setState(name, st) {
+			name = normStepName(name);
+			if (!name) return;
+			ensureStep(name);
+			state[name] = st;
+		}
+
+		for (let i = 0; i < (events || []).length; i++) {
+			const ev = events[i];
+			if (!ev || typeof ev !== "object") continue;
+			const t = String(ev.type || "");
+
+			if (t === "result") {
+				resultStatus = ev.ok ? "success" : "fail";
+				continue;
+			}
+
+			if (t !== "log") continue;
+
+			const kind = String(ev.kind || "");
+			if (kind !== "DO" && kind !== "OK" && kind !== "FAIL") continue;
+
+			const stage = normStepName(ev.stage || "");
+			if (!stage) continue;
+
+			if (kind === "DO") {
+				setState(stage, "running");
+				currentRunning = stage;
+				continue;
+			}
+
+			if (kind === "OK") {
+				setState(stage, "ok");
+				if (currentRunning === stage) currentRunning = "";
+				continue;
+			}
+
+			if (kind === "FAIL") {
+				setState(stage, "fail");
+				if (currentRunning === stage) currentRunning = "";
+			}
+		}
+
+		if (currentRunning) {
+			for (let j = 0; j < order.length; j++) {
+				const nm = order[j];
+				if (state[nm] === "running" && nm !== currentRunning) {
+					state[nm] = "pending";
+				}
+			}
+		}
+
+		for (let k = 0; k < order.length; k++) {
+			const nm2 = order[k];
+			if (!Object.hasOwn(state, nm2)) state[nm2] = "pending";
+		}
+
+		return { order: order, state: state, resultStatus: resultStatus };
+	}
+
+	function deriveProgressSummaryFromEvents(events, progress) {
+		var lastResult = null;
+		var lastLog = null;
+		for (let i = (events || []).length - 1; i >= 0; i--) {
+			const ev = events[i];
+			if (!ev || typeof ev !== "object") continue;
+			const t = String(ev.type || "");
+			if (t === "result") {
+				lastResult = ev;
+				break;
+			}
+			if (t === "log") {
+				const kind = String(ev.kind || "");
+				if (kind === "DO" || kind === "OK" || kind === "FAIL") {
+					lastLog = ev;
+					break;
+				}
+			}
+		}
+
+		if (lastResult) {
+			return {
+				text: lastResult.ok ? "RESULT: SUCCESS" : "RESULT: FAIL",
+				status: lastResult.ok ? "success" : "fail",
+			};
+		}
+
+		if (lastLog) {
+			const stage = normStepName(lastLog.stage || "");
+			const kind = String(lastLog.kind || "");
+			if (kind === "FAIL") {
+				return { text: `FAIL: ${stage}`, status: "fail" };
+			}
+			if (kind === "OK") {
+				return { text: `OK: ${stage}`, status: "running" };
+			}
+			if (kind === "DO") {
+				return { text: `DO: ${stage}`, status: "running" };
+			}
+		}
+
+		if (progress && progress.order && progress.order.length) {
+			return { text: "STATUS: RUNNING", status: "running" };
+		}
+		return { text: "(idle)", status: "idle" };
+	}
+
+	function setProgressSummaryState(summary) {
+		var node = el("progressSummary");
+		if (!node) return;
+		var st = summary && summary.status ? String(summary.status) : "idle";
+		node.classList.remove("success", "fail", "running", "idle", "muted");
+		node.classList.add(st);
+		if (st === "idle") node.classList.add("muted");
+	}
+
+	function updateProgressPanelFromEvents() {
+		var progress = deriveProgressFromEvents(liveEvents);
+		renderProgressSteps(progress);
+		var summary = deriveProgressSummaryFromEvents(liveEvents, progress);
+		renderProgressSummary(summary.text);
+		setProgressSummaryState(summary);
+	}
+
+	function refreshStats() {
+		apiGet("/api/debug/diagnostics").then((r) => {
+			if (!r || r.ok === false) {
+				setPre("stats", r);
+				return;
+			}
+			var s = r.stats || {};
+			var all = s.all_time || {};
+			var lines = [];
+			lines.push({ k: "all_time.total", v: String(all.total || 0) });
+			lines.push({ k: "all_time.success", v: String(all.success || 0) });
+			lines.push({ k: "all_time.fail", v: String(all.fail || 0) });
+			lines.push({ k: "all_time.unknown", v: String(all.unknown || 0) });
+			lines.push({ k: "all_time.canceled", v: String(all.canceled || 0) });
+
+			(s.windows || []).forEach((w) => {
+				var d = w.days;
+				lines.push({ k: `${String(d)}d.total`, v: String(w.total || 0) });
+				lines.push({ k: `${String(d)}d.success`, v: String(w.success || 0) });
+				lines.push({ k: `${String(d)}d.fail`, v: String(w.fail || 0) });
+				lines.push({ k: `${String(d)}d.unknown`, v: String(w.unknown || 0) });
+				lines.push({ k: `${String(d)}d.canceled`, v: String(w.canceled || 0) });
+			});
+
+			el("stats").innerHTML = lines
+				.map(
+					(x) =>
+						`<div class="rowline"><span class="k">${escapeHtml(x.k)}</span>` +
+						`<span class="v">${escapeHtml(x.v)}</span></div>`,
+				)
+				.join("");
+		});
+	}
+
+	function renderActiveJob(jobs) {
+		var active = (jobs || []).find((j) => j.status === "running") || null;
+		activeJobId = active ? String(active.job_id || "") : null;
+		var queued = (jobs || []).filter((j) => j.status === "queued");
+
+		var box = el("activeJob");
+		if (!box) return;
+
+		if (!active && queued.length === 0) {
+			box.innerHTML = '<div class="muted">(none)</div>';
+			return;
+		}
+
+		var html = "";
+		if (active) {
+			html += `<div><b>running</b> ${escapeHtml(active.job_id || "")}</div>`;
+			html += `<div class="muted">mode=${escapeHtml(active.mode || "")} issue=${escapeHtml(active.issue_id || "")}</div>`;
+			html +=
+				'<div class="row"><button class="btn btn-small" id="cancelActive">Cancel</button>';
+			html += `<a class="linklike" href="/api/jobs/log_tail?job_id=${encodeURIComponent(active.job_id || "")}">log</a></div>`;
+		}
+
+		if (queued.length) {
+			html += `<div style="margin-top:6px"><b>queued</b>: ${String(queued.length)}</div>`;
+		}
+
+		box.innerHTML = html;
+
+		var cancelBtn = el("cancelActive");
+		if (cancelBtn && active && active.job_id) {
+			cancelBtn.addEventListener("click", () => {
+				apiPost("/api/jobs/cancel", { job_id: active.job_id }).then(() => {
+					refreshJobs();
+				});
+			});
+		}
+	}
+
+	// Exports
+	ui.deriveProgressFromEvents = deriveProgressFromEvents;
+	ui.deriveProgressSummaryFromEvents = deriveProgressSummaryFromEvents;
+	ui.setProgressSummaryState = setProgressSummaryState;
+	ui.updateProgressPanelFromEvents = updateProgressPanelFromEvents;
+	ui.refreshStats = refreshStats;
+	ui.renderActiveJob = renderActiveJob;
+})();

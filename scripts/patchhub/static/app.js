@@ -1,2172 +1,1938 @@
 (() => {
-  
-
-  var activeJobId = null;
-  var autoRefreshTimer = null;
-
-  var uiStatusLatest = "";
-
-  var selectedJobId = null;
-  var liveStreamJobId = null;
-  var liveES = null;
-  var liveEvents = [];
-  var liveLevel = "normal";
-
-  var previewVisible = false;
-  var runsVisible = false;
-  var jobsVisible = false;
-
-  function setPreviewVisible(v) {
-    previewVisible = !!v;
-    var wrap = el("previewWrapRight");
-    var btn1 = el("previewToggle");
-    var btn2 = el("previewCollapse");
-    if (wrap) wrap.classList.toggle("hidden", !previewVisible);
-    var t = previewVisible ? "Hide" : "Show";
-    if (btn1) btn1.textContent = previewVisible ? "Hide preview" : "Preview";
-    if (btn2) btn2.textContent = t;
-  }
-
-  function isNearBottom(node, slack) {
-    if (!node) return true;
-    slack = (slack == null) ? 20 : slack;
-    return (node.scrollTop + node.clientHeight) >= (node.scrollHeight - slack);
-  }
-
-  function el(id) { return document.getElementById(id); }
-
-  function setUiStatus(message) {
-    var node = el("uiStatusBar");
-    if (!node) return;
-
-    var msg = String(message || "");
-    msg = msg.replace(/\s*\n\s*/g, " ").trim();
-    uiStatusLatest = msg;
-    node.textContent = uiStatusLatest;
-  }
-
-  function setUiError(errorText) {
-    setUiStatus("ERROR: " + String(errorText || ""));
-  }
-
-  function pushApiStatus(payload) {
-    if (!payload || !payload.status || !Array.isArray(payload.status)) return;
-    if (!payload.status.length) return;
-    setUiStatus(String(payload.status[payload.status.length - 1] || ""));
-  }
-
-  function setPre(id, obj) {
-    var node = el(id);
-    if (!node) return;
-    if (typeof obj === "string") {
-      node.textContent = obj;
-      return;
-    }
-    try {
-      node.textContent = JSON.stringify(obj, null, 2);
-    } catch (e) {
-      node.textContent = String(obj);
-    }
-  }
-
-  function setText(id, text) {
-    var node = el(id);
-    if (!node) return;
-    node.textContent = String(text || "");
-  }
-
-  function formatLocalTime(isoUtc) {
-    if (!isoUtc) return "";
-    var d = new Date(String(isoUtc));
-    if (isNaN(d.getTime())) return String(isoUtc);
-    return d.toLocaleString(undefined, {
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit"
-    });
-  }
-
-  function apiGet(path) {
-    return fetch(path, { headers: { "Accept": "application/json" } })
-      .then((r) => r.text().then((t) => {
-          try {
-            return JSON.parse(t);
-          } catch (e) {
-            return {
-              ok: false,
-              error: "bad json",
-              raw: t,
-              status: r.status
-            };
-          }
-        }));
-  }
-
-  function apiPost(path, body) {
-    return fetch(path, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Accept": "application/json" },
-      body: JSON.stringify(body || {})
-    }).then((r) => r.text().then((t) => {
-        try {
-          return JSON.parse(t);
-        } catch (e) {
-          return {
-            ok: false,
-            error: "bad json",
-            raw: t,
-            status: r.status
-          };
-        }
-      }));
-  }
-
-  function joinRel(a, b) {
-    a = String(a || "").replace(/\/+$/, "");
-    b = String(b || "").replace(/^\/+/, "");
-    if (!a) return b;
-    if (!b) return a;
-    return a + "/" + b;
-  }
-
-  function parentRel(p) {
-    p = String(p || "").replace(/\/+$/, "");
-    var idx = p.lastIndexOf("/");
-    if (idx < 0) return "";
-    return p.slice(0, idx);
-  }
-
-  function escapeHtml(s) {
-    return String(s || "")
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#39;");
-  }
-
-  var cfg = null;
-  var issueRegex = null;
-  var fsSelected = "";
-  var fsChecked = {};
-  var fsLastRels = [];
-  var runsCache = [];
-  var selectedRun = null;
-  var tailLines = 200;
-
-  var dirty = { issueId: false, commitMsg: false, patchPath: false };
-  var latestToken = "";
-  var lastAutofillClearedToken = "";
-  var autofillTimer = null;
-
-  var patchStatTimer = null;
-  var patchStatInFlight = false;
-
-  var suppressIdleOutput = false;
-
-  var lastParsedRaw = "";
-  var lastParsed = null;
-  var parseInFlight = false;
-  var parseTimer = null;
-  var parseSeq = 0;
-
-  function patchesRootRel() {
-    var p = (cfg && cfg.paths && cfg.paths.patches_root) ? String(cfg.paths.patches_root) : "patches";
-    return p.replace(/\/+$/, "");
-  }
-
-  function stripPatchesPrefix(path) {
-    var pfx = patchesRootRel();
-    var p = String(path || "").replace(/^\/+/, "");
-    if (p === pfx) return "";
-    if (p.indexOf(pfx + "/") === 0) return p.slice(pfx.length + 1);
-    return p;
-  }
-
-  function normalizePatchPath(p) {
-    p = String(p || "").trim().replace(/^\/+/, "");
-    if (!p) return "";
-
-    var pfx = patchesRootRel();
-    if (p === pfx) return pfx;
-    if (p.indexOf(pfx + "/") === 0) return p;
-    return joinRel(pfx, p);
-  }
-
-  function clearRunFieldsBecauseMissingPatch() {
-    if (el("issueId")) el("issueId").value = "";
-    if (el("commitMsg")) el("commitMsg").value = "";
-    if (el("patchPath")) el("patchPath").value = "";
-    validateAndPreview();
-  }
-
-  function tickMissingPatchClear() {
-    if (patchStatInFlight) return;
-    if (!el("patchPath")) return;
-
-    var full = normalizePatchPath(String(el("patchPath").value || ""));
-    var rel = stripPatchesPrefix(full);
-
-    patchStatInFlight = true;
-    apiGet("/api/fs/stat?path=" + encodeURIComponent(rel)).then((r) => {
-      patchStatInFlight = false;
-      if (!r || r.ok === false) return;
-      if (r.exists === false) clearRunFieldsBecauseMissingPatch();
-    }).catch(() => {
-      patchStatInFlight = false;
-    });
-  }
-
-  function setFsHint(msg) {
-    var h = el("fsHint");
-    if (h) h.textContent = msg || "";
-  }
-
-  function fsUpdateSelCount() {
-    var n = 0;
-    for (var k in fsChecked) {
-      if (Object.hasOwn(fsChecked, k)) n += 1;
-    }
-    var node = el("fsSelCount");
-    if (node) {
-      node.textContent = n ? ("selected: " + String(n)) : "";
-    }
-    return n;
-  }
-
-  function fsClearSelection() {
-    fsChecked = {};
-    fsUpdateSelCount();
-  }
-
-  function fsDownloadSelected() {
-    var paths = [];
-    for (var k in fsChecked) {
-      if (Object.hasOwn(fsChecked, k)) paths.push(k);
-    }
-    if (!paths.length) {
-      setFsHint("select at least one item");
-      return;
-    }
-    paths.sort();
-
-    fetch("/api/fs/archive", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ paths: paths })
-    }).then((r) => {
-      if (!r.ok) {
-        return r.text().then((t) => {
-          setFsHint("archive failed: " + String(t || r.status));
-        });
-      }
-      return r.blob().then((blob) => {
-        var url = URL.createObjectURL(blob);
-        var a = document.createElement("a");
-        a.href = url;
-        a.download = "selection.zip";
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        setTimeout(() => { URL.revokeObjectURL(url); }, 1000);
-      });
-    }).catch((e) => {
-      setFsHint("archive failed: " + String(e));
-    });
-  }
-
-  function setParseHint(msg) {
-    setText("parseHint", msg || "");
-  }
-
-  function getRawCommand() {
-    var n = el("rawCommand");
-    if (!n) return "";
-    return String(n.value || "").trim();
-  }
-
-  function clearParsedState() {
-    lastParsedRaw = "";
-    lastParsed = null;
-    parseInFlight = false;
-  }
-
-  function triggerParse(raw) {
-    raw = String(raw || "").trim();
-    if (!raw) {
-      clearParsedState();
-      setParseHint("");
-      validateAndPreview();
-      return;
-    }
-
-    parseInFlight = true;
-    lastParsedRaw = "";
-    lastParsed = null;
-    setParseHint("Parsing...");
-    setUiStatus("parse_command: started");
-    validateAndPreview();
-
-    parseSeq += 1;
-    var mySeq = parseSeq;
-    apiPost("/api/parse_command", { raw: raw }).then((r) => {
-      if (mySeq !== parseSeq) return;
-      parseInFlight = false;
-
-      if (!r || r.ok === false) {
-        clearParsedState();
-        setParseHint("Parse failed: " + String((r && r.error) || ""));
-        setUiError(String((r && r.error) || "parse failed"));
-        validateAndPreview();
-        return;
-      }
-
-      pushApiStatus(r);
-
-      lastParsedRaw = raw;
-      lastParsed = r;
-      setParseHint("");
-      if (r.parsed && typeof r.parsed === "object") {
-        if (r.parsed.mode) el("mode").value = String(r.parsed.mode);
-        if (r.parsed.issue_id != null) {
-          el("issueId").value = String(r.parsed.issue_id || "");
-        }
-        if (r.parsed.commit_message != null) {
-          el("commitMsg").value = String(r.parsed.commit_message || "");
-        }
-        if (r.parsed.patch_path != null) {
-          el("patchPath").value = String(r.parsed.patch_path || "");
-        }
-      }
-
-      validateAndPreview();
-    });
-  }
-
-  function scheduleParseDebounced(raw) {
-    if (parseTimer) {
-      clearTimeout(parseTimer);
-      parseTimer = null;
-    }
-    parseTimer = setTimeout(() => {
-      parseTimer = null;
-      triggerParse(raw);
-    }, 350);
-  }
-
-  function refreshFs() {
-    var path = el("fsPath").value || "";
-    apiGet("/api/fs/list?path=" + encodeURIComponent(path)).then((r) => {
-      if (!r || r.ok === false) {
-        setPre("fsList", r);
-        return;
-      }
-      var items = r.items || [];
-      fsLastRels = [];
-      var html = items.map((it) => {
-        var name = it.name;
-        var isDir = !!it.is_dir;
-        var rel = joinRel(path, name);
-        fsLastRels.push(rel);
-
-        var displayName = isDir ? (name + "/") : name;
-        var isSelected = (fsSelected === rel);
-        var cls = "item fsitem" + (isSelected ? " selected" : "");
-        var checked = fsChecked[rel] ? " checked" : "";
-
-        var dl = "";
-        if (!isDir) {
-          dl = "<button class=\"btn btn-small btn-inline fsDl\" data-rel=\"" +
-            escapeHtml(rel) + "\">Download</button>";
-        }
-
-        return (
-          "<div class=\"" + cls + "\" data-rel=\"" + escapeHtml(rel) +
-            "\" data-isdir=\"" + (isDir ? "1" : "0") + "\">" +
-          "<input class=\"fsChk\" type=\"checkbox\" data-rel=\"" +
-            escapeHtml(rel) + "\" aria-label=\"Select\" " + checked + " />" +
-          "<span class=\"name\">" + escapeHtml(displayName) + "</span>" +
-          "<span class=\"actions\"><span class=\"muted\">" +
-            String(it.size || 0) + "</span>" + dl + "</span>" +
-          "</div>"
-        );
-      }).join("");
-
-      el("fsList").innerHTML = html || "<div class=\"muted\">(empty)</div>";
-      fsUpdateSelCount();
-
-      Array.from(el("fsList").querySelectorAll(".fsChk")).forEach((node) => {
-        node.addEventListener("click", (ev) => {
-          ev.stopPropagation();
-          var rel = node.getAttribute("data-rel") || "";
-          if (!rel) return;
-          if (node.checked) {
-            fsChecked[rel] = true;
-          } else {
-            delete fsChecked[rel];
-          }
-          fsUpdateSelCount();
-        });
-      });
-
-      Array.from(el("fsList").querySelectorAll(".fsDl")).forEach((node) => {
-        node.addEventListener("click", (ev) => {
-          ev.stopPropagation();
-          var rel = node.getAttribute("data-rel") || "";
-          if (!rel) return;
-          window.location.href = "/api/fs/download?path=" + encodeURIComponent(rel);
-        });
-      });
-
-      Array.from(el("fsList").querySelectorAll(".fsitem .name")).forEach((node) => {
-        node.addEventListener("click", () => {
-          var item = node.parentElement;
-          var rel = item.getAttribute("data-rel") || "";
-          var isDir = (item.getAttribute("data-isdir") || "0") === "1";
-          if (isDir) {
-            el("fsPath").value = rel;
-            fsSelected = "";
-            setFsHint("");
-            refreshFs();
-            return;
-          }
-
-          fsSelected = rel;
-          setFsHint("focused: " + rel);
-
-          if (/\.(zip|patch|diff)$/i.test(rel)) {
-            el("patchPath").value = normalizePatchPath(rel);
-
-				let m = null;
-            if (issueRegex) {
-              try { m = issueRegex.exec(rel); } catch (e) { m = null; }
-            }
-            if (!m) {
-              m = /(?:issue_|#)(\d+)/i.exec(rel) || /(\d{3,6})/.exec(rel);
-            }
-            if (m && m[1] && !String(el("issueId").value || "").trim()) {
-              el("issueId").value = String(m[1]);
-            }
-            validateAndPreview();
-          }
-
-          refreshFs();
-        });
-      });
-    });
-  }
-
-  function refreshRuns() {
-    var q = [];
-    var issue = String(el("runsIssue").value || "").trim();
-    var res = String(el("runsResult").value || "");
-    if (issue) q.push("issue_id=" + encodeURIComponent(issue));
-    if (res) q.push("result=" + encodeURIComponent(res));
-    q.push("limit=80");
-
-    apiGet("/api/runs?" + q.join("&")).then((r) => {
-      if (!r || r.ok === false) {
-        setPre("runsList", r);
-        return;
-      }
-      runsCache = r.runs || [];
-
-      var html = runsCache.map((x, idx) => {
-        var log = x.log_rel_path || "";
-        var link = log ? "<a class=\"linklike\" href=\"/api/fs/download?path=" + encodeURIComponent(log) + "\">log</a>" : "";
-        var sel = (selectedRun && selectedRun.issue_id === x.issue_id && selectedRun.mtime_utc === x.mtime_utc) ? " *" : "";
-        return (
-          "<div class=\"item runitem\" data-idx=\"" + String(idx) + "\">" +
-          "<span class=\"name\">#" + String(x.issue_id) + " " + escapeHtml(String(x.result || "")) + sel + "</span>" +
-          "<span class=\"actions\">" + link + " <span class=\"muted\">" + formatLocalTime(x.mtime_utc || "") + "</span></span>" +
-          "</div>"
-        );
-      }).join("");
-
-      el("runsList").innerHTML = html || "<div class=\"muted\">(none)</div>";
-
-      Array.from(el("runsList").querySelectorAll(".runitem .name")).forEach((node) => {
-        node.addEventListener("click", () => {
-          var item = node.parentElement;
-          var idx = parseInt(item.getAttribute("data-idx") || "-1", 10);
-          if (idx >= 0 && idx < runsCache.length) {
-            selectedRun = runsCache[idx];
-            renderIssueDetail();
-            refreshRuns();
-          }
-        });
-      });
-    });
-  }
-
-  function refreshLastRunLog() {
-    apiGet("/api/runs?limit=1").then((r) => {
-      if (!r || r.ok === false) {
-        setPre("lastRunLog", r);
-        return;
-      }
-      var runs = r.runs || [];
-      if (!runs.length) {
-        lastRunLogPath = "";
-        setPre("lastRunLog", "");
-        return;
-      }
-      var logRel = String(runs[0].log_rel_path || "");
-      if (!logRel) {
-        lastRunLogPath = "";
-        setPre("lastRunLog", "(no log path)");
-        return;
-      }
-
-      lastRunLogPath = logRel;
-      var box = el("lastRunLog");
-      var wantFollow = isNearBottom(box, 24);
-      var url = "/api/fs/read_text?path=" + encodeURIComponent(logRel) + "&tail_lines=2000";
-      apiGet(url).then((rt) => {
-        if (!rt || rt.ok === false) {
-          setPre("lastRunLog", rt);
-          return;
-        }
-        var t = String(rt.text || "");
-        if (rt.truncated) t += "\n\n[TRUNCATED]";
-        setPre("lastRunLog", t);
-        if (wantFollow && box) box.scrollTop = box.scrollHeight;
-      });
-    });
-  }
-
-  function refreshTail(lines) {
-    tailLines = lines || tailLines || 200;
-
-    var idleGuardOn = !!(cfg && cfg.ui && cfg.ui.clear_output_on_autofill);
-    var jid = getLiveJobId();
-    if (!jid && suppressIdleOutput && idleGuardOn) {
-      setPre("tail", "");
-      updateProgressPanelFromEvents();
-      return;
-    }
-
-    var linesQ = encodeURIComponent(String(tailLines));
-    var url = "/api/runner/tail?lines=" + linesQ;
-    if (jid) {
-      url = "/api/jobs/" + encodeURIComponent(String(jid)) + "/log_tail?lines=" + linesQ;
-    }
-    apiGet(url).then((r) => {
-      if (!r || r.ok === false) {
-        setPre("tail", r);
-        return;
-      }
-      var t = String(r.tail || "");
-      setPre("tail", t);
-    });
-  }
-
-
-  function parseProgressFromText(text) {
-    var lines = String(text || "").split(/\r?\n/);
-    var order = [];
-    var state = {};
-    var currentRunning = "";
-
-    function normStepName(s) {
-      return String(s || "").replace(/\s+/g, " ").trim();
-    }
-
-    function ensureStep(name) {
-      if (!name) return;
-      if (!Object.hasOwn(state, name)) {
-        state[name] = "pending";
-      }
-      if (order.indexOf(name) < 0) order.push(name);
-    }
-
-    function setState(name, st) {
-      name = normStepName(name);
-      if (!name) return;
-      ensureStep(name);
-      state[name] = st;
-    }
+	// Load split UI helpers (monolith mitigation).
+	// These scripts attach to window.AMP_PATCHHUB_UI.
+	document.write('<script src="/static/patchhub_progress_ui.js"></script>');
+	document.write('<script src="/static/patchhub_live_ui.js"></script>');
+
+	const AMP_UI = window.AMP_PATCHHUB_UI;
+
+	var activeJobId = null;
+	var autoRefreshTimer = null;
+
+	var uiStatusLatest = "";
+
+	var selectedJobId = null;
+	var liveStreamJobId = null;
+	var liveES = null;
+	var liveEvents = [];
+	var liveLevel = "normal";
+
+	var previewVisible = false;
+	var runsVisible = false;
+	var jobsVisible = false;
+
+	// Deterministic IDLE visible-tab backoff. ACTIVE mode is not affected.
+	var IDLE_BACKOFF_MS = [2000, 5000, 15000, 30000, 60000];
+	var idleBackoffIdx = 0;
+	var idleNextDueMs = 0;
+	var idleSigs = { jobs: "", runs: "", hdr: "" };
+
+	function setPreviewVisible(v) {
+		previewVisible = !!v;
+		var wrap = el("previewWrapRight");
+		var btn1 = el("previewToggle");
+		var btn2 = el("previewCollapse");
+		if (wrap) wrap.classList.toggle("hidden", !previewVisible);
+		var t = previewVisible ? "Hide" : "Show";
+		if (btn1) btn1.textContent = previewVisible ? "Hide preview" : "Preview";
+		if (btn2) btn2.textContent = t;
+	}
+
+	function isNearBottom(node, slack) {
+		if (!node) return true;
+		slack = slack == null ? 20 : slack;
+		return node.scrollTop + node.clientHeight >= node.scrollHeight - slack;
+	}
+
+	function el(id) {
+		return document.getElementById(id);
+	}
+
+	function setUiStatus(message) {
+		var node = el("uiStatusBar");
+		if (!node) return;
+
+		var msg = String(message || "");
+		msg = msg.replace(/\s*\n\s*/g, " ").trim();
+		uiStatusLatest = msg;
+		node.textContent = uiStatusLatest;
+	}
+
+	function setUiError(errorText) {
+		setUiStatus(`ERROR: ${String(errorText || "")}`);
+	}
+
+	function pushApiStatus(payload) {
+		if (!payload || !payload.status || !Array.isArray(payload.status)) return;
+		if (!payload.status.length) return;
+		setUiStatus(String(payload.status[payload.status.length - 1] || ""));
+	}
+
+	function setPre(id, obj) {
+		var node = el(id);
+		if (!node) return;
+		if (typeof obj === "string") {
+			node.textContent = obj;
+			return;
+		}
+		try {
+			node.textContent = JSON.stringify(obj, null, 2);
+		} catch (e) {
+			node.textContent = String(obj);
+		}
+	}
+
+	function setText(id, text) {
+		var node = el(id);
+		if (!node) return;
+		node.textContent = String(text || "");
+	}
+
+	function formatLocalTime(isoUtc) {
+		if (!isoUtc) return "";
+		var d = new Date(String(isoUtc));
+		if (isNaN(d.getTime())) return String(isoUtc);
+		return d.toLocaleString(undefined, {
+			year: "numeric",
+			month: "2-digit",
+			day: "2-digit",
+			hour: "2-digit",
+			minute: "2-digit",
+			second: "2-digit",
+		});
+	}
+
+	function apiGet(path) {
+		return fetch(path, { headers: { Accept: "application/json" } }).then((r) =>
+			r.text().then((t) => {
+				try {
+					return JSON.parse(t);
+				} catch (e) {
+					return {
+						ok: false,
+						error: "bad json",
+						raw: t,
+						status: r.status,
+					};
+				}
+			}),
+		);
+	}
+
+	function apiPost(path, body) {
+		return fetch(path, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				Accept: "application/json",
+			},
+			body: JSON.stringify(body || {}),
+		}).then((r) =>
+			r.text().then((t) => {
+				try {
+					return JSON.parse(t);
+				} catch (e) {
+					return {
+						ok: false,
+						error: "bad json",
+						raw: t,
+						status: r.status,
+					};
+				}
+			}),
+		);
+	}
+
+	function joinRel(a, b) {
+		a = String(a || "").replace(/\/+$/, "");
+		b = String(b || "").replace(/^\/+/, "");
+		if (!a) return b;
+		if (!b) return a;
+		return `${a}/${b}`;
+	}
+
+	function parentRel(p) {
+		p = String(p || "").replace(/\/+$/, "");
+		var idx = p.lastIndexOf("/");
+		if (idx < 0) return "";
+		return p.slice(0, idx);
+	}
+
+	function escapeHtml(s) {
+		return String(s || "")
+			.replace(/&/g, "&amp;")
+			.replace(/</g, "&lt;")
+			.replace(/>/g, "&gt;")
+			.replace(/"/g, "&quot;")
+			.replace(/'/g, "&#39;");
+	}
+
+	var cfg = null;
+	var issueRegex = null;
+	var fsSelected = "";
+	var fsChecked = {};
+	var fsLastRels = [];
+	var runsCache = [];
+	var selectedRun = null;
+	var tailLines = 200;
+
+	var dirty = { issueId: false, commitMsg: false, patchPath: false };
+	var latestToken = "";
+	var lastAutofillClearedToken = "";
+	var autofillTimer = null;
+
+	var patchStatTimer = null;
+	var patchStatInFlight = false;
+
+	var suppressIdleOutput = false;
+
+	var lastParsedRaw = "";
+	var lastParsed = null;
+	var parseInFlight = false;
+	var parseTimer = null;
+	var parseSeq = 0;
+
+	function patchesRootRel() {
+		var p =
+			cfg && cfg.paths && cfg.paths.patches_root
+				? String(cfg.paths.patches_root)
+				: "patches";
+		return p.replace(/\/+$/, "");
+	}
+
+	function stripPatchesPrefix(path) {
+		var pfx = patchesRootRel();
+		var p = String(path || "").replace(/^\/+/, "");
+		if (p === pfx) return "";
+		if (p.indexOf(`${pfx}/`) === 0) return p.slice(pfx.length + 1);
+		return p;
+	}
+
+	function normalizePatchPath(p) {
+		p = String(p || "")
+			.trim()
+			.replace(/^\/+/, "");
+		if (!p) return "";
+
+		var pfx = patchesRootRel();
+		if (p === pfx) return pfx;
+		if (p.indexOf(`${pfx}/`) === 0) return p;
+		return joinRel(pfx, p);
+	}
+
+	function clearRunFieldsBecauseMissingPatch() {
+		if (el("issueId")) el("issueId").value = "";
+		if (el("commitMsg")) el("commitMsg").value = "";
+		if (el("patchPath")) el("patchPath").value = "";
+		validateAndPreview();
+	}
+
+	function tickMissingPatchClear() {
+		if (patchStatInFlight) return;
+		if (!el("patchPath")) return;
+
+		var full = normalizePatchPath(String(el("patchPath").value || ""));
+		var rel = stripPatchesPrefix(full);
+
+		patchStatInFlight = true;
+		apiGet(`/api/fs/stat?path=${encodeURIComponent(rel)}`)
+			.then((r) => {
+				patchStatInFlight = false;
+				if (!r || r.ok === false) return;
+				if (r.exists === false) clearRunFieldsBecauseMissingPatch();
+			})
+			.catch(() => {
+				patchStatInFlight = false;
+			});
+	}
+
+	function setFsHint(msg) {
+		var h = el("fsHint");
+		if (h) h.textContent = msg || "";
+	}
+
+	function fsUpdateSelCount() {
+		var n = 0;
+		for (var k in fsChecked) {
+			if (Object.hasOwn(fsChecked, k)) n += 1;
+		}
+		var node = el("fsSelCount");
+		if (node) {
+			node.textContent = n ? `selected: ${String(n)}` : "";
+		}
+		return n;
+	}
+
+	function fsClearSelection() {
+		fsChecked = {};
+		fsUpdateSelCount();
+	}
+
+	function fsDownloadSelected() {
+		var paths = [];
+		for (var k in fsChecked) {
+			if (Object.hasOwn(fsChecked, k)) paths.push(k);
+		}
+		if (!paths.length) {
+			setFsHint("select at least one item");
+			return;
+		}
+		paths.sort();
+
+		fetch("/api/fs/archive", {
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({ paths: paths }),
+		})
+			.then((r) => {
+				if (!r.ok) {
+					return r.text().then((t) => {
+						setFsHint(`archive failed: ${String(t || r.status)}`);
+					});
+				}
+				return r.blob().then((blob) => {
+					var url = URL.createObjectURL(blob);
+					var a = document.createElement("a");
+					a.href = url;
+					a.download = "selection.zip";
+					document.body.appendChild(a);
+					a.click();
+					a.remove();
+					setTimeout(() => {
+						URL.revokeObjectURL(url);
+					}, 1000);
+				});
+			})
+			.catch((e) => {
+				setFsHint(`archive failed: ${String(e)}`);
+			});
+	}
+
+	function setParseHint(msg) {
+		setText("parseHint", msg || "");
+	}
+
+	function getRawCommand() {
+		var n = el("rawCommand");
+		if (!n) return "";
+		return String(n.value || "").trim();
+	}
+
+	function clearParsedState() {
+		lastParsedRaw = "";
+		lastParsed = null;
+		parseInFlight = false;
+	}
+
+	function triggerParse(raw) {
+		raw = String(raw || "").trim();
+		if (!raw) {
+			clearParsedState();
+			setParseHint("");
+			validateAndPreview();
+			return;
+		}
+
+		parseInFlight = true;
+		lastParsedRaw = "";
+		lastParsed = null;
+		setParseHint("Parsing...");
+		setUiStatus("parse_command: started");
+		validateAndPreview();
+
+		parseSeq += 1;
+		var mySeq = parseSeq;
+		apiPost("/api/parse_command", { raw: raw }).then((r) => {
+			if (mySeq !== parseSeq) return;
+			parseInFlight = false;
+
+			if (!r || r.ok === false) {
+				clearParsedState();
+				setParseHint(`Parse failed: ${String((r && r.error) || "")}`);
+				setUiError(String((r && r.error) || "parse failed"));
+				validateAndPreview();
+				return;
+			}
+
+			pushApiStatus(r);
+
+			lastParsedRaw = raw;
+			lastParsed = r;
+			setParseHint("");
+			if (r.parsed && typeof r.parsed === "object") {
+				if (r.parsed.mode) el("mode").value = String(r.parsed.mode);
+				if (r.parsed.issue_id != null) {
+					el("issueId").value = String(r.parsed.issue_id || "");
+				}
+				if (r.parsed.commit_message != null) {
+					el("commitMsg").value = String(r.parsed.commit_message || "");
+				}
+				if (r.parsed.patch_path != null) {
+					el("patchPath").value = String(r.parsed.patch_path || "");
+				}
+			}
+
+			validateAndPreview();
+		});
+	}
+
+	function scheduleParseDebounced(raw) {
+		if (parseTimer) {
+			clearTimeout(parseTimer);
+			parseTimer = null;
+		}
+		parseTimer = setTimeout(() => {
+			parseTimer = null;
+			triggerParse(raw);
+		}, 350);
+	}
+
+	function refreshFs() {
+		var path = el("fsPath").value || "";
+		apiGet(`/api/fs/list?path=${encodeURIComponent(path)}`).then((r) => {
+			if (!r || r.ok === false) {
+				setPre("fsList", r);
+				return;
+			}
+			var items = r.items || [];
+			fsLastRels = [];
+			var html = items
+				.map((it) => {
+					var name = it.name;
+					var isDir = !!it.is_dir;
+					var rel = joinRel(path, name);
+					fsLastRels.push(rel);
+
+					var displayName = isDir ? `${name}/` : name;
+					var isSelected = fsSelected === rel;
+					var cls = `item fsitem${isSelected ? " selected" : ""}`;
+					var checked = fsChecked[rel] ? " checked" : "";
+
+					var dl = "";
+					if (!isDir) {
+						dl =
+							'<button class="btn btn-small btn-inline fsDl" data-rel="' +
+							escapeHtml(rel) +
+							'">Download</button>';
+					}
+
+					return (
+						'<div class="' +
+						cls +
+						'" data-rel="' +
+						escapeHtml(rel) +
+						'" data-isdir="' +
+						(isDir ? "1" : "0") +
+						'">' +
+						'<input class="fsChk" type="checkbox" data-rel="' +
+						escapeHtml(rel) +
+						'" aria-label="Select" ' +
+						checked +
+						" />" +
+						'<span class="name">' +
+						escapeHtml(displayName) +
+						"</span>" +
+						'<span class="actions"><span class="muted">' +
+						String(it.size || 0) +
+						"</span>" +
+						dl +
+						"</span>" +
+						"</div>"
+					);
+				})
+				.join("");
+
+			el("fsList").innerHTML = html || '<div class="muted">(empty)</div>';
+			fsUpdateSelCount();
+
+			Array.from(el("fsList").querySelectorAll(".fsChk")).forEach((node) => {
+				node.addEventListener("click", (ev) => {
+					ev.stopPropagation();
+					var rel = node.getAttribute("data-rel") || "";
+					if (!rel) return;
+					if (node.checked) {
+						fsChecked[rel] = true;
+					} else {
+						delete fsChecked[rel];
+					}
+					fsUpdateSelCount();
+				});
+			});
+
+			Array.from(el("fsList").querySelectorAll(".fsDl")).forEach((node) => {
+				node.addEventListener("click", (ev) => {
+					ev.stopPropagation();
+					var rel = node.getAttribute("data-rel") || "";
+					if (!rel) return;
+					window.location.href = `/api/fs/download?path=${encodeURIComponent(rel)}`;
+				});
+			});
+
+			Array.from(el("fsList").querySelectorAll(".fsitem .name")).forEach(
+				(node) => {
+					node.addEventListener("click", () => {
+						var item = node.parentElement;
+						var rel = item.getAttribute("data-rel") || "";
+						var isDir = (item.getAttribute("data-isdir") || "0") === "1";
+						if (isDir) {
+							el("fsPath").value = rel;
+							fsSelected = "";
+							setFsHint("");
+							refreshFs();
+							return;
+						}
+
+						fsSelected = rel;
+						setFsHint(`focused: ${rel}`);
+
+						if (/\.(zip|patch|diff)$/i.test(rel)) {
+							el("patchPath").value = normalizePatchPath(rel);
+
+							let m = null;
+							if (issueRegex) {
+								try {
+									m = issueRegex.exec(rel);
+								} catch (e) {
+									m = null;
+								}
+							}
+							if (!m) {
+								m = /(?:issue_|#)(\d+)/i.exec(rel) || /(\d{3,6})/.exec(rel);
+							}
+							if (m && m[1] && !String(el("issueId").value || "").trim()) {
+								el("issueId").value = String(m[1]);
+							}
+							validateAndPreview();
+						}
+
+						refreshFs();
+					});
+				},
+			);
+		});
+	}
+
+	function renderRunsFromResponse(r) {
+		runsCache = r.runs || [];
+
+		var html = runsCache
+			.map((x, idx) => {
+				var log = x.log_rel_path || "";
+				var link = log
+					? '<a class="linklike" href="/api/fs/download?path=' +
+						encodeURIComponent(log) +
+						'">log</a>'
+					: "";
+				var sel =
+					selectedRun &&
+					selectedRun.issue_id === x.issue_id &&
+					selectedRun.mtime_utc === x.mtime_utc
+						? " *"
+						: "";
+				return (
+					'<div class="item runitem" data-idx="' +
+					String(idx) +
+					'">' +
+					'<span class="name">#' +
+					String(x.issue_id) +
+					" " +
+					escapeHtml(String(x.result || "")) +
+					sel +
+					"</span>" +
+					'<span class="actions">' +
+					link +
+					' <span class="muted">' +
+					formatLocalTime(x.mtime_utc || "") +
+					"</span></span>" +
+					"</div>"
+				);
+			})
+			.join("");
+
+		el("runsList").innerHTML = html || '<div class="muted">(none)</div>';
+
+		Array.from(el("runsList").querySelectorAll(".runitem .name")).forEach(
+			(node) => {
+				node.addEventListener("click", () => {
+					var item = node.parentElement;
+					var idx = parseInt(item.getAttribute("data-idx") || "-1", 10);
+					if (idx >= 0 && idx < runsCache.length) {
+						selectedRun = runsCache[idx];
+						renderIssueDetail();
+						refreshRuns();
+					}
+				});
+			},
+		);
+	}
+
+	function refreshRuns() {
+		var q = [];
+		var issue = String(el("runsIssue").value || "").trim();
+		var res = String(el("runsResult").value || "");
+		if (issue) q.push(`issue_id=${encodeURIComponent(issue)}`);
+		if (res) q.push(`result=${encodeURIComponent(res)}`);
+		q.push("limit=80");
+
+		apiGet(`/api/runs?${q.join("&")}`).then((r) => {
+			if (!r || r.ok === false) {
+				setPre("runsList", r);
+				return;
+			}
+			renderRunsFromResponse(r);
+		});
+	}
+
+	function refreshLastRunLog() {
+		apiGet("/api/runs?limit=1").then((r) => {
+			if (!r || r.ok === false) {
+				setPre("lastRunLog", r);
+				return;
+			}
+			var runs = r.runs || [];
+			if (!runs.length) {
+				lastRunLogPath = "";
+				setPre("lastRunLog", "");
+				return;
+			}
+			var logRel = String(runs[0].log_rel_path || "");
+			if (!logRel) {
+				lastRunLogPath = "";
+				setPre("lastRunLog", "(no log path)");
+				return;
+			}
+
+			lastRunLogPath = logRel;
+			var box = el("lastRunLog");
+			var wantFollow = isNearBottom(box, 24);
+			var url =
+				"/api/fs/read_text?path=" +
+				encodeURIComponent(logRel) +
+				"&tail_lines=2000";
+			apiGet(url).then((rt) => {
+				if (!rt || rt.ok === false) {
+					setPre("lastRunLog", rt);
+					return;
+				}
+				var t = String(rt.text || "");
+				if (rt.truncated) t += "\n\n[TRUNCATED]";
+				setPre("lastRunLog", t);
+				if (wantFollow && box) box.scrollTop = box.scrollHeight;
+			});
+		});
+	}
+
+	function refreshTail(lines) {
+		tailLines = lines || tailLines || 200;
+
+		var idleGuardOn = !!(cfg && cfg.ui && cfg.ui.clear_output_on_autofill);
+		var jid = AMP_UI.getLiveJobId();
+		if (!jid && suppressIdleOutput && idleGuardOn) {
+			setPre("tail", "");
+			AMP_UI.updateProgressPanelFromEvents();
+			return;
+		}
+
+		var linesQ = encodeURIComponent(String(tailLines));
+		var url = `/api/runner/tail?lines=${linesQ}`;
+		if (jid) {
+			url =
+				"/api/jobs/" +
+				encodeURIComponent(String(jid)) +
+				"/log_tail?lines=" +
+				linesQ;
+		}
+		apiGet(url).then((r) => {
+			if (!r || r.ok === false) {
+				setPre("tail", r);
+				return;
+			}
+			var t = String(r.tail || "");
+			setPre("tail", t);
+		});
+	}
+
+	function parseProgressFromText(text) {
+		var lines = String(text || "").split(/\r?\n/);
+		var order = [];
+		var state = {};
+		var currentRunning = "";
+
+		function normStepName(s) {
+			return String(s || "")
+				.replace(/\s+/g, " ")
+				.trim();
+		}
+
+		function ensureStep(name) {
+			if (!name) return;
+			if (!Object.hasOwn(state, name)) {
+				state[name] = "pending";
+			}
+			if (order.indexOf(name) < 0) order.push(name);
+		}
+
+		function setState(name, st) {
+			name = normStepName(name);
+			if (!name) return;
+			ensureStep(name);
+			state[name] = st;
+		}
 
 		for (let i = 0; i < lines.length; i++) {
 			const raw = String(lines[i] || "");
 			const s = raw.trim();
-      if (!s) continue;
+			if (!s) continue;
 
-      if (s.indexOf("DO:") === 0) {
+			if (s.indexOf("DO:") === 0) {
 				const stepDo = normStepName(s.slice(3));
-        setState(stepDo, "running");
-        currentRunning = stepDo;
-        continue;
-      }
+				setState(stepDo, "running");
+				currentRunning = stepDo;
+				continue;
+			}
 
-      if (s.indexOf("OK:") === 0) {
+			if (s.indexOf("OK:") === 0) {
 				const stepOk = normStepName(s.slice(3));
-        setState(stepOk, "ok");
-        if (currentRunning === stepOk) currentRunning = "";
-        continue;
-      }
+				setState(stepOk, "ok");
+				if (currentRunning === stepOk) currentRunning = "";
+				continue;
+			}
 
-      if (s.indexOf("FAIL:") === 0) {
+			if (s.indexOf("FAIL:") === 0) {
 				const stepFail = normStepName(s.slice(5));
-        setState(stepFail, "fail");
-        if (currentRunning === stepFail) currentRunning = "";
-        continue;
-      }
+				setState(stepFail, "fail");
+				if (currentRunning === stepFail) currentRunning = "";
+				continue;
+			}
 
-      if (s.indexOf("ERROR:") === 0 || s === "FAIL" || s.indexOf("FAIL ") === 0) {
-        if (currentRunning) setState(currentRunning, "fail");
-      }
-    }
+			if (
+				s.indexOf("ERROR:") === 0 ||
+				s === "FAIL" ||
+				s.indexOf("FAIL ") === 0
+			) {
+				if (currentRunning) setState(currentRunning, "fail");
+			}
+		}
 
-    if (currentRunning) {
+		if (currentRunning) {
 			for (let j = 0; j < order.length; j++) {
 				const nm = order[j];
-        if (state[nm] === "running" && nm !== currentRunning) {
-          state[nm] = "pending";
-        }
-      }
-    }
+				if (state[nm] === "running" && nm !== currentRunning) {
+					state[nm] = "pending";
+				}
+			}
+		}
 
 		for (let k = 0; k < order.length; k++) {
 			const nm2 = order[k];
-      if (!Object.hasOwn(state, nm2)) state[nm2] = "pending";
-    }
+			if (!Object.hasOwn(state, nm2)) state[nm2] = "pending";
+		}
 
-    return { order: order, state: state };
-  }
+		return { order: order, state: state };
+	}
 
-  function pickProgressSummaryLine(text) {
-    var lines = String(text || "").split(/\r?\n/);
+	function pickProgressSummaryLine(text) {
+		var lines = String(text || "").split(/\r?\n/);
 		for (let i = lines.length - 1; i >= 0; i--) {
 			const s = String(lines[i] || "").trim();
-      if (!s) continue;
+			if (!s) continue;
 
-      if (s.indexOf("RESULT:") === 0) return s;
-      if (s.indexOf("STATUS:") === 0) return s;
-      if (s.indexOf("FAIL:") === 0) return s;
-      if (s.indexOf("OK:") === 0) return s;
-      if (s.indexOf("DO:") === 0) return s;
-    }
-    return "(idle)";
-  }
+			if (s.indexOf("RESULT:") === 0) return s;
+			if (s.indexOf("STATUS:") === 0) return s;
+			if (s.indexOf("FAIL:") === 0) return s;
+			if (s.indexOf("OK:") === 0) return s;
+			if (s.indexOf("DO:") === 0) return s;
+		}
+		return "(idle)";
+	}
 
-  function renderProgressSteps(progress) {
-    var box = el("progressSteps");
-    if (!box) return;
+	function renderProgressSteps(progress) {
+		var box = el("progressSteps");
+		if (!box) return;
 
-    var order = (progress && progress.order) ? progress.order : [];
-    var state = (progress && progress.state) ? progress.state : {};
+		var order = progress && progress.order ? progress.order : [];
+		var state = progress && progress.state ? progress.state : {};
 
-    if (!order.length) {
-      box.innerHTML = "";
-      return;
-    }
+		if (!order.length) {
+			box.innerHTML = "";
+			return;
+		}
 
-    var html = "";
+		var html = "";
 		for (let i = 0; i < order.length; i++) {
 			const name = order[i];
 			const st = state[name] || "pending";
-      html += "<div class=\"step\">";
-      html += "<span class=\"dot " + escapeHtml(st) + "\"></span>";
-      html += "<span class=\"step-name\">" + escapeHtml(name) + "</span>";
-      if (st === "running") {
-        html += "<span class=\"pill running\">RUNNING</span>";
-      }
-      html += "</div>";
-    }
-
-    box.innerHTML = html;
-  }
-
-  function renderProgressSummary(summaryLine) {
-    var node = el("progressSummary");
-    if (!node) return;
-    node.textContent = summaryLine || "(idle)";
-  }
-
-  function updateShortProgressFromText(text) {
-    var progress = parseProgressFromText(text);
-    renderProgressSteps(progress);
-    renderProgressSummary(pickProgressSummaryLine(text));
-  }
-
-  function normStepName(s) {
-    return String(s || "").replace(/\s+/g, " ").trim();
-  }
-
-  function deriveProgressFromEvents(events) {
-    var order = [];
-    var state = {};
-    var currentRunning = "";
-    var resultStatus = "";
-
-    function ensureStep(name) {
-      if (!name) return;
-      if (!Object.hasOwn(state, name)) {
-        state[name] = "pending";
-      }
-      if (order.indexOf(name) < 0) order.push(name);
-    }
-
-    function setState(name, st) {
-      name = normStepName(name);
-      if (!name) return;
-      ensureStep(name);
-      state[name] = st;
-    }
-
-		for (let i = 0; i < (events || []).length; i++) {
-			const ev = events[i];
-      if (!ev || typeof ev !== "object") continue;
-			const t = String(ev.type || "");
-
-      if (t === "result") {
-        resultStatus = ev.ok ? "success" : "fail";
-        continue;
-      }
-
-      if (t !== "log") continue;
-
-			const kind = String(ev.kind || "");
-      if (kind !== "DO" && kind !== "OK" && kind !== "FAIL") continue;
-
-			const stage = normStepName(ev.stage || "");
-      if (!stage) continue;
-
-      if (kind === "DO") {
-        setState(stage, "running");
-        currentRunning = stage;
-        continue;
-      }
-
-      if (kind === "OK") {
-        setState(stage, "ok");
-        if (currentRunning === stage) currentRunning = "";
-        continue;
-      }
-
-      if (kind === "FAIL") {
-        setState(stage, "fail");
-        if (currentRunning === stage) currentRunning = "";
-      }
-    }
-
-    if (currentRunning) {
-			for (let j = 0; j < order.length; j++) {
-				const nm = order[j];
-        if (state[nm] === "running" && nm !== currentRunning) {
-          state[nm] = "pending";
-        }
-      }
-    }
-
-		for (let k = 0; k < order.length; k++) {
-			const nm2 = order[k];
-      if (!Object.hasOwn(state, nm2)) state[nm2] = "pending";
-    }
-
-    return { order: order, state: state, resultStatus: resultStatus };
-  }
-
-  function deriveProgressSummaryFromEvents(events, progress) {
-    var lastResult = null;
-    var lastLog = null;
-		for (let i = (events || []).length - 1; i >= 0; i--) {
-			const ev = events[i];
-      if (!ev || typeof ev !== "object") continue;
-			const t = String(ev.type || "");
-      if (t === "result") {
-        lastResult = ev;
-        break;
-      }
-      if (t === "log") {
-				const kind = String(ev.kind || "");
-        if (kind === "DO" || kind === "OK" || kind === "FAIL") {
-          lastLog = ev;
-          break;
-        }
-      }
-    }
-
-    if (lastResult) {
-      return {
-        text: lastResult.ok ? "RESULT: SUCCESS" : "RESULT: FAIL",
-        status: lastResult.ok ? "success" : "fail"
-      };
-    }
-
-    if (lastLog) {
-			const stage = normStepName(lastLog.stage || "");
-			const kind = String(lastLog.kind || "");
-      if (kind === "FAIL") {
-        return { text: "FAIL: " + stage, status: "fail" };
-      }
-      if (kind === "OK") {
-        return { text: "OK: " + stage, status: "running" };
-      }
-      if (kind === "DO") {
-        return { text: "DO: " + stage, status: "running" };
-      }
-    }
-
-    if (progress && progress.order && progress.order.length) {
-      return { text: "STATUS: RUNNING", status: "running" };
-    }
-    return { text: "(idle)", status: "idle" };
-  }
-
-  function setProgressSummaryState(summary) {
-    var node = el("progressSummary");
-    if (!node) return;
-    var st = (summary && summary.status) ? String(summary.status) : "idle";
-    node.classList.remove("success", "fail", "running", "idle", "muted");
-    node.classList.add(st);
-    if (st === "idle") node.classList.add("muted");
-  }
-
-  function updateProgressPanelFromEvents() {
-    var progress = deriveProgressFromEvents(liveEvents);
-    renderProgressSteps(progress);
-    var summary = deriveProgressSummaryFromEvents(liveEvents, progress);
-    renderProgressSummary(summary.text);
-    setProgressSummaryState(summary);
-  }
-
-  function refreshStats() {
-    apiGet("/api/debug/diagnostics").then((r) => {
-      if (!r || r.ok === false) {
-        setPre("stats", r);
-        return;
-      }
-      var s = (r.stats || {});
-      var all = s.all_time || {};
-      var lines = [];
-      lines.push({ k: "all_time.total", v: String(all.total || 0) });
-      lines.push({ k: "all_time.success", v: String(all.success || 0) });
-      lines.push({ k: "all_time.fail", v: String(all.fail || 0) });
-      lines.push({ k: "all_time.unknown", v: String(all.unknown || 0) });
-      lines.push({ k: "all_time.canceled", v: String(all.canceled || 0) });
-
-      (s.windows || []).forEach((w) => {
-        var d = w.days;
-        lines.push({ k: String(d) + "d.total", v: String(w.total || 0) });
-        lines.push({ k: String(d) + "d.success", v: String(w.success || 0) });
-        lines.push({ k: String(d) + "d.fail", v: String(w.fail || 0) });
-        lines.push({ k: String(d) + "d.unknown", v: String(w.unknown || 0) });
-        lines.push({ k: String(d) + "d.canceled", v: String(w.canceled || 0) });
-      });
-
-      el("stats").innerHTML = lines.map((x) => "<div class=\"rowline\"><span class=\"k\">" + escapeHtml(x.k) + "</span><span class=\"v\">" + escapeHtml(x.v) + "</span></div>").join("");
-    });
-  }
-
-  function renderActiveJob(jobs) {
-    var active = (jobs || []).find((j) => j.status === "running") || null;
-    activeJobId = active ? String(active.job_id || "") : null;
-    var queued = (jobs || []).filter((j) => j.status === "queued");
-
-    var box = el("activeJob");
-    if (!box) return;
-
-    if (!active && queued.length === 0) {
-      box.innerHTML = "<div class=\"muted\">(none)</div>";
-      return;
-    }
-
-    var html = "";
-    if (active) {
-      html += "<div><b>running</b> " + escapeHtml(active.job_id || "") + "</div>";
-      html += "<div class=\"muted\">mode=" + escapeHtml(active.mode || "") + " issue=" + escapeHtml(active.issue_id || "") + "</div>";
-      html += "<div class=\"row\"><button class=\"btn btn-small\" id=\"cancelActive\">Cancel</button>";
-      html += "<a class=\"linklike\" href=\"/api/jobs/log_tail?job_id=" + encodeURIComponent(active.job_id || "") + "\">log</a></div>";
-    }
-
-    if (queued.length) {
-      html += "<div style=\"margin-top:6px\"><b>queued</b>: " + String(queued.length) + "</div>";
-    }
-
-    box.innerHTML = html;
-
-    var cancelBtn = el("cancelActive");
-    if (cancelBtn && active && active.job_id) {
-      cancelBtn.addEventListener("click", () => {
-        apiPost("/api/jobs/cancel", { job_id: active.job_id }).then(() => {
-          refreshJobs();
-        });
-      });
-    }
-  }
-
-  
-  function loadLiveJobId() {
-  var v = null;
-  try { v = localStorage.getItem("amp.liveJobId"); } catch (e) { v = null; }
-  if (!v) return null;
-  return String(v);
-}
-
-function saveLiveJobId(jobId) {
-  try { localStorage.setItem("amp.liveJobId", String(jobId || "")); } catch (e) {}
-}
-
-function loadLiveLevel() {
-    var v = null;
-    try { v = localStorage.getItem("amp.liveLogLevel"); } catch (e) { v = null; }
-    if (!v) return;
-    v = String(v);
-    if (["quiet", "normal", "warning", "verbose", "debug"].indexOf(v) >= 0) {
-      liveLevel = v;
-    }
-  }
-
-  function loadUiVisibility() {
-    var v = null;
-    try { v = localStorage.getItem("amp.ui.runsVisible"); } catch (e) { v = null; }
-    if (v === "1") runsVisible = true;
-    else if (v === "0") runsVisible = false;
-
-    v = null;
-    try { v = localStorage.getItem("amp.ui.jobsVisible"); } catch (e) { v = null; }
-    if (v === "1") jobsVisible = true;
-    else if (v === "0") jobsVisible = false;
-  }
-
-  function saveRunsVisible(v) {
-    try { localStorage.setItem("amp.ui.runsVisible", v ? "1" : "0"); } catch (e) {}
-  }
-
-  function saveJobsVisible(v) {
-    try { localStorage.setItem("amp.ui.jobsVisible", v ? "1" : "0"); } catch (e) {}
-  }
-
-  function setRunsVisible(v) {
-    runsVisible = !!v;
-    var wrap = el("runsWrap");
-    var btn = el("runsCollapse");
-    if (wrap) wrap.classList.toggle("hidden", !runsVisible);
-    if (btn) btn.textContent = runsVisible ? "Hide" : "Show";
-  }
-
-  function setJobsVisible(v) {
-    jobsVisible = !!v;
-    var wrap = el("jobsWrap");
-    var btn = el("jobsCollapse");
-    if (wrap) wrap.classList.toggle("hidden", !jobsVisible);
-    if (btn) btn.textContent = jobsVisible ? "Hide" : "Show";
-  }
-
-  function setLiveStreamStatus(text) {
-    var box = el("liveStreamStatus");
-    if (!box) return;
-    box.textContent = String(text || "");
-  }
-
-  function getLiveJobId() {
-    return selectedJobId || activeJobId || null;
-  }
-
-  function closeLiveStream() {
-    if (liveES) {
-      try { liveES.close(); } catch (e) {}
-    }
-    liveES = null;
-    liveStreamJobId = null;
-  }
-
-  function filterLiveEvent(ev) {
-    if (!ev) return false;
-    var t = String(ev.type || "");
-    if (t === "result") return true;
-    if (t === "hello") return liveLevel === "debug";
-    if (t !== "log") return liveLevel === "debug";
-
-    if (ev.bypass === true) return true;
-
-    var ch = String(ev.ch || "");
-    var sev = String(ev.sev || "");
-    var summary = ev.summary === true;
-
-    if (liveLevel === "quiet") return summary;
-    if (liveLevel === "debug") return true;
-
-    if (ch === "CORE") return true;
-
-    if (liveLevel === "normal") return false;
-
-    if (liveLevel === "warning") return ch === "DETAIL" && sev === "WARNING";
-    if (liveLevel === "verbose") {
-      if (ch !== "DETAIL") return false;
-      return sev === "WARNING" || sev === "INFO";
-    }
-    return false;
-  }
-
-
-  function formatLiveEvent(ev) {
-    var t = String(ev.type || "");
-    if (t === "hello") {
-      return "HELLO protocol=" + String(ev.protocol || "") +
-        " mode=" + String(ev.runner_mode || "") +
-        " issue=" + String(ev.issue_id || "");
-    }
-    if (t === "result") {
-			const ok = ev.ok ? "SUCCESS" : "FAIL";
-      return "RESULT: " + ok + " rc=" + String(ev.return_code);
-    }
-
-    var showPrefixes = liveLevel === "debug";
-    var line = "";
-
-    if (showPrefixes) {
-			const parts = [];
-			const stage = String(ev.stage || "");
-			const kind = String(ev.kind || "");
-			const sev = String(ev.sev || "");
-			const msg = String(ev.msg || "");
-      if (stage) parts.push(stage);
-      if (kind) parts.push(kind);
-      if (sev) parts.push(sev);
-      parts.push(msg);
-      line = parts.join(" | ");
-    } else {
-      line = String(ev.msg || "");
-    }
-
-    if (ev.stdout || ev.stderr) {
-			const out = [];
-      out.push(line);
-      if (ev.stdout) out.push("STDOUT:\n" + String(ev.stdout));
-      if (ev.stderr) out.push("STDERR:\n" + String(ev.stderr));
-      return out.join("\n");
-    }
-    return line;
-  }
-
-  function renderLiveLog() {
-    var box = el("liveLog");
-    if (!box) return;
-    var lines = [];
-		for (let i = 0; i < liveEvents.length; i++) {
-			const ev = liveEvents[i];
-      if (!filterLiveEvent(ev)) continue;
-      lines.push(formatLiveEvent(ev));
-    }
-    box.textContent = lines.join("\n");
-    var wrap = box.parentElement;
-    if (wrap && wrap.classList && wrap.classList.contains("card-tight")) {
-      // no-op
-    }
-  }
-
-  function updateProgressFromEvents() {
-    var box = el("activeStage");
-    if (!box) return;
-		for (let i = liveEvents.length - 1; i >= 0; i--) {
-			const ev = liveEvents[i];
-      if (!ev) continue;
-      if (String(ev.type || "") === "result") {
-        box.textContent = (ev.ok ? "RESULT: SUCCESS" : "RESULT: FAIL");
-        return;
-      }
-      if (String(ev.type || "") === "log") {
-				const stage = String(ev.stage || "");
-				const kind = String(ev.kind || "");
-        if (stage || kind) {
-          box.textContent = (stage ? stage : "") + (kind ? " / " + kind : "");
-          return;
-        }
-      }
-    }
-  }
-
-  function openLiveStream(jobId) {
-    if (!jobId) {
-      closeLiveStream();
-      liveEvents = [];
-      renderLiveLog();
-      updateProgressPanelFromEvents();
-      setLiveStreamStatus("");
-      return;
-    }
-    jobId = String(jobId);
-
-    if (liveStreamJobId === jobId && liveES) return;
-
-    closeLiveStream();
-    liveStreamJobId = jobId;
-    liveEvents = [];
-    renderLiveLog();
-    updateProgressPanelFromEvents();
-    setLiveStreamStatus("connecting...");
-
-    var url = "/api/jobs/" + encodeURIComponent(jobId) + "/events";
-    var es = new EventSource(url);
-    liveES = es;
-
-    es.onmessage = (e) => {
-      if (!e || !e.data) return;
-      var obj = null;
-      try { obj = JSON.parse(String(e.data)); } catch (err) { obj = null; }
-      if (!obj) return;
-      liveEvents.push(obj);
-      if (filterLiveEvent(obj)) {
-        renderLiveLog();
-      }
-      updateProgressPanelFromEvents();
-      setLiveStreamStatus("streaming");
-    };
-
-    es.addEventListener("end", (e) => {
-      var reason = "";
-      var status = "";
-      if (e && e.data) {
-        try {
-					const p = JSON.parse(String(e.data));
-          if (p && typeof p === "object") {
-            reason = String(p.reason || "");
-            status = String(p.status || "");
-          }
-        } catch (err) {}
-      }
-      var msg = "ended";
-      if (status) msg += " (" + status + ")";
-      if (reason) msg += " [" + reason + "]";
-      setLiveStreamStatus(msg);
-      try { es.close(); } catch (e2) {}
-      if (liveES === es) {
-        liveES = null;
-      }
-    });
-
-    es.onerror = () => {
-      apiGet("/api/jobs/" + encodeURIComponent(jobId)).then((r) => {
-        if (!r || r.ok === false) {
-          closeLiveStream();
-          setLiveStreamStatus("ended [job_not_found]");
-          return;
-        }
-        var j = r.job || {};
-        var st = String(j.status || "");
-        if (st && st !== "running" && st !== "queued") {
-          closeLiveStream();
-          setLiveStreamStatus("ended (" + st + ") [job_completed]");
-          return;
-        }
-        setLiveStreamStatus("reconnecting...");
-      });
-    };
-  }
-
-
-  function jobSummaryCommit(msg) {
-    msg = String(msg || "");
-    msg = msg.replace(/\s+/g, " ").trim();
-    if (!msg) return "";
-    if (msg.length <= 60) return msg;
-    return msg.slice(0, 57) + "...";
-  }
-
-  function jobSummaryPatchName(p) {
-    p = String(p || "").trim();
-    if (!p) return "";
-    p = p.replace(/\\/g, "/");
-    var idx = p.lastIndexOf("/");
-    if (idx >= 0) return p.slice(idx + 1);
-    return p;
-  }
-
-  function jobSummaryDurationSeconds(startUtc, endUtc) {
-    if (!startUtc || !endUtc) return "";
-    var a = new Date(String(startUtc));
-    var b = new Date(String(endUtc));
-    if (isNaN(a.getTime()) || isNaN(b.getTime())) return "";
-    var sec = (b.getTime() - a.getTime()) / 1000;
-    if (sec < 0) return "";
-    var s = Math.round(sec * 10) / 10;
-    return String(s);
-  }
-
-
-function refreshJobs() {
-    apiGet("/api/jobs").then((r) => {
-      if (!r || r.ok === false) {
-        setPre("jobsList", r);
-        renderActiveJob([]);
-        return;
-      }
-      var jobs = r.jobs || [];
-
-      var active = jobs.find((j) => j.status === "running") || null;
-      var activeId = active ? String(active.job_id || "") : "";
-
-      var idleAutoSelect = !!(cfg && cfg.ui && cfg.ui.idle_auto_select_last_job);
-
-      if (!selectedJobId) {
-			const saved = loadLiveJobId();
-        if (saved) selectedJobId = saved;
-      }
-
-      if (!selectedJobId && activeId) {
-        selectedJobId = activeId;
-        saveLiveJobId(selectedJobId);
-        suppressIdleOutput = false;
-      }
-
-      if (!selectedJobId && jobs.length && idleAutoSelect) {
-        jobs.sort((a, b) => String(a.created_utc || "").localeCompare(String(b.created_utc || "")));
-        selectedJobId = String(jobs[jobs.length - 1].job_id || "");
-        if (selectedJobId) saveLiveJobId(selectedJobId);
-        suppressIdleOutput = false;
-      }
-      renderActiveJob(jobs);
-      ensureAutoRefresh(jobs);
-
-      var html = jobs.map((j) => {
-        var jobId = String(j.job_id || "");
-        var isSel = selectedJobId && String(selectedJobId) === jobId;
-        var cls = "item job-item" + (isSel ? " selected" : "");
-
-        var issueId = String(j.issue_id || "").trim();
-        var issueText = issueId ? ("#" + issueId) : "(no issue)";
-
-        var stRaw = String(j.status || "").trim().toLowerCase();
-        var statusText = stRaw ? stRaw.toUpperCase() : "UNKNOWN";
-        var statusCls = "job-status st-" + (stRaw || "unknown");
-
-        var commit = jobSummaryCommit(j.commit_message || "");
-        var patchName = jobSummaryPatchName(j.patch_path || "");
-
-        var metaParts = [];
-        metaParts.push("mode=" + String(j.mode || ""));
-        if (patchName) metaParts.push("patch=" + patchName);
-
-        var dur = jobSummaryDurationSeconds(j.started_utc, j.ended_utc);
-        if (dur) metaParts.push("dur=" + dur + "s");
-
-        var meta = metaParts.join(" | ");
-
-        var line = "<div class=\"" + cls + "\">";
-        line += "<div class=\"name job-name\" data-jobid=\"" + escapeHtml(jobId) + "\">";
-        line += "<div class=\"job-lines\">";
-        line += "<div class=\"job-top\">";
-        line += "<span class=\"job-issue\">" + escapeHtml(issueText) + "</span>";
-        line += "<span class=\"" + escapeHtml(statusCls) + "\">" + escapeHtml(statusText) + "</span>";
-        line += "</div>";
-        if (commit) {
-          line += "<div class=\"job-title\">" + escapeHtml(commit) + "</div>";
-        }
-        line += "<div class=\"job-meta\">" + escapeHtml(meta) + "</div>";
-        line += "</div>";
-        line += "</div>";
-        line += "</div>";
-        return line;
-      }).join("");
-      el("jobsList").innerHTML = html || "<div class=\"muted\">(none)</div>";
-    });
-  }
-
-
-  function ensureAutoRefresh(jobs) {
-    var id = getLiveJobId();
-    var st = "";
-    if (id && jobs && jobs.length) {
+			html += '<div class="step">';
+			html += `<span class="dot ${escapeHtml(st)}"></span>`;
+			html += `<span class="step-name">${escapeHtml(name)}</span>`;
+			if (st === "running") {
+				html += '<span class="pill running">RUNNING</span>';
+			}
+			html += "</div>";
+		}
+
+		box.innerHTML = html;
+	}
+
+	function renderProgressSummary(summaryLine) {
+		var node = el("progressSummary");
+		if (!node) return;
+		node.textContent = summaryLine || "(idle)";
+	}
+
+	function updateShortProgressFromText(text) {
+		var progress = parseProgressFromText(text);
+		renderProgressSteps(progress);
+		renderProgressSummary(pickProgressSummaryLine(text));
+	}
+
+	function normStepName(s) {
+		return String(s || "")
+			.replace(/\s+/g, " ")
+			.trim();
+	}
+
+	function renderJobsFromResponse(r) {
+		var jobs = r.jobs || [];
+
+		var active = jobs.find((j) => j.status === "running") || null;
+		var activeId = active ? String(active.job_id || "") : "";
+
+		var idleAutoSelect = !!(cfg && cfg.ui && cfg.ui.idle_auto_select_last_job);
+
+		if (!selectedJobId) {
+			const saved = AMP_UI.loadLiveJobId();
+			if (saved) selectedJobId = saved;
+		}
+
+		if (!selectedJobId && activeId) {
+			selectedJobId = activeId;
+			AMP_UI.saveLiveJobId(selectedJobId);
+			suppressIdleOutput = false;
+		}
+
+		if (!selectedJobId && jobs.length && idleAutoSelect) {
+			jobs.sort((a, b) =>
+				String(a.created_utc || "").localeCompare(String(b.created_utc || "")),
+			);
+			selectedJobId = String(jobs[jobs.length - 1].job_id || "");
+			if (selectedJobId) AMP_UI.saveLiveJobId(selectedJobId);
+			suppressIdleOutput = false;
+		}
+		AMP_UI.renderActiveJob(jobs);
+		ensureAutoRefresh(jobs);
+
+		var html = jobs
+			.map((j) => {
+				var jobId = String(j.job_id || "");
+				var isSel = selectedJobId && String(selectedJobId) === jobId;
+				var cls = `item job-item${isSel ? " selected" : ""}`;
+
+				var issueId = String(j.issue_id || "").trim();
+				var issueText = issueId ? `#${issueId}` : "(no issue)";
+
+				var stRaw = String(j.status || "")
+					.trim()
+					.toLowerCase();
+				var statusText = stRaw ? stRaw.toUpperCase() : "UNKNOWN";
+				var statusCls = `job-status st-${stRaw || "unknown"}`;
+
+				var commit = AMP_UI.jobSummaryCommit(j.commit_message || "");
+				var patchName = AMP_UI.jobSummaryPatchName(j.patch_path || "");
+
+				var metaParts = [];
+				metaParts.push(`mode=${String(j.mode || "")}`);
+				if (patchName) metaParts.push(`patch=${patchName}`);
+
+				var dur = AMP_UI.jobSummaryDurationSeconds(j.started_utc, j.ended_utc);
+				if (dur) metaParts.push(`dur=${dur}s`);
+
+				var meta = metaParts.join(" | ");
+
+				var line = '<div class="' + cls + '">';
+				line +=
+					'<div class="name job-name" data-jobid="' + escapeHtml(jobId) + '">';
+				line += '<div class="job-lines">';
+				line += '<div class="job-top">';
+				line += '<span class="job-issue">' + escapeHtml(issueText) + "</span>";
+				line +=
+					'<span class="' +
+					escapeHtml(statusCls) +
+					'">' +
+					escapeHtml(statusText) +
+					"</span>";
+				line += "</div>";
+				if (commit) {
+					line += '<div class="job-title">' + escapeHtml(commit) + "</div>";
+				}
+				line += '<div class="job-meta">' + escapeHtml(meta) + "</div>";
+				line += "</div>";
+				line += "</div>";
+				line += "</div>";
+				return line;
+			})
+			.join("");
+		el("jobsList").innerHTML = html || '<div class="muted">(none)</div>';
+	}
+
+	function refreshJobsIdle() {
+		var qs = "";
+		if (idleSigs.jobs) qs = "?since_sig=" + encodeURIComponent(idleSigs.jobs);
+		return apiGet("/api/jobs" + qs).then((r) => {
+			if (!r || r.ok === false) {
+				return { changed: false, sig: idleSigs.jobs };
+			}
+			var sig = String(r.sig || "");
+			if (sig) idleSigs.jobs = sig;
+			if (r.unchanged) return { changed: false, sig: sig };
+			renderJobsFromResponse(r);
+			return { changed: true, sig: sig };
+		});
+	}
+
+	function idleRefreshTick() {
+		if (document.hidden) return;
+		if (activeJobId) return;
+		var now = Date.now();
+		if (idleNextDueMs && now < idleNextDueMs) return;
+
+		var runsIssue = String(el("runsIssue").value || "").trim();
+		var runsResult = String(el("runsResult").value || "");
+		var canCondRuns = !runsIssue && !runsResult;
+
+		var pRuns;
+		if (canCondRuns) {
+			const q = ["limit=80"];
+			if (idleSigs.runs)
+				q.push("since_sig=" + encodeURIComponent(idleSigs.runs));
+			pRuns = apiGet(`/api/runs?${q.join("&")}`).then((r) => {
+				if (!r || r.ok === false) return { changed: false, sig: idleSigs.runs };
+				var sig = String(r.sig || "");
+				if (sig) idleSigs.runs = sig;
+				if (r.unchanged) return { changed: false, sig: sig };
+				renderRunsFromResponse(r);
+				return { changed: true, sig: sig };
+			});
+		} else {
+			pRuns = Promise.resolve(null);
+		}
+
+		var qsHdr = "";
+		if (idleSigs.hdr) qsHdr = "?since_sig=" + encodeURIComponent(idleSigs.hdr);
+		var pHdr = apiGet("/api/debug/diagnostics" + qsHdr).then((d) => {
+			if (!d || d.ok === false) return { changed: false, sig: idleSigs.hdr };
+			var sig = String(d.sig || "");
+			if (sig) idleSigs.hdr = sig;
+			if (d.unchanged) return { changed: false, sig: sig };
+			var base = "";
+			if (cfg && cfg.server && cfg.server.host && cfg.server.port) {
+				base = "server: " + cfg.server.host + ":" + cfg.server.port;
+			}
+			renderHeaderFromDiagnostics(d, base);
+			return { changed: true, sig: sig };
+		});
+
+		Promise.all([refreshJobsIdle(), pRuns, pHdr]).then((vals) => {
+			var changed = false;
+			for (let i = 0; i < vals.length; i++) {
+				const v = vals[i];
+				if (v && v.changed) changed = true;
+			}
+			if (changed) {
+				idleBackoffIdx = 0;
+			} else if (idleBackoffIdx < IDLE_BACKOFF_MS.length - 1) {
+				idleBackoffIdx += 1;
+			}
+			idleNextDueMs = Date.now() + IDLE_BACKOFF_MS[idleBackoffIdx];
+		});
+	}
+
+	function refreshJobs() {
+		apiGet("/api/jobs").then((r) => {
+			if (!r || r.ok === false) {
+				setPre("jobsList", r);
+				AMP_UI.renderActiveJob([]);
+				return;
+			}
+			renderJobsFromResponse(r);
+		});
+	}
+
+	function ensureAutoRefresh(jobs) {
+		var id = AMP_UI.getLiveJobId();
+		var st = "";
+		if (id && jobs && jobs.length) {
 			const j = jobs.find((x) => String(x.job_id || "") === String(id)) || null;
-      st = j ? String(j.status || "") : "";
-    }
-    if (st === "running" || st === "queued") openLiveStream(id);
-    else closeLiveStream();
+			st = j ? String(j.status || "") : "";
+		}
+		if (st === "running" || st === "queued") AMP_UI.openLiveStream(id);
+		else AMP_UI.closeLiveStream();
 
-    if (activeJobId) {
-      if (!autoRefreshTimer) {
-        autoRefreshTimer = setInterval(() => {
-          refreshJobs();
-          refreshRuns();
-        }, 1500);
-      }
-      return;
-    }
-    if (autoRefreshTimer) {
-      clearInterval(autoRefreshTimer);
-      autoRefreshTimer = null;
-    }
-  }
+		if (activeJobId) {
+			if (!autoRefreshTimer) {
+				autoRefreshTimer = setInterval(() => {
+					refreshJobs();
+					refreshRuns();
+				}, 1500);
+			}
+			return;
+		}
+		if (autoRefreshTimer) {
+			clearInterval(autoRefreshTimer);
+			autoRefreshTimer = null;
+		}
+	}
 
-  function computeCanonicalPreview(mode, issueId, commitMsg, patchPath) {
-    var prefix = (cfg && cfg.runner && cfg.runner.command) ? cfg.runner.command : ["python3", "scripts/am_patch.py"];
-    var argv = prefix.slice();
+	function computeCanonicalPreview(mode, issueId, commitMsg, patchPath) {
+		var prefix =
+			cfg && cfg.runner && cfg.runner.command
+				? cfg.runner.command
+				: ["python3", "scripts/am_patch.py"];
+		var argv = prefix.slice();
 
-    if (mode === "finalize_live") {
-      argv.push("-f");
-      argv.push(String(commitMsg || ""));
-      return argv;
-    }
-    if (mode === "finalize_workspace") {
-      argv.push("-w");
-      argv.push(String(issueId || ""));
-      return argv;
-    }
-    if (mode === "rerun_latest") {
-      argv.push("-l");
-      return argv;
-    }
+		if (mode === "finalize_live") {
+			argv.push("-f");
+			argv.push(String(commitMsg || ""));
+			return argv;
+		}
+		if (mode === "finalize_workspace") {
+			argv.push("-w");
+			argv.push(String(issueId || ""));
+			return argv;
+		}
+		if (mode === "rerun_latest") {
+			argv.push("-l");
+			return argv;
+		}
 
-    argv.push(String(issueId || ""));
-    argv.push(String(commitMsg || ""));
-    argv.push(String(patchPath || ""));
-    return argv;
-  }
+		argv.push(String(issueId || ""));
+		argv.push(String(commitMsg || ""));
+		argv.push(String(patchPath || ""));
+		return argv;
+	}
 
-  
-function setStartFormState(state) {
-  var issueEnabled = !!(state && state.issue_id);
-  var msgEnabled = !!(state && state.commit_message);
-  var patchEnabled = !!(state && state.patch_path);
+	function setStartFormState(state) {
+		var issueEnabled = !!(state && state.issue_id);
+		var msgEnabled = !!(state && state.commit_message);
+		var patchEnabled = !!(state && state.patch_path);
 
-  el("issueId").disabled = !issueEnabled;
-  el("commitMsg").disabled = !msgEnabled;
-  el("patchPath").disabled = !patchEnabled;
-  var browse = el("browsePatch");
-  if (browse) browse.disabled = !patchEnabled;
-}
+		el("issueId").disabled = !issueEnabled;
+		el("commitMsg").disabled = !msgEnabled;
+		el("patchPath").disabled = !patchEnabled;
+		var browse = el("browsePatch");
+		if (browse) browse.disabled = !patchEnabled;
+	}
 
-  function validateAndPreview() {
-    var mode = String(el("mode").value || "patch");
-    var issueId = String(el("issueId").value || "").trim();
-    var commitMsg = String(el("commitMsg").value || "").trim();
-    var patchPath = normalizePatchPath(String(el("patchPath").value || ""));
-    el("patchPath").value = patchPath;
+	function validateAndPreview() {
+		var mode = String(el("mode").value || "patch");
+		var issueId = String(el("issueId").value || "").trim();
+		var commitMsg = String(el("commitMsg").value || "").trim();
+		var patchPath = normalizePatchPath(String(el("patchPath").value || ""));
+		el("patchPath").value = patchPath;
 
-    var raw = getRawCommand();
+		var raw = getRawCommand();
 
+		var modeRules = null;
+		if (mode === "patch" || mode === "repair") {
+			modeRules = { issue_id: true, commit_message: true, patch_path: true };
+		} else if (mode === "finalize_live") {
+			modeRules = { issue_id: false, commit_message: true, patch_path: false };
+		} else if (mode === "finalize_workspace") {
+			modeRules = { issue_id: true, commit_message: false, patch_path: false };
+		} else if (mode === "rerun_latest") {
+			modeRules = { issue_id: false, commit_message: false, patch_path: false };
+		} else {
+			modeRules = { issue_id: true, commit_message: true, patch_path: true };
+		}
+		setStartFormState(modeRules);
 
-var modeRules = null;
-if (mode === "patch" || mode === "repair") {
-  modeRules = { issue_id: true, commit_message: true, patch_path: true };
-} else if (mode === "finalize_live") {
-  modeRules = { issue_id: false, commit_message: true, patch_path: false };
-} else if (mode === "finalize_workspace") {
-  modeRules = { issue_id: true, commit_message: false, patch_path: false };
-} else if (mode === "rerun_latest") {
-  modeRules = { issue_id: false, commit_message: false, patch_path: false };
-} else {
-  modeRules = { issue_id: true, commit_message: true, patch_path: true };
-}
-setStartFormState(modeRules);
+		var ok = true;
 
-var ok = true;
+		var canonical = null;
+		var preview = null;
 
-    var canonical = null;
-    var preview = null;
-
-    if (raw) {
-      ok = !parseInFlight && !!lastParsed && (lastParsedRaw === raw);
-      if (ok) {
+		if (raw) {
+			ok = !parseInFlight && !!lastParsed && lastParsedRaw === raw;
+			if (ok) {
 				const p = lastParsed.parsed || {};
 				const c = lastParsed.canonical || {};
-        canonical = c.argv ? c.argv : [];
+				canonical = c.argv ? c.argv : [];
 				const pMode = p.mode ? p.mode : mode;
 				const pIssue = p.issue_id ? p.issue_id : issueId;
 				const pMsg = p.commit_message ? p.commit_message : commitMsg;
 				const pPatch = p.patch_path ? p.patch_path : patchPath;
-        preview = {
-          mode: pMode,
-          issue_id: pIssue,
-          commit_message: pMsg,
-          patch_path: pPatch,
-          canonical_argv: canonical,
-          raw_command: raw
-        };
-      } else {
-        canonical = [];
-        preview = {
-          mode: mode,
-          issue_id: issueId,
-          commit_message: commitMsg,
-          patch_path: patchPath,
-          canonical_argv: canonical,
-          raw_command: raw,
-          parse_status: parseInFlight ? "parsing" : "needs_parse"
-        };
-      }
+				preview = {
+					mode: pMode,
+					issue_id: pIssue,
+					commit_message: pMsg,
+					patch_path: pPatch,
+					canonical_argv: canonical,
+					raw_command: raw,
+				};
+			} else {
+				canonical = [];
+				preview = {
+					mode: mode,
+					issue_id: issueId,
+					commit_message: commitMsg,
+					patch_path: patchPath,
+					canonical_argv: canonical,
+					raw_command: raw,
+					parse_status: parseInFlight ? "parsing" : "needs_parse",
+				};
+			}
+		} else {
+			if (mode === "patch" || mode === "repair") {
+				ok = !!commitMsg && !!patchPath;
+			} else if (mode === "finalize_live") {
+				ok = !!commitMsg;
+			} else if (mode === "finalize_workspace") {
+				ok = !!issueId && /^[0-9]+$/.test(issueId);
+			} else if (mode === "rerun_latest") {
+				ok = true;
+			}
 
-} else {
-  if (mode === "patch" || mode === "repair") {
-    ok = !!commitMsg && !!patchPath;
-  } else if (mode === "finalize_live") {
-    ok = !!commitMsg;
-  } else if (mode === "finalize_workspace") {
-    ok = !!issueId && (/^[0-9]+$/.test(issueId));
-  } else if (mode === "rerun_latest") {
-    ok = true;
-  }
+			canonical = computeCanonicalPreview(mode, issueId, commitMsg, patchPath);
+			preview = {
+				mode: mode,
+				issue_id: issueId,
+				commit_message: commitMsg,
+				patch_path: patchPath,
+				canonical_argv: canonical,
+			};
+		}
+		setPre("previewRight", preview);
+		el("enqueueBtn").disabled = !ok;
 
-  canonical = computeCanonicalPreview(mode, issueId, commitMsg, patchPath);
-  preview = {
-    mode: mode,
-    issue_id: issueId,
-    commit_message: commitMsg,
-    patch_path: patchPath,
-    canonical_argv: canonical
-  };
-}
-    setPre("previewRight", preview);
-    el("enqueueBtn").disabled = !ok;
+		var hint2 = el("enqueueHint");
+		if (hint2) {
+			if (raw) {
+				hint2.textContent = "";
+			} else {
+				if (ok) {
+					hint2.textContent = "";
+				} else if (mode === "finalize_live") {
+					hint2.textContent = "missing message";
+				} else if (mode === "finalize_workspace") {
+					hint2.textContent = "missing issue id";
+				} else if (mode === "patch" || mode === "repair") {
+					hint2.textContent = "missing commit message or patch path";
+				} else {
+					hint2.textContent = "missing fields";
+				}
+			}
+		}
+	}
 
-    var hint2 = el("enqueueHint");
-    if (hint2) {
-      if (raw) {
-        hint2.textContent = "";
+	function enqueue() {
+		var mode = String(el("mode").value || "patch");
+		var body = {
+			mode: mode,
+			raw_command: el("rawCommand")
+				? String(el("rawCommand").value || "").trim()
+				: "",
+		};
 
-} else {
-  if (ok) {
-    hint2.textContent = "";
-  } else if (mode === "finalize_live") {
-    hint2.textContent = "missing message";
-  } else if (mode === "finalize_workspace") {
-    hint2.textContent = "missing issue id";
-  } else if (mode === "patch" || mode === "repair") {
-    hint2.textContent = "missing commit message or patch path";
-  } else {
-    hint2.textContent = "missing fields";
-  }
-}    }
-  }
+		setUiStatus("enqueue: started mode=" + mode);
 
-  function enqueue() {
-    var mode = String(el("mode").value || "patch");
-    var body = {
-      mode: mode,
-      raw_command: (el("rawCommand") ? String(el("rawCommand").value || "").trim() : "")
-    };
+		if (mode === "patch" || mode === "repair") {
+			body.issue_id = String(el("issueId").value || "").trim();
+			body.commit_message = String(el("commitMsg").value || "").trim();
+			body.patch_path = normalizePatchPath(
+				String(el("patchPath").value || "").trim(),
+			);
+		} else if (mode === "finalize_live") {
+			body.commit_message = String(el("commitMsg").value || "").trim();
+		} else if (mode === "finalize_workspace") {
+			body.issue_id = String(el("issueId").value || "").trim();
+		}
 
-    setUiStatus("enqueue: started mode=" + mode);
+		apiPost("/api/jobs/enqueue", body).then((r) => {
+			pushApiStatus(r);
+			setPre("previewRight", r);
+			if (r && r.ok !== false && r.job_id) {
+				setUiStatus("enqueue: ok job_id=" + String(r.job_id));
+				selectedJobId = String(r.job_id);
+				AMP_UI.saveLiveJobId(selectedJobId);
+				suppressIdleOutput = false;
+				AMP_UI.openLiveStream(selectedJobId);
+				refreshTail(tailLines);
+			} else {
+				setUiError(String((r && r.error) || "enqueue failed"));
+			}
+			refreshJobs();
+		});
+	}
 
+	function uploadFile(file) {
+		var fd = new FormData();
+		fd.append("file", file);
+		setUiStatus("upload: started " + String((file && file.name) || ""));
+		fetch("/api/upload/patch", {
+			method: "POST",
+			body: fd,
+			headers: { Accept: "application/json" },
+		})
+			.then((r) =>
+				r.text().then((t) => {
+					try {
+						return JSON.parse(t);
+					} catch (e) {
+						return {
+							ok: false,
+							error: "bad json",
+							raw: t,
+							status: r.status,
+						};
+					}
+				}),
+			)
+			.then((j) => {
+				pushApiStatus(j);
+				setText(
+					"uploadHint",
+					j && j.ok
+						? "Uploaded: " + String(j.stored_rel_path || "")
+						: "Upload failed: " + String((j && j.error) || ""),
+				);
+				if (j && j.ok) {
+					setUiStatus("upload: ok");
+				} else {
+					setUiError(String((j && j.error) || "upload failed"));
+				}
+				if (j && j.stored_rel_path) {
+					const stored = String(j.stored_rel_path);
+					const n = el("patchPath");
+					if (n && shouldOverwrite("patchPath", n)) {
+						n.value = stored;
+					}
 
-if (mode === "patch" || mode === "repair") {
-  body.issue_id = String(el("issueId").value || "").trim();
-  body.commit_message = String(el("commitMsg").value || "").trim();
-  body.patch_path = normalizePatchPath(String(el("patchPath").value || "").trim());
-} else if (mode === "finalize_live") {
-  body.commit_message = String(el("commitMsg").value || "").trim();
-} else if (mode === "finalize_workspace") {
-  body.issue_id = String(el("issueId").value || "").trim();
-}
+					const relUnderRoot = stripPatchesPrefix(stored);
+					const parent = parentRel(relUnderRoot);
+					if (String(el("fsPath").value || "") === "") {
+						el("fsPath").value = parent;
+					}
+				}
+				applyAutofillFromPayload(j);
+				refreshFs();
+			})
+			.catch((e) => {
+				setPre("uploadResult", String(e));
+				setUiError(String(e));
+			});
+	}
 
-    apiPost("/api/jobs/enqueue", body).then((r) => {
-      pushApiStatus(r);
-      setPre("previewRight", r);
-      if (r && r.ok !== false && r.job_id) {
-        setUiStatus("enqueue: ok job_id=" + String(r.job_id));
-        selectedJobId = String(r.job_id);
-        saveLiveJobId(selectedJobId);
-        suppressIdleOutput = false;
-        openLiveStream(selectedJobId);
-        refreshTail(tailLines);
-      } else {
-        setUiError(String((r && r.error) || "enqueue failed"));
-      }
-      refreshJobs();
-    });
-  }
+	function enableGlobalDropOverlay() {
+		var counter = 0;
 
-  function uploadFile(file) {
-    var fd = new FormData();
-    fd.append("file", file);
-    setUiStatus("upload: started " + String((file && file.name) || ""));
-    fetch("/api/upload/patch", {
-      method: "POST",
-      body: fd,
-      headers: { "Accept": "application/json" }
-    })
-      .then((r) => r.text().then((t) => {
-          try {
-            return JSON.parse(t);
-          } catch (e) {
-            return {
-              ok: false,
-              error: "bad json",
-              raw: t,
-              status: r.status
-            };
-          }
-        }))
-      .then((j) => {
-        pushApiStatus(j);
-        setText(
-          "uploadHint",
-          (j && j.ok)
-            ? ("Uploaded: " + String(j.stored_rel_path || ""))
-            : ("Upload failed: " + String((j && j.error) || ""))
-        );
-        if (j && j.ok) {
-          setUiStatus("upload: ok");
-        } else {
-          setUiError(String((j && j.error) || "upload failed"));
-        }
-        if (j && j.stored_rel_path) {
-				const stored = String(j.stored_rel_path);
-				const n = el("patchPath");
-          if (n && shouldOverwrite("patchPath", n)) {
-            n.value = stored;
-          }
+		function show() {
+			document.body.classList.add("dragging");
+		}
+		function hide() {
+			document.body.classList.remove("dragging");
+		}
 
-				const relUnderRoot = stripPatchesPrefix(stored);
-				const parent = parentRel(relUnderRoot);
-          if (String(el("fsPath").value || "") === "") {
-            el("fsPath").value = parent;
-          }
-        }
-        applyAutofillFromPayload(j);
-        refreshFs();
-      })
-      .catch((e) => {
-        setPre("uploadResult", String(e));
-        setUiError(String(e));
-      });
-  }
+		document.addEventListener("dragenter", (e) => {
+			e.preventDefault();
+			counter += 1;
+			show();
+		});
 
-  function enableGlobalDropOverlay() {
-    var counter = 0;
+		document.addEventListener("dragover", (e) => {
+			e.preventDefault();
+			show();
+		});
 
-    function show() { document.body.classList.add("dragging"); }
-    function hide() { document.body.classList.remove("dragging"); }
+		document.addEventListener("dragleave", (e) => {
+			e.preventDefault();
+			counter -= 1;
+			if (counter <= 0) {
+				counter = 0;
+				hide();
+			}
+		});
 
-    document.addEventListener("dragenter", (e) => {
-      e.preventDefault();
-      counter += 1;
-      show();
-    });
+		document.addEventListener("drop", (e) => {
+			e.preventDefault();
+			counter = 0;
+			hide();
+			var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+			if (f) uploadFile(f);
+		});
+	}
 
-    document.addEventListener("dragover", (e) => {
-      e.preventDefault();
-      show();
-    });
+	function setupUpload() {
+		var zone = el("uploadZone");
+		var browse = el("uploadBrowse");
+		var input = el("uploadInput");
 
-    document.addEventListener("dragleave", (e) => {
-      e.preventDefault();
-      counter -= 1;
-      if (counter <= 0) {
-        counter = 0;
-        hide();
-      }
-    });
+		function openPicker() {
+			if (!input) return;
+			input.value = "";
+			input.click();
+		}
 
-    document.addEventListener("drop", (e) => {
-      e.preventDefault();
-      counter = 0;
-      hide();
-      var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-      if (f) uploadFile(f);
-    });
-  }
+		if (browse) {
+			browse.addEventListener("click", () => {
+				openPicker();
+			});
+		}
+		if (zone) {
+			zone.addEventListener("click", () => {
+				openPicker();
+			});
 
-  function setupUpload() {
-    var zone = el("uploadZone");
-    var browse = el("uploadBrowse");
-    var input = el("uploadInput");
+			function setDrag(on) {
+				if (on) zone.classList.add("dragover");
+				else zone.classList.remove("dragover");
+			}
 
-    function openPicker() {
-      if (!input) return;
-      input.value = "";
-      input.click();
-    }
+			zone.addEventListener("dragenter", (e) => {
+				e.preventDefault();
+				setDrag(true);
+			});
+			zone.addEventListener("dragleave", (e) => {
+				e.preventDefault();
+				setDrag(false);
+			});
+			zone.addEventListener("dragover", (e) => {
+				e.preventDefault();
+				setDrag(true);
+			});
+			zone.addEventListener("drop", (e) => {
+				e.preventDefault();
+				setDrag(false);
+				var f =
+					e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+				if (f) uploadFile(f);
+			});
+		}
 
-    if (browse) {
-      browse.addEventListener("click", () => { openPicker(); });
-    }
-    if (zone) {
-      zone.addEventListener("click", () => { openPicker(); });
+		if (input) {
+			input.addEventListener("change", () => {
+				if (input.files && input.files[0]) uploadFile(input.files[0]);
+			});
+		}
 
-      function setDrag(on) {
-        if (on) zone.classList.add("dragover");
-        else zone.classList.remove("dragover");
-      }
+		window.addEventListener("dragover", (e) => {
+			e.preventDefault();
+		});
+		window.addEventListener("drop", (e) => {
+			e.preventDefault();
+		});
+	}
 
-      zone.addEventListener("dragenter", (e) => { e.preventDefault(); setDrag(true); });
-      zone.addEventListener("dragleave", (e) => { e.preventDefault(); setDrag(false); });
-      zone.addEventListener("dragover", (e) => { e.preventDefault(); setDrag(true); });
-      zone.addEventListener("drop", (e) => {
-        e.preventDefault();
-        setDrag(false);
-        var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-        if (f) uploadFile(f);
-      });
-    }
+	function loadConfig() {
+		return apiGet("/api/config")
+			.then((r) => {
+				cfg = r || null;
+				if (cfg && cfg.issue && cfg.issue.default_regex) {
+					try {
+						issueRegex = new RegExp(cfg.issue.default_regex);
+					} catch (e) {
+						issueRegex = null;
+					}
+				}
+				if (cfg && cfg.meta && cfg.meta.version) {
+					setText("ampWebVersion", "v" + String(cfg.meta.version));
+				}
+				refreshHeader();
+				if (cfg && cfg.ui) {
+					if (cfg.ui.base_font_px) {
+						document.documentElement.style.fontSize =
+							String(cfg.ui.base_font_px) + "px";
+					}
+					if (cfg.ui.drop_overlay_enabled) {
+						enableGlobalDropOverlay();
+					}
+				}
+				return cfg;
+			})
+			.catch(() => {
+				cfg = null;
+				return null;
+			});
+	}
 
-    if (input) {
-      input.addEventListener("change", () => {
-        if (input.files && input.files[0]) uploadFile(input.files[0]);
-      });
-    }
+	function shouldOverwrite(fieldKey, node) {
+		if (!cfg || !cfg.autofill) return String(node.value || "").trim() === "";
+		var pol = String(cfg.autofill.overwrite_policy || "");
+		if (pol === "only_if_empty") return String(node.value || "").trim() === "";
+		if (pol === "if_not_dirty") return !dirty[fieldKey];
+		return false;
+	}
 
-    window.addEventListener("dragover", (e) => { e.preventDefault(); });
-    window.addEventListener("drop", (e) => { e.preventDefault(); });
-  }
+	function applyAutofillFromPayload(p) {
+		if (!cfg || !cfg.autofill || !p) return;
 
-  function loadConfig() {
-    return apiGet("/api/config").then((r) => {
-      cfg = r || null;
-      if (cfg && cfg.issue && cfg.issue.default_regex) {
-        try { issueRegex = new RegExp(cfg.issue.default_regex); } catch (e) { issueRegex = null; }
-      }
-      if (cfg && cfg.meta && cfg.meta.version) {
-        setText("ampWebVersion", "v" + String(cfg.meta.version));
-      }
-      refreshHeader();
-      if (cfg && cfg.ui) {
-        if (cfg.ui.base_font_px) {
-          document.documentElement.style.fontSize = String(cfg.ui.base_font_px) + "px";
-        }
-        if (cfg.ui.drop_overlay_enabled) {
-          enableGlobalDropOverlay();
-        }
-      }
-      return cfg;
-    }).catch(() => {
-      cfg = null;
-      return null;
-    });
-  }
-
-  function shouldOverwrite(fieldKey, node) {
-    if (!cfg || !cfg.autofill) return String(node.value || "").trim() === "";
-    var pol = String(cfg.autofill.overwrite_policy || "");
-    if (pol === "only_if_empty") return String(node.value || "").trim() === "";
-    if (pol === "if_not_dirty") return !dirty[fieldKey];
-    return false;
-  }
-
-  function applyAutofillFromPayload(p) {
-    if (!cfg || !cfg.autofill || !p) return;
-
-    if (cfg.autofill.fill_patch_path && p.stored_rel_path) {
+		if (cfg.autofill.fill_patch_path && p.stored_rel_path) {
 			const n1 = el("patchPath");
-      if (n1 && shouldOverwrite("patchPath", n1)) {
-        n1.value = String(p.stored_rel_path);
-      }
-    }
+			if (n1 && shouldOverwrite("patchPath", n1)) {
+				n1.value = String(p.stored_rel_path);
+			}
+		}
 
-    if (cfg.autofill.fill_issue_id && p.derived_issue != null) {
+		if (cfg.autofill.fill_issue_id && p.derived_issue != null) {
 			const n2 = el("issueId");
-      if (n2 && shouldOverwrite("issueId", n2)) {
-        n2.value = String(p.derived_issue || "");
-      }
-    }
+			if (n2 && shouldOverwrite("issueId", n2)) {
+				n2.value = String(p.derived_issue || "");
+			}
+		}
 
-    if (cfg.autofill.fill_commit_message && p.derived_commit_message != null) {
+		if (cfg.autofill.fill_commit_message && p.derived_commit_message != null) {
 			const n3 = el("commitMsg");
-      if (n3 && shouldOverwrite("commitMsg", n3)) {
-        n3.value = String(p.derived_commit_message || "");
-      }
-    }
+			if (n3 && shouldOverwrite("commitMsg", n3)) {
+				n3.value = String(p.derived_commit_message || "");
+			}
+		}
 
-    validateAndPreview();
-  }
+		validateAndPreview();
+	}
 
-  function resetOutputForNewPatch() {
-    selectedJobId = null;
-    saveLiveJobId("");
+	function resetOutputForNewPatch() {
+		selectedJobId = null;
+		AMP_UI.saveLiveJobId("");
 
-    openLiveStream(null);
-    setPre("tail", "");
-    updateShortProgressFromText("");
+		AMP_UI.openLiveStream(null);
+		setPre("tail", "");
+		updateShortProgressFromText("");
 
-    suppressIdleOutput = true;
+		suppressIdleOutput = true;
 
-    if (cfg && cfg.ui && cfg.ui.show_autofill_clear_status) {
-      setUiStatus("autofill: loaded new patch, output cleared");
-    }
-  }
+		if (cfg && cfg.ui && cfg.ui.show_autofill_clear_status) {
+			setUiStatus("autofill: loaded new patch, output cleared");
+		}
+	}
 
-  function pollLatestPatchOnce() {
-    if (!cfg || !cfg.autofill || !cfg.autofill.enabled) return;
-    apiGet("/api/patches/latest").then((r) => {
-      if (!r || r.ok === false) {
-        setUiError(String((r && r.error) || "autofill scan failed"));
-        return;
-      }
+	function pollLatestPatchOnce() {
+		if (!cfg || !cfg.autofill || !cfg.autofill.enabled) return;
+		apiGet("/api/patches/latest").then((r) => {
+			if (!r || r.ok === false) {
+				setUiError(String((r && r.error) || "autofill scan failed"));
+				return;
+			}
 
-      pushApiStatus(r);
-      if (!r.found) return;
-      var token = String(r.token || "");
-      if (!token || token === latestToken) return;
-      latestToken = token;
-      applyAutofillFromPayload(r);
+			pushApiStatus(r);
+			if (!r.found) return;
+			var token = String(r.token || "");
+			if (!token || token === latestToken) return;
+			latestToken = token;
+			applyAutofillFromPayload(r);
 
-      if (cfg && cfg.ui && cfg.ui.clear_output_on_autofill) {
-        if (token !== lastAutofillClearedToken) {
-          resetOutputForNewPatch();
-          lastAutofillClearedToken = token;
-        }
-      }
-    });
-  }
+			if (cfg && cfg.ui && cfg.ui.clear_output_on_autofill) {
+				if (token !== lastAutofillClearedToken) {
+					resetOutputForNewPatch();
+					lastAutofillClearedToken = token;
+				}
+			}
+		});
+	}
 
-  function startAutofillPolling() {
-    if (autofillTimer) {
-      clearInterval(autofillTimer);
-      autofillTimer = null;
-    }
-    if (!cfg || !cfg.autofill || !cfg.autofill.enabled) return;
-    var sec = parseInt(String(cfg.autofill.poll_interval_seconds || "10"), 10);
-    if (isNaN(sec) || sec < 1) sec = 10;
-    autofillTimer = setInterval(pollLatestPatchOnce, sec * 1000);
-    pollLatestPatchOnce();
-  }
+	function startAutofillPolling() {
+		if (autofillTimer) {
+			clearInterval(autofillTimer);
+			autofillTimer = null;
+		}
+		if (!cfg || !cfg.autofill || !cfg.autofill.enabled) return;
+		var sec = parseInt(String(cfg.autofill.poll_interval_seconds || "10"), 10);
+		if (isNaN(sec) || sec < 1) sec = 10;
+		autofillTimer = setInterval(pollLatestPatchOnce, sec * 1000);
+		pollLatestPatchOnce();
+	}
 
-  function refreshHeader() {
-    var base = "";
-    if (cfg && cfg.server && cfg.server.host && cfg.server.port) {
-      base = "server: " + cfg.server.host + ":" + cfg.server.port;
-    }
+	function renderHeaderFromDiagnostics(d, base) {
+		if (!d || d.ok === false) return;
+		var lock = d.lock || {};
+		var disk = d.disk || {};
+		var held = lock.held ? "LOCK:held" : "LOCK:free";
+		var pct = "";
+		if (disk.total && disk.used) {
+			pct = "disk:" + String(Math.round((disk.used / disk.total) * 100)) + "%";
+		}
 
-    apiGet("/api/debug/diagnostics").then((d) => {
-      if (!d || d.ok === false) return;
-      var lock = d.lock || {};
-      var disk = d.disk || {};
-      var held = lock.held ? "LOCK:held" : "LOCK:free";
-      var pct = "";
-      if (disk.total && disk.used) {
-        pct = "disk:" + String(Math.round((disk.used / disk.total) * 100)) + "%";
-      }
+		var meta = base;
+		if (cfg && cfg.paths && cfg.paths.patches_root) {
+			meta += " | patches: " + cfg.paths.patches_root;
+		}
+		meta += " | " + held;
+		if (pct) meta += " | " + pct;
 
-      var meta = base;
-      if (cfg && cfg.paths && cfg.paths.patches_root) meta += " | patches: " + cfg.paths.patches_root;
-      meta += " | " + held;
-      if (pct) meta += " | " + pct;
+		if (el("hdrMeta")) el("hdrMeta").textContent = meta;
+	}
 
-      if (el("hdrMeta")) el("hdrMeta").textContent = meta;
-    });
-  }
+	function refreshHeader() {
+		var base = "";
+		if (cfg && cfg.server && cfg.server.host && cfg.server.port) {
+			base = "server: " + cfg.server.host + ":" + cfg.server.port;
+		}
 
-  function setTabActive(which) {
-    var tabs = ["Overview", "Logs", "Patch", "Diff", "Files"];
-    tabs.forEach((t) => {
-      var btn = el("tab" + t);
-      if (btn) {
-        if (t === which) btn.classList.add("active");
-        else btn.classList.remove("active");
-      }
-    });
-  }
+		apiGet("/api/debug/diagnostics").then((d) => {
+			renderHeaderFromDiagnostics(d, base);
+		});
+	}
 
-  function renderIssueDetail() {
-    var cardTitle = el("issueDetailTitle");
-    var tabs = el("issueTabs");
-    var content = el("issueTabContent");
-    var links = el("issueTabLinks");
-    var body = el("issueTabBody");
+	function setTabActive(which) {
+		var tabs = ["Overview", "Logs", "Patch", "Diff", "Files"];
+		tabs.forEach((t) => {
+			var btn = el("tab" + t);
+			if (btn) {
+				if (t === which) btn.classList.add("active");
+				else btn.classList.remove("active");
+			}
+		});
+	}
 
-    if (!selectedRun) {
-      if (cardTitle) cardTitle.textContent = "Select a run on the left.";
-      if (tabs) tabs.style.display = "none";
-      if (content) content.style.display = "none";
-      return;
-    }
+	function renderIssueDetail() {
+		var cardTitle = el("issueDetailTitle");
+		var tabs = el("issueTabs");
+		var content = el("issueTabContent");
+		var links = el("issueTabLinks");
+		var body = el("issueTabBody");
 
-    if (cardTitle) {
-      cardTitle.textContent = "Issue #" + String(selectedRun.issue_id) + " (" + String(selectedRun.result || "") + ")";
-    }
-    if (tabs) tabs.style.display = "flex";
-    if (content) content.style.display = "block";
+		if (!selectedRun) {
+			if (cardTitle) cardTitle.textContent = "Select a run on the left.";
+			if (tabs) tabs.style.display = "none";
+			if (content) content.style.display = "none";
+			return;
+		}
 
-    function renderLinks() {
-      var parts = [];
+		if (cardTitle) {
+			cardTitle.textContent =
+				"Issue #" +
+				String(selectedRun.issue_id) +
+				" (" +
+				String(selectedRun.result || "") +
+				")";
+		}
+		if (tabs) tabs.style.display = "flex";
+		if (content) content.style.display = "block";
 
-      function add(label, rel) {
-        if (!rel) return;
-        parts.push("<a class=\"linklike\" href=\"/api/fs/download?path=" + encodeURIComponent(rel) + "\">" + escapeHtml(label) + "</a>");
-      }
+		function renderLinks() {
+			var parts = [];
 
-      add("log", selectedRun.log_rel_path);
-      add("archived patch", selectedRun.archived_patch_rel_path);
-      add("diff bundle", selectedRun.diff_bundle_rel_path);
-      add("latest success zip", selectedRun.success_zip_rel_path);
+			function add(label, rel) {
+				if (!rel) return;
+				parts.push(
+					'<a class="linklike" href="/api/fs/download?path=' +
+						encodeURIComponent(rel) +
+						'">' +
+						escapeHtml(label) +
+						"</a>",
+				);
+			}
 
-      links.innerHTML = parts.join(" ");
-    }
+			add("log", selectedRun.log_rel_path);
+			add("archived patch", selectedRun.archived_patch_rel_path);
+			add("diff bundle", selectedRun.diff_bundle_rel_path);
+			add("latest success zip", selectedRun.success_zip_rel_path);
 
-    function renderOverview() {
-      setTabActive("Overview");
-      renderLinks();
-      setPre("issueTabBody", selectedRun);
-    }
+			links.innerHTML = parts.join(" ");
+		}
 
-    function renderLogs() {
-      setTabActive("Logs");
-      renderLinks();
-      if (!selectedRun.log_rel_path) {
-        setPre("issueTabBody", "(no log path)");
-        return;
-      }
-      var p = String(selectedRun.log_rel_path);
-      var url = "/api/fs/read_text?path=" + encodeURIComponent(p) + "&tail_lines=2000";
-      apiGet(url).then((r) => {
-        if (!r || r.ok === false) {
-          setPre("issueTabBody", r);
-          return;
-        }
-        var t = String(r.text || "");
-        if (r.truncated) {
-          t += "\n\n[TRUNCATED]";
-        }
-        setPre("issueTabBody", t);
-      });
-    }
+		function renderOverview() {
+			setTabActive("Overview");
+			renderLinks();
+			setPre("issueTabBody", selectedRun);
+		}
 
-    function renderPatch() {
-      setTabActive("Patch");
-      renderLinks();
-      if (selectedRun.archived_patch_rel_path) {
-        setPre("issueTabBody", "Download: /api/fs/download?path=" + selectedRun.archived_patch_rel_path);
-      } else {
-        setPre("issueTabBody", "(no archived patch)");
-      }
-    }
+		function renderLogs() {
+			setTabActive("Logs");
+			renderLinks();
+			if (!selectedRun.log_rel_path) {
+				setPre("issueTabBody", "(no log path)");
+				return;
+			}
+			var p = String(selectedRun.log_rel_path);
+			var url =
+				"/api/fs/read_text?path=" + encodeURIComponent(p) + "&tail_lines=2000";
+			apiGet(url).then((r) => {
+				if (!r || r.ok === false) {
+					setPre("issueTabBody", r);
+					return;
+				}
+				var t = String(r.text || "");
+				if (r.truncated) {
+					t += "\n\n[TRUNCATED]";
+				}
+				setPre("issueTabBody", t);
+			});
+		}
 
-    function renderDiff() {
-      setTabActive("Diff");
-      renderLinks();
-      if (selectedRun.diff_bundle_rel_path) {
-        setPre("issueTabBody", "Download: /api/fs/download?path=" + selectedRun.diff_bundle_rel_path);
-      } else {
-        setPre("issueTabBody", "(no diff bundle)");
-      }
-    }
+		function renderPatch() {
+			setTabActive("Patch");
+			renderLinks();
+			if (selectedRun.archived_patch_rel_path) {
+				setPre(
+					"issueTabBody",
+					"Download: /api/fs/download?path=" +
+						selectedRun.archived_patch_rel_path,
+				);
+			} else {
+				setPre("issueTabBody", "(no archived patch)");
+			}
+		}
 
-    function renderFiles() {
-      setTabActive("Files");
-      renderLinks();
-      // Convenience: jump file manager to the issue directory if possible.
-      var p = "";
-      if (selectedRun.log_rel_path) {
-        p = parentRel(stripPatchesPrefix(selectedRun.log_rel_path));
-      }
-      if (p) {
-        el("fsPath").value = p;
-        fsSelected = "";
-        setFsHint("");
-        refreshFs();
-      }
-      setPre("issueTabBody", "File manager path set to: " + String(el("fsPath").value || ""));
-    }
+		function renderDiff() {
+			setTabActive("Diff");
+			renderLinks();
+			if (selectedRun.diff_bundle_rel_path) {
+				setPre(
+					"issueTabBody",
+					"Download: /api/fs/download?path=" + selectedRun.diff_bundle_rel_path,
+				);
+			} else {
+				setPre("issueTabBody", "(no diff bundle)");
+			}
+		}
 
-    el("tabOverview").onclick = renderOverview;
-    el("tabLogs").onclick = renderLogs;
-    el("tabPatch").onclick = renderPatch;
-    el("tabDiff").onclick = renderDiff;
-    el("tabFiles").onclick = renderFiles;
+		function renderFiles() {
+			setTabActive("Files");
+			renderLinks();
+			// Convenience: jump file manager to the issue directory if possible.
+			var p = "";
+			if (selectedRun.log_rel_path) {
+				p = parentRel(stripPatchesPrefix(selectedRun.log_rel_path));
+			}
+			if (p) {
+				el("fsPath").value = p;
+				fsSelected = "";
+				setFsHint("");
+				refreshFs();
+			}
+			setPre(
+				"issueTabBody",
+				"File manager path set to: " + String(el("fsPath").value || ""),
+			);
+		}
 
-    // Default to overview when switching run.
-    renderOverview();
-  }
+		el("tabOverview").onclick = renderOverview;
+		el("tabLogs").onclick = renderLogs;
+		el("tabPatch").onclick = renderPatch;
+		el("tabDiff").onclick = renderDiff;
+		el("tabFiles").onclick = renderFiles;
 
-  function wireButtons() {
-    el("fsRefresh").addEventListener("click", refreshFs);
-    el("fsUp").addEventListener("click", () => {
-      var p = el("fsPath").value || "";
-      el("fsPath").value = parentRel(p);
-      fsSelected = "";
-      setFsHint("");
-      refreshFs();
-    });
+		// Default to overview when switching run.
+		renderOverview();
+	}
 
+	function wireButtons() {
+		el("fsRefresh").addEventListener("click", refreshFs);
+		el("fsUp").addEventListener("click", () => {
+			var p = el("fsPath").value || "";
+			el("fsPath").value = parentRel(p);
+			fsSelected = "";
+			setFsHint("");
+			refreshFs();
+		});
 
-    if (el("fsSelectAll")) {
-      el("fsSelectAll").addEventListener("click", () => {
-        fsLastRels.forEach((rel) => { fsChecked[rel] = true; });
-        fsUpdateSelCount();
-        refreshFs();
-      });
-    }
-    if (el("fsClear")) {
-      el("fsClear").addEventListener("click", () => {
-        fsClearSelection();
-        refreshFs();
-      });
-    }
-    if (el("fsDownloadSelected")) {
-      el("fsDownloadSelected").addEventListener("click", () => {
-        fsDownloadSelected();
-      });
-    }
+		if (el("fsSelectAll")) {
+			el("fsSelectAll").addEventListener("click", () => {
+				fsLastRels.forEach((rel) => {
+					fsChecked[rel] = true;
+				});
+				fsUpdateSelCount();
+				refreshFs();
+			});
+		}
+		if (el("fsClear")) {
+			el("fsClear").addEventListener("click", () => {
+				fsClearSelection();
+				refreshFs();
+			});
+		}
+		if (el("fsDownloadSelected")) {
+			el("fsDownloadSelected").addEventListener("click", () => {
+				fsDownloadSelected();
+			});
+		}
 
-    if (el("fsMkdir")) {
-      el("fsMkdir").addEventListener("click", () => {
-        var base = String(el("fsPath").value || "");
-        var name = prompt("New directory name");
-        if (!name) return;
-        var rel = joinRel(base, name);
-        apiPost("/api/fs/mkdir", { path: rel }).then((r) => {
-          if (!r || r.ok === false) {
-            setFsHint("mkdir failed");
-            return;
-          }
-          refreshFs();
-        });
-      });
-    }
+		if (el("fsMkdir")) {
+			el("fsMkdir").addEventListener("click", () => {
+				var base = String(el("fsPath").value || "");
+				var name = prompt("New directory name");
+				if (!name) return;
+				var rel = joinRel(base, name);
+				apiPost("/api/fs/mkdir", { path: rel }).then((r) => {
+					if (!r || r.ok === false) {
+						setFsHint("mkdir failed");
+						return;
+					}
+					refreshFs();
+				});
+			});
+		}
 
-    if (el("fsRename")) {
-      el("fsRename").addEventListener("click", () => {
-        if (!fsSelected) {
-          setFsHint("focus an item first");
-          return;
-        }
-        var base = parentRel(fsSelected);
-        var curName = fsSelected.split("/").pop();
-        var dstName = prompt("New name", curName || "");
-        if (!dstName) return;
-        var dst = joinRel(base, dstName);
-        apiPost("/api/fs/rename", { src: fsSelected, dst: dst }).then((r) => {
-          if (!r || r.ok === false) {
-            setFsHint("rename failed");
-            return;
-          }
-          fsSelected = dst;
-          refreshFs();
-        });
-      });
-    }
+		if (el("fsRename")) {
+			el("fsRename").addEventListener("click", () => {
+				if (!fsSelected) {
+					setFsHint("focus an item first");
+					return;
+				}
+				var base = parentRel(fsSelected);
+				var curName = fsSelected.split("/").pop();
+				var dstName = prompt("New name", curName || "");
+				if (!dstName) return;
+				var dst = joinRel(base, dstName);
+				apiPost("/api/fs/rename", { src: fsSelected, dst: dst }).then((r) => {
+					if (!r || r.ok === false) {
+						setFsHint("rename failed");
+						return;
+					}
+					fsSelected = dst;
+					refreshFs();
+				});
+			});
+		}
 
-    if (el("fsDelete")) {
-      el("fsDelete").addEventListener("click", () => {
-        var paths = [];
-        for (var k in fsChecked) {
-          if (Object.hasOwn(fsChecked, k)) paths.push(k);
-        }
-        if (!paths.length && fsSelected) paths = [fsSelected];
-        if (!paths.length) {
-          setFsHint("select at least one item");
-          return;
-        }
-        if (!confirm("Delete selected item(s)?")) return;
+		if (el("fsDelete")) {
+			el("fsDelete").addEventListener("click", () => {
+				var paths = [];
+				for (var k in fsChecked) {
+					if (Object.hasOwn(fsChecked, k)) paths.push(k);
+				}
+				if (!paths.length && fsSelected) paths = [fsSelected];
+				if (!paths.length) {
+					setFsHint("select at least one item");
+					return;
+				}
+				if (!confirm("Delete selected item(s)?")) return;
 
-        var seq = Promise.resolve();
-        paths.sort().forEach((p) => {
-          seq = seq.then(() => apiPost("/api/fs/delete", { path: p }).then((r) => {
-              if (!r || r.ok !== true) {
-							const err = (r && r.error) ? String(r.error) : "unknown error";
-                setFsHint("delete failed: " + err);
-                throw new Error(err);
-              }
-              return r;
-            }));
-        });
-        seq.then(() => {
-          fsClearSelection();
-          fsSelected = "";
-          refreshFs();
-        }).catch((e) => {
-          if (e && e.message) {
-            setFsHint("delete failed: " + String(e.message));
-          } else {
-            setFsHint("delete failed");
-          }
-        });
-      });
-    }
+				var seq = Promise.resolve();
+				paths.sort().forEach((p) => {
+					seq = seq.then(() =>
+						apiPost("/api/fs/delete", { path: p }).then((r) => {
+							if (!r || r.ok !== true) {
+								const err = r && r.error ? String(r.error) : "unknown error";
+								setFsHint("delete failed: " + err);
+								throw new Error(err);
+							}
+							return r;
+						}),
+					);
+				});
+				seq
+					.then(() => {
+						fsClearSelection();
+						fsSelected = "";
+						refreshFs();
+					})
+					.catch((e) => {
+						if (e && e.message) {
+							setFsHint("delete failed: " + String(e.message));
+						} else {
+							setFsHint("delete failed");
+						}
+					});
+			});
+		}
 
-    if (el("fsUnzip")) {
-      el("fsUnzip").addEventListener("click", () => {
-        if (!fsSelected || !/\.zip$/i.test(fsSelected)) {
-          setFsHint("focus a .zip file first");
-          return;
-        }
-        var base = parentRel(fsSelected);
-        var dst = prompt("Destination directory", base || "");
-        if (dst === null) return;
-        apiPost("/api/fs/unzip", { zip_path: fsSelected, dest_dir: String(dst || "") })
-          .then((r) => {
-            if (!r || r.ok === false) {
-              setFsHint("unzip failed");
-              return;
-            }
-            refreshFs();
-          });
-      });
-    }
-    el("runsRefresh").addEventListener("click", refreshRuns);
+		if (el("fsUnzip")) {
+			el("fsUnzip").addEventListener("click", () => {
+				if (!fsSelected || !/\.zip$/i.test(fsSelected)) {
+					setFsHint("focus a .zip file first");
+					return;
+				}
+				var base = parentRel(fsSelected);
+				var dst = prompt("Destination directory", base || "");
+				if (dst === null) return;
+				apiPost("/api/fs/unzip", {
+					zip_path: fsSelected,
+					dest_dir: String(dst || ""),
+				}).then((r) => {
+					if (!r || r.ok === false) {
+						setFsHint("unzip failed");
+						return;
+					}
+					refreshFs();
+				});
+			});
+		}
+		el("runsRefresh").addEventListener("click", refreshRuns);
 
-    if (el("runsCollapse")) {
-      el("runsCollapse").addEventListener("click", () => {
-        setRunsVisible(!runsVisible);
-        saveRunsVisible(runsVisible);
-      });
-    }
+		if (el("runsCollapse")) {
+			el("runsCollapse").addEventListener("click", () => {
+				AMP_UI.setRunsVisible(!runsVisible);
+				AMP_UI.saveRunsVisible(runsVisible);
+			});
+		}
 
-        if (el("previewToggle")) {
-      el("previewToggle").addEventListener("click", () => {
-        setPreviewVisible(!previewVisible);
-      });
-    }
-    if (el("previewCollapse")) {
-      el("previewCollapse").addEventListener("click", () => {
-        setPreviewVisible(!previewVisible);
-      });
-    }
+		if (el("previewToggle")) {
+			el("previewToggle").addEventListener("click", () => {
+				setPreviewVisible(!previewVisible);
+			});
+		}
+		if (el("previewCollapse")) {
+			el("previewCollapse").addEventListener("click", () => {
+				setPreviewVisible(!previewVisible);
+			});
+		}
 
-    el("jobsRefresh").addEventListener("click", refreshJobs);
+		el("jobsRefresh").addEventListener("click", refreshJobs);
 
-    if (el("jobsCollapse")) {
-      el("jobsCollapse").addEventListener("click", () => {
-        setJobsVisible(!jobsVisible);
-        saveJobsVisible(jobsVisible);
-      });
-    }
+		if (el("jobsCollapse")) {
+			el("jobsCollapse").addEventListener("click", () => {
+				AMP_UI.setJobsVisible(!jobsVisible);
+				AMP_UI.saveJobsVisible(jobsVisible);
+			});
+		}
 
-    if (el("liveLevel")) {
-      el("liveLevel").addEventListener("change", () => {
-        liveLevel = String(el("liveLevel").value || "normal");
-        try { localStorage.setItem("amp.liveLogLevel", liveLevel); } catch (e) {}
-        renderLiveLog();
-        updateProgressFromEvents();
-      });
-    }
+		if (el("liveLevel")) {
+			el("liveLevel").addEventListener("change", () => {
+				liveLevel = String(el("liveLevel").value || "normal");
+				try {
+					localStorage.setItem("amp.liveLogLevel", liveLevel);
+				} catch (e) {}
+				AMP_UI.renderLiveLog();
+				AMP_UI.updateProgressFromEvents();
+			});
+		}
 
-    if (el("jobsList")) {
-      el("jobsList").addEventListener("click", (e) => {
-        var t = e && e.target ? e.target : null;
-        while (t && t !== el("jobsList")) {
+		if (el("jobsList")) {
+			el("jobsList").addEventListener("click", (e) => {
+				var t = e && e.target ? e.target : null;
+				while (t && t !== el("jobsList")) {
 					const jobId = t.getAttribute && t.getAttribute("data-jobid");
-          if (jobId) {
-            selectedJobId = String(jobId);
-            saveLiveJobId(selectedJobId);
-            suppressIdleOutput = false;
-            refreshJobs();
-            openLiveStream(getLiveJobId());
-            refreshTail(tailLines);
-            return;
-          }
-          t = t.parentElement;
-        }
-      });
-    }
+					if (jobId) {
+						selectedJobId = String(jobId);
+						AMP_UI.saveLiveJobId(selectedJobId);
+						suppressIdleOutput = false;
+						refreshJobs();
+						AMP_UI.openLiveStream(AMP_UI.getLiveJobId());
+						refreshTail(tailLines);
+						return;
+					}
+					t = t.parentElement;
+				}
+			});
+		}
 
-    el("enqueueBtn").addEventListener("click", enqueue);
+		el("enqueueBtn").addEventListener("click", enqueue);
 
-    if (el("parseBtn")) {
-      el("parseBtn").addEventListener("click", () => {
-        triggerParse(getRawCommand());
-      });
-    }
+		if (el("parseBtn")) {
+			el("parseBtn").addEventListener("click", () => {
+				triggerParse(getRawCommand());
+			});
+		}
 
-    if (el("rawCommand")) {
-      el("rawCommand").addEventListener("input", () => {
-        var raw = getRawCommand();
-        if (raw !== lastParsedRaw) {
-          lastParsed = null;
-          lastParsedRaw = "";
-        }
-        if (!raw) {
-          clearParsedState();
-          setParseHint("");
-          validateAndPreview();
-          return;
-        }
-        scheduleParseDebounced(raw);
-      });
+		if (el("rawCommand")) {
+			el("rawCommand").addEventListener("input", () => {
+				var raw = getRawCommand();
+				if (raw !== lastParsedRaw) {
+					lastParsed = null;
+					lastParsedRaw = "";
+				}
+				if (!raw) {
+					clearParsedState();
+					setParseHint("");
+					validateAndPreview();
+					return;
+				}
+				scheduleParseDebounced(raw);
+			});
 
-      el("rawCommand").addEventListener("paste", () => {
-        setTimeout(() => {
-          triggerParse(getRawCommand());
-        }, 0);
-      });
-    }
+			el("rawCommand").addEventListener("paste", () => {
+				setTimeout(() => {
+					triggerParse(getRawCommand());
+				}, 0);
+			});
+		}
 
-    el("mode").addEventListener("change", validateAndPreview);
-    el("issueId").addEventListener("input", () => {
-      dirty.issueId = true;
-      validateAndPreview();
-    });
-    el("commitMsg").addEventListener("input", () => {
-      dirty.commitMsg = true;
-      validateAndPreview();
-    });
-    el("patchPath").addEventListener("input", () => {
-      dirty.patchPath = true;
-      validateAndPreview();
-    });
+		el("mode").addEventListener("change", validateAndPreview);
+		el("issueId").addEventListener("input", () => {
+			dirty.issueId = true;
+			validateAndPreview();
+		});
+		el("commitMsg").addEventListener("input", () => {
+			dirty.commitMsg = true;
+			validateAndPreview();
+		});
+		el("patchPath").addEventListener("input", () => {
+			dirty.patchPath = true;
+			validateAndPreview();
+		});
 
-    var browse = el("browsePatch");
-    if (browse) {
-      browse.addEventListener("click", () => {
-        if (!fsSelected) {
-          setFsHint("select a patch file first");
-          return;
-        }
-        el("patchPath").value = normalizePatchPath(fsSelected);
-        dirty.patchPath = true;
-        validateAndPreview();
-      });
-    }
+		var browse = el("browsePatch");
+		if (browse) {
+			browse.addEventListener("click", () => {
+				if (!fsSelected) {
+					setFsHint("select a patch file first");
+					return;
+				}
+				el("patchPath").value = normalizePatchPath(fsSelected);
+				dirty.patchPath = true;
+				validateAndPreview();
+			});
+		}
 
-    if (el("refreshAll")) {
-      el("refreshAll").addEventListener("click", () => {
-        refreshFs();
-        refreshRuns();
-        refreshStats();
-        refreshJobs();
-            refreshHeader();
-        renderIssueDetail();
-        validateAndPreview();
-      });
-    }
-  }
+		if (el("refreshAll")) {
+			el("refreshAll").addEventListener("click", () => {
+				refreshFs();
+				refreshRuns();
+				AMP_UI.refreshStats();
+				refreshJobs();
+				refreshHeader();
+				renderIssueDetail();
+				validateAndPreview();
+			});
+		}
+	}
 
-  function init() {
-    setupUpload();
-    wireButtons();
-    setPreviewVisible(false);
-    loadUiVisibility();
-    setRunsVisible(runsVisible);
-    setJobsVisible(jobsVisible);
+	function init() {
+		setupUpload();
+		wireButtons();
+		setPreviewVisible(false);
+		AMP_UI.loadUiVisibility();
+		AMP_UI.setRunsVisible(runsVisible);
+		AMP_UI.setJobsVisible(jobsVisible);
 
-    loadLiveLevel();
-    var savedJobId = loadLiveJobId();
-    if (savedJobId) selectedJobId = savedJobId;
-    if (el("liveLevel")) {
-      el("liveLevel").value = liveLevel;
-    }
+		AMP_UI.loadLiveLevel();
+		var savedJobId = AMP_UI.loadLiveJobId();
+		if (savedJobId) selectedJobId = savedJobId;
+		if (el("liveLevel")) {
+			el("liveLevel").value = liveLevel;
+		}
 
-    loadConfig().then(() => {
-      refreshFs();
-      refreshRuns();
-      refreshStats();
-      refreshJobs();
-      refreshTail(tailLines);
-      refreshHeader();
-      renderIssueDetail();
-      validateAndPreview();
-      startAutofillPolling();
+		loadConfig().then(() => {
+			refreshFs();
+			refreshRuns();
+			AMP_UI.refreshStats();
+			refreshJobs();
+			refreshTail(tailLines);
+			refreshHeader();
+			renderIssueDetail();
+			validateAndPreview();
+			startAutofillPolling();
 
-      if (patchStatTimer) {
-        clearInterval(patchStatTimer);
-        patchStatTimer = null;
-      }
-      patchStatTimer = setInterval(tickMissingPatchClear, 1000);
+			if (patchStatTimer) {
+				clearInterval(patchStatTimer);
+				patchStatTimer = null;
+			}
+			patchStatTimer = setInterval(tickMissingPatchClear, 1000);
 
-      setInterval(() => {
-        refreshJobs();
-        refreshTail(tailLines);
-      }, 2000);
+			setInterval(() => {
+				if (activeJobId) {
+					refreshJobs();
+				} else {
+					idleRefreshTick();
+				}
+				refreshTail(tailLines);
+			}, 2000);
 
-      setInterval(() => {
-        refreshHeader();
-      }, 5000);
+			setInterval(() => {
+				if (activeJobId) {
+					refreshHeader();
+				}
+			}, 5000);
 
-      if (window.AmpSettings && typeof window.AmpSettings.init === "function") {
-        try {
-          window.AmpSettings.init();
-        } catch (e) {
-          // Best-effort: do not break main UI if AMP settings init fails.
-        }
-      }
-    });
-  }
+			if (window.AmpSettings && typeof window.AmpSettings.init === "function") {
+				try {
+					window.AmpSettings.init();
+				} catch (e) {
+					// Best-effort: do not break main UI if AMP settings init fails.
+				}
+			}
+		});
+	}
 
-  window.addEventListener("load", init);
+	window.addEventListener("load", init);
 })();

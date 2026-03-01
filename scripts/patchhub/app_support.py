@@ -324,6 +324,39 @@ def _decorate_run(
     return run
 
 
+def canceled_runs_signature(patches_root: Path) -> tuple[int, int]:
+    jobs_root = patches_root / "artifacts" / "web_jobs"
+    if not jobs_root.exists() or not jobs_root.is_dir():
+        return (0, 0)
+
+    count = 0
+    max_mtime_ns = 0
+    for d in jobs_root.iterdir():
+        if not d.is_dir():
+            continue
+        job_json = d / "job.json"
+        if not job_json.exists() or not job_json.is_file():
+            continue
+        try:
+            raw = json.loads(job_json.read_text(encoding="utf-8", errors="replace"))
+        except Exception:
+            continue
+        if not isinstance(raw, dict):
+            continue
+        if str(raw.get("status", "")) != "canceled":
+            continue
+        log_path = d / "runner.log"
+        fp = log_path if log_path.exists() else job_json
+        try:
+            st = fp.stat()
+        except Exception:
+            continue
+        count += 1
+        if st.st_mtime_ns > max_mtime_ns:
+            max_mtime_ns = st.st_mtime_ns
+    return (count, max_mtime_ns)
+
+
 def _iter_canceled_runs(patches_root: Path) -> list[RunEntry]:
     jobs_root = patches_root / "artifacts" / "web_jobs"
     if not jobs_root.exists() or not jobs_root.is_dir():

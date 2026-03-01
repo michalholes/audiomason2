@@ -108,6 +108,31 @@ def parse_run_result_from_sanitized_text(
     return "unknown", result_line
 
 
+def runs_signature(patches_root: Path, log_filename_regex: str) -> tuple[int, int]:
+    rx = re.compile(log_filename_regex)
+    logs_dir = patches_root / "logs"
+    if not logs_dir.exists() or not logs_dir.is_dir():
+        return (0, 0)
+
+    count = 0
+    max_mtime_ns = 0
+    for log_path in logs_dir.iterdir():
+        if not log_path.is_file():
+            continue
+        if log_path.name.endswith(".tail.txt"):
+            continue
+        if not rx.search(log_path.name):
+            continue
+        try:
+            st = log_path.stat()
+        except Exception:
+            continue
+        count += 1
+        if st.st_mtime_ns > max_mtime_ns:
+            max_mtime_ns = st.st_mtime_ns
+    return (count, max_mtime_ns)
+
+
 def iter_runs(patches_root: Path, log_filename_regex: str) -> list[RunEntry]:
     rx = re.compile(log_filename_regex)
     logs_dir = patches_root / "logs"

@@ -13,11 +13,12 @@ from .app_support import (
     _iter_canceled_runs,
     _json_bytes,
     _ok,
+    canceled_runs_signature,
     compute_success_archive_rel,
     read_tail,
 )
 from .command_parse import CommandParseError, parse_runner_command
-from .indexing import compute_stats, iter_runs
+from .indexing import compute_stats, iter_runs, runs_signature
 from .zip_commit_message import (
     ZipCommitConfig,
     ZipIssueConfig,
@@ -337,6 +338,18 @@ def api_parse_command(self, body: dict[str, Any]) -> tuple[int, bytes]:
 
 
 def api_runs(self, qs: dict[str, str]) -> tuple[int, bytes]:
+    since_sig = str(qs.get("since_sig", "")).strip()
+    issue_id = qs.get("issue_id")
+    result = qs.get("result")
+
+    base_sig = runs_signature(self.patches_root, self.cfg.indexing.log_filename_regex)
+    canceled_sig = canceled_runs_signature(self.patches_root)
+    sig = f"runs:l={base_sig[0]}:{base_sig[1]}:c={canceled_sig[0]}:{canceled_sig[1]}"
+
+    # Conditional refresh applies only to the default (unfiltered) runs list.
+    if since_sig and not issue_id and not result and since_sig == sig:
+        return _ok({"unchanged": True, "sig": sig})
+
     runs = iter_runs(self.patches_root, self.cfg.indexing.log_filename_regex)
     runs.extend(_iter_canceled_runs(self.patches_root))
 
@@ -349,8 +362,6 @@ def api_runs(self, qs: dict[str, str]) -> tuple[int, bytes]:
         _decorate_run(r, patches_root=self.patches_root, success_zip_rel=success_rel) for r in runs
     ]
 
-    issue_id = qs.get("issue_id")
-    result = qs.get("result")
     limit = int(qs.get("limit", "100"))
 
     if issue_id:
@@ -366,7 +377,7 @@ def api_runs(self, qs: dict[str, str]) -> tuple[int, bytes]:
 
     runs.sort(key=lambda r: (r.mtime_utc, r.issue_id), reverse=True)
     runs = runs[: max(1, min(limit, 500))]
-    return _ok({"runs": [r.__dict__ for r in runs]})
+    return _ok({"runs": [r.__dict__ for r in runs], "sig": sig})
 
 
 def api_runner_tail(self, qs: dict[str, str]) -> tuple[int, bytes]:

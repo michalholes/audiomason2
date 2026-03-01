@@ -146,11 +146,31 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
         return _json_bytes_response(status, data)
 
     @app.get("/api/jobs")
-    async def api_jobs_list() -> JSONResponse:
+    async def api_jobs_list(request: Request) -> JSONResponse:
         mem = await core.queue.list_jobs()
         mem_by_id = {j.job_id: j for j in mem}
 
-        from patchhub.job_store import list_job_jsons
+        from hashlib import sha1
+
+        from patchhub.job_store import job_json_signature, list_job_jsons
+
+        since_sig = str(request.query_params.get("since_sig", "")).strip()
+
+        disk_sig = await to_thread(job_json_signature, core.jobs_root)
+        mem_parts: list[str] = []
+        for j in sorted(mem, key=lambda x: str(getattr(x, "job_id", ""))):
+            jid = str(getattr(j, "job_id", ""))
+            st = str(getattr(j, "status", ""))
+            isu = str(getattr(j, "issue_id", ""))
+            su = str(getattr(j, "started_utc", ""))
+            eu = str(getattr(j, "ended_utc", ""))
+            mem_parts.append("|".join([jid, st, isu, su, eu]))
+        mem_sig = sha1("\n".join(mem_parts).encode("utf-8")).hexdigest()
+        sig = f"jobs:d={disk_sig[0]}:{disk_sig[1]}:m={mem_sig}"
+        if since_sig and since_sig == sig:
+            return JSONResponse({"ok": True, "unchanged": True, "sig": sig})
+
+        # Build payload only when changed.
 
         def _load_disk_jobs_sync(mem_by_id: dict[str, object]) -> list[Any]:
             from datetime import UTC, datetime
@@ -184,7 +204,9 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
 
         jobs = mem + disk
         jobs.sort(key=lambda j: str(j.created_utc or ""), reverse=True)
-        return JSONResponse({"ok": True, "jobs": [job_to_list_item_json(j) for j in jobs]})
+        return JSONResponse(
+            {"ok": True, "jobs": [job_to_list_item_json(j) for j in jobs], "sig": sig}
+        )
 
     @app.get("/api/jobs/{job_id}")
     async def api_jobs_get(job_id: str) -> JSONResponse:
@@ -352,8 +374,9 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
         return Response(content=data, media_type="application/zip", headers=headers)
 
     @app.get("/api/debug/diagnostics")
-    async def api_debug_diagnostics() -> JSONResponse:
-        return JSONResponse(await core.diagnostics(), status_code=200)
+    async def api_debug_diagnostics(request: Request) -> JSONResponse:
+        since_sig = str(request.query_params.get("since_sig", "")).strip()
+        return JSONResponse(await core.diagnostics(since_sig=since_sig), status_code=200)
 
     @app.get("/api/jobs/{job_id}/events")
     async def api_jobs_events(job_id: str) -> StreamingResponse:

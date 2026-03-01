@@ -65,6 +65,11 @@ def _job_json_signature(jobs_root: Path) -> tuple[int, int]:
     return (count, max_mtime_ns)
 
 
+def job_json_signature(jobs_root: Path) -> tuple[int, int]:
+    """Public signature for on-disk job.json listing invalidation."""
+    return _job_json_signature(jobs_root)
+
+
 def list_job_jsons(jobs_root: Path, *, limit: int = 200) -> list[dict[str, Any]]:
     limit = max(1, min(int(limit), 2000))
     key = str(jobs_root)
