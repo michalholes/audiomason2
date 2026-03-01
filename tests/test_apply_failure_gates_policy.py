@@ -1,9 +1,21 @@
 from __future__ import annotations
 
-from am_patch.apply_failure_gates_policy import evaluate_apply_failure_gates_policy
+import sys
+from pathlib import Path
+
+
+def _import_evaluator():
+    scripts_dir = Path(__file__).parent.parent / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    from am_patch.apply_failure_gates_policy import evaluate_apply_failure_gates_policy
+
+    return evaluate_apply_failure_gates_policy
 
 
 def test_apply_failure_gates_policy_matrix() -> None:
+    evaluate_apply_failure_gates_policy = _import_evaluator()
+
     # attempt=1, partial fail, policy=repair_only -> False
     assert (
         evaluate_apply_failure_gates_policy(
