@@ -40,6 +40,7 @@
     var tokens = Object.create(null);
     var inflight = Object.create(null);
     var seq = Object.create(null);
+    var lastGood = Object.create(null);
 
     function tokenGetJson(path, key) {
       key = String(key || path);
@@ -78,6 +79,11 @@
             if (newToken) tokens[key] = newToken;
           }
 
+          if (data && data.unchanged === true) {
+            const prev = lastGood[key] || null;
+            return { stale: false, data: prev };
+          }
+          if (data && data.ok !== false) lastGood[key] = data;
           return { stale: false, data: data };
         })
         .finally(() => {
@@ -171,11 +177,13 @@
         safeCall(ctx.refreshJobs);
         safeCall(ctx.refreshRuns);
         safeCall(ctx.refreshHeader);
+        safeCall(ctx.refreshJobs);
         safeCall(ctx.refreshTail);
       } else {
         // IDLE: max once per 10s, and only conditional refreshes in refresh funcs.
         safeCall(ctx.refreshRuns);
         safeCall(ctx.refreshHeader);
+        safeCall(ctx.refreshJobs);
       }
 
       scheduleNext(mode === "ACTIVE" ? intervalActiveMs : intervalIdleMs);

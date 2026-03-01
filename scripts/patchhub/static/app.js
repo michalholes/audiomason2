@@ -208,7 +208,7 @@
   var parseSeq = 0;
 
   function patchesRootRel() {
-    var p = (cfg && cfg.paths && cfg.paths.patches_root) ? String(cfg.paths.patches_root) : "patches";
+    var p = (cfg?.paths?.patches_root) ? String(cfg.paths.patches_root) : "patches";
     return p.replace(/\/+$/, "");
   }
 
@@ -352,8 +352,8 @@
 
       if (!r || r.ok === false) {
         clearParsedState();
-        setParseHint(`Parse failed: ${String((r && r.error) || "")}`);
-        setUiError(String((r && r.error) || "parse failed"));
+        setParseHint(`Parse failed: ${String((r?.error) || "")}`);
+        setUiError(String((r?.error) || "parse failed"));
         validateAndPreview();
         return;
       }
@@ -481,7 +481,7 @@
             if (!m) {
               m = /(?:issue_|#)(\d+)/i.exec(rel) || /(\d{3,6})/.exec(rel);
             }
-            if (m && m[1] && !String(el("issueId").value || "").trim()) {
+            if (m?.[1] && !String(el("issueId").value || "").trim()) {
               el("issueId").value = String(m[1]);
             }
             validateAndPreview();
@@ -503,9 +503,7 @@
 
     var url = `/api/runs?${q.join("&")}`;
 
-    var fetcher = (PatchHubRefreshPolicy && PatchHubRefreshPolicy.tokenGetJson)
-      ? (cb) => PatchHubRefreshPolicy.tokenGetJson(url, `runs:${q.join("&")}`).then((res) => cb(res && res.data))
-      : (cb) => apiGet(url).then(cb);
+    var fetcher = PatchHubRefreshPolicy?.tokenGetJson ? (cb) => PatchHubRefreshPolicy.tokenGetJson(url, `runs:${q.join("&")}`).then((r) => cb(r?.data)) : (cb) => apiGet(url).then(cb);
 
     fetcher((r) => {
       if (!r || r.ok === false) {
@@ -529,11 +527,8 @@
       var node = el("runsList");
 
       var out = html || "<div class=\"muted\">(none)</div>";
-      if (PatchHubRefreshPolicy && PatchHubRefreshPolicy.setHtmlIfChanged) {
-        PatchHubRefreshPolicy.setHtmlIfChanged(node, out, "runsList");
-      } else if (node) {
-        node.innerHTML = out;
-      }
+      if (PatchHubRefreshPolicy?.setHtmlIfChanged) PatchHubRefreshPolicy.setHtmlIfChanged(node, out, "runsList");
+      else if (node) node.innerHTML = out;
 
       if (PatchHubRunsUI && typeof PatchHubRunsUI.bindRunsList === "function") {
         PatchHubRunsUI.bindRunsList("runsList", () => runsCache, (run) => {
@@ -947,9 +942,7 @@ function loadLiveLevel() {
 
 
 function refreshJobs() {
-    var fetcher = (PatchHubRefreshPolicy && PatchHubRefreshPolicy.tokenGetJson)
-      ? (cb) => PatchHubRefreshPolicy.tokenGetJson("/api/jobs", "jobs").then((res) => cb(res && res.data))
-      : (cb) => apiGet("/api/jobs").then(cb);
+    var fetcher = PatchHubRefreshPolicy?.tokenGetJson ? (cb) => PatchHubRefreshPolicy.tokenGetJson("/api/jobs", "jobs").then((r) => cb(r?.data)) : (cb) => apiGet("/api/jobs").then(cb);
 
     fetcher((r) => {
       if (!r || r.ok === false) {
@@ -1027,7 +1020,7 @@ function refreshJobs() {
       var node = el("jobsList");
 
       var out = html || "<div class=\"muted\">(none)</div>";
-      if (PatchHubRefreshPolicy && PatchHubRefreshPolicy.setHtmlIfChanged) {
+      if (PatchHubRefreshPolicy?.setHtmlIfChanged) {
         PatchHubRefreshPolicy.setHtmlIfChanged(node, out, "jobsList");
       } else if (node) {
         node.innerHTML = out;
@@ -1047,7 +1040,7 @@ function refreshJobs() {
         activeJobId = isActive ? (getLiveJobId() || activeJobId) : null;
       },
       pokeSoon: () => {
-        if (PatchHubRefreshPolicy && typeof PatchHubRefreshPolicy.pokeSoon === "function") {
+        if (typeof PatchHubRefreshPolicy?.pokeSoon === "function") {
           PatchHubRefreshPolicy.pokeSoon();
         }
       },
@@ -1225,10 +1218,12 @@ if (mode === "patch" || mode === "repair") {
         suppressIdleOutput = false;
         openLiveStream(selectedJobId);
         refreshTail(tailLines);
+        activeJobId = selectedJobId;
+        PatchHubRefreshPolicy.pokeSoon();
+        refreshJobs();
       } else {
-        setUiError(String((r && r.error) || "enqueue failed"));
+        setUiError(String((r?.error) || "enqueue failed"));
       }
-      refreshJobs();
     });
   }
 
@@ -1444,7 +1439,7 @@ if (mode === "patch" || mode === "repair") {
     function pollLatestPatchOnce() {
       if (!cfg || !cfg.autofill || !cfg.autofill.enabled) return;
 
-      var fetcher = (PatchHubRefreshPolicy && PatchHubRefreshPolicy.tokenGetJson)
+      var fetcher = (PatchHubRefreshPolicy?.tokenGetJson)
         ? () => PatchHubRefreshPolicy.tokenGetJson("/api/patches/latest", "latest_patch")
           .then((res) => (res ? res.data : null))
         : () => apiGet("/api/patches/latest");
@@ -1482,10 +1477,10 @@ if (mode === "patch" || mode === "repair") {
       var base = (cfg && cfg.server && cfg.server.host && cfg.server.port)
         ? `server: ${cfg.server.host}:${cfg.server.port}`
         : "";
-      var fetcher = (PatchHubRefreshPolicy && PatchHubRefreshPolicy.tokenGetJson)
+      var fetcher = (PatchHubRefreshPolicy?.tokenGetJson)
         ? (cb) => PatchHubRefreshPolicy
           .tokenGetJson("/api/debug/diagnostics?include_stats=0", "header")
-          .then((res) => cb(res && res.data))
+          .then((res) => cb(res?.data))
         : (cb) => apiGet("/api/debug/diagnostics?include_stats=0").then(cb);
 
       fetcher((d) => {
@@ -1502,7 +1497,7 @@ if (mode === "patch" || mode === "repair") {
         meta += ` | ${held}`; if (pct) meta += ` | ${pct}`;
 
         var node = el("hdrMeta");
-        if (PatchHubRefreshPolicy && PatchHubRefreshPolicy.setTextIfChanged) {
+        if (PatchHubRefreshPolicy?.setTextIfChanged) {
           PatchHubRefreshPolicy.setTextIfChanged(node, meta, "hdrMeta");
         } else if (node) {
           node.textContent = meta;
@@ -1808,6 +1803,9 @@ if (mode === "patch" || mode === "repair") {
             refreshJobs();
             openLiveStream(getLiveJobId());
             refreshTail(tailLines);
+        activeJobId = selectedJobId;
+        PatchHubRefreshPolicy.pokeSoon();
+        refreshJobs();
             return;
           }
           t = t.parentElement;
