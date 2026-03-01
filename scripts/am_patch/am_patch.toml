@@ -127,6 +127,8 @@ ruff_format = true
 
 pytest_use_venv = true
 
+gate_biome_format = true
+gate_biome_format_command = ["npx", "biome", "format", "--write", "."]
 
 # Canonical (supported by runner; missing in your file)
 gates_allow_fail = false
@@ -149,7 +151,7 @@ gate_biome_fix_command = ["npm", "run", "lint:files:fix", "--"]
 gate_biome_extensions = [".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx"]
 gate_biome_command = ["npm", "run", "lint:files", "--"]
 
-gates_skip_typescript = true
+gates_skip_typescript = false
 gate_typescript_extensions = [".ts", ".tsx", ".mts", ".cts"]
 gate_typescript_command = ["tsc", "--noEmit", "--pretty", "false"]
 
