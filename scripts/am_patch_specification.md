@@ -182,6 +182,13 @@ Full error detail bypass (non-filterable):
   failed-step stdout/stderr MUST NOT bypass filtering. It MUST be emitted as
   DETAIL+WARNING so it is visible only at warning/verbose/debug.
 
+Monolith gate failures (normative):
+
+- If Monolith gate fails, the runner MUST emit the concrete failure reasons
+  (the FAIL violation lines) as full error detail so they are visible even in
+  `--verbosity quiet` and `--log-level quiet`.
+- The one-line failure summary (e.g. `MONOLITH: FAIL`) is not sufficient on its own.
+
 Status indicator: - TTY: single-line overwrite on stderr:
 `STATUS: <STAGE>  ELAPSED: <mm:ss>` - non-TTY: periodic heartbeat on
 stderr (1s interval): `HEARTBEAT: <STAGE> elapsed=<mm:ss>` - Before
