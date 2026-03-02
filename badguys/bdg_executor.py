@@ -4,12 +4,11 @@ import subprocess
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, List
 
 from badguys.bdg_evaluator import StepResult
 from badguys.bdg_loader import BdgStep, BdgTest
 from badguys.bdg_materializer import MaterializedAssets
-
 
 
 def _subst_token(value: str, *, issue_id: str) -> str:
@@ -18,11 +17,31 @@ def _subst_token(value: str, *, issue_id: str) -> str:
     return value
 
 
+def _safe_name(name: str) -> str:
+    out = []
+    for ch in name:
+        if ch.isalnum() or ch in {"_", "-", "."}:
+            out.append(ch)
+        else:
+            out.append("_")
+    return "".join(out)
+
+
+def _lock_path_for_test(repo_root: Path, *, test_id: str) -> Path:
+    safe = _safe_name(test_id)
+    return repo_root / "patches" / f"{safe}.lock"
+
+
+def _outside_sentinel(repo_root: Path, *, issue_id: str) -> Path:
+    return repo_root.parent / f"badguys_sentinel_issue_{issue_id}.txt"
+
+
 def _logs_dir(repo_root: Path) -> Path:
     cfg_path = repo_root / "badguys" / "config.toml"
     raw = tomllib.loads(cfg_path.read_text(encoding="utf-8"))
     logs_rel = raw.get("suite", {}).get("logs_dir", "badguys/per_run_logs")
     return repo_root / Path(str(logs_rel))
+
 
 @dataclass(frozen=True)
 class ExecOutcome:
@@ -31,17 +50,38 @@ class ExecOutcome:
     messages: List[str]
 
 
-def execute_bdg(*, repo_root: Path, cfg_runner_cmd: list[str], issue_id: str, bdg: BdgTest,
-                mats: MaterializedAssets) -> list[StepResult]:
+def execute_bdg(
+    *,
+    repo_root: Path,
+    cfg_runner_cmd: list[str],
+    issue_id: str,
+    bdg: BdgTest,
+    mats: MaterializedAssets,
+) -> list[StepResult]:
     results: List[StepResult] = []
     for step in bdg.steps:
-        results.append(_exec_one(repo_root=repo_root, cfg_runner_cmd=cfg_runner_cmd, issue_id=issue_id,
-                                 step=step, mats=mats))
+        results.append(
+            _exec_one(
+                repo_root=repo_root,
+                cfg_runner_cmd=cfg_runner_cmd,
+                issue_id=issue_id,
+                step=step,
+                mats=mats,
+                test_id=bdg.test_id,
+            )
+        )
     return results
 
 
-def _exec_one(*, repo_root: Path, cfg_runner_cmd: list[str], issue_id: str, step: BdgStep,
-              mats: MaterializedAssets) -> StepResult:
+def _exec_one(
+    *,
+    repo_root: Path,
+    cfg_runner_cmd: list[str],
+    issue_id: str,
+    step: BdgStep,
+    mats: MaterializedAssets,
+    test_id: str,
+) -> StepResult:
     op = step.op
     p = step.params
 
@@ -84,7 +124,6 @@ def _exec_one(*, repo_root: Path, cfg_runner_cmd: list[str], issue_id: str, step
         names = [t.name for t in tests]
         return StepResult(rc=0, stdout=None, stderr=None, value=names)
 
-
     if op == "BUILD_CFG":
         input_asset = p.get("input_asset")
         if not isinstance(input_asset, str):
@@ -124,7 +163,7 @@ def _exec_one(*, repo_root: Path, cfg_runner_cmd: list[str], issue_id: str, step
     if op == "READ_STEP_LOG":
         name = p.get("test_name")
         if name is None:
-            name = bdg.test_id
+            name = test_id
         if not isinstance(name, str):
             raise SystemExit("FAIL: bdg: test_name must be string")
         log_dir = _logs_dir(repo_root)
@@ -133,5 +172,58 @@ def _exec_one(*, repo_root: Path, cfg_runner_cmd: list[str], issue_id: str, step
             return StepResult(rc=1, stdout=None, stderr=f"missing log: {log_path}", value="")
         return StepResult(rc=0, stdout=None, stderr=None, value=log_path.read_text(encoding="utf-8"))
 
+    if op == "LOCK_DELETE":
+        lock_path = _lock_path_for_test(repo_root, test_id=test_id)
+        try:
+            lock_path.unlink()
+        except FileNotFoundError:
+            pass
+        return StepResult(rc=0, stdout=None, stderr=None, value=str(lock_path))
+
+    if op == "LOCK_WRITE_STALE":
+        lock_path = _lock_path_for_test(repo_root, test_id=test_id)
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        lock_path.write_text("pid=0\nstarted=0\n", encoding="utf-8")
+        return StepResult(rc=0, stdout=None, stderr=None, value=str(lock_path))
+
+    if op == "LOCK_ACQUIRE":
+        ttl_seconds = p.get("ttl_seconds")
+        on_conflict = p.get("on_conflict")
+        if not isinstance(ttl_seconds, int):
+            raise SystemExit("FAIL: bdg: ttl_seconds must be int")
+        if on_conflict not in {"fail", "steal"}:
+            raise SystemExit("FAIL: bdg: on_conflict must be 'fail' or 'steal'")
+        lock_path = _lock_path_for_test(repo_root, test_id=test_id)
+        from badguys._util import acquire_lock
+
+        try:
+            acquire_lock(repo_root, path=lock_path, ttl_seconds=ttl_seconds, on_conflict=on_conflict)
+        except SystemExit as e:
+            return StepResult(rc=1, stdout=None, stderr=str(e), value=str(lock_path))
+        return StepResult(rc=0, stdout=None, stderr=None, value=str(lock_path))
+
+    if op == "LOCK_RELEASE":
+        lock_path = _lock_path_for_test(repo_root, test_id=test_id)
+        from badguys._util import release_lock
+
+        try:
+            release_lock(repo_root, path=lock_path)
+        except SystemExit as e:
+            return StepResult(rc=1, stdout=None, stderr=str(e), value=str(lock_path))
+        return StepResult(rc=0, stdout=None, stderr=None, value=str(lock_path))
+
+    if op == "CLEAN_OUTSIDE_SENTINEL":
+        sentinel = _outside_sentinel(repo_root, issue_id=issue_id)
+        try:
+            sentinel.unlink()
+        except FileNotFoundError:
+            pass
+        return StepResult(rc=0, stdout=None, stderr=None, value=str(sentinel))
+
+    if op == "ASSERT_NO_OUTSIDE_SENTINEL":
+        sentinel = _outside_sentinel(repo_root, issue_id=issue_id)
+        if sentinel.exists():
+            return StepResult(rc=1, stdout=None, stderr="outside write detected", value=str(sentinel))
+        return StepResult(rc=0, stdout=None, stderr=None, value=str(sentinel))
 
     raise SystemExit(f"FAIL: bdg: unsupported op: {op}")

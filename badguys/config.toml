@@ -73,7 +73,27 @@ value_not_contains = ["Traceback"]
 
 [evaluation.tests.test_010_discovery_deterministic_order.steps.0]
 rc_eq = 0
-list_eq = ["test_000_test_mode_smoke", "test_010_discovery_deterministic_order", "test_010_help_short", "test_011_include_single", "test_012_exclude_single", "test_013_include_exclude_conflict", "test_014_guard_exclude_guard_is_ignored", "test_020_help_all", "test_020_runner_quiet_default", "test_021_runner_verbose_override_cli", "test_022_runner_debug_override_cli", "test_030_show_config", "test_031_invalid_runner_verbosity_fails_cleanly"]
+list_eq = [
+  "test_000_test_mode_smoke",
+  "test_001_lock_create_and_release",
+  "test_002_lock_conflict_fail",
+  "test_003_lock_conflict_steal_ttl",
+  "test_010_discovery_deterministic_order",
+  "test_010_help_short",
+  "test_011_include_single",
+  "test_012_exclude_single",
+  "test_013_include_exclude_conflict",
+  "test_014_guard_exclude_guard_is_ignored",
+  "test_020_help_all",
+  "test_020_runner_quiet_default",
+  "test_021_runner_verbose_override_cli",
+  "test_022_runner_debug_override_cli",
+  "test_030_show_config",
+  "test_031_invalid_runner_verbosity_fails_cleanly",
+  "test_050_unified_patch_zip_recursive_detection",
+  "test_052_unified_patch_ignores_py_when_patch_present",
+  "test_067_path_traversal_outside_repo_fails",
+]
 
 [evaluation.tests.test_011_include_single.steps.0]
 rc_eq = 0
@@ -81,7 +101,26 @@ list_eq = ["test_000_test_mode_smoke", "test_010_help_short"]
 
 [evaluation.tests.test_012_exclude_single.steps.0]
 rc_eq = 0
-list_eq = ["test_000_test_mode_smoke", "test_010_discovery_deterministic_order", "test_011_include_single", "test_012_exclude_single", "test_013_include_exclude_conflict", "test_014_guard_exclude_guard_is_ignored", "test_020_help_all", "test_020_runner_quiet_default", "test_021_runner_verbose_override_cli", "test_022_runner_debug_override_cli", "test_030_show_config", "test_031_invalid_runner_verbosity_fails_cleanly"]
+list_eq = [
+  "test_000_test_mode_smoke",
+  "test_001_lock_create_and_release",
+  "test_002_lock_conflict_fail",
+  "test_003_lock_conflict_steal_ttl",
+  "test_010_discovery_deterministic_order",
+  "test_011_include_single",
+  "test_012_exclude_single",
+  "test_013_include_exclude_conflict",
+  "test_014_guard_exclude_guard_is_ignored",
+  "test_020_help_all",
+  "test_020_runner_quiet_default",
+  "test_021_runner_verbose_override_cli",
+  "test_022_runner_debug_override_cli",
+  "test_030_show_config",
+  "test_031_invalid_runner_verbosity_fails_cleanly",
+  "test_050_unified_patch_zip_recursive_detection",
+  "test_052_unified_patch_ignores_py_when_patch_present",
+  "test_067_path_traversal_outside_repo_fails",
+]
 
 [evaluation.tests.test_013_include_exclude_conflict.steps.0]
 rc_eq = 2
@@ -104,3 +143,60 @@ value_not_contains = ["--verbosity=quiet"]
 rc_eq = 0
 value_contains = ["--verbosity=debug"]
 value_not_contains = ["--verbosity=quiet"]
+
+[evaluation.tests.test_001_lock_create_and_release.steps.0]
+rc_eq = 0
+
+[evaluation.tests.test_001_lock_create_and_release.steps.1]
+rc_eq = 0
+
+[evaluation.tests.test_001_lock_create_and_release.steps.2]
+rc_eq = 0
+
+[evaluation.tests.test_001_lock_create_and_release.steps.3]
+rc_eq = 0
+
+[evaluation.tests.test_002_lock_conflict_fail.steps.0]
+rc_eq = 0
+
+[evaluation.tests.test_002_lock_conflict_fail.steps.1]
+rc_eq = 0
+
+[evaluation.tests.test_002_lock_conflict_fail.steps.2]
+rc_eq = 1
+
+[evaluation.tests.test_002_lock_conflict_fail.steps.3]
+rc_eq = 0
+
+[evaluation.tests.test_002_lock_conflict_fail.steps.4]
+rc_eq = 0
+
+[evaluation.tests.test_003_lock_conflict_steal_ttl.steps.0]
+rc_eq = 0
+
+[evaluation.tests.test_003_lock_conflict_steal_ttl.steps.1]
+rc_eq = 0
+
+[evaluation.tests.test_003_lock_conflict_steal_ttl.steps.2]
+rc_eq = 0
+
+[evaluation.tests.test_003_lock_conflict_steal_ttl.steps.3]
+rc_eq = 0
+
+[evaluation.tests.test_003_lock_conflict_steal_ttl.steps.4]
+rc_eq = 0
+
+[evaluation.tests.test_050_unified_patch_zip_recursive_detection.steps.0]
+rc_eq = 0
+
+[evaluation.tests.test_052_unified_patch_ignores_py_when_patch_present.steps.0]
+rc_eq = 0
+
+[evaluation.tests.test_067_path_traversal_outside_repo_fails.steps.0]
+rc_eq = 0
+
+[evaluation.tests.test_067_path_traversal_outside_repo_fails.steps.1]
+rc_eq = 1
+
+[evaluation.tests.test_067_path_traversal_outside_repo_fails.steps.2]
+rc_eq = 0

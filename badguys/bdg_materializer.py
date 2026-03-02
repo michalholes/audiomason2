@@ -25,48 +25,50 @@ def _safe_name(name: str) -> str:
     return "".join(out)
 
 
+def _subst_content(content: str, *, issue_id: str) -> str:
+    return content.replace("${issue_id}", str(issue_id))
+
+
 def materialize_assets(*, repo_root: Path, issue_id: str, bdg: BdgTest) -> MaterializedAssets:
     root = repo_root / "patches" / "badguys_artifacts" / f"issue_{issue_id}" / bdg.test_id
     root.mkdir(parents=True, exist_ok=True)
     files: Dict[str, Path] = {}
     for asset_id, asset in bdg.assets.items():
-        files[asset_id] = _materialize_one(root=root, asset=asset)
+        files[asset_id] = _materialize_one(root=root, issue_id=issue_id, asset=asset)
     return MaterializedAssets(root=root, files=files)
 
 
-def _materialize_one(*, root: Path, asset: BdgAsset) -> Path:
+def _materialize_one(*, root: Path, issue_id: str, asset: BdgAsset) -> Path:
     safe_id = _safe_name(asset.asset_id)
     if asset.kind == "text":
         p = root / f"{safe_id}.txt"
-        p.write_text(asset.content or "", encoding="utf-8")
+        p.write_text(_subst_content(asset.content or "", issue_id=issue_id), encoding="utf-8")
         return p
-
 
     if asset.kind == "toml_text":
         p = root / f"{safe_id}.toml"
-        p.write_text(asset.content or "", encoding="utf-8")
+        p.write_text(_subst_content(asset.content or "", issue_id=issue_id), encoding="utf-8")
         return p
 
     if asset.kind == "python_patch_script":
         p = root / f"{safe_id}.py"
-        p.write_text(asset.content or "", encoding="utf-8")
+        p.write_text(_subst_content(asset.content or "", issue_id=issue_id), encoding="utf-8")
         return p
-
 
     if asset.kind == "git_patch_text":
         p = root / f"{safe_id}.patch"
-        p.write_text(asset.content or "", encoding="utf-8")
+        p.write_text(_subst_content(asset.content or "", issue_id=issue_id), encoding="utf-8")
         return p
 
     if asset.kind == "patch_zip_manifest":
         p = root / f"{safe_id}.zip"
-        _write_zip_from_manifest(p, asset)
+        _write_zip_from_manifest(p, issue_id=issue_id, asset=asset)
         return p
 
     raise SystemExit(f"FAIL: bdg: unsupported asset kind: {asset.kind}")
 
 
-def _write_zip_from_manifest(path: Path, asset: BdgAsset) -> None:
+def _write_zip_from_manifest(path: Path, *, issue_id: str, asset: BdgAsset) -> None:
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as z:
         # Deterministic: stable ordering and fixed timestamps.
@@ -74,5 +76,6 @@ def _write_zip_from_manifest(path: Path, asset: BdgAsset) -> None:
             info = zipfile.ZipInfo(ent.name)
             info.date_time = (1980, 1, 1, 0, 0, 0)
             info.compress_type = zipfile.ZIP_DEFLATED
-            z.writestr(info, ent.content.encode("utf-8"))
+            data = _subst_content(ent.content, issue_id=issue_id).encode("utf-8")
+            z.writestr(info, data)
     path.write_bytes(buf.getvalue())

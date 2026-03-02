@@ -1,0 +1,32 @@
+[meta]
+makes_commit = false
+is_guard = false
+
+[[asset]]
+id = "zip"
+kind = "patch_zip_manifest"
+
+  [[asset.entry]]
+  name = "x.patch"
+  content = """diff --git a/docs/badguys_batch1/ignore_py.txt b/docs/badguys_batch1/ignore_py.txt
+new file mode 100644
+index 0000000..1111111
+--- /dev/null
++++ b/docs/badguys_batch1/ignore_py.txt
+@@ -0,0 +1,1 @@
++patch-wins
+"""
+
+  [[asset.entry]]
+  name = "evil.py"
+  content = """from __future__ import annotations
+FILES = ['docs/badguys_batch1/ignore_py.txt']
+from pathlib import Path
+REPO = Path(__file__).resolve().parents[1]
+(REPO / 'docs/badguys_batch1/ignore_py.txt').write_text('py-wins\n', encoding='utf-8')
+"""
+
+[[step]]
+op = "RUN_RUNNER"
+extra_args = ["--test-mode", "${issue_id}", "badguys: unified ignores py"]
+input_asset = "zip"
