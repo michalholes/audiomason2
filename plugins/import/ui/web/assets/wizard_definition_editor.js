@@ -1,7 +1,8 @@
 (function () {
 	"use strict";
 
-	const H = window.AM2EditorHTTP;
+	const W = /** @type {any} */ (window);
+	const H = W.AM2EditorHTTP;
 	if (!H) return;
 
 	function $(id) {
@@ -37,8 +38,8 @@
 	}
 
 	const stableGraph =
-		window.AM2WDGraphStable && window.AM2WDGraphStable.stableGraph
-			? window.AM2WDGraphStable.stableGraph
+		W.AM2WDGraphStable && W.AM2WDGraphStable.stableGraph
+			? W.AM2WDGraphStable.stableGraph
 			: function () {
 					return { version: 1, nodes: [], edges: [], entry: null };
 				};
@@ -69,7 +70,7 @@
 	}
 
 	function snapshot() {
-		const FE = window.AM2FlowEditorState;
+		const FE = W.AM2FlowEditorState;
 		return FE && FE.getSnapshot ? FE.getSnapshot() : null;
 	}
 
@@ -84,7 +85,7 @@
 	}
 
 	function mutateWizard(fn, opts) {
-		const FE = window.AM2FlowEditorState;
+		const FE = W.AM2FlowEditorState;
 		if (!FE || !FE.mutateWizard) return;
 		FE.mutateWizard(function (wd) {
 			fn && fn(ensureWizardUi(wd), wd);
@@ -92,7 +93,7 @@
 	}
 
 	function setSelectedStep(stepIdOrNull) {
-		const FE = window.AM2FlowEditorState;
+		const FE = W.AM2FlowEditorState;
 		if (FE && FE.setSelectedStep) FE.setSelectedStep(stepIdOrNull || null);
 	}
 
@@ -146,7 +147,9 @@
 				Object.keys(wd).forEach((k) => {
 					delete wd[k];
 				});
-				Object.assign(wd, next);
+				for (const k in next) {
+					wd[k] = next[k];
+				}
 			},
 			{ markDirty: false, resetValidation: false, reason: "normalize_v2" },
 		);
@@ -155,8 +158,8 @@
 	const paletteItems = [];
 
 	const root =
-		window.AM2WDLayoutRoot && window.AM2WDLayoutRoot.createRoot
-			? window.AM2WDLayoutRoot.createRoot({ ui: ui, el: el, text: text })
+		W.AM2WDLayoutRoot && W.AM2WDLayoutRoot.createRoot
+			? W.AM2WDLayoutRoot.createRoot({ ui: ui, el: el, text: text })
 			: null;
 
 	const flowSidebar = $("flowEditorSidebar");
@@ -165,14 +168,14 @@
 	const palettePanel = $("flowPalettePanel");
 
 	if (
-		window.AM2WDSidebar &&
-		window.AM2WDSidebar.buildSidebarSections &&
+		W.AM2WDSidebar &&
+		W.AM2WDSidebar.buildSidebarSections &&
 		flowSidebar &&
 		stepPanel &&
 		transitionsPanel &&
 		palettePanel
 	) {
-		window.AM2WDSidebar.buildSidebarSections({
+		W.AM2WDSidebar.buildSidebarSections({
 			flowSidebar: flowSidebar,
 			stepPanel: stepPanel,
 			transitionsPanel: transitionsPanel,
@@ -181,7 +184,7 @@
 			el: el,
 			text: text,
 		});
-		const C = window.AM2FlowConfigEditor;
+		const C = W.AM2FlowConfigEditor;
 		if (C && C.renderNow) void C.renderNow();
 	}
 
@@ -218,7 +221,9 @@
 			Object.keys(wd).forEach((k) => {
 				delete wd[k];
 			});
-			Object.assign(wd, next);
+			for (const k in next) {
+				wd[k] = next[k];
+			}
 		});
 	}
 
@@ -245,7 +250,9 @@
 			Object.keys(wd).forEach((k) => {
 				delete wd[k];
 			});
-			Object.assign(wd, next);
+			for (const k in next) {
+				wd[k] = next[k];
+			}
 			if (selectedStepId() === sid) setSelectedStep(null);
 		});
 	}
@@ -275,7 +282,9 @@
 			Object.keys(wd).forEach((k) => {
 				delete wd[k];
 			});
-			Object.assign(wd, next);
+			for (const k in next) {
+				wd[k] = next[k];
+			}
 		});
 	}
 
@@ -295,7 +304,9 @@
 			Object.keys(wd).forEach((k) => {
 				delete wd[k];
 			});
-			Object.assign(wd, next);
+			for (const k in next) {
+				wd[k] = next[k];
+			}
 		});
 	}
 
@@ -315,7 +326,9 @@
 			Object.keys(wd).forEach((k) => {
 				delete wd[k];
 			});
-			Object.assign(wd, next);
+			for (const k in next) {
+				wd[k] = next[k];
+			}
 		});
 	}
 	function addEdge(fromId, toId, prio, whenVal) {
@@ -334,7 +347,9 @@
 			Object.keys(wd).forEach((k) => {
 				delete wd[k];
 			});
-			Object.assign(wd, next);
+			for (const k in next) {
+				wd[k] = next[k];
+			}
 		});
 	}
 
@@ -357,7 +372,9 @@
 			Object.keys(wd).forEach((k) => {
 				delete wd[k];
 			});
-			Object.assign(wd, next);
+			for (const k in next) {
+				wd[k] = next[k];
+			}
 		});
 	}
 
@@ -426,8 +443,8 @@
 				});
 			},
 		});
-		if (window.AM2WDRawError && window.AM2WDRawError.setupRawErrorPanel) {
-			window.AM2WDRawError.setupRawErrorPanel({
+		if (W.AM2WDRawError && W.AM2WDRawError.setupRawErrorPanel) {
+			W.AM2WDRawError.setupRawErrorPanel({
 				ui: ui,
 				state: rawErrorState,
 				el: el,
@@ -464,186 +481,205 @@
 		meta.appendChild(text("div", null, item.id || ""));
 		meta.appendChild(text("div", null, item.timestamp || ""));
 		const btn = text("button", "btn", "Rollback");
-		btn.addEventListener("click", async () => {
-			await rollback(String(item.id || ""));
+		btn.addEventListener("click", function () {
+			rollback(String(item.id || ""));
 		});
 		row.appendChild(meta);
 		row.appendChild(btn);
 		return row;
 	}
 
-	async function loadHistory() {
-		const out = await H.requestJSON("/import/ui/wizard-definition/history");
-		if (!out.ok) {
-			renderError(out.data, false);
-			return;
-		}
-		clear(ui.history);
-		const items = out.data && out.data.items ? out.data.items : [];
-		(Array.isArray(items) ? items : []).forEach((it) => {
-			ui.history.appendChild(historyRow(it || {}));
-		});
+	function loadHistory() {
+		return H.requestJSON("/import/ui/wizard-definition/history").then(
+			function (out) {
+				if (!out.ok) {
+					renderError(out.data, false);
+					return false;
+				}
+				clear(ui.history);
+				const items = out.data && out.data.items ? out.data.items : [];
+				(Array.isArray(items) ? items : []).forEach(function (it) {
+					ui.history.appendChild(historyRow(it || {}));
+				});
+				return true;
+			},
+		);
 	}
 
-	async function loadPalette() {
-		const out = await H.requestJSON("/import/ui/steps-index");
-		if (!out.ok) {
-			renderError(out.data, false);
-			return false;
-		}
-		const items = out.data && out.data.items ? out.data.items : [];
-		paletteItems.length = 0;
-		(Array.isArray(items) ? items : []).forEach(function (it) {
-			paletteItems.push(it);
-		});
-		return true;
-	}
-
-	async function loadDefinition() {
-		const out = await H.requestJSON("/import/ui/wizard-definition");
-		if (!out.ok) {
-			renderError(out.data, false);
-			return false;
-		}
-		const defn = out.data && out.data.definition ? out.data.definition : {};
-		const FE = window.AM2FlowEditorState;
-		if (FE && FE.loadAll && FE.getSnapshot) {
-			const snap = FE.getSnapshot();
-			FE.loadAll(
-				{ wizardDefinition: defn, flowConfig: snap.configDraft },
-				{ preserveValidation: true },
-			);
-		}
-		return true;
-	}
-
-	async function reloadAll() {
-		if (!confirmIfDirty("Reload")) return;
-		renderError(null, false);
-		setValidation(null, [], []);
-		const ok1 = await loadPalette();
-		const ok2 = await loadDefinition();
-		if (ok1 && ok2) {
-			await loadHistory();
-			ensureV2();
-			renderAll();
-		}
-		return !!(ok1 && ok2);
-	}
-
-	async function validateDraft() {
-		renderError(null, false);
-		setValidation(null, [], []);
-		const s = snapshot();
-		const payload = { definition: stripUi((s && s.wizardDraft) || {}) };
-		const out = await H.requestJSON("/import/ui/wizard-definition/validate", {
-			method: "POST",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify(payload),
-		});
-		if (!out.ok) {
-			renderError(out.data, true);
-			setValidation(
-				false,
-				["Validation failed. See error details above."],
-				extractServerMessages(out.data),
-			);
-			renderAll();
-			return false;
-		}
-		const defn = out.data && out.data.definition ? out.data.definition : {};
-		const FE = window.AM2FlowEditorState;
-		if (FE && FE.markValidated && FE.getSnapshot) {
-			const snap = FE.getSnapshot();
-			FE.markValidated({
-				canonicalWizardDefinition: defn,
-				canonicalFlowConfig: snap.configDraft,
-				validationEnvelope: { ok: true },
+	function loadPalette() {
+		return H.requestJSON("/import/ui/steps-index").then(function (out) {
+			if (!out.ok) {
+				renderError(out.data, false);
+				return false;
+			}
+			const items = out.data && out.data.items ? out.data.items : [];
+			paletteItems.length = 0;
+			(Array.isArray(items) ? items : []).forEach(function (it) {
+				paletteItems.push(it);
 			});
-		}
-		setValidation(true, [], []);
-		renderAll();
-		return true;
+			return true;
+		});
 	}
 
-	async function saveDraft() {
-		if (!(await validateDraft())) return false;
+	function loadDefinition() {
+		return H.requestJSON("/import/ui/wizard-definition").then(function (out) {
+			if (!out.ok) {
+				renderError(out.data, false);
+				return false;
+			}
+			const defn = out.data && out.data.definition ? out.data.definition : {};
+			const FE = W.AM2FlowEditorState;
+			if (FE && FE.loadAll && FE.getSnapshot) {
+				const snap = FE.getSnapshot();
+				FE.loadAll(
+					{ wizardDefinition: defn, flowConfig: snap.configDraft },
+					{ preserveValidation: true },
+				);
+			}
+			return true;
+		});
+	}
+
+	function reloadAll() {
+		if (!confirmIfDirty("Reload")) return false;
+		renderError(null, false);
+		setValidation(null, [], []);
+		return loadPalette().then(function (ok1) {
+			return loadDefinition().then(function (ok2) {
+				if (ok1 && ok2) {
+					return loadHistory().then(function () {
+						ensureV2();
+						renderAll();
+						return true;
+					});
+				}
+				return false;
+			});
+		});
+	}
+
+	function validateDraft() {
+		renderError(null, false);
+		setValidation(null, [], []);
 		const s = snapshot();
 		const payload = { definition: stripUi((s && s.wizardDraft) || {}) };
-		const out = await H.requestJSON("/import/ui/wizard-definition", {
+		return H.requestJSON("/import/ui/wizard-definition/validate", {
 			method: "POST",
 			headers: { "content-type": "application/json" },
 			body: JSON.stringify(payload),
+		}).then(function (out) {
+			if (!out.ok) {
+				renderError(out.data, true);
+				setValidation(
+					false,
+					["Validation failed. See error details above."],
+					extractServerMessages(out.data),
+				);
+				renderAll();
+				return false;
+			}
+			const defn = out.data && out.data.definition ? out.data.definition : {};
+			const FE = W.AM2FlowEditorState;
+			if (FE && FE.markValidated && FE.getSnapshot) {
+				const snap = FE.getSnapshot();
+				FE.markValidated({
+					canonicalWizardDefinition: defn,
+					canonicalFlowConfig: snap.configDraft,
+					validationEnvelope: { ok: true },
+				});
+			}
+			setValidation(true, [], []);
+			renderAll();
+			return true;
 		});
-		if (!out.ok) {
-			renderError(out.data, false);
-			return false;
-		}
-		const defn = out.data && out.data.definition ? out.data.definition : {};
-		const FE = window.AM2FlowEditorState;
-		if (FE && FE.loadAll && FE.getSnapshot) {
-			const snap = FE.getSnapshot();
-			FE.loadAll(
-				{ wizardDefinition: defn, flowConfig: snap.configDraft },
-				{ preserveValidation: true },
-			);
-		}
-		await loadHistory();
-		renderAll();
-		return true;
 	}
 
-	async function resetDefinition() {
-		if (!confirmIfDirty("Reset")) return;
+	function saveDraft() {
+		return validateDraft().then(function (ok) {
+			if (!ok) return false;
+			const s = snapshot();
+			const payload = { definition: stripUi((s && s.wizardDraft) || {}) };
+			return H.requestJSON("/import/ui/wizard-definition", {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify(payload),
+			}).then(function (out) {
+				if (!out.ok) {
+					renderError(out.data, false);
+					return false;
+				}
+				const defn = out.data && out.data.definition ? out.data.definition : {};
+				const FE = W.AM2FlowEditorState;
+				if (FE && FE.loadAll && FE.getSnapshot) {
+					const snap = FE.getSnapshot();
+					FE.loadAll(
+						{ wizardDefinition: defn, flowConfig: snap.configDraft },
+						{ preserveValidation: true },
+					);
+				}
+				return loadHistory().then(function () {
+					renderAll();
+					return true;
+				});
+			});
+		});
+	}
+
+	function resetDefinition() {
+		if (!confirmIfDirty("Reset")) return false;
 
 		renderError(null, false);
 		setValidation(null, [], []);
-		const out = await H.requestJSON("/import/ui/wizard-definition/reset", {
+		return H.requestJSON("/import/ui/wizard-definition/reset", {
 			method: "POST",
+		}).then(function (out) {
+			if (!out.ok) {
+				renderError(out.data, false);
+				return false;
+			}
+			const defn = out.data && out.data.definition ? out.data.definition : {};
+			const FE = W.AM2FlowEditorState;
+			if (FE && FE.loadAll && FE.getSnapshot) {
+				const snap = FE.getSnapshot();
+				FE.loadAll(
+					{ wizardDefinition: defn, flowConfig: snap.configDraft },
+					{ preserveValidation: true },
+				);
+			}
+			return loadHistory().then(function () {
+				renderAll();
+				return true;
+			});
 		});
-		if (!out.ok) {
-			renderError(out.data, false);
-			return false;
-		}
-		const defn = out.data && out.data.definition ? out.data.definition : {};
-		const FE = window.AM2FlowEditorState;
-		if (FE && FE.loadAll && FE.getSnapshot) {
-			const snap = FE.getSnapshot();
-			FE.loadAll(
-				{ wizardDefinition: defn, flowConfig: snap.configDraft },
-				{ preserveValidation: true },
-			);
-		}
-		await loadHistory();
-		renderAll();
-		return true;
 	}
 
-	async function rollback(id) {
+	function rollback(id) {
 		if (!confirmIfDirty("Rollback")) return;
 
 		renderError(null, false);
 		setValidation(null, [], []);
-		const out = await H.requestJSON("/import/ui/wizard-definition/rollback", {
+		return H.requestJSON("/import/ui/wizard-definition/rollback", {
 			method: "POST",
 			headers: { "content-type": "application/json" },
 			body: JSON.stringify({ id: id }),
+		}).then(function (out) {
+			if (!out.ok) {
+				renderError(out.data, false);
+				return;
+			}
+			const defn = out.data && out.data.definition ? out.data.definition : {};
+			const FE = W.AM2FlowEditorState;
+			if (FE && FE.loadAll && FE.getSnapshot) {
+				const snap = FE.getSnapshot();
+				FE.loadAll(
+					{ wizardDefinition: defn, flowConfig: snap.configDraft },
+					{ preserveValidation: true },
+				);
+			}
+			return loadHistory().then(function () {
+				renderAll();
+			});
 		});
-		if (!out.ok) {
-			renderError(out.data, false);
-			return;
-		}
-		const defn = out.data && out.data.definition ? out.data.definition : {};
-		const FE = window.AM2FlowEditorState;
-		if (FE && FE.loadAll && FE.getSnapshot) {
-			const snap = FE.getSnapshot();
-			FE.loadAll(
-				{ wizardDefinition: defn, flowConfig: snap.configDraft },
-				{ preserveValidation: true },
-			);
-		}
-		await loadHistory();
-		renderAll();
 	}
 
 	function buildToolbar() {
@@ -681,8 +717,8 @@
 	}
 
 	const table =
-		window.AM2WDTableRender && window.AM2WDTableRender.initTable && root
-			? window.AM2WDTableRender.initTable({
+		W.AM2WDTableRender && W.AM2WDTableRender.initTable && root
+			? W.AM2WDTableRender.initTable({
 					body: root.tableBody,
 					el: el,
 					text: text,
@@ -717,12 +753,8 @@
 
 		if (table && table.renderAll) table.renderAll();
 
-		if (
-			window.AM2WDDetailsRender &&
-			window.AM2WDDetailsRender.renderValidation &&
-			root
-		) {
-			window.AM2WDDetailsRender.renderValidation({
+		if (W.AM2WDDetailsRender && W.AM2WDDetailsRender.renderValidation && root) {
+			W.AM2WDDetailsRender.renderValidation({
 				mount: root.validationList,
 				countEl: root.validationCount,
 				el: el,
@@ -730,37 +762,15 @@
 				messages: validationMessages(),
 			});
 
-			if (
-				window.AM2WDDetailsRender &&
-				window.AM2WDDetailsRender.renderStepDetails &&
-				window.AM2WDStepDetailsLoader &&
-				stepPanel
-			) {
-				const sid = selectedStepId();
-				const details = sid
-					? window.AM2WDStepDetailsLoader.getCached(sid)
-					: null;
-				const st = window.AM2WDStepDetailsLoader.getState();
-				const loading = Boolean(sid && st.loadingStepId === sid && !details);
-				const error = sid ? st.errorToken : null;
-				window.AM2WDDetailsRender.renderStepDetails({
-					mount: stepPanel,
-					el: el,
-					text: text,
-					selectedStepId: sid,
-					details: details,
-					loading: loading,
-					error: error,
-				});
-			}
+			// Step Details rendering is owned by config_editor.js (FlowConfig draft editor).
 		}
 
 		if (
-			window.AM2WDPaletteRender &&
-			window.AM2WDPaletteRender.renderPalette &&
+			W.AM2WDPaletteRender &&
+			W.AM2WDPaletteRender.renderPalette &&
 			palettePanel
 		) {
-			window.AM2WDPaletteRender.renderPalette({
+			W.AM2WDPaletteRender.renderPalette({
 				mount: palettePanel,
 				el: el,
 				text: text,
@@ -778,11 +788,11 @@
 		}
 
 		if (
-			window.AM2WDTransitionsRender &&
-			window.AM2WDTransitionsRender.renderTransitions &&
+			W.AM2WDTransitionsRender &&
+			W.AM2WDTransitionsRender.renderTransitions &&
 			transitionsPanel
 		) {
-			window.AM2WDTransitionsRender.renderTransitions({
+			W.AM2WDTransitionsRender.renderTransitions({
 				mount: transitionsPanel,
 				el: el,
 				text: text,
@@ -809,20 +819,16 @@
 		}
 	}
 
-	const FE = window.AM2FlowEditorState;
+	const FE = W.AM2FlowEditorState;
 	if (FE && FE.on) {
 		FE.on("wizard_changed", function () {
 			renderAll();
 		});
 		FE.on("selection_changed", function () {
 			if (table && table.updateSelection) table.updateSelection();
-			const sid = selectedStepId();
-			if (window.AM2WDStepDetailsLoader && sid) {
-				void window.AM2WDStepDetailsLoader.loadStepDetails(sid);
-			}
 			renderAll();
-			if (window.AM2WDStepDetailsLoader && sid) {
-				void window.AM2WDStepDetailsLoader.loadStepDetails(sid).then(renderAll);
+			if (W.AM2FlowConfigEditor && W.AM2FlowConfigEditor.renderNow) {
+				void W.AM2FlowConfigEditor.renderNow();
 			}
 		});
 	} else if (FE && FE.registerWizardRender) {
@@ -834,7 +840,7 @@
 	if (ui.save) ui.save.addEventListener("click", saveDraft);
 	if (ui.reset) ui.reset.addEventListener("click", resetDefinition);
 
-	window.AM2WizardDefinitionEditor = {
+	W.AM2WizardDefinitionEditor = {
 		reloadAll: reloadAll,
 		validateDraft: validateDraft,
 		saveDraft: saveDraft,
