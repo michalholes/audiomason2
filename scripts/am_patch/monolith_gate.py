@@ -869,6 +869,16 @@ def run_monolith_gate(
             logger.line(line)
 
     if fail:
+        quiet_enabled = (logger.screen_level == "quiet") or (logger.log_level == "quiet")
+        if quiet_enabled:
+            detail_lines: list[str] = [
+                "MONOLITH FAIL REASONS:",
+                "count=" + str(len(fail)),
+            ]
+            for v in sorted(fail, key=lambda x: (x.rule_id, x.relpath)):
+                line = f"{v.rule_id} {v.relpath} {v.severity} {v.message}"
+                detail_lines.append(line)
+            logger.emit_error_detail("\n".join(detail_lines) + "\n")
         logger.error_core("MONOLITH: FAIL")
         return False
     if warn:
