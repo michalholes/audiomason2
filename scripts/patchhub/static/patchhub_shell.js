@@ -67,6 +67,42 @@
 		return msg;
 	}
 
+	const pending = {};
+	const deferCaps = {
+		openLiveStream: true,
+		closeLiveStream: true,
+		renderLiveLog: true,
+		updateProgressFromEvents: true,
+		updateProgressPanelFromEvents: true,
+		refreshStats: true,
+		renderActiveJob: true,
+	};
+
+	function enqueue(capabilityName, args) {
+		var cap = String(capabilityName || "");
+		if (!cap) return;
+		pending[cap] = pending[cap] || [];
+		pending[cap].push(args || []);
+		record(diag, { ts: nowIso(), kind: "deferred", cap }, 50);
+	}
+
+	function flushPending(caps) {
+		if (!Array.isArray(caps) || !caps.length) return;
+		for (let i = 0; i < caps.length; i++) {
+			const cap = String(caps[i] || "");
+			const calls = pending[cap];
+			if (!calls || !calls.length) continue;
+			delete pending[cap];
+			for (let j = 0; j < calls.length; j++) {
+				try {
+					call(cap, ...(calls[j] || []));
+				} catch (e) {
+					// ignore
+				}
+			}
+		}
+	}
+
 	const defaults = {
 		getLiveJobId: () => null,
 		loadLiveJobId: () => null,
@@ -80,32 +116,31 @@
 		setJobsVisible: () => undefined,
 		setLiveStreamStatus: (s) => setText("liveStreamStatus", String(s || "")),
 		openLiveStream: (jobId) => {
-			setText("liveStreamStatus", degradedNote("live", "missing", jobId));
-			setText("liveLog", degradedNote("live", "missing"));
+			enqueue("openLiveStream", [jobId]);
 			return undefined;
 		},
 		closeLiveStream: () => {
-			setText("liveStreamStatus", degradedNote("live", "missing"));
+			enqueue("closeLiveStream", []);
 			return undefined;
 		},
 		renderLiveLog: () => {
-			setText("liveLog", degradedNote("live", "missing"));
+			enqueue("renderLiveLog", []);
 			return undefined;
 		},
 		updateProgressFromEvents: () => {
-			setText("progressSummary", degradedNote("progress", "missing"));
+			enqueue("updateProgressFromEvents", []);
 			return undefined;
 		},
 		updateProgressPanelFromEvents: () => {
-			setText("progressSummary", degradedNote("progress", "missing"));
+			enqueue("updateProgressPanelFromEvents", []);
 			return undefined;
 		},
 		refreshStats: () => {
-			setText("stats", degradedNote("progress", "missing"));
+			enqueue("refreshStats", []);
 			return undefined;
 		},
 		renderActiveJob: () => {
-			setText("activeJob", degradedNote("progress", "missing"));
+			enqueue("renderActiveJob", []);
 			return undefined;
 		},
 	};
@@ -122,6 +157,7 @@
 			m.capabilities = caps.slice(0);
 			m.exports = ex;
 			m.meta = meta || {};
+			flushPending(caps);
 		} catch (e) {
 			m.state = "faulted";
 			m.last_error = String((e && e.message) || e || "");
@@ -138,13 +174,17 @@
 		}
 	}
 
+	function hasOwn(obj, key) {
+		return Object.prototype.hasOwnProperty.call(obj, key);
+	}
+
 	function findCapability(capabilityName) {
 		var name = String(capabilityName || "");
 		var keys = Object.keys(registry);
 		for (let i = 0; i < keys.length; i++) {
 			const mod = registry[keys[i]];
 			if (!mod || mod.state !== "ready" || !mod.exports) continue;
-			if (Object.hasOwn(mod.exports, name)) {
+			if (hasOwn(mod.exports, name)) {
 				return { moduleName: keys[i], handler: mod.exports[name] };
 			}
 		}
@@ -162,11 +202,15 @@
 		var note = "";
 		if (!hit) {
 			record(diag, { ts: nowIso(), kind: "missing", cap }, 50);
+			if (deferCaps[cap]) {
+				enqueue(cap, args);
+				return undefined;
+			}
 			if (!once.missing[cap]) {
 				once.missing[cap] = true;
 				log("warn", degradedNote("capability", "missing", cap));
 			}
-			if (Object.hasOwn(defaults, cap)) {
+			if (hasOwn(defaults, cap)) {
 				try {
 					return defaults[cap].apply(null, args);
 				} catch (e) {
@@ -270,7 +314,9 @@
 		}
 	});
 
-	window.PH = {
+	var W = /** @type {any} */ (window);
+
+	W.PH = {
 		register,
 		has,
 		call,
@@ -279,9 +325,9 @@
 		_registry: registry,
 	};
 
-	window.uiCall = (name, ...args) => {
+	W.uiCall = (name, ...args) => {
 		try {
-			return window.PH.call(name, ...args);
+			return W.PH.call(name, ...args);
 		} catch (e) {
 			return undefined;
 		}
