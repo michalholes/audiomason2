@@ -15,6 +15,38 @@
 		if (max && list.length > max) list.splice(0, list.length - max);
 	}
 
+	function tryGetLocalStorage() {
+		try {
+			return window.localStorage;
+		} catch (e) {
+			return null;
+		}
+	}
+
+	function recordClientStatus(kind, message) {
+		var store = tryGetLocalStorage();
+		if (!store) return;
+		var item = {
+			ts: nowIso(),
+			kind: String(kind || ""),
+			msg: String(message || ""),
+		};
+		var raw = "[]";
+		var arr = [];
+		try {
+			raw = store.getItem("patchhub.client_status_log") || "[]";
+			try {
+				arr = JSON.parse(raw) || [];
+			} catch (e) {
+				arr = [];
+			}
+			arr.push(item);
+			if (arr.length > 200) arr = arr.slice(arr.length - 200);
+			store.setItem("patchhub.client_status_log", JSON.stringify(arr));
+		} catch (e) {
+			// ignore
+		}
+	}
 	function nowIso() {
 		try {
 			return new Date().toISOString();
@@ -44,6 +76,7 @@
 			// ignore
 		}
 		uiStatus(msg);
+		recordClientStatus(kind, msg);
 	}
 
 	const registry = {};
@@ -109,11 +142,51 @@
 		jobSummaryCommit: (s) => String(s || ""),
 		jobSummaryPatchName: (s) => String(s || ""),
 		jobSummaryDurationSeconds: () => "",
-		loadUiVisibility: () => undefined,
-		saveRunsVisible: () => undefined,
-		saveJobsVisible: () => undefined,
-		setRunsVisible: () => undefined,
-		setJobsVisible: () => undefined,
+		loadUiVisibility: () => {
+			var store = tryGetLocalStorage();
+			if (!store) return undefined;
+			var rv = null;
+			var jv = null;
+			try {
+				rv = store.getItem("amp.ui.runsVisible");
+				jv = store.getItem("amp.ui.jobsVisible");
+				if (rv === "1") defaults.setRunsVisible(true);
+				if (jv === "1") defaults.setJobsVisible(true);
+			} catch (e) {}
+			return undefined;
+		},
+		saveRunsVisible: (v) => {
+			var store = tryGetLocalStorage();
+			if (!store) return undefined;
+			try {
+				store.setItem("amp.ui.runsVisible", v ? "1" : "0");
+			} catch (e) {}
+			return undefined;
+		},
+		saveJobsVisible: (v) => {
+			var store = tryGetLocalStorage();
+			if (!store) return undefined;
+			try {
+				store.setItem("amp.ui.jobsVisible", v ? "1" : "0");
+			} catch (e) {}
+			return undefined;
+		},
+		setRunsVisible: (v) => {
+			var visible = !!v;
+			var wrap = el("runsWrap");
+			var btn = el("runsCollapse");
+			if (wrap) wrap.classList.toggle("hidden", !visible);
+			if (btn) btn.textContent = visible ? "Hide" : "Show";
+			return undefined;
+		},
+		setJobsVisible: (v) => {
+			var visible = !!v;
+			var wrap = el("jobsWrap");
+			var btn = el("jobsCollapse");
+			if (wrap) wrap.classList.toggle("hidden", !visible);
+			if (btn) btn.textContent = visible ? "Hide" : "Show";
+			return undefined;
+		},
 		setLiveStreamStatus: (s) => setText("liveStreamStatus", String(s || "")),
 		openLiveStream: (jobId) => {
 			enqueue("openLiveStream", [jobId]);
@@ -175,7 +248,7 @@
 	}
 
 	function hasOwn(obj, key) {
-		return Object.prototype.hasOwnProperty.call(obj, key);
+		return Object.hasOwn(obj, key);
 	}
 
 	function findCapability(capabilityName) {
@@ -263,7 +336,36 @@
 				s = document.createElement("script");
 				s.src = String(url || "");
 				s.async = true;
-				s.onload = () => resolve(true);
+				s.onload = () => {
+					setTimeout(() => {
+						if (m.state === "loading") {
+							m.state = "faulted";
+							m.last_error = "loaded but not registered";
+							record(
+								diag,
+								{
+									ts: nowIso(),
+									kind: "load_no_register",
+									module: moduleName,
+									url,
+								},
+								50,
+							);
+							if (!once.load[moduleName]) {
+								once.load[moduleName] = true;
+								log(
+									"error",
+									degradedNote(
+										moduleName,
+										"faulted",
+										"loaded but not registered",
+									),
+								);
+							}
+						}
+					}, 0);
+					resolve(true);
+				};
 				s.onerror = () => {
 					m.state = "missing";
 					m.last_error = "load failed";
@@ -313,6 +415,29 @@
 			// ignore
 		}
 	});
+
+	function observeStatusBar() {
+		var node = el("uiStatusBar");
+		if (!node || typeof MutationObserver === "undefined") return;
+		var obs = null;
+		try {
+			obs = new MutationObserver(() => {
+				var msg = String(node.textContent || "").trim();
+				if (!msg) return;
+				recordClientStatus("status", msg);
+				record(diag, { ts: nowIso(), kind: "status", msg }, 50);
+			});
+			obs.observe(node, {
+				childList: true,
+				characterData: true,
+				subtree: true,
+			});
+		} catch (e) {
+			// ignore
+		}
+	}
+
+	observeStatusBar();
 
 	var W = /** @type {any} */ (window);
 

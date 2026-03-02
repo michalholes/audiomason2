@@ -1,71 +1,120 @@
 (() => {
-  
+	var errors = [];
+	var net = [];
 
-  var errors = [];
-  var net = [];
+	function el(id) {
+		return document.getElementById(id);
+	}
+	function setPre(id, obj) {
+		el(id).textContent =
+			typeof obj === "string" ? obj : JSON.stringify(obj, null, 2);
+	}
+	function loadClientStatus() {
+		var raw = "";
+		var arr = [];
+		try {
+			raw = localStorage.getItem("patchhub.client_status_log") || "[]";
+			arr = JSON.parse(raw) || [];
+			setPre("clientStatus", arr);
+		} catch (e) {
+			setPre("clientStatus", [{ error: String(e) }]);
+		}
+	}
 
-  function el(id) { return document.getElementById(id); }
-  function setPre(id, obj) {
-    el(id).textContent = typeof obj === "string" ? obj : JSON.stringify(obj, null, 2);
-  }
+	window.addEventListener("error", (e) => {
+		errors.push({
+			message: String(e.message || "error"),
+			source: String(e.filename || ""),
+			line: e.lineno || 0,
+			col: e.colno || 0,
+		});
+		if (errors.length > 200) errors.shift();
+		setPre("clientErrors", errors);
+	});
 
-  window.addEventListener("error", (e) => {
-    errors.push({ message: String(e.message || "error"), source: String(e.filename || ""), line: e.lineno || 0, col: e.colno || 0 });
-    if (errors.length > 200) errors.shift();
-    setPre("clientErrors", errors);
-  });
+	var origFetch = window.fetch;
+	window.fetch = (url, opts) => {
+		var started = Date.now();
+		return origFetch(url, opts)
+			.then((r) => {
+				net.push({
+					method: (opts && opts.method) || "GET",
+					url: String(url),
+					status: r.status,
+					ms: Date.now() - started,
+				});
+				if (net.length > 200) net.shift();
+				setPre("clientNet", net);
 
-  var origFetch = window.fetch;
-  window.fetch = (url, opts) => {
-    var started = Date.now();
-    return origFetch(url, opts).then((r) => {
-      net.push({ method: (opts && opts.method) || "GET", url: String(url), status: r.status, ms: Date.now() - started });
-      if (net.length > 200) net.shift();
-      setPre("clientNet", net);
-      return r;
-    }).catch((e) => {
-      net.push({ method: (opts && opts.method) || "GET", url: String(url), status: 0, ms: Date.now() - started, error: String(e) });
-      if (net.length > 200) net.shift();
-      setPre("clientNet", net);
-      throw e;
-    });
-  };
+				loadClientStatus();
+				return r;
+			})
+			.catch((e) => {
+				net.push({
+					method: (opts && opts.method) || "GET",
+					url: String(url),
+					status: 0,
+					ms: Date.now() - started,
+					error: String(e),
+				});
+				if (net.length > 200) net.shift();
+				setPre("clientNet", net);
 
-  function apiGet(url) {
-    return fetch(url, { headers: { "Accept": "application/json" } }).then((r) => r.json());
-  }
-  function apiPost(url, obj) {
-    return fetch(url, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Accept": "application/json" },
-      body: JSON.stringify(obj)
-    }).then((r) => r.json());
-  }
+				loadClientStatus();
+				throw e;
+			});
+	};
 
-  function refreshDiag() {
-    apiGet("/api/debug/diagnostics").then((r) => { setPre("serverDiag", r); });
-  }
+	function apiGet(url) {
+		return fetch(url, { headers: { Accept: "application/json" } }).then((r) =>
+			r.json(),
+		);
+	}
+	function apiPost(url, obj) {
+		return fetch(url, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				Accept: "application/json",
+			},
+			body: JSON.stringify(obj),
+		}).then((r) => r.json());
+	}
 
-  function refreshTail() {
-    apiGet("/api/runner/tail?lines=200").then((r) => { setPre("tail", r.events || []); });
-  }
+	function refreshDiag() {
+		apiGet("/api/debug/diagnostics").then((r) => {
+			setPre("serverDiag", r);
+		});
+	}
 
-  function parseCmd() {
-    var raw = el("raw").value;
-    apiPost("/api/parse_command", { raw: raw }).then((r) => { setPre("parsed", r); });
-  }
+	function refreshTail() {
+		apiGet("/api/runner/tail?lines=200").then((r) => {
+			setPre("tail", r.events || []);
+		});
+	}
 
-  function init() {
-    setPre("clientErrors", errors);
-    setPre("clientNet", net);
+	function parseCmd() {
+		var raw = /** @type {HTMLInputElement} */ (el("raw")).value;
+		apiPost("/api/parse_command", { raw: raw }).then((r) => {
+			setPre("parsed", r);
+		});
+	}
 
-    el("diagRefresh").addEventListener("click", refreshDiag);
-    el("tailRefresh").addEventListener("click", refreshTail);
-    el("parse").addEventListener("click", parseCmd);
+	function init() {
+		setPre("clientErrors", errors);
+		setPre("clientNet", net);
 
-    refreshDiag();
-    refreshTail();
-  }
+		loadClientStatus();
 
-  window.addEventListener("load", init);
+		el("diagRefresh").addEventListener("click", refreshDiag);
+		el("tailRefresh").addEventListener("click", refreshTail);
+		el("parse").addEventListener("click", parseCmd);
+
+		refreshDiag();
+		refreshTail();
+		loadClientStatus();
+		setInterval(loadClientStatus, 1000);
+	}
+
+	window.addEventListener("load", init);
 })();
