@@ -1,9 +1,12 @@
 (function () {
 	"use strict";
 
+	/** @type {any} */
+	const W = window;
+
 	const stableGraph =
-		window.AM2WDGraphStable && window.AM2WDGraphStable.stableGraph
-			? window.AM2WDGraphStable.stableGraph
+		W.AM2WDGraphStable && W.AM2WDGraphStable.stableGraph
+			? W.AM2WDGraphStable.stableGraph
 			: function () {
 					return { version: 1, nodes: [], edges: [], entry: null };
 				};
@@ -47,7 +50,8 @@
 				} catch (err) {}
 				clearDropTargets();
 				if (!dragId) return;
-				state.reorderStep && state.reorderStep(dragId, null);
+				const beforeId = dropBeforeId;
+				state.reorderStep && state.reorderStep(dragId, beforeId || null);
 			});
 		}
 
@@ -77,8 +81,8 @@
 				const cellOrder = el("div", "wdCellOrder");
 				const handle = el("span", "wdDragHandle");
 				const gripSvg =
-					window.AM2WDDomIcons && window.AM2WDDomIcons.svgIcon
-						? window.AM2WDDomIcons.svgIcon("grip", "wdGrip", "Reorder")
+					W.AM2WDDomIcons && W.AM2WDDomIcons.svgIcon
+						? W.AM2WDDomIcons.svgIcon("grip", "wdGrip", "Reorder")
 						: null;
 				if (gripSvg) {
 					handle.appendChild(gripSvg);
@@ -106,8 +110,8 @@
 				btnRemove.type = "button";
 				btnRemove.title = "Remove";
 				const trashSvg =
-					window.AM2WDDomIcons && window.AM2WDDomIcons.svgIcon
-						? window.AM2WDDomIcons.svgIcon("trash", null, "Remove")
+					W.AM2WDDomIcons && W.AM2WDDomIcons.svgIcon
+						? W.AM2WDDomIcons.svgIcon("trash", null, "Remove")
 						: null;
 				if (trashSvg) {
 					btnRemove.appendChild(trashSvg);
@@ -145,6 +149,7 @@
 
 					row.addEventListener("dragover", function (e) {
 						e.preventDefault();
+						e.stopPropagation();
 						dropBeforeId = String(sid || "");
 						clearDropTargets();
 						row.classList.add("is-drop-target");
@@ -159,6 +164,7 @@
 
 					row.addEventListener("drop", function (e) {
 						e.preventDefault();
+						e.stopPropagation();
 						const targetId = String(sid || "");
 						let dragId = dragStepId;
 						try {
@@ -204,7 +210,7 @@
 		};
 	}
 
-	window.AM2WDTableRender = {
+	W.AM2WDTableRender = {
 		initTable: initTable,
 	};
 })();
