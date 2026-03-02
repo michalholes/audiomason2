@@ -737,12 +737,36 @@
 		clear(root.toolbar);
 
 		const btnAdd = text("button", "btn", "Add Step");
+		const btnRemove = text("button", "btn", "Remove");
+		const btnUp = text("button", "btn", "Move Up");
+		const btnDown = text("button", "btn", "Move Down");
+
 		const optLabel = el("label", "wdToggle");
 		const optToggle = el("input", "wdToggleInput");
 		optToggle.type = "checkbox";
 		optToggle.checked = true;
 		optLabel.appendChild(optToggle);
 		optLabel.appendChild(text("span", "wdToggleText", "Show Optional"));
+
+		function refreshButtons() {
+			const sid = String(selectedStepId() || "");
+			const g = stableGraph(wizardDraft());
+			const nodes = Array.isArray(g.nodes) ? g.nodes : [];
+			const idx = sid ? nodes.indexOf(sid) : -1;
+
+			btnRemove.disabled = !(sid && canRemove(sid));
+			btnRemove.classList.toggle("is-disabled", btnRemove.disabled);
+
+			btnUp.disabled = !(sid && idx > 0);
+			btnUp.classList.toggle("is-disabled", btnUp.disabled);
+
+			btnDown.disabled = !(sid && idx >= 0 && idx < nodes.length - 1);
+			btnDown.classList.toggle("is-disabled", btnDown.disabled);
+
+			if (root && root.rootSteps) {
+				root.rootSteps.textContent = "Steps: " + String(nodes.length);
+			}
+		}
 
 		btnAdd.type = "button";
 		btnAdd.addEventListener("click", () => {
@@ -755,6 +779,30 @@
 			}
 		});
 
+		btnRemove.type = "button";
+		btnRemove.addEventListener("click", () => {
+			const sid = String(selectedStepId() || "");
+			if (!sid) return;
+			removeStep(sid);
+			renderAll();
+		});
+
+		btnUp.type = "button";
+		btnUp.addEventListener("click", () => {
+			const sid = String(selectedStepId() || "");
+			if (!sid) return;
+			moveStepUp(sid);
+			renderAll();
+		});
+
+		btnDown.type = "button";
+		btnDown.addEventListener("click", () => {
+			const sid = String(selectedStepId() || "");
+			if (!sid) return;
+			moveStepDown(sid);
+			renderAll();
+		});
+
 		optToggle.addEventListener("change", () => {
 			mutateWizard((uiState) => {
 				uiState.showOptional = !!optToggle.checked;
@@ -762,6 +810,18 @@
 			renderAll();
 		});
 
+		root.toolbar.appendChild(btnAdd);
+		root.toolbar.appendChild(btnRemove);
+		root.toolbar.appendChild(btnUp);
+		root.toolbar.appendChild(btnDown);
+		root.toolbar.appendChild(optLabel);
+
+		refreshButtons();
+		try {
+			window.addEventListener("am2:wd:selected", refreshButtons);
+		} catch (e) {
+			// ignore
+		}
 		root.toolbar.appendChild(btnAdd);
 		root.toolbar.appendChild(optLabel);
 	}

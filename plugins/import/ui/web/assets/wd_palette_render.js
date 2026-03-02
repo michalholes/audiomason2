@@ -1,6 +1,9 @@
 (function () {
 	"use strict";
 
+	/** @type {any} */
+	const W = window;
+
 	let _focusHandlerBound = false;
 	let _lastSearch = null;
 	let _lastMount = null;
@@ -22,7 +25,7 @@
 		const searchWrap = el("div", "wdPaletteSearch");
 		const search = el("input", "wdPaletteSearchInput");
 		search.type = "search";
-		search.placeholder = "Search";
+		search.placeholder = "Search steps...";
 		searchWrap.appendChild(search);
 		mount.appendChild(searchWrap);
 
@@ -51,39 +54,95 @@
 		function renderList() {
 			clear(list);
 			const q = String(search.value || "");
-			(Array.isArray(items) ? items : []).forEach(function (it) {
-				if (!matches(it, q)) return;
-				const sid = String(it && it.step_id ? it.step_id : "");
-				if (!sid) return;
 
-				const row = el("div", "wdPaletteItem");
-				const meta = el("div", "wdPaletteMeta");
-				meta.appendChild(text("div", "wdPaletteItemId", sid));
-				meta.appendChild(
-					text(
-						"div",
-						"wdPaletteItemTitle",
-						String(it.displayName || it.title || sid),
-					),
-				);
+			const groups = [
+				{ kind: "mandatory", title: "Mandatory Steps" },
+				{ kind: "optional", title: "Optional Steps" },
+				{ kind: "conditional", title: "Conditional Steps" },
+			];
 
-				if (it && it.shortDescription) {
+			function groupItems(kind) {
+				return (Array.isArray(items) ? items : []).filter(function (it) {
+					if (!it) return false;
+					if (String(it.kind || "") !== kind) return false;
+					return matches(it, q);
+				});
+			}
+
+			groups.forEach(function (g) {
+				const group = el("div", "wdPaletteGroup");
+				group.appendChild(text("div", "wdPaletteGroupTitle", g.title));
+
+				const rows = el("div", "wdPaletteGroupRows");
+				const arr = groupItems(g.kind);
+
+				arr.forEach(function (it) {
+					const sid = String(it && it.step_id ? it.step_id : "");
+					if (!sid) return;
+
+					const row = el("div", "wdPaletteItem");
+					const meta = el("div", "wdPaletteMeta");
+
+					const idRow = el("div", "wdPaletteItemIdRow");
+					if (String(it.pinned || "") !== "none") {
+						const pin = text(
+							"span",
+							"wdPalettePinned",
+							String(it.pinned || ""),
+						);
+						idRow.appendChild(pin);
+					}
+					idRow.appendChild(text("span", "wdPaletteItemId", sid));
+					if (g.kind === "mandatory") {
+						const lock =
+							W.AM2WDDomIcons && W.AM2WDDomIcons.svgIcon
+								? W.AM2WDDomIcons.svgIcon("lock", "wdSvg", "Mandatory")
+								: null;
+						if (lock) idRow.appendChild(lock);
+					}
+					meta.appendChild(idRow);
+
 					meta.appendChild(
-						text("div", "wdPaletteItemDesc", String(it.shortDescription || "")),
+						text(
+							"div",
+							"wdPaletteItemTitle",
+							String(it.displayName || it.title || sid),
+						),
 					);
-				}
 
-				const btn = text("button", "btn btnSmall", "Add");
-				btn.type = "button";
-				btn.disabled = !(state.canAdd && state.canAdd(sid));
-				btn.classList.toggle("is-disabled", btn.disabled);
-				btn.addEventListener("click", function () {
-					state.addStep && state.addStep(sid);
+					if (it && it.shortDescription) {
+						meta.appendChild(
+							text(
+								"div",
+								"wdPaletteItemDesc",
+								String(it.shortDescription || ""),
+							),
+						);
+					}
+
+					let btn = null;
+					if (g.kind === "mandatory") {
+						btn = text("button", "btn btnSmall", "Locked");
+						btn.type = "button";
+						btn.disabled = true;
+						btn.classList.add("is-disabled");
+					} else {
+						btn = text("button", "btn btnSmall", "Add");
+						btn.type = "button";
+						btn.disabled = !(state.canAdd && state.canAdd(sid));
+						btn.classList.toggle("is-disabled", btn.disabled);
+						btn.addEventListener("click", function () {
+							state.addStep && state.addStep(sid);
+						});
+					}
+
+					row.appendChild(meta);
+					row.appendChild(btn);
+					rows.appendChild(row);
 				});
 
-				row.appendChild(meta);
-				row.appendChild(btn);
-				list.appendChild(row);
+				group.appendChild(rows);
+				list.appendChild(group);
 			});
 		}
 
@@ -111,7 +170,7 @@
 		renderList();
 	}
 
-	window.AM2WDPaletteRender = {
+	/** @type {any} */ (window).AM2WDPaletteRender = {
 		renderPalette: renderPalette,
 	};
 })();

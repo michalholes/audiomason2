@@ -11,6 +11,17 @@
 
 		const layout = el("div", "wdLayoutRoot");
 		const toolbar = el("div", "wdToolbar");
+		const rootHead = el("div", "wdRootHead");
+		const rootHeadLeft = el("div", "wdRootHeadLeft");
+		rootHeadLeft.appendChild(text("div", "wdRootTitle", "Wizard Structure"));
+		rootHeadLeft.appendChild(
+			text("div", "wdRootSubtitle", "Define steps, order and policies"),
+		);
+		const rootHeadRight = el("div", "wdRootHeadRight");
+		rootHeadRight.appendChild(text("div", "wdRootSteps", ""));
+		rootHead.appendChild(rootHeadLeft);
+		rootHead.appendChild(rootHeadRight);
+
 		const table = el("div", "wdTable");
 		const head = el("div", "wdHead");
 		const body = el("div", "wdBody");
@@ -47,6 +58,7 @@
 		validation.appendChild(validationHeader);
 		validation.appendChild(validationList);
 
+		layout.appendChild(rootHead);
 		layout.appendChild(toolbar);
 		layout.appendChild(table);
 		layout.appendChild(dropHint);
@@ -57,6 +69,7 @@
 
 		return {
 			layout: layout,
+			rootSteps: rootHeadRight.firstChild,
 			toolbar: toolbar,
 			tableBody: body,
 			dropHint: dropHint,
@@ -66,7 +79,7 @@
 		};
 	}
 
-	window.AM2WDLayoutRoot = {
+	/** @type {any} */ (window).AM2WDLayoutRoot = {
 		createRoot: createRoot,
 	};
 })();
