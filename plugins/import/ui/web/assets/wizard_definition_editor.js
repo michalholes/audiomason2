@@ -1,6 +1,4 @@
-(function () {
-	"use strict";
-
+(() => {
 	const W = /** @type {any} */ (window);
 	const H = W.AM2EditorHTTP;
 	if (!H) return;
@@ -40,9 +38,7 @@
 	const stableGraph =
 		W.AM2WDGraphStable && W.AM2WDGraphStable.stableGraph
 			? W.AM2WDGraphStable.stableGraph
-			: function () {
-					return { version: 1, nodes: [], edges: [], entry: null };
-				};
+			: () => ({ version: 1, nodes: [], edges: [], entry: null });
 
 	function deepClone(x) {
 		return x === undefined ? undefined : JSON.parse(JSON.stringify(x));
@@ -87,7 +83,7 @@
 	function mutateWizard(fn, opts) {
 		const FE = W.AM2FlowEditorState;
 		if (!FE || !FE.mutateWizard) return;
-		FE.mutateWizard(function (wd) {
+		FE.mutateWizard((wd) => {
 			fn && fn(ensureWizardUi(wd), wd);
 		}, opts || null);
 	}
@@ -116,15 +112,12 @@
 
 	function ensureV2() {
 		mutateWizard(
-			function (uiState, wd) {
+			(uiState, wd) => {
 				// Only normalize when required; avoid marking the draft dirty for
 				// internal idempotent migrations.
 				if (wd && typeof wd === "object") {
 					const v2 = wd.version === 2;
-					const hasWizardId = Object.prototype.hasOwnProperty.call(
-						wd,
-						"wizard_id",
-					);
+					const hasWizardId = Object.hasOwn(wd, "wizard_id");
 					const g = wd.graph;
 					const graphOk =
 						g &&
@@ -133,9 +126,9 @@
 						Array.isArray(g.edges) &&
 						typeof g.entry_step_id === "string";
 					const keys = Object.keys(wd);
-					const onlyKnownKeys = keys.every(function (k) {
-						return k === "version" || k === "graph" || k === "_am2_ui";
-					});
+					const onlyKnownKeys = keys.every(
+						(k) => k === "version" || k === "graph" || k === "_am2_ui",
+					);
 					if (v2 && !hasWizardId && graphOk && onlyKnownKeys) return;
 				}
 
@@ -210,7 +203,7 @@
 
 	function addStep(stepId) {
 		ensureV2();
-		mutateWizard(function (uiState, wd) {
+		mutateWizard((uiState, wd) => {
 			const g = stableGraph(wd);
 			const nodes = Array.isArray(g.nodes) ? g.nodes.slice(0) : [];
 			const sid = String(stepId || "");
@@ -229,7 +222,7 @@
 
 	function removeStep(stepId) {
 		ensureV2();
-		mutateWizard(function (uiState, wd) {
+		mutateWizard((uiState, wd) => {
 			const g = stableGraph(wd);
 			const sid = String(stepId || "");
 			const nodes = Array.isArray(g.nodes) ? g.nodes.slice(0) : [];
@@ -238,12 +231,9 @@
 			if (!canRemove(sid)) return;
 			nodes.splice(idx, 1);
 			const edges = (Array.isArray(g.edges) ? g.edges : []).filter(
-				function (e) {
-					return (
-						String(e.from_step_id || "") !== sid &&
-						String(e.to_step_id || "") !== sid
-					);
-				},
+				(e) =>
+					String(e.from_step_id || "") !== sid &&
+					String(e.to_step_id || "") !== sid,
 			);
 			const next = defFromGraph(nodes, g.entry, edges);
 			next._am2_ui = uiState;
@@ -259,7 +249,7 @@
 
 	function reorderStep(dragStepId, dropBeforeStepIdOrNull) {
 		ensureV2();
-		mutateWizard(function (uiState, wd) {
+		mutateWizard((uiState, wd) => {
 			const g = stableGraph(wd);
 			const nodes = Array.isArray(g.nodes) ? g.nodes.slice(0) : [];
 			const dragId = String(dragStepId || "");
@@ -290,7 +280,7 @@
 
 	function moveStepUp(stepId) {
 		ensureV2();
-		mutateWizard(function (uiState, wd) {
+		mutateWizard((uiState, wd) => {
 			const g = stableGraph(wd);
 			const nodes = Array.isArray(g.nodes) ? g.nodes.slice(0) : [];
 			const sid = String(stepId || "");
@@ -312,7 +302,7 @@
 
 	function moveStepDown(stepId) {
 		ensureV2();
-		mutateWizard(function (uiState, wd) {
+		mutateWizard((uiState, wd) => {
 			const g = stableGraph(wd);
 			const nodes = Array.isArray(g.nodes) ? g.nodes.slice(0) : [];
 			const sid = String(stepId || "");
@@ -333,7 +323,7 @@
 	}
 	function addEdge(fromId, toId, prio, whenVal) {
 		ensureV2();
-		mutateWizard(function (uiState, wd) {
+		mutateWizard((uiState, wd) => {
 			const g = stableGraph(wd);
 			const edges = Array.isArray(g.edges) ? g.edges.slice(0) : [];
 			edges.push({
@@ -355,7 +345,7 @@
 
 	function removeEdge(fromId, outgoingIndex) {
 		ensureV2();
-		mutateWizard(function (uiState, wd) {
+		mutateWizard((uiState, wd) => {
 			const g = stableGraph(wd);
 			const from = String(fromId || "");
 			const edgesAll = Array.isArray(g.edges) ? g.edges.slice(0) : [];
@@ -378,8 +368,74 @@
 		});
 	}
 
+	function updateEdge(fromId, outgoingIndex, newEdge) {
+		ensureV2();
+		mutateWizard((uiState, wd) => {
+			const g = stableGraph(wd);
+			const from = String(fromId || "");
+			const edgesAll = Array.isArray(g.edges) ? g.edges.slice(0) : [];
+			const outgoing = edgesAll.filter(
+				(e) => String(e.from_step_id || "") === from,
+			);
+			const target = outgoing[outgoingIndex];
+			if (!target) return;
+			const idx = edgesAll.indexOf(target);
+			if (idx < 0) return;
+			const nextEdge = {
+				from_step_id: from,
+				to_step_id: String(
+					newEdge && newEdge.to_step_id ? newEdge.to_step_id : "",
+				),
+				priority: Number(newEdge && newEdge.priority ? newEdge.priority : 0),
+				when: newEdge && "when" in newEdge ? newEdge.when : null,
+			};
+			edgesAll[idx] = nextEdge;
+			const next = defFromGraph(g.nodes, g.entry, edgesAll);
+			next._am2_ui = uiState;
+			Object.keys(wd).forEach((k) => {
+				delete wd[k];
+			});
+			Object.assign(wd, next);
+		});
+	}
+
+	function moveEdge(fromId, outgoingIndex, dir) {
+		ensureV2();
+		mutateWizard((uiState, wd) => {
+			const g = stableGraph(wd);
+			const from = String(fromId || "");
+			const edgesAll = Array.isArray(g.edges) ? g.edges.slice(0) : [];
+			const outgoing = edgesAll
+				.filter((e) => String(e.from_step_id || "") === from)
+				.map((e, i) => ({ edge: e, outgoingIndex: i }));
+			const target = outgoing[outgoingIndex];
+			if (!target) return;
+			const byPri = outgoing
+				.slice(0)
+				.sort(
+					(a, b) => Number(a.edge.priority || 0) - Number(b.edge.priority || 0),
+				);
+			const pos = byPri.findIndex((x) => x.outgoingIndex === outgoingIndex);
+			if (pos < 0) return;
+			const nextPos = pos + (dir < 0 ? -1 : 1);
+			if (nextPos < 0 || nextPos >= byPri.length) return;
+			const a = byPri[pos].edge;
+			const b = byPri[nextPos].edge;
+			const aPri = Number(a.priority || 0);
+			const bPri = Number(b.priority || 0);
+			a.priority = bPri;
+			b.priority = aPri;
+			const next = defFromGraph(g.nodes, g.entry, edgesAll);
+			next._am2_ui = uiState;
+			Object.keys(wd).forEach((k) => {
+				delete wd[k];
+			});
+			Object.assign(wd, next);
+		});
+	}
+
 	function setValidation(ok, localMsgs, serverMsgs) {
-		mutateWizard(function (uiState) {
+		mutateWizard((uiState) => {
 			uiState.validation = {
 				ok: ok,
 				local: Array.isArray(localMsgs) ? localMsgs : [],
@@ -404,7 +460,7 @@
 	function extractServerMessages(errEnvelope) {
 		const details = errEnvelope && errEnvelope.details;
 		const out = [];
-		(Array.isArray(details) ? details : []).forEach(function (d) {
+		(Array.isArray(details) ? details : []).forEach((d) => {
 			if (!d) return;
 			const path = d.path ? String(d.path) : "";
 			const reason = d.reason ? String(d.reason) : "";
@@ -415,7 +471,7 @@
 
 	function renderError(data, collapseByDefault) {
 		H.renderError(ui.err, data);
-		mutateWizard(function (uiState) {
+		mutateWizard((uiState) => {
 			uiState.hasErrorDetails = !!data;
 			uiState.showRawError = data ? !collapseByDefault : false;
 		});
@@ -424,21 +480,17 @@
 	function setupRawErrorPanel() {
 		const rawErrorState = {};
 		Object.defineProperty(rawErrorState, "showRawError", {
-			get: function () {
-				return !!(wizardDraft()._am2_ui || {}).showRawError;
-			},
-			set: function (on) {
-				mutateWizard(function (uiState) {
+			get: () => !!(wizardDraft()._am2_ui || {}).showRawError,
+			set: (on) => {
+				mutateWizard((uiState) => {
 					uiState.showRawError = !!on;
 				});
 			},
 		});
 		Object.defineProperty(rawErrorState, "hasErrorDetails", {
-			get: function () {
-				return !!(wizardDraft()._am2_ui || {}).hasErrorDetails;
-			},
-			set: function (on) {
-				mutateWizard(function (uiState) {
+			get: () => !!(wizardDraft()._am2_ui || {}).hasErrorDetails,
+			set: (on) => {
+				mutateWizard((uiState) => {
 					uiState.hasErrorDetails = !!on;
 				});
 			},
@@ -481,7 +533,7 @@
 		meta.appendChild(text("div", null, item.id || ""));
 		meta.appendChild(text("div", null, item.timestamp || ""));
 		const btn = text("button", "btn", "Rollback");
-		btn.addEventListener("click", function () {
+		btn.addEventListener("click", () => {
 			rollback(String(item.id || ""));
 		});
 		row.appendChild(meta);
@@ -490,31 +542,29 @@
 	}
 
 	function loadHistory() {
-		return H.requestJSON("/import/ui/wizard-definition/history").then(
-			function (out) {
-				if (!out.ok) {
-					renderError(out.data, false);
-					return false;
-				}
-				clear(ui.history);
-				const items = out.data && out.data.items ? out.data.items : [];
-				(Array.isArray(items) ? items : []).forEach(function (it) {
-					ui.history.appendChild(historyRow(it || {}));
-				});
-				return true;
-			},
-		);
+		return H.requestJSON("/import/ui/wizard-definition/history").then((out) => {
+			if (!out.ok) {
+				renderError(out.data, false);
+				return false;
+			}
+			clear(ui.history);
+			const items = out.data && out.data.items ? out.data.items : [];
+			(Array.isArray(items) ? items : []).forEach((it) => {
+				ui.history.appendChild(historyRow(it || {}));
+			});
+			return true;
+		});
 	}
 
 	function loadPalette() {
-		return H.requestJSON("/import/ui/steps-index").then(function (out) {
+		return H.requestJSON("/import/ui/steps-index").then((out) => {
 			if (!out.ok) {
 				renderError(out.data, false);
 				return false;
 			}
 			const items = out.data && out.data.items ? out.data.items : [];
 			paletteItems.length = 0;
-			(Array.isArray(items) ? items : []).forEach(function (it) {
+			(Array.isArray(items) ? items : []).forEach((it) => {
 				paletteItems.push(it);
 			});
 			return true;
@@ -522,7 +572,7 @@
 	}
 
 	function loadDefinition() {
-		return H.requestJSON("/import/ui/wizard-definition").then(function (out) {
+		return H.requestJSON("/import/ui/wizard-definition").then((out) => {
 			if (!out.ok) {
 				renderError(out.data, false);
 				return false;
@@ -544,18 +594,18 @@
 		if (!confirmIfDirty("Reload")) return false;
 		renderError(null, false);
 		setValidation(null, [], []);
-		return loadPalette().then(function (ok1) {
-			return loadDefinition().then(function (ok2) {
+		return loadPalette().then((ok1) =>
+			loadDefinition().then((ok2) => {
 				if (ok1 && ok2) {
-					return loadHistory().then(function () {
+					return loadHistory().then(() => {
 						ensureV2();
 						renderAll();
 						return true;
 					});
 				}
 				return false;
-			});
-		});
+			}),
+		);
 	}
 
 	function validateDraft() {
@@ -567,7 +617,7 @@
 			method: "POST",
 			headers: { "content-type": "application/json" },
 			body: JSON.stringify(payload),
-		}).then(function (out) {
+		}).then((out) => {
 			if (!out.ok) {
 				renderError(out.data, true);
 				setValidation(
@@ -595,7 +645,7 @@
 	}
 
 	function saveDraft() {
-		return validateDraft().then(function (ok) {
+		return validateDraft().then((ok) => {
 			if (!ok) return false;
 			const s = snapshot();
 			const payload = { definition: stripUi((s && s.wizardDraft) || {}) };
@@ -603,7 +653,7 @@
 				method: "POST",
 				headers: { "content-type": "application/json" },
 				body: JSON.stringify(payload),
-			}).then(function (out) {
+			}).then((out) => {
 				if (!out.ok) {
 					renderError(out.data, false);
 					return false;
@@ -617,7 +667,7 @@
 						{ preserveValidation: true },
 					);
 				}
-				return loadHistory().then(function () {
+				return loadHistory().then(() => {
 					renderAll();
 					return true;
 				});
@@ -632,7 +682,7 @@
 		setValidation(null, [], []);
 		return H.requestJSON("/import/ui/wizard-definition/reset", {
 			method: "POST",
-		}).then(function (out) {
+		}).then((out) => {
 			if (!out.ok) {
 				renderError(out.data, false);
 				return false;
@@ -646,7 +696,7 @@
 					{ preserveValidation: true },
 				);
 			}
-			return loadHistory().then(function () {
+			return loadHistory().then(() => {
 				renderAll();
 				return true;
 			});
@@ -662,7 +712,7 @@
 			method: "POST",
 			headers: { "content-type": "application/json" },
 			body: JSON.stringify({ id: id }),
-		}).then(function (out) {
+		}).then((out) => {
 			if (!out.ok) {
 				renderError(out.data, false);
 				return;
@@ -676,7 +726,7 @@
 					{ preserveValidation: true },
 				);
 			}
-			return loadHistory().then(function () {
+			return loadHistory().then(() => {
 				renderAll();
 			});
 		});
@@ -695,7 +745,7 @@
 		optLabel.appendChild(text("span", "wdToggleText", "Show Optional"));
 
 		btnAdd.type = "button";
-		btnAdd.addEventListener("click", function () {
+		btnAdd.addEventListener("click", () => {
 			try {
 				window.dispatchEvent(
 					new CustomEvent("am2:palette:focus", { detail: {} }),
@@ -705,8 +755,8 @@
 			}
 		});
 
-		optToggle.addEventListener("change", function () {
-			mutateWizard(function (uiState) {
+		optToggle.addEventListener("change", () => {
+			mutateWizard((uiState) => {
 				uiState.showOptional = !!optToggle.checked;
 			});
 			renderAll();
@@ -728,19 +778,19 @@
 						isOptional: isOptionalStep,
 						canRemove: canRemove,
 						setSelectedStep: setSelectedStep,
-						removeStep: function (sid) {
+						removeStep: (sid) => {
 							removeStep(sid);
 							renderAll();
 						},
-						moveStepUp: function (sid) {
+						moveStepUp: (sid) => {
 							moveStepUp(sid);
 							renderAll();
 						},
-						moveStepDown: function (sid) {
+						moveStepDown: (sid) => {
 							moveStepDown(sid);
 							renderAll();
 						},
-						reorderStep: function (dragSid, dropBeforeSidOrNull) {
+						reorderStep: (dragSid, dropBeforeSidOrNull) => {
 							reorderStep(dragSid, dropBeforeSidOrNull);
 							renderAll();
 						},
@@ -776,10 +826,8 @@
 				text: text,
 				items: paletteItems,
 				state: {
-					canAdd: function (sid) {
-						return !hasStep(sid);
-					},
-					addStep: function (sid) {
+					canAdd: (sid) => !hasStep(sid),
+					addStep: (sid) => {
 						addStep(sid);
 						renderAll();
 					},
@@ -799,11 +847,11 @@
 				state: {
 					getWizardDraft: wizardDraft,
 					getSelectedStepId: selectedStepId,
-					addEdge: function (fromId, toId, prio, whenVal) {
+					addEdge: (fromId, toId, prio, whenVal) => {
 						addEdge(fromId, toId, prio, whenVal);
 						renderAll();
 					},
-					removeEdge: function (fromId, outgoingIndex) {
+					removeEdge: (fromId, outgoingIndex) => {
 						removeEdge(fromId, outgoingIndex);
 						renderAll();
 					},
@@ -812,7 +860,7 @@
 		}
 
 		if (root && root.validationClear) {
-			root.validationClear.onclick = function () {
+			root.validationClear.onclick = () => {
 				setValidation(null, [], []);
 				renderAll();
 			};
@@ -821,10 +869,10 @@
 
 	const FE = W.AM2FlowEditorState;
 	if (FE && FE.on) {
-		FE.on("wizard_changed", function () {
+		FE.on("wizard_changed", () => {
 			renderAll();
 		});
-		FE.on("selection_changed", function () {
+		FE.on("selection_changed", () => {
 			if (table && table.updateSelection) table.updateSelection();
 			renderAll();
 			if (W.AM2FlowConfigEditor && W.AM2FlowConfigEditor.renderNow) {
