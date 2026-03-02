@@ -41,6 +41,12 @@ def _materialize_one(*, root: Path, asset: BdgAsset) -> Path:
         p.write_text(asset.content or "", encoding="utf-8")
         return p
 
+
+    if asset.kind == "toml_text":
+        p = root / f"{safe_id}.toml"
+        p.write_text(asset.content or "", encoding="utf-8")
+        return p
+
     if asset.kind == "python_patch_script":
         p = root / f"{safe_id}.py"
         p.write_text(asset.content or "", encoding="utf-8")

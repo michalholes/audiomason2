@@ -12,6 +12,22 @@ class StepResult:
     stderr: Optional[str]
     value: Any
 
+def _value_as_str(v: Any) -> str:
+    if v is None:
+        return ""
+    if isinstance(v, str):
+        return v
+    return str(v)
+
+
+def _value_as_list(v: Any) -> List[str]:
+    if v is None:
+        return []
+    if isinstance(v, list) and all(isinstance(x, str) for x in v):
+        return list(v)
+    if isinstance(v, str):
+        return [v]
+    raise SystemExit("FAIL: value must be list[str] or string")
 
 def _as_list(v: Any) -> List[str]:
     if v is None:
@@ -52,6 +68,60 @@ def evaluate_step(*, rules: Dict[str, Any], result: StepResult, prior: Dict[int,
     for pat in out_regex:
         if re.search(pat, result.stdout or "", flags=re.MULTILINE) is None:
             return False, f"stdout regex not matched: {pat}"
+
+
+    err_contains = _as_list(rules.get("stderr_contains"))
+    for s in err_contains:
+        if (result.stderr or "").find(s) < 0:
+            return False, f"missing stderr token: {s}"
+
+    err_not = _as_list(rules.get("stderr_not_contains"))
+    for s in err_not:
+        if (result.stderr or "").find(s) >= 0:
+            return False, f"unexpected stderr token: {s}"
+
+    err_regex = _as_list(rules.get("stderr_regex"))
+    for pat in err_regex:
+        if re.search(pat, result.stderr or "", flags=re.MULTILINE) is None:
+            return False, f"stderr regex not matched: {pat}"
+
+    value_eq = rules.get("value_eq")
+    if value_eq is not None:
+        if result.value != value_eq:
+            return False, "value != value_eq"
+
+    value_contains = _as_list(rules.get("value_contains"))
+    vstr = _value_as_str(result.value)
+    for s in value_contains:
+        if vstr.find(s) < 0:
+            return False, f"missing value token: {s}"
+
+    value_not_contains = _as_list(rules.get("value_not_contains"))
+    for s in value_not_contains:
+        if vstr.find(s) >= 0:
+            return False, f"unexpected value token: {s}"
+
+    list_eq = rules.get("list_eq")
+    if list_eq is not None:
+        if not (isinstance(list_eq, list) and all(isinstance(x, str) for x in list_eq)):
+            raise SystemExit("FAIL: list_eq must be list[str]")
+        vlist = _value_as_list(result.value)
+        if vlist != list_eq:
+            return False, "list != list_eq"
+
+    list_contains = _as_list(rules.get("list_contains"))
+    if list_contains:
+        vlist = _value_as_list(result.value)
+        for s in list_contains:
+            if s not in vlist:
+                return False, f"missing list item: {s}"
+
+    list_not_contains = _as_list(rules.get("list_not_contains"))
+    if list_not_contains:
+        vlist = _value_as_list(result.value)
+        for s in list_not_contains:
+            if s in vlist:
+                return False, f"unexpected list item: {s}"
 
     equals_step_index = rules.get("equals_step_index")
     if equals_step_index is not None:
