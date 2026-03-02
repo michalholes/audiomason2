@@ -1,3 +1,9 @@
+## 2026-03-02T00:00:00+01:00
+
+-   Issue 10000: spec: Normalize docs/specification.jsonl by marking duplicate rules as
+    alias -> canonical_id (with status/supersedes metadata), and mark JSON-snippet
+    rule entries as invalid. Bump JSONL spec version to 2.0.1-normalized-m1.
+
 ## 2026-03-01T00:00:00+01:00
 
 - spec/tooling: Replace gates_on_partial_apply/gates_on_zero_apply with apply_failure_*_gates_policy (defaults: repair_only/never).
