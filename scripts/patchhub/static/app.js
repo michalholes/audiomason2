@@ -1,8 +1,8 @@
 (() => {
 	// Load split UI helpers (monolith mitigation).
 	// These scripts attach to window.AMP_PATCHHUB_UI.
-	document.write('<script src="/static/patchhub_progress_ui.js"></script>');
-	document.write('<script src="/static/patchhub_live_ui.js"></script>');
+	window.PH.loadScript("/static/patchhub_progress_ui.js", "progress");
+	window.PH.loadScript("/static/patchhub_live_ui.js", "live");
 
 	window.AMP_PATCHHUB_UI = window.AMP_PATCHHUB_UI || {};
 	const AMP_UI = window.AMP_PATCHHUB_UI;
@@ -976,8 +976,12 @@
 		if (activeJobId) {
 			if (!autoRefreshTimer) {
 				autoRefreshTimer = setInterval(() => {
-					refreshJobs();
-					refreshRuns();
+					try {
+						refreshJobs();
+						refreshRuns();
+					} catch (e) {
+						setUiError(e);
+					}
 				}, 1500);
 			}
 			return;
@@ -1915,17 +1919,20 @@
 			patchStatTimer = setInterval(tickMissingPatchClear, 1000);
 
 			setInterval(() => {
-				if (activeJobId) {
-					refreshJobs();
-				} else {
-					idleRefreshTick();
+				try {
+					if (activeJobId) refreshJobs();
+					else idleRefreshTick();
+					refreshTail(tailLines);
+				} catch (e) {
+					setUiError(e);
 				}
-				refreshTail(tailLines);
 			}, 2000);
 
 			setInterval(() => {
-				if (activeJobId) {
-					refreshHeader();
+				try {
+					if (activeJobId) refreshHeader();
+				} catch (e) {
+					setUiError(e);
 				}
 			}, 5000);
 

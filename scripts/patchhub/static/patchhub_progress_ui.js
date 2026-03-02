@@ -331,6 +331,16 @@
 	}
 
 	// Exports
+	if (window.PH && typeof window.PH.register === "function") {
+		window.PH.register("progress", {
+			deriveProgressFromEvents,
+			deriveProgressSummaryFromEvents,
+			setProgressSummaryState,
+			updateProgressPanelFromEvents,
+			refreshStats,
+			renderActiveJob,
+		});
+	}
 	ui.deriveProgressFromEvents = deriveProgressFromEvents;
 	ui.deriveProgressSummaryFromEvents = deriveProgressSummaryFromEvents;
 	ui.setProgressSummaryState = setProgressSummaryState;

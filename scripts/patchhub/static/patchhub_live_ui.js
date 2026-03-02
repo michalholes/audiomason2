@@ -6,7 +6,7 @@
 	}
 
 	function safeExport(name, fn) {
-		ui[name] = function (...args) {
+		ui[name] = (...args) => {
 			try {
 				return fn(...args);
 			} catch (e) {
@@ -349,6 +349,29 @@
 	}
 
 	// Exports
+	if (window.PH && typeof window.PH.register === "function") {
+		window.PH.register("live", {
+			loadLiveJobId,
+			saveLiveJobId,
+			loadLiveLevel,
+			loadUiVisibility,
+			saveRunsVisible,
+			saveJobsVisible,
+			setRunsVisible,
+			setJobsVisible,
+			setLiveStreamStatus,
+			getLiveJobId,
+			closeLiveStream,
+			renderLiveLog,
+			filterLiveEvent,
+			formatLiveEvent,
+			updateProgressFromEvents,
+			openLiveStream,
+			jobSummaryCommit,
+			jobSummaryPatchName,
+			jobSummaryDurationSeconds,
+		});
+	}
 	safeExport("loadLiveJobId", loadLiveJobId);
 	safeExport("saveLiveJobId", saveLiveJobId);
 	safeExport("loadLiveLevel", loadLiveLevel);
