@@ -254,7 +254,7 @@
 
 	function loadScript(url, moduleName) {
 		var m = ensureModule(moduleName);
-		m.state = "missing";
+		m.state = "loading";
 		m.last_error = "";
 
 		return new Promise((resolve) => {
