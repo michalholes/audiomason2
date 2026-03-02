@@ -47,3 +47,10 @@ abort_on_guard_fail = true
 # Optional default include/exclude patterns.
 include = []
 exclude = []
+
+
+[evaluation]
+strict_coverage = true
+
+[evaluation.tests.test_000_test_mode_smoke.steps.0]
+rc_eq = 0

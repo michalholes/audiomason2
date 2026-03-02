@@ -20,6 +20,7 @@ import tomllib
 @dataclass(frozen=True)
 class SuiteCfg:
     repo_root: Path
+    config_path: str
     issue_id: str
     runner_cmd: list[str]
     patches_dir: Path
@@ -132,6 +133,7 @@ def _make_cfg(
 
     return SuiteCfg(
         repo_root=repo_root,
+        config_path=str(config_path),
         issue_id=issue_id,
         runner_cmd=runner_cmd,
         patches_dir=patches_dir,
@@ -411,118 +413,81 @@ def _cleanup_issue_artifacts(ctx: Ctx, *, issue_id: str, test_name: Optional[str
         _action(ctx, test_name=test_name, kind="CLEANUP", phase="OK", msg=f"rm {pat}")
 
 
+def _load_eval_rules(repo_root: Path, config_path: Path) -> dict:
+    raw = tomllib.loads((repo_root / config_path).read_text(encoding="utf-8"))
+    return raw.get("evaluation", {})
+
+
+def _rules_for_step(evaluation: dict, *, test_id: str, step_index: int) -> dict:
+    tests = evaluation.get("tests", {})
+    if not isinstance(tests, dict):
+        return {}
+    t = tests.get(test_id, {})
+    if not isinstance(t, dict):
+        return {}
+    steps = t.get("steps", {})
+    if not isinstance(steps, dict):
+        return {}
+    s = steps.get(str(step_index)) if str(step_index) in steps else steps.get(step_index)
+    if not isinstance(s, dict):
+        return {}
+    return s
+
+
 def _run_test_plan(test, ctx: Ctx) -> bool:
-    from badguys._util import (
-        CmdStep,
-        ExpectPathExists,
-        FuncStep,
-        Plan,
-    )
+    from badguys.bdg_executor import execute_bdg
+    from badguys.bdg_evaluator import StepResult, evaluate_step
+    from badguys.bdg_loader import BdgTest
+    from badguys.bdg_materializer import materialize_assets
 
     name = getattr(test, "name", "(unknown)")
+    evaluation = _load_eval_rules(ctx.repo_root, Path(ctx.cfg.config_path))
+    strict = bool(evaluation.get("strict_coverage", True))
+
     try:
-        plan_obj = test.run(ctx)
+        obj = test.run(ctx)
     except SystemExit as e:
-        # Treat SystemExit from a test as a deterministic test FAIL, not a suite crash.
         _emit(ctx, level="verbose", test_name=name, text=f"FAIL: {e}\n")
         _emit(ctx, level="verbose", test_name=name, text=f"TEST END {name} FAIL\n")
         return False
-    except Exception:
-        # Treat unexpected exceptions from a test as FAIL. Only include traceback in debug.
-        ok = False
-        if _want(ctx.log_verbosity, "debug") or _want(ctx.console_verbosity, "debug"):
-            tb = traceback.format_exc()
-            _emit(ctx, level="verbose", test_name=name, text="FAIL: test raised\n" + tb + "\n")
-        else:
-            exc = traceback.format_exc().strip().splitlines()[-1]
-            _emit(ctx, level="verbose", test_name=name, text=f"FAIL: {exc}\n")
-        _emit(ctx, level="verbose", test_name=name, text=f"TEST END {name} FAIL\n")
-        return False
 
-    if not isinstance(plan_obj, Plan):
-        raise SystemExit(f"FAIL: test {name} returned invalid plan type: {type(plan_obj).__name__}")
+    if isinstance(obj, BdgTest):
+        bdg = obj
+        mats = materialize_assets(repo_root=ctx.repo_root, issue_id=ctx.cfg.issue_id, bdg=bdg)
+        _emit(ctx, level="verbose", test_name=name, text=f"TEST BEGIN {name}\n")
 
-    ok = True
+        step_results = execute_bdg(
+            repo_root=ctx.repo_root,
+            cfg_runner_cmd=list(ctx.cfg.runner_cmd),
+            issue_id=ctx.cfg.issue_id,
+            bdg=bdg,
+            mats=mats,
+        )
 
-    _emit(ctx, level="verbose", test_name=name, text=f"TEST BEGIN {name}\n")
-
-    for step in plan_obj.steps:
-        if isinstance(step, CmdStep):
-            argv = step.argv
-            cwd = step.cwd if step.cwd is not None else ctx.repo_root
-            _log_banner(ctx, name, "cmd")
-            out = _run_cmd_with_heartbeat(ctx, test_name=name, argv=list(argv), cwd=cwd)
-            cp = out.cp
-            ipc_result = out.ipc_result
-
-            # CMD summary is always at least "$ ..." and "rc=..." in verbose+.
-            if _want(ctx.log_verbosity, "verbose") or _want(ctx.console_verbosity, "verbose"):
-                args = cp.args if isinstance(cp.args, list) else [str(cp.args)]
-                _emit(ctx, level="verbose", test_name=name, text="$ " + " ".join(str(a) for a in args) + "\n")
-                _emit(ctx, level="verbose", test_name=name, text=f"rc={cp.returncode}\n")
-
-            # In verbose/debug, include stdout/stderr.
-            if cp.stdout:
-                _emit(ctx, level="verbose", test_name=name, text=cp.stdout.rstrip("\n") + "\n")
-            if cp.stderr:
-                _emit(ctx, level="verbose", test_name=name, text=cp.stderr.rstrip("\n") + "\n")
-
-            if ipc_result is not None and "ok" in ipc_result:
-                if not bool(ipc_result.get("ok")):
-                    ok = False
-                    _emit(
-                        ctx,
-                        level="verbose",
-                        test_name=name,
-                        text=(
-                            "FAIL: runner ipc ok=false "
-                            f"returncode={cp.returncode} expected={step.expect_rc}\n"
-                        ),
-                    )
-            else:
-                if cp.returncode != step.expect_rc:
-                    ok = False
-                    _emit(
-                        ctx,
-                        level="verbose",
-                        test_name=name,
-                        text=f"FAIL: returncode={cp.returncode} expected={step.expect_rc}\n",
-                    )
-        elif isinstance(step, ExpectPathExists):
-            _log_banner(ctx, name, "expect_path_exists")
-            if not step.path.exists():
+        ok = True
+        prior: dict[int, StepResult] = {}
+        for idx, r in enumerate(step_results):
+            rules = _rules_for_step(evaluation, test_id=bdg.test_id, step_index=idx)
+            if strict and not rules:
                 ok = False
-                _emit(ctx, level="verbose", test_name=name, text=f"FAIL: missing path: {step.path}\n")
+                _emit(ctx, level="verbose", test_name=name, text=f"FAIL: missing evaluation rules for step {idx}\n")
             else:
-                _emit(ctx, level="verbose", test_name=name, text=f"OK: path exists: {step.path}\n")
-        elif isinstance(step, FuncStep):
-            _log_banner(ctx, name, f"func: {step.name}")
-            try:
-                _action(ctx, test_name=name, kind="ACTION", phase="DO", msg=step.name)
-                step.fn()
-                _action(ctx, test_name=name, kind="ACTION", phase="OK", msg=step.name)
-            except Exception:
-                ok = False
-                tb = traceback.format_exc()
-                _action(ctx, test_name=name, kind="ACTION", phase="FAIL", msg=step.name)
-                _emit(ctx, level="verbose", test_name=name, text="FAIL: func step raised\n" + tb + "\n")
-        else:
-            ok = False
-            _emit(ctx, level="verbose", test_name=name, text=f"FAIL: unknown step type: {type(step).__name__}\n")
+                passed, msg = evaluate_step(
+                    rules=rules,
+                    result=r,
+                    prior=prior,
+                    test_id=bdg.test_id,
+                    step_index=idx,
+                )
+                if not passed:
+                    ok = False
+                    _emit(ctx, level="verbose", test_name=name, text=f"FAIL: step {idx}: {msg}\n")
+            prior[idx] = r
 
-    # Cleanup any per-test temp files provided by the plan.
-    for p in plan_obj.cleanup_paths:
-        try:
-            if p.is_dir():
-                shutil.rmtree(p, ignore_errors=True)
-            else:
-                p.unlink()
-        except FileNotFoundError:
-            pass
+        _emit(ctx, level="verbose", test_name=name, text=f"TEST END {name} {'PASS' if ok else 'FAIL'}\n")
+        return ok
 
-    _emit(ctx, level="verbose", test_name=name, text=f"TEST END {name} {'PASS' if ok else 'FAIL'}\n")
-    return ok
-
+    raise SystemExit(f"FAIL: test {name} returned unsupported type: {type(obj).__name__}")
 
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(prog="python3 badguys/badguys.py")
