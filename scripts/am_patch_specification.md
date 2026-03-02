@@ -71,6 +71,9 @@ partial reads.
 -   gate_biome_extensions = [".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx"]
 -   gate_biome_command = ["npm", "run", "lint", "--"]
 -   gates_skip_typescript = true
+-   gate_typescript_mode = "auto"
+-   typescript_targets = ["plugins/import/ui/web/assets/**/*.js", "..."]
+-   gate_typescript_base_tsconfig = "tsconfig.json"
 -   gate_typescript_extensions = [".ts", ".tsx", ".mts", ".cts"]
 -   gate_typescript_command = ["tsc", "--noEmit", "--pretty", "false"]
 -   scope_ignore_prefixes = \[".am_patch/", ".pytest_cache/",
@@ -522,29 +525,33 @@ scope accordingly - Should be used deliberately and sparingly
 
 ### 6.1.4 TypeScript gate
 
--   Purpose: run TypeScript typechecking when a patch touches TypeScript files.
--   Trigger: the gate is evaluated only when at least one changed path ends with an extension
-    listed in `gate_typescript_extensions` (case-insensitive suffix match).
+-   Purpose: run TypeScript/JS typechecking when a patch touches files inside configured
+    TypeScript targets.
+-   Trigger (when gate_typescript_mode!="always"):
+    -   the gate is evaluated only when at least one changed path:
+        -   is under any entry in `typescript_targets` (path prefix match), AND
+        -   ends with an extension listed in `gate_typescript_extensions`
+            (case-insensitive suffix match)
+    -   OR when the changed set includes the base tsconfig file
+        (`gate_typescript_base_tsconfig`).
 -   If not triggered, the gate is SKIPPED and MUST NOT execute any external tool.
--   Changed paths that do not exist as files after patch application are ignored (e.g.,
-    deletions). If all matched paths are non-existent, the gate is SKIPPED and MUST NOT
-    execute any external tool.
--   Variant B execution semantics (file-scoped):
-    -   Runner builds a deterministic lexicographically sorted list of matched changed files.
+-   Execution semantics (project-scoped):
+    -   Runner generates a deterministic temporary tsconfig JSON file under `.am_patch/`
+        that extends `gate_typescript_base_tsconfig` and sets `include` to
+        `typescript_targets`.
     -   Runner executes the gate exactly once:
-        `<argv...> <changed_file_1> <changed_file_2> ...`
+        `<argv...> --project <generated_tsconfig_path>`
 -   Controls (precedence: CLI > config > defaults):
     -   `gates_skip_typescript = true|false` (default: true)
-    -   `gate_typescript_extensions = [".ts", ...]`
-        (default: `[".ts", ".tsx", ".mts", ".cts"]`)
+    -   `gate_typescript_mode = "auto"|"always"` (default: "auto")
+    -   `typescript_targets = list[str]`
+        (default: derived from the repository tsconfig include list)
+    -   `gate_typescript_base_tsconfig = str` (default: "tsconfig.json")
+    -   `gate_typescript_extensions = [".js", ".ts", ...]`
     -   `gate_typescript_command = list[str] | str`
         (default: `["tsc", "--noEmit", "--pretty", "false"]`)
-        -   If a string is used (cfg or CLI), it is parsed using shell-like splitting (shlex).
-        -   The value must be non-empty and is treated as argv including the tool.
--   CLI (explicit flags; no `--override` required for these options):
-    -   `--skip-typescript` (equivalent to setting `gates_skip_typescript=true`)
-    -   `--gate-typescript-extensions CSV_OR_REPEATABLE` sets `gate_typescript_extensions`
-    -   `--gate-typescript-command STR` sets `gate_typescript_command`
+        -   If a string is used (cfg or CLI), it is parsed using shell-like splitting
+            (shlex).
 
 ### Python gates - auto mode
 
