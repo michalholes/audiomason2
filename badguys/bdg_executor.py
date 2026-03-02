@@ -10,6 +10,12 @@ from badguys.bdg_loader import BdgStep, BdgTest
 from badguys.bdg_materializer import MaterializedAssets
 
 
+
+def _subst_token(value: str, *, issue_id: str) -> str:
+    if value == "${issue_id}":
+        return str(issue_id)
+    return value
+
 @dataclass(frozen=True)
 class ExecOutcome:
     ok: bool
