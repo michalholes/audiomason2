@@ -598,6 +598,26 @@ Notes:
 - This clearing is unconditional with respect to user edits, autofill, dirty flags,
   and overwrite policies.
 
+7.1.8 Mode Reset After Terminal Job (UI) (HARD)
+
+Rule:
+- After any job reaches a terminal state (success, failed, canceled),
+  the UI MUST set the mode dropdown to: patch.
+
+Notes:
+- This rule applies to all modes (patch, finalize_live, finalize_workspace,
+  rerun_latest, repair).
+
+7.1.9 Autofill New Patch Token Forces Patch Mode (UI) (HARD)
+
+Rule:
+- When /api/patches/latest returns a new token (a different patch than previously
+  seen), the UI MUST:
+  - set mode dropdown to: patch
+  - set issueId, commitMsg, patchPath from the new autofill payload
+  - clear rawCommand (if present)
+
+
 7.2 API routes (GET)
 
 7.2.1 GET /api/config
@@ -953,7 +973,7 @@ Parsing rules (command_parse.py):
 - supports finalize/rerun flags in rest (combinations are rejected):
   -f MESSAGE => finalize_live (MESSAGE is required; stored as commit_message)
   -w ISSUE_ID => finalize_workspace (ISSUE_ID is required; digits only)
-  -l => rerun_latest (no extra args)
+  -l ISSUE_ID MESSAGE => rerun_latest (ISSUE_ID and MESSAGE are required)
 - patch mode requires exactly 3 args after scripts/am_patch.py:
   ISSUE_ID (digits), commit message (non-empty), PATCH (non-empty)
 
@@ -976,7 +996,8 @@ Behavior:
 - If raw_command is absent:
   - finalize_live requires commit_message and builds: runner_prefix + ['-f', commit_message]
   - finalize_workspace requires issue_id (digits) and builds: runner_prefix + ['-w', issue_id]
-  - rerun_latest builds: runner_prefix + ['-l']
+  - rerun_latest requires issue_id and commit_message and builds:
+    runner_prefix + ['-l', issue_id, commit_message]
   - patch/repair requires commit_message and patch_path
   - if issue_id missing, PatchHub auto-allocates it (see Section 11)
 
