@@ -23,8 +23,32 @@
 		}
 	}
 
+	function uiStatus(message) {
+		var node = el("uiStatusBar");
+		if (!node) return;
+		var msg = String(message || "");
+		msg = msg.replace(/\s*\n\s*/g, " ").trim();
+		if (!msg) return;
+		if (node.textContent === msg) return;
+		node.textContent = msg;
+	}
+
+	function log(kind, message, details) {
+		var msg = String(message || "");
+		if (details) msg += ` (${String(details)})`;
+		try {
+			if (kind === "error") console.error("[PatchHub]", msg);
+			else if (kind === "warn") console.warn("[PatchHub]", msg);
+			else console.log("[PatchHub]", msg);
+		} catch (e) {
+			// ignore
+		}
+		uiStatus(msg);
+	}
+
 	const registry = {};
 	const diag = [];
+	const once = { missing: {}, fault: {}, load: {} };
 
 	function ensureModule(name) {
 		if (!registry[name]) {
@@ -138,10 +162,18 @@
 		var note = "";
 		if (!hit) {
 			record(diag, { ts: nowIso(), kind: "missing", cap }, 50);
+			if (!once.missing[cap]) {
+				once.missing[cap] = true;
+				log("warn", degradedNote("capability", "missing", cap));
+			}
 			if (Object.hasOwn(defaults, cap)) {
 				try {
 					return defaults[cap].apply(null, args);
 				} catch (e) {
+					if (!once.fault[`default:${cap}`]) {
+						once.fault[`default:${cap}`] = true;
+						log("error", degradedNote("default", "faulted", cap));
+					}
 					return undefined;
 				}
 			}
@@ -166,6 +198,10 @@
 				50,
 			);
 			note = degradedNote(hit.moduleName, "faulted", mod.last_error);
+			if (!once.fault[`${hit.moduleName}:${cap}`]) {
+				once.fault[`${hit.moduleName}:${cap}`] = true;
+				log("error", note);
+			}
 			if (cap === "renderLiveLog") setText("liveLog", note);
 			else if (cap.indexOf("progress") >= 0) setText("progressSummary", note);
 			return undefined;
@@ -192,6 +228,13 @@
 						{ ts: nowIso(), kind: "load_error", module: moduleName, url },
 						50,
 					);
+					if (!once.load[moduleName]) {
+						once.load[moduleName] = true;
+						log(
+							"error",
+							degradedNote(moduleName, "missing", "script load failed"),
+						);
+					}
 					resolve(false);
 				};
 				document.head.appendChild(s);
@@ -207,6 +250,25 @@
 			}
 		});
 	}
+
+	window.addEventListener("error", (ev) => {
+		try {
+			const msg = (ev && ev.message) || "window error";
+			log("error", `Unhandled error: ${String(msg)}`);
+		} catch (e) {
+			// ignore
+		}
+	});
+
+	window.addEventListener("unhandledrejection", (ev) => {
+		try {
+			const r = ev && ev.reason;
+			const msg = (r && r.message) || String(r || "unhandled rejection");
+			log("error", `Unhandled rejection: ${msg}`);
+		} catch (e) {
+			// ignore
+		}
+	});
 
 	window.PH = {
 		register,
