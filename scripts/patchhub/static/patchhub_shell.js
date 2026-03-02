@@ -279,10 +279,7 @@
 				enqueue(cap, args);
 				return undefined;
 			}
-			if (!once.missing[cap]) {
-				once.missing[cap] = true;
-				log("warn", degradedNote("capability", "missing", cap));
-			}
+			// Defaults are first-class fallback behavior; do not label as degraded.
 			if (hasOwn(defaults, cap)) {
 				try {
 					return defaults[cap].apply(null, args);
@@ -294,6 +291,10 @@
 					return undefined;
 				}
 			}
+			if (!once.missing[cap]) {
+				once.missing[cap] = true;
+				log("warn", degradedNote("capability", "missing", cap));
+			}
 			return undefined;
 		}
 
@@ -301,7 +302,8 @@
 			return hit.handler.apply(null, args);
 		} catch (e) {
 			mod = ensureModule(hit.moduleName);
-			mod.state = "faulted";
+			// Do not hard-disable the whole module on a single handler failure.
+			// Record the error and keep the module available so the UI can recover.
 			mod.last_error = String((e && e.message) || e || "");
 			record(
 				diag,
