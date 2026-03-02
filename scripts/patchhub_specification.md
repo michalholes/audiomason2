@@ -3,7 +3,7 @@ Status: AUTHORITATIVE SPECIFICATION
 Applies to: scripts/patchhub/*
 Language: ENGLISH (ASCII ONLY)
 
-Specification Version: 1.4.2-spec
+Specification Version: 1.4.3-spec
 Code Baseline: audiomason2-main.zip (as provided in this chat)
 
 -------------------------------------------------------------------------------
@@ -193,6 +193,71 @@ Anti-monolith rule (for PatchHub code):
 - Prefer extraction over growth.
 
 -------------------------------------------------------------------------------
+
+
+3.1 UI Fault Containment and Degraded Mode (HARD)
+
+Goal: A failure of any optional UI module MUST NOT crash the PatchHub UI shell.
+The UI MUST remain operable in a degraded mode.
+
+Definitions:
+- Shell: the always-loaded bootstrap layer responsible for initialization, routing UI events, and rendering fallbacks.
+- Module: an optional feature bundle that registers capabilities with the Shell (e.g. live log view, progress rendering).
+
+3.1.1 Shell requirement (HARD)
+- A Shell layer MUST exist and MUST be the only mandatory bootstrap.
+- The Shell MUST be able to start and render "minimal viable UI" even when zero modules are loaded.
+
+3.1.2 Dispatcher / capability mediator (HARD)
+- All calls from the Shell/application code to module functionality MUST go through a centralized dispatcher (capability mediator).
+- The dispatcher MUST provide at least:
+  - has(capability_name) -> bool
+  - call(capability_name, *args, **kwargs) -> any
+- call(...) MUST be existence-safe:
+  - Calling a non-existent capability MUST NOT raise an exception.
+  - It MUST return a stable default (implementation-defined; MUST be documented).
+- call(...) MUST be exception-safe:
+  - Exceptions thrown by a capability handler MUST be caught inside the dispatcher.
+  - The exception MUST NOT propagate to the top-level UI runtime.
+- The dispatcher MUST be fault-aware:
+  - When a capability throws, its owning module MUST be marked faulted and further calls MAY be short-circuited to defaults.
+
+3.1.3 Deterministic module registration (HARD)
+- Each module MUST register itself with:
+  - a stable module name (ASCII),
+  - a deterministic list of exported capabilities,
+  - an optional version string.
+- The Shell MUST maintain a module registry with states at minimum:
+  - missing, ready, faulted
+  - and last_error (string) for diagnostics.
+
+3.1.4 Robust module loading (HARD)
+- Module loading MUST provide an explicit success/failure signal to the Shell.
+- A module load failure (e.g. 404, parse error) MUST NOT crash the UI.
+- The Shell MUST mark the module as missing and render fallbacks for dependent sections.
+
+3.1.5 Explicit UI fallbacks (HARD)
+- Any UI section that depends on an optional capability MUST have an explicit fallback renderer.
+- Fallback UI MUST clearly indicate degraded mode and identify the missing/faulted module/capability.
+
+3.1.6 Timer/event crash-chain prevention (HARD)
+- Top-level periodic refresh ticks and event entrypoints MUST be guarded so that one exception does not stop the loop.
+- Any module-invoking work inside timers/events MUST use the dispatcher.
+
+3.1.7 Minimal viable UI without modules (HARD)
+Minimal viable UI MUST work when all modules are missing/faulted:
+- Patch upload (UI and API path unchanged).
+- Start run (enqueue) (UI and API path unchanged).
+- Manual refresh of runs/jobs/fs (at least raw JSON rendering is acceptable).
+- Display of error status and degraded-mode state.
+
+3.1.8 UI module contract (HARD)
+The specification MUST treat modules as optional and MUST define:
+- registration shape (module name, capability map),
+- dispatcher semantics (existence-safe + exception-safe + fault-aware),
+- module registry states and diagnostics fields,
+- required fallback behavior for missing/faulted capabilities.
+
 
 4. Filesystem Model and Jail
 
