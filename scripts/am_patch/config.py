@@ -189,6 +189,10 @@ class Policy(PolicyMonolithMixin):
     gate_typescript_command: list[str] = field(
         default_factory=lambda: ["tsc", "--noEmit", "--pretty", "false"]
     )
+
+    gate_typescript_mode: str = "auto"
+    typescript_targets: list[str] = field(default_factory=list)
+    gate_typescript_base_tsconfig: str = "tsconfig.json"
     apply_failure_partial_gates_policy: str = "repair_only"
     apply_failure_zero_gates_policy: str = "never"
     gate_docs_include: list[str] = field(default_factory=lambda: ["src", "plugins"])
@@ -1006,6 +1010,12 @@ def build_policy(defaults: Policy, cfg: dict[str, Any]) -> Policy:
     p.mypy_targets = _as_list_str(cfg, "mypy_targets", p.mypy_targets)
     _mark_cfg(p, cfg, "mypy_targets")
 
+    p.typescript_targets = _as_list_str(cfg, "typescript_targets", p.typescript_targets)
+    _mark_cfg(p, cfg, "typescript_targets")
+
+    if "gate_typescript_base_tsconfig" in cfg:
+        p.gate_typescript_base_tsconfig = str(cfg["gate_typescript_base_tsconfig"]).strip()
+        _mark_cfg(p, cfg, "gate_typescript_base_tsconfig")
     from .policy_gate_modes import apply_gate_modes
 
     apply_gate_modes(cfg, p, _mark_cfg)

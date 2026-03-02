@@ -15,6 +15,7 @@ def apply_gate_modes(
         ("gate_ruff_mode", "INVALID_GATE_RUFF_MODE"),
         ("gate_mypy_mode", "INVALID_GATE_MYPY_MODE"),
         ("gate_pytest_mode", "INVALID_GATE_PYTEST_MODE"),
+        ("gate_typescript_mode", "INVALID_GATE_TYPESCRIPT_MODE"),
     ):
         v = str(cfg.get(k, getattr(p, k))).strip()
         setattr(p, k, v)

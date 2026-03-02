@@ -76,6 +76,9 @@ _SECTION_BY_KEY: dict[str, str] = {
     "biome_autofix_legalize_outside": "",
     "gate_biome_fix_command": "",
     "gates_skip_typescript": "",
+    "gate_typescript_mode": "",
+    "typescript_targets": "",
+    "gate_typescript_base_tsconfig": "",
     "gate_typescript_extensions": "",
     "gate_typescript_command": "",
     "apply_failure_partial_gates_policy": "",
@@ -443,6 +446,7 @@ _ENUM_BY_KEY: dict[str, list[str]] = {
     "gate_ruff_mode": ["auto", "always"],
     "gate_mypy_mode": ["auto", "always"],
     "gate_pytest_mode": ["auto", "always"],
+    "gate_typescript_mode": ["auto", "always"],
 }
 
 

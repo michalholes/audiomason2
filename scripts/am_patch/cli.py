@@ -224,6 +224,27 @@ def parse_args(argv: list[str]) -> CliArgs:
         choices=("auto", "always"),
     )
     p.add_argument(
+        "--typescript-mode",
+        action=AppendOverride,
+        key="gate_typescript_mode",
+        dest="overrides",
+        choices=("auto", "always"),
+    )
+    p.add_argument(
+        "--typescript-targets",
+        action=AppendOverride,
+        key="typescript_targets",
+        dest="overrides",
+        metavar="CSV",
+    )
+    p.add_argument(
+        "--typescript-base-tsconfig",
+        action=AppendOverride,
+        key="gate_typescript_base_tsconfig",
+        dest="overrides",
+    )
+
+    p.add_argument(
         "--pytest-js-prefixes",
         action=AppendOverride,
         key="gate_pytest_js_prefixes",

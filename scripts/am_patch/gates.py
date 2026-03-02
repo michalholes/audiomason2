@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import re
 import sys
@@ -18,6 +19,69 @@ def _norm_targets(targets: list[str], fallback: list[str]) -> list[str]:
         if s and s not in out:
             out.append(s)
     return out or list(fallback)
+
+
+def _typescript_target_to_include_glob(t: str) -> str:
+    s = str(t).strip().replace("\\", "/")
+    if s.startswith("./"):
+        s = s[2:]
+    s = s.rstrip("/")
+    if not s:
+        return ""
+    if any(ch in s for ch in ("*", "?", "[")):
+        return s
+    return s + "/**/*"
+
+
+def _typescript_targets_to_include(targets: list[str]) -> list[str]:
+    out: list[str] = []
+    for t in targets:
+        g = _typescript_target_to_include_glob(t)
+        if g and g not in out:
+            out.append(g)
+    return out
+
+
+def _typescript_targets_to_trigger_prefixes(targets: list[str]) -> list[str]:
+    out: list[str] = []
+    for t in targets:
+        s = str(t).strip().replace("\\", "/")
+        if s.startswith("./"):
+            s = s[2:]
+        for ch in ("*", "?", "["):
+            if ch in s:
+                s = s.split(ch, 1)[0]
+                break
+        s = s.rstrip("/")
+        if s and s not in out:
+            out.append(s)
+    return out
+
+
+def _write_typescript_gate_tsconfig(
+    repo_root: Path,
+    *,
+    base_tsconfig: str,
+    targets: list[str],
+) -> Path:
+    base_path = repo_root / base_tsconfig
+    if not base_path.exists():
+        raise RunnerError(
+            "CONFIG",
+            "TYPESCRIPT_BASE_TSCONFIG_NOT_FOUND",
+            f"missing base tsconfig: {base_tsconfig!r}",
+        )
+
+    gen_dir = repo_root / ".am_patch"
+    gen_dir.mkdir(parents=True, exist_ok=True)
+    gen_path = gen_dir / "tsconfig.typescript_gate.json"
+    rel_extends = os.path.relpath(base_path, gen_dir)
+    payload: dict[str, object] = {
+        "extends": rel_extends,
+        "include": _typescript_targets_to_include(targets),
+    }
+    gen_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return gen_path
 
 
 def _venv_python(repo_root: Path) -> Path:
@@ -590,6 +654,9 @@ def run_gates(
     biome_fix_command: list[str] | None = None,
     typescript_extensions: list[str] | None = None,
     typescript_command: list[str] | None = None,
+    gate_typescript_mode: str = "auto",
+    typescript_targets: list[str] | None = None,
+    gate_typescript_base_tsconfig: str = "tsconfig.json",
     ruff_format: bool,
     ruff_autofix: bool,
     ruff_targets: list[str],
@@ -614,6 +681,15 @@ def run_gates(
     biome_fix_cmd = biome_fix_command or []
     ts_exts = typescript_extensions or []
     ts_cmd = typescript_command or []
+    ts_mode = str(gate_typescript_mode).strip()
+    if ts_mode not in ("auto", "always"):
+        raise RunnerError(
+            "CONFIG",
+            "INVALID_GATE_TYPESCRIPT_MODE",
+            f"invalid gate_typescript_mode: {ts_mode!r}",
+        )
+    ts_targets = _norm_targets(typescript_targets or [], fallback=[])
+    ts_base = str(gate_typescript_base_tsconfig).strip() or "tsconfig.json"
     if not order:
         logger.section("GATES: SKIPPED (gates_order empty)")
         logger.warning_core("GATES: SKIPPED (gates_order empty)")
@@ -684,14 +760,21 @@ def run_gates(
                 skipped.append("typescript")
                 logger.warning_core("gate_typescript=SKIP (skipped_by_user)")
                 return True
-            return run_file_scoped_gate(
-                logger,
-                cwd=cwd,
-                name="typescript",
-                decision_paths=decision_paths,
-                extensions=ts_exts,
-                command=ts_cmd,
+            if ts_mode != "always":
+                trigger_prefixes = _typescript_targets_to_trigger_prefixes(ts_targets)
+                trigger = _has_changed_basename((ts_base,)) or _has_changed_file(
+                    tuple(ts_exts), trigger_prefixes
+                )
+                if not trigger:
+                    skipped.append("typescript")
+                    logger.warning_core("gate_typescript=SKIP (no_matching_files)")
+                    return True
+            gen_path = _write_typescript_gate_tsconfig(
+                repo_root, base_tsconfig=ts_base, targets=ts_targets
             )
+            argv = list(ts_cmd) + ["--project", str(gen_path)]
+            r = logger.run_logged(argv, cwd=cwd)
+            return r.returncode == 0
 
         if name == "ruff":
             if skip_ruff:
