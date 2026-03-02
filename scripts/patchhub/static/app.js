@@ -4,6 +4,7 @@
 	document.write('<script src="/static/patchhub_progress_ui.js"></script>');
 	document.write('<script src="/static/patchhub_live_ui.js"></script>');
 
+	window.AMP_PATCHHUB_UI = window.AMP_PATCHHUB_UI || {};
 	const AMP_UI = window.AMP_PATCHHUB_UI;
 
 	var activeJobId = null;
