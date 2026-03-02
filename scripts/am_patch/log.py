@@ -310,7 +310,15 @@ class Logger:
             with contextlib.suppress(Exception):
                 ipc_stream(evt)
 
-    def emit_json_failed_step_detail(self, *, stdout: str, stderr: str) -> None:
+    def emit_json_failed_step_detail(
+        self,
+        *,
+        stdout: str,
+        stderr: str,
+        severity: Severity,
+        channel: Channel,
+        bypass: bool,
+    ) -> None:
         if not self.json_enabled or self._json_fp is None:
             return
         self._json_seq += 1
@@ -320,10 +328,10 @@ class Logger:
             "ts_mono_ms": self._now_mono_ms(),
             "stage": self._get_stage(),
             "kind": "TEXT",
-            "sev": "ERROR",
-            "ch": "CORE",
+            "sev": severity,
+            "ch": channel,
             "summary": False,
-            "bypass": True,
+            "bypass": bool(bypass),
             "msg": "FAILED STEP OUTPUT",
             "stdout": stdout,
             "stderr": stderr,
@@ -365,11 +373,16 @@ class Logger:
         # Full error detail must bypass filtering (visible even in quiet).
         self.emit(severity="ERROR", channel="CORE", message=s, error_detail=True)
 
+    def emit_warning_detail(self, s: str) -> None:
+        self.emit(severity="WARNING", channel="DETAIL", message=s)
+
     def run_logged(
         self,
         argv: list[str],
         cwd: Path | None = None,
         env: dict[str, str] | None = None,
+        *,
+        failure_dump_mode: str = "bypass",
     ) -> RunResult:
         # RUN metadata must not appear in normal/warning/verbose; keep it in DETAIL+DEBUG.
         self.emit(severity="DEBUG", channel="DETAIL", message="RUN\n")
@@ -386,19 +399,34 @@ class Logger:
         )
 
         if p.returncode != 0:
-            self.emit_json_failed_step_detail(stdout=p.stdout or "", stderr=p.stderr or "")
-            # Full error detail must always be visible (stdout+stderr), even in quiet.
-            self.emit_error_detail("\n" + ("=" * 80) + "\nFAILED STEP OUTPUT\n" + ("=" * 80) + "\n")
+            if failure_dump_mode not in ("bypass", "warn_detail"):
+                raise ValueError(f"unknown failure_dump_mode: {failure_dump_mode}")
+
+            bypass = failure_dump_mode == "bypass"
+            sev: Severity = "ERROR" if bypass else "WARNING"
+            ch: Channel = "CORE" if bypass else "DETAIL"
+            self.emit_json_failed_step_detail(
+                stdout=p.stdout or "",
+                stderr=p.stderr or "",
+                severity=sev,
+                channel=ch,
+                bypass=bypass,
+            )
+
+            # Failed-step stdout/stderr dumping is controlled per-call.
+            emit = self.emit_error_detail if bypass else self.emit_warning_detail
+
+            emit("\n" + ("=" * 80) + "\nFAILED STEP OUTPUT\n" + ("=" * 80) + "\n")
             if p.stdout:
-                self.emit_error_detail("[stdout]\n")
-                self.emit_error_detail(p.stdout)
+                emit("[stdout]\n")
+                emit(p.stdout)
                 if not p.stdout.endswith("\n"):
-                    self.emit_error_detail("\n")
+                    emit("\n")
             if p.stderr:
-                self.emit_error_detail("[stderr]\n")
-                self.emit_error_detail(p.stderr)
+                emit("[stderr]\n")
+                emit(p.stderr)
                 if not p.stderr.endswith("\n"):
-                    self.emit_error_detail("\n")
+                    emit("\n")
 
         return RunResult(argv=argv, returncode=p.returncode, stdout=p.stdout, stderr=p.stderr)
 

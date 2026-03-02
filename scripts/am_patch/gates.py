@@ -302,7 +302,11 @@ def run_ruff(
 
     if ruff_format:
         logger.section("GATE: RUFF FORMAT")
-        rfmt = logger.run_logged(_cmd_py("ruff", python=py) + ["format", *targets], cwd=cwd)
+        rfmt = logger.run_logged(
+            _cmd_py("ruff", python=py) + ["format", *targets],
+            cwd=cwd,
+            failure_dump_mode="warn_detail",
+        )
         if rfmt.returncode != 0:
             return False
 
@@ -314,7 +318,11 @@ def run_ruff(
         return False
 
     logger.section("GATE: RUFF (fix)")
-    _ = logger.run_logged(_cmd_py("ruff", python=py) + ["check", *targets, "--fix"], cwd=cwd)
+    _ = logger.run_logged(
+        _cmd_py("ruff", python=py) + ["check", *targets, "--fix"],
+        cwd=cwd,
+        failure_dump_mode="warn_detail",
+    )
 
     logger.section("GATE: RUFF (final)")
     r2 = logger.run_logged(_cmd_py("ruff", python=py) + ["check", *targets], cwd=cwd)
@@ -359,7 +367,7 @@ def run_biome(
 
         logger.section("GATE: BIOME FORMAT")
         logger.line("gate_biome_format_cmd=" + " ".join(fmt_cmd0))
-        r0 = logger.run_logged([*fmt_cmd0, *existing], cwd=cwd)
+        r0 = logger.run_logged([*fmt_cmd0, *existing], cwd=cwd, failure_dump_mode="warn_detail")
         if r0.returncode != 0:
             return False
 
@@ -381,7 +389,7 @@ def run_biome(
 
     logger.section("GATE: BIOME_AUTOFIX (apply)")
     logger.line("gate_biome_fix_cmd=" + " ".join(fix_cmd0))
-    _ = logger.run_logged([*fix_cmd0, *existing], cwd=cwd)
+    _ = logger.run_logged([*fix_cmd0, *existing], cwd=cwd, failure_dump_mode="warn_detail")
 
     logger.section("GATE: BIOME (final)")
     r2 = logger.run_logged([*cmd0, *existing], cwd=cwd)
