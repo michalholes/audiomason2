@@ -14,6 +14,7 @@
 		validate: $("cfgValidate"),
 		save: $("cfgSave"),
 		reset: $("cfgReset"),
+		activate: $("cfgActivate"),
 
 		stepPanel: $("flowStepPanel"),
 		stepHeader: $("flowStepHeader"),
@@ -25,6 +26,9 @@
 		stepApply: $("flowStepApply"),
 		stepError: $("flowStepError"),
 		clearStep: $("flowClearStep"),
+		stepValidate: $("flowStepValidate"),
+		stepSave: $("flowStepSave"),
+		stepActivate: $("flowStepActivate"),
 	};
 
 	if (!ui.ta) return;
@@ -213,6 +217,19 @@
 
 		await loadHistory();
 		if (unifiedMode) renderSelectedStep();
+		return true;
+	}
+
+	async function activate() {
+		H.renderError(ui.err, null);
+		const out = await H.requestJSON("/import/ui/config/activate", {
+			method: "POST",
+		});
+		if (!out.ok) {
+			H.renderError(ui.err, out.data);
+			return false;
+		}
+		await reload();
 		return true;
 	}
 
@@ -412,8 +429,9 @@
 		setStepError("");
 
 		if (!stepId) {
-			ui.stepHeader.textContent = "Select a step";
-			ui.stepBehavior.textContent = "";
+			ui.stepHeader.textContent = "Step settings (FlowConfig draft)";
+			ui.stepBehavior.textContent =
+				"Edits modify the FlowConfig draft. Use Validate -> Save -> Activate to apply.";
 			if (ui.stepInput) ui.stepInput.textContent = "";
 			if (ui.stepOutput) ui.stepOutput.textContent = "";
 			if (ui.stepSideEffects) ui.stepSideEffects.textContent = "";
@@ -438,7 +456,9 @@
 		const schema = det && det.settings_schema ? det.settings_schema : {};
 
 		ui.stepHeader.textContent = title ? stepId + " - " + title : stepId;
-		ui.stepBehavior.textContent = behavior;
+		ui.stepBehavior.textContent =
+			"Edits modify the FlowConfig draft. Use Validate -> Save -> Activate to apply.\n\n" +
+			behavior;
 		if (ui.stepInput) ui.stepInput.textContent = inC;
 		if (ui.stepOutput) ui.stepOutput.textContent = outC;
 		if (ui.stepSideEffects) ui.stepSideEffects.textContent = sideFx;
@@ -462,16 +482,39 @@
 			clearStepDefaults((s && s.selectedStepId) || null);
 		});
 
+	ui.stepValidate &&
+		ui.stepValidate.addEventListener("click", () => {
+			void validateOnly();
+		});
+
+	ui.stepSave &&
+		ui.stepSave.addEventListener("click", () => {
+			void save();
+		});
+
+	ui.stepActivate &&
+		ui.stepActivate.addEventListener("click", () => {
+			void activate();
+		});
+
 	ui.reload && ui.reload.addEventListener("click", reload);
 	ui.validate && ui.validate.addEventListener("click", validateOnly);
 	ui.save && ui.save.addEventListener("click", save);
 	ui.reset && ui.reset.addEventListener("click", reset);
+	ui.activate && ui.activate.addEventListener("click", activate);
+
+	async function renderNow() {
+		await renderSelectedStep();
+		return true;
+	}
 
 	window.AM2FlowConfigEditor = {
 		reload: reload,
 		validate: validateOnly,
 		save: save,
 		reset: reset,
+		activate: activate,
+		renderNow: renderNow,
 		_debug_getDraft: () => currentConfig(),
 	};
 

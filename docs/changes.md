@@ -877,3 +877,8 @@
     Step Details renders read-only step metadata from /import/ui/steps/{step_id}.
 
 -   spec: Bump specification version to 1.1.32.
+
+-   Issue 400: Flow Editor Step Details is now editable via FlowConfig draft; added
+    window.AM2FlowConfigEditor.renderNow() and sidebar-friendly UX text; added Activate.
+
+-   spec: Bump specification version to 1.1.33.

@@ -181,6 +181,8 @@
 			el: el,
 			text: text,
 		});
+		const C = window.AM2FlowConfigEditor;
+		if (C && C.renderNow) void C.renderNow();
 	}
 
 	function isOptionalStep(stepId) {
