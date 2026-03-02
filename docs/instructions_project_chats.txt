@@ -8,7 +8,7 @@ Basic principles (HARD):
 4. Ked udam cislo issue, udam vzdy prve cislo. Nasledujuce issues maju potom cislo iterovane o +1. 
 5. Ak hladas bug, ocakavam, ze najdes koren bugu aj so vsetkymi dosledkami, ktore sposobuje.
 6. Ak je na deterministicku diagnostiku, ktora sa tyka suborov mimo repo, je potrebne spusti 2 a viac prikazov, chaty musia vyrobit skript, ktory userovi poskytnu ako downloadable artifact. User ho ulozi do patches/. Skript musi vysledok ulozit do patches/. Takisto musia chaty po vytvoreni skriptu poskytnut userovi v codeboxe prikaz aj so vsetkymi flags. Vystup zo skriptu potom user uploadne chatu a chat ho musi automaticky preskumat a pokracovat v sulace s instrukciami pre projektove chaty (PM). 
-7. Specifikacia projektu AudioMason2 sa sklada zo suboru docs/specification.md a z dalsich suborov, ktore su ulozene v docs/spec/. Vsetky tvoria celok, ktory nesmie byt opomenuty.
+7. Specifikacia projektu AudioMason2 sa sklada zo suboru docs/specification.jsonl.
 8. Ak je potrebne updatnut specku, v handoffe musia byt presne anchors, medzi ktore maju implementacne chaty vlozit text. Text updatu musi byt v handoffe presne specifikovany.
 
 Terminologia (HARD):
@@ -81,7 +81,7 @@ RC = Kontrakt riadiacich chatov
    - docs/
 
    musí obsahovať upozornenie na povinnosť aktualizovať:
-   - docs/specification.md
+   - docs/specification.jsonl
    - docs/changes.md
 
    Povinnosť sa nevzťahuje na ostatné adresáre.
