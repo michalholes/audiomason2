@@ -2,6 +2,8 @@
 
 Status: normative
 
+Specification Version: 0.2.0
+
 This document is the authoritative specification for the BadGuys suite shipped in this repository.
 BadGuys exists to systematically break the AM Patch Runner and verify that it FAILs correctly.
 
@@ -381,3 +383,21 @@ All paths in messages SHOULD be repo-relative where feasible.
 BadGuys MAY add new configuration keys and new CLI options in the future.
 Any such additions MUST be specified in this document (including defaults and precedence) before being considered normative.
 
+
+## BdG tests
+
+BadGuys tests are defined by files under `badguys/tests/` with the `.bdg` extension.
+
+A `.bdg` file is TOML and contains:
+
+- `[meta]` with optional `makes_commit` (bool) and `is_guard` (bool)
+- `[[asset]]` entries with `id`, `kind`, and embedded content
+- `[[step]]` entries with `op` and parameters.
+
+`.bdg` MUST NOT contain filesystem paths, command lines, or expectations.
+
+## Central evaluation
+
+All PASS/FAIL rules are defined centrally in `badguys/config.toml` under `[evaluation]` and keyed by `(test_id, step_index)`.
+
+If `evaluation.strict_coverage=true`, missing rules for a step is a deterministic FAIL.
