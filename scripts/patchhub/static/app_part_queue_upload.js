@@ -23,7 +23,7 @@ function validateAndPreview() {
 	var raw = getRawCommand();
 
 	var modeRules = null;
-	if (mode === "patch" || mode === "repair") {
+	if (mode === "patch") {
 		modeRules = { issue_id: true, commit_message: true, patch_path: true };
 	} else if (mode === "finalize_live") {
 		modeRules = { issue_id: false, commit_message: true, patch_path: false };
@@ -72,7 +72,7 @@ function validateAndPreview() {
 			};
 		}
 	} else {
-		if (mode === "patch" || mode === "repair") {
+		if (mode === "patch") {
 			ok = !!commitMsg && !!patchPath;
 		} else if (mode === "finalize_live") {
 			ok = !!commitMsg;
@@ -105,7 +105,7 @@ function validateAndPreview() {
 				hint2.textContent = "missing message";
 			} else if (mode === "finalize_workspace") {
 				hint2.textContent = "missing issue id";
-			} else if (mode === "patch" || mode === "repair") {
+			} else if (mode === "patch") {
 				hint2.textContent = "missing commit message or patch path";
 			} else {
 				hint2.textContent = "missing fields";
@@ -125,7 +125,7 @@ function enqueue() {
 
 	setUiStatus("enqueue: started mode=" + mode);
 
-	if (mode === "patch" || mode === "repair") {
+	if (mode === "patch") {
 		body.issue_id = String(el("issueId").value || "").trim();
 		body.commit_message = String(el("commitMsg").value || "").trim();
 		body.patch_path = normalizePatchPath(

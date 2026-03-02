@@ -73,7 +73,6 @@
           <label class="lbl">Mode</label>
           <select id="mode" class="input">
             <option value="patch">patch</option>
-            <option value="repair">repair</option>
             <option value="finalize_live">finalize_live (-f)</option>
             <option value="finalize_workspace">finalize_workspace (-w)</option>
             <option value="rerun_latest">rerun_latest (-l)</option>
@@ -81,8 +80,8 @@
         </div>
 
         <div class="row">
-          <input id="issueId" class="input" placeholder="issue id (auto if empty for patch/repair; required for -w)" />
-          <input id="commitMsg" class="input" placeholder="message (required for patch/repair and -f)" />
+          <input id="issueId" class="input" placeholder="issue id (auto if empty for patch; required for -w)" />
+          <input id="commitMsg" class="input" placeholder="message (required for patch and -f)" />
           <button type="button" id="enqueueBtn" class="btn btn-danger btn-start" disabled>Start</button>
         </div>
 

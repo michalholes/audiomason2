@@ -605,8 +605,8 @@ Rule:
   the UI MUST set the mode dropdown to: patch.
 
 Notes:
-- This rule applies to all modes (patch, finalize_live, finalize_workspace,
-  rerun_latest, repair).
+- This rule applies to all UI-exposed modes (patch, finalize_live, finalize_workspace, rerun_latest).
+- repair is a legacy mode supported only for backward compatibility via API/parse; UI MUST NOT expose repair in the mode dropdown.
 
 7.1.9 Autofill New Patch Token Forces Patch Mode (UI) (HARD)
 
