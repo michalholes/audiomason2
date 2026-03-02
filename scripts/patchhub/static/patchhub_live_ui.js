@@ -5,6 +5,17 @@
 		window.AMP_PATCHHUB_UI = ui;
 	}
 
+	function safeExport(name, fn) {
+		ui[name] = function (...args) {
+			try {
+				return fn(...args);
+			} catch (e) {
+				console.error(`PatchHub UI module error in ${name}:`, e);
+				return undefined;
+			}
+		};
+	}
+
 	function el(id) {
 		return document.getElementById(id);
 	}
@@ -106,7 +117,10 @@
 	}
 
 	function getLiveJobId() {
-		return selectedJobId || activeJobId || null;
+		// Self-contained: do not reference app.js locals (separate module scope).
+		var v = loadLiveJobId();
+		if (v) return v;
+		return null;
 	}
 
 	function closeLiveStream() {
@@ -335,20 +349,20 @@
 	}
 
 	// Exports
-	ui.loadLiveJobId = loadLiveJobId;
-	ui.saveLiveJobId = saveLiveJobId;
-	ui.loadLiveLevel = loadLiveLevel;
-	ui.loadUiVisibility = loadUiVisibility;
-	ui.saveRunsVisible = saveRunsVisible;
-	ui.saveJobsVisible = saveJobsVisible;
-	ui.setRunsVisible = setRunsVisible;
-	ui.setJobsVisible = setJobsVisible;
-	ui.setLiveStreamStatus = setLiveStreamStatus;
-	ui.getLiveJobId = getLiveJobId;
-	ui.closeLiveStream = closeLiveStream;
+	safeExport("loadLiveJobId", loadLiveJobId);
+	safeExport("saveLiveJobId", saveLiveJobId);
+	safeExport("loadLiveLevel", loadLiveLevel);
+	safeExport("loadUiVisibility", loadUiVisibility);
+	safeExport("saveRunsVisible", saveRunsVisible);
+	safeExport("saveJobsVisible", saveJobsVisible);
+	safeExport("setRunsVisible", setRunsVisible);
+	safeExport("setJobsVisible", setJobsVisible);
+	safeExport("setLiveStreamStatus", setLiveStreamStatus);
+	safeExport("getLiveJobId", getLiveJobId);
+	safeExport("closeLiveStream", closeLiveStream);
 	ui.filterLiveEvent = filterLiveEvent;
 	ui.formatLiveEvent = formatLiveEvent;
-	ui.renderLiveLog = renderLiveLog;
+	safeExport("renderLiveLog", renderLiveLog);
 	ui.updateProgressFromEvents = updateProgressFromEvents;
 	ui.openLiveStream = openLiveStream;
 	ui.jobSummaryCommit = jobSummaryCommit;

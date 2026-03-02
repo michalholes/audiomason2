@@ -627,10 +627,10 @@
 		tailLines = lines || tailLines || 200;
 
 		var idleGuardOn = !!(cfg && cfg.ui && cfg.ui.clear_output_on_autofill);
-		var jid = AMP_UI.getLiveJobId();
+		var jid = uiCall("getLiveJobId");
 		if (!jid && suppressIdleOutput && idleGuardOn) {
 			setPre("tail", "");
-			AMP_UI.updateProgressPanelFromEvents();
+			uiCall("updateProgressPanelFromEvents");
 			return;
 		}
 
@@ -802,7 +802,7 @@
 		var idleAutoSelect = !!(cfg && cfg.ui && cfg.ui.idle_auto_select_last_job);
 
 		if (!selectedJobId) {
-			const saved = AMP_UI.loadLiveJobId();
+			const saved = uiCall("loadLiveJobId");
 			if (saved) selectedJobId = saved;
 		}
 
@@ -820,7 +820,7 @@
 			if (selectedJobId) AMP_UI.saveLiveJobId(selectedJobId);
 			suppressIdleOutput = false;
 		}
-		AMP_UI.renderActiveJob(jobs);
+		uiCall("renderActiveJob", jobs);
 		ensureAutoRefresh(jobs);
 
 		var html = jobs
@@ -838,14 +838,18 @@
 				var statusText = stRaw ? stRaw.toUpperCase() : "UNKNOWN";
 				var statusCls = `job-status st-${stRaw || "unknown"}`;
 
-				var commit = AMP_UI.jobSummaryCommit(j.commit_message || "");
-				var patchName = AMP_UI.jobSummaryPatchName(j.patch_path || "");
+				var commit = uiCall("jobSummaryCommit", j.commit_message || "");
+				var patchName = uiCall("jobSummaryPatchName", j.patch_path || "");
 
 				var metaParts = [];
 				metaParts.push(`mode=${String(j.mode || "")}`);
 				if (patchName) metaParts.push(`patch=${patchName}`);
 
-				var dur = AMP_UI.jobSummaryDurationSeconds(j.started_utc, j.ended_utc);
+				var dur = uiCall(
+					"jobSummaryDurationSeconds",
+					j.started_utc,
+					j.ended_utc,
+				);
 				if (dur) metaParts.push(`dur=${dur}s`);
 
 				var meta = metaParts.join(" | ");
@@ -952,7 +956,7 @@
 		apiGet("/api/jobs").then((r) => {
 			if (!r || r.ok === false) {
 				setPre("jobsList", r);
-				AMP_UI.renderActiveJob([]);
+				uiCall("renderActiveJob", []);
 				return;
 			}
 			renderJobsFromResponse(r);
@@ -960,14 +964,14 @@
 	}
 
 	function ensureAutoRefresh(jobs) {
-		var id = AMP_UI.getLiveJobId();
+		var id = uiCall("getLiveJobId");
 		var st = "";
 		if (id && jobs && jobs.length) {
 			const j = jobs.find((x) => String(x.job_id || "") === String(id)) || null;
 			st = j ? String(j.status || "") : "";
 		}
-		if (st === "running" || st === "queued") AMP_UI.openLiveStream(id);
-		else AMP_UI.closeLiveStream();
+		if (st === "running" || st === "queued") uiCall("openLiveStream", id);
+		else uiCall("closeLiveStream");
 
 		if (activeJobId) {
 			if (!autoRefreshTimer) {
@@ -1156,7 +1160,7 @@
 				selectedJobId = String(r.job_id);
 				AMP_UI.saveLiveJobId(selectedJobId);
 				suppressIdleOutput = false;
-				AMP_UI.openLiveStream(selectedJobId);
+				uiCall("openLiveStream", selectedJobId);
 				refreshTail(tailLines);
 			} else {
 				setUiError(String((r && r.error) || "enqueue failed"));
@@ -1394,7 +1398,7 @@
 		selectedJobId = null;
 		AMP_UI.saveLiveJobId("");
 
-		AMP_UI.openLiveStream(null);
+		uiCall("openLiveStream", null);
 		setPre("tail", "");
 		updateShortProgressFromText("");
 
@@ -1752,7 +1756,7 @@
 
 		if (el("runsCollapse")) {
 			el("runsCollapse").addEventListener("click", () => {
-				AMP_UI.setRunsVisible(!runsVisible);
+				uiCall("setRunsVisible", !runsVisible);
 				AMP_UI.saveRunsVisible(runsVisible);
 			});
 		}
@@ -1772,7 +1776,7 @@
 
 		if (el("jobsCollapse")) {
 			el("jobsCollapse").addEventListener("click", () => {
-				AMP_UI.setJobsVisible(!jobsVisible);
+				uiCall("setJobsVisible", !jobsVisible);
 				AMP_UI.saveJobsVisible(jobsVisible);
 			});
 		}
@@ -1783,8 +1787,8 @@
 				try {
 					localStorage.setItem("amp.liveLogLevel", liveLevel);
 				} catch (e) {}
-				AMP_UI.renderLiveLog();
-				AMP_UI.updateProgressFromEvents();
+				uiCall("renderLiveLog");
+				uiCall("updateProgressFromEvents");
 			});
 		}
 
@@ -1798,7 +1802,7 @@
 						AMP_UI.saveLiveJobId(selectedJobId);
 						suppressIdleOutput = false;
 						refreshJobs();
-						AMP_UI.openLiveStream(AMP_UI.getLiveJobId());
+						uiCall("openLiveStream", uiCall("getLiveJobId"));
 						refreshTail(tailLines);
 						return;
 					}
@@ -1869,7 +1873,7 @@
 			el("refreshAll").addEventListener("click", () => {
 				refreshFs();
 				refreshRuns();
-				AMP_UI.refreshStats();
+				uiCall("refreshStats");
 				refreshJobs();
 				refreshHeader();
 				renderIssueDetail();
@@ -1882,12 +1886,12 @@
 		setupUpload();
 		wireButtons();
 		setPreviewVisible(false);
-		AMP_UI.loadUiVisibility();
-		AMP_UI.setRunsVisible(runsVisible);
-		AMP_UI.setJobsVisible(jobsVisible);
+		uiCall("loadUiVisibility");
+		uiCall("setRunsVisible", runsVisible);
+		uiCall("setJobsVisible", jobsVisible);
 
-		AMP_UI.loadLiveLevel();
-		var savedJobId = AMP_UI.loadLiveJobId();
+		uiCall("loadLiveLevel");
+		var savedJobId = uiCall("loadLiveJobId");
 		if (savedJobId) selectedJobId = savedJobId;
 		if (el("liveLevel")) {
 			el("liveLevel").value = liveLevel;
@@ -1896,7 +1900,7 @@
 		loadConfig().then(() => {
 			refreshFs();
 			refreshRuns();
-			AMP_UI.refreshStats();
+			uiCall("refreshStats");
 			refreshJobs();
 			refreshTail(tailLines);
 			refreshHeader();
