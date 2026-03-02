@@ -22,11 +22,11 @@
 		if (!flowSidebar || !stepPanel || !transitionsPanel || !rightCol) return;
 
 		clear(flowSidebar);
-		flowSidebar.appendChild(_section("Available Steps", rightCol, el, text));
 		flowSidebar.appendChild(_section("Step Details", stepPanel, el, text));
 		flowSidebar.appendChild(
 			_section("Transitions", transitionsPanel, el, text),
 		);
+		flowSidebar.appendChild(_section("Step Palette", rightCol, el, text));
 
 		return {};
 	}
@@ -62,7 +62,7 @@
 		}
 	}
 
-	/** @type {any} */ (window).AM2WDSidebar = {
+	window.AM2WDSidebar = {
 		buildSidebarSections: buildSidebarSections,
 		buildSidebarTabs: buildSidebarTabs,
 		clearSidebar: clearSidebar,

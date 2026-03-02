@@ -440,21 +440,6 @@ textarea {
 	opacity: 0.95;
 }
 
-
-.wdPaletteItemIdRow {
-	display: flex;
-	align-items: center;
-	gap: 8px;
-}
-
-.wdPalettePinned {
-	font-size: 11px;
-	padding: 2px 6px;
-	border-radius: 999px;
-	border: 1px solid rgba(255, 255, 255, 0.14);
-	opacity: 0.85;
-}
-
 .wdPaletteItemDesc {
 	font-size: 12px;
 	opacity: 0.8;
@@ -827,39 +812,6 @@ textarea {
 	display: flex;
 	flex-direction: column;
 	gap: 10px;
-}
-
-
-.wdRootHead {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	padding: 6px 2px;
-}
-
-.wdRootTitle {
-	font-size: 20px;
-	font-weight: 800;
-}
-
-.wdRootSubtitle {
-	margin-top: 2px;
-	opacity: 0.7;
-	font-size: 13px;
-}
-
-.wdRootSteps {
-	padding: 6px 10px;
-	border: 1px solid rgba(255, 255, 255, 0.12);
-	border-radius: 10px;
-	background: rgba(15, 22, 38, 0.6);
-	font-weight: 700;
-	font-size: 12px;
-	opacity: 0.9;
-}
-
-.wdPaletteSearchInput::placeholder {
-	opacity: 0.8;
 }
 
 .flowLayout {
