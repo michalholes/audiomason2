@@ -1,4 +1,5 @@
 /** @type {any} */
+var __ph_w = /** @type {any} */ (window);
 var PH = /** @type {any} */ (window).PH;
 function setStartFormState(state) {
 	var issueEnabled = !!(state && state.issue_id);
@@ -145,7 +146,7 @@ function enqueue() {
 			AMP_UI.saveLiveJobId(selectedJobId);
 			suppressIdleOutput = false;
 			PH.call("openLiveStream", selectedJobId);
-			refreshTail(tailLines);
+			__ph_w.refreshTail(tailLines);
 		} else {
 			setUiError(String((r && r.error) || "enqueue failed"));
 		}

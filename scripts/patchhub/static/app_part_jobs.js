@@ -1,4 +1,5 @@
 /** @type {any} */
+var __ph_w = /** @type {any} */ (window);
 var PH = /** @type {any} */ (window).PH;
 function renderJobsFromResponse(r) {
 	var jobs = r.jobs || [];
@@ -121,7 +122,7 @@ function idleRefreshTick() {
 			var sig = String(r.sig || "");
 			if (sig) idleSigs.runs = sig;
 			if (r.unchanged) return { changed: false, sig: sig };
-			renderRunsFromResponse(r);
+			__ph_w.renderRunsFromResponse(r);
 			return { changed: true, sig: sig };
 		});
 	} else {
@@ -184,7 +185,7 @@ function ensureAutoRefresh(jobs) {
 			autoRefreshTimer = setInterval(() => {
 				try {
 					refreshJobs();
-					refreshRuns();
+					__ph_w.refreshRuns();
 				} catch (e) {
 					setUiError(e);
 				}

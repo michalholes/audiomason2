@@ -1,4 +1,5 @@
 /** @type {any} */
+var __ph_w = /** @type {any} */ (window);
 var PH = /** @type {any} */ (window).PH;
 function applyAutofillFromPayload(p) {
 	if (!cfg || !cfg.autofill || !p) return;
@@ -33,7 +34,7 @@ function resetOutputForNewPatch() {
 
 	PH.call("openLiveStream", null);
 	setPre("tail", "");
-	updateShortProgressFromText("");
+	__ph_w.updateShortProgressFromText("");
 
 	suppressIdleOutput = true;
 
