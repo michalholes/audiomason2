@@ -1,9 +1,19 @@
 (() => {
-	var ui = window.AMP_PATCHHUB_UI;
+	var w = /** @type {any} */ (window);
+	var ui = w.AMP_PATCHHUB_UI;
 	if (!ui) {
 		ui = {};
-		window.AMP_PATCHHUB_UI = ui;
+		w.AMP_PATCHHUB_UI = ui;
 	}
+
+	// Module-local state. Split UI modules must not rely on app.js locals.
+	var liveStreamJobId = null;
+	var liveES = null;
+	var liveEvents = [];
+	var liveLevel = "normal";
+	var runsVisible = false;
+	var jobsVisible = false;
+	ui.liveEvents = liveEvents;
 
 	function safeExport(name, fn) {
 		ui[name] = (...args) => {
@@ -80,6 +90,9 @@
 		}
 		if (v === "1") jobsVisible = true;
 		else if (v === "0") jobsVisible = false;
+
+		setRunsVisible(runsVisible);
+		setJobsVisible(jobsVisible);
 	}
 
 	function saveRunsVisible(v) {
@@ -240,8 +253,10 @@
 		if (!jobId) {
 			closeLiveStream();
 			liveEvents = [];
+			ui.liveEvents = liveEvents;
+			ui.liveEvents = liveEvents;
 			renderLiveLog();
-			updateProgressPanelFromEvents();
+			if (ui.updateProgressPanelFromEvents) ui.updateProgressPanelFromEvents();
 			setLiveStreamStatus("");
 			return;
 		}
@@ -252,8 +267,9 @@
 		closeLiveStream();
 		liveStreamJobId = jobId;
 		liveEvents = [];
+		ui.liveEvents = liveEvents;
 		renderLiveLog();
-		updateProgressPanelFromEvents();
+		if (ui.updateProgressPanelFromEvents) ui.updateProgressPanelFromEvents();
 		setLiveStreamStatus("connecting...");
 
 		var url = `/api/jobs/${encodeURIComponent(jobId)}/events`;
@@ -273,7 +289,7 @@
 			if (filterLiveEvent(obj)) {
 				renderLiveLog();
 			}
-			updateProgressPanelFromEvents();
+			if (ui.updateProgressPanelFromEvents) ui.updateProgressPanelFromEvents();
 			setLiveStreamStatus("streaming");
 		};
 
@@ -349,8 +365,9 @@
 	}
 
 	// Exports
-	if (window.PH && typeof window.PH.register === "function") {
-		window.PH.register("live", {
+	var PH = w.PH;
+	if (PH && typeof PH.register === "function") {
+		PH.register("live", {
 			loadLiveJobId,
 			saveLiveJobId,
 			loadLiveLevel,

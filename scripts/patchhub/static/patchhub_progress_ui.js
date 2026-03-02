@@ -1,10 +1,12 @@
 (() => {
-	var ui = window.AMP_PATCHHUB_UI;
+	var w = /** @type {any} */ (window);
+	var ui = w.AMP_PATCHHUB_UI;
 	if (!ui) {
 		ui = {};
-		window.AMP_PATCHHUB_UI = ui;
+		w.AMP_PATCHHUB_UI = ui;
 	}
 
+	var activeJobId = null;
 	function el(id) {
 		return document.getElementById(id);
 	}
@@ -251,9 +253,10 @@
 	}
 
 	function updateProgressPanelFromEvents() {
-		var progress = deriveProgressFromEvents(liveEvents);
+		var events = ui.liveEvents || [];
+		var progress = deriveProgressFromEvents(events);
 		renderProgressSteps(progress);
-		var summary = deriveProgressSummaryFromEvents(liveEvents, progress);
+		var summary = deriveProgressSummaryFromEvents(events, progress);
 		renderProgressSummary(summary.text);
 		setProgressSummaryState(summary);
 	}
@@ -331,8 +334,9 @@
 	}
 
 	// Exports
-	if (window.PH && typeof window.PH.register === "function") {
-		window.PH.register("progress", {
+	var PH = w.PH;
+	if (PH && typeof PH.register === "function") {
+		PH.register("progress", {
 			deriveProgressFromEvents,
 			deriveProgressSummaryFromEvents,
 			setProgressSummaryState,

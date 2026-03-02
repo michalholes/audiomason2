@@ -1,0 +1,351 @@
+/** @type {any} */
+var PH = /** @type {any} */ (window).PH;
+function setStartFormState(state) {
+	var issueEnabled = !!(state && state.issue_id);
+	var msgEnabled = !!(state && state.commit_message);
+	var patchEnabled = !!(state && state.patch_path);
+
+	el("issueId").disabled = !issueEnabled;
+	el("commitMsg").disabled = !msgEnabled;
+	el("patchPath").disabled = !patchEnabled;
+	var browse = el("browsePatch");
+	if (browse) browse.disabled = !patchEnabled;
+}
+
+function validateAndPreview() {
+	var mode = String(el("mode").value || "patch");
+	var issueId = String(el("issueId").value || "").trim();
+	var commitMsg = String(el("commitMsg").value || "").trim();
+	var patchPath = normalizePatchPath(String(el("patchPath").value || ""));
+	el("patchPath").value = patchPath;
+
+	var raw = getRawCommand();
+
+	var modeRules = null;
+	if (mode === "patch" || mode === "repair") {
+		modeRules = { issue_id: true, commit_message: true, patch_path: true };
+	} else if (mode === "finalize_live") {
+		modeRules = { issue_id: false, commit_message: true, patch_path: false };
+	} else if (mode === "finalize_workspace") {
+		modeRules = { issue_id: true, commit_message: false, patch_path: false };
+	} else if (mode === "rerun_latest") {
+		modeRules = { issue_id: false, commit_message: false, patch_path: false };
+	} else {
+		modeRules = { issue_id: true, commit_message: true, patch_path: true };
+	}
+	setStartFormState(modeRules);
+
+	var ok = true;
+
+	var canonical = null;
+	var preview = null;
+
+	if (raw) {
+		ok = !parseInFlight && !!lastParsed && lastParsedRaw === raw;
+		if (ok) {
+			const p = lastParsed.parsed || {};
+			const c = lastParsed.canonical || {};
+			canonical = c.argv ? c.argv : [];
+			const pMode = p.mode ? p.mode : mode;
+			const pIssue = p.issue_id ? p.issue_id : issueId;
+			const pMsg = p.commit_message ? p.commit_message : commitMsg;
+			const pPatch = p.patch_path ? p.patch_path : patchPath;
+			preview = {
+				mode: pMode,
+				issue_id: pIssue,
+				commit_message: pMsg,
+				patch_path: pPatch,
+				canonical_argv: canonical,
+				raw_command: raw,
+			};
+		} else {
+			canonical = [];
+			preview = {
+				mode: mode,
+				issue_id: issueId,
+				commit_message: commitMsg,
+				patch_path: patchPath,
+				canonical_argv: canonical,
+				raw_command: raw,
+				parse_status: parseInFlight ? "parsing" : "needs_parse",
+			};
+		}
+	} else {
+		if (mode === "patch" || mode === "repair") {
+			ok = !!commitMsg && !!patchPath;
+		} else if (mode === "finalize_live") {
+			ok = !!commitMsg;
+		} else if (mode === "finalize_workspace") {
+			ok = !!issueId && /^[0-9]+$/.test(issueId);
+		} else if (mode === "rerun_latest") {
+			ok = true;
+		}
+
+		canonical = computeCanonicalPreview(mode, issueId, commitMsg, patchPath);
+		preview = {
+			mode: mode,
+			issue_id: issueId,
+			commit_message: commitMsg,
+			patch_path: patchPath,
+			canonical_argv: canonical,
+		};
+	}
+	setPre("previewRight", preview);
+	el("enqueueBtn").disabled = !ok;
+
+	var hint2 = el("enqueueHint");
+	if (hint2) {
+		if (raw) {
+			hint2.textContent = "";
+		} else {
+			if (ok) {
+				hint2.textContent = "";
+			} else if (mode === "finalize_live") {
+				hint2.textContent = "missing message";
+			} else if (mode === "finalize_workspace") {
+				hint2.textContent = "missing issue id";
+			} else if (mode === "patch" || mode === "repair") {
+				hint2.textContent = "missing commit message or patch path";
+			} else {
+				hint2.textContent = "missing fields";
+			}
+		}
+	}
+}
+
+function enqueue() {
+	var mode = String(el("mode").value || "patch");
+	var body = {
+		mode: mode,
+		raw_command: el("rawCommand")
+			? String(el("rawCommand").value || "").trim()
+			: "",
+	};
+
+	setUiStatus("enqueue: started mode=" + mode);
+
+	if (mode === "patch" || mode === "repair") {
+		body.issue_id = String(el("issueId").value || "").trim();
+		body.commit_message = String(el("commitMsg").value || "").trim();
+		body.patch_path = normalizePatchPath(
+			String(el("patchPath").value || "").trim(),
+		);
+	} else if (mode === "finalize_live") {
+		body.commit_message = String(el("commitMsg").value || "").trim();
+	} else if (mode === "finalize_workspace") {
+		body.issue_id = String(el("issueId").value || "").trim();
+	}
+
+	apiPost("/api/jobs/enqueue", body).then((r) => {
+		pushApiStatus(r);
+		setPre("previewRight", r);
+		if (r && r.ok !== false && r.job_id) {
+			setUiStatus("enqueue: ok job_id=" + String(r.job_id));
+			selectedJobId = String(r.job_id);
+			AMP_UI.saveLiveJobId(selectedJobId);
+			suppressIdleOutput = false;
+			PH.call("openLiveStream", selectedJobId);
+			refreshTail(tailLines);
+		} else {
+			setUiError(String((r && r.error) || "enqueue failed"));
+		}
+		refreshJobs();
+	});
+}
+
+function uploadFile(file) {
+	var fd = new FormData();
+	fd.append("file", file);
+	setUiStatus("upload: started " + String((file && file.name) || ""));
+	fetch("/api/upload/patch", {
+		method: "POST",
+		body: fd,
+		headers: { Accept: "application/json" },
+	})
+		.then((r) =>
+			r.text().then((t) => {
+				try {
+					return JSON.parse(t);
+				} catch (e) {
+					return {
+						ok: false,
+						error: "bad json",
+						raw: t,
+						status: r.status,
+					};
+				}
+			}),
+		)
+		.then((j) => {
+			pushApiStatus(j);
+			setText(
+				"uploadHint",
+				j && j.ok
+					? "Uploaded: " + String(j.stored_rel_path || "")
+					: "Upload failed: " + String((j && j.error) || ""),
+			);
+			if (j && j.ok) {
+				setUiStatus("upload: ok");
+			} else {
+				setUiError(String((j && j.error) || "upload failed"));
+			}
+			if (j && j.stored_rel_path) {
+				const stored = String(j.stored_rel_path);
+				const n = el("patchPath");
+				if (n && shouldOverwrite("patchPath", n)) {
+					n.value = stored;
+				}
+
+				const relUnderRoot = stripPatchesPrefix(stored);
+				const parent = parentRel(relUnderRoot);
+				if (String(el("fsPath").value || "") === "") {
+					el("fsPath").value = parent;
+				}
+			}
+			applyAutofillFromPayload(j);
+			refreshFs();
+		})
+		.catch((e) => {
+			setPre("uploadResult", String(e));
+			setUiError(String(e));
+		});
+}
+
+function enableGlobalDropOverlay() {
+	var counter = 0;
+
+	function show() {
+		document.body.classList.add("dragging");
+	}
+	function hide() {
+		document.body.classList.remove("dragging");
+	}
+
+	document.addEventListener("dragenter", (e) => {
+		e.preventDefault();
+		counter += 1;
+		show();
+	});
+
+	document.addEventListener("dragover", (e) => {
+		e.preventDefault();
+		show();
+	});
+
+	document.addEventListener("dragleave", (e) => {
+		e.preventDefault();
+		counter -= 1;
+		if (counter <= 0) {
+			counter = 0;
+			hide();
+		}
+	});
+
+	document.addEventListener("drop", (e) => {
+		e.preventDefault();
+		counter = 0;
+		hide();
+		var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+		if (f) uploadFile(f);
+	});
+}
+
+function setupUpload() {
+	var zone = el("uploadZone");
+	var browse = el("uploadBrowse");
+	var input = el("uploadInput");
+
+	function openPicker() {
+		if (!input) return;
+		input.value = "";
+		input.click();
+	}
+
+	if (browse) {
+		browse.addEventListener("click", () => {
+			openPicker();
+		});
+	}
+	if (zone) {
+		zone.addEventListener("click", () => {
+			openPicker();
+		});
+
+		function setDrag(on) {
+			if (on) zone.classList.add("dragover");
+			else zone.classList.remove("dragover");
+		}
+
+		zone.addEventListener("dragenter", (e) => {
+			e.preventDefault();
+			setDrag(true);
+		});
+		zone.addEventListener("dragleave", (e) => {
+			e.preventDefault();
+			setDrag(false);
+		});
+		zone.addEventListener("dragover", (e) => {
+			e.preventDefault();
+			setDrag(true);
+		});
+		zone.addEventListener("drop", (e) => {
+			e.preventDefault();
+			setDrag(false);
+			var f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+			if (f) uploadFile(f);
+		});
+	}
+
+	if (input) {
+		input.addEventListener("change", () => {
+			if (input.files && input.files[0]) uploadFile(input.files[0]);
+		});
+	}
+
+	window.addEventListener("dragover", (e) => {
+		e.preventDefault();
+	});
+	window.addEventListener("drop", (e) => {
+		e.preventDefault();
+	});
+}
+
+function loadConfig() {
+	return apiGet("/api/config")
+		.then((r) => {
+			cfg = r || null;
+			if (cfg && cfg.issue && cfg.issue.default_regex) {
+				try {
+					issueRegex = new RegExp(cfg.issue.default_regex);
+				} catch (e) {
+					issueRegex = null;
+				}
+			}
+			if (cfg && cfg.meta && cfg.meta.version) {
+				setText("ampWebVersion", "v" + String(cfg.meta.version));
+			}
+			refreshHeader();
+			if (cfg && cfg.ui) {
+				if (cfg.ui.base_font_px) {
+					document.documentElement.style.fontSize =
+						String(cfg.ui.base_font_px) + "px";
+				}
+				if (cfg.ui.drop_overlay_enabled) {
+					enableGlobalDropOverlay();
+				}
+			}
+			return cfg;
+		})
+		.catch(() => {
+			cfg = null;
+			return null;
+		});
+}
+
+function shouldOverwrite(fieldKey, node) {
+	if (!cfg || !cfg.autofill) return String(node.value || "").trim() === "";
+	var pol = String(cfg.autofill.overwrite_policy || "");
+	if (pol === "only_if_empty") return String(node.value || "").trim() === "";
+	if (pol === "if_not_dirty") return !dirty[fieldKey];
+	return false;
+}
