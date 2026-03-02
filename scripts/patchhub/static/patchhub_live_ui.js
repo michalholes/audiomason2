@@ -5,6 +5,10 @@
 		window.AMP_PATCHHUB_UI = ui;
 	}
 
+	function el(id) {
+		return document.getElementById(id);
+	}
+
 	function loadLiveJobId() {
 		var v = null;
 		try {
