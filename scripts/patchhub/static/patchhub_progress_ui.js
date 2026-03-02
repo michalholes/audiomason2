@@ -5,6 +5,18 @@
 		window.AMP_PATCHHUB_UI = ui;
 	}
 
+	function apiGet(path) {
+		return fetch(path, { headers: { Accept: "application/json" } }).then((r) =>
+			r.text().then((t) => {
+				try {
+					return JSON.parse(t);
+				} catch (e) {
+					return { ok: false, error: "bad json", raw: t, status: r.status };
+				}
+			}),
+		);
+	}
+
 	function deriveProgressFromEvents(events) {
 		var order = [];
 		var state = {};
