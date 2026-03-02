@@ -106,8 +106,7 @@
 	}
 
 	function getLiveJobId() {
-		// Self-contained: app.js keeps selection in localStorage via amp.liveJobId.
-		return loadLiveJobId() || null;
+		return selectedJobId || activeJobId || null;
 	}
 
 	function closeLiveStream() {
