@@ -5,6 +5,109 @@
 		window.AMP_PATCHHUB_UI = ui;
 	}
 
+	function el(id) {
+		return document.getElementById(id);
+	}
+
+	function setPre(id, obj) {
+		var node = el(id);
+		if (!node) return;
+		if (typeof obj === "string") {
+			node.textContent = obj;
+			return;
+		}
+		try {
+			node.textContent = JSON.stringify(obj, null, 2);
+		} catch (e) {
+			node.textContent = String(obj);
+		}
+	}
+
+	function escapeHtml(s) {
+		return String(s || "")
+			.replace(/&/g, "&amp;")
+			.replace(/</g, "&lt;")
+			.replace(/>/g, "&gt;")
+			.replace(/"/g, "&quot;")
+			.replace(/'/g, "&#39;");
+	}
+
+	function normStepName(s) {
+		return String(s || "")
+			.replace(/\s+/g, " ")
+			.trim();
+	}
+
+	function apiPost(path, body) {
+		return fetch(path, {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+				Accept: "application/json",
+			},
+			body: JSON.stringify(body || {}),
+		}).then((r) =>
+			r.text().then((t) => {
+				try {
+					return JSON.parse(t);
+				} catch (e) {
+					return {
+						ok: false,
+						error: "bad json",
+						raw: t,
+						status: r.status,
+					};
+				}
+			}),
+		);
+	}
+
+	function renderProgressSteps(progress) {
+		var box = el("progressSteps");
+		if (!box) return;
+
+		var order = progress && progress.order ? progress.order : [];
+		var state = progress && progress.state ? progress.state : {};
+
+		if (!order.length) {
+			box.innerHTML = "";
+			return;
+		}
+
+		var html = "";
+		for (let i = 0; i < order.length; i++) {
+			const name = order[i];
+			const st = state[name] || "pending";
+			html += '<div class="step">';
+			html += `<span class="dot ${escapeHtml(st)}"></span>`;
+			html += `<span class="step-name">${escapeHtml(name)}</span>`;
+			if (st === "running") {
+				html += '<span class="pill running">RUNNING</span>';
+			}
+			html += "</div>";
+		}
+
+		box.innerHTML = html;
+	}
+
+	function renderProgressSummary(summaryLine) {
+		var node = el("progressSummary");
+		if (!node) return;
+		node.textContent = summaryLine || "(idle)";
+	}
+
+	function refreshJobs() {
+		apiGet("/api/jobs").then((r) => {
+			if (!r || r.ok === false) {
+				// Best-effort: do not crash UI on errors.
+				return;
+			}
+			// renderActiveJob expects the full jobs list (it picks active from ui state).
+			try {
+				renderActiveJob(r.jobs || []);
+			} catch (e) {}
+		});
+	}
 	function apiGet(path) {
 		return fetch(path, { headers: { Accept: "application/json" } }).then((r) =>
 			r.text().then((t) => {
