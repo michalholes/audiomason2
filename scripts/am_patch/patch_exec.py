@@ -92,6 +92,11 @@ def _build_bwrap_cmd(*, workspace_repo: Path, argv: list[str], unshare_net: bool
     # Minimal runtime filesystem. Everything is read-only except the workspace repo.
     cmd += ["--proc", "/proc", "--dev", "/dev", "--tmpfs", "/tmp"]
 
+    # Ensure a stable PATH inside the jail.
+    # This is defensive: callers may have a modified PATH, and the jail does not
+    # inherit a predictable environment.
+    cmd += ["--setenv", "PATH", "/usr/bin:/bin:/usr/sbin:/sbin"]
+
     for p in ("/usr", "/bin", "/sbin", "/lib", "/lib64", "/etc"):
         if Path(p).exists():
             cmd += ["--ro-bind", p, p]
@@ -437,7 +442,21 @@ def run_unified_patch_bundle(
         _write_atomic(patch_path, rewritten_text.encode("utf-8"))
 
         patch_rel = patch_path.relative_to(workspace_repo)
-        git_argv = ["git", "apply", "--whitespace=nowarn", str(patch_rel)]
+
+        # Preserve error category priority for jail preflight:
+        # if bubblewrap is missing, report BWRAP even if PATH is modified.
+        if getattr(policy, "patch_jail", False) and not _find_bwrap():
+            raise RunnerError(
+                "PREFLIGHT",
+                "BWRAP",
+                "bwrap not found (install bubblewrap or disable patch_jail)",
+            )
+
+        git_bin = shutil.which("git")
+        if not git_bin:
+            raise RunnerError("PREFLIGHT", "GIT", "git not found")
+
+        git_argv = [git_bin, "apply", "--whitespace=nowarn", str(patch_rel)]
         if getattr(policy, "patch_jail", False):
             cmd = _build_bwrap_cmd(
                 workspace_repo=workspace_repo,
@@ -456,7 +475,12 @@ def run_unified_patch_bundle(
             r = logger.run_logged(git_argv, cwd=workspace_repo)
         if r.returncode != 0:
             applied_fail += 1
-            reason = f"git apply failed (rc={r.returncode})"
+            stderr_tail = ""
+            if r.stderr:
+                lines = r.stderr.splitlines()
+                tail = lines[-25:] if len(lines) > 25 else lines
+                stderr_tail = "\n" + "\n".join(tail)
+            reason = f"git apply failed (rc={r.returncode}){stderr_tail}"
             logger.line(f"result=FAIL reason={reason}")
             logger.error_core(f"UNIFIED_PATCH result=FAIL name={name} reason={reason}")
             failures.append(UnifiedPatchFailure(name=name, data=data, reason=reason))
