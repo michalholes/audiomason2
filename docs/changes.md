@@ -872,3 +872,8 @@
     wizard_changed, and config_changed, enabling Save only when lastOk=true and draftDirty=false.
 
 -   spec: Bump specification version to 1.1.30.
+
+-   Issue 301: Flow Editor sidebar no longer duplicates Transitions/Palette titles;
+    Step Details renders read-only step metadata from /import/ui/steps/{step_id}.
+
+-   spec: Bump specification version to 1.1.32.

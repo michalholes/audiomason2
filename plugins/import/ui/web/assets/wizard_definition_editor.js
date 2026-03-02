@@ -727,6 +727,30 @@
 				text: text,
 				messages: validationMessages(),
 			});
+
+			if (
+				window.AM2WDDetailsRender &&
+				window.AM2WDDetailsRender.renderStepDetails &&
+				window.AM2WDStepDetailsLoader &&
+				stepPanel
+			) {
+				const sid = selectedStepId();
+				const details = sid
+					? window.AM2WDStepDetailsLoader.getCached(sid)
+					: null;
+				const st = window.AM2WDStepDetailsLoader.getState();
+				const loading = Boolean(sid && st.loadingStepId === sid && !details);
+				const error = sid ? st.errorToken : null;
+				window.AM2WDDetailsRender.renderStepDetails({
+					mount: stepPanel,
+					el: el,
+					text: text,
+					selectedStepId: sid,
+					details: details,
+					loading: loading,
+					error: error,
+				});
+			}
 		}
 
 		if (
@@ -790,7 +814,14 @@
 		});
 		FE.on("selection_changed", function () {
 			if (table && table.updateSelection) table.updateSelection();
+			const sid = selectedStepId();
+			if (window.AM2WDStepDetailsLoader && sid) {
+				void window.AM2WDStepDetailsLoader.loadStepDetails(sid);
+			}
 			renderAll();
+			if (window.AM2WDStepDetailsLoader && sid) {
+				void window.AM2WDStepDetailsLoader.loadStepDetails(sid).then(renderAll);
+			}
 		});
 	} else if (FE && FE.registerWizardRender) {
 		FE.registerWizardRender(renderAll);

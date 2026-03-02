@@ -67,9 +67,6 @@
 		const edges = Array.isArray(g.edges) ? g.edges : [];
 
 		const panel = el("div", "flowTransPanel");
-		const header = el("div", "flowTransHeader");
-		header.appendChild(text("div", "flowTransTitle", "Transitions"));
-		panel.appendChild(header);
 
 		const body = el("div", "flowTransBody");
 		panel.appendChild(body);

@@ -19,10 +19,6 @@
 		if (!mount) return;
 		clear(mount);
 
-		const header = el("div", "wdPaletteHeader");
-		header.appendChild(text("div", "wdPaletteTitle", "Step Palette"));
-		mount.appendChild(header);
-
 		const searchWrap = el("div", "wdPaletteSearch");
 		const search = el("input", "wdPaletteSearchInput");
 		search.type = "search";
