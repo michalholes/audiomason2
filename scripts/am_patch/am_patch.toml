@@ -152,8 +152,9 @@ gate_biome_extensions = [".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx"]
 gate_biome_command = ["npm", "run", "lint:files", "--"]
 
 gates_skip_typescript = false
-gate_typescript_extensions = [".ts", ".tsx", ".mts", ".cts"]
-gate_typescript_command = ["tsc", "--noEmit", "--pretty", "false"]
+gate_typescript_extensions = [".js", ".ts", ".tsx", ".mts", ".cts", ".d.ts"]
+gate_typescript_command = ["tsc", "--noEmit", "--pretty", "false", "--allowJs", "--checkJs", "--target", "ES2022", "--lib", "ES2022,DOM"]
+
 
 # Documentation gate (docs) - required updates when watched paths change
 gates_skip_docs = true
