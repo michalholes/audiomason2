@@ -3,7 +3,7 @@ console_color = "auto" # auto | always | never
 
 # IPC (Unix domain socket)
 ipc_socket_enabled = true
-ipc_socket_mode = "patch_dir"
+ipc_socket_mode = "/tmp/audiomason/"
 ipc_socket_name_template = "am_patch.sock"
 
 ipc_socket_cleanup_delay_success_s = 0
@@ -259,7 +259,7 @@ ascii_only_patch = true
 # NOTE: present in your file; not part of runner Policy surface (keep only if used elsewhere).
 block_subprocess_network_best_effort = true
 
-patch_jail = false
+patch_jail = true
 patch_jail_unshare_net = true
 live_repo_guard = true
 live_repo_guard_scope = "patch"
