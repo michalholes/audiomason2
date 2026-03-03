@@ -223,20 +223,5 @@
 		setInterval(loadClientStatus, 1000);
 	}
 
-	window.boot();
-
-	function boot() {
-		// Ensure handlers are wired even if the page is restored from bfcache or loaded quickly.
-		if (
-			document.readyState === "complete" ||
-			document.readyState === "interactive"
-		) {
-			init();
-		} else {
-			window.addEventListener("DOMContentLoaded", init, { once: true });
-		}
-		window.addEventListener("pageshow", (ev) => {
-			if (ev.persisted) init();
-		});
-	}
+	window.addEventListener("load", init);
 })();
