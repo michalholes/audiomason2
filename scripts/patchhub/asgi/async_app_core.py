@@ -9,6 +9,7 @@ from patchhub import app_api_fs as _fs
 from patchhub import app_api_jobs as _jobs
 from patchhub import app_api_upload as _upload
 from patchhub import app_ui as _ui
+from patchhub import proc_resources
 from patchhub.config import AppConfig
 from patchhub.fs_jail import FsJail
 
@@ -117,6 +118,7 @@ class AsyncAppCore:
                     "used": int(usage.used),
                     "free": int(usage.free),
                 },
+                "resources": proc_resources.snapshot(),
                 "runs": {"count": len(runs)},
                 "stats": {
                     "all_time": stats.all_time.__dict__,

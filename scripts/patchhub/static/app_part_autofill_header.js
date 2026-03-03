@@ -120,6 +120,38 @@ function renderHeaderFromDiagnostics(d, base) {
 	}
 	meta += " | " + held;
 	if (pct) meta += " | " + pct;
+	var res = d.resources || {};
+	var proc = res.process || {};
+	var host = res.host || {};
+	var rss = "";
+	if (proc.rss_bytes) {
+		rss = "rss:" + String(Math.round(proc.rss_bytes / 1048576)) + "MiB";
+	}
+	var cpu = "";
+	var l1 = 0;
+	if (host.loadavg_1 != null) {
+		l1 = Number(host.loadavg_1);
+		if (!Number.isNaN(l1)) cpu = "cpu:load" + l1.toFixed(2);
+	}
+	var net = "";
+	var rx = 0;
+	var tx = 0;
+	if (host.net_rx_bytes_total != null && host.net_tx_bytes_total != null) {
+		rx = Number(host.net_rx_bytes_total);
+		tx = Number(host.net_tx_bytes_total);
+		if (!Number.isNaN(rx) && !Number.isNaN(tx)) {
+			net =
+				"net:rx" +
+				String(Math.round(rx / 1048576)) +
+				"MiB tx" +
+				String(Math.round(tx / 1048576)) +
+				"MiB";
+		}
+	}
+
+	if (rss) meta += " | " + rss;
+	if (cpu) meta += " | " + cpu;
+	if (net) meta += " | " + net;
 
 	if (el("hdrMeta")) el("hdrMeta").textContent = meta;
 }

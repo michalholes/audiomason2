@@ -6,6 +6,7 @@ import shutil
 from pathlib import Path
 from typing import Any
 
+from . import proc_resources
 from .app_support import (
     _ascii_sanitize,
     _decorate_run,
@@ -420,6 +421,7 @@ def diagnostics(self) -> dict[str, Any]:
             "held": lock_held,
         },
         "disk": {"total": int(usage.total), "used": int(usage.used), "free": int(usage.free)},
+        "resources": proc_resources.snapshot(),
         "runs": {"count": len(runs)},
         "stats": {
             "all_time": stats.all_time.__dict__,
