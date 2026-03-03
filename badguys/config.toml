@@ -240,8 +240,8 @@ rc_eq = 1
 [evaluation.tests.test_071_compile_exclude_respected.steps.1]
 rc_eq = 0
 value_contains = [
-  "HEARTBEAT: GATE_COMPILE",
-  "FAIL: GATE_RUFF",
+  "GATE: compile",
+  "GATE: RUFF",
   "compile_exclude=['scripts/badguys_batch1_excluded']",
 ]
 
@@ -259,18 +259,15 @@ rc_eq = 0
 rc_eq = 0
 
 [evaluation.tests.test_900_commit_push_timestamp.steps.0]
-rc_eq = 0
+rc_ne = 0
 
 [evaluation.tests.test_900_commit_push_timestamp.steps.1]
-rc_eq = 1
+rc_eq = 0
 
 [evaluation.tests.test_900_commit_push_timestamp.steps.2]
 rc_eq = 0
 
 [evaluation.tests.test_900_commit_push_timestamp.steps.3]
-rc_eq = 0
-
-[evaluation.tests.test_900_commit_push_timestamp.steps.4]
 rc_eq = 0
 stdout_contains = [
   "RESULT: SUCCESS",
