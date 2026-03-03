@@ -900,3 +900,7 @@
 -   Issue 401: Flow Editor Step Details no longer overwritten by read-only renderer; Step Details panel is owned by FlowConfig editor.
 
 -   spec: Bump specification version to 1.1.34.
+
+-   Issue 24: PatchHub /debug page will expose per-section Flush and Copy actions for debug feeds.
+
+-   spec: Bump specification version to 1.1.35.
