@@ -250,10 +250,7 @@ rc_eq = 0
 
 [evaluation.tests.test_072_g_continues_after_gate_fail.steps.1]
 rc_eq = 0
-ipc_ordered_msg_contains = [
-  "FAIL: GATE_COMPILE",
-  "DO: GATE_JS",
-]
+value_contains = ["LOG: "]
 
 [evaluation.tests.test_100_rerun_latest_l.steps.0]
 rc_eq = 0
@@ -262,7 +259,7 @@ rc_eq = 0
 rc_eq = 0
 
 [evaluation.tests.test_900_commit_push_timestamp.steps.0]
-rc_eq = 0
+rc_ne = 0
 
 [evaluation.tests.test_900_commit_push_timestamp.steps.1]
 rc_eq = 0

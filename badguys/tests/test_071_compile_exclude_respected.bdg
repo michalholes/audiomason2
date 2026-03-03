@@ -26,4 +26,4 @@ extra_args = [
 input_asset = "patch"
 
 [[step]]
-op = "READ_RUNNER_IPC_JSONL"
+op = "READ_STEP_LOG"

@@ -257,19 +257,15 @@ def _run_cmd_with_heartbeat(ctx: Ctx, *, test_name: str, argv: list[str], cwd: P
     ipc_thread: threading.Thread | None = None
     socket_path: Path | None = None
     if _is_runner_cmd(ctx.cfg, argv):
-        from badguys.ipc_result_reader import read_ipc_result_tee
+        from badguys.ipc_result_reader import read_ipc_result
 
         socket_path = ctx.cfg.patches_dir / f"am_patch_ipc_{ctx.cfg.issue_id}.sock"
-        trace_path = ctx.cfg.logs_dir / test_name / "runner_ipc.jsonl"
-        trace_path.parent.mkdir(parents=True, exist_ok=True)
-
 
         def _run_reader() -> None:
-            ipc_holder["result"] = read_ipc_result_tee(
+            ipc_holder["result"] = read_ipc_result(
                 socket_path,
                 connect_timeout_s=3.0,
                 total_timeout_s=0.0,
-                trace_path=trace_path,
             )
 
         ipc_thread = threading.Thread(target=_run_reader, name="badguys_ipc_reader", daemon=True)

@@ -1,30 +1,8 @@
 from __future__ import annotations
 
-import json
 import re
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
-
-def _parse_ipc_jsonl(text: str) -> List[Dict[str, Any]]:
-    events: List[Dict[str, Any]] = []
-    for line in (text or "").splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            obj = json.loads(line)
-        except Exception:
-            continue
-        if isinstance(obj, dict):
-            events.append(obj)
-    return events
-
-
-def _event_msg(e: Dict[str, Any]) -> str:
-    msg = e.get("msg")
-    if isinstance(msg, str):
-        return msg
-    return ""
 
 
 @dataclass(frozen=True)
@@ -122,34 +100,6 @@ def evaluate_step(*, rules: Dict[str, Any], result: StepResult, prior: Dict[int,
     for s in value_not_contains:
         if vstr.find(s) >= 0:
             return False, f"unexpected value token: {s}"
-    ipc_any_msg_contains = _as_list(rules.get("ipc_any_msg_contains"))
-    if ipc_any_msg_contains:
-        events = _parse_ipc_jsonl(_value_as_str(result.value))
-        for s in ipc_any_msg_contains:
-            if not any(_event_msg(e).find(s) >= 0 for e in events):
-                return False, f"missing ipc msg token: {s}"
-
-    ipc_any_msg_not_contains = _as_list(rules.get("ipc_any_msg_not_contains"))
-    if ipc_any_msg_not_contains:
-        events = _parse_ipc_jsonl(_value_as_str(result.value))
-        for s in ipc_any_msg_not_contains:
-            if any(_event_msg(e).find(s) >= 0 for e in events):
-                return False, f"unexpected ipc msg token: {s}"
-
-    ipc_ordered_msg_contains = _as_list(rules.get("ipc_ordered_msg_contains"))
-    if ipc_ordered_msg_contains:
-        events = _parse_ipc_jsonl(_value_as_str(result.value))
-        idx = 0
-        for e in events:
-            msg = _event_msg(e)
-            if msg.find(ipc_ordered_msg_contains[idx]) >= 0:
-                idx += 1
-                if idx >= len(ipc_ordered_msg_contains):
-                    break
-        if idx < len(ipc_ordered_msg_contains):
-            missing = ipc_ordered_msg_contains[idx]
-            return False, f"missing ordered ipc msg token: {missing}"
-
 
     list_eq = rules.get("list_eq")
     if list_eq is not None:

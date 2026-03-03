@@ -103,22 +103,15 @@ def _exec_one(
             argv.append(str(path))
 
         socket_path = repo_root / "patches" / f"am_patch_ipc_{issue_id}.sock"
-
-        dst_dir = _logs_dir(repo_root) / test_id
-        dst_dir.mkdir(parents=True, exist_ok=True)
-        ipc_trace_path = dst_dir / "runner_ipc.jsonl"
-
-
         ipc_holder: dict[str, dict | None] = {"result": None}
 
         def _run_reader() -> None:
-            from badguys.ipc_result_reader import read_ipc_result_tee
+            from badguys.ipc_result_reader import read_ipc_result
 
-            ipc_holder["result"] = read_ipc_result_tee(
+            ipc_holder["result"] = read_ipc_result(
                 socket_path,
                 connect_timeout_s=3.0,
                 total_timeout_s=0.0,
-                trace_path=ipc_trace_path,
             )
 
         ipc_thread = threading.Thread(target=_run_reader, name="badguys_ipc_reader", daemon=True)
@@ -151,6 +144,9 @@ def _exec_one(
                 artifacts["json_path"] = Path(json_path)
 
             if artifacts:
+                dst_dir = _logs_dir(repo_root) / test_id
+                dst_dir.mkdir(parents=True, exist_ok=True)
+
                 src_log = artifacts.get("log_path")
                 if src_log is not None and src_log.exists():
                     shutil.copy2(src_log, dst_dir / "runner.log")
@@ -231,28 +227,6 @@ def _exec_one(
         if not log_path.exists():
             return StepResult(rc=1, stdout=None, stderr=f"missing log: {log_path}", value="")
         return StepResult(rc=0, stdout=None, stderr=None, value=log_path.read_text(encoding="utf-8"))
-    if op == "READ_RUNNER_IPC_JSONL":
-        # Machine-readable runner IPC trace (NDJSON) captured from the AMP socket.
-        name = p.get("test_name")
-        if name is None:
-            name = test_id
-        if not isinstance(name, str):
-            raise SystemExit("FAIL: bdg: test_name must be string")
-        trace_path = _logs_dir(repo_root) / name / "runner_ipc.jsonl"
-        if not trace_path.exists():
-            return StepResult(
-                rc=1,
-                stdout=None,
-                stderr=f"missing runner ipc trace: {trace_path}",
-                value="",
-            )
-        return StepResult(
-            rc=0,
-            stdout=None,
-            stderr=None,
-            value=trace_path.read_text(encoding="utf-8"),
-        )
-
 
     if op == "LOCK_DELETE":
         lock_path = _lock_path_for_test(repo_root, test_id=test_id)
