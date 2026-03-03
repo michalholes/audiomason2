@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import shutil
 import subprocess
+import threading
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
@@ -99,8 +101,62 @@ def _exec_one(
             if path is None:
                 raise SystemExit(f"FAIL: bdg: missing materialized asset: {input_asset}")
             argv.append(str(path))
-        cp = subprocess.run(argv, cwd=str(repo_root), text=True, capture_output=True)
-        return StepResult(rc=int(cp.returncode), stdout=cp.stdout, stderr=cp.stderr, value=None)
+
+        socket_path = repo_root / "patches" / f"am_patch_ipc_{issue_id}.sock"
+        ipc_holder: dict[str, dict | None] = {"result": None}
+
+        def _run_reader() -> None:
+            from badguys.ipc_result_reader import read_ipc_result
+
+            ipc_holder["result"] = read_ipc_result(
+                socket_path,
+                connect_timeout_s=3.0,
+                total_timeout_s=0.0,
+            )
+
+        ipc_thread = threading.Thread(target=_run_reader, name="badguys_ipc_reader", daemon=True)
+        ipc_thread.start()
+
+        proc = subprocess.Popen(
+            argv,
+            cwd=str(repo_root),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+        )
+        stdout, stderr = proc.communicate()
+        rc = int(proc.returncode or 0)
+
+        ipc_thread.join(timeout=0.25)
+        ipc_result = ipc_holder["result"]
+        if ipc_result is not None:
+            try:
+                rc = int(ipc_result["return_code"])
+            except Exception:
+                pass
+
+            artifacts: dict[str, Path] = {}
+            log_path = ipc_result.get("log_path")
+            json_path = ipc_result.get("json_path")
+            if isinstance(log_path, str) and log_path:
+                artifacts["log_path"] = Path(log_path)
+            if isinstance(json_path, str) and json_path:
+                artifacts["json_path"] = Path(json_path)
+
+            if artifacts:
+                dst_dir = _logs_dir(repo_root) / test_id
+                dst_dir.mkdir(parents=True, exist_ok=True)
+
+                src_log = artifacts.get("log_path")
+                if src_log is not None and src_log.exists():
+                    shutil.copy2(src_log, dst_dir / "runner.log")
+
+                src_json = artifacts.get("json_path")
+                if src_json is not None and src_json.exists():
+                    shutil.copy2(src_json, dst_dir / "runner.jsonl")
+
+        return StepResult(rc=rc, stdout=stdout, stderr=stderr, value=None)
+
 
     if op == "DISCOVER_TESTS":
         from badguys.discovery import discover_tests
