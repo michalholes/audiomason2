@@ -18,7 +18,7 @@ index 0000000..1111111
 """
 [[step]]
 op = "RUN_RUNNER"
-extra_args = ["-g", "--test-mode", "${issue_id}", "badguys: -g continues after gate fail (compile)"]
+extra_args = ["-g", "", "${issue_id}", "badguys: -g continues after gate fail (compile)"]
 input_asset = "bundle"
 
 [[step]]

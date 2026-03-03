@@ -23,7 +23,7 @@ op = "CLEAN_OUTSIDE_SENTINEL"
 
 [[step]]
 op = "RUN_RUNNER"
-extra_args = ["--test-mode", "${issue_id}", "badguys: path traversal outside repo must fail"]
+extra_args = ["", "${issue_id}", "badguys: path traversal outside repo must fail"]
 input_asset = "script"
 
 [[step]]

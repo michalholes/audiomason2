@@ -67,6 +67,7 @@ def execute_bdg(
                 repo_root=repo_root,
                 cfg_runner_cmd=cfg_runner_cmd,
                 issue_id=issue_id,
+                full_runner_tests=full_runner_tests,
                 step=step,
                 mats=mats,
                 test_id=bdg.test_id,
@@ -80,6 +81,7 @@ def _exec_one(
     repo_root: Path,
     cfg_runner_cmd: list[str],
     issue_id: str,
+    full_runner_tests: set[str],
     step: BdgStep,
     mats: MaterializedAssets,
     test_id: str,
@@ -94,7 +96,14 @@ def _exec_one(
         extra_args = p.get("extra_args", [])
         if not (isinstance(extra_args, list) and all(isinstance(x, str) for x in extra_args)):
             raise SystemExit("FAIL: bdg: extra_args must be list[str]")
+        if "--test-mode" in extra_args:
+            raise SystemExit(
+                "FAIL: bdg: --test-mode is controlled by BadGuys; "
+                "remove it from extra_args"
+            )
         argv = list(cfg_runner_cmd)
+        if test_id not in full_runner_tests:
+            argv.append("--test-mode")
         argv.extend([_subst_token(a, issue_id=issue_id) for a in extra_args])
         if input_asset:
             path = mats.files.get(input_asset)

@@ -9,5 +9,5 @@ content = "from __future__ import annotations\n\nFILES = ['docs/badguys_batch1/a
 
 [[step]]
 op = "RUN_RUNNER"
-extra_args = ["--test-mode", "-a", "${issue_id}", "badguys: -a allows undeclared"]
+extra_args = ["", "-a", "${issue_id}", "badguys: -a allows undeclared"]
 input_asset = "patch"

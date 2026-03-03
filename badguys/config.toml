@@ -106,6 +106,8 @@ list_eq = [
   "test_900_commit_push_timestamp",
 ]
 
+[runner]
+full_runner_tests = ["test_900_commit_push_timestamp"]
 
 [evaluation.tests.test_011_include_single.steps.0]
 rc_eq = 0

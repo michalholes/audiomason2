@@ -32,6 +32,7 @@ class SuiteCfg:
     console_verbosity: str
     log_verbosity: str
     per_run_logs_post_run: str
+    full_runner_tests: list[str]
 
     def central_log_path(self, run_id: str) -> Path:
         rel = self.central_log_pattern.format(run_id=run_id)
@@ -79,9 +80,20 @@ def _make_cfg(
     raw = _load_config(repo_root, config_path)
     suite = raw.get("suite", {})
     lock = raw.get("lock", {})
+    runner = raw.get("runner", {})
 
     issue_id = str(suite.get("issue_id", "666"))
     runner_cmd = [str(x) for x in suite.get("runner_cmd", ["python3", "scripts/am_patch.py"])]
+
+    full_runner_tests_raw = runner.get("full_runner_tests", [])
+    if full_runner_tests_raw is None:
+        full_runner_tests_raw = []
+    if not (
+        isinstance(full_runner_tests_raw, list)
+        and all(isinstance(x, str) for x in full_runner_tests_raw)
+    ):
+        raise SystemExit("FAIL: runner.full_runner_tests must be list[str]")
+    full_runner_tests = [str(x) for x in full_runner_tests_raw]
 
     # When BadGuys is invoked as an am_patch gate, the runner may be executing inside a
     # venv that is not present inside a workspace/clone repo. Allow am_patch to override
@@ -145,6 +157,7 @@ def _make_cfg(
         console_verbosity=console_verbosity,
         log_verbosity=log_verbosity,
         per_run_logs_post_run=per_run_logs_post_run,
+        full_runner_tests=full_runner_tests,
     )
 
 
@@ -460,6 +473,7 @@ def _run_test_plan(test, ctx: Ctx) -> bool:
             repo_root=ctx.repo_root,
             cfg_runner_cmd=list(ctx.cfg.runner_cmd),
             issue_id=ctx.cfg.issue_id,
+            full_runner_tests=set(ctx.cfg.full_runner_tests),
             bdg=bdg,
             mats=mats,
         )
@@ -573,6 +587,22 @@ def main(argv: list[str]) -> int:
             cli_include=list(args.include),
             cli_exclude=list(args.exclude),
         )
+
+        # Validate runner.full_runner_tests against discovered test ids.
+        all_test_ids = {t.name for t in discover_tests(
+            repo_root=repo_root,
+            config_path=Path(args.config),
+            cli_commit_limit=args.commit_limit,
+            cli_include=[],
+            cli_exclude=[],
+        )}
+        unknown = sorted(set(cfg.full_runner_tests).difference(all_test_ids))
+        if unknown:
+            joined = ", ".join(unknown)
+            raise SystemExit(
+                "FAIL: runner.full_runner_tests references unknown test_id(s): "
+                f"{joined}"
+            )
 
         if args.list_tests:
             for t in tests:
