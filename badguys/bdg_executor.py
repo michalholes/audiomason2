@@ -226,4 +226,109 @@ def _exec_one(
             return StepResult(rc=1, stdout=None, stderr="outside write detected", value=str(sentinel))
         return StepResult(rc=0, stdout=None, stderr=None, value=str(sentinel))
 
+
+    if op == "DELETE_PATCHED_ZIP":
+        patched_zip = repo_root / "patches" / "patched.zip"
+        try:
+            patched_zip.unlink()
+        except FileNotFoundError:
+            pass
+        return StepResult(rc=0, stdout=None, stderr=None, value=str(patched_zip))
+
+    if op == "ASSERT_NO_WORKSPACE_AND_NO_ARCHIVES":
+        ws_dir = repo_root / "patches" / "workspaces" / f"issue_{issue_id}"
+        patched_zip = repo_root / "patches" / "patched.zip"
+        if ws_dir.exists():
+            return StepResult(rc=1, stdout=None, stderr="workspace exists", value=str(ws_dir))
+        if patched_zip.exists():
+            return StepResult(rc=1, stdout=None, stderr="patched.zip exists", value=str(patched_zip))
+        return StepResult(rc=0, stdout=None, stderr=None, value="OK")
+
+    if op == "ASSERT_WORKSPACE_REPO_EXISTS":
+        ws_repo = repo_root / "patches" / "workspaces" / f"issue_{issue_id}" / "repo"
+        if not ws_repo.exists():
+            return StepResult(rc=1, stdout=None, stderr="missing workspace repo", value=str(ws_repo))
+        return StepResult(rc=0, stdout=None, stderr=None, value=str(ws_repo))
+
+    if op == "GIT_STATUS_PORCELAIN":
+        cp = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=str(repo_root),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        lines = (cp.stdout or "").splitlines()
+        out = [ln.rstrip("\n") for ln in lines if ln.strip()]
+        return StepResult(rc=0, stdout=None, stderr=None, value=out)
+
+    if op == "PREPARE_UNSUCCESSFUL_PATCH":
+        marker_rel = p.get("marker_rel")
+        marker_text = p.get("marker_text", "")
+        if not isinstance(marker_rel, str):
+            raise SystemExit("FAIL: bdg: marker_rel must be string")
+        if not isinstance(marker_text, str):
+            raise SystemExit("FAIL: bdg: marker_text must be string")
+        unsucc_dir = repo_root / "patches" / "unsuccessful"
+        unsucc_dir.mkdir(parents=True, exist_ok=True)
+        name = f"issue_{issue_id}__badguys_rerun_latest__bdg.patch"
+        patch_path = unsucc_dir / name
+        patch_txt = (
+            f"diff --git a/{marker_rel} b/{marker_rel}\n"
+            "new file mode 100644\n"
+            "index 0000000..1111111\n"
+            f"--- /dev/null\n"
+            f"+++ b/{marker_rel}\n"
+            "@@ -0,0 +1 @@\n"
+            f"+{marker_text}\n"
+        )
+        patch_path.write_text(patch_txt, encoding="utf-8")
+        return StepResult(rc=0, stdout=None, stderr=None, value=str(patch_path))
+
+    if op == "PREPARE_LATEST_BUNDLE_900":
+        # This op is dedicated to test_900_commit_push_timestamp.
+        issue = str(issue_id)
+        patches_dir = repo_root / "patches"
+        patches_dir.mkdir(parents=True, exist_ok=True)
+        ws_repo = patches_dir / "workspaces" / f"issue_{issue}" / "repo"
+        marker_rel = "badguys/artifacts/commit_marker.txt"
+        seed_rel = "src/audiomason/_badguys_seed_fail.py"
+        ws_marker = ws_repo / marker_rel
+        ws_marker.parent.mkdir(parents=True, exist_ok=True)
+        ws_marker.write_text(
+            "badguys commit marker\n"
+            "test\n",
+            encoding="utf-8",
+        )
+        try:
+            (ws_repo / seed_rel).unlink()
+        except FileNotFoundError:
+            pass
+        old_line = "test\n"
+        new_line = f"{issue}\n"
+        patch_txt = (
+            f"diff --git a/{marker_rel} b/{marker_rel}\n"
+            "index 1111111..2222222 100644\n"
+            f"--- a/{marker_rel}\n"
+            f"+++ b/{marker_rel}\n"
+            "@@ -1,2 +1,2 @@\n"
+            " badguys commit marker\n"
+            f"-{old_line}"
+            f"+{new_line}"
+        )
+        unsucc_dir = patches_dir / "unsuccessful"
+        unsucc_dir.mkdir(parents=True, exist_ok=True)
+        bundle_path = unsucc_dir / f"issue_{issue}__badguys_latest_bundle__bdg.zip"
+        inner_name = f"issue_{issue}__badguys_fix_marker__bdg.patch"
+        import io
+        import zipfile
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+            info = zipfile.ZipInfo(inner_name)
+            info.date_time = (1980, 1, 1, 0, 0, 0)
+            info.compress_type = zipfile.ZIP_DEFLATED
+            zf.writestr(info, patch_txt.encode("utf-8"))
+        bundle_path.write_bytes(buf.getvalue())
+        return StepResult(rc=0, stdout=None, stderr=None, value=str(bundle_path))
+
     raise SystemExit(f"FAIL: bdg: unsupported op: {op}")

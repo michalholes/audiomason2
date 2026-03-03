@@ -90,10 +90,22 @@ list_eq = [
   "test_022_runner_debug_override_cli",
   "test_030_show_config",
   "test_031_invalid_runner_verbosity_fails_cleanly",
+  "test_040_test_mode_hard_stop_no_archives",
+  "test_041_test_mode_cleanup_on_fail",
   "test_050_unified_patch_zip_recursive_detection",
   "test_052_unified_patch_ignores_py_when_patch_present",
+  "test_060_scope_touching_undeclared_fails",
+  "test_061_scope_declared_but_not_touched_fails",
+  "test_062_scope_noop_patch_fails",
+  "test_064_a_allows_undeclared",
+  "test_065_scope_py_undeclared_leaves_index_clean",
   "test_067_path_traversal_outside_repo_fails",
+  "test_071_compile_exclude_respected",
+  "test_072_g_continues_after_gate_fail",
+  "test_100_rerun_latest_l",
+  "test_900_commit_push_timestamp",
 ]
+
 
 [evaluation.tests.test_011_include_single.steps.0]
 rc_eq = 0
@@ -200,3 +212,84 @@ rc_eq = 1
 
 [evaluation.tests.test_067_path_traversal_outside_repo_fails.steps.2]
 rc_eq = 0
+
+[evaluation.tests.test_040_test_mode_hard_stop_no_archives.steps.0]
+rc_eq = 0
+
+[evaluation.tests.test_040_test_mode_hard_stop_no_archives.steps.1]
+rc_eq = 0
+
+[evaluation.tests.test_040_test_mode_hard_stop_no_archives.steps.2]
+rc_eq = 0
+
+[evaluation.tests.test_041_test_mode_cleanup_on_fail.steps.0]
+rc_eq = 0
+
+[evaluation.tests.test_041_test_mode_cleanup_on_fail.steps.1]
+rc_eq = 1
+
+[evaluation.tests.test_041_test_mode_cleanup_on_fail.steps.2]
+rc_eq = 0
+
+[evaluation.tests.test_060_scope_touching_undeclared_fails.steps.0]
+rc_eq = 1
+
+[evaluation.tests.test_061_scope_declared_but_not_touched_fails.steps.0]
+rc_eq = 1
+
+[evaluation.tests.test_062_scope_noop_patch_fails.steps.0]
+rc_eq = 1
+
+[evaluation.tests.test_064_a_allows_undeclared.steps.0]
+rc_eq = 0
+
+[evaluation.tests.test_065_scope_py_undeclared_leaves_index_clean.steps.0]
+rc_eq = 0
+
+[evaluation.tests.test_065_scope_py_undeclared_leaves_index_clean.steps.1]
+rc_eq = 1
+
+[evaluation.tests.test_065_scope_py_undeclared_leaves_index_clean.steps.2]
+rc_eq = 0
+equals_step_index = 0
+
+[evaluation.tests.test_071_compile_exclude_respected.steps.0]
+rc_eq = 1
+
+[evaluation.tests.test_071_compile_exclude_respected.steps.1]
+rc_eq = 0
+value_contains = [
+  "GATE: compile",
+  "GATE: RUFF",
+  "compile_exclude=['scripts/badguys_batch1_excluded']",
+]
+
+[evaluation.tests.test_072_g_continues_after_gate_fail.steps.0]
+rc_eq = 0
+
+[evaluation.tests.test_072_g_continues_after_gate_fail.steps.1]
+rc_eq = 0
+value_contains = ["LOG: "]
+
+[evaluation.tests.test_100_rerun_latest_l.steps.0]
+rc_eq = 0
+
+[evaluation.tests.test_100_rerun_latest_l.steps.1]
+rc_eq = 0
+
+[evaluation.tests.test_900_commit_push_timestamp.steps.0]
+rc_ne = 0
+
+[evaluation.tests.test_900_commit_push_timestamp.steps.1]
+rc_eq = 0
+
+[evaluation.tests.test_900_commit_push_timestamp.steps.2]
+rc_eq = 0
+
+[evaluation.tests.test_900_commit_push_timestamp.steps.3]
+rc_eq = 0
+stdout_contains = [
+  "RESULT: SUCCESS",
+  "PUSH: OK",
+]
+stdout_regex = ["^COMMIT:\\s*[0-9a-f]{40}\\b"]

@@ -1,0 +1,13 @@
+[meta]
+makes_commit = false
+is_guard = false
+
+[[asset]]
+id = "patch"
+kind = "python_patch_script"
+content = "from __future__ import annotations\n\nFILES = ['docs/badguys_batch1/scope_declared.txt']\n\nfrom pathlib import Path\n\nREPO = Path(__file__).resolve().parents[1]\n\n(REPO / 'docs/badguys_batch1/scope_declared.txt').parent.mkdir(parents=True, exist_ok=True)\n(REPO / 'docs/badguys_batch1/scope_declared.txt').write_text('declared\\\\n', encoding='utf-8')\n(REPO / 'docs/badguys_batch1/scope_undeclared.txt').write_text('undeclared\\\\n', encoding='utf-8')\n"
+
+[[step]]
+op = "RUN_RUNNER"
+extra_args = ["${issue_id}", "badguys: scope touched undeclared fails"]
+input_asset = "patch"
