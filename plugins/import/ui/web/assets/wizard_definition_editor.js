@@ -892,6 +892,15 @@
 		reloadAll: reloadAll,
 		validateDraft: validateDraft,
 		saveDraft: saveDraft,
+		resetDefinition: resetDefinition,
+	};
+
+	W.AM2FlowEditor = W.AM2FlowEditor || {};
+	W.AM2FlowEditor.wizard = {
+		reload: reloadAll,
+		validate: validateDraft,
+		save: saveDraft,
+		reset: resetDefinition,
 	};
 
 	reloadAll();

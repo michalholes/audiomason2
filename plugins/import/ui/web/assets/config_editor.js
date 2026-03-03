@@ -776,6 +776,15 @@
 		_debug_getDraft: () => currentConfig(),
 	};
 
+	window.AM2FlowEditor = window.AM2FlowEditor || {};
+	window.AM2FlowEditor.config = {
+		reload: reload,
+		validate: validateOnly,
+		save: save,
+		reset: reset,
+		activate: activate,
+	};
+
 	const FE = window["AM2FlowEditorState"];
 	if (FE && FE.registerConfigRender) {
 		FE.registerConfigRender(() => {
