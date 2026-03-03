@@ -90,12 +90,8 @@ function renderJobsFromResponse(r) {
 			var statusText = stRaw ? stRaw.toUpperCase() : "UNKNOWN";
 			var statusCls = `job-status st-${stRaw || "unknown"}`;
 
-			var commit = PH.call("jobSummaryCommit", j.commit_message || "");
-			var patchName = PH.call("jobSummaryPatchName", j.patch_path || "");
-
 			var metaParts = [];
 			metaParts.push(`mode=${String(j.mode || "")}`);
-			if (patchName) metaParts.push(`patch=${patchName}`);
 
 			var dur = PH.call(
 				"jobSummaryDurationSeconds",
@@ -119,9 +115,6 @@ function renderJobsFromResponse(r) {
 				escapeHtml(statusText) +
 				"</span>";
 			line += "</div>";
-			if (commit) {
-				line += '<div class="job-title">' + escapeHtml(commit) + "</div>";
-			}
 			line += '<div class="job-meta">' + escapeHtml(meta) + "</div>";
 			line += "</div>";
 			line += "</div>";
@@ -149,58 +142,48 @@ function refreshJobsIdle() {
 
 function idleRefreshTick() {
 	if (document.hidden) return;
-	if (activeJobId) return;
-	var now = Date.now();
-	if (idleNextDueMs && now < idleNextDueMs) return;
+	if (!idleNextDueMs) idleNextDueMs = 0;
+	if (Date.now() < idleNextDueMs) return;
 
-	var runsIssue = String(el("runsIssue").value || "").trim();
-	var runsResult = String(el("runsResult").value || "");
-	var canCondRuns = !runsIssue && !runsResult;
+	var qs = "";
+	if (idleSigs.snapshot)
+		qs = "?since_sig=" + encodeURIComponent(idleSigs.snapshot);
 
-	var pRuns;
-	if (canCondRuns) {
-		const q = ["limit=80"];
-		if (idleSigs.runs) q.push("since_sig=" + encodeURIComponent(idleSigs.runs));
-		pRuns = apiGet(`/api/runs?${q.join("&")}`).then((r) => {
-			if (!r || r.ok === false) return { changed: false, sig: idleSigs.runs };
-			var sig = String(r.sig || "");
-			if (sig) idleSigs.runs = sig;
-			if (r.unchanged) return { changed: false, sig: sig };
-			__ph_w.renderRunsFromResponse(r);
-			return { changed: true, sig: sig };
+	apiGetETag("ui_snapshot", "/api/ui_snapshot" + qs)
+		.then((r) => {
+			if (!r || r.ok === false) return { changed: false };
+			if (r.unchanged) return { changed: false };
+
+			var snapSig = String(r.sig || "");
+			if (snapSig) idleSigs.snapshot = snapSig;
+
+			var js = String(r.jobs_sig || "");
+			var rs = String(r.runs_sig || "");
+			var hs = String(r.diag_sig || "");
+			if (js) idleSigs.jobs = js;
+			if (rs) idleSigs.runs = rs;
+			if (hs) idleSigs.hdr = hs;
+
+			renderJobsFromResponse({ ok: true, jobs: r.jobs || [] });
+			__ph_w.renderRunsFromResponse({ ok: true, runs: r.runs || [] });
+
+			var base = "";
+			if (cfg && cfg.server && cfg.server.host && cfg.server.port) {
+				base = "server: " + cfg.server.host + ":" + cfg.server.port;
+			}
+			renderHeaderFromDiagnostics(r.diagnostics || {}, base);
+
+			return { changed: true };
+		})
+		.then((res) => {
+			var changed = !!(res && res.changed);
+			if (changed) {
+				idleBackoffIdx = 0;
+			} else if (idleBackoffIdx < IDLE_BACKOFF_MS.length - 1) {
+				idleBackoffIdx += 1;
+			}
+			idleNextDueMs = Date.now() + IDLE_BACKOFF_MS[idleBackoffIdx];
 		});
-	} else {
-		pRuns = Promise.resolve(null);
-	}
-
-	var qsHdr = "";
-	if (idleSigs.hdr) qsHdr = "?since_sig=" + encodeURIComponent(idleSigs.hdr);
-	var pHdr = apiGet("/api/debug/diagnostics" + qsHdr).then((d) => {
-		if (!d || d.ok === false) return { changed: false, sig: idleSigs.hdr };
-		var sig = String(d.sig || "");
-		if (sig) idleSigs.hdr = sig;
-		if (d.unchanged) return { changed: false, sig: sig };
-		var base = "";
-		if (cfg && cfg.server && cfg.server.host && cfg.server.port) {
-			base = "server: " + cfg.server.host + ":" + cfg.server.port;
-		}
-		renderHeaderFromDiagnostics(d, base);
-		return { changed: true, sig: sig };
-	});
-
-	Promise.all([refreshJobsIdle(), pRuns, pHdr]).then((vals) => {
-		var changed = false;
-		for (let i = 0; i < vals.length; i++) {
-			const v = vals[i];
-			if (v && v.changed) changed = true;
-		}
-		if (changed) {
-			idleBackoffIdx = 0;
-		} else if (idleBackoffIdx < IDLE_BACKOFF_MS.length - 1) {
-			idleBackoffIdx += 1;
-		}
-		idleNextDueMs = Date.now() + IDLE_BACKOFF_MS[idleBackoffIdx];
-	});
 }
 
 function refreshJobs() {

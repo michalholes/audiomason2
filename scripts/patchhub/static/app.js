@@ -124,6 +124,61 @@ function apiGet(path) {
 	);
 }
 
+var __phEtagCache = {};
+var __phInFlight = {};
+var __phAborters = {};
+
+function apiAbortKey(key) {
+	key = String(key || "");
+	var ctl = null;
+	try {
+		ctl = __phAborters[key];
+		if (ctl) ctl.abort();
+	} catch (_) {}
+	__phAborters[key] = null;
+	__phInFlight[key] = null;
+}
+
+function apiGetETag(key, path, opts) {
+	key = String(key || "");
+	path = String(path || "");
+	opts = opts || {};
+
+	// Abort prior request for this key (deterministic: latest wins).
+	apiAbortKey(key);
+
+	var ctl = new AbortController();
+	__phAborters[key] = ctl;
+
+	var hdr = { Accept: "application/json" };
+	var et = __phEtagCache[key];
+	if (et) hdr["If-None-Match"] = String(et);
+
+	var p = fetch(path, { headers: hdr, signal: ctl.signal }).then((r) => {
+		if (r.status === 304) {
+			return { ok: true, unchanged: true, status: 304 };
+		}
+		return r.text().then((t) => {
+			var obj = null;
+			try {
+				obj = JSON.parse(t);
+			} catch (e) {
+				obj = { ok: false, error: "bad json", raw: t, status: r.status };
+			}
+			var newEtag = r.headers.get("ETag");
+			if (newEtag) __phEtagCache[key] = String(newEtag);
+			return obj;
+		});
+	});
+	__phInFlight[key] = p;
+	return p.finally(() => {
+		if (__phInFlight[key] === p) {
+			__phInFlight[key] = null;
+			__phAborters[key] = null;
+		}
+	});
+}
+
 function apiPost(path, body) {
 	return fetch(path, {
 		method: "POST",

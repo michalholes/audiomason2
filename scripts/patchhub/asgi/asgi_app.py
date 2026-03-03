@@ -36,6 +36,18 @@ def _guess_content_type(path: Path) -> str:
     return ctype or "application/octet-stream"
 
 
+def _etag_quote(token: str) -> str:
+    token = str(token or "")
+    return '"' + token.replace('"', "") + '"'
+
+
+def _etag_matches(if_none_match: str | None, etag_value: str) -> bool:
+    if if_none_match is None:
+        return False
+    inm = str(if_none_match).strip()
+    return inm == etag_value
+
+
 def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
     app = FastAPI()
     core = AsyncAppCore(repo_root=repo_root, cfg=cfg)
@@ -106,9 +118,29 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
         return _json_bytes_response(status, data)
 
     @app.get("/api/patches/latest")
-    async def api_patches_latest() -> Response:
-        status, data = await to_thread(core.api_patches_latest)
-        return _json_bytes_response(status, data)
+    async def api_patches_latest(request: Request) -> Response:
+        qs = dict(request.query_params)
+        status, data = await to_thread(core.api_patches_latest, qs)
+        etag = ""
+        try:
+            obj = json.loads(data.decode("utf-8"))
+            token = str(obj.get("token", ""))
+            if token:
+                etag = _etag_quote(token)
+        except Exception:
+            etag = ""
+
+        inm = request.headers.get("if-none-match")
+        if status == 200 and etag and _etag_matches(inm, etag):
+            return Response(status_code=304, headers={"ETag": etag})
+        headers = {"ETag": etag} if (status == 200 and etag) else None
+        return (
+            _json_bytes_response(status, data)
+            if not headers
+            else Response(
+                content=data, status_code=status, media_type="application/json", headers=headers
+            )
+        )
 
     @app.get("/api/fs/read_text")
     async def api_fs_read_text(request: Request) -> Response:
@@ -136,7 +168,40 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
     @app.get("/api/runs")
     async def api_runs(request: Request) -> Response:
         qs = dict(request.query_params)
+        # ETag/304 is canonical only for default (unfiltered) list.
+        issue_id = str(qs.get("issue_id", "")).strip()
+        result = str(qs.get("result", "")).strip()
+        since_sig = str(qs.get("since_sig", "")).strip()
+        etag = ""
+        if not issue_id and not result:
+            from patchhub.app_support import canceled_runs_signature
+            from patchhub.indexing import runs_signature
+
+            base_sig = await to_thread(
+                runs_signature, core.patches_root, core.cfg.indexing.log_filename_regex
+            )
+            canceled_sig = await to_thread(canceled_runs_signature, core.patches_root)
+            sig = f"runs:r={base_sig[0]}:{base_sig[1]}:c={canceled_sig[0]}:{canceled_sig[1]}"
+            etag = _etag_quote(sig)
+            inm = request.headers.get("if-none-match")
+            if etag and _etag_matches(inm, etag):
+                return Response(status_code=304, headers={"ETag": etag})
+            if since_sig and since_sig == sig:
+                data = json.dumps(
+                    {"ok": True, "unchanged": True, "sig": sig}, ensure_ascii=True
+                ).encode("utf-8")
+                return Response(
+                    content=data,
+                    status_code=200,
+                    media_type="application/json",
+                    headers={"ETag": etag},
+                )
+
         status, data = await to_thread(core.api_runs, qs)
+        if status == 200 and etag:
+            return Response(
+                content=data, status_code=200, media_type="application/json", headers={"ETag": etag}
+            )
         return _json_bytes_response(status, data)
 
     @app.get("/api/runner/tail")
@@ -146,7 +211,7 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
         return _json_bytes_response(status, data)
 
     @app.get("/api/jobs")
-    async def api_jobs_list(request: Request) -> JSONResponse:
+    async def api_jobs_list(request: Request) -> Response:
         mem = await core.queue.list_jobs()
         mem_by_id = {j.job_id: j for j in mem}
 
@@ -167,8 +232,12 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
             mem_parts.append("|".join([jid, st, isu, su, eu]))
         mem_sig = sha1("\n".join(mem_parts).encode("utf-8")).hexdigest()
         sig = f"jobs:d={disk_sig[0]}:{disk_sig[1]}:m={mem_sig}"
+        etag = _etag_quote(sig)
+        inm = request.headers.get("if-none-match")
+        if etag and _etag_matches(inm, etag):
+            return Response(status_code=304, headers={"ETag": etag})
         if since_sig and since_sig == sig:
-            return JSONResponse({"ok": True, "unchanged": True, "sig": sig})
+            return JSONResponse({"ok": True, "unchanged": True, "sig": sig}, headers={"ETag": etag})
 
         # Build payload only when changed.
 
@@ -205,7 +274,8 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
         jobs = mem + disk
         jobs.sort(key=lambda j: str(j.created_utc or ""), reverse=True)
         return JSONResponse(
-            {"ok": True, "jobs": [job_to_list_item_json(j) for j in jobs], "sig": sig}
+            {"ok": True, "jobs": [job_to_list_item_json(j) for j in jobs], "sig": sig},
+            headers={"ETag": etag},
         )
 
     @app.get("/api/jobs/{job_id}")
@@ -374,9 +444,197 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
         return Response(content=data, media_type="application/zip", headers=headers)
 
     @app.get("/api/debug/diagnostics")
-    async def api_debug_diagnostics(request: Request) -> JSONResponse:
-        since_sig = str(request.query_params.get("since_sig", "")).strip()
-        return JSONResponse(await core.diagnostics(since_sig=since_sig), status_code=200)
+    async def api_debug_diagnostics(request: Request) -> Response:
+        qs = dict(request.query_params)
+        since_sig = str(qs.get("since_sig", "")).strip()
+
+        # Compute diagnostics sig cheaply for ETag/304.
+        qstate = None
+        try:
+            qstate = await core.queue.state()
+        except Exception:
+            qstate = None
+        queued = int(getattr(qstate, "queued", 0) or 0) if qstate is not None else 0
+        running = int(getattr(qstate, "running", 0) or 0) if qstate is not None else 0
+
+        def _lock_sig_sync() -> tuple[str, int]:
+            lock_held = 0
+            try:
+                from patchhub.job_ids import is_lock_held
+
+                lock_held = 1 if is_lock_held(core.jail.lock_path()) else 0
+            except Exception:
+                lock_held = 0
+
+            from patchhub.app_support import canceled_runs_signature
+            from patchhub.indexing import runs_signature
+
+            base_sig = runs_signature(core.patches_root, core.cfg.indexing.log_filename_regex)
+            canceled_sig = canceled_runs_signature(core.patches_root)
+            sig = (
+                f"diag:q={queued}:{running}"
+                f":l={lock_held}"
+                f":r={base_sig[0]}:{base_sig[1]}"
+                f":c={canceled_sig[0]}:{canceled_sig[1]}"
+            )
+            return sig, lock_held
+
+        sig, _lock_held = await to_thread(_lock_sig_sync)
+        etag = _etag_quote(sig)
+        inm = request.headers.get("if-none-match")
+        if etag and _etag_matches(inm, etag):
+            return Response(status_code=304, headers={"ETag": etag})
+        if since_sig and since_sig == sig:
+            data = json.dumps(
+                {"ok": True, "unchanged": True, "sig": sig}, ensure_ascii=True
+            ).encode("utf-8")
+            return Response(
+                content=data, status_code=200, media_type="application/json", headers={"ETag": etag}
+            )
+
+        body = await core.diagnostics(since_sig="")
+        body["sig"] = sig
+        data = json.dumps(body, ensure_ascii=True).encode("utf-8")
+        return Response(
+            content=data, status_code=200, media_type="application/json", headers={"ETag": etag}
+        )
+
+    @app.get("/api/ui_snapshot")
+    async def api_ui_snapshot(request: Request) -> Response:
+        qs = dict(request.query_params)
+        since_sig = str(qs.get("since_sig", "")).strip()
+
+        from hashlib import sha1
+
+        from patchhub.app_support import canceled_runs_signature
+        from patchhub.indexing import runs_signature
+        from patchhub.job_store import job_json_signature, list_job_jsons
+
+        # Jobs signature: disk + memory queue.
+        disk_sig = await to_thread(job_json_signature, core.jobs_root)
+        mem = await core.queue.list_jobs()
+        mem_by_id = {j.job_id: j for j in mem}
+        mem_parts: list[str] = []
+        for j in sorted(mem, key=lambda x: str(getattr(x, "job_id", ""))):
+            jid = str(getattr(j, "job_id", ""))
+            st = str(getattr(j, "status", ""))
+            isu = str(getattr(j, "issue_id", ""))
+            su = str(getattr(j, "started_utc", ""))
+            eu = str(getattr(j, "ended_utc", ""))
+            mem_parts.append("|".join([jid, st, isu, su, eu]))
+        mem_sig = sha1("\n".join(mem_parts).encode("utf-8")).hexdigest()
+        jobs_sig = f"jobs:d={disk_sig[0]}:{disk_sig[1]}:m={mem_sig}"
+
+        # Runs signature.
+        base_sig = await to_thread(
+            runs_signature, core.patches_root, core.cfg.indexing.log_filename_regex
+        )
+        canceled_sig = await to_thread(canceled_runs_signature, core.patches_root)
+        runs_sig = f"runs:r={base_sig[0]}:{base_sig[1]}:c={canceled_sig[0]}:{canceled_sig[1]}"
+
+        # Diagnostics signature (queue + lock + runs).
+        qstate = None
+        try:
+            qstate = await core.queue.state()
+        except Exception:
+            qstate = None
+        queued = int(getattr(qstate, "queued", 0) or 0) if qstate is not None else 0
+        running = int(getattr(qstate, "running", 0) or 0) if qstate is not None else 0
+
+        def _lock_held_sync() -> int:
+            try:
+                from patchhub.job_ids import is_lock_held
+
+                return 1 if is_lock_held(core.jail.lock_path()) else 0
+            except Exception:
+                return 0
+
+        lock_held = await to_thread(_lock_held_sync)
+        diag_sig = (
+            f"diag:q={queued}:{running}"
+            f":l={lock_held}"
+            f":r={base_sig[0]}:{base_sig[1]}"
+            f":c={canceled_sig[0]}:{canceled_sig[1]}"
+        )
+
+        # Latest patch token (autofill) participates in snapshot.
+        status_latest, data_latest = await to_thread(core.api_patches_latest, {"since_token": ""})
+        latest_token = ""
+        latest_obj: dict[str, Any] = {}
+        if status_latest == 200:
+            try:
+                latest_obj = json.loads(data_latest.decode("utf-8"))
+                latest_token = str(latest_obj.get("token", ""))
+            except Exception:
+                latest_obj = {}
+                latest_token = ""
+
+        snapshot_sig = "|".join([jobs_sig, runs_sig, diag_sig, f"latest:{latest_token}"])
+        etag = _etag_quote(snapshot_sig)
+
+        inm = request.headers.get("if-none-match")
+        if etag and _etag_matches(inm, etag):
+            return Response(status_code=304, headers={"ETag": etag})
+        if since_sig and since_sig == snapshot_sig:
+            data = json.dumps(
+                {"ok": True, "unchanged": True, "sig": snapshot_sig},
+                ensure_ascii=True,
+            ).encode("utf-8")
+            return Response(
+                content=data,
+                status_code=200,
+                media_type="application/json",
+                headers={"ETag": etag},
+            )
+
+        # Build payload only when changed.
+
+        def _load_disk_jobs_sync(mem_by_id: dict[str, object]) -> list[Any]:
+            disk_raw = list_job_jsons(core.jobs_root, limit=200)
+            disk: list[Any] = []
+            for r in disk_raw:
+                jid = str(r.get("job_id", ""))
+                if not jid or jid in mem_by_id:
+                    continue
+                j = core._load_job_from_disk(jid)
+                if j is None:
+                    continue
+                disk.append(j)
+            return disk
+
+        disk = await to_thread(_load_disk_jobs_sync, mem_by_id)
+        jobs = mem + disk
+        jobs.sort(key=lambda j: str(j.created_utc or ""), reverse=True)
+        jobs_items = [job_to_list_item_json(j) for j in jobs]
+
+        runs_status, runs_bytes = await to_thread(core.api_runs, {"limit": "80"})
+        runs_list: list[Any] = []
+        if runs_status == 200:
+            try:
+                runs_obj = json.loads(runs_bytes.decode("utf-8"))
+                runs_list = list(runs_obj.get("runs", []) or [])
+            except Exception:
+                runs_list = []
+
+        diag_body = await core.diagnostics(since_sig="")
+        diag_body["sig"] = diag_sig
+
+        payload: dict[str, Any] = {
+            "ok": True,
+            "sig": snapshot_sig,
+            "jobs_sig": jobs_sig,
+            "runs_sig": runs_sig,
+            "diag_sig": diag_sig,
+            "latest_token": latest_token,
+            "jobs": jobs_items,
+            "runs": runs_list,
+            "diagnostics": diag_body,
+            "latest": latest_obj,
+        }
+        data = json.dumps(payload, ensure_ascii=True).encode("utf-8")
+        return Response(
+            content=data, status_code=200, media_type="application/json", headers={"ETag": etag}
+        )
 
     @app.get("/api/jobs/{job_id}/events")
     async def api_jobs_events(job_id: str) -> StreamingResponse:

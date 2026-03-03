@@ -45,12 +45,16 @@ function resetOutputForNewPatch() {
 
 function pollLatestPatchOnce() {
 	if (!cfg || !cfg.autofill || !cfg.autofill.enabled) return;
-	apiGet("/api/patches/latest").then((r) => {
+	var qs = latestToken
+		? "?since_token=" + encodeURIComponent(String(latestToken))
+		: "";
+	apiGetETag("patches_latest", "/api/patches/latest" + qs).then((r) => {
 		if (!r || r.ok === false) {
 			setUiError(String((r && r.error) || "autofill scan failed"));
 			return;
 		}
 
+		if (r && r.unchanged) return;
 		pushApiStatus(r);
 		if (!r.found) return;
 		var token = String(r.token || "");
@@ -79,6 +83,13 @@ function pollLatestPatchOnce() {
 			}
 		}
 	});
+}
+
+function stopAutofillPolling() {
+	if (autofillTimer) {
+		clearInterval(autofillTimer);
+		autofillTimer = null;
+	}
 }
 
 function startAutofillPolling() {

@@ -44,8 +44,6 @@ def job_to_list_item_json(j: JobRecord) -> dict[str, Any]:
         "ended_utc": j.ended_utc,
         "mode": j.mode,
         "issue_id": j.issue_id,
-        "commit_message": j.commit_message,
-        "patch_path": j.patch_path,
     }
 
 

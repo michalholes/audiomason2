@@ -288,7 +288,6 @@ function init() {
 		refreshHeader();
 		renderIssueDetail();
 		validateAndPreview();
-		startAutofillPolling();
 
 		if (patchStatTimer) {
 			clearInterval(patchStatTimer);
@@ -296,23 +295,69 @@ function init() {
 		}
 		patchStatTimer = setInterval(tickMissingPatchClear, 1000);
 
-		setInterval(() => {
-			try {
-				if (activeJobId) refreshJobs();
-				else idleRefreshTick();
-				refreshTail(tailLines);
-			} catch (e) {
-				setUiError(e);
-			}
-		}, 2000);
+		var refreshTimer = null;
+		var headerTimer = null;
 
-		setInterval(() => {
+		function stopTimers() {
+			if (refreshTimer) {
+				clearInterval(refreshTimer);
+				refreshTimer = null;
+			}
+			if (headerTimer) {
+				clearInterval(headerTimer);
+				headerTimer = null;
+			}
+			stopAutofillPolling();
+			PH.call("closeLiveStream");
+		}
+
+		function startTimers() {
+			stopTimers();
+
+			refreshTimer = setInterval(() => {
+				try {
+					if (activeJobId) refreshJobs();
+					else idleRefreshTick();
+					refreshTail(tailLines);
+				} catch (e) {
+					setUiError(e);
+				}
+			}, 2000);
+
+			headerTimer = setInterval(() => {
+				try {
+					if (activeJobId) refreshHeader();
+				} catch (e) {
+					setUiError(e);
+				}
+			}, 5000);
+		}
+
+		function resyncVisible() {
+			refreshFs();
+			refreshRuns();
+			PH.call("refreshStats");
+			refreshJobs();
+			refreshTail(tailLines);
+			refreshHeader();
+			renderIssueDetail();
+			validateAndPreview();
+		}
+
+		document.addEventListener("visibilitychange", () => {
 			try {
-				if (activeJobId) refreshHeader();
+				if (document.hidden) {
+					stopTimers();
+				} else {
+					resyncVisible();
+					startTimers();
+				}
 			} catch (e) {
 				setUiError(e);
 			}
-		}, 5000);
+		});
+
+		startTimers();
 
 		if (
 			/** @type {any} */ (window).AmpSettings &&

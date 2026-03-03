@@ -172,13 +172,18 @@ def api_config(self) -> tuple[int, bytes]:
     return _json_bytes(data)
 
 
-def api_patches_latest(self) -> tuple[int, bytes]:
+def api_patches_latest(self, qs: dict[str, str] | None = None) -> tuple[int, bytes]:
     if not self.cfg.autofill.enabled:
         return _ok({"found": False, "disabled": True})
     if self.cfg.autofill.choose_strategy != "mtime_ns":
         return _err("Unsupported choose_strategy", status=400)
     if self.cfg.autofill.tiebreaker != "lex_name":
         return _err("Unsupported tiebreaker", status=400)
+
+    qs = qs or {}
+    since_token = str(qs.get("since_token", "") or "").strip()
+    if not since_token:
+        since_token = str(qs.get("since_sig", "") or "").strip()
 
     rel = self._autofill_scan_dir_rel()
     if rel is None:
@@ -298,6 +303,10 @@ def api_patches_latest(self) -> tuple[int, bytes]:
             f"selected={best_name}",
         ],
     }
+
+    if since_token and since_token == str(payload.get("token", "")):
+        return _ok({"unchanged": True, "token": payload.get("token", "")})
+
     if self.cfg.autofill.derive_enabled:
         payload["derived_issue"] = issue_id
         payload["derived_commit_message"] = commit_msg
