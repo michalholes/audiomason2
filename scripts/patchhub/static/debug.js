@@ -9,6 +9,64 @@
 		el(id).textContent =
 			typeof obj === "string" ? obj : JSON.stringify(obj, null, 2);
 	}
+
+	function pushClientError(err) {
+		errors.push({ message: String(err), ts: new Date().toISOString() });
+		setPre("clientErrors", errors);
+	}
+
+	function copyPreToClipboard(preId) {
+		var text = el(preId).textContent || "";
+		// Prefer modern clipboard API, fallback to execCommand for older contexts.
+		if (navigator.clipboard && navigator.clipboard.writeText) {
+			return navigator.clipboard.writeText(text);
+		}
+		return new Promise((resolve, reject) => {
+			/** @type {HTMLTextAreaElement | null} */
+			var ta = null;
+			var ok = false;
+			try {
+				ta = document.createElement("textarea");
+				ta.value = text;
+				ta.setAttribute("readonly", "true");
+				ta.style.position = "absolute";
+				ta.style.left = "-9999px";
+				document.body.appendChild(ta);
+				ta.select();
+				ok = document.execCommand("copy");
+				document.body.removeChild(ta);
+				ta = null;
+				if (ok) {
+					resolve();
+					return;
+				}
+				reject(new Error("execCommand(copy) returned false"));
+			} catch (e) {
+				if (ta) {
+					try {
+						document.body.removeChild(ta);
+					} catch {
+						// ignore
+					}
+				}
+				reject(e);
+			}
+		});
+	}
+
+	function wireFlushCopy(flushBtnId, copyBtnId, preId, flushFn) {
+		el(flushBtnId).addEventListener("click", () => {
+			try {
+				flushFn();
+			} catch (e) {
+				pushClientError(e);
+			}
+		});
+		el(copyBtnId).addEventListener("click", () => {
+			copyPreToClipboard(preId).catch((e) => pushClientError(e));
+		});
+	}
+
 	function loadClientStatus() {
 		var raw = "";
 		var arr = [];
@@ -105,6 +163,37 @@
 		setPre("clientNet", net);
 
 		loadClientStatus();
+		wireFlushCopy(
+			"clientErrorsFlush",
+			"clientErrorsCopy",
+			"clientErrors",
+			() => {
+				errors = [];
+				setPre("clientErrors", errors);
+			},
+		);
+		wireFlushCopy(
+			"clientStatusFlush",
+			"clientStatusCopy",
+			"clientStatus",
+			() => {
+				localStorage.removeItem("patchhub.client_status_log");
+				loadClientStatus();
+			},
+		);
+		wireFlushCopy("clientNetFlush", "clientNetCopy", "clientNet", () => {
+			net = [];
+			setPre("clientNet", net);
+		});
+		wireFlushCopy("serverDiagFlush", "serverDiagCopy", "serverDiag", () => {
+			setPre("serverDiag", "");
+		});
+		wireFlushCopy("parsedFlush", "parsedCopy", "parsed", () => {
+			setPre("parsed", "");
+		});
+		wireFlushCopy("tailFlush", "tailCopy", "tail", () => {
+			setPre("tail", "");
+		});
 
 		el("diagRefresh").addEventListener("click", refreshDiag);
 		el("tailRefresh").addEventListener("click", refreshTail);
