@@ -482,6 +482,25 @@ def _run_test_plan(test, ctx: Ctx) -> bool:
                 if not passed:
                     ok = False
                     _emit(ctx, level="verbose", test_name=name, text=f"FAIL: step {idx}: {msg}\n")
+            # Emit step output into per-run log for parity with legacy CmdStep/FuncStep tests.
+            if r.stdout:
+                _emit(ctx, level="verbose", test_name=name, text=r.stdout)
+                if not r.stdout.endswith("\n"):
+                    _emit(ctx, level="verbose", test_name=name, text="\n")
+            if r.stderr:
+                _emit(ctx, level="verbose", test_name=name, text=r.stderr)
+                if not r.stderr.endswith("\n"):
+                    _emit(ctx, level="verbose", test_name=name, text="\n")
+            # For RUN_RUNNER steps, also emit the resolved runner log path as 'LOG: <path>'.
+            if bdg.steps[idx].op == "RUN_RUNNER":
+                log_link = ctx.cfg.patches_dir / "am_patch.log"
+                try:
+                    resolved = log_link.resolve(strict=True)
+                except FileNotFoundError:
+                    resolved = None
+                if resolved is not None:
+                    _emit(ctx, level="verbose", test_name=name, text=f"LOG: {resolved}\n")
+
             prior[idx] = r
 
         _emit(ctx, level="verbose", test_name=name, text=f"TEST END {name} {'PASS' if ok else 'FAIL'}\n")

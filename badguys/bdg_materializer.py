@@ -34,11 +34,11 @@ def materialize_assets(*, repo_root: Path, issue_id: str, bdg: BdgTest) -> Mater
     root.mkdir(parents=True, exist_ok=True)
     files: Dict[str, Path] = {}
     for asset_id, asset in bdg.assets.items():
-        files[asset_id] = _materialize_one(root=root, issue_id=issue_id, asset=asset)
+        files[asset_id] = _materialize_one(root=root, repo_root=repo_root, issue_id=issue_id, test_id=bdg.test_id, asset=asset)
     return MaterializedAssets(root=root, files=files)
 
 
-def _materialize_one(*, root: Path, issue_id: str, asset: BdgAsset) -> Path:
+def _materialize_one(*, root: Path, repo_root: Path, issue_id: str, test_id: str, asset: BdgAsset) -> Path:
     safe_id = _safe_name(asset.asset_id)
     if asset.kind == "text":
         p = root / f"{safe_id}.txt"
@@ -51,17 +51,26 @@ def _materialize_one(*, root: Path, issue_id: str, asset: BdgAsset) -> Path:
         return p
 
     if asset.kind == "python_patch_script":
-        p = root / f"{safe_id}.py"
+        patches_dir = repo_root / "patches"
+        patches_dir.mkdir(parents=True, exist_ok=True)
+        safe_test = _safe_name(test_id)
+        p = patches_dir / f"issue_{issue_id}__bdg__{safe_test}__{safe_id}.py"
         p.write_text(_subst_content(asset.content or "", issue_id=issue_id), encoding="utf-8")
         return p
 
     if asset.kind == "git_patch_text":
-        p = root / f"{safe_id}.patch"
+        patches_dir = repo_root / "patches"
+        patches_dir.mkdir(parents=True, exist_ok=True)
+        safe_test = _safe_name(test_id)
+        p = patches_dir / f"issue_{issue_id}__bdg__{safe_test}__{safe_id}.patch"
         p.write_text(_subst_content(asset.content or "", issue_id=issue_id), encoding="utf-8")
         return p
 
     if asset.kind == "patch_zip_manifest":
-        p = root / f"{safe_id}.zip"
+        patches_dir = repo_root / "patches"
+        patches_dir.mkdir(parents=True, exist_ok=True)
+        safe_test = _safe_name(test_id)
+        p = patches_dir / f"issue_{issue_id}__bdg__{safe_test}__{safe_id}.zip"
         _write_zip_from_manifest(p, issue_id=issue_id, asset=asset)
         return p
 
