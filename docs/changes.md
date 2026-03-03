@@ -12,6 +12,16 @@
     and baseline_type change policy).
 
 -   spec: Bump specification version to 2.0.3-normalized-m1.
+
+-   spec: Define import plugin power flow editing surface (editable StepSchema, runtime defaults keys,
+    strict value precedence, canonical transition operators, and pinned constraint transparency).
+
+-   spec: Add project-wide governance and validation stabilizers (strict precedence, canonical
+    operator registry, unknown field/path policy, idempotent evaluation, alias governance,
+    extension discoverability, and optional conformance vectors).
+
+-   spec: Bump specification version to 2.0.4-normalized-m1.
+
 ## 2026-03-02T00:00:00+01:00
 
 -   Issue 10000: spec: Normalize docs/specification.jsonl by marking duplicate rules as
