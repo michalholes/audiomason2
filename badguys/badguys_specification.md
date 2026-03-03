@@ -293,6 +293,8 @@ BadGuys provides two cleanup layers:
    - patches/logs/issue_<issue_id>*
    - patches/successful/issue_<issue_id>*
    - patches/unsuccessful/issue_<issue_id>*
+   - patches/patched_issue<issue_id>_*.zip
+   - patches/issue_<issue_id>__bdg__test_*
 
 2) Per-plan cleanup_paths:
    - each path in cleanup_paths MUST be deleted after the test plan finishes (pass or fail)
