@@ -384,10 +384,12 @@ def _cleanup_issue_artifacts(ctx: Ctx, *, issue_id: str, test_name: Optional[str
                 shutil.copy2(src_json, dst_dir / "runner.jsonl")
 
     # Contract: after EACH test, the engine must delete:
-    # - patches/workspaces/issue_666/
-    # - patches/logs/issue_666*
-    # - patches/successful/issue_666*
-    # - patches/unsuccessful/issue_666*
+    # - patches/workspaces/issue_<issue_id>/
+    # - patches/logs/issue_<issue_id>*
+    # - patches/successful/issue_<issue_id>*
+    # - patches/unsuccessful/issue_<issue_id>*
+    # - patches/patched_issue<issue_id>_*.zip
+    # - patches/issue_<issue_id>__bdg__*
     repo_root = ctx.repo_root
     ws = repo_root / "patches" / "workspaces" / f"issue_{issue_id}"
     _action(ctx, test_name=test_name, kind="CLEANUP", phase="DO", msg=f"rm -rf {ws}")
@@ -412,6 +414,8 @@ def _cleanup_issue_artifacts(ctx: Ctx, *, issue_id: str, test_name: Optional[str
     for pat in (
         str(repo_root / "patches" / "successful" / f"issue_{issue_id}*"),
         str(repo_root / "patches" / "unsuccessful" / f"issue_{issue_id}*"),
+        str(repo_root / "patches" / f"patched_issue{issue_id}_*.zip"),
+        str(repo_root / "patches" / f"issue_{issue_id}__bdg__*"),
     ):
         _action(ctx, test_name=test_name, kind="CLEANUP", phase="DO", msg=f"rm {pat}")
         for path_str in glob.glob(pat):
