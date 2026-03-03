@@ -460,6 +460,8 @@
 	function extractServerMessages(errEnvelope) {
 		const details = errEnvelope && errEnvelope.details;
 		const out = [];
+		const msg = errEnvelope && errEnvelope.message;
+		if (msg) out.push(String(msg));
 		(Array.isArray(details) ? details : []).forEach((d) => {
 			if (!d) return;
 			const path = d.path ? String(d.path) : "";

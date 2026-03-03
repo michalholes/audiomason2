@@ -307,6 +307,24 @@ def enforce_mandatory_constraints(step_order: list[str]) -> None:
 
     idxs = [step_order.index(sid) for sid in _MANDATORY_CHAIN]
     if idxs != sorted(idxs):
+        # Provide a deterministic, specific error to help users fix ordering.
+        pos = {sid: step_order.index(sid) for sid in _MANDATORY_CHAIN}
+        for i in range(len(_MANDATORY_CHAIN) - 1):
+            a = _MANDATORY_CHAIN[i]
+            b = _MANDATORY_CHAIN[i + 1]
+            if pos[a] > pos[b]:
+                msg = (
+                    "wizard_definition ordering violated: "
+                    + a
+                    + " must be before "
+                    + b
+                    + " (positions "
+                    + str(pos[a])
+                    + ">"
+                    + str(pos[b])
+                    + ")"
+                )
+                raise FinalizeError(msg)
         raise FinalizeError("wizard_definition violates mandatory ordering constraints")
 
     # processing must be the only PHASE 2 step and the only terminal step.

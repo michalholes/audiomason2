@@ -49,6 +49,18 @@
 		return { cfg: cfg, wiz: wiz };
 	}
 
+	function getWizardFailureDetail() {
+		const FE = window.AM2FlowEditorState;
+		const snap = FE && FE.getSnapshot ? FE.getSnapshot() : null;
+		const wd = snap && snap.wizardDraft ? snap.wizardDraft : null;
+		const uiState = wd && wd._am2_ui ? wd._am2_ui : null;
+		const v = uiState && uiState.validation ? uiState.validation : null;
+		const server = v && Array.isArray(v.server) ? v.server : [];
+		const local = v && Array.isArray(v.local) ? v.local : [];
+		const msg = (server[0] || local[0] || "").trim();
+		return msg ? msg : "";
+	}
+
 	async function doReloadAll() {
 		invalidateValidation();
 		setStatus("", "");
@@ -108,7 +120,16 @@
 		const failed = [];
 		if (!okW) failed.push("WizardDefinition");
 		if (!okC) failed.push("FlowConfig");
-		setStatus(`Validate All: FAILED (${failed.join(", ")})`, "bad");
+		let detail = "";
+		if (!okW) detail = getWizardFailureDetail();
+		if (detail) {
+			setStatus(
+				`Validate All: FAILED (${failed.join(", ")}): ${detail}`,
+				"bad",
+			);
+		} else {
+			setStatus(`Validate All: FAILED (${failed.join(", ")})`, "bad");
+		}
 		return false;
 	}
 
