@@ -55,15 +55,33 @@
 	}
 
 	function wireFlushCopy(flushBtnId, copyBtnId, preId, flushFn) {
-		el(flushBtnId).addEventListener("click", () => {
+		var flushBtn = el(flushBtnId);
+		var copyBtn = el(copyBtnId);
+		if (!flushBtn || !copyBtn) {
+			pushClientError(
+				new Error("Missing debug control(s): " + flushBtnId + ", " + copyBtnId),
+			);
+			return;
+		}
+
+		flushBtn.addEventListener("click", () => {
 			try {
 				flushFn();
 			} catch (e) {
 				pushClientError(e);
 			}
 		});
-		el(copyBtnId).addEventListener("click", () => {
-			copyPreToClipboard(preId).catch((e) => pushClientError(e));
+		copyBtn.addEventListener("click", () => {
+			copyPreToClipboard(preId)
+				.then(() => {
+					// Minimal UX feedback without adding new UI elements
+					var oldText = copyBtn.textContent;
+					copyBtn.textContent = "Copied";
+					setTimeout(() => {
+						copyBtn.textContent = oldText;
+					}, 800);
+				})
+				.catch((e) => pushClientError(e));
 		});
 	}
 
@@ -205,5 +223,20 @@
 		setInterval(loadClientStatus, 1000);
 	}
 
-	window.addEventListener("load", init);
+	window.boot();
+
+	function boot() {
+		// Ensure handlers are wired even if the page is restored from bfcache or loaded quickly.
+		if (
+			document.readyState === "complete" ||
+			document.readyState === "interactive"
+		) {
+			init();
+		} else {
+			window.addEventListener("DOMContentLoaded", init, { once: true });
+		}
+		window.addEventListener("pageshow", (ev) => {
+			if (ev.persisted) init();
+		});
+	}
 })();
