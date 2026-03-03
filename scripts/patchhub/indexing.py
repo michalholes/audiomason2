@@ -81,9 +81,18 @@ def _build_sanitized_tail_from_log(log_path: Path) -> str:
 
 
 def _ensure_sanitized_tail_text(log_path: Path) -> str:
-    existing = _read_sanitized_tail_text(log_path)
-    if existing is not None:
-        return existing
+    tail_path = _tail_path(log_path)
+    if tail_path.exists() and tail_path.is_file():
+        try:
+            log_stat = log_path.stat()
+            tail_stat = tail_path.stat()
+            if tail_stat.st_mtime_ns >= log_stat.st_mtime_ns:
+                return tail_path.read_text(encoding="utf-8", errors="replace")
+        except Exception:
+            # If we cannot compare freshness, fall back to the existing tail.
+            with contextlib.suppress(Exception):
+                return tail_path.read_text(encoding="utf-8", errors="replace")
+
     text = _build_sanitized_tail_from_log(log_path)
     # Best-effort cache; indexing must still succeed.
     with contextlib.suppress(Exception):
