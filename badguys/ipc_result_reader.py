@@ -111,3 +111,81 @@ def read_ipc_result(
                 s.close()
         except Exception:
             pass
+
+def read_ipc_result_tee(
+    socket_path: Path,
+    *,
+    connect_timeout_s: float,
+    total_timeout_s: float,
+    trace_path: Path,
+) -> dict | None:
+    """Read the runner IPC NDJSON stream and write all received lines to trace_path.
+
+    The function still returns the validated type="result" event when observed.
+    """
+    trace_path.parent.mkdir(parents=True, exist_ok=True)
+    # Open in text mode with LF newlines to preserve NDJSON format deterministically.
+    with trace_path.open("w", encoding="utf-8", newline="\n") as trace_fp:
+        connect_deadline = time.monotonic() + max(0.0, float(connect_timeout_s))
+        total_deadline: float | None
+        if float(total_timeout_s) > 0:
+            total_deadline = time.monotonic() + float(total_timeout_s)
+        else:
+            total_deadline = None
+
+        s: socket.socket | None = None
+        while True:
+            if time.monotonic() >= connect_deadline:
+                return None
+            try:
+                s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                s.settimeout(0.2)
+                s.connect(str(socket_path))
+                break
+            except (FileNotFoundError, ConnectionRefusedError, OSError):
+                try:
+                    if s is not None:
+                        s.close()
+                except Exception:
+                    pass
+                time.sleep(0.05)
+                continue
+
+        try:
+            s.settimeout(0.2)
+            fp = s.makefile("r", encoding="utf-8", newline="\n")
+            connected = False
+            result: dict[str, Any] | None = None
+
+            while True:
+                if total_deadline is not None and time.monotonic() >= total_deadline:
+                    break
+                try:
+                    line = fp.readline()
+                except (OSError, ValueError):
+                    break
+                if not line:
+                    break
+                trace_fp.write(line)
+
+                try:
+                    obj = json.loads(line)
+                except Exception:
+                    continue
+
+                if not connected and _is_connected_event(obj):
+                    connected = True
+                    continue
+
+                if connected and _is_result_event(obj):
+                    valid = _validate_result(obj)
+                    if valid is not None:
+                        result = valid
+
+            return result
+        finally:
+            try:
+                if s is not None:
+                    s.close()
+            except Exception:
+                pass
