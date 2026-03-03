@@ -22,6 +22,13 @@
 
 -   spec: Bump specification version to 2.0.4-normalized-m1.
 
+-   spec: Strengthen architecture guarantees by binding capability surfaces and
+    value precedence to implementations, version-locking the canonical operator
+    registry, isolating extensions from structural validation, requiring explicit
+    alias migration on removal, and requiring deterministic operator semantics.
+
+-   spec: Bump specification version to 2.0.5-normalized-m1.
+
 ## 2026-03-02T00:00:00+01:00
 
 -   Issue 10000: spec: Normalize docs/specification.jsonl by marking duplicate rules as
