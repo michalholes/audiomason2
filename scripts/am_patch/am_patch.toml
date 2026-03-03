@@ -3,7 +3,7 @@ console_color = "auto" # auto | always | never
 
 # IPC (Unix domain socket)
 ipc_socket_enabled = true
-ipc_socket_mode = "/tmp/audiomason/"
+ipc_socket_mode = "patch_dir"
 ipc_socket_name_template = "am_patch.sock"
 
 ipc_socket_cleanup_delay_success_s = 0
