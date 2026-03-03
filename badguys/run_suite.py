@@ -412,6 +412,26 @@ def _cleanup_issue_artifacts(ctx: Ctx, *, issue_id: str, test_name: Optional[str
                     pass
         _action(ctx, test_name=test_name, kind="CLEANUP", phase="OK", msg=f"rm {pat}")
 
+    # Additional hard-isolation cleanup (patch-root artifacts).
+    # These artifacts are produced by am_patch under several failure/success flows and
+    # can leak state between tests if not removed.
+    patch_root_patterns = (
+        str(repo_root / "patches" / f"patched_issue{issue_id}_*.zip"),
+        str(repo_root / "patches" / f"issue_{issue_id}__bdg__test_*"),
+    )
+    for pat in patch_root_patterns:
+        _action(ctx, test_name=test_name, kind="CLEANUP", phase="DO", msg=f"rm {pat}")
+        for path_str in glob.glob(pat):
+            p = Path(path_str)
+            if p.is_dir():
+                shutil.rmtree(p, ignore_errors=True)
+            else:
+                try:
+                    p.unlink()
+                except FileNotFoundError:
+                    pass
+        _action(ctx, test_name=test_name, kind="CLEANUP", phase="OK", msg=f"rm {pat}")
+
 
 def _load_eval_rules(repo_root: Path, config_path: Path) -> dict:
     raw = tomllib.loads((repo_root / config_path).read_text(encoding="utf-8"))
@@ -499,7 +519,9 @@ def _run_test_plan(test, ctx: Ctx) -> bool:
                 except FileNotFoundError:
                     resolved = None
                 if resolved is not None:
-                    _emit(ctx, level="verbose", test_name=name, text=f"LOG: {resolved}\n")
+                    # Keep this at 'normal' so READ_STEP_LOG-based tests remain deterministic
+                    # even when log_verbosity is not >= verbose.
+                    _emit(ctx, level="normal", test_name=name, text=f"LOG: {resolved}\n")
 
             prior[idx] = r
 
@@ -617,7 +639,7 @@ def main(argv: list[str]) -> int:
         for idx, t in enumerate(tests):
             try:
                 # Enforce deterministic isolation contract.
-                _cleanup_issue_artifacts(ctx, issue_id=cfg.issue_id, test_name=getattr(t, "name", None))
+                _cleanup_issue_artifacts(ctx, issue_id=cfg.issue_id, test_name=None)
     
                 ok = False
                 try:
@@ -648,6 +670,10 @@ def main(argv: list[str]) -> int:
         else:
             summary = f"BadGuys summary: {status} passed={passed} failed={failed}\n"
         _emit(ctx, level="quiet", test_name=None, text=summary)
+
+        # Post-suite hard isolation cleanup (covers the last executed test and any
+        # artifacts produced by abort paths).
+        _cleanup_issue_artifacts(ctx, issue_id=cfg.issue_id, test_name=None)
 
         _post_run_cleanup_logs(cfg, per_test_ok)
 
