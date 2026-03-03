@@ -3,7 +3,7 @@ Status: AUTHORITATIVE SPECIFICATION
 Applies to: scripts/patchhub/*
 Language: ENGLISH (ASCII ONLY)
 
-Specification Version: 1.4.3-spec
+Specification Version: 1.5.0-spec
 Code Baseline: audiomason2-main.zip (as provided in this chat)
 
 -------------------------------------------------------------------------------
@@ -137,13 +137,18 @@ Failure mode
 - Therefore, sig MUST cover all user-visible state for that payload, including
   memory-resident queue jobs and on-disk job.json files.
 
-Server contract (transport)
-- Each refresh API MUST return a stable string token field: sig.
-- The UI MUST send the last-seen token via query parameter since_sig.
+Server contract (canonical transport: HTTP ETag/304)
+- Each refresh API MUST compute a stable string token field: sig.
+- The server MUST expose the current token as an HTTP ETag header.
+- The UI MUST send the last-seen token using If-None-Match.
+- If If-None-Match matches the current token, the server MUST respond with:
+  HTTP 304 Not Modified (no response body) and MUST NOT compute expensive payload fields.
+
+JSON fallback (compatibility)
+- Each refresh API MUST also accept the last-seen token via query parameter since_sig.
 - If since_sig matches current sig, the server MUST respond with:
   { ok: true, unchanged: true, sig: <sig> }
   and MUST NOT compute expensive payload fields.
-
 2.6 Runs Indexing: Tail Scan and Cache (HARD)
 
 - Runs result parsing MUST scan from end-of-file and MUST stop as soon as RESULT
@@ -158,6 +163,93 @@ Server contract (transport)
 - The UI MUST throttle high-frequency live event rendering and MUST bound
   in-memory live event storage (ring buffer).
 - Throttling MUST NOT break stop/cancel responsiveness.
+
+
+
+2.8 Single-Flight Requests (HARD)
+
+Goal: prevent overlapping requests that create backend pressure when responses are slow.
+
+- For each refresh endpoint (jobs, runs, header/stats, ui_snapshot, latest patch),
+  the UI MUST enforce single-flight: at most one in-flight request per endpoint.
+- If a periodic tick occurs while a request for that endpoint is still in-flight,
+  the UI MUST NOT start a second request for the same endpoint.
+- If a user action triggers a refresh while a request is in-flight, the UI MUST
+  abort the prior request and start a new request.
+- Aborting MUST use AbortController.
+- The behavior MUST be deterministic (no jitter).
+
+2.9 Batching: /api/ui_snapshot (HARD)
+
+Goal: reduce HTTP overhead by batching multiple list endpoints into one response.
+
+Endpoint
+- GET /api/ui_snapshot
+
+Payload
+- The response MUST include, at minimum:
+  - jobs list (thin, see 2.11),
+  - runs list (thin, see 2.11),
+  - header/status summary (diagnostics/stats payload used by the header).
+
+Tokens and caching
+- The server MUST compute and expose a stable sig for each sub-payload:
+  - jobs_sig, runs_sig, header_sig.
+- The server MUST compute a snapshot_sig that changes if any sub-payload changes.
+- The response MUST include:
+  { ok: true, snapshot: { jobs: [...], runs: [...], header: {...} },
+    sigs: { jobs: <jobs_sig>, runs: <runs_sig>, header: <header_sig>, snapshot: <snapshot_sig> } }
+- The snapshot endpoint MUST support ETag/304 using snapshot_sig.
+
+Client behavior
+- In IDLE mode, the UI SHOULD prefer /api/ui_snapshot over multiple list calls.
+- ACTIVE mode MAY continue to use specialized endpoints for near-realtime
+  (tail, live stream) without routing through the snapshot endpoint.
+
+2.10 HTTP ETag and 304 Not Modified (HARD)
+
+- For refresh APIs covered by 2.5 / 2.5.1, ETag/304 is the canonical transport.
+- The ETag value MUST be derived from the current sig.
+- The server MUST treat If-None-Match strictly:
+  - exact string match => 304 with empty body.
+- The server MUST include the ETag header on 200 responses.
+- The server MAY include the ETag header on 304 responses.
+
+2.11 Thin DTO Contracts (HARD)
+
+Jobs list item (JobListItem)
+- jobs list endpoints MUST return a thin DTO with fields:
+  - job_id: string
+  - status: string
+  - created_utc: string
+  - started_utc: string|null
+  - ended_utc: string|null
+  - mode: string
+  - issue_id: string
+  - label: string (short human label for list display)
+
+Runs list item (RunListItem)
+- runs list endpoints MUST return a thin DTO with fields:
+  - issue_id: int
+  - result: string
+  - mtime_utc: string
+  - log_rel_path: string
+  - artifact_refs: array of string (may be empty)
+
+Detail separation
+- List DTOs MUST NOT include full commit message text, raw command text, or
+  patch filesystem paths.
+- Detailed job/run fields MUST be served only by detail endpoints.
+
+2.12 Server Sorting and Filtering Cost (HARD)
+
+- List endpoints MUST avoid repeated full materialization + full sort work when
+  there is no change.
+- For default (unfiltered) list views, the unchanged path MUST return 304 (or
+  JSON unchanged) without constructing the list or sorting it.
+- If server-side sort/filter is expensive, the implementation MUST use
+  incremental or cached ordering keyed by deterministic signatures.
+
 
 -------------------------------------------------------------------------------
 
