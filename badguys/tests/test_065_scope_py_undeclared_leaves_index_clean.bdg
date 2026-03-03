@@ -12,7 +12,7 @@ op = "GIT_STATUS_PORCELAIN"
 
 [[step]]
 op = "RUN_RUNNER"
-extra_args = ["", "${issue_id}", "badguys: scope undeclared leaves live tree unchanged"]
+extra_args = ["${issue_id}", "badguys: scope undeclared leaves live tree unchanged"]
 input_asset = "patch"
 
 [[step]]
