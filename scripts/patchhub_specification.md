@@ -3,7 +3,7 @@ Status: AUTHORITATIVE SPECIFICATION
 Applies to: scripts/patchhub/*
 Language: ENGLISH (ASCII ONLY)
 
-Specification Version: 1.5.0-spec
+Specification Version: 1.5.1-spec
 Code Baseline: audiomason2-main.zip (as provided in this chat)
 
 -------------------------------------------------------------------------------
@@ -62,11 +62,30 @@ The runtime version MUST NOT be hardcoded in code.
 
 2.2 Idle and Background Activity (HARD)
 
+Server
 - PatchHub server MUST NOT use timeout-based polling for the main job queue idle loop.
 - The job queue idle loop MUST block on queue.get() and MUST wake only on new work or on stop.
-- When the PatchHub UI document is hidden (document.hidden == true), the UI MUST pause all periodic refresh timers and MUST close any active SSE/EventSource connections.
-- When the document becomes visible again, the UI MUST resume timers and refresh UI state.
-- Timer creation MUST be centralized to prevent duplicated timers across multiple hide/show cycles.
+
+UI hidden/visible lifecycle
+- When the PatchHub UI document is hidden (document.hidden == true), the UI MUST:
+  - pause all periodic refresh timers, and
+  - close any active SSE/EventSource connections.
+- When the document becomes visible again, the UI MUST:
+  - resume timers deterministically, and
+  - perform a one-shot resync refresh of UI state.
+
+Periodic refresh timers (enumeration)
+- Periodic timers include, at minimum:
+  - log tail refresh (runner tail / job log tail),
+  - jobs list refresh,
+  - runs list refresh,
+  - header/status summary refresh,
+  - latest patch discovery polling (autofill).
+
+Timer centralization
+- Timer creation MUST be centralized so that repeated hide/show cycles
+  MUST NOT create duplicated timers.
+
 
 2.3 Client Fault Tolerance (HARD)
 
@@ -101,17 +120,35 @@ The runtime version MUST NOT be hardcoded in code.
 
 2.5 Conditional Refresh Tokens (HARD)
 
-- APIs that return frequently refreshed UI data MUST expose a stable "version
-  token" for each logical payload, including at minimum:
-  - runs list,
-  - jobs list,
-  - header/status summary,
-  - latest patch discovery.
-- The UI MUST supply the last-seen token on refresh.
-- If the token matches (no changes), the server MUST return an "unchanged"
-  response without recomputing expensive payloads.
-- The UI MUST skip DOM updates if the data is unchanged.
+Goal
+- Allow the UI and server to detect "no change" cheaply.
 
+Scope (minimum)
+- runs list
+- jobs list
+- header/status summary
+- latest patch discovery
+
+Canonical transport: HTTP ETag + 304 (HARD)
+- For each scoped endpoint, the server MUST compute a deterministic ETag
+  for the logical payload.
+- On 200 responses, the server MUST include: ETag: "<token>".
+- The UI MUST send If-None-Match: "<token>" on subsequent refreshes.
+- If the token matches (no changes), the server MUST return HTTP 304 with
+  an empty body (no JSON), and SHOULD avoid expensive recomputation.
+- On 304, the UI MUST treat the payload as unchanged and MUST skip DOM
+  updates.
+
+JSON fallback: signature field (HARD)
+- If the UI cannot use ETag/If-None-Match (environment limitation), the
+  server MUST also provide a deterministic token in JSON as:
+  - {"sig": "<token>", ...}
+- The UI MUST supply the last-seen token using query param: since_sig=<token>.
+- If the token matches (no changes), the server MUST return a minimal JSON
+  unchanged response:
+  - {"ok": true, "unchanged": true, "sig": "<token>"}
+- The UI MUST treat unchanged JSON responses as unchanged and MUST skip
+  DOM updates.
 
 2.5.1 Deterministic IDLE Visible Backoff (HARD)
 
