@@ -208,6 +208,10 @@
 		this._dispatchSelectionEvent(this.selectedStepId);
 	};
 
+	FlowEditorState.prototype.clearDirty = function clearDirty() {
+		this.draftDirty = false;
+	};
+
 	window.FlowEditorState = FlowEditorState;
 	if (!window.AM2FlowEditorState) {
 		window.AM2FlowEditorState = new FlowEditorState();

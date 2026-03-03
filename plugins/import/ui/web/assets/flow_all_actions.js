@@ -142,6 +142,13 @@
 			return;
 		}
 
+		const FE2 = window.AM2FlowEditorState;
+		if (FE2 && typeof FE2.clearDirty === "function") {
+			FE2.clearDirty();
+		} else if (FE2) {
+			FE2.draftDirty = false;
+		}
+
 		await doReloadAll();
 		setAllValid(false);
 		setStatus("Save All: OK", "ok");
