@@ -6,6 +6,12 @@
 
 -   spec: Bump specification version to 2.0.2-normalized-m1.
 
+
+-   spec: Define strict power flow editing governance (authoritative workflow,
+    deterministic merge, operator registry, strict error reasons, pinned constraints,
+    and baseline_type change policy).
+
+-   spec: Bump specification version to 2.0.3-normalized-m1.
 ## 2026-03-02T00:00:00+01:00
 
 -   Issue 10000: spec: Normalize docs/specification.jsonl by marking duplicate rules as
