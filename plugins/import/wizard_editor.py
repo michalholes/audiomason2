@@ -20,7 +20,11 @@ from typing import Any
 from .editor import EditorResult
 from .engine import ImportWizardEngine
 from .errors import error_envelope
-from .wizard_definition_model import validate_wizard_definition_structure
+from .wizard_definition_model import (
+    canonicalize_wizard_definition,
+    validate_wizard_definition_constraints_v2,
+    validate_wizard_definition_structure,
+)
 from .wizard_editor_storage import load_wizard_definition, save_wizard_definition
 
 
@@ -77,6 +81,9 @@ def edit_wizard_definition_interactive(engine: ImportWizardEngine) -> EditorResu
 def _validate_for_edit(obj: Any) -> dict[str, Any]:
     try:
         validate_wizard_definition_structure(obj)
+        wd_canon = canonicalize_wizard_definition(obj)
+        if isinstance(wd_canon, dict) and wd_canon.get("version") == 2:
+            validate_wizard_definition_constraints_v2(wd_canon)
         return {"ok": True}
     except Exception as e:
         return error_envelope(

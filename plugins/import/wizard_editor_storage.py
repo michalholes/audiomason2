@@ -24,6 +24,7 @@ from .wizard_definition_model import (
     WIZARD_DEFINITION_REL_PATH,
     canonicalize_wizard_definition,
     migrate_v1_to_v2,
+    validate_wizard_definition_constraints_v2,
     validate_wizard_definition_structure,
 )
 
@@ -44,6 +45,9 @@ def canonicalize_to_v2(obj: Any) -> dict[str, Any]:
     validate_wizard_definition_structure(wd)
     wd = canonicalize_wizard_definition(wd)
 
+    if isinstance(wd, dict) and wd.get("version") == 2:
+        validate_wizard_definition_constraints_v2(wd)
+
     if wd.get("version") != 2:
         raise ValueError("wizard_definition must be version 2")
 
@@ -61,7 +65,12 @@ def ensure_wizard_definition_active_exists(fs: FileService) -> dict[str, Any]:
         DEFAULT_WIZARD_DEFINITION,
     )
     active = read_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_REL_PATH)
-    return canonicalize_to_v2(active)
+    try:
+        return canonicalize_to_v2(active)
+    except Exception:
+        canon_default = canonicalize_to_v2(DEFAULT_WIZARD_DEFINITION)
+        atomic_write_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_REL_PATH, canon_default)
+        return canon_default
 
 
 def get_wizard_definition_draft(fs: FileService) -> dict[str, Any]:

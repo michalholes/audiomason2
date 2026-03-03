@@ -16,6 +16,7 @@ from .field_schema_validation import FieldSchemaValidationError
 from .flow_config_validation import normalize_flow_config
 from .wizard_definition_model import (
     canonicalize_wizard_definition,
+    validate_wizard_definition_constraints_v2,
     validate_wizard_definition_structure,
 )
 
@@ -413,6 +414,15 @@ def _validate_wizard_definition(engine: Any, body: Any) -> dict[str, Any]:
             reason="invalid_structure",
             meta={},
         )
+    try:
+        validate_wizard_definition_constraints_v2(wd_canon)
+    except Exception as err:
+        raise FieldSchemaValidationError(
+            message=str(err),
+            path="$.definition",
+            reason="invalid_constraints",
+            meta={},
+        ) from err
     return {"definition": wd_canon}
 
 

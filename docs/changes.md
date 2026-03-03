@@ -1,3 +1,11 @@
+## 2026-03-03T00:00:00+01:00
+
+-   Issue 23: Import wizard editor now enforces mandatory ordering constraints for
+    WizardDefinition v2 (graph.nodes order) at validate/save/activate time, and
+    runtime load self-heals invalid active definitions by resetting to defaults.
+
+-   spec: Bump specification version to 2.0.2-normalized-m1.
+
 ## 2026-03-02T00:00:00+01:00
 
 -   Issue 10000: spec: Normalize docs/specification.jsonl by marking duplicate rules as

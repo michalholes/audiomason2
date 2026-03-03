@@ -84,13 +84,26 @@ def load_or_bootstrap_wizard_definition(fs: FileService) -> dict[str, Any]:
         wd = migrate_v1_to_v2(wd)
         save_wizard_definition_with_history(fs, wd)
 
-    validate_wizard_definition_structure(wd)
-    wd = canonicalize_wizard_definition(wd)
+    try:
+        validate_wizard_definition_structure(wd)
+        wd = canonicalize_wizard_definition(wd)
 
-    if wd.get("version") != 2:
-        raise ValueError("WizardDefinition must be version 2")
+        if wd.get("version") != 2:
+            raise ValueError("WizardDefinition must be version 2")
 
-    return wd
+        if not isinstance(wd, dict):
+            raise ValueError("WizardDefinition must be an object")
+
+        validate_wizard_definition_constraints_v2(wd)
+        return wd
+    except (FinalizeError, ValueError, TypeError) as err:
+        default_any = canonicalize_wizard_definition(DEFAULT_WIZARD_DEFINITION)
+        if not isinstance(default_any, dict) or default_any.get("version") != 2:
+            raise RuntimeError("DEFAULT_WIZARD_DEFINITION must be v2") from err
+
+        validate_wizard_definition_constraints_v2(default_any)
+        save_wizard_definition_with_history(fs, default_any)
+        return default_any
 
 
 def _assert_exact_keys(
@@ -249,6 +262,35 @@ def build_effective_workflow_snapshot(
         return ordered
 
     raise FinalizeError("wizard_definition version must be 1 or 2")
+
+
+def validate_wizard_definition_constraints_v2(wd: dict[str, Any]) -> None:
+    """Validate WizardDefinition v2 constraints that depend on node ordering.
+
+    Ordering constraints are derived from graph.nodes order, not edges.
+    """
+
+    if wd.get("version") != 2:
+        raise FinalizeError("wizard_definition must be version 2")
+
+    graph_any = wd.get("graph")
+    if not isinstance(graph_any, dict):
+        raise FinalizeError("wizard_definition graph must be an object")
+
+    nodes_any = graph_any.get("nodes")
+    if not isinstance(nodes_any, list) or not nodes_any:
+        raise FinalizeError("wizard_definition graph nodes must be a non-empty list")
+
+    step_order: list[str] = []
+    for n in nodes_any:
+        if not isinstance(n, dict):
+            raise FinalizeError("wizard_definition graph nodes must be objects")
+        sid = n.get("step_id")
+        if not isinstance(sid, str) or not sid:
+            raise FinalizeError("wizard_definition graph node step_id must be a string")
+        step_order.append(sid)
+
+    enforce_mandatory_constraints(step_order)
 
 
 def enforce_mandatory_constraints(step_order: list[str]) -> None:
