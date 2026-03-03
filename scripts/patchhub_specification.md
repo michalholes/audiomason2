@@ -604,6 +604,10 @@ Rule:
 - After any job reaches a terminal state (success, failed, canceled),
   the UI MUST set the mode dropdown to: patch.
 
+Additionally, after resetting mode to patch due to a terminal job state,
+  the UI MUST clear the start-form inputs: issueId, commitMsg, patchPath, rawCommand.
+
+
 Notes:
 - This rule applies to all UI-exposed modes (patch, finalize_live, finalize_workspace, rerun_latest).
 - repair is a legacy mode supported only for backward compatibility via API/parse; UI MUST NOT expose repair in the mode dropdown.

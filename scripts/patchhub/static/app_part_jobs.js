@@ -17,21 +17,15 @@ function renderJobsFromResponse(r) {
 				: "";
 			if (st && st !== "running" && st !== "queued") {
 				const m = el("mode");
-				if (m) {
-					m.value = "patch";
-					// Ensure the rest of the form state is updated (enable/disable inputs, preview, etc).
-					try {
-						if (typeof __ph_w.validateAndPreview === "function") {
-							__ph_w.validateAndPreview();
-						} else {
-							m.dispatchEvent(new Event("change"));
-						}
-					} catch (_) {}
-				}
+				if (m) m.value = "patch";
 				// Clear transient inputs from the completed non-patch job.
 				try {
+					const iid = el("issueId");
+					if (iid) iid.value = "";
 					const cm = el("commitMsg");
 					if (cm) cm.value = "";
+					const pp = el("patchPath");
+					if (pp) pp.value = "";
 					const rc = el("rawCommand");
 					if (rc) rc.value = "";
 				} catch (_) {}
@@ -39,6 +33,14 @@ function renderJobsFromResponse(r) {
 					dirty.issueId = false;
 					dirty.commitMsg = false;
 					dirty.patchPath = false;
+				} catch (_) {}
+				// Ensure the rest of the form state is updated.
+				try {
+					if (typeof __ph_w.validateAndPreview === "function") {
+						__ph_w.validateAndPreview();
+					} else if (m) {
+						m.dispatchEvent(new Event("change"));
+					}
 				} catch (_) {}
 				window.__ph_last_enqueued_job_id = "";
 				window.__ph_last_enqueued_mode = "";
