@@ -127,6 +127,7 @@
 				`Validate All: FAILED (${failed.join(", ")}): ${detail}`,
 				"bad",
 			);
+			window.alert(detail);
 		} else {
 			setStatus(`Validate All: FAILED (${failed.join(", ")})`, "bad");
 		}

@@ -458,9 +458,15 @@
 	}
 
 	function extractServerMessages(errEnvelope) {
-		const details = errEnvelope && errEnvelope.details;
+		const outer =
+			errEnvelope && typeof errEnvelope === "object" ? errEnvelope : null;
+		const inner =
+			outer && outer.error && typeof outer.error === "object"
+				? outer.error
+				: outer;
+		const details = inner && inner.details;
 		const out = [];
-		const msg = errEnvelope && errEnvelope.message;
+		const msg = inner && inner.message;
 		if (msg) out.push(String(msg));
 		(Array.isArray(details) ? details : []).forEach((d) => {
 			if (!d) return;
