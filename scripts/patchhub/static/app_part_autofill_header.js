@@ -156,13 +156,22 @@ function renderHeaderFromDiagnostics(d, base) {
 	if (el("hdrMeta")) el("hdrMeta").textContent = meta;
 }
 
-function refreshHeader() {
+function refreshHeader(opts) {
+	opts = opts || {};
+	var mode = String(opts.mode || "user");
+	var sf = mode === "periodic";
+
 	var base = "";
 	if (cfg && cfg.server && cfg.server.host && cfg.server.port) {
 		base = "server: " + cfg.server.host + ":" + cfg.server.port;
 	}
 
-	apiGet("/api/debug/diagnostics").then((d) => {
+	apiGetETag("diagnostics", "/api/debug/diagnostics", {
+		mode: mode,
+		single_flight: sf,
+	}).then((d) => {
+		if (!d || d.ok === false) return;
+		if (d.unchanged) return;
 		renderHeaderFromDiagnostics(d, base);
 	});
 }

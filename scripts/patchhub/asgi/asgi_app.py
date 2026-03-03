@@ -17,6 +17,7 @@ from fastapi.responses import (
     StreamingResponse,
 )
 
+from patchhub import app_api_core as _core_api
 from patchhub.app_support import read_tail
 from patchhub.models import job_to_list_item_json
 
@@ -181,7 +182,10 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
                 runs_signature, core.patches_root, core.cfg.indexing.log_filename_regex
             )
             canceled_sig = await to_thread(canceled_runs_signature, core.patches_root)
-            sig = f"runs:r={base_sig[0]}:{base_sig[1]}:c={canceled_sig[0]}:{canceled_sig[1]}"
+            sig = (
+                f"runs:r={base_sig[0]}:{base_sig[1]}:{base_sig[2]}"
+                f":c={canceled_sig[0]}:{canceled_sig[1]}"
+            )
             etag = _etag_quote(sig)
             inm = request.headers.get("if-none-match")
             if etag and _etag_matches(inm, etag):
@@ -202,6 +206,11 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
             return Response(
                 content=data, status_code=200, media_type="application/json", headers={"ETag": etag}
             )
+        return _json_bytes_response(status, data)
+
+    @app.get("/api/runs/{issue_id}")
+    async def api_runs_get(issue_id: int) -> Response:
+        status, data = await to_thread(_core_api.api_run_detail, core, int(issue_id))
         return _json_bytes_response(status, data)
 
     @app.get("/api/runner/tail")
@@ -474,7 +483,7 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
             sig = (
                 f"diag:q={queued}:{running}"
                 f":l={lock_held}"
-                f":r={base_sig[0]}:{base_sig[1]}"
+                f":r={base_sig[0]}:{base_sig[1]}:{base_sig[2]}"
                 f":c={canceled_sig[0]}:{canceled_sig[1]}"
             )
             return sig, lock_held
@@ -530,7 +539,10 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
             runs_signature, core.patches_root, core.cfg.indexing.log_filename_regex
         )
         canceled_sig = await to_thread(canceled_runs_signature, core.patches_root)
-        runs_sig = f"runs:r={base_sig[0]}:{base_sig[1]}:c={canceled_sig[0]}:{canceled_sig[1]}"
+        runs_sig = (
+            f"runs:r={base_sig[0]}:{base_sig[1]}:{base_sig[2]}"
+            f":c={canceled_sig[0]}:{canceled_sig[1]}"
+        )
 
         # Diagnostics signature (queue + lock + runs).
         qstate = None
@@ -553,7 +565,7 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
         diag_sig = (
             f"diag:q={queued}:{running}"
             f":l={lock_held}"
-            f":r={base_sig[0]}:{base_sig[1]}"
+            f":r={base_sig[0]}:{base_sig[1]}:{base_sig[2]}"
             f":c={canceled_sig[0]}:{canceled_sig[1]}"
         )
 

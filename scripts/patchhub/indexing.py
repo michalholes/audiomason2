@@ -10,8 +10,8 @@ from .models import AppStats, RunEntry, StatsWindow
 
 _ANSI_RX = re.compile(r"\x1b\[[0-9;]*m")
 # Deterministic in-process cache for historical runs indexing.
-# Invalidation is signature-based: (count, max mtime_ns) across matching log files.
-_RUNS_CACHE: dict[tuple[str, str], tuple[tuple[int, int], list[RunEntry]]] = {}
+# Invalidation is signature-based: (count, max mtime_ns, max size) across matching log files.
+_RUNS_CACHE: dict[tuple[str, str], tuple[tuple[int, int, int], list[RunEntry]]] = {}
 
 
 def _utc_iso(ts: float) -> str:
@@ -117,14 +117,15 @@ def parse_run_result_from_sanitized_text(
     return "unknown", result_line
 
 
-def runs_signature(patches_root: Path, log_filename_regex: str) -> tuple[int, int]:
+def runs_signature(patches_root: Path, log_filename_regex: str) -> tuple[int, int, int]:
     rx = re.compile(log_filename_regex)
     logs_dir = patches_root / "logs"
     if not logs_dir.exists() or not logs_dir.is_dir():
-        return (0, 0)
+        return (0, 0, 0)
 
     count = 0
     max_mtime_ns = 0
+    max_size = 0
     for log_path in logs_dir.iterdir():
         if not log_path.is_file():
             continue
@@ -139,7 +140,9 @@ def runs_signature(patches_root: Path, log_filename_regex: str) -> tuple[int, in
         count += 1
         if st.st_mtime_ns > max_mtime_ns:
             max_mtime_ns = st.st_mtime_ns
-    return (count, max_mtime_ns)
+        if st.st_size > max_size:
+            max_size = int(st.st_size)
+    return (count, max_mtime_ns, max_size)
 
 
 def iter_runs(patches_root: Path, log_filename_regex: str) -> list[RunEntry]:
@@ -150,6 +153,7 @@ def iter_runs(patches_root: Path, log_filename_regex: str) -> list[RunEntry]:
 
     count = 0
     max_mtime_ns = 0
+    max_size = 0
     matched_paths: list[Path] = []
     for log_path in logs_dir.iterdir():
         if not log_path.is_file():
@@ -167,9 +171,11 @@ def iter_runs(patches_root: Path, log_filename_regex: str) -> list[RunEntry]:
         count += 1
         if st.st_mtime_ns > max_mtime_ns:
             max_mtime_ns = st.st_mtime_ns
+        if st.st_size > max_size:
+            max_size = int(st.st_size)
 
     key = (str(patches_root), log_filename_regex)
-    sig = (count, max_mtime_ns)
+    sig = (count, max_mtime_ns, max_size)
     cached = _RUNS_CACHE.get(key)
     if cached is not None:
         cached_sig, cached_runs = cached

@@ -316,7 +316,7 @@ function init() {
 
 			refreshTimer = setInterval(() => {
 				try {
-					if (activeJobId) refreshJobs();
+					if (activeJobId) refreshJobs({ mode: "periodic" });
 					else idleRefreshTick();
 					refreshTail(tailLines);
 				} catch (e) {
@@ -326,7 +326,7 @@ function init() {
 
 			headerTimer = setInterval(() => {
 				try {
-					if (activeJobId) refreshHeader();
+					if (activeJobId) refreshHeader({ mode: "periodic" });
 				} catch (e) {
 					setUiError(e);
 				}

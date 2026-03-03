@@ -144,8 +144,20 @@ function apiGetETag(key, path, opts) {
 	path = String(path || "");
 	opts = opts || {};
 
-	// Abort prior request for this key (deterministic: latest wins).
-	apiAbortKey(key);
+	// Request policy:
+	// - mode="periodic": MUST NOT start a second request if one is in-flight.
+	// - mode="user" or "latest": abort prior request (deterministic: latest wins).
+	var mode = String(opts.mode || "latest")
+		.trim()
+		.toLowerCase();
+	var singleFlight = !!opts.single_flight;
+
+	var cur = __phInFlight[key];
+	if (cur && (mode === "periodic" || singleFlight)) return cur;
+
+	if (mode !== "periodic") {
+		apiAbortKey(key);
+	}
 
 	var ctl = new AbortController();
 	__phAborters[key] = ctl;

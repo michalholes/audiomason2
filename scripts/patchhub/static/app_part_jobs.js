@@ -186,15 +186,21 @@ function idleRefreshTick() {
 		});
 }
 
-function refreshJobs() {
-	apiGet("/api/jobs").then((r) => {
-		if (!r || r.ok === false) {
-			setPre("jobsList", r);
-			PH.call("renderActiveJob", []);
-			return;
-		}
-		renderJobsFromResponse(r);
-	});
+function refreshJobs(opts) {
+	opts = opts || {};
+	var mode = String(opts.mode || "user");
+	var sf = mode === "periodic";
+	apiGetETag("jobs_list", "/api/jobs", { mode: mode, single_flight: sf }).then(
+		(r) => {
+			if (!r || r.ok === false) {
+				setPre("jobsList", r);
+				PH.call("renderActiveJob", []);
+				return;
+			}
+			if (r.unchanged) return;
+			renderJobsFromResponse(r);
+		},
+	);
 }
 
 function ensureAutoRefresh(jobs) {
@@ -208,15 +214,11 @@ function ensureAutoRefresh(jobs) {
 	else PH.call("closeLiveStream");
 
 	if (activeJobId) {
-		if (!autoRefreshTimer) {
-			autoRefreshTimer = setInterval(() => {
-				try {
-					refreshJobs();
-					__ph_w.refreshRuns();
-				} catch (e) {
-					setUiError(e);
-				}
-			}, 1500);
+		// Do not start a separate polling timer here.
+		// Polling is centralized in app_part_wire_init.js and is stopped when tab is hidden.
+		if (autoRefreshTimer) {
+			clearInterval(autoRefreshTimer);
+			autoRefreshTimer = null;
 		}
 		return;
 	}

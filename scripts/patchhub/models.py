@@ -44,6 +44,7 @@ def job_to_list_item_json(j: JobRecord) -> dict[str, Any]:
         "ended_utc": j.ended_utc,
         "mode": j.mode,
         "issue_id": j.issue_id,
+        "label": f"{j.mode} #{j.issue_id}".strip(),
     }
 
 
@@ -59,6 +60,25 @@ class RunEntry:
     archived_patch_rel_path: str | None = None
     diff_bundle_rel_path: str | None = None
     success_zip_rel_path: str | None = None
+
+
+def run_to_list_item_json(r: RunEntry) -> dict[str, Any]:
+    # Thin DTO for list endpoints (spec: RunListItem JSON).
+    # artifact_refs is an array of rel paths (may be empty).
+    refs: list[str] = []
+    if r.archived_patch_rel_path:
+        refs.append(str(r.archived_patch_rel_path))
+    if r.diff_bundle_rel_path:
+        refs.append(str(r.diff_bundle_rel_path))
+    if r.success_zip_rel_path:
+        refs.append(str(r.success_zip_rel_path))
+    return {
+        "issue_id": r.issue_id,
+        "result": r.result,
+        "mtime_utc": r.mtime_utc,
+        "log_rel_path": r.log_rel_path,
+        "artifact_refs": refs,
+    }
 
 
 @dataclass

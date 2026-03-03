@@ -45,11 +45,21 @@ function renderRunsFromResponse(r) {
 			node.addEventListener("click", () => {
 				var item = node.parentElement;
 				var idx = parseInt(item.getAttribute("data-idx") || "-1", 10);
+				var thin = null;
+				var iid = NaN;
 				if (idx >= 0 && idx < runsCache.length) {
-					selectedRun = runsCache[idx];
-					renderIssueDetail();
-					refreshRuns();
+					thin = runsCache[idx];
+					iid = Number(thin.issue_id);
 				}
+				if (!Number.isFinite(iid)) return;
+				apiGet(`/api/runs/${encodeURIComponent(String(iid))}`).then((dr) => {
+					if (!dr || dr.ok === false) {
+						setPre("issueTabBody", dr);
+						return;
+					}
+					selectedRun = dr.run;
+					renderIssueDetail();
+				});
 			});
 		},
 	);
