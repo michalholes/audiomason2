@@ -2,7 +2,7 @@
 
 Status: normative
 
-Specification Version: 0.2.0
+Specification Version: 0.2.1
 
 This document is the authoritative specification for the BadGuys suite shipped in this repository.
 BadGuys exists to systematically break the AM Patch Runner and verify that it FAILs correctly.
@@ -160,7 +160,16 @@ Unknown keys MAY exist but MUST NOT change behavior unless explicitly defined by
   - maximum number of selected tests with makes_commit=true
   - default if missing: 1
 
-### 4.2 [lock]
+
+### 4.2 [runner]
+
+- full_runner_tests (array of strings)
+  - list of test_ids that are allowed to invoke the AM Patch Runner without --test-mode
+  - default if missing: []
+  - each entry MUST be an existing discovered test_id; otherwise the suite MUST FAIL before execution
+  - duplicates MUST be rejected (suite MUST FAIL before execution)
+
+### 4.3 [lock]
 
 - path (string)
   - lock file path (repo-relative)
@@ -175,7 +184,7 @@ Unknown keys MAY exist but MUST NOT change behavior unless explicitly defined by
   - default if missing: "fail"
   - semantics are defined in section 9 (Locking)
 
-### 4.3 [guard]
+### 4.4 [guard]
 
 - require_guard_test (bool)
   - default if missing: true
@@ -284,7 +293,25 @@ BadGuys MUST NOT use stdout/stderr parsing as the authoritative decision source 
 If the IPC result includes log_path and/or json_path, BadGuys MUST copy those artifacts into the
 per-test log directory with stable filenames (no timestamps) BEFORE cleanup deletes issue artifacts.
 
-### 7.3 Cleanup and isolation (normative)
+
+### 7.4 Runner test mode (normative)
+
+When a step executes the AM Patch Runner, BadGuys MUST control runner mode centrally.
+
+Default rule:
+- For every step that invokes scripts/am_patch.py, BadGuys MUST inject the flag --test-mode
+  into the runner argv (including informational invocations such as -h, --help-all, or --show-config).
+
+Full runner allowlist rule:
+- If the current test_id is listed in config table [runner].full_runner_tests, BadGuys MUST NOT inject
+  --test-mode for that test.
+
+Single source of truth rule:
+- A test definition MUST NOT attempt to control runner mode directly via extra_args.
+- If extra_args contains --test-mode for any runner invocation, the suite MUST FAIL before execution
+  with a deterministic error message identifying the test_id.
+
+### 7.5 Cleanup and isolation (normative)
 
 BadGuys provides two cleanup layers:
 
@@ -301,7 +328,7 @@ BadGuys provides two cleanup layers:
 
 Tests MUST NOT rely on artifacts from any previous test.
 
-### 7.4 Forbidden patterns
+### 7.6 Forbidden patterns
 
 - A test MUST NOT invoke "python3 badguys/badguys.py" (directly or indirectly).
   Reason: the suite holds a global lock during the run; nesting would deadlock or violate isolation.
