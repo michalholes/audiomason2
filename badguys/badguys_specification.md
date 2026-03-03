@@ -212,21 +212,26 @@ BadGuys MUST support this environment variable:
 
 ## 6. Discovery and selection
 
-Discovery is implemented in badguys/tests/__init__.py.
+Discovery is implemented in badguys/discovery.py.
 
 Rules (normative):
-1) Tests are files in badguys/tests/ matched by glob: test_*.py
+1) Tests are files in badguys/tests/ matched by glob: *.bdg
 2) Files MUST be processed in lexicographic order by filename.
-3) Each file MUST define a dict TEST with keys:
-   - name (string)
-   - run (callable)
-   - optional: makes_commit (bool)
-   - optional: is_guard (bool)
-4) Contract: TEST["name"] MUST equal the filename stem (basename without .py).
+3) Each test file MUST be a TOML document. The test id is the filename stem
+   (basename without the .bdg extension).
+4) The TOML document MAY contain a [meta] table. Supported keys:
+   - makes_commit (bool, default false)
+   - is_guard (bool, default false)
 5) The effective include filter is applied first (if non-empty).
 6) The effective exclude filter is applied second.
-7) If guard.require_guard_test=true:
-   - guard.guard_test_name MUST be present after filtering, otherwise the suite MUST FAIL with:
+7) If include and exclude are both non-empty and overlap, the suite MUST FAIL with:
+   "FAIL: include/exclude conflict: <comma-separated names>"
+8) If guard.require_guard_test=true:
+   - if guard.guard_test_name is present in the effective exclude set, the suite MUST FAIL with:
+     "FAIL: guard test excluded but required: <name>"
+   - if the guard test is not present after filtering but exists in the full discovered set, the
+     suite MUST inject the guard test back into the selected list.
+   - if the guard test does not exist in the full discovered set, the suite MUST FAIL with:
      "FAIL: guard test not found: <name>"
    - the guard test MUST be moved to index 0 (run first)
 
@@ -234,25 +239,36 @@ Rules (normative):
 
 ### 7.1 Structure
 
-- One test == one file "badguys/tests/test_*.py".
-- TEST["name"] == filename stem.
-- A test MUST implement run(ctx) and return one of:
-  - Plan (preferred), or
-  - [] (empty list) for pure no-op tests (legacy compatibility)
+- One test == one file "badguys/tests/*.bdg".
+- The test id is the filename stem (basename without .bdg).
+- A .bdg file MUST be valid TOML and MUST contain at least one [[step]].
 
-### 7.2 Plan and steps
+The .bdg schema is defined by badguys/bdg_loader.py (normative):
 
-Plan and step types are defined in badguys/_util.py:
-- Plan(steps=[...], cleanup_paths=[...])
+- [meta] (optional table)
+  - makes_commit (bool, default false)
+  - is_guard (bool, default false)
 
-Supported step types:
-- CmdStep(argv=[...], cwd=..., expect_rc=...)
-- FuncStep(name=..., fn=callable)
-- ExpectPathExists(path=Path)
+- [[asset]] (optional array of tables)
+  - id (string, required, unique within the file)
+  - kind (string, required)
+  - content (string, optional)
+  - [[asset.entry]] (optional array of tables)
+    - name (string, required)
+    - content (string, required)
 
-#### CmdStep runner result determination (normative)
+- [[step]] (required array of tables)
+  - op (string, required)
+  - additional keys are op-specific parameters
 
-When a CmdStep executes the AM Patch Runner (scripts/am_patch.py), BadGuys MUST determine the
+### 7.2 Execution model
+
+- Discovery produces TestDef objects whose run(ctx) returns a BdgTest.
+- The engine MUST execute the listed BdgStep objects in order.
+
+### 7.3 Runner result determination (normative)
+
+When a step executes the AM Patch Runner (scripts/am_patch.py), BadGuys MUST determine the
 runner outcome primarily from the IPC socket event stream.
 
 Primary rule:
@@ -267,8 +283,6 @@ BadGuys MUST NOT use stdout/stderr parsing as the authoritative decision source 
 
 If the IPC result includes log_path and/or json_path, BadGuys MUST copy those artifacts into the
 per-test log directory with stable filenames (no timestamps) BEFORE cleanup deletes issue artifacts.
-
-The engine MUST execute steps in order.
 
 ### 7.3 Cleanup and isolation (normative)
 
