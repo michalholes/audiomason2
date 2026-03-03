@@ -5,8 +5,14 @@ is_guard = false
 [[asset]]
 id = "patch"
 kind = "git_patch_text"
-content = 'diff --git a/docs/badguys_batch1/test_mode_hard_stop_marker.txt b/docs/badguys_batch1/test_mode_hard_stop_marker.txt\nnew file mode 100644\nindex 0000000..1111111\n--- /dev/null\n+++ b/docs/badguys_batch1/test_mode_hard_stop_marker.txt\n@@ -0,0 +1,1 @@\n+marker\n'
-
+content = """diff --git a/docs/badguys_batch1/test_mode_hard_stop_marker.txt b/docs/badguys_batch1/test_mode_hard_stop_marker.txt
+new file mode 100644
+index 0000000..1111111
+--- /dev/null
++++ b/docs/badguys_batch1/test_mode_hard_stop_marker.txt
+@@ -0,0 +1,1 @@
++marker
+"""
 [[step]]
 op = "DELETE_PATCHED_ZIP"
 

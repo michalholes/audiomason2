@@ -5,8 +5,15 @@ is_guard = false
 [[asset]]
 id = "patch"
 kind = "git_patch_text"
-content = 'diff --git a/scripts/badguys_batch1_compile_fail.py b/scripts/badguys_batch1_compile_fail.py\nnew file mode 100644\nindex 0000000..1111111\n--- /dev/null\n+++ b/scripts/badguys_batch1_compile_fail.py\n@@ -0,0 +1,2 @@\n+def oops(:\n+    pass\n'
-
+content = """diff --git a/scripts/badguys_batch1_compile_fail.py b/scripts/badguys_batch1_compile_fail.py
+new file mode 100644
+index 0000000..1111111
+--- /dev/null
++++ b/scripts/badguys_batch1_compile_fail.py
+@@ -0,0 +1,2 @@
++def oops(:
++    pass
+"""
 [[step]]
 op = "DELETE_PATCHED_ZIP"
 

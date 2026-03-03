@@ -8,8 +8,14 @@ kind = "patch_zip_manifest"
 
   [[asset.entry]]
   name = "inner.patch"
-  content = 'diff --git a/src/test.py b/src/test.py\nnew file mode 100644\nindex 0000000..1111111\n--- /dev/null\n+++ b/src/test.py\n@@ -0,0 +1,1 @@\n+oops = )\n'
-
+  content = """diff --git a/src/test.py b/src/test.py
+new file mode 100644
+index 0000000..1111111
+--- /dev/null
++++ b/src/test.py
+@@ -0,0 +1,1 @@
++oops = )
+"""
 [[step]]
 op = "RUN_RUNNER"
 extra_args = ["-g", "--test-mode", "${issue_id}", "badguys: -g continues after gate fail (compile)"]
