@@ -157,9 +157,8 @@ gate_typescript_command = ["tsc", "--noEmit", "--pretty", "false", "--allowJs", 
 gate_typescript_mode = "auto" # auto | always
 gate_typescript_base_tsconfig = "tsconfig.json"
 typescript_targets = [
-    "plugins/import/ui/web/assets",
-    "plugins/web_interface/ui/assets",
-    "scripts/patchhub/static",
+    "plugins/",
+    "scripts/",
 ]
 
 
