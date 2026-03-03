@@ -3,7 +3,7 @@ Status: AUTHORITATIVE SPECIFICATION
 Applies to: scripts/patchhub/*
 Language: ENGLISH (ASCII ONLY)
 
-Specification Version: 1.5.0-spec
+Specification Version: 1.6.0-spec
 Code Baseline: audiomason2-main.zip (as provided in this chat)
 
 -------------------------------------------------------------------------------
@@ -1038,7 +1038,15 @@ Schema (best-effort, current implementation):
   "lock": { "path": "<string>", "held": <bool> },
   "disk": { "total": <int>, "used": <int>, "free": <int> },
   "runs": { "count": <int> },
-  "stats": { "all_time": <StatsWindow>, "windows": [<StatsWindow>, ...] }
+  "stats": { "all_time": <StatsWindow>, "windows": [<StatsWindow>, ...] },
+  "resources": {
+    "process": { "rss_bytes": <int>, "cpu_user_seconds": <float>, "cpu_system_seconds": <float> },
+    "host": {
+      "loadavg_1": <float>, "loadavg_5": <float>, "loadavg_15": <float>,
+      "mem_total_bytes": <int>, "mem_available_bytes": <int>,
+      "net_rx_bytes_total": <int>, "net_tx_bytes_total": <int>
+    }
+  }
 }
 StatsWindow schema:
 { "days": <int>, "total": <int>, "success": <int>, "fail": <int>, "unknown": <int> }
