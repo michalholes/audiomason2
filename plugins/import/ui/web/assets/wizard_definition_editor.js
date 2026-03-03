@@ -590,8 +590,9 @@
 		});
 	}
 
-	function reloadAll() {
-		if (!confirmIfDirty("Reload")) return false;
+	function reloadAll(opts) {
+		const skipConfirm = !!(opts && opts.skipConfirm);
+		if (!skipConfirm && !confirmIfDirty("Reload")) return false;
 		renderError(null, false);
 		setValidation(null, [], []);
 		return loadPalette().then((ok1) =>
@@ -903,5 +904,5 @@
 		reset: resetDefinition,
 	};
 
-	reloadAll();
+	reloadAll({ skipConfirm: true });
 })();
