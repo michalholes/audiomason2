@@ -220,6 +220,14 @@ def _exec_one(
             pass
         return StepResult(rc=0, stdout=None, stderr=None, value=str(sentinel))
 
+    if op == "DELETE_REPO_COMMIT_MARKER":
+        marker = repo_root / "badguys" / "artifacts" / "commit_marker.txt"
+        try:
+            marker.unlink()
+        except FileNotFoundError:
+            pass
+        return StepResult(rc=0, stdout=None, stderr=None, value=str(marker))
+
     if op == "ASSERT_NO_OUTSIDE_SENTINEL":
         sentinel = _outside_sentinel(repo_root, issue_id=issue_id)
         if sentinel.exists():
