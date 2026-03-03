@@ -17,7 +17,29 @@ function renderJobsFromResponse(r) {
 				: "";
 			if (st && st !== "running" && st !== "queued") {
 				const m = el("mode");
-				if (m) m.value = "patch";
+				if (m) {
+					m.value = "patch";
+					// Ensure the rest of the form state is updated (enable/disable inputs, preview, etc).
+					try {
+						if (typeof __ph_w.validateAndPreview === "function") {
+							__ph_w.validateAndPreview();
+						} else {
+							m.dispatchEvent(new Event("change"));
+						}
+					} catch (_) {}
+				}
+				// Clear transient inputs from the completed non-patch job.
+				try {
+					const cm = el("commitMsg");
+					if (cm) cm.value = "";
+					const rc = el("rawCommand");
+					if (rc) rc.value = "";
+				} catch (_) {}
+				try {
+					dirty.issueId = false;
+					dirty.commitMsg = false;
+					dirty.patchPath = false;
+				} catch (_) {}
 				window.__ph_last_enqueued_job_id = "";
 				window.__ph_last_enqueued_mode = "";
 			}
