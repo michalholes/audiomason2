@@ -4,6 +4,26 @@ var PH = /** @type {any} */ (window).PH;
 function renderJobsFromResponse(r) {
 	var jobs = r.jobs || [];
 
+	// If the most recently enqueued job reached a terminal state, reset mode to patch.
+	try {
+		const lastId = String(window.__ph_last_enqueued_job_id || "");
+		if (lastId) {
+			const j =
+				(jobs || []).find((x) => String(x.job_id || "") === lastId) || null;
+			const st = j
+				? String(j.status || "")
+						.trim()
+						.toLowerCase()
+				: "";
+			if (st && st !== "running" && st !== "queued") {
+				const m = el("mode");
+				if (m) m.value = "patch";
+				window.__ph_last_enqueued_job_id = "";
+				window.__ph_last_enqueued_mode = "";
+			}
+		}
+	} catch (_) {}
+
 	var active = jobs.find((j) => j.status === "running") || null;
 	var activeId = active ? String(active.job_id || "") : "";
 

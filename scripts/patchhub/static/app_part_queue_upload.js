@@ -143,6 +143,10 @@ function enqueue() {
 		if (r && r.ok !== false && r.job_id) {
 			setUiStatus("enqueue: ok job_id=" + String(r.job_id));
 			selectedJobId = String(r.job_id);
+			try {
+				window.__ph_last_enqueued_job_id = selectedJobId;
+				window.__ph_last_enqueued_mode = String(el("mode") && el("mode").value);
+			} catch (_) {}
 			AMP_UI.saveLiveJobId(selectedJobId);
 			suppressIdleOutput = false;
 			PH.call("openLiveStream", selectedJobId);
