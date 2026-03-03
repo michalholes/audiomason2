@@ -57,6 +57,7 @@ def execute_bdg(
     repo_root: Path,
     cfg_runner_cmd: list[str],
     issue_id: str,
+    full_runner_tests: set[str],
     bdg: BdgTest,
     mats: MaterializedAssets,
 ) -> list[StepResult]:
