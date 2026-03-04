@@ -7,8 +7,28 @@
 
 (() => {
 	/** @type {any} */
-	var W = window;
+	const W = window;
 
+	function getStaticVersion() {
+		try {
+			const el = document.querySelector('meta[name="patchhub-static-version"]');
+			if (!el) return "";
+			const v = el.getAttribute("content") || "";
+			if (typeof v !== "string") return "";
+			return v;
+		} catch (e) {
+			return "";
+		}
+	}
+
+	function withStaticVersion(url) {
+		var v = getStaticVersion();
+		if (!v) return url;
+		if (url.indexOf("?") >= 0) {
+			return url + "&v=" + encodeURIComponent(v);
+		}
+		return url + "?v=" + encodeURIComponent(v);
+	}
 	function nowIso() {
 		try {
 			return new Date().toISOString();
@@ -28,7 +48,7 @@
 	function recordClientStatus(kind, message) {
 		var store = tryGetLocalStorage();
 		if (!store) return;
-		var item = {
+		const item = {
 			ts: nowIso(),
 			kind: String(kind || ""),
 			msg: String(message || ""),
@@ -125,9 +145,12 @@
 	};
 
 	async function start() {
-		var ok = await loadScript("/static/patchhub_runtime.js", "runtime");
-		if (!ok) return;
 		if (!W.PH || typeof W.PH !== "object") {
+			W.PH = {};
+		}
+		let ok = await loadScript("/static/patchhub_runtime.js", "runtime");
+		if (!ok) return;
+		if (W.PH.__ph_runtime_ready !== true) {
 			bootLog("error", "PH runtime missing");
 			setDegradedOnce("fatal: PH runtime missing");
 			return;

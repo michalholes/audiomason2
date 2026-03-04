@@ -3,11 +3,31 @@
 
 (() => {
 	/** @type {any} */
-	var W = window;
-	var BOOT = W.PH_BOOT || null;
-	var PH_NS = W.PH || {};
+	const W = window;
+	const BOOT = W.PH_BOOT || null;
+	const PH_NS = W.PH || {};
 	W.PH = PH_NS;
 
+	function getStaticVersion() {
+		try {
+			const el = document.querySelector('meta[name="patchhub-static-version"]');
+			if (!el) return "";
+			const v = el.getAttribute("content") || "";
+			if (typeof v !== "string") return "";
+			return v;
+		} catch (e) {
+			return "";
+		}
+	}
+
+	function withStaticVersion(url) {
+		const v = getStaticVersion();
+		if (!v) return url;
+		if (url.indexOf("?") >= 0) {
+			return url + "&v=" + encodeURIComponent(v);
+		}
+		return url + "?v=" + encodeURIComponent(v);
+	}
 	function nowIso() {
 		try {
 			return new Date().toISOString();
@@ -17,7 +37,7 @@
 	}
 
 	function logStatus(kind, message) {
-		var msg = String(message || "");
+		const msg = String(message || "");
 		try {
 			if (kind === "error") console.error("[PatchHub]", msg);
 			else if (kind === "warn") console.warn("[PatchHub]", msg);
@@ -66,14 +86,14 @@
 	}
 
 	function degradedNote(moduleName, state, details) {
-		var msg = `Degraded mode: ${String(moduleName)} ${String(state)}`;
-		if (details) msg += ` (${String(details)})`;
-		return msg;
+		const base = `Degraded mode: ${String(moduleName)} ${String(state)}`;
+		if (!details) return base;
+		return `${base} (${String(details)})`;
 	}
 
 	function register(moduleName, exportsObj) {
-		var name = String(moduleName || "");
-		var m = ensureModule(name);
+		const name = String(moduleName || "");
+		const m = ensureModule(name);
 		m.state = "ready";
 		m.exports = exportsObj || {};
 		m.capabilities = Object.keys(m.exports || {});
@@ -85,8 +105,8 @@
 	}
 
 	function findCapability(capabilityName) {
-		var name = String(capabilityName || "");
-		var keys = Object.keys(registry);
+		const name = String(capabilityName || "");
+		const keys = Object.keys(registry);
 		for (let i = 0; i < keys.length; i++) {
 			const mod = registry[keys[i]];
 			if (!mod || mod.state !== "ready" || !mod.exports) continue;
@@ -102,8 +122,8 @@
 	}
 
 	function call(capabilityName, ...args) {
-		var cap = String(capabilityName || "");
-		var hit = findCapability(cap);
+		const cap = String(capabilityName || "");
+		const hit = findCapability(cap);
 		if (!hit) {
 			record(diag, { ts: nowIso(), kind: "missing", cap }, 50);
 			if (!once.missing[cap]) {
@@ -141,15 +161,15 @@
 	}
 
 	function loadScript(url, moduleName) {
-		var u = String(url || "");
-		var name = String(moduleName || "");
-		var m = ensureModule(name);
+		const u = String(url || "");
+		const name = String(moduleName || "");
+		const m = ensureModule(name);
 		m.state = "loading";
 		m.last_error = "";
 		logStatus("status", `load-start ${name} ${u}`);
 		return new Promise((resolve) => {
 			/** @type {HTMLScriptElement | null} */
-			var s = null;
+			let s = null;
 			try {
 				s = document.createElement("script");
 				s.src = u;
@@ -221,4 +241,5 @@
 	PH_NS.loadScript = loadScript;
 	PH_NS._diag = diag;
 	PH_NS._registry = registry;
+	PH_NS.__ph_runtime_ready = true;
 })();
