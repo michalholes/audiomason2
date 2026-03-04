@@ -101,7 +101,7 @@
 	}
 
 	function hasOwn(obj, key) {
-		return Object.hasOwn(obj, key);
+		return Object.prototype.hasOwnProperty.call(obj, key);
 	}
 
 	function findCapability(capabilityName) {
@@ -161,12 +161,13 @@
 	}
 
 	function loadScript(url, moduleName) {
-		const u = String(url || "");
+		const rawUrl = String(url || "");
+		const u = withStaticVersion(rawUrl);
 		const name = String(moduleName || "");
 		const m = ensureModule(name);
 		m.state = "loading";
 		m.last_error = "";
-		logStatus("status", `load-start ${name} ${u}`);
+		logStatus("status", `load-start ${name} ${rawUrl}`);
 		return new Promise((resolve) => {
 			/** @type {HTMLScriptElement | null} */
 			let s = null;
@@ -185,7 +186,7 @@
 									ts: nowIso(),
 									kind: "load_no_register",
 									module: name,
-									url: u,
+									url: rawUrl,
 								},
 								50,
 							);
@@ -207,7 +208,7 @@
 					m.last_error = "load failed";
 					record(
 						diag,
-						{ ts: nowIso(), kind: "load_error", module: name, url: u },
+						{ ts: nowIso(), kind: "load_error", module: name, url: rawUrl },
 						50,
 					);
 					if (!once.load[name]) {

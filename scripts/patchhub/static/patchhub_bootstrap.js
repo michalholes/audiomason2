@@ -22,7 +22,7 @@
 	}
 
 	function withStaticVersion(url) {
-		var v = getStaticVersion();
+		const v = getStaticVersion();
 		if (!v) return url;
 		if (url.indexOf("?") >= 0) {
 			return url + "&v=" + encodeURIComponent(v);
@@ -46,7 +46,7 @@
 	}
 
 	function recordClientStatus(kind, message) {
-		var store = tryGetLocalStorage();
+		const store = tryGetLocalStorage();
 		if (!store) return;
 		const item = {
 			ts: nowIso(),
@@ -70,7 +70,7 @@
 	}
 
 	function bootLog(kind, message) {
-		var msg = String(message || "");
+		const msg = String(message || "");
 		try {
 			if (kind === "error") console.error("[PatchHub]", msg);
 			else if (kind === "warn") console.warn("[PatchHub]", msg);
@@ -89,12 +89,13 @@
 	}
 
 	function loadScript(url, label) {
-		var u = String(url || "");
-		var l = String(label || "");
-		bootLog("status", `load-start ${l} ${u}`);
+		const rawUrl = String(url || "");
+		const u = withStaticVersion(rawUrl);
+		const l = String(label || "");
+		bootLog("status", `load-start ${l} ${rawUrl}`);
 		return new Promise((resolve) => {
 			/** @type {HTMLScriptElement | null} */
-			var s = null;
+			let s = null;
 			try {
 				s = document.createElement("script");
 				s.src = u;
