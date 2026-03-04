@@ -307,12 +307,18 @@ function init() {
 				clearInterval(headerTimer);
 				headerTimer = null;
 			}
+			if (patchStatTimer) {
+				clearInterval(patchStatTimer);
+				patchStatTimer = null;
+			}
 			stopAutofillPolling();
 			PH.call("closeLiveStream");
 		}
 
 		function startTimers() {
 			stopTimers();
+
+			patchStatTimer = setInterval(tickMissingPatchClear, 1000);
 
 			refreshTimer = setInterval(() => {
 				try {
@@ -331,6 +337,8 @@ function init() {
 					setUiError(e);
 				}
 			}, 5000);
+
+			startAutofillPolling();
 		}
 
 		function resyncVisible() {
