@@ -76,9 +76,15 @@ def _write_typescript_gate_tsconfig(
     gen_dir.mkdir(parents=True, exist_ok=True)
     gen_path = gen_dir / "tsconfig.typescript_gate.json"
     rel_extends = os.path.relpath(base_path, gen_dir)
+    includes = _typescript_targets_to_include(targets)
+    # NOTE: TypeScript resolves `include` relative to the directory of the
+    # tsconfig itself. Our generated tsconfig lives under `.am_patch/`, so we
+    # must point one level up to reach repo-relative targets (scripts/, plugins/...).
+    includes = [("../" + x.lstrip("./")) if not x.startswith(("../", "/")) else x for x in includes]
+    includes = [x.replace("\\", "/") for x in includes]
     payload: dict[str, object] = {
         "extends": rel_extends,
-        "include": _typescript_targets_to_include(targets),
+        "include": includes,
     }
     gen_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return gen_path
@@ -770,7 +776,7 @@ def run_gates(
                     logger.warning_core("gate_typescript=SKIP (no_matching_files)")
                     return True
             gen_path = _write_typescript_gate_tsconfig(
-                repo_root, base_tsconfig=ts_base, targets=ts_targets
+                cwd, base_tsconfig=ts_base, targets=ts_targets
             )
             argv = list(ts_cmd) + ["--project", str(gen_path)]
             r = logger.run_logged(argv, cwd=cwd)
