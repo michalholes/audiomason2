@@ -265,83 +265,22 @@ function wireButtons() {
 }
 
 function init() {
-	setupUpload();
-	wireButtons();
-	setPreviewVisible(false);
-	PH.call("loadUiVisibility");
-	PH.call("setRunsVisible", runsVisible);
-	PH.call("setJobsVisible", jobsVisible);
+	function start() {
+		setupUpload();
+		wireButtons();
+		setPreviewVisible(false);
+		PH.call("loadUiVisibility");
+		PH.call("setRunsVisible", runsVisible);
+		PH.call("setJobsVisible", jobsVisible);
 
-	PH.call("loadLiveLevel");
-	var savedJobId = PH.call("loadLiveJobId");
-	if (savedJobId) selectedJobId = savedJobId;
-	if (el("liveLevel")) {
-		el("liveLevel").value = liveLevel;
-	}
-
-	loadConfig().then(() => {
-		refreshFs();
-		refreshRuns();
-		PH.call("refreshStats");
-		refreshJobs();
-		refreshTail(tailLines);
-		refreshHeader();
-		renderIssueDetail();
-		validateAndPreview();
-
-		if (patchStatTimer) {
-			clearInterval(patchStatTimer);
-			patchStatTimer = null;
-		}
-		patchStatTimer = setInterval(tickMissingPatchClear, 1000);
-
-		var refreshTimer = null;
-		var headerTimer = null;
-
-		function stopTimers() {
-			if (refreshTimer) {
-				clearInterval(refreshTimer);
-				refreshTimer = null;
-			}
-			if (headerTimer) {
-				clearInterval(headerTimer);
-				headerTimer = null;
-			}
-			if (patchStatTimer) {
-				clearInterval(patchStatTimer);
-				patchStatTimer = null;
-			}
-			stopAutofillPolling();
-			PH.call("closeLiveStream");
+		PH.call("loadLiveLevel");
+		var savedJobId = PH.call("loadLiveJobId");
+		if (savedJobId) selectedJobId = savedJobId;
+		if (el("liveLevel")) {
+			el("liveLevel").value = liveLevel;
 		}
 
-		function startTimers() {
-			stopTimers();
-
-			patchStatTimer = setInterval(tickMissingPatchClear, 1000);
-
-			refreshTimer = setInterval(() => {
-				try {
-					if (activeJobId) refreshJobs({ mode: "periodic" });
-					else idleRefreshTick();
-					refreshTail(tailLines);
-				} catch (e) {
-					setUiError(e);
-				}
-			}, 2000);
-
-			headerTimer = setInterval(() => {
-				try {
-					if (activeJobId) refreshHeader({ mode: "periodic" });
-				} catch (e) {
-					setUiError(e);
-				}
-			}, 5000);
-
-			startAutofillPolling();
-		}
-
-		function resyncVisible() {
+		loadConfig().then(() => {
 			refreshFs();
 			refreshRuns();
 			PH.call("refreshStats");
@@ -350,34 +289,104 @@ function init() {
 			refreshHeader();
 			renderIssueDetail();
 			validateAndPreview();
-		}
 
-		document.addEventListener("visibilitychange", () => {
-			try {
-				if (document.hidden) {
-					stopTimers();
-				} else {
-					resyncVisible();
-					startTimers();
+			if (patchStatTimer) {
+				clearInterval(patchStatTimer);
+				patchStatTimer = null;
+			}
+			patchStatTimer = setInterval(tickMissingPatchClear, 1000);
+
+			var refreshTimer = null;
+			var headerTimer = null;
+
+			function stopTimers() {
+				if (refreshTimer) {
+					clearInterval(refreshTimer);
+					refreshTimer = null;
 				}
-			} catch (e) {
-				setUiError(e);
+				if (headerTimer) {
+					clearInterval(headerTimer);
+					headerTimer = null;
+				}
+				if (patchStatTimer) {
+					clearInterval(patchStatTimer);
+					patchStatTimer = null;
+				}
+				stopAutofillPolling();
+				PH.call("closeLiveStream");
+			}
+
+			function startTimers() {
+				stopTimers();
+
+				patchStatTimer = setInterval(tickMissingPatchClear, 1000);
+
+				refreshTimer = setInterval(() => {
+					try {
+						if (activeJobId) refreshJobs({ mode: "periodic" });
+						else idleRefreshTick();
+						refreshTail(tailLines);
+					} catch (e) {
+						setUiError(e);
+					}
+				}, 2000);
+
+				headerTimer = setInterval(() => {
+					try {
+						if (activeJobId) refreshHeader({ mode: "periodic" });
+					} catch (e) {
+						setUiError(e);
+					}
+				}, 5000);
+
+				startAutofillPolling();
+			}
+
+			function resyncVisible() {
+				refreshFs();
+				refreshRuns();
+				PH.call("refreshStats");
+				refreshJobs();
+				refreshTail(tailLines);
+				refreshHeader();
+				renderIssueDetail();
+				validateAndPreview();
+			}
+
+			document.addEventListener("visibilitychange", () => {
+				try {
+					if (document.hidden) {
+						stopTimers();
+					} else {
+						resyncVisible();
+						startTimers();
+					}
+				} catch (e) {
+					setUiError(e);
+				}
+			});
+
+			startTimers();
+
+			if (
+				/** @type {any} */ (window).AmpSettings &&
+				typeof (/** @type {any} */ (window).AmpSettings.init) === "function"
+			) {
+				try {
+					/** @type {any} */ (window).AmpSettings.init();
+				} catch (e) {
+					// Best-effort: do not break main UI if AMP settings init fails.
+				}
 			}
 		});
+	}
 
-		startTimers();
-
-		if (
-			/** @type {any} */ (window).AmpSettings &&
-			typeof (/** @type {any} */ (window).AmpSettings.init) === "function"
-		) {
-			try {
-				/** @type {any} */ (window).AmpSettings.init();
-			} catch (e) {
-				// Best-effort: do not break main UI if AMP settings init fails.
-			}
-		}
-	});
+	if (document.readyState === "loading") {
+		document.addEventListener("DOMContentLoaded", start);
+	} else {
+		start();
+	}
 }
 
-window.addEventListener("load", init);
+// Called by app.js after it loads all required parts.
+window.PH_APP_START = init;

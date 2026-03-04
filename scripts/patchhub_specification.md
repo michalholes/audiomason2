@@ -3,7 +3,7 @@ Status: AUTHORITATIVE SPECIFICATION
 Applies to: scripts/patchhub/*
 Language: ENGLISH (ASCII ONLY)
 
-Specification Version: 1.6.0-spec
+Specification Version: 1.7.0-spec
 Code Baseline: audiomason2-main.zip (as provided in this chat)
 
 -------------------------------------------------------------------------------
@@ -83,6 +83,35 @@ The runtime version MUST NOT be hardcoded in code.
   - provide a safe accessor for optional modules (missing module => visible
     fault + fallback no-op behavior),
   - keep a bounded in-memory list of recent client faults for display.
+
+2.3.1 Bootstrap Identity and No-Go Policy (HARD)
+
+- The PatchHub client bootstrap script MUST be exactly:
+  - scripts/patchhub/static/patchhub_bootstrap.js
+
+- index.html MUST load the bootstrap script before any other client script.
+- index.html MUST NOT load any other PatchHub client scripts directly.
+  - In particular, app.js MUST NOT be included via a direct <script src=...>.
+
+- The bootstrap script is NO-GO.
+  - Any patch touching scripts/patchhub/static/patchhub_bootstrap.js MUST be
+    rejected unless the issue text contains an explicit approval line from
+    Michal permitting a bootstrap change.
+
+2.3.2 Debug Survivability and Fatal Degraded Flag (HARD)
+
+- GET /debug MUST remain functional even if the main UI fails to load or throws
+  at runtime.
+- The bootstrap MUST persist a bounded client status log to localStorage key:
+  - patchhub.client_status_log
+- The /debug UI MUST display patchhub.client_status_log.
+
+- The bootstrap MUST set a "degraded" flag in patchhub.client_status_log on the
+  first fatal start failure.
+- A fatal start failure includes at minimum:
+  - failure to load runtime script(s),
+  - failure to load app.js,
+  - app init throwing (after app.js was loaded).
 
 2.4 Refresh Policy: ACTIVE vs IDLE (HARD)
 

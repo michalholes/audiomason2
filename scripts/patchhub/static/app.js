@@ -1,8 +1,7 @@
 // PatchHub app core (refactored split: part files).
 var __ph_w = /** @type {any} */ (window);
-var PH = __ph_w.PH;
-PH.loadScript("/static/patchhub_progress_ui.js", "progress");
-PH.loadScript("/static/patchhub_live_ui.js", "live");
+/** @type {any} */
+var PH = null;
 
 __ph_w.AMP_PATCHHUB_UI = __ph_w.AMP_PATCHHUB_UI || {};
 const AMP_UI = __ph_w.AMP_PATCHHUB_UI;
@@ -21,6 +20,82 @@ var liveLevel = "normal";
 var previewVisible = false;
 var runsVisible = false;
 var jobsVisible = false;
+
+function appLog(kind, message) {
+	var msg = String(message || "");
+	try {
+		if (__ph_w.PH_BOOT && typeof __ph_w.PH_BOOT.bootLog === "function") {
+			__ph_w.PH_BOOT.bootLog(kind, msg);
+			return;
+		}
+	} catch (e) {
+		// ignore
+	}
+	try {
+		if (kind === "error") console.error("[PatchHub]", msg);
+		else if (kind === "warn") console.warn("[PatchHub]", msg);
+		else console.log("[PatchHub]", msg);
+	} catch (e) {
+		// ignore
+	}
+}
+
+async function loadParts() {
+	PH = __ph_w.PH;
+	if (!PH) {
+		appLog("error", "PH runtime missing");
+		throw new Error("PH runtime missing");
+	}
+
+	// Optional modules (degraded mode if missing).
+	await PH.loadScript("/static/patchhub_progress_ui.js", "progress");
+	await PH.loadScript("/static/patchhub_live_ui.js", "live");
+	await PH.loadScript("/static/amp_settings.js", "amp_settings");
+
+	// App part files. wire_init is required for app start.
+	await PH.loadScript("/static/app_part_runs.js", "app_part_runs");
+	await PH.loadScript("/static/app_part_jobs.js", "app_part_jobs");
+	await PH.loadScript(
+		"/static/app_part_queue_upload.js",
+		"app_part_queue_upload",
+	);
+	await PH.loadScript(
+		"/static/app_part_autofill_header.js",
+		"app_part_autofill_header",
+	);
+	var okWire = await PH.loadScript(
+		"/static/app_part_wire_init.js",
+		"app_part_wire_init",
+	);
+	if (!okWire) {
+		appLog("error", "wire init module failed to load");
+		if (
+			__ph_w.PH_BOOT &&
+			typeof __ph_w.PH_BOOT.setDegradedOnce === "function"
+		) {
+			__ph_w.PH_BOOT.setDegradedOnce("fatal: wire init missing");
+		}
+		return false;
+	}
+	return true;
+}
+
+// Called by bootstrap.
+__ph_w.PH_APP_MAIN = async function PH_APP_MAIN() {
+	var ok = await loadParts();
+	if (!ok) return;
+	if (typeof __ph_w.PH_APP_START !== "function") {
+		appLog("error", "PH_APP_START missing");
+		if (
+			__ph_w.PH_BOOT &&
+			typeof __ph_w.PH_BOOT.setDegradedOnce === "function"
+		) {
+			__ph_w.PH_BOOT.setDegradedOnce("fatal: PH_APP_START missing");
+		}
+		return;
+	}
+	__ph_w.PH_APP_START();
+};
 
 // Deterministic IDLE visible-tab backoff. ACTIVE mode is not affected.
 var IDLE_BACKOFF_MS = [2000, 5000, 15000, 30000, 60000];
@@ -584,10 +659,5 @@ function refreshFs() {
 	});
 }
 
-// Refactor: split large sections into part files to satisfy monolith gate.
-// NOTE: document.write is used to preserve synchronous execution order during initial parse.
-document.write('<script src="/static/app_part_runs.js"></script>');
-document.write('<script src="/static/app_part_jobs.js"></script>');
-document.write('<script src="/static/app_part_queue_upload.js"></script>');
-document.write('<script src="/static/app_part_autofill_header.js"></script>');
-document.write('<script src="/static/app_part_wire_init.js"></script>');
+// App parts are loaded by PH_APP_MAIN via PH.loadScript to avoid relying on
+// document.write order, and to ensure bootstrap can observe failures.
