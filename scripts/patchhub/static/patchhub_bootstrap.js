@@ -127,6 +127,11 @@
 	async function start() {
 		var ok = await loadScript("/static/patchhub_runtime.js", "runtime");
 		if (!ok) return;
+		if (!W.PH || typeof W.PH !== "object") {
+			bootLog("error", "PH runtime missing");
+			setDegradedOnce("fatal: PH runtime missing");
+			return;
+		}
 		ok = await loadScript("/static/app.js", "app");
 		if (!ok) return;
 		try {

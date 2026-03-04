@@ -5,6 +5,8 @@
 	/** @type {any} */
 	var W = window;
 	var BOOT = W.PH_BOOT || null;
+	var PH_NS = W.PH || {};
+	W.PH = PH_NS;
 
 	function nowIso() {
 		try {
@@ -213,12 +215,10 @@
 		});
 	}
 
-	W.PH = {
-		register,
-		has,
-		call,
-		loadScript,
-		_diag: diag,
-		_registry: registry,
-	};
+	PH_NS.register = register;
+	PH_NS.has = has;
+	PH_NS.call = call;
+	PH_NS.loadScript = loadScript;
+	PH_NS._diag = diag;
+	PH_NS._registry = registry;
 })();
