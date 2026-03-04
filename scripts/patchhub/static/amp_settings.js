@@ -492,7 +492,7 @@
 			});
 		}
 
-		var inpFilter = el("ampFilter");
+		var inpFilter = /** @type {HTMLInputElement|null} */ (el("ampFilter"));
 		if (inpFilter) {
 			inpFilter.addEventListener("input", () => {
 				filterText = String(inpFilter.value || "");

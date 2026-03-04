@@ -145,8 +145,12 @@
 	function initTabs() {
 		const wrap = document.getElementById("tabs");
 		if (!wrap) return;
-		const btns = Array.from(wrap.querySelectorAll(".tabBtn"));
-		const panels = Array.from(document.querySelectorAll(".tabPanel"));
+		const btns = /** @type {HTMLElement[]} */ (
+			Array.from(wrap.querySelectorAll(".tabBtn"))
+		);
+		const panels = /** @type {HTMLElement[]} */ (
+			Array.from(document.querySelectorAll(".tabPanel"))
+		);
 
 		let flowAutoLoaded = false;
 
@@ -354,15 +358,23 @@
 		const grouped = {};
 
 		nodes.forEach((n) => {
-			if (n.dataset.stepId !== stepId) return;
-			const ftype = n.dataset.ftype || "";
-			const name = n.dataset.field || "";
+			const node =
+				/** @type {HTMLInputElement|HTMLSelectElement|HTMLTextAreaElement} */ (
+					n
+				);
+			if (node.dataset.stepId !== stepId) return;
+			const ftype = node.dataset.ftype || "";
+			const name = node.dataset.field || "";
 			if (!name) return;
 
 			if (ftype === "multi_select_indexed") {
 				if (!grouped[name]) grouped[name] = [];
-				if (n.getAttribute("type") === "checkbox" && n.checked) {
-					grouped[name].push(String(n.dataset.itemId || ""));
+				if (
+					node instanceof HTMLInputElement &&
+					node.getAttribute("type") === "checkbox" &&
+					node.checked
+				) {
+					grouped[name].push(String(node.dataset.itemId || ""));
 				}
 				return;
 			}
@@ -371,7 +383,8 @@
 				n.tagName.toLowerCase() === "input" &&
 				n.getAttribute("type") === "checkbox"
 			) {
-				payload[name] = !!n.checked;
+				payload[name] =
+					node instanceof HTMLInputElement ? !!node.checked : false;
 				return;
 			}
 
@@ -379,13 +392,13 @@
 				n.tagName.toLowerCase() === "input" &&
 				n.getAttribute("type") === "number"
 			) {
-				if (n.value === "") payload[name] = null;
-				else payload[name] = Number(n.value);
+				if (node.value === "") payload[name] = null;
+				else payload[name] = Number(node.value);
 				return;
 			}
 
 			if (n.tagName.toLowerCase() === "textarea") {
-				const raw = String(n.value || "");
+				const raw = String(node.value || "");
 				try {
 					payload[name] = JSON.parse(raw);
 				} catch {
@@ -394,7 +407,7 @@
 				return;
 			}
 
-			payload[name] = String(n.value || "");
+			payload[name] = String(node.value || "");
 		});
 
 		for (const [name, ids] of Object.entries(grouped)) {

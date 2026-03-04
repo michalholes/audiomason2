@@ -9,7 +9,7 @@
 		status: $("flowAllStatus"),
 		reloadAll: $("flowReloadAll"),
 		validateAll: $("flowValidateAll"),
-		saveAll: $("flowSaveAll"),
+		saveAll: /** @type {HTMLButtonElement|null} */ ($("flowSaveAll")),
 		resetAll: $("flowResetAll"),
 	};
 
