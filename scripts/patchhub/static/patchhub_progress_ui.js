@@ -130,7 +130,7 @@
 
 		function ensureStep(name) {
 			if (!name) return;
-			if (!Object.hasOwn(state, name)) {
+			if (!Object.prototype.hasOwnProperty.call(state, name)) {
 				state[name] = "pending";
 			}
 			if (order.indexOf(name) < 0) order.push(name);
@@ -190,7 +190,8 @@
 
 		for (let k = 0; k < order.length; k++) {
 			const nm2 = order[k];
-			if (!Object.hasOwn(state, nm2)) state[nm2] = "pending";
+			if (!Object.prototype.hasOwnProperty.call(state, nm2))
+				state[nm2] = "pending";
 		}
 
 		return { order: order, state: state, resultStatus: resultStatus };

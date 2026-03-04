@@ -73,7 +73,7 @@ function wireButtons() {
 		el("fsDelete").addEventListener("click", () => {
 			var paths = [];
 			for (var k in fsChecked) {
-				if (Object.hasOwn(fsChecked, k)) paths.push(k);
+				if (Object.prototype.hasOwnProperty.call(fsChecked, k)) paths.push(k);
 			}
 			if (!paths.length && fsSelected) paths = [fsSelected];
 			if (!paths.length) {

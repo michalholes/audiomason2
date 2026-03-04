@@ -5,7 +5,8 @@
 	/** @type {any} */
 	const W = window;
 	const BOOT = W.PH_BOOT || null;
-	const PH_NS = W.PH || {};
+	const PH_NS = W.PH_RT || {};
+	W.PH_RT = PH_NS;
 	W.PH = PH_NS;
 
 	function getStaticVersion() {

@@ -40,8 +40,8 @@ function appLog(kind, message) {
 	}
 }
 
-async function loadParts() {
-	PH = __ph_w.PH;
+async function loadParts(rt) {
+	PH = rt;
 	if (!PH) {
 		appLog("error", "PH runtime missing");
 		throw new Error("PH runtime missing");
@@ -81,8 +81,8 @@ async function loadParts() {
 }
 
 // Called by bootstrap.
-__ph_w.PH_APP_MAIN = async function PH_APP_MAIN() {
-	var ok = await loadParts();
+__ph_w.PH_APP_MAIN = async function PH_APP_MAIN(rt) {
+	var ok = await loadParts(rt);
 	if (!ok) return;
 	if (typeof __ph_w.PH_APP_START !== "function") {
 		appLog("error", "PH_APP_START missing");
@@ -401,7 +401,7 @@ function setFsHint(msg) {
 function fsUpdateSelCount() {
 	var n = 0;
 	for (var k in fsChecked) {
-		if (Object.hasOwn(fsChecked, k)) n += 1;
+		if (Object.prototype.hasOwnProperty.call(fsChecked, k)) n += 1;
 	}
 	var node = el("fsSelCount");
 	if (node) {
@@ -418,7 +418,7 @@ function fsClearSelection() {
 function fsDownloadSelected() {
 	var paths = [];
 	for (var k in fsChecked) {
-		if (Object.hasOwn(fsChecked, k)) paths.push(k);
+		if (Object.prototype.hasOwnProperty.call(fsChecked, k)) paths.push(k);
 	}
 	if (!paths.length) {
 		setFsHint("select at least one item");

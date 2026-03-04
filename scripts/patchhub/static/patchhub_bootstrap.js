@@ -146,12 +146,14 @@
 	};
 
 	async function start() {
-		if (!W.PH || typeof W.PH !== "object") {
-			W.PH = {};
+		if (!W.PH_RT || typeof W.PH_RT !== "object") {
+			W.PH_RT = {};
 		}
+		// Compatibility alias (legacy modules may read window.PH).
+		W.PH = W.PH_RT;
 		let ok = await loadScript("/static/patchhub_runtime.js", "runtime");
 		if (!ok) return;
-		if (W.PH.__ph_runtime_ready !== true) {
+		if (W.PH_RT.__ph_runtime_ready !== true) {
 			bootLog("error", "PH runtime missing");
 			setDegradedOnce("fatal: PH runtime missing");
 			return;
@@ -164,7 +166,7 @@
 				setDegradedOnce("fatal: PH_APP_MAIN missing");
 				return;
 			}
-			await Promise.resolve(W.PH_APP_MAIN());
+			await Promise.resolve(W.PH_APP_MAIN(W.PH_RT));
 			bootLog("status", "app-init-ok");
 		} catch (e) {
 			bootLog("error", "app-init-failed");

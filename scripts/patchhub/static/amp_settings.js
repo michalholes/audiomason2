@@ -97,10 +97,12 @@
 		var o = p || {};
 		var type = o && o.type != null ? String(o.type) : "";
 		var defv =
-			o && Object.hasOwn(o, "default") ? JSON.stringify(o.default) : "";
+			o && Object.prototype.hasOwnProperty.call(o, "default")
+				? JSON.stringify(o.default)
+				: "";
 		var sec = o && o.section != null ? String(o.section) : "";
 		var ro = "";
-		if (o && Object.hasOwn(o, "read_only")) {
+		if (o && Object.prototype.hasOwnProperty.call(o, "read_only")) {
 			ro = o.read_only ? "true" : "false";
 		}
 		return (
@@ -363,7 +365,10 @@
 			var out = {};
 			Object.keys(fieldKinds).forEach((k) => {
 				var kind = fieldKinds[k];
-				var v = src && Object.hasOwn(src, k) ? src[k] : undefined;
+				var v =
+					src && Object.prototype.hasOwnProperty.call(src, k)
+						? src[k]
+						: undefined;
 				if (kind === "list_str") {
 					out[k] = normalizeList(v);
 				} else if (kind === "bool") {
