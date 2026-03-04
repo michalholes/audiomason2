@@ -2,15 +2,30 @@ export {};
 
 declare global {
 	interface Window {
+		// --- import/ui globals (reálne sa nastavujú v JS assets) ---
+		AM2EditorHTTP: any;
 		AM2FlowEditor: any;
 		AM2FlowEditorState: any; // ak používaš AM2FlowEditorState
+		FlowEditorState: any; // flow_editor_state.js nastavuje window.FlowEditorState
+		AM2FlowConfigEditor: any;
+		AM2WizardDefinitionEditor: any;
 		AM2UI: any;
 
+		// --- Wizard Definition editor components ---
 		AM2WDDomIcons: any;
 		AM2WDEdgesIntegrity: any;
 		AM2WDStepDetailsLoader: any;
+		AM2WDDetailsRender: any;
+		AM2WDGraphStable: any;
+		AM2WDLayoutRoot: any;
+		AM2WDPaletteRender: any;
+		AM2WDRawError: any;
+		AM2WDSidebar: any;
 
 		AmpSettings: any;
+
+		// --- Patchhub ---
+		PH_APP_START: any; // app_part_wire_init.js nastavuje window.PH_APP_START
 
 		__AM_APP_LOADED__: any;
 		__AM_UI_LOGS__: any;
@@ -23,6 +38,24 @@ declare global {
 
 		__ph_last_enqueued_job_id: any;
 		__ph_last_enqueued_mode: any;
+	}
+
+	// --- DOM typing relaxácie pre checkJs (aby Element/HTMLElement mali používané props) ---
+	// Pozn.: toto je "typový hack" – tichšie než prepisovať veľa JS na presné casty.
+	interface Element {
+		// import_wizard.js používa b.dataset / p.dataset na Elementoch z querySelectorAll()
+		dataset: DOMStringMap;
+		// import_wizard.js používa checked/value na Elementoch (typicky input/select)
+		value?: any;
+		checked?: any;
+	}
+
+	interface HTMLElement {
+		// flow_all_actions.js používa .disabled na HTMLElement
+		disabled?: boolean;
+		// amp_settings.js používa .value na elemente vrátenom helperom el()
+		value?: any;
+		checked?: any;
 	}
 
 	// Ak sa to volá globálne bez window. (napr. startBookFlow())
