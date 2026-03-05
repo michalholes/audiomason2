@@ -40,24 +40,6 @@ declare global {
 		__ph_last_enqueued_mode: any;
 	}
 
-	// --- DOM typing relaxácie pre checkJs (aby Element/HTMLElement mali používané props) ---
-	// Pozn.: toto je "typový hack" – tichšie než prepisovať veľa JS na presné casty.
-	interface Element {
-		// import_wizard.js používa b.dataset / p.dataset na Elementoch z querySelectorAll()
-		dataset: DOMStringMap;
-		// import_wizard.js používa checked/value na Elementoch (typicky input/select)
-		value?: any;
-		checked?: any;
-	}
-
-	interface HTMLElement {
-		// flow_all_actions.js používa .disabled na HTMLElement
-		disabled?: boolean;
-		// amp_settings.js používa .value na elemente vrátenom helperom el()
-		value?: any;
-		checked?: any;
-	}
-
 	// Ak sa to volá globálne bez window. (napr. startBookFlow())
 	function startBookFlow(...args: any[]): any;
 }
