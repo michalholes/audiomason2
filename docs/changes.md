@@ -1,3 +1,11 @@
+## 2026-03-05T00:00:00+01:00
+
+-   spec: Define WizardDefinition v3 as a DSL program model (primitive invocations, single-file JSON).
+-   spec: Define FlowModel kind gating for legacy v2 vs DSL v3.
+-   spec: Define SessionState namespaces and state-path conventions for the DSL interpreter.
+-   spec: Define import wizard primitive registry artifact and baseline expression operators/functions.
+-   spec: Bump specification version to 2.0.6-normalized-m1.
+
 ## 2026-03-03T00:00:00+01:00
 
 -   Issue 23: Import wizard editor now enforces mandatory ordering constraints for
