@@ -153,7 +153,10 @@ function idleRefreshTick() {
 	if (idleSigs.snapshot)
 		qs = "?since_sig=" + encodeURIComponent(idleSigs.snapshot);
 
-	apiGetETag("ui_snapshot", "/api/ui_snapshot" + qs)
+	apiGetETag("ui_snapshot", "/api/ui_snapshot" + qs, {
+		mode: "periodic",
+		single_flight: true,
+	})
 		.then((r) => {
 			if (!r || r.ok === false) return { changed: false };
 			if (r.unchanged) return { changed: false };
@@ -181,6 +184,7 @@ function idleRefreshTick() {
 
 			return { changed: true };
 		})
+		.catch((e) => ({ changed: false }))
 		.then((res) => {
 			var changed = !!(res && res.changed);
 			if (changed) {
