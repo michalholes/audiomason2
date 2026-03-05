@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import shutil
 import subprocess
+import sys
 import threading
+import time
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
@@ -40,7 +42,7 @@ def _outside_sentinel(repo_root: Path, *, issue_id: str) -> Path:
 def _logs_dir(repo_root: Path) -> Path:
     cfg_path = repo_root / "badguys" / "config.toml"
     raw = tomllib.loads(cfg_path.read_text(encoding="utf-8"))
-    logs_rel = raw.get("suite", {}).get("logs_dir", "badguys/per_run_logs")
+    logs_rel = raw.get("suite", {}).get("logs_dir", "patches/badguys_logs")
     return repo_root / Path(str(logs_rel))
 
 
@@ -59,9 +61,10 @@ def execute_bdg(
     full_runner_tests: set[str],
     bdg: BdgTest,
     mats: MaterializedAssets,
+    step_runner_cfg: dict[str, object],
 ) -> list[StepResult]:
     results: List[StepResult] = []
-    for step in bdg.steps:
+    for idx, step in enumerate(bdg.steps):
         results.append(
             _exec_one(
                 repo_root=repo_root,
@@ -71,6 +74,8 @@ def execute_bdg(
                 step=step,
                 mats=mats,
                 test_id=bdg.test_id,
+                step_index=int(idx),
+                step_runner_cfg=step_runner_cfg,
             )
         )
     return results
@@ -85,6 +90,8 @@ def execute_bdg_step(
     step: BdgStep,
     mats: MaterializedAssets,
     test_id: str,
+    step_index: int,
+    step_runner_cfg: dict[str, object],
 ) -> StepResult:
     return _exec_one(
         repo_root=repo_root,
@@ -94,6 +101,8 @@ def execute_bdg_step(
         step=step,
         mats=mats,
         test_id=test_id,
+        step_index=int(step_index),
+        step_runner_cfg=step_runner_cfg,
     )
 
 
@@ -107,10 +116,11 @@ def _exec_one(
     step: BdgStep,
     mats: MaterializedAssets,
     test_id: str,
+    step_index: int,
+    step_runner_cfg: dict[str, object],
 ) -> StepResult:
     op = step.op
     p = step.params
-
     if op == "RUN_RUNNER":
         input_asset = p.get("input_asset")
         if input_asset is not None and not isinstance(input_asset, str):
@@ -125,6 +135,21 @@ def _exec_one(
                 "FAIL: bdg: --test-mode is controlled by BadGuys; "
                 "remove it from extra_args"
             )
+
+        patches_dir_obj = step_runner_cfg.get("patches_dir")
+        artifacts_dir_obj = step_runner_cfg.get("artifacts_dir")
+        copy_runner_log = bool(step_runner_cfg.get("copy_runner_log", False))
+        write_subprocess_stdio = bool(step_runner_cfg.get("write_subprocess_stdio", False))
+        console_verbosity = str(step_runner_cfg.get("console_verbosity", "normal"))
+
+        if not isinstance(patches_dir_obj, Path):
+            raise SystemExit("FAIL: bdg: patches_dir must be Path")
+        if not isinstance(artifacts_dir_obj, Path):
+            raise SystemExit("FAIL: bdg: artifacts_dir must be Path")
+        patches_dir = patches_dir_obj
+        artifacts_dir = artifacts_dir_obj
+        artifacts_dir.mkdir(parents=True, exist_ok=True)
+
         argv = list(cfg_runner_cmd)
         if test_id not in full_runner_tests:
             argv.append("--test-mode")
@@ -135,20 +160,33 @@ def _exec_one(
                 raise SystemExit(f"FAIL: bdg: missing materialized asset: {input_asset}")
             argv.append(str(path))
 
-        socket_path = repo_root / "patches" / f"am_patch_ipc_{subst.issue_id}.sock"
-        ipc_holder: dict[str, dict | None] = {"result": None}
+        socket_path = patches_dir / f"am_patch_ipc_{subst.issue_id}.sock"
+        ipc_stream_path = artifacts_dir / f"runner.ipc.step{int(step_index)}.jsonl"
 
-        def _run_reader() -> None:
-            from badguys.ipc_result_reader import read_ipc_result
+        ipc_holder: dict[str, object] = {"result": None, "value_text": ""}
 
-            ipc_holder["result"] = read_ipc_result(
+        def _run_recorder() -> None:
+            from badguys.ipc_stream_recorder import record_ipc_stream
+
+            res, value_text = record_ipc_stream(
                 socket_path,
+                out_path=ipc_stream_path,
                 connect_timeout_s=3.0,
                 total_timeout_s=0.0,
             )
+            ipc_holder["result"] = res
+            ipc_holder["value_text"] = value_text
 
-        ipc_thread = threading.Thread(target=_run_reader, name="badguys_ipc_reader", daemon=True)
+        ipc_thread = threading.Thread(
+            target=_run_recorder,
+            name="badguys_ipc_recorder",
+            daemon=True,
+        )
         ipc_thread.start()
+
+        heartbeat_enabled = console_verbosity in {"normal", "verbose", "debug"}
+        started = time.monotonic()
+        last_msg: str | None = None
 
         proc = subprocess.Popen(
             argv,
@@ -157,38 +195,95 @@ def _exec_one(
             stderr=subprocess.PIPE,
             text=True,
         )
-        stdout, stderr = proc.communicate()
+
+        stdout = ""
+        stderr = ""
+
+        def _emit_hb(msg: str) -> None:
+            nonlocal last_msg
+            out = msg
+            if sys.stderr.isatty():
+                pad = ""
+                if last_msg is not None and len(last_msg) > len(out):
+                    pad = " " * (len(last_msg) - len(out))
+                sys.stderr.write("\r" + out + pad)
+                sys.stderr.flush()
+            else:
+                sys.stderr.write("HEARTBEAT: " + out + "\n")
+                sys.stderr.flush()
+            last_msg = out
+
+        def _clear_hb() -> None:
+            if not sys.stderr.isatty():
+                return
+            if last_msg is None:
+                return
+            sys.stderr.write("\r" + (" " * len(last_msg)) + "\r")
+            sys.stderr.flush()
+
+        try:
+            while True:
+                try:
+                    if heartbeat_enabled:
+                        stdout, stderr = proc.communicate(timeout=5.0)
+                    else:
+                        stdout, stderr = proc.communicate()
+                    break
+                except subprocess.TimeoutExpired:
+                    elapsed = int(time.monotonic() - started)
+                    mm, ss = divmod(elapsed, 60)
+                    _emit_hb(
+                        f"BadGuys {test_id} step={int(step_index)} ELAPSED: {mm:02d}:{ss:02d}"
+                    )
+                    continue
+                except KeyboardInterrupt:
+                    try:
+                        if proc.poll() is None:
+                            proc.terminate()
+                            try:
+                                proc.wait(timeout=2.0)
+                            except subprocess.TimeoutExpired:
+                                proc.kill()
+                    except Exception:
+                        pass
+                    raise
+        finally:
+            _clear_hb()
+
         rc = int(proc.returncode or 0)
 
-        ipc_thread.join(timeout=0.25)
-        ipc_result = ipc_holder["result"]
-        if ipc_result is not None:
+        ipc_thread.join(timeout=2.0)
+        ipc_result = ipc_holder.get("result")
+        value_text = str(ipc_holder.get("value_text") or "")
+
+        if isinstance(ipc_result, dict):
             try:
                 rc = int(ipc_result["return_code"])
             except Exception:
                 pass
 
-            artifacts: dict[str, Path] = {}
-            log_path = ipc_result.get("log_path")
             json_path = ipc_result.get("json_path")
-            if isinstance(log_path, str) and log_path:
-                artifacts["log_path"] = Path(log_path)
             if isinstance(json_path, str) and json_path:
-                artifacts["json_path"] = Path(json_path)
+                src = Path(json_path)
+                if not src.exists():
+                    raise SystemExit(f"FAIL: bdg: missing runner json_path: {src}")
+                shutil.copy2(src, artifacts_dir / "runner.result.json")
 
-            if artifacts:
-                dst_dir = _logs_dir(repo_root) / test_id
-                dst_dir.mkdir(parents=True, exist_ok=True)
+            log_path = ipc_result.get("log_path")
+            if copy_runner_log and isinstance(log_path, str) and log_path:
+                src = Path(log_path)
+                if not src.exists():
+                    raise SystemExit(f"FAIL: bdg: missing runner log_path: {src}")
+                shutil.copy2(src, artifacts_dir / "runner.log.txt")
 
-                src_log = artifacts.get("log_path")
-                if src_log is not None and src_log.exists():
-                    shutil.copy2(src_log, dst_dir / "runner.log")
+        if write_subprocess_stdio:
+            if stdout:
+                (artifacts_dir / "runner.stdout.txt").write_text(stdout, encoding="utf-8")
+            if stderr:
+                (artifacts_dir / "runner.stderr.txt").write_text(stderr, encoding="utf-8")
 
-                src_json = artifacts.get("json_path")
-                if src_json is not None and src_json.exists():
-                    shutil.copy2(src_json, dst_dir / "runner.jsonl")
+        return StepResult(rc=rc, stdout=None, stderr=None, value=value_text)
 
-        return StepResult(rc=rc, stdout=stdout, stderr=stderr, value=None)
 
 
     if op == "DISCOVER_TESTS":
@@ -260,10 +355,15 @@ def _exec_one(
             raise SystemExit("FAIL: bdg: test_name must be string")
         name = _subst(name, subst=subst)
         log_dir = _logs_dir(repo_root)
-        log_path = log_dir / f"{name}.log"
+        log_path = log_dir / name / "badguys.test.jsonl"
         if not log_path.exists():
             return StepResult(rc=1, stdout=None, stderr=f"missing log: {log_path}", value="")
-        return StepResult(rc=0, stdout=None, stderr=None, value=log_path.read_text(encoding="utf-8"))
+        return StepResult(
+            rc=0,
+            stdout=None,
+            stderr=None,
+            value=log_path.read_text(encoding="utf-8"),
+        )
 
     if op == "LOCK_DELETE":
         lock_path = _lock_path_for_test(repo_root, test_id=test_id)
@@ -293,7 +393,12 @@ def _exec_one(
         from badguys._util import acquire_lock
 
         try:
-            acquire_lock(repo_root, path=lock_path, ttl_seconds=ttl_seconds, on_conflict=on_conflict)
+            acquire_lock(
+                repo_root,
+                path=lock_path,
+                ttl_seconds=ttl_seconds,
+                on_conflict=on_conflict,
+            )
         except SystemExit as e:
             return StepResult(rc=1, stdout=None, stderr=str(e), value=str(lock_path))
         return StepResult(rc=0, stdout=None, stderr=None, value=str(lock_path))
@@ -327,7 +432,12 @@ def _exec_one(
     if op == "ASSERT_NO_OUTSIDE_SENTINEL":
         sentinel = _outside_sentinel(repo_root, issue_id=subst.issue_id)
         if sentinel.exists():
-            return StepResult(rc=1, stdout=None, stderr="outside write detected", value=str(sentinel))
+            return StepResult(
+                rc=1,
+                stdout=None,
+                stderr="outside write detected",
+                value=str(sentinel),
+            )
         return StepResult(rc=0, stdout=None, stderr=None, value=str(sentinel))
 
 
@@ -345,13 +455,23 @@ def _exec_one(
         if ws_dir.exists():
             return StepResult(rc=1, stdout=None, stderr="workspace exists", value=str(ws_dir))
         if patched_zip.exists():
-            return StepResult(rc=1, stdout=None, stderr="patched.zip exists", value=str(patched_zip))
+            return StepResult(
+                rc=1,
+                stdout=None,
+                stderr="patched.zip exists",
+                value=str(patched_zip),
+            )
         return StepResult(rc=0, stdout=None, stderr=None, value="OK")
 
     if op == "ASSERT_WORKSPACE_REPO_EXISTS":
         ws_repo = repo_root / "patches" / "workspaces" / f"issue_{subst.issue_id}" / "repo"
         if not ws_repo.exists():
-            return StepResult(rc=1, stdout=None, stderr="missing workspace repo", value=str(ws_repo))
+            return StepResult(
+                rc=1,
+                stdout=None,
+                stderr="missing workspace repo",
+                value=str(ws_repo),
+            )
         return StepResult(rc=0, stdout=None, stderr=None, value=str(ws_repo))
 
     if op == "GIT_STATUS_PORCELAIN":

@@ -22,12 +22,18 @@ log_verbosity = "debug"
 # Note: logs_dir is still deleted and recreated at the start of each run.
 per_run_logs_post_run = "delete_successful"
 
+# If true, BadGuys may copy runner log_path into per-test artifacts (human-readable).
+copy_runner_log = false
+
+# If true, BadGuys may write captured subprocess stdout/stderr into per-test artifacts.
+write_subprocess_stdio = false
+
 # Repo-relative directories.
 patches_dir = "patches"
-logs_dir = "badguys/per_run_logs"
+logs_dir = "patches/badguys_logs"
 
 # Repo-relative pattern for the central log.
-central_log_pattern = "badguys/logs/badguys_{run_id}.log"
+central_log_pattern = "patches/badguys_{run_id}.log"
 
 # Maximum number of tests in one run that are allowed to perform a real commit+push.
 commit_limit = 1
@@ -66,10 +72,8 @@ rc_eq = 0
 
 [evaluation.tests.test_031_invalid_runner_verbosity_fails_cleanly.steps.0]
 rc_eq = 2
-
-[evaluation.tests.test_031_invalid_runner_verbosity_fails_cleanly.steps.1]
-rc_eq = 0
 value_not_contains = ["Traceback"]
+
 
 [evaluation.tests.test_010_discovery_deterministic_order.steps.0]
 rc_eq = 0
@@ -238,21 +242,17 @@ equals_step_index = 0
 
 [evaluation.tests.test_071_compile_exclude_respected.steps.0]
 rc_eq = 1
-
-[evaluation.tests.test_071_compile_exclude_respected.steps.1]
-rc_eq = 0
 value_contains = [
   "GATE: compile",
   "GATE: RUFF",
   "compile_exclude=['patches', 'scripts/badguys_batch1_excluded']",
 ]
 
+
 [evaluation.tests.test_072_g_continues_after_gate_fail.steps.0]
 rc_eq = 0
-
-[evaluation.tests.test_072_g_continues_after_gate_fail.steps.1]
-rc_eq = 0
 value_contains = ["LOG: "]
+
 
 [evaluation.tests.test_100_rerun_latest_l.steps.0]
 rc_eq = 0
@@ -271,8 +271,8 @@ rc_eq = 0
 
 [evaluation.tests.test_900_commit_push_timestamp.steps.3]
 rc_eq = 0
-stdout_contains = [
+value_contains = [
   "RESULT: SUCCESS",
   "PUSH: OK",
 ]
-stdout_regex = ["^COMMIT:\\s*[0-9a-f]{40}\\b"]
+value_regex = ["^COMMIT:\\s*[0-9a-f]{40}\\b"]

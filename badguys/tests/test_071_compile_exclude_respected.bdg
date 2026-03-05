@@ -24,5 +24,3 @@ extra_args = [
 ]
 input_asset = "patch"
 
-[[step]]
-op = "READ_STEP_LOG"

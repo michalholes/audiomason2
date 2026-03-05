@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import subprocess
@@ -211,18 +212,22 @@ def fail_commit_limit(central_log: Path, commit_limit: int, commit_tests: Sequen
             names.append(str(t))
 
     msg = f"FAIL: commit_limit exceeded: selected={len(names)} limit={commit_limit}"
-    with central_log.open("a", encoding="utf-8") as f:
-        f.write(msg + "\n")
-        f.write("Commit tests selected:\n")
-        for n in names:
-            f.write(f" - {n}\n")
-        f.write("Fix: increase --commit-limit OR exclude some commit tests OR include only one.\n")
+    event = {
+        "type": "badguys_fail_commit_limit",
+        "selected": len(names),
+        "limit": int(commit_limit),
+        "tests": list(names),
+        "msg": msg,
+    }
+    with central_log.open("a", encoding="utf-8", newline="\n") as f:
+        f.write(json.dumps(event, ensure_ascii=True, separators=(",", ":")) + "\n")
 
     print(msg, file=sys.stderr)
     for n in names:
         print(f" - {n}", file=sys.stderr)
     print("Fix: increase --commit-limit OR use --exclude/--include.", file=sys.stderr)
     raise SystemExit(1)
+
 
 # --- Additional helpers for new tests (Batch 1) ---
 

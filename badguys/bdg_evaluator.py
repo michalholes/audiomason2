@@ -101,6 +101,11 @@ def evaluate_step(*, rules: Dict[str, Any], result: StepResult, prior: Dict[int,
         if vstr.find(s) >= 0:
             return False, f"unexpected value token: {s}"
 
+    value_regex = _as_list(rules.get("value_regex"))
+    for pat in value_regex:
+        if re.search(pat, vstr, flags=re.MULTILINE) is None:
+            return False, f"value regex not matched: {pat}"
+
     list_eq = rules.get("list_eq")
     if list_eq is not None:
         if not (isinstance(list_eq, list) and all(isinstance(x, str) for x in list_eq)):

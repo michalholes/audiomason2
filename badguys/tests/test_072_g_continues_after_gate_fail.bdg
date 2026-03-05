@@ -21,5 +21,3 @@ op = "RUN_RUNNER"
 extra_args = ["-g", "${issue_id}", "badguys: -g continues after gate fail (compile)"]
 input_asset = "bundle"
 
-[[step]]
-op = "READ_STEP_LOG"

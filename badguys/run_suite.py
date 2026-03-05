@@ -2,17 +2,15 @@
 from __future__ import annotations
 
 import argparse
-import os
 import glob
+import json
+import os
 import shutil
-import subprocess
 import sys
-import threading
 import time
-import traceback
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 import tomllib
 
@@ -33,6 +31,8 @@ class SuiteCfg:
     log_verbosity: str
     per_run_logs_post_run: str
     full_runner_tests: list[str]
+    copy_runner_log: bool
+    write_subprocess_stdio: bool
 
     def central_log_path(self, run_id: str) -> Path:
         rel = self.central_log_pattern.format(run_id=run_id)
@@ -47,11 +47,12 @@ class Ctx:
     cfg: SuiteCfg
     console_verbosity: str
     log_verbosity: str
-    runner_ipc_artifacts: dict[str, dict[str, Path]]
 
-    def step_log_path(self, test_name: str) -> Path:
-        # Per-test log name must be stable (no timestamp in filename).
-        return self.cfg.logs_dir / f"{test_name}.log"
+    def test_dir(self, test_id: str) -> Path:
+        return self.cfg.logs_dir / test_id
+
+    def test_log_path(self, test_id: str) -> Path:
+        return self.test_dir(test_id) / "badguys.test.jsonl"
 
 
 def _load_config(repo_root: Path, config_path: Path) -> dict:
@@ -95,32 +96,35 @@ def _make_cfg(
         raise SystemExit("FAIL: runner.full_runner_tests must be list[str]")
     full_runner_tests = [str(x) for x in full_runner_tests_raw]
 
-    # When BadGuys is invoked as an am_patch gate, the runner may be executing inside a
-    # venv that is not present inside a workspace/clone repo. Allow am_patch to override
-    # the Python executable used for nested runner invocations.
     env_py = os.environ.get("AM_PATCH_BADGUYS_RUNNER_PYTHON")
     if env_py and runner_cmd:
         head = str(runner_cmd[0])
-        if head in {"python", "python3", "/usr/bin/python3", "/usr/bin/python"} or head.endswith("/python3") or head.endswith("/python"):
+        if head in {"python", "python3", "/usr/bin/python3", "/usr/bin/python"} or head.endswith(
+            "/python3"
+        ) or head.endswith("/python"):
             runner_cmd[0] = str(env_py)
 
-    # Runner verbosity (passed through to am_patch via --verbosity=<mode>)
-    runner_verbosity = _resolve_value(cli_runner_verbosity, suite.get("runner_verbosity"), "quiet").strip()
+    runner_verbosity = _resolve_value(
+        cli_runner_verbosity,
+        suite.get("runner_verbosity"),
+        "quiet",
+    ).strip()
     if runner_verbosity:
         runner_cmd = runner_cmd + [f"--verbosity={runner_verbosity}"]
 
-    # Deterministic IPC socket naming for runner result detection.
     runner_cmd = runner_cmd + [
         "--ipc-socket-mode=patch_dir",
         "--ipc-socket-name-template=am_patch_ipc_{issue}.sock",
     ]
 
-    # BadGuys console verbosity (short flags override this).
-    console_verbosity = _resolve_value(cli_console_verbosity, suite.get("console_verbosity"), "normal").strip()
+    console_verbosity = _resolve_value(
+        cli_console_verbosity,
+        suite.get("console_verbosity"),
+        "normal",
+    ).strip()
     if console_verbosity not in {"debug", "verbose", "normal", "quiet"}:
         raise SystemExit(f"FAIL: invalid BadGuys console verbosity: {console_verbosity!r}")
 
-    # BadGuys log verbosity (controls central + per-test logs).
     log_verbosity = _resolve_value(cli_log_verbosity, suite.get("log_verbosity"), "normal").strip()
     if log_verbosity not in {"debug", "verbose", "normal", "quiet"}:
         raise SystemExit(f"FAIL: invalid BadGuys log verbosity: {log_verbosity!r}")
@@ -132,12 +136,21 @@ def _make_cfg(
     ).strip()
     if per_run_logs_post_run not in {"delete_all", "keep_all", "delete_successful"}:
         raise SystemExit(
-            f"FAIL: invalid per_run_logs_post_run: {per_run_logs_post_run!r} (expected delete_all|keep_all|delete_successful)"
+            "FAIL: invalid per_run_logs_post_run: "
+            f"{per_run_logs_post_run!r} (expected delete_all|keep_all|delete_successful)"
         )
 
     patches_dir = repo_root / str(suite.get("patches_dir", "patches"))
     logs_dir = repo_root / str(suite.get("logs_dir", "patches/badguys_logs"))
     central_log_pattern = str(suite.get("central_log_pattern", "patches/badguys_{run_id}.log"))
+
+    copy_runner_log = suite.get("copy_runner_log", False)
+    if not isinstance(copy_runner_log, bool):
+        raise SystemExit("FAIL: suite.copy_runner_log must be bool")
+
+    write_subprocess_stdio = suite.get("write_subprocess_stdio", False)
+    if not isinstance(write_subprocess_stdio, bool):
+        raise SystemExit("FAIL: suite.write_subprocess_stdio must be bool")
 
     lock_path = repo_root / str(lock.get("path", "patches/badguys.lock"))
     lock_ttl_seconds = int(lock.get("ttl_seconds", 3600))
@@ -158,6 +171,8 @@ def _make_cfg(
         log_verbosity=log_verbosity,
         per_run_logs_post_run=per_run_logs_post_run,
         full_runner_tests=full_runner_tests,
+        copy_runner_log=bool(copy_runner_log),
+        write_subprocess_stdio=bool(write_subprocess_stdio),
     )
 
 
@@ -165,7 +180,6 @@ _VERBOSITY_ORDER = {"quiet": 0, "normal": 1, "verbose": 2, "debug": 3}
 
 
 def _want(verbosity: str, level: str) -> bool:
-    """Return True if an event at 'level' should be emitted under 'verbosity'."""
     return _VERBOSITY_ORDER[verbosity] >= _VERBOSITY_ORDER[level]
 
 
@@ -177,6 +191,16 @@ def _ensure_repo_root_in_syspath(repo_root: Path) -> None:
         sys.path.insert(0, s)
 
 
+def _json_line(obj: dict[str, Any]) -> str:
+    return json.dumps(obj, ensure_ascii=True, separators=(",", ":")) + "\n"
+
+
+def _append_jsonl(path: Path, obj: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("a", encoding="utf-8", newline="\n") as f:
+        f.write(_json_line(obj))
+
+
 def _init_logs(cfg: SuiteCfg, run_id: str) -> Path:
     logs_dir = cfg.logs_dir
     if logs_dir.exists():
@@ -185,8 +209,37 @@ def _init_logs(cfg: SuiteCfg, run_id: str) -> Path:
 
     central = cfg.central_log_path(run_id)
     central.parent.mkdir(parents=True, exist_ok=True)
-    central.write_text(f"BadGuys run_id={run_id}\n", encoding="utf-8")
+    central.write_text(_json_line({"type": "badguys_run", "run_id": run_id}), encoding="utf-8")
     return central
+
+
+def _ensure_test_artifacts(ctx: Ctx, test_id: str) -> None:
+    d = ctx.test_dir(test_id)
+    d.mkdir(parents=True, exist_ok=True)
+    p = ctx.test_log_path(test_id)
+    if p.exists():
+        return
+    p.write_text(
+        _json_line({"type": "badguys_test", "run_id": ctx.run_id, "test_id": test_id}),
+        encoding="utf-8",
+    )
+
+
+def _log(ctx: Ctx, *, level: str, test_id: Optional[str], obj: dict[str, Any]) -> None:
+    if not _want(ctx.log_verbosity, level):
+        return
+
+    _append_jsonl(ctx.central_log, obj)
+    if test_id is not None:
+        _ensure_test_artifacts(ctx, test_id)
+        _append_jsonl(ctx.test_log_path(test_id), obj)
+
+
+def _console(ctx: Ctx, *, level: str, text: str) -> None:
+    if not _want(ctx.console_verbosity, level):
+        return
+    sys.stdout.write(text)
+    sys.stdout.flush()
 
 
 def _post_run_cleanup_logs(cfg: SuiteCfg, per_test_ok: dict[str, bool]) -> None:
@@ -198,207 +251,38 @@ def _post_run_cleanup_logs(cfg: SuiteCfg, per_test_ok: dict[str, bool]) -> None:
         if logs_dir.exists():
             shutil.rmtree(logs_dir)
         return
-    # delete_successful
-    for test_name, ok in per_test_ok.items():
+
+    for test_id, ok in per_test_ok.items():
         if not ok:
             continue
-        p = logs_dir / f"{test_name}.log"
-        try:
-            p.unlink()
-        except FileNotFoundError:
-            pass
+        d = logs_dir / test_id
+        if d.exists():
+            shutil.rmtree(d)
 
 
-def _emit(ctx: Ctx, *, level: str, test_name: Optional[str], text: str) -> None:
-    """Emit a single formatted line to central log, per-test log, and/or console."""
-    if _want(ctx.log_verbosity, level):
-        ctx.central_log.parent.mkdir(parents=True, exist_ok=True)
-        with ctx.central_log.open("a", encoding="utf-8") as f:
-            f.write(text)
-
-        if test_name is not None:
-            p = ctx.step_log_path(test_name)
-            p.parent.mkdir(parents=True, exist_ok=True)
-            with p.open("a", encoding="utf-8") as f:
-                f.write(text)
-
-    if _want(ctx.console_verbosity, level):
-        sys.stdout.write(text)
-        sys.stdout.flush()
-
-
-
-
-def _want_heartbeat(ctx: Ctx) -> bool:
-    # Heartbeat is console-only and must be disabled in quiet.
-    return ctx.console_verbosity in {"normal", "verbose", "debug"}
-
-
-def _emit_heartbeat(ctx: Ctx, *, test_name: str, started: float, last_msg: Optional[str]) -> str:
-    elapsed = int(time.monotonic() - started)
-    mm, ss = divmod(elapsed, 60)
-    msg = f"STATUS: BadGuys {test_name}  ELAPSED: {mm:02d}:{ss:02d}"
-    out = msg
-    # Overwrite in TTY, otherwise emit standalone heartbeat lines.
-    if sys.stderr.isatty():
-        pad = ""
-        if last_msg is not None and len(last_msg) > len(msg):
-            pad = " " * (len(last_msg) - len(msg))
-        sys.stderr.write("\r" + msg + pad)
-        sys.stderr.flush()
-    else:
-        sys.stderr.write("HEARTBEAT: " + msg + "\n")
-        sys.stderr.flush()
-    return out
-
-
-def _clear_heartbeat(ctx: Ctx, last_msg: Optional[str]) -> None:
-    if not sys.stderr.isatty():
-        return
-    if last_msg is None:
-        return
-    sys.stderr.write("\r" + (" " * len(last_msg)) + "\r")
-    sys.stderr.flush()
-
-
-def _run_cmd_with_heartbeat(ctx: Ctx, *, test_name: str, argv: list[str], cwd: Path) -> CmdOutcome:
-    started = time.monotonic()
-    last_msg: Optional[str] = None
-    hb_interval = 5.0
-
-    ipc_holder: dict[str, dict | None] = {"result": None}
-    ipc_thread: threading.Thread | None = None
-    socket_path: Path | None = None
-    if _is_runner_cmd(ctx.cfg, argv):
-        from badguys.ipc_result_reader import read_ipc_result
-
-        socket_path = ctx.cfg.patches_dir / f"am_patch_ipc_{ctx.cfg.issue_id}.sock"
-
-        def _run_reader() -> None:
-            ipc_holder["result"] = read_ipc_result(
-                socket_path,
-                connect_timeout_s=3.0,
-                total_timeout_s=0.0,
-            )
-
-        ipc_thread = threading.Thread(target=_run_reader, name="badguys_ipc_reader", daemon=True)
-        ipc_thread.start()
-
-    proc = subprocess.Popen(
-        argv,
-        cwd=str(cwd),
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-    )
-    try:
-        while True:
-            try:
-                stdout, stderr = proc.communicate(timeout=hb_interval)
-                rc = proc.returncode
-                break
-            except subprocess.TimeoutExpired:
-                if _want_heartbeat(ctx):
-                    last_msg = _emit_heartbeat(ctx, test_name=test_name, started=started, last_msg=last_msg)
-                continue
-            except KeyboardInterrupt:
-                # Ensure the child process does not leak when the user aborts the suite.
-                try:
-                    if proc.poll() is None:
-                        proc.terminate()
-                        try:
-                            proc.wait(timeout=2.0)
-                        except subprocess.TimeoutExpired:
-                            proc.kill()
-                except Exception:
-                    # Best-effort cleanup; the interrupt should still propagate.
-                    pass
-                raise
-    finally:
-        _clear_heartbeat(ctx, last_msg)
-
-    if ipc_thread is not None:
-        ipc_thread.join(timeout=0.25)
-
-    ipc_result = ipc_holder["result"]
-    if ipc_result is not None:
-        try:
-            rc = int(ipc_result["return_code"])
-        except Exception:
-            pass
-
-        artifacts: dict[str, Path] = {}
-        log_path = ipc_result.get("log_path")
-        json_path = ipc_result.get("json_path")
-        if isinstance(log_path, str) and log_path:
-            artifacts["log_path"] = Path(log_path)
-        if isinstance(json_path, str) and json_path:
-            artifacts["json_path"] = Path(json_path)
-        if artifacts:
-            ctx.runner_ipc_artifacts[test_name] = artifacts
-
-    cp = subprocess.CompletedProcess(args=argv, returncode=int(rc), stdout=stdout, stderr=stderr)
-    return CmdOutcome(cp=cp, ipc_result=ipc_result)
-
-
-def _is_runner_cmd(cfg: SuiteCfg, argv: list[str]) -> bool:
-    if not argv:
-        return False
-    if len(argv) < len(cfg.runner_cmd):
-        return False
-    return argv[: len(cfg.runner_cmd)] == cfg.runner_cmd
-
-
-@dataclass(frozen=True)
-class CmdOutcome:
-    cp: subprocess.CompletedProcess[str]
-    ipc_result: dict | None
-def _log_banner(ctx: Ctx, test_name: str, title: str) -> None:
-    _emit(
-        ctx,
-        level="verbose",
-        test_name=test_name,
-        text=(
-            "\n" + "=" * 78 + "\n" + f"{test_name}: {title}\n" + "=" * 78 + "\n"
-        ),
-    )
-
-
-def _action(ctx: Ctx, *, test_name: Optional[str], kind: str, phase: str, msg: str) -> None:
-    _emit(ctx, level="verbose", test_name=test_name, text=f"{kind} {phase}: {msg}\n")
-
-
-def _cleanup_issue_artifacts(ctx: Ctx, *, issue_id: str, test_name: Optional[str]) -> None:
-    if test_name is not None:
-        artifacts = ctx.runner_ipc_artifacts.pop(test_name, None)
-        if artifacts:
-            dst_dir = ctx.cfg.logs_dir / test_name
-            dst_dir.mkdir(parents=True, exist_ok=True)
-
-            src_log = artifacts.get("log_path")
-            if src_log is not None and src_log.exists():
-                shutil.copy2(src_log, dst_dir / "runner.log")
-
-            src_json = artifacts.get("json_path")
-            if src_json is not None and src_json.exists():
-                shutil.copy2(src_json, dst_dir / "runner.jsonl")
-
-    # Contract: after EACH test, the engine must delete:
-    # - patches/workspaces/issue_<issue_id>/
-    # - patches/logs/issue_<issue_id>*
-    # - patches/successful/issue_<issue_id>*
-    # - patches/unsuccessful/issue_<issue_id>*
-    # - patches/patched_issue<issue_id>_*.zip
-    # - patches/issue_<issue_id>__bdg__*
+def _cleanup_issue_artifacts(ctx: Ctx, *, issue_id: str, test_id: Optional[str]) -> None:
     repo_root = ctx.repo_root
+
+    def _rm_tree(p: Path) -> None:
+        shutil.rmtree(p, ignore_errors=True)
+
+    def _rm_glob(pattern: str) -> None:
+        for path_str in glob.glob(pattern):
+            p = Path(path_str)
+            if p.is_dir():
+                shutil.rmtree(p, ignore_errors=True)
+            else:
+                try:
+                    p.unlink()
+                except FileNotFoundError:
+                    pass
+
     ws = repo_root / "patches" / "workspaces" / f"issue_{issue_id}"
-    _action(ctx, test_name=test_name, kind="CLEANUP", phase="DO", msg=f"rm -rf {ws}")
-    shutil.rmtree(ws, ignore_errors=True)
-    _action(ctx, test_name=test_name, kind="CLEANUP", phase="OK", msg=f"rm -rf {ws}")
+    _log(ctx, level="verbose", test_id=test_id, obj={"type": "cleanup", "path": str(ws)})
+    _rm_tree(ws)
 
     logs_dir = repo_root / "patches" / "logs"
     issue_logs_pat = f"issue_{issue_id}*"
-    _action(ctx, test_name=test_name, kind="CLEANUP", phase="DO", msg=f"rm {logs_dir}/{issue_logs_pat}")
     if logs_dir.exists():
         for p in logs_dir.glob(issue_logs_pat):
             if p.is_dir():
@@ -409,25 +293,14 @@ def _cleanup_issue_artifacts(ctx: Ctx, *, issue_id: str, test_name: Optional[str
                 except FileNotFoundError:
                     pass
 
-    _action(ctx, test_name=test_name, kind="CLEANUP", phase="OK", msg=f"rm {logs_dir}/{issue_logs_pat}")
-
     for pat in (
         str(repo_root / "patches" / "successful" / f"issue_{issue_id}*"),
         str(repo_root / "patches" / "unsuccessful" / f"issue_{issue_id}*"),
         str(repo_root / "patches" / f"patched_issue{issue_id}_*.zip"),
         str(repo_root / "patches" / f"issue_{issue_id}__bdg__*"),
     ):
-        _action(ctx, test_name=test_name, kind="CLEANUP", phase="DO", msg=f"rm {pat}")
-        for path_str in glob.glob(pat):
-            p = Path(path_str)
-            if p.is_dir():
-                shutil.rmtree(p, ignore_errors=True)
-            else:
-                try:
-                    p.unlink()
-                except FileNotFoundError:
-                    pass
-        _action(ctx, test_name=test_name, kind="CLEANUP", phase="OK", msg=f"rm {pat}")
+        _log(ctx, level="verbose", test_id=test_id, obj={"type": "cleanup_glob", "pattern": pat})
+        _rm_glob(pat)
 
 
 def _load_eval_rules(repo_root: Path, config_path: Path) -> dict:
@@ -465,33 +338,81 @@ def _run_test_plan(test, ctx: Ctx) -> bool:
     try:
         obj = test.run(ctx)
     except SystemExit as e:
-        _emit(ctx, level="verbose", test_name=name, text=f"FAIL: {e}\n")
-        _emit(ctx, level="verbose", test_name=name, text=f"TEST END {name} FAIL\n")
+        _log(ctx, level="quiet", test_id=name, obj={"type": "test_error", "msg": str(e)})
         return False
 
-    if isinstance(obj, BdgTest):
-        bdg = obj
-        subst = make_subst_ctx(issue_id=ctx.cfg.issue_id)
-        mats = materialize_assets(repo_root=ctx.repo_root, subst=subst, bdg=bdg)
-        _emit(ctx, level="verbose", test_name=name, text=f"TEST BEGIN {name}\n")
+    if not isinstance(obj, BdgTest):
+        raise SystemExit(f"FAIL: test {name} returned unsupported type: {type(obj).__name__}")
 
-        ok = True
-        prior: dict[int, StepResult] = {}
-        for idx, step in enumerate(bdg.steps):
-            r = execute_bdg_step(
-                repo_root=ctx.repo_root,
-                cfg_runner_cmd=list(ctx.cfg.runner_cmd),
-                subst=subst,
-                full_runner_tests=set(ctx.cfg.full_runner_tests),
-                step=step,
-                mats=mats,
+    bdg = obj
+    _ensure_test_artifacts(ctx, bdg.test_id)
+    _log(
+        ctx,
+        level="quiet",
+        test_id=bdg.test_id,
+        obj={"type": "test_begin", "test_id": bdg.test_id},
+    )
+
+    subst = make_subst_ctx(issue_id=ctx.cfg.issue_id)
+    mats = materialize_assets(repo_root=ctx.repo_root, subst=subst, bdg=bdg)
+
+    ok = True
+    prior: dict[int, StepResult] = {}
+
+    step_runner_cfg: dict[str, object] = {
+        "patches_dir": ctx.cfg.patches_dir,
+        "artifacts_dir": ctx.test_dir(bdg.test_id),
+        "copy_runner_log": ctx.cfg.copy_runner_log,
+        "write_subprocess_stdio": ctx.cfg.write_subprocess_stdio,
+        "console_verbosity": ctx.console_verbosity,
+    }
+
+    for idx, step in enumerate(bdg.steps):
+        r = execute_bdg_step(
+            repo_root=ctx.repo_root,
+            cfg_runner_cmd=list(ctx.cfg.runner_cmd),
+            subst=subst,
+            full_runner_tests=set(ctx.cfg.full_runner_tests),
+            step=step,
+            mats=mats,
+            test_id=bdg.test_id,
+            step_index=int(idx),
+            step_runner_cfg=step_runner_cfg,
+        )
+
+        rules = _rules_for_step(evaluation, test_id=bdg.test_id, step_index=idx)
+        if strict and not rules:
+            ok = False
+            _log(
+                ctx,
+                level="quiet",
                 test_id=bdg.test_id,
+                obj={
+                    "type": "fail",
+                    "reason": "missing_evaluation_rules",
+                    "step_index": int(idx),
+                },
             )
-            rules = _rules_for_step(evaluation, test_id=bdg.test_id, step_index=idx)
-            if strict and not rules:
-                ok = False
-                _emit(ctx, level="verbose", test_name=name, text=f"FAIL: missing evaluation rules for step {idx}\n")
-            else:
+        else:
+            if step.op == "RUN_RUNNER":
+                for k in rules.keys():
+                    if k.startswith("stdout_") or k.startswith("stderr_"):
+                        ok = False
+                        _log(
+                            ctx,
+                            level="quiet",
+                            test_id=bdg.test_id,
+                            obj={
+                                "type": "fail",
+                                "reason": "forbidden_evaluation_keys_for_runner",
+                                "step_index": int(idx),
+                                "key": str(k),
+                            },
+                        )
+                        rules = {}
+                        break
+
+            if rules:
                 passed, msg = evaluate_step(
                     rules=rules,
                     result=r,
@@ -501,37 +422,51 @@ def _run_test_plan(test, ctx: Ctx) -> bool:
                 )
                 if not passed:
                     ok = False
-                    _emit(ctx, level="verbose", test_name=name, text=f"FAIL: step {idx}: {msg}\n")
-            # Emit step output into per-run log for parity with legacy CmdStep/FuncStep tests.
-            if r.stdout:
-                _emit(ctx, level="verbose", test_name=name, text=r.stdout)
-                if not r.stdout.endswith("\n"):
-                    _emit(ctx, level="verbose", test_name=name, text="\n")
-            if r.stderr:
-                _emit(ctx, level="verbose", test_name=name, text=r.stderr)
-                if not r.stderr.endswith("\n"):
-                    _emit(ctx, level="verbose", test_name=name, text="\n")
-            # For RUN_RUNNER steps, also emit the resolved runner log path as 'LOG: <path>'.
-            if step.op == "RUN_RUNNER":
-                log_link = ctx.cfg.patches_dir / "am_patch.log"
-                try:
-                    resolved = log_link.resolve(strict=True)
-                except FileNotFoundError:
-                    resolved = None
-                if resolved is not None:
-                    _emit(ctx, level="verbose", test_name=name, text=f"LOG: {resolved}\n")
+                    _log(
+                        ctx,
+                        level="quiet",
+                        test_id=bdg.test_id,
+                        obj={
+                            "type": "step_fail",
+                            "step_index": int(idx),
+                            "msg": str(msg),
+                        },
+                    )
 
-            prior[idx] = r
+        step_obj: dict[str, Any] = {
+            "type": "step",
+            "step_index": int(idx),
+            "op": str(step.op),
+            "rc": r.rc,
+        }
+        if step.op == "RUN_RUNNER":
+            step_obj["ipc_stream"] = f"runner.ipc.step{int(idx)}.jsonl"
+            res_path = ctx.test_dir(bdg.test_id) / "runner.result.json"
+            if res_path.exists():
+                step_obj["runner_result"] = res_path.name
 
-        _emit(ctx, level="verbose", test_name=name, text=f"TEST END {name} {'PASS' if ok else 'FAIL'}\n")
-        return ok
+        _log(ctx, level="normal", test_id=bdg.test_id, obj=step_obj)
 
-    raise SystemExit(f"FAIL: test {name} returned unsupported type: {type(obj).__name__}")
+        prior[idx] = r
+
+    _log(
+        ctx,
+        level="quiet",
+        test_id=bdg.test_id,
+        obj={"type": "test_end", "test_id": bdg.test_id, "ok": bool(ok)},
+    )
+    return ok
+
 
 def main(argv: list[str]) -> int:
     ap = argparse.ArgumentParser(prog="python3 badguys/badguys.py")
     ap.add_argument("--config", default="badguys/config.toml", help="Config path (repo-relative)")
-    ap.add_argument("--commit-limit", type=int, default=None, help="Override commit_limit from config")
+    ap.add_argument(
+        "--commit-limit",
+        type=int,
+        default=None,
+        help="Override commit_limit from config",
+    )
     ap.add_argument(
         "--runner-verbosity",
         default=None,
@@ -553,9 +488,14 @@ def main(argv: list[str]) -> int:
         "--per-run-logs-post-run",
         default=None,
         choices=["delete_all", "keep_all", "delete_successful"],
-        help="Post-run per-test log cleanup policy",
+        help="Post-run per-test artifact cleanup policy",
     )
-    ap.add_argument("--include", action="append", default=[], help="Run only named tests (repeatable)")
+    ap.add_argument(
+        "--include",
+        action="append",
+        default=[],
+        help="Run only named tests (repeatable)",
+    )
     ap.add_argument("--exclude", action="append", default=[], help="Skip named tests (repeatable)")
     ap.add_argument("--list-tests", action="store_true", help="List discovered tests and exit")
     args = ap.parse_args(argv)
@@ -594,14 +534,16 @@ def main(argv: list[str]) -> int:
             cli_exclude=list(args.exclude),
         )
 
-        # Validate runner.full_runner_tests against discovered test ids.
-        all_test_ids = {t.name for t in discover_tests(
-            repo_root=repo_root,
-            config_path=Path(args.config),
-            cli_commit_limit=args.commit_limit,
-            cli_include=[],
-            cli_exclude=[],
-        )}
+        all_test_ids = {
+            t.name
+            for t in discover_tests(
+                repo_root=repo_root,
+                config_path=Path(args.config),
+                cli_commit_limit=args.commit_limit,
+                cli_include=[],
+                cli_exclude=[],
+            )
+        }
         unknown = sorted(set(cfg.full_runner_tests).difference(all_test_ids))
         if unknown:
             joined = ", ".join(unknown)
@@ -615,7 +557,6 @@ def main(argv: list[str]) -> int:
                 print(t.name)
             return 0
 
-        # Debug: log resolved config details
         ctx = Ctx(
             repo_root=repo_root,
             run_id=run_id,
@@ -623,23 +564,22 @@ def main(argv: list[str]) -> int:
             cfg=cfg,
             console_verbosity=cfg.console_verbosity,
             log_verbosity=cfg.log_verbosity,
-            runner_ipc_artifacts={},
         )
-        _emit(ctx, level="quiet", test_name=None, text="BadGuys start\n")
 
-        if ctx.console_verbosity == "debug" or ctx.log_verbosity == "debug":
-            _emit(
+        if ctx.log_verbosity == "debug":
+            _log(
                 ctx,
                 level="debug",
-                test_name=None,
-                text=(
-                    f"debug: config_path={args.config}\n"
-                    f"debug: console_verbosity={cfg.console_verbosity}\n"
-                    f"debug: log_verbosity={cfg.log_verbosity}\n"
-                    f"debug: runner_cmd={' '.join(cfg.runner_cmd)}\n"
-                    f"debug: issue_id={cfg.issue_id}\n"
-                    f"debug: per_run_logs_post_run={cfg.per_run_logs_post_run}\n"
-                ),
+                test_id=None,
+                obj={
+                    "type": "debug_config",
+                    "config_path": args.config,
+                    "console_verbosity": cfg.console_verbosity,
+                    "log_verbosity": cfg.log_verbosity,
+                    "runner_cmd": " ".join(cfg.runner_cmd),
+                    "issue_id": cfg.issue_id,
+                    "per_run_logs_post_run": cfg.per_run_logs_post_run,
+                },
             )
 
         commit_limit = int(getattr(tests, "commit_limit", 1))
@@ -650,46 +590,63 @@ def main(argv: list[str]) -> int:
         ok_all = True
         interrupted = False
         per_test_ok: dict[str, bool] = {}
+
         for idx, t in enumerate(tests):
             try:
-                # Enforce deterministic isolation contract.
-                _cleanup_issue_artifacts(ctx, issue_id=cfg.issue_id, test_name=getattr(t, "name", None))
-    
+                _cleanup_issue_artifacts(
+                    ctx,
+                    issue_id=cfg.issue_id,
+                    test_id=getattr(t, "name", None),
+                )
+
                 ok = False
                 try:
                     ok = _run_test_plan(t, ctx)
                 finally:
-                    _cleanup_issue_artifacts(ctx, issue_id=cfg.issue_id, test_name=getattr(t, "name", None))
-    
+                    _cleanup_issue_artifacts(
+                        ctx,
+                        issue_id=cfg.issue_id,
+                        test_id=getattr(t, "name", None),
+                    )
+
                 per_test_ok[t.name] = bool(ok)
 
-                if ctx.console_verbosity in {"normal", "verbose", "debug"} or ctx.log_verbosity in {"normal", "verbose", "debug"}:
-                    _emit(ctx, level="normal", test_name=t.name, text=format_result_line(t.name, ok))
+                if ctx.console_verbosity in {"normal", "verbose", "debug"}:
+                    _console(ctx, level="normal", text=format_result_line(t.name, ok))
+
                 if not ok:
                     ok_all = False
                     if idx == 0 and bool(getattr(tests, "abort_on_guard_fail", False)):
                         break
-    
+
             except KeyboardInterrupt:
                 interrupted = True
                 ok_all = False
-                _emit(ctx, level="quiet", test_name=None, text="BadGuys interrupted (Ctrl+C)\n")
                 break
-        # Summary is minimal by contract in quiet, and includes counts in normal+.
+
         status = "OK" if ok_all else "FAIL"
         passed = sum(1 for ok in per_test_ok.values() if ok)
         failed = sum(1 for ok in per_test_ok.values() if not ok)
+
         if ctx.console_verbosity == "quiet":
             summary = f"BadGuys summary: {status}\n"
         else:
             summary = f"BadGuys summary: {status} passed={passed} failed={failed}\n"
-        _emit(ctx, level="quiet", test_name=None, text=summary)
+        _console(ctx, level="quiet", text=summary)
+
+        _log(
+            ctx,
+            level="quiet",
+            test_id=None,
+            obj={"type": "badguys_summary", "status": status, "passed": passed, "failed": failed},
+        )
 
         _post_run_cleanup_logs(cfg, per_test_ok)
 
         if interrupted:
             return 130
         return 0 if ok_all else 1
+
     finally:
         release_lock(repo_root)
 
