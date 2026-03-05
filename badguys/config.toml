@@ -244,7 +244,7 @@ rc_eq = 0
 value_contains = [
   "GATE: compile",
   "GATE: RUFF",
-  "compile_exclude=['scripts/badguys_batch1_excluded']",
+  "compile_exclude=['patches', 'scripts/badguys_batch1_excluded']",
 ]
 
 [evaluation.tests.test_072_g_continues_after_gate_fail.steps.0]
