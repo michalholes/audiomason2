@@ -155,7 +155,7 @@ Backoff sequence
   by editing one value.
 
 Reset and advance rules
-- The UI MUST track last-seen change tokens (sig) for: jobs, runs, header.
+- The UI MUST track last-seen change tokens (sig) for: jobs, runs, header, latest patch discovery.
 - On a refresh attempt, if all sig values are unchanged, the UI MUST advance
   one step in the backoff sequence (capped at the last element).
 - If any sig value changes, the UI MUST reset to the first element.
@@ -255,7 +255,8 @@ Jobs list item (JobListItem)
   - ended_utc: string|null
   - mode: string
   - issue_id: string
-  - label: string (short human label for list display)
+  - commit_summary: string (single line; deterministic truncation)
+  - patch_basename: string|null (filename only; no directory; null if absent)
 
 Runs list item (RunListItem)
 - runs list endpoints MUST return a thin DTO with fields:
@@ -932,25 +933,23 @@ Output (success):
   "ok": true,
   "runs": [
     {
-      "issue_id": <int>,
-      "log_rel_path": "<string>",
-      "result": "success|fail|unknown|canceled",
-      "result_line": "<string|null>",
-      "mtime_utc": "<UTC ISO Z string>",
-      "archived_patch_rel_path": "<string|null>",
-      "diff_bundle_rel_path": "<string|null>",
-      "success_zip_rel_path": "<string|null>"
+"issue_id": <int>,
+"log_rel_path": "<string>",
+"result": "success|fail|unknown|canceled",
+"mtime_utc": "<UTC ISO Z string>",
+"artifact_refs": ["<string>", ...]
     },
     ...
   ]
 }
 
 Derivation details:
-- result/result_line parsed from last 200 non-empty lines of log, after ANSI strip.
-- archived_patch_rel_path determined by searching latest file in:
-  patches/successful or patches/unsuccessful containing "issue_<id>"
-- diff_bundle_rel_path determined by searching patches/artifacts for "issue_<id>_diff"
-- success_zip_rel_path always set to config-derived success archive rel path.
+- result parsed from last 200 non-empty lines of log, after ANSI strip.
+- artifact_refs is a list of existing artifact rel paths under patches_root for the issue_id:
+  - archived patch: latest file in patches/successful or patches/unsuccessful containing "issue_<id>"
+  - diff bundle: latest file in patches/artifacts containing "issue_<id>_diff"
+  - success zip: config-derived success archive rel path when present
+- missing artifacts are omitted (artifact_refs may be empty).
 
 7.2.7 GET /api/runner/tail?lines=<int>
 Input:
@@ -1147,8 +1146,8 @@ JobRecord JSON schema (models.JobRecord):
   "created_utc": "<UTC ISO Z string>",
   "mode": "patch|repair|finalize_live|finalize_workspace|rerun_latest",
   "issue_id": "<string>",
-  "commit_message": "<string>",
-  "patch_path": "<string>",
+  "commit_summary": "<string>",
+  "patch_basename": "<string|null>",
   "raw_command": "<string>",
   "canonical_command": ["<string>", ...],
   "status": "queued|running|success|fail|canceled|unknown",
