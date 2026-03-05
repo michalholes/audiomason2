@@ -107,9 +107,31 @@ allow_no_op = false
 # Legacy alias (runner maps order -> gates_order)
 # order = []
 # order = ["pytest"]
-order = ["compile", "js", "biome", "typescript", "ruff", "pytest", "mypy", "monolith", "docs"]
+order = [
+  "dont-touch",
+  "compile",
+  "js",
+  "biome",
+  "typescript",
+  "ruff",
+  "pytest",
+  "mypy",
+  "monolith",
+  "docs",
+]
 # Canonical (supported by runner; missing in your file)
-gates_order = ["compile", "js", "biome", "typescript", "ruff", "pytest", "mypy", "monolith", "docs"]
+gates_order = [
+  "dont-touch",
+  "compile",
+  "js",
+  "biome",
+  "typescript",
+  "ruff",
+  "pytest",
+  "mypy",
+  "monolith",
+  "docs",
+]
 
 # Canonical (supported by runner; missing in your file)
 run_all_tests = true
@@ -132,6 +154,13 @@ gate_biome_format_command = ["npx", "biome", "format", "--write", "."]
 
 # Canonical (supported by runner; missing in your file)
 gates_allow_fail = false
+gates_skip_dont_touch = false
+dont_touch_paths = [
+  "scripts/patchhub/static/patchhub_bootstrap.js",
+  "tsconfig.json",
+  "biome.json",
+  "pyproject.toml",
+]
 apply_failure_partial_gates_policy = "repair_only"
 apply_failure_zero_gates_policy = "repair_only"
 

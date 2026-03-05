@@ -405,16 +405,32 @@ scope accordingly - Should be used deliberately and sparingly
 -   When gates run after patch apply failure, the run remains FAIL with
     PATCH_APPLY as the primary reason.
 -   Default gate order is:
-    1)  COMPILE (python bytecode compilation)
-    2)  JS syntax (only when JS files are touched)
-    3)  Biome (only when configured and matching files are touched)
-    4)  TypeScript (only when configured and matching files are touched)
-    5)  Ruff
-    6)  Pytest
-    7)  Mypy
-    8)  Monolith (anti-monolith AST gate)
-    9)  Docs (documentation obligation)
+    1)  DONT-TOUCH (protected paths guard)
+    2)  COMPILE (python bytecode compilation)
+    3)  JS syntax (only when JS files are touched)
+    4)  Biome (only when configured and matching files are touched)
+    5)  TypeScript (only when configured and matching files are touched)
+    6)  Ruff
+    7)  Pytest
+    8)  Mypy
+    9)  Monolith (anti-monolith AST gate)
+    10) Docs (documentation obligation)
 -   Individual gates may be configured on/off.
+
+### 6.1.0 dont-touch gate
+
+-   Purpose: block patching and workspace operations that touch protected paths.
+-   Input: decision_paths only (deterministic; no filesystem inspection).
+-   Matching rules:
+    -   "foo/" => directory prefix match
+    -   "foo.txt" => exact match
+-   Controls (precedence: CLI > config > defaults):
+    -   `gates_skip_dont_touch = true|false` (default: false)
+    -   `dont_touch_paths = ["...", ...]` (repo-relative)
+-   CLI:
+    -   `--skip-dont-touch` (equivalent to `--override gates_skip_dont_touch=true`)
+-   Failure: the runner fails with a gate error that includes both the protected
+    path and the matching decision path.
 
 ### 6.1.1 COMPILE gate
 

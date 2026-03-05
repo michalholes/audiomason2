@@ -160,6 +160,15 @@ class Policy(PolicyMonolithMixin):
     )
 
     gates_allow_fail: bool = False
+    gates_skip_dont_touch: bool = False
+    dont_touch_paths: list[str] = field(
+        default_factory=lambda: [
+            "scripts/patchhub/static/patchhub_bootstrap.js",
+            "tsconfig.json",
+            "biome.json",
+            "pyproject.toml",
+        ]
+    )
     gates_skip_ruff: bool = False
     gates_skip_pytest: bool = False
     gates_skip_mypy: bool = False
@@ -202,6 +211,7 @@ class Policy(PolicyMonolithMixin):
     )
     gates_order: list[str] = field(
         default_factory=lambda: [
+            "dont-touch",
             "compile",
             "js",
             "biome",
@@ -732,6 +742,11 @@ def build_policy(defaults: Policy, cfg: dict[str, Any]) -> Policy:
         cfg, "apply_failure_zero_gates_policy", p.apply_failure_zero_gates_policy
     )
     _mark_cfg(p, cfg, "apply_failure_zero_gates_policy")
+
+    p.gates_skip_dont_touch = _as_bool(cfg, "gates_skip_dont_touch", p.gates_skip_dont_touch)
+    _mark_cfg(p, cfg, "gates_skip_dont_touch")
+    p.dont_touch_paths = _as_list_str(cfg, "dont_touch_paths", p.dont_touch_paths)
+    _mark_cfg(p, cfg, "dont_touch_paths")
 
     p.gates_skip_ruff = _as_bool(cfg, "gates_skip_ruff", p.gates_skip_ruff)
     _mark_cfg(p, cfg, "gates_skip_ruff")

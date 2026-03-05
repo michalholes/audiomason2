@@ -573,6 +573,7 @@ def parse_args(argv: list[str]) -> CliArgs:
     p.add_argument("--skip-js", dest="skip_js", action="store_true", default=None)
     p.add_argument("--skip-docs", dest="skip_docs", action="store_true", default=None)
     p.add_argument("--skip-monolith", dest="skip_monolith", action="store_true", default=None)
+    p.add_argument("--skip-dont-touch", dest="skip_dont_touch", action="store_true", default=None)
 
     p.add_argument("--skip-biome", dest="skip_biome", action="store_true", default=None)
     p.add_argument("--skip-typescript", dest="skip_typescript", action="store_true", default=None)
@@ -790,6 +791,8 @@ def parse_args(argv: list[str]) -> CliArgs:
 
     # Map explicit gate flags into overrides so engine.py does not need changes.
     # Precedence: CLI flags > config > defaults (apply_cli_overrides marks these as src=cli).
+    if getattr(ns, "skip_dont_touch", None):
+        ns.overrides = (ns.overrides or []) + ["gates_skip_dont_touch=true"]
     if getattr(ns, "skip_biome", None):
         ns.overrides = (ns.overrides or []) + ["gates_skip_biome=true"]
     if getattr(ns, "skip_typescript", None):

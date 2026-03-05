@@ -61,6 +61,8 @@ _SECTION_BY_KEY: dict[str, str] = {
     "biome_format_legalize_outside": "",
     "gate_biome_format_command": "",
     "gates_allow_fail": "",
+    "gates_skip_dont_touch": "",
+    "dont_touch_paths": "",
     "gates_skip_ruff": "",
     "gates_skip_pytest": "",
     "gates_skip_mypy": "",

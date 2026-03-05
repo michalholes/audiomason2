@@ -47,6 +47,8 @@ def run_validation(
         compile_targets=policy.compile_targets,
         compile_exclude=policy.compile_exclude,
         allow_fail=policy.gates_allow_fail,
+        skip_dont_touch=policy.gates_skip_dont_touch,
+        dont_touch_paths=policy.dont_touch_paths,
         skip_ruff=policy.gates_skip_ruff,
         skip_js=policy.gates_skip_js,
         skip_pytest=policy.gates_skip_pytest,

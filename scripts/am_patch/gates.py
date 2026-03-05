@@ -583,6 +583,7 @@ def _norm_gates_order(order: list[str] | None) -> list[str]:
     if not order:
         return []
     allowed = {
+        "dont-touch",
         "compile",
         "js",
         "biome",
@@ -611,6 +612,8 @@ def run_gates(
     compile_targets: list[str],
     compile_exclude: list[str],
     allow_fail: bool,
+    skip_dont_touch: bool = False,
+    dont_touch_paths: list[str] | None = None,
     skip_ruff: bool,
     skip_js: bool,
     skip_biome: bool = True,
@@ -718,6 +721,21 @@ def run_gates(
         return False
 
     def _run_gate(name: str) -> bool:
+        if name == "dont-touch":
+            if skip_dont_touch:
+                skipped.append("dont-touch")
+                logger.warning_core("gate_dont_touch=SKIP (skipped_by_user)")
+                return True
+            from .gate_dont_touch import run_dont_touch_gate
+
+            logger.section("GATE: dont-touch")
+            run_dont_touch_gate(
+                decision_paths=decision_paths,
+                protected_paths=list(dont_touch_paths or []),
+            )
+            logger.line("gate_dont_touch=OK")
+            return True
+
         if name == "compile":
             if not compile_check:
                 skipped.append("compile")
@@ -914,6 +932,7 @@ def run_gates(
         return True
 
     for gate in (
+        "dont-touch",
         "compile",
         "js",
         "biome",
