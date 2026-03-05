@@ -150,20 +150,25 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
         return _json_bytes_response(status, data)
 
     @app.get("/api/fs/download")
-    async def api_fs_download(path: str = "") -> FileResponse:
+    async def api_fs_download(path: str = "") -> Response:
         def _resolve_download_sync(path: str) -> Path:
             return core.jail.resolve_rel(path)
 
         try:
             p = await to_thread(_resolve_download_sync, path)
         except Exception as e:
-            raise HTTPException(status_code=400, detail=str(e)) from e
+            data = json.dumps({"ok": False, "error": str(e)}, ensure_ascii=True).encode("utf-8")
+            return Response(content=data, status_code=400, media_type="application/json")
 
         def _exists_file_sync(p: Path) -> bool:
             return p.exists() and p.is_file()
 
         if not await to_thread(_exists_file_sync, p):
-            raise HTTPException(status_code=404, detail="Not found")
+            data = json.dumps(
+                {"ok": False, "error": "Not found"},
+                ensure_ascii=True,
+            ).encode("utf-8")
+            return Response(content=data, status_code=404, media_type="application/json")
         return FileResponse(p, media_type=_guess_content_type(p), filename=p.name)
 
     @app.get("/api/runs")
@@ -501,8 +506,7 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
                 content=data, status_code=200, media_type="application/json", headers={"ETag": etag}
             )
 
-        body = await core.diagnostics(since_sig="")
-        body["sig"] = sig
+        body = await core.diagnostics()
         data = json.dumps(body, ensure_ascii=True).encode("utf-8")
         return Response(
             content=data, status_code=200, media_type="application/json", headers={"ETag": etag}
@@ -562,26 +566,14 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
                 return 0
 
         lock_held = await to_thread(_lock_held_sync)
-        diag_sig = (
+        header_sig = (
             f"diag:q={queued}:{running}"
             f":l={lock_held}"
             f":r={base_sig[0]}:{base_sig[1]}:{base_sig[2]}"
             f":c={canceled_sig[0]}:{canceled_sig[1]}"
         )
 
-        # Latest patch token (autofill) participates in snapshot.
-        status_latest, data_latest = await to_thread(core.api_patches_latest, {"since_token": ""})
-        latest_token = ""
-        latest_obj: dict[str, Any] = {}
-        if status_latest == 200:
-            try:
-                latest_obj = json.loads(data_latest.decode("utf-8"))
-                latest_token = str(latest_obj.get("token", ""))
-            except Exception:
-                latest_obj = {}
-                latest_token = ""
-
-        snapshot_sig = "|".join([jobs_sig, runs_sig, diag_sig, f"latest:{latest_token}"])
+        snapshot_sig = "|".join([jobs_sig, runs_sig, header_sig])
         etag = _etag_quote(snapshot_sig)
 
         inm = request.headers.get("if-none-match")
@@ -628,20 +620,21 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
             except Exception:
                 runs_list = []
 
-        diag_body = await core.diagnostics(since_sig="")
-        diag_body["sig"] = diag_sig
+        header_body = await core.diagnostics()
 
         payload: dict[str, Any] = {
             "ok": True,
-            "sig": snapshot_sig,
-            "jobs_sig": jobs_sig,
-            "runs_sig": runs_sig,
-            "diag_sig": diag_sig,
-            "latest_token": latest_token,
-            "jobs": jobs_items,
-            "runs": runs_list,
-            "diagnostics": diag_body,
-            "latest": latest_obj,
+            "snapshot": {
+                "jobs": jobs_items,
+                "runs": runs_list,
+                "header": header_body,
+            },
+            "sigs": {
+                "jobs": jobs_sig,
+                "runs": runs_sig,
+                "header": header_sig,
+                "snapshot": snapshot_sig,
+            },
         }
         data = json.dumps(payload, ensure_ascii=True).encode("utf-8")
         return Response(
@@ -701,8 +694,24 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
                         continue
                     yield f"data: {line}\n\n".encode()
 
-            async for line in broker.subscribe():
+            sub = broker.subscribe().__aiter__()
+            while True:
+                try:
+                    line = await asyncio.wait_for(sub.__anext__(), timeout=10.0)
+                except TimeoutError:
+                    # Keep-alive comment (EventSource ignores it).
+                    yield b": ping\n\n"
+                    continue
+                except StopAsyncIteration:
+                    break
                 yield f"data: {line}\n\n".encode()
+
+            st = await job_status()
+            data = json.dumps(
+                {"reason": "job_completed", "status": st or ""},
+                ensure_ascii=True,
+            )
+            yield f"event: end\ndata: {data}\n\n".encode()
 
         return StreamingResponse(gen(), media_type="text/event-stream")
 

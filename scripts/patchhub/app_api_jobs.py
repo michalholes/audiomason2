@@ -12,7 +12,13 @@ from .command_parse import (
 from .issue_alloc import allocate_next_issue_id
 from .job_ids import new_job_id
 from .job_store import list_job_jsons, load_job_json
-from .models import JobMode, JobRecord, job_to_list_item_json
+from .models import (
+    JobMode,
+    JobRecord,
+    compute_commit_summary,
+    compute_patch_basename,
+    job_to_list_item_json,
+)
 from .zip_commit_message import (
     ZipCommitConfig,
     ZipIssueConfig,
@@ -123,20 +129,31 @@ def _load_job_from_disk(self, job_id: str) -> JobRecord | None:
             created = str(raw.get("created_utc", ""))
             mode = str(raw.get("mode", "patch"))
             issue = str(raw.get("issue_id", ""))
-            commit = str(raw.get("commit_message", ""))
-            patch = str(raw.get("patch_path", ""))
+            commit_summary = str(raw.get("commit_summary", ""))
+            patch_basename = raw.get("patch_basename")
+            if patch_basename is not None:
+                patch_basename = str(patch_basename)
             raw_cmd = str(raw.get("raw_command", ""))
             canon = raw.get("canonical_command")
             if not isinstance(canon, list):
                 canon = []
             status = str(raw.get("status", "unknown"))
+
+            if not commit_summary:
+                commit_message = str(raw.get("commit_message", ""))
+                commit_summary = compute_commit_summary(commit_message)
+                if not commit_summary:
+                    commit_summary = f"({mode})"
+            if not patch_basename:
+                patch_path = str(raw.get("patch_path", ""))
+                patch_basename = compute_patch_basename(patch_path)
             jr = JobRecord(
                 job_id=jid,
                 created_utc=created,
                 mode=mode,  # type: ignore[arg-type]
                 issue_id=issue,
-                commit_message=commit,
-                patch_path=patch,
+                commit_summary=commit_summary,
+                patch_basename=patch_basename,
                 raw_command=raw_cmd,
                 canonical_command=[str(x) for x in canon],
             )
@@ -145,6 +162,9 @@ def _load_job_from_disk(self, job_id: str) -> JobRecord | None:
             jr.ended_utc = raw.get("ended_utc")
             jr.return_code = raw.get("return_code")
             jr.error = raw.get("error")
+            jr.cancel_requested_utc = raw.get("cancel_requested_utc")
+            jr.cancel_ack_utc = raw.get("cancel_ack_utc")
+            jr.cancel_source = raw.get("cancel_source")
             cache[job_id] = (st.st_mtime_ns, jr)
             return jr
         except Exception:
@@ -228,14 +248,19 @@ def api_jobs_enqueue(self, body: dict[str, Any]) -> tuple[int, bytes]:
                 runner_prefix, mode, issue_id, commit_message, patch_path
             )
 
+    commit_summary = compute_commit_summary(commit_message)
+    if not commit_summary:
+        commit_summary = f"({mode})"
+    patch_basename = compute_patch_basename(patch_path)
+
     job_id = new_job_id()
     job = JobRecord(
         job_id=job_id,
         created_utc=_utc_now(),
         mode=mode,
         issue_id=issue_id,
-        commit_message=commit_message,
-        patch_path=patch_path,
+        commit_summary=commit_summary,
+        patch_basename=patch_basename,
         raw_command=raw_command,
         canonical_command=canonical,
     )

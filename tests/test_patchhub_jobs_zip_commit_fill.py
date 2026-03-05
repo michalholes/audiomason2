@@ -139,7 +139,7 @@ def test_enqueue_fills_commit_from_zip_when_missing(tmp_path: Path) -> None:
     status, raw = api_jobs_enqueue(s, body)
     assert status == 200
     payload = json.loads(raw.decode("utf-8"))
-    assert payload["job"]["commit_message"] == "Hello"
+    assert payload["job"]["commit_summary"] == "Hello"
 
 
 def test_enqueue_does_not_override_user_commit(tmp_path: Path) -> None:
@@ -151,7 +151,7 @@ def test_enqueue_does_not_override_user_commit(tmp_path: Path) -> None:
     status, raw = api_jobs_enqueue(s, body)
     assert status == 200
     payload = json.loads(raw.decode("utf-8"))
-    assert payload["job"]["commit_message"] == "UserMsg"
+    assert payload["job"]["commit_summary"] == "UserMsg"
 
 
 def test_enqueue_fills_issue_and_commit_from_zip_when_missing(tmp_path: Path) -> None:
@@ -164,4 +164,4 @@ def test_enqueue_fills_issue_and_commit_from_zip_when_missing(tmp_path: Path) ->
     assert status == 200
     payload = json.loads(raw.decode("utf-8"))
     assert payload["job"]["issue_id"] == "602"
-    assert payload["job"]["commit_message"] == "Hello"
+    assert payload["job"]["commit_summary"] == "Hello"

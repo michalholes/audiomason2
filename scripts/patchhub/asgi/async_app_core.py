@@ -60,28 +60,15 @@ class AsyncAppCore:
     api_amp_config_get = _amp.api_amp_config_get
     api_amp_config_post = _amp.api_amp_config_post
 
-    async def diagnostics(self, *, since_sig: str = "") -> dict[str, object]:
+    async def diagnostics(self) -> dict[str, object]:
         qstate: Any | None
-        qerr: str | None = None
         try:
             qstate = await self.queue.state()
-        except Exception as e:
+        except Exception:
             qstate = None
-            qerr = f"{type(e).__name__}: {e}"
-        else:
-            qerr = None
 
-        if qstate is None:
-            queue_part: dict[str, Any] = {"ok": False, "error": str(qerr)}
-        else:
-            queue_part = {
-                "ok": True,
-                "queued": int(qstate.queued),
-                "running": int(qstate.running),
-            }
-
-        queued = int(queue_part.get("queued", 0) or 0)
-        running = int(queue_part.get("running", 0) or 0)
+        queued = int(getattr(qstate, "queued", 0) or 0) if qstate is not None else 0
+        running = int(getattr(qstate, "running", 0) or 0) if qstate is not None else 0
 
         def _sync_part() -> dict[str, object]:
             lock_held = False
@@ -92,23 +79,10 @@ class AsyncAppCore:
             except Exception:
                 lock_held = False
 
-            base_sig = _core.runs_signature(self.patches_root, self.cfg.indexing.log_filename_regex)
-            canceled_sig = _core.canceled_runs_signature(self.patches_root)
-            sig = (
-                f"diag:q={queued}:{running}"
-                f":l={1 if lock_held else 0}"
-                f":r={base_sig[0]}:{base_sig[1]}"
-                f":c={canceled_sig[0]}:{canceled_sig[1]}"
-            )
-            if since_sig and since_sig == sig:
-                return {"ok": True, "unchanged": True, "sig": sig}
-
             runs = _core.iter_runs(self.patches_root, self.cfg.indexing.log_filename_regex)
             stats = _core.compute_stats(runs, self.cfg.indexing.stats_windows_days)
             usage = _core.shutil.disk_usage(str(self.patches_root))
             return {
-                "ok": True,
-                "sig": sig,
                 "lock": {
                     "path": str(Path(self.cfg.paths.patches_root) / "am_patch.lock"),
                     "held": lock_held,
@@ -126,12 +100,19 @@ class AsyncAppCore:
                 },
             }
 
+        sync_part: dict[str, object]
         try:
             sync_part = await to_thread(_sync_part)
-        except Exception as e:
-            sync_part = {"ok": False, "error": f"{type(e).__name__}: {e}"}
+        except Exception:
+            sync_part = {
+                "lock": {"path": "", "held": False},
+                "disk": {"total": 0, "used": 0, "free": 0},
+                "runs": {"count": 0},
+                "stats": {"all_time": {}, "windows": []},
+                "resources": {},
+            }
 
-        return {"queue": queue_part, **sync_part}
+        return {"queue": {"queued": queued, "running": running}, **sync_part}
 
     api_fs_list = _fs.api_fs_list
     api_fs_read_text = _fs.api_fs_read_text

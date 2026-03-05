@@ -165,7 +165,7 @@
 
 	function refreshTail() {
 		apiGet("/api/runner/tail?lines=200").then((r) => {
-			setPre("tail", r.events || []);
+			setPre("tail", r.tail || "");
 		});
 	}
 

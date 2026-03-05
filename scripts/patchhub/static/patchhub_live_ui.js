@@ -10,6 +10,8 @@
 	var liveStreamJobId = null;
 	var liveES = null;
 	var liveEvents = [];
+	var MAX_LIVE_EVENTS = 2000;
+	var liveRenderTimer = null;
 	var liveLevel = "normal";
 	var runsVisible = false;
 	var jobsVisible = false;
@@ -228,6 +230,15 @@
 		}
 	}
 
+	function scheduleLiveRender() {
+		if (liveRenderTimer) return;
+		liveRenderTimer = setTimeout(() => {
+			liveRenderTimer = null;
+			renderLiveLog();
+			if (ui.updateProgressPanelFromEvents) ui.updateProgressPanelFromEvents();
+		}, 50);
+	}
+
 	function updateProgressFromEvents() {
 		var box = el("activeStage");
 		if (!box) return;
@@ -286,10 +297,10 @@
 			}
 			if (!obj) return;
 			liveEvents.push(obj);
-			if (filterLiveEvent(obj)) {
-				renderLiveLog();
+			if (liveEvents.length > MAX_LIVE_EVENTS) {
+				liveEvents.splice(0, liveEvents.length - MAX_LIVE_EVENTS);
 			}
-			if (ui.updateProgressPanelFromEvents) ui.updateProgressPanelFromEvents();
+			scheduleLiveRender();
 			setLiveStreamStatus("streaming");
 		};
 

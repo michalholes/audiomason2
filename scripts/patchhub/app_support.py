@@ -253,7 +253,9 @@ def compute_success_archive_rel(
     name = os.path.basename(name)
     if not name.endswith(".zip"):
         name = f"{name}.zip"
-    return str(Path(patches_root_rel) / name)
+    # Return a path relative to patches_root (not repo-root).
+    # The caller resolves it under patches_root.
+    return name
 
 
 def _utc_iso(ts: float) -> str:
@@ -300,7 +302,11 @@ def _decorate_run(
     patches_root: Path,
     success_zip_rel: str,
 ) -> RunEntry:
-    run.success_zip_rel_path = success_zip_rel
+    try:
+        p = patches_root / str(success_zip_rel)
+        run.success_zip_rel_path = success_zip_rel if (p.exists() and p.is_file()) else None
+    except Exception:
+        run.success_zip_rel_path = None
     issue_key = f"issue_{run.issue_id}"
 
     # Archived patch: try result-specific dir first, then both.

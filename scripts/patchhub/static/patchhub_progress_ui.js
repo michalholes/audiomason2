@@ -130,7 +130,7 @@
 
 		function ensureStep(name) {
 			if (!name) return;
-			if (!Object.prototype.hasOwnProperty.call(state, name)) {
+			if (!Object.hasOwn(state, name)) {
 				state[name] = "pending";
 			}
 			if (order.indexOf(name) < 0) order.push(name);
@@ -190,8 +190,7 @@
 
 		for (let k = 0; k < order.length; k++) {
 			const nm2 = order[k];
-			if (!Object.prototype.hasOwnProperty.call(state, nm2))
-				state[nm2] = "pending";
+			if (!Object.hasOwn(state, nm2)) state[nm2] = "pending";
 		}
 
 		return { order: order, state: state, resultStatus: resultStatus };
@@ -300,6 +299,7 @@
 		var active = (jobs || []).find((j) => j.status === "running") || null;
 		activeJobId = active ? String(active.job_id || "") : null;
 		var queued = (jobs || []).filter((j) => j.status === "queued");
+		var jidEnc = "";
 
 		var box = el("activeJob");
 		if (!box) return;
@@ -311,11 +311,15 @@
 
 		var html = "";
 		if (active) {
+			jidEnc = encodeURIComponent(active.job_id || "");
 			html += `<div><b>running</b> ${escapeHtml(active.job_id || "")}</div>`;
 			html += `<div class="muted">mode=${escapeHtml(active.mode || "")} issue=${escapeHtml(active.issue_id || "")}</div>`;
 			html +=
 				'<div class="row"><button class="btn btn-small" id="cancelActive">Cancel</button>';
-			html += `<a class="linklike" href="/api/jobs/log_tail?job_id=${encodeURIComponent(active.job_id || "")}">log</a></div>`;
+			html +=
+				'<a class="linklike" href="/api/jobs/' +
+				jidEnc +
+				'/log_tail?lines=200">log</a></div>';
 		}
 
 		if (queued.length) {
@@ -327,7 +331,10 @@
 		var cancelBtn = el("cancelActive");
 		if (cancelBtn && active && active.job_id) {
 			cancelBtn.addEventListener("click", () => {
-				apiPost("/api/jobs/cancel", { job_id: active.job_id }).then(() => {
+				apiPost(
+					`/api/jobs/${encodeURIComponent(active.job_id)}/cancel`,
+					{},
+				).then(() => {
 					refreshJobs();
 				});
 			});

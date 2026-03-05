@@ -92,6 +92,8 @@ function renderJobsFromResponse(r) {
 
 			var metaParts = [];
 			metaParts.push(`mode=${String(j.mode || "")}`);
+			var pb = String(j.patch_basename || "").trim();
+			if (pb) metaParts.push(`patch=${pb}`);
 
 			var dur = PH.call(
 				"jobSummaryDurationSeconds",
@@ -101,6 +103,7 @@ function renderJobsFromResponse(r) {
 			if (dur) metaParts.push(`dur=${dur}s`);
 
 			var meta = metaParts.join(" | ");
+			var commit = String(j.commit_summary || "").trim();
 
 			var line = '<div class="' + cls + '">';
 			line +=
@@ -115,6 +118,7 @@ function renderJobsFromResponse(r) {
 				escapeHtml(statusText) +
 				"</span>";
 			line += "</div>";
+			line += '<div class="job-commit">' + escapeHtml(commit) + "</div>";
 			line += '<div class="job-meta">' + escapeHtml(meta) + "</div>";
 			line += "</div>";
 			line += "</div>";
@@ -154,24 +158,26 @@ function idleRefreshTick() {
 			if (!r || r.ok === false) return { changed: false };
 			if (r.unchanged) return { changed: false };
 
-			var snapSig = String(r.sig || "");
+			var sigs = r.sigs || {};
+			var snapSig = String(sigs.snapshot || "");
 			if (snapSig) idleSigs.snapshot = snapSig;
 
-			var js = String(r.jobs_sig || "");
-			var rs = String(r.runs_sig || "");
-			var hs = String(r.diag_sig || "");
+			var js = String(sigs.jobs || "");
+			var rs = String(sigs.runs || "");
+			var hs = String(sigs.header || "");
 			if (js) idleSigs.jobs = js;
 			if (rs) idleSigs.runs = rs;
 			if (hs) idleSigs.hdr = hs;
 
-			renderJobsFromResponse({ ok: true, jobs: r.jobs || [] });
-			__ph_w.renderRunsFromResponse({ ok: true, runs: r.runs || [] });
+			var snap = r.snapshot || {};
+			renderJobsFromResponse({ ok: true, jobs: snap.jobs || [] });
+			__ph_w.renderRunsFromResponse({ ok: true, runs: snap.runs || [] });
 
 			var base = "";
 			if (cfg && cfg.server && cfg.server.host && cfg.server.port) {
 				base = "server: " + cfg.server.host + ":" + cfg.server.port;
 			}
-			renderHeaderFromDiagnostics(r.diagnostics || {}, base);
+			renderHeaderFromDiagnostics(snap.header || {}, base);
 
 			return { changed: true };
 		})

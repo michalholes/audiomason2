@@ -14,8 +14,8 @@ class JobRecord:
     created_utc: str
     mode: JobMode
     issue_id: str
-    commit_message: str
-    patch_path: str
+    commit_summary: str
+    patch_basename: str | None
     raw_command: str
     canonical_command: list[str]
     status: JobStatus = "queued"
@@ -33,6 +33,28 @@ class JobRecord:
         return asdict(self)
 
 
+def compute_commit_summary(commit_message: str, *, max_len: int = 60) -> str:
+    msg = str(commit_message or "")
+    msg = " ".join(msg.split())
+    if not msg:
+        return ""
+    if len(msg) <= max_len:
+        return msg
+    if max_len <= 3:
+        return msg[:max_len]
+    return msg[: max_len - 3] + "..."
+
+
+def compute_patch_basename(patch_path: str) -> str | None:
+    p = str(patch_path or "").strip()
+    if not p:
+        return None
+    p = p.replace("\\", "/")
+    if "/" in p:
+        return p.rsplit("/", 1)[-1] or None
+    return p
+
+
 def job_to_list_item_json(j: JobRecord) -> dict[str, Any]:
     # Thin DTO for list endpoints (spec: JobListItem JSON).
     # Manual mapping to avoid dataclasses.asdict() overhead.
@@ -44,7 +66,8 @@ def job_to_list_item_json(j: JobRecord) -> dict[str, Any]:
         "ended_utc": j.ended_utc,
         "mode": j.mode,
         "issue_id": j.issue_id,
-        "label": f"{j.mode} #{j.issue_id}".strip(),
+        "commit_summary": j.commit_summary,
+        "patch_basename": j.patch_basename,
     }
 
 

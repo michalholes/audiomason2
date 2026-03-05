@@ -75,6 +75,33 @@ def _persist_job_sync(job_dir: Path, job: JobRecord) -> None:
     )
 
 
+def _job_jsonl_path_from_fields(job_dir: Path, mode: str, issue_id: str) -> Path:
+    if mode in ("finalize_live", "finalize_workspace"):
+        return job_dir / "am_patch_finalize.jsonl"
+    issue_s = str(issue_id or "")
+    if issue_s.isdigit():
+        return job_dir / ("am_patch_issue_" + issue_s + ".jsonl")
+    return job_dir / "am_patch_finalize.jsonl"
+
+
+def _ensure_job_jsonl_exists_sync(job_dir: Path, mode: str, issue_id: str) -> None:
+    job_dir.mkdir(parents=True, exist_ok=True)
+    jsonl_path = _job_jsonl_path_from_fields(job_dir, mode, issue_id)
+    try:
+        if jsonl_path.exists() and jsonl_path.is_file() and jsonl_path.stat().st_size > 0:
+            return
+    except Exception:
+        return
+
+    line = json.dumps(
+        {"type": "log", "ch": "CORE", "sev": "INFO", "msg": "queued", "summary": True},
+        ensure_ascii=True,
+    )
+    with jsonl_path.open("a", encoding="utf-8") as f:
+        f.write(line)
+        f.write("\n")
+
+
 @dataclass
 class QueueState:
     queued: int
@@ -138,6 +165,13 @@ class AsyncJobQueue:
         async with self._mu:
             self._jobs[job.job_id] = job
             await self._persist(job)
+            job_dir = self._job_dir(job.job_id)
+            await asyncio.to_thread(
+                _ensure_job_jsonl_exists_sync,
+                job_dir,
+                str(job.mode),
+                str(job.issue_id),
+            )
         await self._q.put(job.job_id)
 
     async def cancel(self, job_id: str) -> bool:
@@ -213,10 +247,7 @@ class AsyncJobQueue:
 
     async def _run_loop(self) -> None:
         while not self._stop.is_set():
-            try:
-                job_id = await asyncio.wait_for(self._q.get(), timeout=0.5)
-            except TimeoutError:
-                continue
+            job_id = await self._q.get()
 
             async with self._mu:
                 job = self._jobs.get(job_id)
@@ -240,14 +271,6 @@ class AsyncJobQueue:
             job_dir = self._job_dir(job_id)
             runner_log = job_dir / "runner.log"
 
-            def _job_jsonl_path(j: JobRecord, job_dir: Path = job_dir) -> Path:
-                if j.mode in ("finalize_live", "finalize_workspace"):
-                    return job_dir / "am_patch_finalize.jsonl"
-                issue_s = str(j.issue_id or "")
-                if issue_s.isdigit():
-                    return job_dir / ("am_patch_issue_" + issue_s + ".jsonl")
-                return job_dir / "am_patch_finalize.jsonl"
-
             try:
                 effective_cmd = _inject_web_overrides(job.canonical_command, job_id)
 
@@ -257,7 +280,11 @@ class AsyncJobQueue:
                     with contextlib.suppress(Exception):
                         sock_path.unlink()
 
-                jsonl_path = _job_jsonl_path(job)
+                jsonl_path = _job_jsonl_path_from_fields(
+                    job_dir,
+                    str(job.mode),
+                    str(job.issue_id),
+                )
                 broker = JobEventBroker()
                 async with self._mu:
                     self._brokers[job_id] = broker
@@ -279,11 +306,6 @@ class AsyncJobQueue:
                     await pump_task
 
                 async with self._mu:
-                    broker_to_close = self._brokers.pop(job_id) if job_id in self._brokers else None
-                if broker_to_close is not None:
-                    broker_to_close.close()
-
-                async with self._mu:
                     job = self._jobs.get(job_id)
                     if job is None:
                         continue
@@ -297,12 +319,12 @@ class AsyncJobQueue:
                         job.status = "fail"
                         job.ended_utc = utc_now()
                     await self._persist(job)
-            except Exception as e:
+
                 async with self._mu:
                     broker_to_close = self._brokers.pop(job_id) if job_id in self._brokers else None
                 if broker_to_close is not None:
                     broker_to_close.close()
-
+            except Exception as e:
                 async with self._mu:
                     job = self._jobs.get(job_id)
                     if job is None:
@@ -311,3 +333,8 @@ class AsyncJobQueue:
                     job.ended_utc = utc_now()
                     job.error = f"{type(e).__name__}: {e}"
                     await self._persist(job)
+
+                async with self._mu:
+                    broker_to_close = self._brokers.pop(job_id) if job_id in self._brokers else None
+                if broker_to_close is not None:
+                    broker_to_close.close()

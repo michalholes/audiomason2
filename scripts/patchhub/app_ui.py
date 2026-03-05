@@ -9,7 +9,13 @@ def render_template(self, name: str) -> str:
 
 
 def render_index(self) -> str:
-    return self.render_template("index.html")
+    tpl = self.render_template("index.html")
+    version = ""
+    try:
+        version = str(self.cfg.meta.version)
+    except Exception:
+        version = ""
+    return tpl.replace("{{PATCHHUB_STATIC_VERSION}}", version)
 
 
 def render_debug(self) -> str:
