@@ -49,6 +49,18 @@ def _etag_matches(if_none_match: str | None, etag_value: str) -> bool:
     return inm == etag_value
 
 
+def _head_json_response(status: int, *, etag: str = "") -> Response:
+    headers: dict[str, str] = {}
+    if etag:
+        headers["ETag"] = etag
+    return Response(
+        content=b"",
+        status_code=status,
+        media_type="application/json",
+        headers=headers,
+    )
+
+
 def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
     app = FastAPI()
     core = AsyncAppCore(repo_root=repo_root, cfg=cfg)
@@ -277,6 +289,51 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
             )
         return _json_bytes_response(status, data)
 
+    @app.head("/api/runs")
+    async def api_runs_head(request: Request) -> Response:
+        qs = dict(request.query_params)
+        issue_id_s = str(qs.get("issue_id", "")).strip()
+        result = str(qs.get("result", "")).strip()
+        since_sig = str(qs.get("since_sig", "")).strip()
+
+        if issue_id_s or result:
+            return _head_json_response(200)
+
+        if core.indexer.ready():
+            got = core.indexer.get_runs()
+            if got is not None:
+                sig, _runs_items = got
+                etag = _etag_quote(sig)
+
+                inm = request.headers.get("if-none-match")
+                if etag and _etag_matches(inm, etag):
+                    return Response(status_code=304, headers={"ETag": etag})
+                if since_sig and since_sig == sig:
+                    return _head_json_response(200, etag=etag)
+                return _head_json_response(200, etag=etag)
+
+        from patchhub.app_support import canceled_runs_signature
+        from patchhub.indexing import runs_signature
+
+        base_sig = await to_thread(
+            runs_signature,
+            core.patches_root,
+            core.cfg.indexing.log_filename_regex,
+        )
+        canceled_sig = await to_thread(canceled_runs_signature, core.patches_root)
+        sig = (
+            f"runs:r={base_sig[0]}:{base_sig[1]}:{base_sig[2]}"
+            f":c={canceled_sig[0]}:{canceled_sig[1]}"
+        )
+        etag = _etag_quote(sig)
+
+        inm = request.headers.get("if-none-match")
+        if etag and _etag_matches(inm, etag):
+            return Response(status_code=304, headers={"ETag": etag})
+        if since_sig and since_sig == sig:
+            return _head_json_response(200, etag=etag)
+        return _head_json_response(200, etag=etag)
+
     @app.get("/api/runs/{issue_id}")
     async def api_runs_get(issue_id: int) -> Response:
         status, data = await to_thread(_core_api.api_run_detail, core, int(issue_id))
@@ -383,6 +440,50 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
             {"ok": True, "jobs": [job_to_list_item_json(j) for j in jobs], "sig": sig},
             headers={"ETag": etag},
         )
+
+    @app.head("/api/jobs")
+    async def api_jobs_list_head(request: Request) -> Response:
+        since_sig = str(request.query_params.get("since_sig", "")).strip()
+
+        if core.indexer.ready():
+            got = core.indexer.get_jobs()
+            if got is not None:
+                sig, _jobs_items = got
+                etag = _etag_quote(sig)
+
+                inm = request.headers.get("if-none-match")
+                if etag and _etag_matches(inm, etag):
+                    return Response(status_code=304, headers={"ETag": etag})
+                if since_sig and since_sig == sig:
+                    return _head_json_response(200, etag=etag)
+                return _head_json_response(200, etag=etag)
+
+        from hashlib import sha1
+
+        from patchhub.job_store import job_json_signature
+
+        mem = await core.queue.list_jobs()
+        disk_sig = await to_thread(job_json_signature, core.jobs_root)
+
+        mem_parts: list[str] = []
+        for j in sorted(mem, key=lambda x: str(getattr(x, "job_id", ""))):
+            jid = str(getattr(j, "job_id", ""))
+            st = str(getattr(j, "status", ""))
+            isu = str(getattr(j, "issue_id", ""))
+            su = str(getattr(j, "started_utc", ""))
+            eu = str(getattr(j, "ended_utc", ""))
+            mem_parts.append("|".join([jid, st, isu, su, eu]))
+
+        mem_sig = sha1("\n".join(mem_parts).encode("utf-8")).hexdigest()
+        sig = f"jobs:d={disk_sig[0]}:{disk_sig[1]}:m={mem_sig}"
+        etag = _etag_quote(sig)
+
+        inm = request.headers.get("if-none-match")
+        if etag and _etag_matches(inm, etag):
+            return Response(status_code=304, headers={"ETag": etag})
+        if since_sig and since_sig == sig:
+            return _head_json_response(200, etag=etag)
+        return _head_json_response(200, etag=etag)
 
     @app.get("/api/jobs/{job_id}")
     async def api_jobs_get(job_id: str) -> JSONResponse:
@@ -786,6 +887,90 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
             media_type="application/json",
             headers={"ETag": etag},
         )
+
+    @app.head("/api/ui_snapshot")
+    async def api_ui_snapshot_head(request: Request) -> Response:
+        qs = dict(request.query_params)
+        since_sig = str(qs.get("since_sig", "")).strip()
+
+        if core.indexer.ready():
+            snap = core.indexer.get_ui_snapshot()
+            if snap is not None:
+                snapshot_sig = str(snap.snapshot_sig)
+                etag = _etag_quote(snapshot_sig)
+
+                inm = request.headers.get("if-none-match")
+                if etag and _etag_matches(inm, etag):
+                    return Response(status_code=304, headers={"ETag": etag})
+                if since_sig and since_sig == snapshot_sig:
+                    return _head_json_response(200, etag=etag)
+                return _head_json_response(200, etag=etag)
+
+        from hashlib import sha1
+
+        from patchhub.app_support import canceled_runs_signature
+        from patchhub.indexing import runs_signature
+        from patchhub.job_store import job_json_signature
+
+        disk_sig = await to_thread(job_json_signature, core.jobs_root)
+        mem = await core.queue.list_jobs()
+
+        mem_parts: list[str] = []
+        for j in sorted(mem, key=lambda x: str(getattr(x, "job_id", ""))):
+            jid = str(getattr(j, "job_id", ""))
+            st = str(getattr(j, "status", ""))
+            isu = str(getattr(j, "issue_id", ""))
+            su = str(getattr(j, "started_utc", ""))
+            eu = str(getattr(j, "ended_utc", ""))
+            mem_parts.append("|".join([jid, st, isu, su, eu]))
+
+        mem_sig = sha1("\n".join(mem_parts).encode("utf-8")).hexdigest()
+        jobs_sig = f"jobs:d={disk_sig[0]}:{disk_sig[1]}:m={mem_sig}"
+
+        base_sig = await to_thread(
+            runs_signature,
+            core.patches_root,
+            core.cfg.indexing.log_filename_regex,
+        )
+        canceled_sig = await to_thread(canceled_runs_signature, core.patches_root)
+        runs_sig = (
+            f"runs:r={base_sig[0]}:{base_sig[1]}:{base_sig[2]}"
+            f":c={canceled_sig[0]}:{canceled_sig[1]}"
+        )
+
+        qstate = None
+        try:
+            qstate = await core.queue.state()
+        except Exception:
+            qstate = None
+        queued = int(getattr(qstate, "queued", 0) or 0) if qstate is not None else 0
+        running = int(getattr(qstate, "running", 0) or 0) if qstate is not None else 0
+
+        def _lock_held_sync() -> int:
+            try:
+                from patchhub.job_ids import is_lock_held
+
+                return 1 if is_lock_held(core.jail.lock_path()) else 0
+            except Exception:
+                return 0
+
+        lock_held = await to_thread(_lock_held_sync)
+        header_sig = (
+            f"diag:q={queued}:{running}"
+            f":l={lock_held}"
+            f":r={base_sig[0]}:{base_sig[1]}:{base_sig[2]}"
+            f":c={canceled_sig[0]}:{canceled_sig[1]}"
+        )
+
+        snapshot_sig = "|".join([jobs_sig, runs_sig, header_sig])
+        etag = _etag_quote(snapshot_sig)
+
+        inm = request.headers.get("if-none-match")
+        if etag and _etag_matches(inm, etag):
+            return Response(status_code=304, headers={"ETag": etag})
+        if since_sig and since_sig == snapshot_sig:
+            return _head_json_response(200, etag=etag)
+        return _head_json_response(200, etag=etag)
 
     @app.get("/api/jobs/{job_id}/events")
     async def api_jobs_events(job_id: str) -> StreamingResponse:
