@@ -289,20 +289,20 @@ Detail separation
 3. Structure (Modules and Responsibilities)
 
 Primary modules:
-- server.py: HTTP routing, request parsing, response writing
-- app_core.py: App wiring (composition)
+- asgi/asgi_app.py: HTTP routing, request parsing, response writing (ASGI backend)
+- asgi/async_app_core.py: App wiring (composition) for ASGI backend
 - config.py: TOML config loading (patchhub.toml)
 - fs_jail.py: patches-root jail and CRUD gating
 - app_api_core.py: config, parse_command, runs, runner_tail, diagnostics
 - app_api_jobs.py: jobs enqueue/list/get/log_tail/cancel
 - app_api_upload.py: upload patch artifacts
 - app_api_fs.py: fs list/read_text/mkdir/rename/delete/unzip
-- server_archive.py: /api/fs/archive (selection.zip creation)
-- server_events.py: /api/jobs/<job_id>/events (SSE stream from PatchHub jsonl store)
-- event_pump.py: single socket->jsonl event persistence pump (one per job)
-- job_event_broker.py: in-memory per-job event broadcast used for low-latency SSE
-- queue.py: job queue, lock, override injection, job persistence
-- runner_exec.py: runner subprocess executor
+- asgi/asgi_app.py: /api/fs/archive and /api/jobs/<job_id>/events routes
+- asgi/async_event_pump.py: single socket->jsonl event persistence pump (one per job)
+- asgi/job_event_broker.py: in-memory per-job event broadcast used for low-latency SSE
+- asgi/sse_jsonl_stream.py: JSONL tailing fallback for SSE after restart
+- asgi/async_queue.py: job queue, lock, override injection, job persistence
+- asgi/async_runner_exec.py: runner subprocess executor
 - indexing.py: historical runs indexing from patches/logs
   - Uses deterministic in-process caching for /api/runs results.
   - Cache invalidation is signature-based: (count, max mtime_ns) of matching log files.
@@ -995,7 +995,7 @@ If runner.log missing: tail is empty string.
 Output:
 - text/event-stream; charset=utf-8 (SSE)
 
-Semantics (server_events.py):
+Semantics (asgi/asgi_app.py):
 - If job not found (neither memory nor disk):
   - returns 200 and immediately emits:
     event: end
@@ -1108,7 +1108,7 @@ Parsing rules (command_parse.py):
 - supports finalize/rerun flags in rest (combinations are rejected):
   -f MESSAGE => finalize_live (MESSAGE is required; stored as commit_message)
   -w ISSUE_ID => finalize_workspace (ISSUE_ID is required; digits only)
-  -l ISSUE_ID MESSAGE => rerun_latest (ISSUE_ID and MESSAGE are required)
+  -l => rerun_latest (no extra args)
 - patch mode requires exactly 3 args after scripts/am_patch.py:
   ISSUE_ID (digits), commit message (non-empty), PATCH (non-empty)
 
@@ -1131,8 +1131,7 @@ Behavior:
 - If raw_command is absent:
   - finalize_live requires commit_message and builds: runner_prefix + ['-f', commit_message]
   - finalize_workspace requires issue_id (digits) and builds: runner_prefix + ['-w', issue_id]
-  - rerun_latest requires issue_id and commit_message and builds:
-    runner_prefix + ['-l', issue_id, commit_message]
+  - rerun_latest builds: runner_prefix + ['-l']
   - patch/repair requires commit_message and patch_path
   - if issue_id missing, PatchHub auto-allocates it (see Section 11)
 
