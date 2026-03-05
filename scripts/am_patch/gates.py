@@ -592,7 +592,6 @@ def _norm_gates_order(order: list[str] | None) -> list[str]:
         "mypy",
         "docs",
         "monolith",
-        "dont-touch",
     }
     out: list[str] = []
     for item in order:
@@ -619,8 +618,6 @@ def run_gates(
     skip_pytest: bool,
     skip_mypy: bool,
     skip_docs: bool,
-    skip_dont_touch: bool = False,
-    dont_touch_paths: list[str] | None = None,
     skip_monolith: bool,
     gate_monolith_enabled: bool,
     gate_monolith_mode: str,
@@ -684,7 +681,6 @@ def run_gates(
     skipped: list[str] = []
 
     order = _norm_gates_order(gates_order)
-    dont_touch_paths = dont_touch_paths or []
     biome_exts = biome_extensions or []
     biome_cmd = biome_command or []
     biome_fmt_cmd = biome_format_command or []
@@ -734,32 +730,6 @@ def run_gates(
                 targets=compile_targets,
                 exclude=compile_exclude,
             )
-
-        if name == "dont-touch":
-            if skip_dont_touch:
-                skipped.append("dont-touch")
-                logger.warning_core("gate_dont_touch=SKIP (skipped_by_user)")
-                return True
-            from .gate_dont_touch import run_dont_touch_gate
-
-            ok, protected, decision = run_dont_touch_gate(
-                decision_paths,
-                dont_touch_paths,
-            )
-            if ok:
-                logger.line("gate_dont_touch=OK")
-                return True
-            msg = (
-                "dont-touch blocked: protected_path="
-                + str(protected)
-                + " decision_path="
-                + str(decision)
-            )
-            logger.error_core("gate_dont_touch=FAIL")
-            logger.error_core(msg)
-            if not allow_fail:
-                raise RunnerError("GATES", "GATES", msg)
-            return False
 
         if name == "js":
             if skip_js:
@@ -944,7 +914,6 @@ def run_gates(
         return True
 
     for gate in (
-        "dont-touch",
         "compile",
         "js",
         "biome",

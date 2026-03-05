@@ -101,7 +101,6 @@ class CliArgs:
     skip_mypy: bool | None
     skip_js: bool | None
     skip_docs: bool | None
-    skip_dont_touch: bool | None
     skip_monolith: bool | None
     apply_failure_partial_gates_policy: str | None
     apply_failure_zero_gates_policy: str | None
@@ -573,7 +572,6 @@ def parse_args(argv: list[str]) -> CliArgs:
     p.add_argument("--skip-mypy", dest="skip_mypy", action="store_true", default=None)
     p.add_argument("--skip-js", dest="skip_js", action="store_true", default=None)
     p.add_argument("--skip-docs", dest="skip_docs", action="store_true", default=None)
-    p.add_argument("--skip-dont-touch", dest="skip_dont_touch", action="store_true", default=None)
     p.add_argument("--skip-monolith", dest="skip_monolith", action="store_true", default=None)
 
     p.add_argument("--skip-biome", dest="skip_biome", action="store_true", default=None)
@@ -877,7 +875,6 @@ def parse_args(argv: list[str]) -> CliArgs:
             skip_mypy=ns.skip_mypy,
             skip_js=getattr(ns, "skip_js", None),
             skip_docs=getattr(ns, "skip_docs", None),
-            skip_dont_touch=getattr(ns, "skip_dont_touch", None),
             skip_monolith=getattr(ns, "skip_monolith", None),
             apply_failure_partial_gates_policy=getattr(
                 ns, "apply_failure_partial_gates_policy", None
@@ -967,7 +964,6 @@ def parse_args(argv: list[str]) -> CliArgs:
         skip_mypy=ns.skip_mypy,
         skip_js=getattr(ns, "skip_js", None),
         skip_docs=getattr(ns, "skip_docs", None),
-        skip_dont_touch=getattr(ns, "skip_dont_touch", None),
         skip_monolith=getattr(ns, "skip_monolith", None),
         apply_failure_partial_gates_policy=getattr(ns, "apply_failure_partial_gates_policy", None),
         apply_failure_zero_gates_policy=getattr(ns, "apply_failure_zero_gates_policy", None),

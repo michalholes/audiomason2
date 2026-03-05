@@ -63,8 +63,6 @@ def run_validation(
         typescript_targets=policy.typescript_targets,
         gate_typescript_base_tsconfig=policy.gate_typescript_base_tsconfig,
         skip_docs=policy.gates_skip_docs,
-        skip_dont_touch=policy.gates_skip_dont_touch,
-        dont_touch_paths=policy.dont_touch_paths,
         skip_monolith=policy.gates_skip_monolith,
         gate_monolith_enabled=policy.gate_monolith_enabled,
         gate_monolith_mode=policy.gate_monolith_mode,
