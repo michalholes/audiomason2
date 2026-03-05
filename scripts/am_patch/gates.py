@@ -729,12 +729,17 @@ def run_gates(
             from .gate_dont_touch import run_dont_touch_gate
 
             logger.section("GATE: dont-touch")
-            run_dont_touch_gate(
+            ok, reason = run_dont_touch_gate(
                 decision_paths=decision_paths,
                 protected_paths=list(dont_touch_paths or []),
             )
-            logger.line("gate_dont_touch=OK")
-            return True
+            if ok:
+                logger.line("gate_dont_touch=OK")
+                return True
+            logger.error_core("gate_dont_touch=FAIL")
+            if reason:
+                logger.error_core(reason)
+            return False
 
         if name == "compile":
             if not compile_check:

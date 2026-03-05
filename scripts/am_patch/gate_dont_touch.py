@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from .errors import RunnerError
-
 
 def _norm_decision_path(p: str) -> str:
     s = str(p).strip().replace("\\", "/")
@@ -31,8 +29,11 @@ def _dir_prefix_match(path: str, prefix: str) -> bool:
     return path == prefix or path.startswith(prefix + "/")
 
 
-def run_dont_touch_gate(decision_paths: list[str], protected_paths: list[str]) -> None:
-    """Fail if any changed repo-relative path matches a protected path.
+def run_dont_touch_gate(
+    decision_paths: list[str],
+    protected_paths: list[str],
+) -> tuple[bool, str | None]:
+    """Return (ok, reason).
 
     Matching rules:
     - 'foo/' => directory prefix match
@@ -60,21 +61,17 @@ def run_dont_touch_gate(decision_paths: list[str], protected_paths: list[str]) -
         for base, is_dir, display in norm_protected:
             if is_dir:
                 if _dir_prefix_match(d, base):
-                    raise RunnerError(
-                        "GATES",
-                        "GATES",
-                        (
-                            "dont-touch gate blocked protected path: "
-                            f"protected={display!r} decision={d!r}"
-                        ),
+                    msg = (
+                        "dont-touch gate blocked protected path: "
+                        f"protected={display!r} decision={d!r}"
                     )
+                    return False, msg
             else:
                 if d == base:
-                    raise RunnerError(
-                        "GATES",
-                        "GATES",
-                        (
-                            "dont-touch gate blocked protected path: "
-                            f"protected={display!r} decision={d!r}"
-                        ),
+                    msg = (
+                        "dont-touch gate blocked protected path: "
+                        f"protected={display!r} decision={d!r}"
                     )
+                    return False, msg
+
+    return True, None

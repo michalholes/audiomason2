@@ -7,45 +7,42 @@ from pathlib import Path
 def _import_gate():
     scripts_dir = Path(__file__).parent.parent / "scripts"
     sys.path.insert(0, str(scripts_dir))
-    from am_patch.errors import RunnerError
     from am_patch.gate_dont_touch import run_dont_touch_gate
 
-    return run_dont_touch_gate, RunnerError
+    return run_dont_touch_gate
 
 
 def test_protected_file() -> None:
-    run_dont_touch_gate, runner_error_cls = _import_gate()
+    run_dont_touch_gate = _import_gate()
     protected = ["pyproject.toml"]
     decision_paths = ["pyproject.toml"]
 
-    try:
-        run_dont_touch_gate(decision_paths=decision_paths, protected_paths=protected)
-        raise AssertionError("expected RunnerError")
-    except runner_error_cls as e:
-        msg = str(e)
-        assert "pyproject.toml" in msg
+    ok, reason = run_dont_touch_gate(decision_paths=decision_paths, protected_paths=protected)
+    assert ok is False
+    assert reason is not None
+    assert "pyproject.toml" in reason
 
 
 def test_directory_protection() -> None:
-    run_dont_touch_gate, runner_error_cls = _import_gate()
+    run_dont_touch_gate = _import_gate()
     protected = ["scripts/"]
     decision_paths = ["scripts/x.py"]
 
-    try:
-        run_dont_touch_gate(decision_paths=decision_paths, protected_paths=protected)
-        raise AssertionError("expected RunnerError")
-    except runner_error_cls as e:
-        msg = str(e)
-        assert "scripts/" in msg
-        assert "scripts/x.py" in msg
+    ok, reason = run_dont_touch_gate(decision_paths=decision_paths, protected_paths=protected)
+    assert ok is False
+    assert reason is not None
+    assert "scripts/" in reason
+    assert "scripts/x.py" in reason
 
 
 def test_non_protected() -> None:
-    run_dont_touch_gate, _ = _import_gate()
+    run_dont_touch_gate = _import_gate()
     protected = ["pyproject.toml"]
     decision_paths = ["README.md"]
 
-    run_dont_touch_gate(decision_paths=decision_paths, protected_paths=protected)
+    ok, reason = run_dont_touch_gate(decision_paths=decision_paths, protected_paths=protected)
+    assert ok is True
+    assert reason is None
 
 
 def _import_run_gates():

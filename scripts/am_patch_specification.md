@@ -429,8 +429,9 @@ scope accordingly - Should be used deliberately and sparingly
     -   `dont_touch_paths = ["...", ...]` (repo-relative)
 -   CLI:
     -   `--skip-dont-touch` (equivalent to `--override gates_skip_dont_touch=true`)
--   Failure: the runner fails with a gate error that includes both the protected
-    path and the matching decision path.
+-   Failure: the gate reports FAIL and emits a core error line that includes both the
+    protected path and the matching decision path. When run_all_tests=true, other
+    gates still execute; the overall run remains FAIL unless gates_allow_fail=true.
 
 ### 6.1.1 COMPILE gate
 
