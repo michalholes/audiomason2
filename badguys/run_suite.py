@@ -456,6 +456,7 @@ def _run_test_plan(test, ctx: Ctx) -> bool:
     from badguys.bdg_evaluator import StepResult, evaluate_step
     from badguys.bdg_loader import BdgTest
     from badguys.bdg_materializer import materialize_assets
+    from badguys.bdg_subst import make_subst_ctx
 
     name = getattr(test, "name", "(unknown)")
     evaluation = _load_eval_rules(ctx.repo_root, Path(ctx.cfg.config_path))
@@ -470,13 +471,14 @@ def _run_test_plan(test, ctx: Ctx) -> bool:
 
     if isinstance(obj, BdgTest):
         bdg = obj
-        mats = materialize_assets(repo_root=ctx.repo_root, issue_id=ctx.cfg.issue_id, bdg=bdg)
+        subst = make_subst_ctx(issue_id=ctx.cfg.issue_id)
+        mats = materialize_assets(repo_root=ctx.repo_root, subst=subst, bdg=bdg)
         _emit(ctx, level="verbose", test_name=name, text=f"TEST BEGIN {name}\n")
 
         step_results = execute_bdg(
             repo_root=ctx.repo_root,
             cfg_runner_cmd=list(ctx.cfg.runner_cmd),
-            issue_id=ctx.cfg.issue_id,
+            subst=subst,
             full_runner_tests=set(ctx.cfg.full_runner_tests),
             bdg=bdg,
             mats=mats,

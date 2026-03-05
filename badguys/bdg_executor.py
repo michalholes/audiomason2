@@ -11,12 +11,11 @@ from typing import Any, List
 from badguys.bdg_evaluator import StepResult
 from badguys.bdg_loader import BdgStep, BdgTest
 from badguys.bdg_materializer import MaterializedAssets
+from badguys.bdg_subst import SubstCtx, subst_text
 
 
-def _subst_token(value: str, *, issue_id: str) -> str:
-    if value == "${issue_id}":
-        return str(issue_id)
-    return value
+def _subst(value: str, *, subst: SubstCtx) -> str:
+    return subst_text(value, ctx=subst)
 
 
 def _safe_name(name: str) -> str:
@@ -56,7 +55,7 @@ def execute_bdg(
     *,
     repo_root: Path,
     cfg_runner_cmd: list[str],
-    issue_id: str,
+    subst: SubstCtx,
     full_runner_tests: set[str],
     bdg: BdgTest,
     mats: MaterializedAssets,
@@ -67,7 +66,7 @@ def execute_bdg(
             _exec_one(
                 repo_root=repo_root,
                 cfg_runner_cmd=cfg_runner_cmd,
-                issue_id=issue_id,
+                subst=subst,
                 full_runner_tests=full_runner_tests,
                 step=step,
                 mats=mats,
@@ -81,7 +80,7 @@ def _exec_one(
     *,
     repo_root: Path,
     cfg_runner_cmd: list[str],
-    issue_id: str,
+    subst: SubstCtx,
     full_runner_tests: set[str],
     step: BdgStep,
     mats: MaterializedAssets,
@@ -94,6 +93,8 @@ def _exec_one(
         input_asset = p.get("input_asset")
         if input_asset is not None and not isinstance(input_asset, str):
             raise SystemExit("FAIL: bdg: input_asset must be string")
+        if isinstance(input_asset, str):
+            input_asset = _subst(input_asset, subst=subst)
         extra_args = p.get("extra_args", [])
         if not (isinstance(extra_args, list) and all(isinstance(x, str) for x in extra_args)):
             raise SystemExit("FAIL: bdg: extra_args must be list[str]")
@@ -105,14 +106,14 @@ def _exec_one(
         argv = list(cfg_runner_cmd)
         if test_id not in full_runner_tests:
             argv.append("--test-mode")
-        argv.extend([_subst_token(a, issue_id=issue_id) for a in extra_args])
+        argv.extend([_subst(a, subst=subst) for a in extra_args])
         if input_asset:
             path = mats.files.get(input_asset)
             if path is None:
                 raise SystemExit(f"FAIL: bdg: missing materialized asset: {input_asset}")
             argv.append(str(path))
 
-        socket_path = repo_root / "patches" / f"am_patch_ipc_{issue_id}.sock"
+        socket_path = repo_root / "patches" / f"am_patch_ipc_{subst.issue_id}.sock"
         ipc_holder: dict[str, dict | None] = {"result": None}
 
         def _run_reader() -> None:
@@ -177,6 +178,8 @@ def _exec_one(
             raise SystemExit("FAIL: bdg: include must be list[str]")
         if not (isinstance(exclude, list) and all(isinstance(x, str) for x in exclude)):
             raise SystemExit("FAIL: bdg: exclude must be list[str]")
+        include = [_subst(x, subst=subst) for x in include]
+        exclude = [_subst(x, subst=subst) for x in exclude]
         try:
             tests = discover_tests(
                 repo_root=repo_root,
@@ -194,6 +197,7 @@ def _exec_one(
         input_asset = p.get("input_asset")
         if not isinstance(input_asset, str):
             raise SystemExit("FAIL: bdg: BUILD_CFG requires input_asset")
+        input_asset = _subst(input_asset, subst=subst)
         cfg_path = mats.files.get(input_asset)
         if cfg_path is None:
             raise SystemExit(f"FAIL: bdg: missing materialized asset: {input_asset}")
@@ -232,6 +236,7 @@ def _exec_one(
             name = test_id
         if not isinstance(name, str):
             raise SystemExit("FAIL: bdg: test_name must be string")
+        name = _subst(name, subst=subst)
         log_dir = _logs_dir(repo_root)
         log_path = log_dir / f"{name}.log"
         if not log_path.exists():
@@ -257,6 +262,9 @@ def _exec_one(
         on_conflict = p.get("on_conflict")
         if not isinstance(ttl_seconds, int):
             raise SystemExit("FAIL: bdg: ttl_seconds must be int")
+        if not isinstance(on_conflict, str):
+            raise SystemExit("FAIL: bdg: on_conflict must be 'fail' or 'steal'")
+        on_conflict = _subst(on_conflict, subst=subst)
         if on_conflict not in {"fail", "steal"}:
             raise SystemExit("FAIL: bdg: on_conflict must be 'fail' or 'steal'")
         lock_path = _lock_path_for_test(repo_root, test_id=test_id)
@@ -279,7 +287,7 @@ def _exec_one(
         return StepResult(rc=0, stdout=None, stderr=None, value=str(lock_path))
 
     if op == "CLEAN_OUTSIDE_SENTINEL":
-        sentinel = _outside_sentinel(repo_root, issue_id=issue_id)
+        sentinel = _outside_sentinel(repo_root, issue_id=subst.issue_id)
         try:
             sentinel.unlink()
         except FileNotFoundError:
@@ -295,7 +303,7 @@ def _exec_one(
         return StepResult(rc=0, stdout=None, stderr=None, value=str(marker))
 
     if op == "ASSERT_NO_OUTSIDE_SENTINEL":
-        sentinel = _outside_sentinel(repo_root, issue_id=issue_id)
+        sentinel = _outside_sentinel(repo_root, issue_id=subst.issue_id)
         if sentinel.exists():
             return StepResult(rc=1, stdout=None, stderr="outside write detected", value=str(sentinel))
         return StepResult(rc=0, stdout=None, stderr=None, value=str(sentinel))
@@ -310,7 +318,7 @@ def _exec_one(
         return StepResult(rc=0, stdout=None, stderr=None, value=str(patched_zip))
 
     if op == "ASSERT_NO_WORKSPACE_AND_NO_ARCHIVES":
-        ws_dir = repo_root / "patches" / "workspaces" / f"issue_{issue_id}"
+        ws_dir = repo_root / "patches" / "workspaces" / f"issue_{subst.issue_id}"
         patched_zip = repo_root / "patches" / "patched.zip"
         if ws_dir.exists():
             return StepResult(rc=1, stdout=None, stderr="workspace exists", value=str(ws_dir))
@@ -319,7 +327,7 @@ def _exec_one(
         return StepResult(rc=0, stdout=None, stderr=None, value="OK")
 
     if op == "ASSERT_WORKSPACE_REPO_EXISTS":
-        ws_repo = repo_root / "patches" / "workspaces" / f"issue_{issue_id}" / "repo"
+        ws_repo = repo_root / "patches" / "workspaces" / f"issue_{subst.issue_id}" / "repo"
         if not ws_repo.exists():
             return StepResult(rc=1, stdout=None, stderr="missing workspace repo", value=str(ws_repo))
         return StepResult(rc=0, stdout=None, stderr=None, value=str(ws_repo))
@@ -343,9 +351,11 @@ def _exec_one(
             raise SystemExit("FAIL: bdg: marker_rel must be string")
         if not isinstance(marker_text, str):
             raise SystemExit("FAIL: bdg: marker_text must be string")
+        marker_rel = _subst(marker_rel, subst=subst)
+        marker_text = _subst(marker_text, subst=subst)
         unsucc_dir = repo_root / "patches" / "unsuccessful"
         unsucc_dir.mkdir(parents=True, exist_ok=True)
-        name = f"issue_{issue_id}__badguys_rerun_latest__bdg.patch"
+        name = f"issue_{subst.issue_id}__badguys_rerun_latest__bdg.patch"
         patch_path = unsucc_dir / name
         patch_txt = (
             f"diff --git a/{marker_rel} b/{marker_rel}\n"
@@ -361,7 +371,13 @@ def _exec_one(
 
     if op == "PREPARE_LATEST_BUNDLE_900":
         # This op is dedicated to test_900_commit_push_timestamp.
-        issue = str(issue_id)
+        issue = str(subst.issue_id)
+        stamp_raw = p.get("stamp", "${now_stamp}")
+        if not isinstance(stamp_raw, str):
+            raise SystemExit("FAIL: bdg: stamp must be string")
+        stamp = _subst(stamp_raw, subst=subst)
+        if "\n" in stamp or "\r" in stamp:
+            raise SystemExit("FAIL: bdg: stamp must not contain newlines")
         patches_dir = repo_root / "patches"
         patches_dir.mkdir(parents=True, exist_ok=True)
         ws_repo = patches_dir / "workspaces" / f"issue_{issue}" / "repo"
@@ -379,7 +395,7 @@ def _exec_one(
         except FileNotFoundError:
             pass
         old_line = "test\n"
-        new_line = f"{issue}\n"
+        new_line = f"{stamp}\n"
         patch_txt = (
             f"diff --git a/{marker_rel} b/{marker_rel}\n"
             "index 1111111..2222222 100644\n"
@@ -392,8 +408,8 @@ def _exec_one(
         )
         unsucc_dir = patches_dir / "unsuccessful"
         unsucc_dir.mkdir(parents=True, exist_ok=True)
-        bundle_path = unsucc_dir / f"issue_{issue}__badguys_latest_bundle__bdg.zip"
-        inner_name = f"issue_{issue}__badguys_fix_marker__bdg.patch"
+        bundle_path = unsucc_dir / f"issue_{issue}__badguys_latest_bundle__{stamp}.zip"
+        inner_name = f"issue_{issue}__badguys_fix_marker__{stamp}.patch"
         import io
         import zipfile
         buf = io.BytesIO()
