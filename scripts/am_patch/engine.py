@@ -240,7 +240,7 @@ def build_paths_and_logger(
         patch_dir = isolated_work_patch_dir
     paths = default_paths(
         repo_root=repo_root,
-        patch_dir=patch_root,
+        patch_dir=patch_dir,
         logs_dir_name=policy.patch_layout_logs_dir,
         json_dir_name=policy.patch_layout_json_dir,
         workspaces_dir_name=policy.patch_layout_workspaces_dir,
