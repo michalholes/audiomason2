@@ -5,6 +5,11 @@
 -   spec: Define SessionState namespaces and state-path conventions for the DSL interpreter.
 -   spec: Define import wizard primitive registry artifact and baseline expression operators/functions.
 -   spec: Bump specification version to 2.0.6-normalized-m1.
+-   Issue 101: Define WizardDefinition v3 wire schema (nodes, edges, ExprRef, writes).
+-   Issue 101: Define primitive_registry.json wire schema (restricted JSON-Schema subset).
+-   Issue 101: Define SessionState trace event shape and deterministic bounds.
+-   Issue 101: Define deterministic parallel semantics for DSL primitives.
+-   spec: Bump specification version to 2.0.7-normalized-m1.
 
 ## 2026-03-03T00:00:00+01:00
 
