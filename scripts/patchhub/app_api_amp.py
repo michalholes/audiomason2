@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import contextlib
+import fcntl
 import os
 import tempfile
 import tomllib
@@ -8,6 +10,22 @@ from pathlib import Path
 from typing import Any, cast, get_args, get_origin, get_type_hints
 
 from patchhub.app_support import _err, _json_bytes, _ok
+
+
+def _is_lock_held(lock_path: Path) -> bool:
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    fd = lock_path.open("a+")
+    try:
+        try:
+            fcntl.flock(fd.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            return True
+        finally:
+            with contextlib.suppress(Exception):
+                fcntl.flock(fd.fileno(), fcntl.LOCK_UN)
+        return False
+    finally:
+        fd.close()
 
 
 def _runner_config_path(repo_root: Path, cfg: Any) -> Path:
@@ -123,9 +141,7 @@ def api_amp_config_get(self) -> tuple[int, bytes]:
 
 
 def api_amp_config_post(self, body: dict[str, Any]) -> tuple[int, bytes]:
-    from patchhub.job_ids import is_lock_held
-
-    if is_lock_held(self.jail.lock_path()):
+    if _is_lock_held(self.jail.lock_path()):
         return _json_bytes({"ok": False, "error": "Runner active (lock held)"}, status=409)
 
     values = body.get("values")

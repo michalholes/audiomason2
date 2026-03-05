@@ -89,6 +89,10 @@ def bind_editor_routes(
     def wizard_definition_rollback(body: dict[str, Any]):
         return call(lambda: _rollback_wizard_definition(engine, body))
 
+    @router.get("/primitive-registry")
+    def get_primitive_registry():
+        return call(lambda: _get_primitive_registry(engine))
+
     @router.get("/steps-index")
     def get_steps_index():
         return call(lambda: _get_steps_index())
@@ -385,6 +389,14 @@ def _get_wizard_definition(engine: Any) -> dict[str, Any]:
     return {"definition": wd}
 
 
+def _get_primitive_registry(engine: Any) -> dict[str, Any]:
+    from .dsl.primitive_registry_storage import load_or_bootstrap_primitive_registry
+
+    fs = _engine_fs(engine)
+    reg = load_or_bootstrap_primitive_registry(fs)
+    return {"registry": reg}
+
+
 def _set_wizard_definition(engine: Any, body: Any) -> dict[str, Any]:
     from .wizard_editor_storage import put_wizard_definition_draft
 
@@ -407,13 +419,34 @@ def _validate_wizard_definition(engine: Any, body: Any) -> dict[str, Any]:
     wd_any = obj.get("definition")
     validate_wizard_definition_structure(wd_any)
     wd_canon = canonicalize_wizard_definition(wd_any)
-    if not isinstance(wd_canon, dict) or wd_canon.get("version") != 2:
+
+    if not isinstance(wd_canon, dict):
         raise FieldSchemaValidationError(
-            message="definition must be WizardDefinition v2",
+            message="definition must be an object",
             path="$.definition",
-            reason="invalid_structure",
+            reason="invalid_type",
             meta={},
         )
+
+    ver = wd_canon.get("version")
+    if ver not in {2, 3}:
+        raise FieldSchemaValidationError(
+            message="definition must be WizardDefinition v2 or v3",
+            path="$.definition.version",
+            reason="invalid_enum",
+            meta={"allowed": [2, 3], "value": ver},
+        )
+
+    if ver == 3:
+        from .dsl.primitive_registry_storage import load_or_bootstrap_primitive_registry
+        from .dsl.wizard_definition_v3_model import (
+            validate_wizard_definition_v3_against_registry,
+        )
+
+        registry = load_or_bootstrap_primitive_registry(_engine_fs(engine))
+        validate_wizard_definition_v3_against_registry(wd_canon, registry)
+        return {"definition": wd_canon}
+
     try:
         validate_wizard_definition_constraints_v2(wd_canon)
     except Exception as err:

@@ -17,6 +17,11 @@ from typing import Any
 from plugins.file_io.service import FileService
 from plugins.file_io.service.types import RootName
 
+from .dsl.primitive_registry_storage import (
+    bootstrap_primitive_registry_if_missing,
+    load_or_bootstrap_primitive_registry,
+)
+from .dsl.wizard_definition_v3_model import validate_wizard_definition_v3_against_registry
 from .fingerprints import fingerprint_json
 from .storage import atomic_write_json, atomic_write_json_if_missing, read_json
 from .wizard_definition_model import (
@@ -34,7 +39,7 @@ HISTORY_DIR = "import/editor_history"
 HISTORY_LIMIT = 5
 
 
-def canonicalize_to_v2(obj: Any) -> dict[str, Any]:
+def canonicalize_to_supported(fs: FileService, obj: Any) -> dict[str, Any]:
     if not isinstance(obj, dict):
         raise ValueError("wizard_definition must be an object")
 
@@ -43,21 +48,29 @@ def canonicalize_to_v2(obj: Any) -> dict[str, Any]:
         wd = migrate_v1_to_v2(wd)
 
     validate_wizard_definition_structure(wd)
-    wd = canonicalize_wizard_definition(wd)
+    wd_any = canonicalize_wizard_definition(wd)
 
-    if isinstance(wd, dict) and wd.get("version") == 2:
-        validate_wizard_definition_constraints_v2(wd)
-
-    if wd.get("version") != 2:
-        raise ValueError("wizard_definition must be version 2")
-
-    if not isinstance(wd, dict):
+    if not isinstance(wd_any, dict):
         raise ValueError("wizard_definition must be an object")
 
-    return wd
+    wd = wd_any
+    ver = wd.get("version")
+
+    if ver == 2:
+        validate_wizard_definition_constraints_v2(wd)
+        return wd
+
+    if ver == 3:
+        registry = load_or_bootstrap_primitive_registry(fs)
+        validate_wizard_definition_v3_against_registry(wd, registry)
+        return wd
+
+    raise ValueError("wizard_definition must be version 2 or 3")
 
 
 def ensure_wizard_definition_active_exists(fs: FileService) -> dict[str, Any]:
+    bootstrap_primitive_registry_if_missing(fs)
+
     atomic_write_json_if_missing(
         fs,
         RootName.WIZARDS,
@@ -66,9 +79,9 @@ def ensure_wizard_definition_active_exists(fs: FileService) -> dict[str, Any]:
     )
     active = read_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_REL_PATH)
     try:
-        return canonicalize_to_v2(active)
+        return canonicalize_to_supported(fs, active)
     except Exception:
-        canon_default = canonicalize_to_v2(DEFAULT_WIZARD_DEFINITION)
+        canon_default = canonicalize_to_supported(fs, DEFAULT_WIZARD_DEFINITION)
         atomic_write_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_REL_PATH, canon_default)
         return canon_default
 
@@ -77,18 +90,18 @@ def get_wizard_definition_draft(fs: FileService) -> dict[str, Any]:
     active = ensure_wizard_definition_active_exists(fs)
     if fs.exists(RootName.WIZARDS, WIZARD_DEFINITION_DRAFT_REL_PATH):
         draft = read_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_DRAFT_REL_PATH)
-        return canonicalize_to_v2(draft)
+        return canonicalize_to_supported(fs, draft)
     return active
 
 
 def put_wizard_definition_draft(fs: FileService, obj: Any) -> dict[str, Any]:
-    canon = canonicalize_to_v2(obj)
+    canon = canonicalize_to_supported(fs, obj)
     atomic_write_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_DRAFT_REL_PATH, canon)
     return canon
 
 
 def reset_wizard_definition_draft(fs: FileService) -> dict[str, Any]:
-    canon = canonicalize_to_v2(DEFAULT_WIZARD_DEFINITION)
+    canon = canonicalize_to_supported(fs, DEFAULT_WIZARD_DEFINITION)
     atomic_write_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_DRAFT_REL_PATH, canon)
     return canon
 
@@ -100,7 +113,7 @@ def activate_wizard_definition_draft(fs: FileService) -> dict[str, Any]:
         raise ValueError("wizard_definition draft does not exist")
 
     draft_any = read_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_DRAFT_REL_PATH)
-    draft = canonicalize_to_v2(draft_any)
+    draft = canonicalize_to_supported(fs, draft_any)
 
     cur_fp = fingerprint_json(active)
     new_fp = fingerprint_json(draft)
@@ -120,18 +133,18 @@ def delete_wizard_definition_draft(fs: FileService) -> None:
 
 def load_wizard_definition(fs: FileService) -> Any:
     wd = read_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_REL_PATH)
-    return canonicalize_to_v2(wd)
+    return canonicalize_to_supported(fs, wd)
 
 
 def save_wizard_definition(fs: FileService, obj: Any) -> None:
-    canon = canonicalize_to_v2(obj)
+    canon = canonicalize_to_supported(fs, obj)
     atomic_write_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_REL_PATH, canon)
 
 
 def save_wizard_definition_with_history(fs: FileService, obj: Any) -> None:
     """Save WizardDefinition ACTIVE and record history deterministically."""
 
-    canon = canonicalize_to_v2(obj)
+    canon = canonicalize_to_supported(fs, obj)
 
     if fs.exists(RootName.WIZARDS, WIZARD_DEFINITION_REL_PATH):
         cur = load_wizard_definition(fs)

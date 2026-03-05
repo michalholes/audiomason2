@@ -17,6 +17,10 @@ from plugins.file_io.service import FileService
 from plugins.file_io.service.types import RootName
 
 from .conditions import find_invalid_condition_path
+from .dsl.wizard_definition_v3_model import (
+    canonicalize_wizard_definition_v3,
+    validate_wizard_definition_v3_structure,
+)
 from .errors import FinalizeError
 from .flow_runtime import CANONICAL_STEP_ORDER, MANDATORY_STEP_IDS, OPTIONAL_STEP_IDS
 from .step_catalog import STEP_CATALOG
@@ -88,14 +92,17 @@ def load_or_bootstrap_wizard_definition(fs: FileService) -> dict[str, Any]:
         validate_wizard_definition_structure(wd)
         wd = canonicalize_wizard_definition(wd)
 
-        if wd.get("version") != 2:
-            raise ValueError("WizardDefinition must be version 2")
-
         if not isinstance(wd, dict):
             raise ValueError("WizardDefinition must be an object")
 
-        validate_wizard_definition_constraints_v2(wd)
-        return wd
+        ver = wd.get("version")
+        if ver == 2:
+            validate_wizard_definition_constraints_v2(wd)
+            return wd
+        if ver == 3:
+            return wd
+
+        raise ValueError("WizardDefinition must be version 2 or 3")
     except (FinalizeError, ValueError, TypeError) as err:
         default_any = canonicalize_wizard_definition(DEFAULT_WIZARD_DEFINITION)
         if not isinstance(default_any, dict) or default_any.get("version") != 2:
@@ -118,7 +125,7 @@ def _assert_exact_keys(
 
 
 def validate_wizard_definition_structure(wd: Any) -> None:
-    """Validate WizardDefinition v1/v2 structure and invariants."""
+    """Validate WizardDefinition v1/v2/v3 structure and invariants."""
 
     _validate_step_catalog_behavioral_fields()
     if not isinstance(wd, dict):
@@ -141,7 +148,11 @@ def validate_wizard_definition_structure(wd: Any) -> None:
         _validate_v2_graph(wd)
         return
 
-    raise FinalizeError("wizard_definition version must be 1 or 2")
+    if version == 3:
+        validate_wizard_definition_v3_structure(wd)
+        return
+
+    raise FinalizeError("wizard_definition version must be 1, 2, or 3")
 
 
 def canonicalize_wizard_definition(wd: Any) -> Any:
@@ -159,6 +170,8 @@ def canonicalize_wizard_definition(wd: Any) -> Any:
 
     version_any = wd.get("version")
     version = int(version_any) if isinstance(version_any, int) else 1
+    if version == 3:
+        return canonicalize_wizard_definition_v3(wd)
     if version != 2:
         return wd
 
