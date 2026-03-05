@@ -2,7 +2,7 @@
 
 Status: normative
 
-Specification Version: 0.2.2
+Specification Version: 0.3.0
 
 This document is the authoritative specification for the BadGuys suite shipped in this repository.
 BadGuys exists to systematically break the AM Patch Runner and verify that it FAILs correctly.
@@ -73,7 +73,7 @@ BadGuys MUST support the following CLI options and semantics:
 
 - --per-run-logs-post-run {delete_all,keep_all,delete_successful}
   - overrides [suite].per_run_logs_post_run from config for this run
-  - controls what happens to per-test logs in logs_dir after the suite run completes
+  - controls what happens to per-test artifacts in logs_dir after the suite run completes
 
 - --include NAME (repeatable)
   - add NAME to the include filter set for this run
@@ -139,17 +139,29 @@ Unknown keys MAY exist but MUST NOT change behavior unless explicitly defined by
   - default if missing: "patches"
 
 - logs_dir (string)
-  - repo-relative directory for per-test logs
+  - repo-relative directory for per-test artifacts
   - default if missing: "patches/badguys_logs"
   - NOTE (normative): the engine MUST delete this directory at the start of each suite run, then recreate it
 
 - per_run_logs_post_run (string)
   - one of: delete_all, keep_all, delete_successful
   - default if missing: "keep_all"
-  - controls what happens to per-test logs in logs_dir after the suite run completes
+  - controls what happens to per-test artifacts in logs_dir after the suite run completes
   - delete_all: delete logs_dir entirely
-  - keep_all: keep all per-test logs
-  - delete_successful: delete per-test log files for tests that PASSED; keep logs for failed or unexecuted tests
+  - keep_all: keep all per-test artifacts
+  - delete_successful: delete per-test artifact directories for tests that PASSED;
+    keep artifacts for failed or unexecuted tests
+
+- copy_runner_log (bool)
+  - default if missing: false
+  - if true, and if the runner IPC result includes log_path, BadGuys MAY copy that artifact into
+    the per-test artifacts directory
+  - if false, BadGuys MUST NOT copy log_path (runner logs are human-readable)
+
+- write_subprocess_stdio (bool)
+  - default if missing: false
+  - if true, BadGuys MAY write captured subprocess stdout/stderr into per-test artifacts
+  - if false, BadGuys MUST NOT write subprocess stdout/stderr into per-test artifacts
 
 - central_log_pattern (string)
   - repo-relative path pattern (format string)
@@ -312,8 +324,24 @@ Fallback rule:
 
 BadGuys MUST NOT use stdout/stderr parsing as the authoritative decision source for PASS/FAIL.
 
-If the IPC result includes log_path and/or json_path, BadGuys MUST copy those artifacts into the
-per-test log directory with stable filenames (no timestamps) BEFORE cleanup deletes issue artifacts.
+IPC stream persistence rule:
+- For every step that invokes scripts/am_patch.py, BadGuys MUST capture the complete IPC event
+  stream (NDJSON, one JSON object per line) and write it into the per-test artifacts directory as:
+  logs_dir/<test_id>/runner.ipc.step<step_index>.jsonl
+- The stream file MUST contain the exact NDJSON lines received from the socket (no filtering and
+  no reformatting).
+
+Runner value_text rule:
+- For every runner-invoking step, BadGuys MUST compute a deterministic value_text string by
+  concatenating the 'msg' field from every IPC event with type="log" in receive order, separated
+  by a single '\n'. This value_text MUST be used as the step's evaluation 'value'.
+
+Runner artifact copy rule:
+- If the IPC result includes json_path, BadGuys MUST copy it into logs_dir/<test_id>/ as:
+  runner.result.json
+- If the IPC result includes log_path:
+  - if suite.copy_runner_log=true, BadGuys MAY copy it into logs_dir/<test_id>/ as: runner.log.txt
+  - otherwise, BadGuys MUST NOT copy it.
 
 
 ### 7.4 Runner test mode (normative)
@@ -360,14 +388,17 @@ Tests MUST NOT rely on artifacts from any previous test.
 ### 8.1 Log outputs
 
 BadGuys MUST produce:
-- one central log file at: central_log_pattern.format(run_id=...)
-- per-test logs at: logs_dir/<test_name>.log
+- one central run log file at: central_log_pattern.format(run_id=...)
+  - format: NDJSON (one JSON object per line)
+  - first line MUST be a single JSON object with at least: {"type":"badguys_run","run_id":"..."}
+- per-test artifacts at: logs_dir/<test_id>/ (directory)
+  - each test directory MUST contain a file: badguys.test.jsonl (NDJSON)
+  - for each runner-invoking step, the directory MUST contain the corresponding
+    runner.ipc.step<step_index>.jsonl file (see 7.3)
 
-The per-test logs directory (logs_dir) MUST be cleared at the start of each suite run.
-The central log path MUST be created (parents created as needed) and MUST begin with a header line:
-"BadGuys run_id=<run_id>"
+The per-test artifacts root directory (logs_dir) MUST be cleared at the start of each suite run.
+The central log path MUST be created (parents created as needed).
 
-### 8.2 Verbosity channels
 
 BadGuys has three distinct verbosity controls:
 
@@ -466,3 +497,22 @@ A `.bdg` file is TOML and contains:
 All PASS/FAIL rules are defined centrally in `badguys/config.toml` under `[evaluation]` and keyed by `(test_id, step_index)`.
 
 If `evaluation.strict_coverage=true`, missing rules for a step is a deterministic FAIL.
+
+
+Supported evaluation rule keys (normative):
+- rc_eq (int), rc_ne (int)
+- stdout_contains (string|list[string]), stdout_not_contains (string|list[string]),
+  stdout_regex (string|list[string])
+- stderr_contains (string|list[string]), stderr_not_contains (string|list[string]),
+  stderr_regex (string|list[string])
+- value_eq (any), value_contains (string|list[string]), value_not_contains (string|list[string]),
+  value_regex (string|list[string])
+- list_eq (list[string]), list_contains (string|list[string]),
+  list_not_contains (string|list[string])
+- equals_step_index (int)
+
+Runner evaluation constraint (normative):
+- For any step that invokes scripts/am_patch.py, evaluation rules MUST NOT use any stdout_* or
+  stderr_* keys. The runner subprocess stdio is non-authoritative and may be empty.
+- For any step that invokes scripts/am_patch.py, the evaluation 'value' MUST be the runner
+  value_text defined in section 7.3.
