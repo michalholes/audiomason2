@@ -2,7 +2,7 @@
 
 Status: normative
 
-Specification Version: 0.2.1
+Specification Version: 0.2.2
 
 This document is the authoritative specification for the BadGuys suite shipped in this repository.
 BadGuys exists to systematically break the AM Patch Runner and verify that it FAILs correctly.
@@ -269,6 +269,28 @@ The .bdg schema is defined by badguys/bdg_loader.py (normative):
 - [[step]] (required array of tables)
   - op (string, required)
   - additional keys are op-specific parameters
+
+#### 7.1.1 Token substitution in strings (normative)
+
+BadGuys MUST support token substitution in all string fields originating from a `.bdg` file,
+including:
+- `[[asset]].content`
+- `[[asset.entry]].content`
+- any string parameter values inside `[[step]]` tables (including lists of strings)
+
+Tokens are written as `${name}` and MUST be replaced before an operation executes.
+
+Supported tokens (normative):
+- `${issue_id}`: replaced with the effective `suite.issue_id` string.
+- `${now_stamp}`: replaced with a per-test stamp computed once at test start,
+  using local time format `YYYYMMDD_HHMMSS`.
+
+Consistency rule (normative):
+- Within a single test execution, every `${now_stamp}` expansion MUST yield the same value.
+
+Safety rule (normative):
+- Central evaluation rules MUST NOT depend on the exact `${now_stamp}` value.
+  `${now_stamp}` exists only to make prepared artifacts unique.
 
 ### 7.2 Execution model
 
