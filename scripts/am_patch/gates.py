@@ -8,8 +8,11 @@ from collections.abc import Callable
 from pathlib import Path
 
 from .errors import RunnerError
+from .gates_wiring_guard import assert_single_run_gates_callsite
 from .log import Logger
 from .monolith_gate import run_monolith_gate
+
+_RUN_GATES_WIRING_CHECKED = False
 
 
 def _norm_targets(targets: list[str], fallback: list[str]) -> list[str]:
@@ -680,6 +683,11 @@ def run_gates(
     decision_paths: list[str],
     progress: Callable[[str], None] | None = None,
 ) -> None:
+    global _RUN_GATES_WIRING_CHECKED
+    if not _RUN_GATES_WIRING_CHECKED:
+        assert_single_run_gates_callsite()
+        _RUN_GATES_WIRING_CHECKED = True
+
     failures: list[str] = []
     skipped: list[str] = []
 

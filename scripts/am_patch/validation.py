@@ -7,7 +7,8 @@ from pathlib import Path
 from typing import Any
 
 from am_patch.errors import RunnerError
-from am_patch.gates import run_badguys, run_gates
+from am_patch.gates import run_badguys
+from am_patch.gates_policy_wiring import run_policy_gates
 
 
 @dataclass(frozen=True)
@@ -30,7 +31,6 @@ def run_validation(
     progress: Any,
     run_badguys_gate: bool,
 ) -> GateSummary:
-    crossarea_min_areas = policy.gate_monolith_crossarea_min_distinct_areas
     if not getattr(policy, "gate_monolith_extensions", None):
         raise RunnerError(
             "CONFIG",
@@ -38,78 +38,11 @@ def run_validation(
             "gate_monolith_extensions must be non-empty (use gates_skip_monolith or "
             "gate_monolith_enabled instead)",
         )
-    run_gates(
-        logger,
+    run_policy_gates(
+        logger=logger,
         cwd=cwd,
         repo_root=repo_root,
-        run_all=policy.run_all_tests,
-        compile_check=policy.compile_check,
-        compile_targets=policy.compile_targets,
-        compile_exclude=policy.compile_exclude,
-        allow_fail=policy.gates_allow_fail,
-        skip_dont_touch=policy.gates_skip_dont_touch,
-        dont_touch_paths=policy.dont_touch_paths,
-        skip_ruff=policy.gates_skip_ruff,
-        skip_js=policy.gates_skip_js,
-        skip_pytest=policy.gates_skip_pytest,
-        skip_mypy=policy.gates_skip_mypy,
-        skip_biome=policy.gates_skip_biome,
-        biome_extensions=policy.gate_biome_extensions,
-        biome_command=policy.gate_biome_command,
-        biome_autofix=policy.biome_autofix,
-        biome_fix_command=policy.gate_biome_fix_command,
-        skip_typescript=policy.gates_skip_typescript,
-        typescript_extensions=policy.gate_typescript_extensions,
-        typescript_command=policy.gate_typescript_command,
-        gate_typescript_mode=policy.gate_typescript_mode,
-        typescript_targets=policy.typescript_targets,
-        gate_typescript_base_tsconfig=policy.gate_typescript_base_tsconfig,
-        skip_docs=policy.gates_skip_docs,
-        skip_monolith=policy.gates_skip_monolith,
-        gate_monolith_enabled=policy.gate_monolith_enabled,
-        gate_monolith_mode=policy.gate_monolith_mode,
-        gate_monolith_scan_scope=policy.gate_monolith_scan_scope,
-        gate_monolith_extensions=policy.gate_monolith_extensions,
-        gate_monolith_compute_fanin=policy.gate_monolith_compute_fanin,
-        gate_monolith_on_parse_error=policy.gate_monolith_on_parse_error,
-        gate_monolith_areas_prefixes=policy.gate_monolith_areas_prefixes,
-        gate_monolith_areas_names=policy.gate_monolith_areas_names,
-        gate_monolith_areas_dynamic=policy.gate_monolith_areas_dynamic,
-        gate_monolith_large_loc=policy.gate_monolith_large_loc,
-        gate_monolith_huge_loc=policy.gate_monolith_huge_loc,
-        gate_monolith_large_allow_loc_increase=policy.gate_monolith_large_allow_loc_increase,
-        gate_monolith_huge_allow_loc_increase=policy.gate_monolith_huge_allow_loc_increase,
-        gate_monolith_large_allow_exports_delta=policy.gate_monolith_large_allow_exports_delta,
-        gate_monolith_huge_allow_exports_delta=policy.gate_monolith_huge_allow_exports_delta,
-        gate_monolith_large_allow_imports_delta=policy.gate_monolith_large_allow_imports_delta,
-        gate_monolith_huge_allow_imports_delta=policy.gate_monolith_huge_allow_imports_delta,
-        gate_monolith_new_file_max_loc=policy.gate_monolith_new_file_max_loc,
-        gate_monolith_new_file_max_exports=policy.gate_monolith_new_file_max_exports,
-        gate_monolith_new_file_max_imports=policy.gate_monolith_new_file_max_imports,
-        gate_monolith_hub_fanin_delta=policy.gate_monolith_hub_fanin_delta,
-        gate_monolith_hub_fanout_delta=policy.gate_monolith_hub_fanout_delta,
-        gate_monolith_hub_exports_delta_min=policy.gate_monolith_hub_exports_delta_min,
-        gate_monolith_hub_loc_delta_min=policy.gate_monolith_hub_loc_delta_min,
-        gate_monolith_crossarea_min_distinct_areas=crossarea_min_areas,
-        gate_monolith_catchall_basenames=policy.gate_monolith_catchall_basenames,
-        gate_monolith_catchall_dirs=policy.gate_monolith_catchall_dirs,
-        gate_monolith_catchall_allowlist=policy.gate_monolith_catchall_allowlist,
-        docs_include=policy.gate_docs_include,
-        docs_exclude=policy.gate_docs_exclude,
-        docs_required_files=policy.gate_docs_required_files,
-        js_extensions=policy.gate_js_extensions,
-        js_command=policy.gate_js_command,
-        ruff_format=policy.ruff_format,
-        ruff_autofix=policy.ruff_autofix,
-        ruff_targets=policy.ruff_targets,
-        pytest_targets=policy.pytest_targets,
-        mypy_targets=policy.mypy_targets,
-        gate_ruff_mode=policy.gate_ruff_mode,
-        gate_mypy_mode=policy.gate_mypy_mode,
-        gate_pytest_mode=policy.gate_pytest_mode,
-        gate_pytest_js_prefixes=policy.gate_pytest_js_prefixes,
-        gates_order=policy.gates_order,
-        pytest_use_venv=policy.pytest_use_venv,
+        policy=policy,
         decision_paths=decision_paths,
         progress=progress,
     )

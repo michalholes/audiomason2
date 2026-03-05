@@ -112,6 +112,10 @@ Quiet sinks:
 - **Finalize mode (-f)**: runner works directly on the live repo (no workspace). Use only when you intentionally want a direct/live operation.
 - **Finalize-workspace mode (--finalize-workspace)**: runner finalizes an existing issue workspace (gates in workspace, promote to live, gates in live, commit+push). Commit message is read from workspace `meta.json`.
 
+Note: All modes use a single canonical Policy->gates wiring entry point.
+Direct calls to run_gates outside scripts/am_patch/gates_policy_wiring.py are forbidden
+and enforced.
+
 ## What "SUCCESS" means
 
 If the runner reports **SUCCESS** (without `-o`):
