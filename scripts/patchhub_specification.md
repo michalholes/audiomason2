@@ -270,6 +270,9 @@ Detail separation
 - List DTOs MUST NOT include full commit message text, raw command text, or
   patch filesystem paths.
 - Detailed job/run fields MUST be served only by detail endpoints.
+- For runs, PatchHub does not define a separate run-detail JSON route beyond
+  GET /api/runs?issue_id=<int> (optionally with limit=1); log text MUST be fetched
+  via GET /api/fs/read_text using the run's log_rel_path (tail_lines recommended).
 
 2.12 Server Sorting and Filtering Cost (HARD)
 
@@ -1172,12 +1175,15 @@ JobListItem JSON schema (used by Section 7.2.8 GET /api/jobs):
   "ended_utc": "<UTC ISO Z string|null>",
   "mode": "patch|repair|finalize_live|finalize_workspace|rerun_latest",
   "issue_id": "<string>",
-  "commit_message": "<string>",
-  "patch_path": "<string>"
+  "commit_summary": "<string>",
+  "patch_basename": "<string|null>"
+
 }
 
 Contract:
 - GET /api/jobs MUST return JobListItem JSON objects (not JobRecord JSON).
+- commit_summary MUST be a single line and use deterministic truncation consistent with Section 2.11.
+- patch_basename MUST be filename-only (no directory); it MUST be null if absent.
 - GET /api/jobs MUST NOT include additional keys in list items; full details are available via GET /api/jobs/<job_id>.
 
 7.3.3 POST /api/jobs/<job_id>/cancel
