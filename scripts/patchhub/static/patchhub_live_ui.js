@@ -68,10 +68,23 @@
 			v = null;
 		}
 		if (!v) return;
-		v = String(v);
-		if (["quiet", "normal", "warning", "verbose", "debug"].indexOf(v) >= 0) {
-			liveLevel = v;
+		setLiveLevel(v);
+	}
+
+	function getLiveLevel() {
+		return liveLevel;
+	}
+
+	function setLiveLevel(v) {
+		v = String(v || "").trim();
+		if (["quiet", "normal", "warning", "verbose", "debug"].indexOf(v) < 0) {
+			v = "normal";
 		}
+		liveLevel = v;
+		try {
+			localStorage.setItem("amp.liveLogLevel", liveLevel);
+		} catch (e) {}
+		return liveLevel;
 	}
 
 	function loadUiVisibility() {
@@ -382,6 +395,8 @@
 			loadLiveJobId,
 			saveLiveJobId,
 			loadLiveLevel,
+			getLiveLevel,
+			setLiveLevel,
 			loadUiVisibility,
 			saveRunsVisible,
 			saveJobsVisible,
@@ -403,6 +418,8 @@
 	safeExport("loadLiveJobId", loadLiveJobId);
 	safeExport("saveLiveJobId", saveLiveJobId);
 	safeExport("loadLiveLevel", loadLiveLevel);
+	safeExport("getLiveLevel", getLiveLevel);
+	safeExport("setLiveLevel", setLiveLevel);
 	safeExport("loadUiVisibility", loadUiVisibility);
 	safeExport("saveRunsVisible", saveRunsVisible);
 	safeExport("saveJobsVisible", saveJobsVisible);

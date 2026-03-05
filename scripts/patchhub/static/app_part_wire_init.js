@@ -73,7 +73,7 @@ function wireButtons() {
 		el("fsDelete").addEventListener("click", () => {
 			var paths = [];
 			for (var k in fsChecked) {
-				if (Object.prototype.hasOwnProperty.call(fsChecked, k)) paths.push(k);
+				if (Object.hasOwn(fsChecked, k)) paths.push(k);
 			}
 			if (!paths.length && fsSelected) paths = [fsSelected];
 			if (!paths.length) {
@@ -165,10 +165,8 @@ function wireButtons() {
 
 	if (el("liveLevel")) {
 		el("liveLevel").addEventListener("change", () => {
-			liveLevel = String(el("liveLevel").value || "normal");
-			try {
-				localStorage.setItem("amp.liveLogLevel", liveLevel);
-			} catch (e) {}
+			var v = String(el("liveLevel").value || "normal");
+			PH.call("setLiveLevel", v);
 			PH.call("renderLiveLog");
 			PH.call("updateProgressFromEvents");
 		});
@@ -277,7 +275,8 @@ function init() {
 		var savedJobId = PH.call("loadLiveJobId");
 		if (savedJobId) selectedJobId = savedJobId;
 		if (el("liveLevel")) {
-			el("liveLevel").value = liveLevel;
+			const v = PH.call("getLiveLevel");
+			if (v) el("liveLevel").value = String(v);
 		}
 
 		loadConfig().then(() => {
