@@ -22,9 +22,10 @@ from .dsl.wizard_definition_v3_model import (
     validate_wizard_definition_v3_structure,
 )
 from .errors import FinalizeError
+from .field_schema_validation import FieldSchemaValidationError
 from .flow_runtime import CANONICAL_STEP_ORDER, MANDATORY_STEP_IDS, OPTIONAL_STEP_IDS
 from .step_catalog import STEP_CATALOG
-from .storage import atomic_write_json_if_missing, read_json
+from .storage import atomic_write_json, atomic_write_json_if_missing, read_json
 
 WIZARD_DEFINITION_REL_PATH = "import/definitions/wizard_definition.json"
 
@@ -103,13 +104,13 @@ def load_or_bootstrap_wizard_definition(fs: FileService) -> dict[str, Any]:
             return wd
 
         raise ValueError("WizardDefinition must be version 2 or 3")
-    except (FinalizeError, ValueError, TypeError) as err:
+    except (FieldSchemaValidationError, FinalizeError, ValueError, TypeError) as err:
         default_any = canonicalize_wizard_definition(DEFAULT_WIZARD_DEFINITION)
         if not isinstance(default_any, dict) or default_any.get("version") != 2:
             raise RuntimeError("DEFAULT_WIZARD_DEFINITION must be v2") from err
 
         validate_wizard_definition_constraints_v2(default_any)
-        save_wizard_definition_with_history(fs, default_any)
+        atomic_write_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_REL_PATH, default_any)
         return default_any
 
 

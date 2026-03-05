@@ -10,10 +10,24 @@ ASCII-only.
 
 from __future__ import annotations
 
+import re
 from typing import Any, TypeGuard
 
 from ..field_schema_validation import FieldSchemaValidationError
 from .primitive_registry_model import primitive_index
+
+_STEP_ID_RE = re.compile(r"^[a-z0-9]+(_[a-z0-9]+)*$")
+
+
+def _validate_step_id(value: str, *, path: str) -> None:
+    _ascii_only(value, path=path)
+    if "." in value or _STEP_ID_RE.fullmatch(value) is None:
+        raise FieldSchemaValidationError(
+            message="step_id must be ASCII lower_snake_case without dots",
+            path=path,
+            reason="missing_or_invalid",
+            meta={},
+        )
 
 
 def _ascii_only(value: str, *, path: str) -> None:
@@ -97,7 +111,7 @@ def validate_wizard_definition_v3_structure(wd_any: Any) -> None:
             reason="missing_or_invalid",
             meta={},
         )
-    _ascii_only(entry, path="$.entry_step_id")
+    _validate_step_id(entry, path="$.entry_step_id")
 
     nodes_any = wd.get("nodes")
     if not isinstance(nodes_any, list):
@@ -139,7 +153,7 @@ def validate_wizard_definition_v3_structure(wd_any: Any) -> None:
                 reason="missing_or_invalid",
                 meta={},
             )
-        _ascii_only(sid, path=f"{nfx}.step_id")
+        _validate_step_id(sid, path=f"{nfx}.step_id")
         if sid in seen:
             raise FieldSchemaValidationError(
                 message="step_id must be unique",

@@ -14,7 +14,7 @@ Each primitives[] entry must minimally include:
   - outputs_schema (object)
   - allowed_errors (array of strings)
 
-This module additionally requires determinism_notes (string).
+determinism_notes is optional. If present, it must be a non-empty string.
 
 ASCII-only.
 """
@@ -241,16 +241,6 @@ def validate_primitive_registry(registry_any: Any) -> dict[str, Any]:
             )
 
         p = dict(p_any)
-        allowed = {
-            "primitive_id",
-            "version",
-            "phase",
-            "inputs_schema",
-            "outputs_schema",
-            "determinism_notes",
-            "allowed_errors",
-        }
-        _assert_exact_keys(p, allowed=allowed, path=pfx)
 
         pid = p.get("primitive_id")
         if not isinstance(pid, str) or not pid:
@@ -281,13 +271,15 @@ def validate_primitive_registry(registry_any: Any) -> dict[str, Any]:
             )
 
         det = p.get("determinism_notes")
-        if not isinstance(det, str) or not det:
-            raise FieldSchemaValidationError(
-                message="determinism_notes must be a non-empty string",
-                path=f"{pfx}.determinism_notes",
-                reason="missing_or_invalid",
-                meta={"primitive_id": pid, "version": v},
-            )
+        if det is not None:
+            if not isinstance(det, str) or not det:
+                raise FieldSchemaValidationError(
+                    message="determinism_notes must be a non-empty string",
+                    path=f"{pfx}.determinism_notes",
+                    reason="missing_or_invalid",
+                    meta={"primitive_id": pid, "version": v},
+                )
+            _ascii_only(det, path=f"{pfx}.determinism_notes")
 
         ins = p.get("inputs_schema")
         outs = p.get("outputs_schema")
