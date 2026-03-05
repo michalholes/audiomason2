@@ -452,7 +452,7 @@ def _rules_for_step(evaluation: dict, *, test_id: str, step_index: int) -> dict:
 
 
 def _run_test_plan(test, ctx: Ctx) -> bool:
-    from badguys.bdg_executor import execute_bdg
+    from badguys.bdg_executor import execute_bdg_step
     from badguys.bdg_evaluator import StepResult, evaluate_step
     from badguys.bdg_loader import BdgTest
     from badguys.bdg_materializer import materialize_assets
@@ -475,18 +475,18 @@ def _run_test_plan(test, ctx: Ctx) -> bool:
         mats = materialize_assets(repo_root=ctx.repo_root, subst=subst, bdg=bdg)
         _emit(ctx, level="verbose", test_name=name, text=f"TEST BEGIN {name}\n")
 
-        step_results = execute_bdg(
-            repo_root=ctx.repo_root,
-            cfg_runner_cmd=list(ctx.cfg.runner_cmd),
-            subst=subst,
-            full_runner_tests=set(ctx.cfg.full_runner_tests),
-            bdg=bdg,
-            mats=mats,
-        )
-
         ok = True
         prior: dict[int, StepResult] = {}
-        for idx, r in enumerate(step_results):
+        for idx, step in enumerate(bdg.steps):
+            r = execute_bdg_step(
+                repo_root=ctx.repo_root,
+                cfg_runner_cmd=list(ctx.cfg.runner_cmd),
+                subst=subst,
+                full_runner_tests=set(ctx.cfg.full_runner_tests),
+                step=step,
+                mats=mats,
+                test_id=bdg.test_id,
+            )
             rules = _rules_for_step(evaluation, test_id=bdg.test_id, step_index=idx)
             if strict and not rules:
                 ok = False
@@ -512,7 +512,7 @@ def _run_test_plan(test, ctx: Ctx) -> bool:
                 if not r.stderr.endswith("\n"):
                     _emit(ctx, level="verbose", test_name=name, text="\n")
             # For RUN_RUNNER steps, also emit the resolved runner log path as 'LOG: <path>'.
-            if bdg.steps[idx].op == "RUN_RUNNER":
+            if step.op == "RUN_RUNNER":
                 log_link = ctx.cfg.patches_dir / "am_patch.log"
                 try:
                     resolved = log_link.resolve(strict=True)

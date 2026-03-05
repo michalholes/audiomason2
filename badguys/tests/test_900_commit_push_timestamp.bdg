@@ -15,8 +15,6 @@ index 0000000..1111111
 """
 
 [[step]]
-op = "DELETE_REPO_COMMIT_MARKER"
-[[step]]
 op = "RUN_RUNNER"
 extra_args = ["${issue_id}", "badguys: seed run to create workspace"]
 input_asset = "seed_patch"

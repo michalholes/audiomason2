@@ -76,6 +76,28 @@ def execute_bdg(
     return results
 
 
+def execute_bdg_step(
+    *,
+    repo_root: Path,
+    cfg_runner_cmd: list[str],
+    subst: SubstCtx,
+    full_runner_tests: set[str],
+    step: BdgStep,
+    mats: MaterializedAssets,
+    test_id: str,
+) -> StepResult:
+    return _exec_one(
+        repo_root=repo_root,
+        cfg_runner_cmd=cfg_runner_cmd,
+        subst=subst,
+        full_runner_tests=full_runner_tests,
+        step=step,
+        mats=mats,
+        test_id=test_id,
+    )
+
+
+
 def _exec_one(
     *,
     repo_root: Path,
