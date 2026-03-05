@@ -174,12 +174,72 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
     @app.get("/api/runs")
     async def api_runs(request: Request) -> Response:
         qs = dict(request.query_params)
-        # ETag/304 is canonical only for default (unfiltered) list.
-        issue_id = str(qs.get("issue_id", "")).strip()
+        issue_id_s = str(qs.get("issue_id", "")).strip()
         result = str(qs.get("result", "")).strip()
         since_sig = str(qs.get("since_sig", "")).strip()
+
+        if core.indexer.ready():
+            got = core.indexer.get_runs()
+            if got is not None:
+                sig, runs_items = got
+                etag = _etag_quote(sig)
+
+                # ETag/304 is canonical only for default (unfiltered) list.
+                if not issue_id_s and not result:
+                    inm = request.headers.get("if-none-match")
+                    if etag and _etag_matches(inm, etag):
+                        return Response(status_code=304, headers={"ETag": etag})
+                    if since_sig and since_sig == sig:
+                        data = json.dumps(
+                            {"ok": True, "unchanged": True, "sig": sig},
+                            ensure_ascii=True,
+                        ).encode("utf-8")
+                        return Response(
+                            content=data,
+                            status_code=200,
+                            media_type="application/json",
+                            headers={"ETag": etag},
+                        )
+
+                limit = int(qs.get("limit", "100"))
+                limit = max(1, min(limit, 500))
+
+                if issue_id_s:
+                    try:
+                        iid = int(issue_id_s)
+                    except ValueError:
+                        return JSONResponse(
+                            {"ok": False, "error": "Invalid issue_id"},
+                            status_code=400,
+                        )
+                    runs_items = [r for r in runs_items if int(r.get("issue_id", 0) or 0) == iid]
+
+                if result:
+                    if result not in ("success", "fail", "unknown", "canceled"):
+                        return JSONResponse(
+                            {"ok": False, "error": "Invalid result filter"},
+                            status_code=400,
+                        )
+                    runs_items = [r for r in runs_items if str(r.get("result", "")) == result]
+
+                runs_items = runs_items[:limit]
+                data = json.dumps(
+                    {"ok": True, "runs": runs_items, "sig": sig},
+                    ensure_ascii=True,
+                ).encode("utf-8")
+                if not issue_id_s and not result and etag:
+                    return Response(
+                        content=data,
+                        status_code=200,
+                        media_type="application/json",
+                        headers={"ETag": etag},
+                    )
+                return _json_bytes_response(200, data)
+
+        # Legacy path (indexer not ready / error).
+        # ETag/304 is canonical only for default (unfiltered) list.
         etag = ""
-        if not issue_id and not result:
+        if not issue_id_s and not result:
             from patchhub.app_support import canceled_runs_signature
             from patchhub.indexing import runs_signature
 
@@ -197,7 +257,8 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
                 return Response(status_code=304, headers={"ETag": etag})
             if since_sig and since_sig == sig:
                 data = json.dumps(
-                    {"ok": True, "unchanged": True, "sig": sig}, ensure_ascii=True
+                    {"ok": True, "unchanged": True, "sig": sig},
+                    ensure_ascii=True,
                 ).encode("utf-8")
                 return Response(
                     content=data,
@@ -209,7 +270,10 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
         status, data = await to_thread(core.api_runs, qs)
         if status == 200 and etag:
             return Response(
-                content=data, status_code=200, media_type="application/json", headers={"ETag": etag}
+                content=data,
+                status_code=200,
+                media_type="application/json",
+                headers={"ETag": etag},
             )
         return _json_bytes_response(status, data)
 
@@ -226,14 +290,39 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
 
     @app.get("/api/jobs")
     async def api_jobs_list(request: Request) -> Response:
+        since_sig = str(request.query_params.get("since_sig", "")).strip()
+
+        if core.indexer.ready():
+            got = core.indexer.get_jobs()
+            if got is not None:
+                sig, jobs_items = got
+                etag = _etag_quote(sig)
+                inm = request.headers.get("if-none-match")
+                if etag and _etag_matches(inm, etag):
+                    return Response(status_code=304, headers={"ETag": etag})
+                if since_sig and since_sig == sig:
+                    return JSONResponse(
+                        {"ok": True, "unchanged": True, "sig": sig},
+                        headers={"ETag": etag},
+                    )
+                data = json.dumps(
+                    {"ok": True, "jobs": jobs_items, "sig": sig},
+                    ensure_ascii=True,
+                ).encode("utf-8")
+                return Response(
+                    content=data,
+                    status_code=200,
+                    media_type="application/json",
+                    headers={"ETag": etag},
+                )
+
+        # Legacy path (indexer not ready / error).
         mem = await core.queue.list_jobs()
         mem_by_id = {j.job_id: j for j in mem}
 
         from hashlib import sha1
 
         from patchhub.job_store import job_json_signature, list_job_jsons
-
-        since_sig = str(request.query_params.get("since_sig", "")).strip()
 
         disk_sig = await to_thread(job_json_signature, core.jobs_root)
         mem_parts: list[str] = []
@@ -251,7 +340,10 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
         if etag and _etag_matches(inm, etag):
             return Response(status_code=304, headers={"ETag": etag})
         if since_sig and since_sig == sig:
-            return JSONResponse({"ok": True, "unchanged": True, "sig": sig}, headers={"ETag": etag})
+            return JSONResponse(
+                {"ok": True, "unchanged": True, "sig": sig},
+                headers={"ETag": etag},
+            )
 
         # Build payload only when changed.
 
@@ -457,6 +549,11 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
         headers = {"Content-Disposition": 'attachment; filename="selection.zip"'}
         return Response(content=data, media_type="application/zip", headers=headers)
 
+    @app.post("/api/debug/indexer/force_rescan")
+    async def api_debug_indexer_force_rescan() -> JSONResponse:
+        await core.indexer.force_rescan()
+        return JSONResponse({"ok": True})
+
     @app.get("/api/debug/diagnostics")
     async def api_debug_diagnostics(request: Request) -> Response:
         qs = dict(request.query_params)
@@ -515,6 +612,52 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
     @app.get("/api/ui_snapshot")
     async def api_ui_snapshot(request: Request) -> Response:
         qs = dict(request.query_params)
+        since_sig = str(qs.get("since_sig", "")).strip()
+
+        if core.indexer.ready():
+            snap = core.indexer.get_ui_snapshot()
+            if snap is not None:
+                snapshot_sig = str(snap.snapshot_sig)
+                etag = _etag_quote(snapshot_sig)
+
+                inm = request.headers.get("if-none-match")
+                if etag and _etag_matches(inm, etag):
+                    return Response(status_code=304, headers={"ETag": etag})
+                if since_sig and since_sig == snapshot_sig:
+                    data = json.dumps(
+                        {"ok": True, "unchanged": True, "sig": snapshot_sig},
+                        ensure_ascii=True,
+                    ).encode("utf-8")
+                    return Response(
+                        content=data,
+                        status_code=200,
+                        media_type="application/json",
+                        headers={"ETag": etag},
+                    )
+
+                payload: dict[str, Any] = {
+                    "ok": True,
+                    "snapshot": {
+                        "jobs": list(snap.jobs_items),
+                        "runs": list(snap.runs_items[:80]),
+                        "header": dict(snap.header_body),
+                    },
+                    "sigs": {
+                        "jobs": str(snap.jobs_sig),
+                        "runs": str(snap.runs_sig),
+                        "header": str(snap.header_sig),
+                        "snapshot": snapshot_sig,
+                    },
+                }
+                data = json.dumps(payload, ensure_ascii=True).encode("utf-8")
+                return Response(
+                    content=data,
+                    status_code=200,
+                    media_type="application/json",
+                    headers={"ETag": etag},
+                )
+
+        # Legacy path (indexer not ready / error).
         since_sig = str(qs.get("since_sig", "")).strip()
 
         from hashlib import sha1
@@ -622,7 +765,7 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
 
         header_body = await core.diagnostics()
 
-        payload: dict[str, Any] = {
+        payload = {
             "ok": True,
             "snapshot": {
                 "jobs": jobs_items,
@@ -638,7 +781,10 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
         }
         data = json.dumps(payload, ensure_ascii=True).encode("utf-8")
         return Response(
-            content=data, status_code=200, media_type="application/json", headers={"ETag": etag}
+            content=data,
+            status_code=200,
+            media_type="application/json",
+            headers={"ETag": etag},
         )
 
     @app.get("/api/jobs/{job_id}/events")

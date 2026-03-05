@@ -3,16 +3,31 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from patchhub import app_api_amp as _amp
-from patchhub import app_api_core as _core
-from patchhub import app_api_fs as _fs
-from patchhub import app_api_jobs as _jobs
-from patchhub import app_api_upload as _upload
-from patchhub import app_ui as _ui
-from patchhub import proc_resources
+from patchhub import (
+    app_api_amp as _amp,
+)
+from patchhub import (
+    app_api_core as _core,
+)
+from patchhub import (
+    app_api_fs as _fs,
+)
+from patchhub import (
+    app_api_jobs as _jobs,
+)
+from patchhub import (
+    app_api_upload as _upload,
+)
+from patchhub import (
+    app_ui as _ui,
+)
+from patchhub import (
+    proc_resources,
+)
 from patchhub.config import AppConfig
 from patchhub.fs_jail import FsJail
 
+from .async_jobs_runs_indexer import AsyncJobsRunsIndexer
 from .async_offload import to_thread
 from .async_queue import AsyncJobQueue
 from .async_runner_exec import AsyncRunnerExecutor
@@ -41,10 +56,14 @@ class AsyncAppCore:
             executor=AsyncRunnerExecutor(),
         )
 
+        self.indexer = AsyncJobsRunsIndexer(core=self)
+
     async def startup(self) -> None:
         await self.queue.start()
+        await self.indexer.start()
 
     async def shutdown(self) -> None:
+        await self.indexer.stop()
         await self.queue.stop()
 
     _autofill_scan_dir_rel = _core._autofill_scan_dir_rel
