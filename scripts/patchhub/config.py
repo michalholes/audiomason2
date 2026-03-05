@@ -53,6 +53,7 @@ class IssueConfig:
 class IndexingConfig:
     log_filename_regex: str
     stats_windows_days: list[int]
+    poll_interval_seconds: int = 2
 
 
 @dataclass(frozen=True)
@@ -166,6 +167,7 @@ def load_config(path: Path) -> AppConfig:
         indexing=IndexingConfig(
             log_filename_regex=str(_must_get(indexing, "log_filename_regex")),
             stats_windows_days=list(_must_get(indexing, "stats_windows_days")),
+            poll_interval_seconds=int(indexing.get("poll_interval_seconds", 2)),
         ),
         ui=UiConfig(
             base_font_px=int(ui.get("base_font_px", 24)),

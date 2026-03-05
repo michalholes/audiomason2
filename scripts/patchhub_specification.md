@@ -3,7 +3,7 @@ Status: AUTHORITATIVE SPECIFICATION
 Applies to: scripts/patchhub/*
 Language: ENGLISH (ASCII ONLY)
 
-Specification Version: 1.7.0-spec
+Specification Version: 1.8.0-spec
 Code Baseline: audiomason2-main.zip (as provided in this chat)
 
 -------------------------------------------------------------------------------
@@ -186,6 +186,38 @@ JSON fallback (compatibility)
   metadata (e.g. mtime_ns and size).
 - The runs list MUST be able to scale to thousands of logs without full file
   reads on each refresh.
+
+2.6.1 Background Indexer for jobs/runs/ui_snapshot (HARD)
+
+Normal path behavior
+- When a background indexer is ready, list endpoints MUST NOT perform any
+  filesystem scan or parsing work in the request handler path.
+  - This includes scanning logs, scanning web job artifacts, reading job.json,
+    and reading/parsing run logs.
+- In this state, list endpoints MUST serve precomputed, in-memory snapshots and
+  MUST limit request handler work to O(n) filtering + JSON serialization.
+
+Indexer behavior
+- PatchHub MUST run a background indexer task that maintains snapshots for:
+  - jobs list (see 7.2.8)
+  - runs list (see 7.2.6 runs; includes canceled runs)
+  - ui_snapshot payload (see 2.9)
+- On server startup, the indexer MUST perform an initial full scan/build for
+  those snapshots.
+- After startup, the indexer MUST refresh snapshots on a deterministic polling
+  interval configured by cfg.indexing.poll_interval_seconds.
+- The refresh work MUST execute outside request handlers.
+
+Failure mode
+- A bug or crash in the indexer can cause stale UI data.
+- If the indexer is not ready, or if it is in an error state, endpoints MAY
+  fall back to legacy on-demand disk scanning behavior.
+  - This is the only permitted case where request handlers may scan or parse
+    disk state for jobs/runs/ui_snapshot.
+
+Debug support
+- PatchHub MUST provide a debug-only endpoint to trigger a full rescan:
+  POST /api/debug/indexer/force_rescan (see 7.3.10).
 
 2.7 Live Events Rendering Limits (HARD)
 
@@ -444,6 +476,11 @@ UI/autofill have defaults (see config.py).
   - "sync": removed / unsupported (legacy synchronous backend)
 
 Default behavior is backend="asgi".
+
+5.2.2 Optional keys (indexing)
+
+- [indexing] poll_interval_seconds (int, default 2)
+  - Polling interval for the background indexer described in 2.6.1.
 
 5.3 Key semantics used by API
 - cfg.meta.version: shown in UI and /api/config
@@ -779,7 +816,8 @@ Output schema (success):
   },
   "indexing": {
     "log_filename_regex": "<string>",
-    "stats_windows_days": [<int>, ...]
+    "stats_windows_days": [<int>, ...],
+    "poll_interval_seconds": <int>
   },
   "ui": {
     "base_font_px": <int>,
@@ -1280,6 +1318,20 @@ Output:
 - Content-Type: application/zip
 - Content-Disposition: attachment; filename="selection.zip"
 - Body: zip bytes
+
+7.3.10 POST /api/debug/indexer/force_rescan
+Purpose:
+- Debug-only trigger for an immediate index rebuild (jobs, runs, ui_snapshot).
+
+Input:
+- No body.
+
+Output (success):
+{ "ok": true }
+
+Semantics:
+- The request handler MUST NOT perform filesystem scanning.
+- The handler only signals the background indexer to perform a full rescan.
 
 -------------------------------------------------------------------------------
 
