@@ -272,6 +272,18 @@ failures but MUST NOT override the primary PATCH_APPLY failure.
     -   no failure-zip artifacts.
 -   Workspace directory is deleted on exit (SUCCESS or FAILURE).
 
+Patch dir isolation:
+
+-   When test_mode is enabled, test_mode_isolate_patch_dir=true, patch_dir is not set,
+    and ISSUE_ID is provided, the runner sets effective patch_dir to:
+    <patch_root>/_test_mode/issue_<ID>_pid_<PID>
+-   patch_root remains the patch script root (repo_root/patch_dir_name unless patch_dir overrides).
+-   The runner creates patch layout directories under the isolated patch_dir:
+    logs, logs_json, workspaces, successful, unsuccessful,
+    artifacts, lock, and current-log symlink.
+-   When ipc_socket_mode=patch_dir, the IPC socket path is under the isolated patch_dir.
+-   On exit, the runner deletes the isolated patch_dir tree.
+
 Workspace cleanup: - In test mode, the workspace is deleted on exit
 ALWAYS (SUCCESS or FAILURE). - `--keep-workspace` is ignored in test
 mode. - `delete_workspace_on_success` does not apply in test mode.
