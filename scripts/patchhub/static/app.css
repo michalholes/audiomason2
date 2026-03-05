@@ -22,6 +22,21 @@ body {
 	border-bottom: 1px solid #1d2b50;
 	gap: 10px;
 }
+.bar.bar-stacked {
+	flex-direction: column;
+	align-items: stretch;
+}
+.bar-top {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	gap: 10px;
+}
+.bar-bottom {
+	display: flex;
+	justify-content: center;
+	gap: 10px;
+}
 .title {
 	font-size: 16px;
 	font-weight: 700;

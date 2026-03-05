@@ -9,11 +9,17 @@
 </head>
 <body>
   <div id="dropOverlay" class="drop-overlay" aria-hidden="true">Drop file to upload</div>
-  <header class="bar">
-    <div class="title">PatchHub <span id="ampWebVersion"></span></div>
-    <div id="hdrMeta" class="hdrmeta"></div>
-    <div class="actions">
-      <a class="link" href="/debug">Debug</a>
+  <header class="bar bar-stacked">
+    <div class="bar-top">
+      <div class="title">PatchHub <span id="ampWebVersion"></span></div>
+      <div id="hdrMeta" class="hdrmeta"></div>
+      <div class="actions">
+        <a class="link" href="/debug">Debug</a>
+      </div>
+    </div>
+    <div class="bar-bottom">
+      <span id="parseHint" class="muted"></span>
+      <span id="enqueueHint" class="muted"></span>
     </div>
   </header>
 
@@ -25,7 +31,19 @@
         <div class="row">
           <button type="button" id="refreshAll" class="btn btn-small">Refresh all</button>
         </div>
+        <div class="row">
+          <button type="button" id="uploadBrowse" class="btn primary">Browse</button>
+          <span class="muted">You can also drag &amp; drop a file anywhere in this window.</span>
+        </div>
+        <input id="uploadInput" type="file" style="display:none" />
+        <span id="uploadHint" class="muted"></span>
       </section>
+
+      <section class="card card-tight">
+        <h2>Stats</h2>
+        <div id="stats" class="stats"></div>
+      </section>
+
 
       <section class="card card-tight">
         <div class="row">
@@ -50,23 +68,9 @@
           <div id="runsList" class="scroll scroll-tall"></div>
         </div>
       </section>
-
-      <section class="card card-tight">
-        <h2>Stats</h2>
-        <div id="stats" class="stats"></div>
-      </section>
     </aside>
 
     <section class="panel panel-center">
-      <section class="card">
-        <h2>A) Upload patch</h2>
-        <div class="row">
-          <button type="button" id="uploadBrowse" class="btn primary">Browse</button>
-          <span class="muted">You can also drag &amp; drop a file anywhere in this window.</span>
-        </div>
-        <input id="uploadInput" type="file" style="display:none" />
-        <span id="uploadHint" class="muted"></span>
-      </section>
 
       <section class="card">
         <h2>B) Start run</h2>
@@ -91,6 +95,8 @@
           <button type="button" id="browsePatch" class="btn btn-small">From file manager</button>
         </div>
 
+        <div id="uiStatusBar" class="statusbar" aria-live="polite"></div>
+
         <details class="details">
           <summary>Advanced: paste canonical runner command</summary>
           <textarea id="rawCommand" class="textarea" rows="3" placeholder="python3 scripts/am_patch.py 1000 \"msg\" patches/issue_1000.zip"></textarea>
@@ -99,11 +105,8 @@
         <div class="row">
           <button type="button" id="parseBtn" class="btn btn-small">Parse</button>
           <button type="button" id="previewToggle" class="btn btn-small">Preview</button>
-          <span id="parseHint" class="muted"></span>
-          <span id="enqueueHint" class="muted"></span>
         </div>
 
-        <div id="uiStatusBar" class="statusbar" aria-live="polite"></div>
 
 
         <h3>Live log (events)</h3>
@@ -189,17 +192,6 @@
         <div id="progressSummary" class="progress-summary muted">(idle)</div>
       </section>
 
-      <section class="card card-tight" id="previewCard">
-        <div class="row">
-          <h2 style="margin:0">Preview</h2>
-          <span class="spacer"></span>
-          <button type="button" id="previewCollapse" class="btn btn-small">Show</button>
-        </div>
-        <div id="previewWrapRight" class="hidden">
-          <pre id="previewRight" class="pre pre-box"></pre>
-        </div>
-      </section>
-
       <section class="card card-tight">
         <div class="row">
           <h2 style="margin:0">Jobs</h2>
@@ -211,6 +203,18 @@
             <button type="button" id="jobsRefresh" class="btn btn-small">Refresh</button>
           </div>
           <div id="jobsList" class="scroll"></div>
+        </div>
+      </section>
+
+
+      <section class="card card-tight" id="previewCard">
+        <div class="row">
+          <h2 style="margin:0">Preview</h2>
+          <span class="spacer"></span>
+          <button type="button" id="previewCollapse" class="btn btn-small">Show</button>
+        </div>
+        <div id="previewWrapRight" class="hidden">
+          <pre id="previewRight" class="pre pre-box"></pre>
         </div>
       </section>
     </aside>
