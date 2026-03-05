@@ -164,6 +164,16 @@ class Policy(PolicyMonolithMixin):
     gates_skip_pytest: bool = False
     gates_skip_mypy: bool = False
     gates_skip_docs: bool = False
+    gates_skip_dont_touch: bool = False
+
+    dont_touch_paths: list[str] = field(
+        default_factory=lambda: [
+            "scripts/patchhub/static/patchhub_bootstrap.js",
+            "tsconfig.json",
+            "biome.json",
+            "pyproject.toml",
+        ]
+    )
 
     gates_skip_js: bool = False
     gate_js_extensions: list[str] = field(default_factory=lambda: [".js"])
@@ -202,6 +212,7 @@ class Policy(PolicyMonolithMixin):
     )
     gates_order: list[str] = field(
         default_factory=lambda: [
+            "dont-touch",
             "compile",
             "js",
             "biome",
@@ -741,6 +752,16 @@ def build_policy(defaults: Policy, cfg: dict[str, Any]) -> Policy:
     _mark_cfg(p, cfg, "gates_skip_mypy")
     p.gates_skip_docs = _as_bool(cfg, "gates_skip_docs", p.gates_skip_docs)
     _mark_cfg(p, cfg, "gates_skip_docs")
+
+    p.gates_skip_dont_touch = _as_bool(cfg, "gates_skip_dont_touch", p.gates_skip_dont_touch)
+    _mark_cfg(p, cfg, "gates_skip_dont_touch")
+
+    raw = cfg.get("dont_touch_paths")
+    if raw is not None:
+        if not isinstance(raw, list) or not all(isinstance(x, str) for x in raw):
+            raise RunnerError("CONFIG", "INVALID", "dont_touch_paths must be list[str]")
+        p.dont_touch_paths = list(dict.fromkeys([s for s in (x.strip() for x in raw) if s]))
+        _mark_cfg(p, cfg, "dont_touch_paths")
 
     p.gates_skip_monolith = _as_bool(cfg, "gates_skip_monolith", p.gates_skip_monolith)
     _mark_cfg(p, cfg, "gates_skip_monolith")

@@ -130,6 +130,7 @@ def build_effective_policy(argv: list[str]) -> int | tuple[Any, Policy, Path, st
             "gates_skip_mypy": cli.skip_mypy,
             "gates_skip_js": getattr(cli, "skip_js", None),
             "gates_skip_docs": getattr(cli, "skip_docs", None),
+            "gates_skip_dont_touch": getattr(cli, "skip_dont_touch", None),
             "gates_skip_monolith": getattr(cli, "skip_monolith", None),
             "apply_failure_partial_gates_policy": getattr(
                 cli, "apply_failure_partial_gates_policy", None

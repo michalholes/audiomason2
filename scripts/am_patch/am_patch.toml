@@ -107,9 +107,9 @@ allow_no_op = false
 # Legacy alias (runner maps order -> gates_order)
 # order = []
 # order = ["pytest"]
-order = ["compile", "js", "biome", "typescript", "ruff", "pytest", "mypy", "monolith", "docs"]
+order = ["dont-touch", "compile", "js", "biome", "typescript", "ruff", "pytest", "mypy", "monolith", "docs"]
 # Canonical (supported by runner; missing in your file)
-gates_order = ["compile", "js", "biome", "typescript", "ruff", "pytest", "mypy", "monolith", "docs"]
+gates_order = ["dont-touch", "compile", "js", "biome", "typescript", "ruff", "pytest", "mypy", "monolith", "docs"]
 
 # Canonical (supported by runner; missing in your file)
 run_all_tests = true
@@ -160,6 +160,15 @@ typescript_targets = ["plugins/", "scripts/", "types/"]
 
 # Documentation gate (docs) - required updates when watched paths change
 gates_skip_docs = true
+gates_skip_dont_touch = false
+
+dont_touch_paths = [
+  "scripts/patchhub/static/patchhub_bootstrap.js",
+  "tsconfig.json",
+  "biome.json",
+  "pyproject.toml",
+]
+
 gate_docs_include = ["src", "plugins"]
 gate_docs_exclude = ["badguys", "patches"]
 gate_docs_required_files = ["docs/changes.md", "docs/specification.md"]
