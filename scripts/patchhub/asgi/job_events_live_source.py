@@ -5,9 +5,35 @@ import json
 from collections.abc import AsyncIterator, Awaitable, Callable
 from pathlib import Path
 
-from patchhub.app_support import read_tail
-
 from .job_event_broker import JobEventBroker
+
+
+def _read_tail_snapshot(
+    path: Path,
+    lines: int,
+    *,
+    max_bytes: int = 8_388_608,
+) -> tuple[str, int]:
+    if not path.exists():
+        return "", 0
+
+    lines = max(1, min(int(lines), 5000))
+    max_bytes = max(0, int(max_bytes))
+    file_size = path.stat().st_size
+    if file_size <= 0:
+        return "", 0
+
+    start = max(0, file_size - max_bytes)
+    with path.open("rb") as f:
+        f.seek(start)
+        raw = f.read(file_size - start)
+
+    if not raw:
+        return "", file_size
+
+    text = raw.decode("utf-8", errors="replace")
+    parts = text.splitlines()
+    return "\n".join(parts[-lines:]), file_size
 
 
 async def stream_job_events_live_source(
@@ -22,12 +48,17 @@ async def stream_job_events_live_source(
     ping_interval_s: float = 10.0,
     broker_poll_interval_s: float = 0.1,
 ) -> AsyncIterator[bytes]:
+    del job_id
     if not in_memory_job:
         async for chunk in historical_stream():
             yield chunk
         return
 
-    tail = await asyncio.to_thread(read_tail, jsonl_path, tail_lines)
+    tail, snapshot_end_offset = await asyncio.to_thread(
+        _read_tail_snapshot,
+        jsonl_path,
+        tail_lines,
+    )
     if tail:
         for line in tail.splitlines():
             if not line.strip():
@@ -61,7 +92,7 @@ async def stream_job_events_live_source(
 
         await asyncio.sleep(broker_poll_interval_s)
 
-    sub = broker.subscribe().__aiter__()
+    sub = broker.subscribe(after_offset=snapshot_end_offset).__aiter__()
     while True:
         try:
             line = await asyncio.wait_for(sub.__anext__(), timeout=10.0)

@@ -23,22 +23,23 @@ def _write_line(
     *,
     f,
     line: str,
-    publish: Callable[[str], None] | None,
+    publish: Callable[[str, int], None] | None,
 ) -> None:
     line = line.rstrip("\n")
     if not line.strip():
         return
 
-    if publish is not None:
-        publish(line)
-
     f.write(line + "\n")
+    end_offset = f.tell()
+
+    if publish is not None:
+        publish(line, end_offset)
 
 
 async def _connect_and_stream(
     socket_path: str,
     jsonl_path: Path,
-    publish: Callable[[str], None] | None,
+    publish: Callable[[str, int], None] | None,
 ) -> None:
     reader, writer = await asyncio.open_unix_connection(socket_path)
     jsonl_path.parent.mkdir(parents=True, exist_ok=True)
@@ -95,7 +96,7 @@ async def start_event_pump(
     *,
     socket_path: str,
     jsonl_path: Path,
-    publish: Callable[[str], None] | None = None,
+    publish: Callable[[str, int], None] | None = None,
     connect_timeout_s: float = 10.0,
     retry_sleep_s: float = 0.25,
 ) -> None:
