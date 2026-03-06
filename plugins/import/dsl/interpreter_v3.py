@@ -184,17 +184,30 @@ def _record_trace(
     )
 
 
-def _guard_parallel_map_writes(step: dict[str, Any]) -> None:
+def _guard_parallel_map_write_conflicts(
+    step: dict[str, Any],
+    inputs: dict[str, Any],
+) -> None:
     primitive_id = str(step.get("primitive_id") or "")
     primitive_version = int(step.get("primitive_version") or 0)
+    if primitive_id != "parallel.map" or primitive_version != 1:
+        return
+    if inputs.get("merge_mode", "fail_on_conflict") != "fail_on_conflict":
+        return
     writes_any = step.get("writes")
-    if (
-        primitive_id == "parallel.map"
-        and primitive_version == 1
-        and isinstance(writes_any, list)
-        and writes_any
-    ):
-        raise FinalizeError("parallel.map@1 writes must be empty")
+    if not isinstance(writes_any, list) or not writes_any:
+        return
+
+    write_counts: dict[str, int] = {}
+    for write_any in writes_any:
+        if not isinstance(write_any, dict):
+            continue
+        to_path = write_any.get("to_path")
+        if not isinstance(to_path, str) or not to_path:
+            continue
+        write_counts[to_path] = write_counts.get(to_path, 0) + 1
+        if write_counts[to_path] > 1:
+            raise FinalizeError("parallel_map_conflicting_writes")
 
 
 def run_automatic_steps(
@@ -212,8 +225,8 @@ def run_automatic_steps(
             break
         if not is_non_interactive(primitive_id, primitive_version):
             raise FinalizeError("non_prompt_submit_payload_forbidden")
-        _guard_parallel_map_writes(step)
         inputs = resolve_inputs(step, state)
+        _guard_parallel_map_write_conflicts(step, inputs)
         outputs, jobs = execute_non_prompt(
             session_id=session_id,
             step_id=current,

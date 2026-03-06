@@ -1,3 +1,10 @@
+## 2026-03-06T00:00:01+01:00
+
+-   Issue 105 corrective: remove the parallel.map@1 write drift in the v3 runtime
+    so non-empty writes remain allowed, fail only on duplicate to_path
+    conflicts, and replace the drift test with conflict-vs-non-conflict
+    coverage.
+
 ## 2026-03-06T00:00:00+01:00
 
 -   Issue 105: remove v3 baseline select_authors drift, normalize v3 trace results to OK/ERR, stop implicit prompt answers/inputs writes, enforce parallel.map write conflict guard, and raise trace retention to 1000 events.
