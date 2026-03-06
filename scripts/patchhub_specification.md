@@ -1053,6 +1053,8 @@ Runner IPC event persistence robustness (HARD):
 - The job event pump MUST NOT rely on asyncio StreamReader.readline() limits.
 - The pump MUST read the IPC stream in chunks and split on "\n".
 - The pump MUST persist each complete JSONL line as-is (after UTF-8 decode).
+- This raw capture rule includes IPC control and reply frames received on the
+  job socket.
 - If a single line grows beyond 64 MiB without a newline, the pump MUST drop
   the partial buffer and emit a JSON notice line with:
   {"type":"patchhub_notice","code":"IPC_LINE_TOO_LARGE_DROPPED",...}.
@@ -1350,7 +1352,13 @@ Additionally, PatchHub persists a jsonl store into jobs_root/<job_id>/:
 Persistence source (HARD):
 - Runtime source is the runner IPC socket NDJSON stream.
 - PatchHub MUST persist every received NDJSON line into the job jsonl store.
+- This includes runner events, control frames, and reply frames received on
+  the job socket.
 - PatchHub MUST NOT rewrite NDJSON lines.
+- After receiving a control frame with event="connected", the job event pump
+  MUST send the IPC command ready.
+- After receiving a control frame with event="eos" and seq=<n>, the job event
+  pump MUST first persist that eos line and then send drain_ack(seq=<n>).
 
 jobs_root is fixed:
 - jobs_root = patches_root/artifacts/web_jobs
@@ -1365,6 +1373,8 @@ Queue worker waits until BOTH are true:
 Before executing a job, PatchHub injects runner overrides into argv
 deterministically and idempotently:
 - --override ipc_socket_enabled=true
+- --override ipc_handshake_enabled=true
+- --override ipc_handshake_wait_s=<cfg.runner.ipc_handshake_wait_s>
 - --override ipc_socket_path=/tmp/audiomason/patchhub_<job_id>.sock
 - --override patch_layout_json_dir=artifacts/web_jobs/<job_id>
 
@@ -1403,6 +1413,11 @@ Persistence:
 
 SSE (/api/jobs/<job_id>/events) streams JSONL lines by tailing the PatchHub
 jsonl store only. PatchHub does not parse or rewrite JSONL lines.
+Debug live view requirements (HARD):
+- In debug level, the UI MUST display every persisted JSONL line, including
+  non-log IPC reply/control frames.
+- Debug rendering MUST provide a deterministic non-empty fallback for reply,
+  control, and other non-log JSON objects.
 
 -------------------------------------------------------------------------------
 
