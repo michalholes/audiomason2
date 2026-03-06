@@ -23,6 +23,7 @@ from patchhub.models import job_to_list_item_json
 
 from .async_app_core import AsyncAppCore
 from .async_offload import to_thread
+from .job_events_live_source import stream_job_events_live_source
 from .sse_jsonl_stream import stream_job_events_sse
 
 UPLOAD_PATCH_FILE: Any = File(...)
@@ -1003,46 +1004,28 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
                     return str(disk_job.status)
                 return None
 
-            broker = None
-            if job is not None:
-                broker = await core.queue.get_broker(job_id)
+            async def get_broker() -> Any:
+                if job is None:
+                    return None
+                return await core.queue.get_broker(job_id)
 
-            # Replay persisted events first (best-effort), then stream live events.
-            # If there is no live broker (disk job or after restart), fall back to JSONL tailing.
-            if broker is None:
+            async def historical_stream() -> AsyncIterator[bytes]:
                 async for chunk in stream_job_events_sse(
                     job_id=str(job_id),
                     jsonl_path=jsonl_path,
                     job_status=job_status,
                 ):
                     yield chunk
-                return
 
-            tail = await to_thread(read_tail, jsonl_path, 500)
-            if tail:
-                for line in tail.splitlines():
-                    if not line.strip():
-                        continue
-                    yield f"data: {line}\n\n".encode()
-
-            sub = broker.subscribe().__aiter__()
-            while True:
-                try:
-                    line = await asyncio.wait_for(sub.__anext__(), timeout=10.0)
-                except TimeoutError:
-                    # Keep-alive comment (EventSource ignores it).
-                    yield b": ping\n\n"
-                    continue
-                except StopAsyncIteration:
-                    break
-                yield f"data: {line}\n\n".encode()
-
-            st = await job_status()
-            data = json.dumps(
-                {"reason": "job_completed", "status": st or ""},
-                ensure_ascii=True,
-            )
-            yield f"event: end\ndata: {data}\n\n".encode()
+            async for chunk in stream_job_events_live_source(
+                job_id=str(job_id),
+                jsonl_path=jsonl_path,
+                in_memory_job=job is not None,
+                job_status=job_status,
+                get_broker=get_broker,
+                historical_stream=historical_stream,
+            ):
+                yield chunk
 
         return StreamingResponse(gen(), media_type="text/event-stream")
 
