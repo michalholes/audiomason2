@@ -109,7 +109,7 @@ The runner prints its version: - on every invocation - in `--help`
 
 Example:
 
-    am_patch RUNNER_VERSION=4.3.10
+    am_patch RUNNER_VERSION=4.3.32
 
 Version discipline: - Any change that alters runner behavior MUST bump
 `RUNNER_VERSION`. - Any change that alters runner behavior MUST update
@@ -1299,6 +1299,8 @@ Configuration keys (Policy):
 - ipc_socket_name_template: filename template (no path separators)
 - ipc_socket_base_dir: used when mode=base_dir
 - ipc_socket_system_runtime_dir: optional override when mode=system_runtime
+- ipc_handshake_enabled: bool (default false)
+- ipc_handshake_wait_s: int (default 0)
 
 CLI overrides:
 - --ipc-socket PATH
@@ -1306,6 +1308,9 @@ CLI overrides:
 - --ipc-socket-mode MODE
 - --ipc-socket-base-dir DIR
 - --ipc-socket-name-template TEMPLATE
+- --ipc-handshake
+- --no-ipc-handshake
+- --ipc-handshake-wait-s N
 
 Commands (cmd field):
 - ping
@@ -1315,6 +1320,8 @@ Commands (cmd field):
 - pause_after_step (args: {"step":"<STEP>"})
 - resume
 - set_verbosity (args: {"verbosity":"<level>","log_level":"<level>"})
+- ready
+- drain_ack (args: {"seq":<int>})
 
 Semantics:
 - cancel requests termination at the next safe boundary.
@@ -1322,8 +1329,28 @@ Semantics:
 - pause_after_step pauses the main thread when the named step completes; resume continues.
 - resume returns INVALID_STATE if the runner is not paused.
 - Priority at a boundary: cancel > stop_after_step > pause_after_step.
+- When ipc_handshake_enabled=false, the runner retains legacy IPC startup/shutdown behavior.
+- When ipc_handshake_enabled=true, the runner waits at most ipc_handshake_wait_s seconds
+  for ready after ipc.start() and before the first START/hello event.
+- Startup handshake timeout is fail-open: processing continues and the run falls back to
+  legacy IPC behavior for that run.
+- Shutdown handshake is active only when the same run completed a successful startup ready
+  handshake.
+- In runs with a successful startup ready handshake, the runner emits control event eos and
+  waits at most ipc_handshake_wait_s seconds for drain_ack(seq=<eos seq>) before socket
+  removal.
+- In runs with a successful startup ready handshake, the shutdown handshake wait replaces
+  ipc_socket_cleanup_delay_success_s / ipc_socket_cleanup_delay_failure_s; the waits do not
+  stack.
+- pause_after_step semantics and the OK/FAIL safe-boundary definition remain unchanged;
+  handshake is a distinct pre-run / post-run state and is not an extension of
+  pause_after_step.
+- Handshake text in human-readable stdout/stderr/file log is DEBUG-only.
+- IPC/NDJSON handshake control events are machine-facing and may be emitted regardless of
+  human-readable verbosity.
 
-The safe boundary definition is the emission of an OK/FAIL step token ("OK: <STEP>" or "FAIL: <STEP>").
+The safe boundary definition is the emission of an OK/FAIL step token ("OK: <STEP>" or
+"FAIL: <STEP>").
 
 Socket file lifecycle:
 - The runner MUST attempt to remove the IPC socket file on process exit, best-effort.
@@ -1345,52 +1372,6 @@ Constant socket names:
 - ipc_socket_name_template MAY be a constant string (example: am_patch.sock).
 - Consequence: single-instance socket in the selected scope; parallel runs conflict unless
   the name differs.
-
-Staged opt-in handshake extension (inactive in RUNNER_VERSION 4.3.31):
-- This extension is specified here before implementation so the next behavior-changing
-  runner version can activate it without introducing an undocumented control surface.
-- Until a later runner version implements this extension, the current supported command
-  set remains exactly the commands listed above and current socket lifecycle behavior
-  remains unchanged.
-
-Staged handshake configuration keys (Policy):
-- ipc_handshake_enabled: bool (default false)
-- ipc_handshake_wait_s: int (default 0)
-
-Staged handshake CLI overrides:
-- --ipc-handshake
-- --no-ipc-handshake
-- --ipc-handshake-wait-s N
-
-Staged handshake commands:
-- ready
-- drain_ack (args: {"seq":<int>})
-
-Staged handshake control events:
-- eos (runner -> client control event carrying the final emitted seq)
-
-Staged handshake semantics:
-- The startup handshake wait is placed after ipc.start() and before the first START/hello
-  event.
-- When ipc_handshake_enabled=false, the runner retains current legacy behavior.
-- When ipc_handshake_enabled=true, the runner waits at most ipc_handshake_wait_s seconds
-  for ready.
-- Startup handshake timeout is fail-open: processing continues and the runner falls back
-  to legacy IPC behavior for that run.
-- Shutdown handshake wait is used only if the same run completed a successful startup
-  ready handshake.
-- In runs with a successful startup ready handshake, the shutdown handshake wait replaces
-  ipc_socket_cleanup_delay_success_s / ipc_socket_cleanup_delay_failure_s; the waits do
-  not stack.
-- The runner emits control event eos before socket removal and waits at most
-  ipc_handshake_wait_s seconds for drain_ack(seq=<eos seq>) when shutdown handshake is
-  active.
-- pause_after_step semantics and the OK/FAIL safe-boundary definition remain unchanged;
-  the handshake is a distinct pre-run / post-run state and is not an extension of
-  pause_after_step.
-- Handshake text in human-readable stdout/stderr/file log is DEBUG-only.
-- IPC/NDJSON handshake control events are machine-facing and may be emitted regardless of
-  human-readable verbosity.
 
 ------------------------------------------------------------------------
 

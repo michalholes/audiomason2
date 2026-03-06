@@ -239,13 +239,28 @@ def main(argv: list[str]) -> int:
         return exit_code
     finally:
         if ctx is not None and getattr(ctx, "ipc", None) is not None:
-            delay = (
-                int(getattr(policy, "ipc_socket_cleanup_delay_success_s", 0) or 0)
-                if exit_code == 0
-                else int(getattr(policy, "ipc_socket_cleanup_delay_failure_s", 0) or 0)
-            )
-            if delay > 0:
-                threading.Event().wait(float(delay))
+            shutdown_handshake_active = False
+            with contextlib.suppress(Exception):
+                if ctx.ipc.startup_handshake_completed():
+                    ctx.logger.emit(
+                        severity="DEBUG",
+                        channel="DETAIL",
+                        message="DEBUG: IPC shutdown handshake waiting for drain_ack\n",
+                        kind="TEXT",
+                    )
+                    ctx.logger.emit_control_event({"type": "control", "event": "eos"})
+                    eos_seq = ctx.logger.get_last_json_seq()
+                    shutdown_handshake_active = ctx.ipc.begin_shutdown_handshake(eos_seq=eos_seq)
+                    if shutdown_handshake_active:
+                        ctx.ipc.wait_for_drain_ack()
+            if not shutdown_handshake_active:
+                delay = (
+                    int(getattr(policy, "ipc_socket_cleanup_delay_success_s", 0) or 0)
+                    if exit_code == 0
+                    else int(getattr(policy, "ipc_socket_cleanup_delay_failure_s", 0) or 0)
+                )
+                if delay > 0:
+                    threading.Event().wait(float(delay))
             with contextlib.suppress(Exception):
                 ctx.ipc.stop()
 

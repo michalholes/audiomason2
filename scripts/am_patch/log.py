@@ -291,6 +291,9 @@ class Logger:
             with contextlib.suppress(Exception):
                 ipc_stream(evt)
 
+    def get_last_json_seq(self) -> int:
+        return int(self._json_seq)
+
     def emit_control_event(self, payload: dict[str, Any]) -> None:
         ipc_stream = self._ipc_stream
         need_evt = (self.json_enabled and self._json_fp is not None) or ipc_stream is not None

@@ -11,8 +11,8 @@ ipc_socket_cleanup_delay_failure_s = 0
 
 ipc_socket_on_startup_exists = "fail"
 ipc_socket_on_startup_wait_s = 0
-
-
+ipc_handshake_enabled = false
+ipc_handshake_wait_s = 0
 
 
 [paths]

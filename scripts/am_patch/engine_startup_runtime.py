@@ -43,6 +43,8 @@ def build_startup_logger_and_ipc(
     )
 
     ipc: IpcController | None = None
+    startup_handshake_enabled = bool(getattr(policy, "ipc_handshake_enabled", False))
+    startup_ready = False
     sock_path = resolve_socket_path(policy=policy, patch_dir=patch_dir, issue_id=cli.issue_id)
     if sock_path is not None:
         ipc = IpcController(
@@ -51,8 +53,12 @@ def build_startup_logger_and_ipc(
             mode=cli.mode,
             status_provider=status,
             logger=logger,
+            handshake_enabled=startup_handshake_enabled,
+            handshake_wait_s=int(getattr(policy, "ipc_handshake_wait_s", 0) or 0),
         )
         ipc.start()
+        if startup_handshake_enabled:
+            startup_ready = ipc.wait_for_ready()
 
         def _ipc_hook(_kind: str, _stage: str) -> None:
             action = ipc.check_boundary(completed_step=_stage)
@@ -90,4 +96,16 @@ def build_startup_logger_and_ipc(
         verbosity=verbosity,
         log_level=log_level,
     )
+    if startup_handshake_enabled and ipc is not None:
+        msg = (
+            "DEBUG: IPC startup handshake completed before START\n"
+            if startup_ready
+            else "DEBUG: IPC startup handshake timed out; continuing legacy IPC\n"
+        )
+        logger.emit(
+            severity="DEBUG",
+            channel="DETAIL",
+            message=msg,
+            kind="TEXT",
+        )
     return StartupLoggerIpc(logger=logger, ipc=ipc)

@@ -8,6 +8,7 @@ from typing import Any
 from am_patch.version import RUNNER_VERSION
 
 from .cli_help_text import fmt_full_help, fmt_short_help
+from .cli_ipc_surface import add_ipc_override_args
 
 
 class AppendOverride(argparse.Action):
@@ -252,52 +253,7 @@ def parse_args(argv: list[str]) -> CliArgs:
         metavar="CSV",
     )
 
-    p.add_argument("--ipc-socket", action=AppendOverride, key="ipc_socket_path", dest="overrides")
-    p.add_argument(
-        "--no-ipc-socket",
-        action=AppendOverride,
-        key="ipc_socket_enabled",
-        const_value="false",
-        dest="overrides",
-        nargs=0,
-    )
-    p.add_argument(
-        "--ipc-socket-mode", action=AppendOverride, key="ipc_socket_mode", dest="overrides"
-    )
-    p.add_argument(
-        "--ipc-socket-base-dir", action=AppendOverride, key="ipc_socket_base_dir", dest="overrides"
-    )
-    p.add_argument(
-        "--ipc-socket-name-template",
-        action=AppendOverride,
-        key="ipc_socket_name_template",
-        dest="overrides",
-    )
-
-    p.add_argument(
-        "--ipc-socket-cleanup-delay-success-s",
-        action=AppendOverride,
-        key="ipc_socket_cleanup_delay_success_s",
-        dest="overrides",
-    )
-    p.add_argument(
-        "--ipc-socket-cleanup-delay-failure-s",
-        action=AppendOverride,
-        key="ipc_socket_cleanup_delay_failure_s",
-        dest="overrides",
-    )
-    p.add_argument(
-        "--ipc-socket-on-startup-exists",
-        action=AppendOverride,
-        key="ipc_socket_on_startup_exists",
-        dest="overrides",
-    )
-    p.add_argument(
-        "--ipc-socket-on-startup-wait-s",
-        action=AppendOverride,
-        key="ipc_socket_on_startup_wait_s",
-        dest="overrides",
-    )
+    add_ipc_override_args(p, append_override=AppendOverride)
 
     p.add_argument(
         "--patch-dir-name", action=AppendOverride, key="patch_dir_name", dest="overrides"

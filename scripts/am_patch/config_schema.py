@@ -43,6 +43,8 @@ _SECTION_BY_KEY: dict[str, str] = {
     "ipc_socket_cleanup_delay_failure_s": "",
     "ipc_socket_on_startup_exists": "",
     "ipc_socket_on_startup_wait_s": "",
+    "ipc_handshake_enabled": "",
+    "ipc_handshake_wait_s": "",
     "unified_patch": "",
     "unified_patch_continue": "",
     "unified_patch_strip": "",

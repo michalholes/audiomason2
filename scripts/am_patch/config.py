@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from .config_ipc_surface import IPC_NONNEGATIVE_IPC_INT_KEYS, apply_ipc_cfg_surface
 from .config_monolith_areas import parse_monolith_areas
 from .errors import RunnerError
 from .policy_monolith_mixin import PolicyMonolithMixin
@@ -135,6 +136,8 @@ class Policy(PolicyMonolithMixin):
     ipc_socket_cleanup_delay_failure_s: int = 0
     ipc_socket_on_startup_exists: str = "fail"
     ipc_socket_on_startup_wait_s: int = 0
+    ipc_handshake_enabled: bool = False
+    ipc_handshake_wait_s: int = 0
 
     unified_patch: bool = False
     unified_patch_continue: bool = True
@@ -606,24 +609,12 @@ def build_policy(defaults: Policy, cfg: dict[str, Any]) -> Policy:
             f"invalid console_color={p.console_color!r}; allowed: auto|always|never",
         )
 
-    p.ipc_socket_enabled = _as_bool(cfg, "ipc_socket_enabled", p.ipc_socket_enabled)
-    _mark_cfg(p, cfg, "ipc_socket_enabled")
-    p.ipc_socket_mode = str(cfg.get("ipc_socket_mode", p.ipc_socket_mode))
-    _mark_cfg(p, cfg, "ipc_socket_mode")
-    p.ipc_socket_name_template = str(
-        cfg.get("ipc_socket_name_template", p.ipc_socket_name_template)
+    apply_ipc_cfg_surface(
+        p,
+        cfg,
+        as_bool=_as_bool,
+        mark_cfg=_mark_cfg,
     )
-    _mark_cfg(p, cfg, "ipc_socket_name_template")
-    p.ipc_socket_on_startup_exists = str(
-        cfg.get("ipc_socket_on_startup_exists", p.ipc_socket_on_startup_exists)
-    )
-    _mark_cfg(p, cfg, "ipc_socket_on_startup_exists")
-    if p.ipc_socket_on_startup_exists not in ("fail", "wait_then_fail", "unlink_if_stale"):
-        raise RunnerError(
-            "CONFIG",
-            "INVALID",
-            "ipc_socket_on_startup_exists must be fail|wait_then_fail|unlink_if_stale",
-        )
 
     p.patch_dir_name = _validate_basename(p.patch_dir_name, field="patch_dir_name")
     p.patch_layout_logs_dir = _validate_basename(
@@ -859,15 +850,20 @@ def build_policy(defaults: Policy, cfg: dict[str, Any]) -> Policy:
         "gate_monolith_hub_exports_delta_min",
         "gate_monolith_hub_loc_delta_min",
         "gate_monolith_crossarea_min_distinct_areas",
-        "ipc_socket_cleanup_delay_success_s",
-        "ipc_socket_cleanup_delay_failure_s",
-        "ipc_socket_on_startup_wait_s",
+        *IPC_NONNEGATIVE_IPC_INT_KEYS,
     ):
         if k in cfg:
             setattr(p, k, int(cfg[k]))
             _mark_cfg(p, cfg, k)
         if int(getattr(p, k)) < 0:
             raise RunnerError("CONFIG", "INVALID", f"{k} must be >= 0")
+
+    if p.ipc_handshake_enabled and p.ipc_handshake_wait_s < 1:
+        raise RunnerError(
+            "CONFIG",
+            "INVALID",
+            "ipc_handshake_wait_s must be >= 1 when ipc_handshake_enabled=true",
+        )
 
     p.gate_monolith_catchall_basenames = _as_list_str(
         cfg, "gate_monolith_catchall_basenames", p.gate_monolith_catchall_basenames

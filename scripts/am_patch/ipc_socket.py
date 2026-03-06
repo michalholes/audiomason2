@@ -98,6 +98,8 @@ class IpcController:
         mode: str,
         status_provider: Any,
         logger: Any,
+        handshake_enabled: bool = False,
+        handshake_wait_s: int = 0,
     ) -> None:
         self.socket_path = socket_path
         self.issue_id = issue_id
@@ -113,6 +115,13 @@ class IpcController:
 
         self._clients_lock = threading.Lock()
         self._clients: list[Any] = []
+
+        self._handshake_enabled = bool(handshake_enabled)
+        self._handshake_wait_s = max(0, int(handshake_wait_s or 0))
+        self._startup_ready = threading.Event()
+        self._drain_ack = threading.Event()
+        self._startup_state = "pending" if self._handshake_enabled else "disabled"
+        self._expected_drain_seq: int | None = None
 
         set_stream = getattr(self._logger, "set_ipc_stream", None)
         if callable(set_stream):
@@ -168,6 +177,8 @@ class IpcController:
     def stop(self) -> None:
         self._stop.set()
         self._resume.set()
+        self._startup_ready.set()
+        self._drain_ack.set()
         t = self._thread
         if t is not None:
             t.join(timeout=2.0)
@@ -262,6 +273,37 @@ class IpcController:
             if cancelled or not paused:
                 return
             self._resume.wait(0.25)
+
+    def wait_for_ready(self) -> bool:
+        if not self._handshake_enabled:
+            return False
+        ready = self._startup_ready.wait(float(self._handshake_wait_s))
+        with self._lock:
+            if ready:
+                self._startup_state = "completed"
+            elif self._startup_state == "pending":
+                self._startup_state = "timed_out"
+        return ready
+
+    def startup_handshake_completed(self) -> bool:
+        with self._lock:
+            return self._startup_state == "completed"
+
+    def begin_shutdown_handshake(self, *, eos_seq: int) -> bool:
+        if not self._handshake_enabled:
+            return False
+        with self._lock:
+            if self._startup_state != "completed":
+                return False
+            self._expected_drain_seq = int(eos_seq)
+            self._drain_ack.clear()
+            return True
+
+    def wait_for_drain_ack(self) -> bool:
+        with self._lock:
+            if self._expected_drain_seq is None:
+                return False
+        return self._drain_ack.wait(float(self._handshake_wait_s))
 
     def _emit_control(self, event: str, data: dict[str, Any] | None = None) -> None:
         emit = getattr(self._logger, "emit_control_event", None)
@@ -486,6 +528,109 @@ class IpcController:
                                 )
                             )
                         )
+                        continue
+
+                    if cmd == "ready":
+                        if not self._handshake_enabled:
+                            fp.write(
+                                _json_line(
+                                    self._reply_err(
+                                        cmd_id=cmd_id,
+                                        code="INVALID_STATE",
+                                        message="startup handshake is disabled",
+                                    )
+                                )
+                            )
+                            continue
+                        with self._lock:
+                            state = self._startup_state
+                            if state == "pending":
+                                self._startup_state = "completed"
+                                self._startup_ready.set()
+                            elif state != "completed":
+                                fp.write(
+                                    _json_line(
+                                        self._reply_err(
+                                            cmd_id=cmd_id,
+                                            code="INVALID_STATE",
+                                            message="startup handshake is not active",
+                                        )
+                                    )
+                                )
+                            else:
+                                fp.write(
+                                    _json_line(self._reply_ok(cmd_id=cmd_id, data={"ready": True}))
+                                )
+                                continue
+                        if state == "pending":
+                            fp.write(
+                                _json_line(self._reply_ok(cmd_id=cmd_id, data={"ready": True}))
+                            )
+                        continue
+
+                    if cmd == "drain_ack":
+                        raw_seq = args.get("seq")
+                        if raw_seq is None:
+                            fp.write(
+                                _json_line(
+                                    self._reply_err(
+                                        cmd_id=cmd_id,
+                                        code="VALIDATION_ERROR",
+                                        message="drain_ack seq must be an integer",
+                                    )
+                                )
+                            )
+                            continue
+                        try:
+                            ack_seq = int(raw_seq)
+                        except Exception:
+                            fp.write(
+                                _json_line(
+                                    self._reply_err(
+                                        cmd_id=cmd_id,
+                                        code="VALIDATION_ERROR",
+                                        message="drain_ack seq must be an integer",
+                                    )
+                                )
+                            )
+                            continue
+                        with self._lock:
+                            if self._startup_state != "completed":
+                                fp.write(
+                                    _json_line(
+                                        self._reply_err(
+                                            cmd_id=cmd_id,
+                                            code="INVALID_STATE",
+                                            message="startup handshake did not complete",
+                                        )
+                                    )
+                                )
+                                continue
+                            expected = self._expected_drain_seq
+                            if expected is None:
+                                fp.write(
+                                    _json_line(
+                                        self._reply_err(
+                                            cmd_id=cmd_id,
+                                            code="INVALID_STATE",
+                                            message="eos was not emitted",
+                                        )
+                                    )
+                                )
+                                continue
+                            if ack_seq != expected:
+                                fp.write(
+                                    _json_line(
+                                        self._reply_err(
+                                            cmd_id=cmd_id,
+                                            code="VALIDATION_ERROR",
+                                            message=f"expected seq={expected}",
+                                        )
+                                    )
+                                )
+                                continue
+                            self._drain_ack.set()
+                        fp.write(_json_line(self._reply_ok(cmd_id=cmd_id, data={"seq": ack_seq})))
                         continue
 
                     fp.write(
