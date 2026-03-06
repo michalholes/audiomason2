@@ -1,3 +1,8 @@
+## 2026-03-06T00:00:00+01:00
+
+-   Issue 104: Define baseline DSL primitive semantics v1 (prompt payloads, output keys, stop/job semantics, and parallel.map merge baseline).
+-   spec: Bump specification version to 2.0.8-normalized-m1.
+
 ## 2026-03-05T00:00:00+01:00
 
 -   spec: Define WizardDefinition v3 as a DSL program model (primitive invocations, single-file JSON).
