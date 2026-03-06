@@ -150,6 +150,13 @@
 
 	const paletteItems = [];
 
+	function v3() {
+		const editor = W.AM2DSLEditorV3;
+		return editor && editor.isV3Draft && editor.isV3Draft(wizardDraft())
+			? editor
+			: null;
+	}
+
 	const root =
 		W.AM2WDLayoutRoot && W.AM2WDLayoutRoot.createRoot
 			? W.AM2WDLayoutRoot.createRoot({ ui: ui, el: el, text: text })
@@ -603,8 +610,11 @@
 		if (!skipConfirm && !confirmIfDirty("Reload")) return false;
 		renderError(null, false);
 		setValidation(null, [], []);
-		return loadPalette().then((ok1) =>
-			loadDefinition().then((ok2) => {
+		return loadDefinition().then((ok2) => {
+			const editor = v3();
+			if (ok2 && editor && editor.reloadAll)
+				return editor.reloadAll({ skipConfirm: true });
+			return loadPalette().then((ok1) => {
 				if (ok1 && ok2) {
 					return loadHistory().then(() => {
 						ensureV2();
@@ -613,8 +623,8 @@
 					});
 				}
 				return false;
-			}),
-		);
+			});
+		});
 	}
 
 	function validateDraft() {
@@ -808,6 +818,10 @@
 			: null;
 
 	function renderAll() {
+		const editor = v3();
+		if (editor && editor.renderAll) return editor.renderAll();
+		if (ui.ta) ui.ta.classList.add("is-hidden");
+		if (root && root.layout) root.layout.classList.remove("is-hidden");
 		buildToolbar();
 
 		if (table && table.renderAll) table.renderAll();
@@ -884,7 +898,7 @@
 		FE.on("selection_changed", () => {
 			if (table && table.updateSelection) table.updateSelection();
 			renderAll();
-			if (W.AM2FlowConfigEditor && W.AM2FlowConfigEditor.renderNow) {
+			if (!v3() && W.AM2FlowConfigEditor && W.AM2FlowConfigEditor.renderNow) {
 				void W.AM2FlowConfigEditor.renderNow();
 			}
 		});
@@ -892,24 +906,40 @@
 		FE.registerWizardRender(renderAll);
 	}
 
-	if (ui.reload) ui.reload.addEventListener("click", reloadAll);
-	if (ui.validate) ui.validate.addEventListener("click", validateDraft);
-	if (ui.save) ui.save.addEventListener("click", saveDraft);
-	if (ui.reset) ui.reset.addEventListener("click", resetDefinition);
+	if (ui.reload)
+		ui.reload.addEventListener("click", () =>
+			(v3() || {}).reloadAll ? v3().reloadAll() : reloadAll(),
+		);
+	if (ui.validate)
+		ui.validate.addEventListener("click", () =>
+			(v3() || {}).validateDraft ? v3().validateDraft() : validateDraft(),
+		);
+	if (ui.save)
+		ui.save.addEventListener("click", () =>
+			(v3() || {}).saveDraft ? v3().saveDraft() : saveDraft(),
+		);
+	if (ui.reset)
+		ui.reset.addEventListener("click", () =>
+			(v3() || {}).resetDefinition ? v3().resetDefinition() : resetDefinition(),
+		);
 
 	W.AM2WizardDefinitionEditor = {
-		reloadAll: reloadAll,
-		validateDraft: validateDraft,
-		saveDraft: saveDraft,
-		resetDefinition: resetDefinition,
+		reloadAll: () => ((v3() || {}).reloadAll ? v3().reloadAll() : reloadAll()),
+		validateDraft: () =>
+			(v3() || {}).validateDraft ? v3().validateDraft() : validateDraft(),
+		saveDraft: () => ((v3() || {}).saveDraft ? v3().saveDraft() : saveDraft()),
+		resetDefinition: () =>
+			(v3() || {}).resetDefinition ? v3().resetDefinition() : resetDefinition(),
 	};
 
 	W.AM2FlowEditor = W.AM2FlowEditor || {};
 	W.AM2FlowEditor.wizard = {
-		reload: reloadAll,
-		validate: validateDraft,
-		save: saveDraft,
-		reset: resetDefinition,
+		reload: () => ((v3() || {}).reloadAll ? v3().reloadAll() : reloadAll()),
+		validate: () =>
+			(v3() || {}).validateDraft ? v3().validateDraft() : validateDraft(),
+		save: () => ((v3() || {}).saveDraft ? v3().saveDraft() : saveDraft()),
+		reset: () =>
+			(v3() || {}).resetDefinition ? v3().resetDefinition() : resetDefinition(),
 	};
 
 	reloadAll({ skipConfirm: true });
