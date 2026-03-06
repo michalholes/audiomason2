@@ -42,3 +42,26 @@ def test_parse_expr_rejects_unsupported_token() -> None:
     assert error is not None
     assert error.code == "invalid_expr_syntax"
     assert error.reason == "unsupported_character"
+
+
+def test_parse_expr_returns_structured_error_on_unexpected_internal_exception(
+    monkeypatch,
+) -> None:
+    parser_module = import_module("plugins.import.dsl.expr_parser")
+
+    def _raise_unexpected_exception(*args: object, **kwargs: object) -> object:
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(parser_module, "tokenize_expr", _raise_unexpected_exception)
+
+    ok, ast, error = parse_expr("$.inputs.name")
+
+    assert ok is False
+    assert ast is None
+    assert error is not None
+    assert error.code == "internal_error"
+    assert error.reason == "unexpected_parse_exception"
+    assert error.meta == {
+        "exception_type": "RuntimeError",
+        "message": "boom",
+    }

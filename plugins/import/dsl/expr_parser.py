@@ -315,14 +315,29 @@ def parse_expr(
 ]:
     """Parse a baseline ExprRef expression into a small AST."""
 
-    ok, tokens, error = tokenize_expr(expr, path=path)
-    if not ok or tokens is None:
-        token_error = error or ExprTokenError(
-            code="internal_error",
-            path=path,
-            reason="tokenize_failed",
-            meta={},
+    try:
+        ok, tokens, error = tokenize_expr(expr, path=path)
+        if not ok or tokens is None:
+            token_error = error or ExprTokenError(
+                code="internal_error",
+                path=path,
+                reason="tokenize_failed",
+                meta={},
+            )
+            return False, None, _from_token_error(token_error)
+        parser = _Parser(tokens, path=path)
+        return parser.parse()
+    except Exception as exc:
+        return (
+            False,
+            None,
+            _error(
+                code="internal_error",
+                path=path,
+                reason="unexpected_parse_exception",
+                meta={
+                    "exception_type": type(exc).__name__,
+                    "message": str(exc),
+                },
+            ),
         )
-        return False, None, _from_token_error(token_error)
-    parser = _Parser(tokens, path=path)
-    return parser.parse()
