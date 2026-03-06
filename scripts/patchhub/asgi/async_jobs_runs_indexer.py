@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
 import shutil
+import stat as statlib
 from contextlib import suppress
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -12,8 +14,8 @@ from pathlib import Path
 from typing import Any
 
 from patchhub.app_support import compute_success_archive_rel
-from patchhub.indexing import compute_stats, iter_runs, runs_signature
-from patchhub.job_store import job_json_signature, list_job_jsons
+from patchhub.indexing import compute_stats, iter_runs_with_signature
+from patchhub.job_store import list_job_jsons_and_signature
 from patchhub.models import RunEntry, job_to_list_item_json, run_to_list_item_json
 from patchhub.proc_resources import snapshot as resources_snapshot
 
@@ -48,40 +50,40 @@ def _etag_sig_jobs(*, disk_sig: tuple[int, int], mem: list[Any]) -> str:
     return f"jobs:d={disk_sig[0]}:{disk_sig[1]}:m={mem_sig}"
 
 
-def _iter_files(p: Path) -> list[Path]:
-    if not p.exists() or not p.is_dir():
-        return []
-    out: list[Path] = []
-    for x in p.iterdir():
-        if x.is_file():
-            out.append(x)
-    return out
-
-
 def _latest_by_issue(
     patches_root: Path,
     dir_name: str,
     rx: re.Pattern[str],
 ) -> dict[int, str]:
     d = patches_root / dir_name
+    try:
+        it = os.scandir(d)
+    except (FileNotFoundError, NotADirectoryError, PermissionError):
+        return {}
+
     best: dict[int, tuple[int, str]] = {}
-    for p in _iter_files(d):
-        m = rx.search(p.name)
-        if not m:
-            continue
-        try:
-            issue_id = int(m.group(1))
-        except Exception:
-            continue
-        try:
-            st = p.stat()
-        except Exception:
-            continue
-        key = issue_id
-        cand = (int(getattr(st, "st_mtime_ns", int(st.st_mtime * 1_000_000_000))), p.name)
-        prev = best.get(key)
-        if prev is None or cand[0] > prev[0] or (cand[0] == prev[0] and cand[1] > prev[1]):
-            best[key] = cand
+    with it:
+        for ent in it:
+            name = ent.name
+            m = rx.search(name)
+            if not m:
+                continue
+            try:
+                issue_id = int(m.group(1))
+            except Exception:
+                continue
+            try:
+                st = ent.stat(follow_symlinks=False)
+            except Exception:
+                continue
+            if not statlib.S_ISREG(st.st_mode):
+                continue
+
+            mt = int(getattr(st, "st_mtime_ns", int(st.st_mtime * 1_000_000_000)))
+            cand = (mt, name)
+            prev = best.get(issue_id)
+            if prev is None or cand[0] > prev[0] or (cand[0] == prev[0] and cand[1] > prev[1]):
+                best[issue_id] = cand
 
     out: dict[int, str] = {}
     for issue_id, (_mt, name) in best.items():
@@ -225,12 +227,11 @@ class AsyncJobsRunsIndexer:
         running = int(getattr(qstate, "running", 0) or 0) if qstate is not None else 0
 
         def _sync_build() -> IndexerSnapshot:
-            disk_sig = job_json_signature(self._core.jobs_root)
+            disk_sig, disk_raw = list_job_jsons_and_signature(self._core.jobs_root, limit=200)
             jobs_sig = _etag_sig_jobs(disk_sig=disk_sig, mem=mem)
 
             mem_by_id = {str(getattr(j, "job_id", "")) for j in mem}
             disk_jobs: list[Any] = []
-            disk_raw = list_job_jsons(self._core.jobs_root, limit=200)
 
             for r in disk_raw:
                 jid = str(r.get("job_id", ""))
@@ -258,11 +259,7 @@ class AsyncJobsRunsIndexer:
             jobs.sort(key=lambda j: str(getattr(j, "created_utc", "")) or "", reverse=True)
             jobs_items = [job_to_list_item_json(j) for j in jobs]
 
-            base_sig = runs_signature(
-                self._core.patches_root,
-                self._core.cfg.indexing.log_filename_regex,
-            )
-            base_runs = iter_runs(
+            base_sig, base_runs = iter_runs_with_signature(
                 self._core.patches_root,
                 self._core.cfg.indexing.log_filename_regex,
             )
@@ -353,7 +350,9 @@ class AsyncJobsRunsIndexer:
 
     def _build_canceled_runs_sync(self) -> tuple[list[RunEntry], tuple[int, int]]:
         jobs_root = self._core.patches_root / "artifacts" / "web_jobs"
-        if not jobs_root.exists() or not jobs_root.is_dir():
+        try:
+            it = os.scandir(jobs_root)
+        except (FileNotFoundError, NotADirectoryError, PermissionError):
             self._cancel_job_cache.clear()
             return [], (0, 0)
 
@@ -362,71 +361,74 @@ class AsyncJobsRunsIndexer:
         count = 0
         max_mtime_ns = 0
 
-        for d in jobs_root.iterdir():
-            if not d.is_dir():
-                continue
-            jid = d.name
-            seen.add(jid)
-            job_json = d / "job.json"
-            if not job_json.exists() or not job_json.is_file():
-                self._cancel_job_cache.pop(jid, None)
-                continue
+        with it:
+            for ent in it:
+                if not ent.is_dir(follow_symlinks=False):
+                    continue
+                jid = ent.name
+                seen.add(jid)
 
-            try:
-                st = job_json.stat()
-            except Exception:
-                continue
-
-            cached = self._cancel_job_cache.get(jid)
-            status = ""
-            issue_id = 0
-            if cached is not None and cached[0] == int(st.st_mtime_ns):
-                status = cached[1]
-                issue_id = int(cached[2])
-            else:
+                job_json = Path(jobs_root) / jid / "job.json"
                 try:
-                    raw = json.loads(job_json.read_text(encoding="utf-8", errors="replace"))
+                    st = job_json.stat()
                 except Exception:
-                    raw = None
-                if isinstance(raw, dict):
-                    status = str(raw.get("status", ""))
-                    issue_s = str(raw.get("issue_id", ""))
+                    self._cancel_job_cache.pop(jid, None)
+                    continue
+                if not statlib.S_ISREG(st.st_mode):
+                    self._cancel_job_cache.pop(jid, None)
+                    continue
+
+                cached = self._cancel_job_cache.get(jid)
+                status = ""
+                issue_id = 0
+                if cached is not None and cached[0] == int(st.st_mtime_ns):
+                    status = cached[1]
+                    issue_id = int(cached[2])
+                else:
                     try:
-                        issue_id = int(issue_s)
+                        raw = json.loads(job_json.read_text(encoding="utf-8", errors="replace"))
                     except Exception:
-                        issue_id = 0
-                self._cancel_job_cache[jid] = (int(st.st_mtime_ns), status, issue_id)
+                        raw = None
+                    if isinstance(raw, dict):
+                        status = str(raw.get("status", ""))
+                        issue_s = str(raw.get("issue_id", ""))
+                        try:
+                            issue_id = int(issue_s)
+                        except Exception:
+                            issue_id = 0
+                    self._cancel_job_cache[jid] = (int(st.st_mtime_ns), status, issue_id)
 
-            if status != "canceled" or issue_id <= 0:
-                continue
+                if status != "canceled" or issue_id <= 0:
+                    continue
 
-            log_path = d / "runner.log"
-            fp = log_path if log_path.exists() else job_json
-            try:
-                st2 = fp.stat()
-            except Exception:
-                continue
+                log_path = Path(jobs_root) / jid / "runner.log"
+                use_log = False
+                st2 = st
+                try:
+                    st_log = log_path.stat()
+                    if statlib.S_ISREG(st_log.st_mode):
+                        st2 = st_log
+                        use_log = True
+                except Exception:
+                    use_log = False
 
-            rel = str(
-                Path("artifacts")
-                / "web_jobs"
-                / jid
-                / ("runner.log" if log_path.exists() else "job.json")
-            )
-            out.append(
-                RunEntry(
-                    issue_id=issue_id,
-                    log_rel_path=rel,
-                    result="canceled",
-                    result_line="RESULT: CANCELED",
-                    mtime_utc=_utc_iso(st2.st_mtime),
+                rel = str(
+                    Path("artifacts") / "web_jobs" / jid / ("runner.log" if use_log else "job.json")
                 )
-            )
+                out.append(
+                    RunEntry(
+                        issue_id=issue_id,
+                        log_rel_path=rel,
+                        result="canceled",
+                        result_line="RESULT: CANCELED",
+                        mtime_utc=_utc_iso(float(st2.st_mtime)),
+                    )
+                )
 
-            count += 1
-            mtime_ns = int(getattr(st2, "st_mtime_ns", int(st2.st_mtime * 1_000_000_000)))
-            if mtime_ns > max_mtime_ns:
-                max_mtime_ns = mtime_ns
+                count += 1
+                mtime_ns = int(getattr(st2, "st_mtime_ns", int(st2.st_mtime * 1_000_000_000)))
+                if mtime_ns > max_mtime_ns:
+                    max_mtime_ns = mtime_ns
 
         for jid in list(self._cancel_job_cache.keys()):
             if jid not in seen:
