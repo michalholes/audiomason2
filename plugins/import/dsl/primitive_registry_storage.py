@@ -31,22 +31,14 @@ def _default_schema_object() -> dict[str, Any]:
 
 
 def _default_primitives() -> list[dict[str, Any]]:
-    # Default registry maps UI step_ids to phase-1 primitives.
-    from ..step_catalog import STEP_CATALOG
+    from ..primitives import baseline_registry_entries
 
     out: list[dict[str, Any]] = []
-    for step_id in sorted(STEP_CATALOG.keys()):
-        out.append(
-            {
-                "primitive_id": str(step_id),
-                "version": 1,
-                "phase": 1,
-                "inputs_schema": _default_schema_object(),
-                "outputs_schema": _default_schema_object(),
-                "determinism_notes": "deterministic",
-                "allowed_errors": [],
-            }
-        )
+    for entry in baseline_registry_entries():
+        item = dict(entry)
+        item.setdefault("inputs_schema", _default_schema_object())
+        item.setdefault("outputs_schema", _default_schema_object())
+        out.append(item)
     return out
 
 

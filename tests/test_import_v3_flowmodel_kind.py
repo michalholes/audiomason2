@@ -1,0 +1,101 @@
+"""Issue 105: FlowModel kind and v3 primitive metadata."""
+
+from __future__ import annotations
+
+from importlib import import_module
+from pathlib import Path
+
+from audiomason.core.config import ConfigResolver
+
+ImportWizardEngine = import_module("plugins.import.engine").ImportWizardEngine
+atomic_write_json = import_module("plugins.import.storage").atomic_write_json
+RootName = import_module("plugins.file_io.service.types").RootName
+WIZARD_DEFINITION_REL_PATH = import_module(
+    "plugins.import.wizard_definition_model"
+).WIZARD_DEFINITION_REL_PATH
+
+
+PROMPT_V3 = {
+    "version": 3,
+    "entry_step_id": "ask_name",
+    "nodes": [
+        {
+            "step_id": "ask_name",
+            "op": {
+                "primitive_id": "ui.prompt_text",
+                "primitive_version": 1,
+                "inputs": {},
+                "writes": [
+                    {
+                        "to_path": "$.state.answers.ask_name.value",
+                        "value": {"expr": "$.op.outputs.value"},
+                    }
+                ],
+            },
+        },
+        {
+            "step_id": "stop",
+            "op": {
+                "primitive_id": "ctrl.stop",
+                "primitive_version": 1,
+                "inputs": {},
+                "writes": [],
+            },
+        },
+    ],
+    "edges": [{"from": "ask_name", "to": "stop"}],
+}
+
+
+def _make_engine(tmp_path: Path) -> ImportWizardEngine:
+    roots = {
+        "inbox": tmp_path / "inbox",
+        "stage": tmp_path / "stage",
+        "outbox": tmp_path / "outbox",
+        "jobs": tmp_path / "jobs",
+        "config": tmp_path / "config",
+        "wizards": tmp_path / "wizards",
+    }
+    for root in roots.values():
+        root.mkdir(parents=True, exist_ok=True)
+    defaults = {
+        "file_io": {
+            "roots": {
+                "inbox_dir": str(roots["inbox"]),
+                "stage_dir": str(roots["stage"]),
+                "outbox_dir": str(roots["outbox"]),
+                "jobs_dir": str(roots["jobs"]),
+                "config_dir": str(roots["config"]),
+                "wizards_dir": str(roots["wizards"]),
+            }
+        },
+        "output_dir": str(roots["outbox"]),
+        "diagnostics": {"enabled": False},
+    }
+    resolver = ConfigResolver(
+        cli_args=defaults,
+        defaults=defaults,
+        user_config_path=tmp_path / "no_user_config.yaml",
+        system_config_path=tmp_path / "no_system_config.yaml",
+    )
+    return ImportWizardEngine(resolver=resolver)
+
+
+def test_get_flow_model_v3_declares_kind_and_primitive_metadata(tmp_path: Path) -> None:
+    engine = _make_engine(tmp_path)
+    fs = engine.get_file_service()
+    atomic_write_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_REL_PATH, PROMPT_V3)
+
+    flow_model = engine.get_flow_model()
+
+    assert flow_model["flowmodel_kind"] == "dsl_step_graph_v3"
+    steps = {step["step_id"]: step for step in flow_model["steps"]}
+    assert steps["ask_name"]["primitive_id"] == "ui.prompt_text"
+    assert steps["ask_name"]["primitive_version"] == 1
+    assert steps["stop"]["primitive_id"] == "ctrl.stop"
+
+    state = engine.create_session("inbox", "")
+    assert state["status"] == "in_progress"
+    out = engine.submit_step(state["session_id"], "ask_name", {"value": "Ada"})
+    assert out["status"] == "completed"
+    assert out["answers"]["ask_name"]["value"] == "Ada"

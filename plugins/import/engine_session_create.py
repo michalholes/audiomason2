@@ -15,6 +15,7 @@ from plugins.file_io.service.types import RootName
 from . import discovery as discovery_mod
 from .action_jobs import extract_action_job_requests
 from .defaults import ensure_default_models
+from .engine_actions_v3 import build_runtime_flow_model, initialize_state
 from .engine_session_guards import validate_root_and_path
 from .engine_util import (
     _derive_selection_items,
@@ -72,27 +73,29 @@ def create_session_impl(
     validate_models(catalog, flow)
 
     wizard_definition = load_or_bootstrap_wizard_definition(engine._fs)
-    step_order = build_effective_workflow_snapshot(
-        wizard_definition=wizard_definition,
-        flow_config=flow_cfg_norm,
-    )
-
-    effective_model = build_flow_model(
-        catalog=catalog,
-        flow_config=flow_cfg_norm,
-        step_order=step_order,
-    )
-
+    if int(wizard_definition.get("version") or 0) == 3:
+        effective_model = build_runtime_flow_model(wizard_definition=wizard_definition)
+    else:
+        step_order = build_effective_workflow_snapshot(
+            wizard_definition=wizard_definition,
+            flow_config=flow_cfg_norm,
+        )
+        effective_model = build_flow_model(
+            catalog=catalog,
+            flow_config=flow_cfg_norm,
+            step_order=step_order,
+        )
     # 2) Discovery
     discovery = discovery_mod.run_discovery(engine._fs, root=root, relative_path=relative_path)
     discovery_fingerprint = fingerprint_json(discovery)
 
     authors_items, books_items = _derive_selection_items(discovery)
-    effective_model = _inject_selection_items(
-        effective_model=effective_model,
-        authors_items=authors_items,
-        books_items=books_items,
-    )
+    if effective_model.get("flowmodel_kind") != "dsl_step_graph_v3":
+        effective_model = _inject_selection_items(
+            effective_model=effective_model,
+            authors_items=authors_items,
+            books_items=books_items,
+        )
 
     model_fingerprint = fingerprint_json(effective_model)
 
@@ -224,6 +227,7 @@ def create_session_impl(
 
     state: dict[str, Any] = {
         "session_id": session_id,
+        "session_state_version": 1,
         "created_at": created_at,
         "updated_at": created_at,
         "model_fingerprint": model_fingerprint,
@@ -231,8 +235,12 @@ def create_session_impl(
         "mode": mode,
         "source": {"root": root, "relative_path": relative_path},
         "current_step_id": start_step_id,
+        "cursor": {"step_id": start_step_id},
         "completed_step_ids": [],
         "answers": {},
+        "vars": {},
+        "jobs": {"emitted": [], "submitted": []},
+        "trace": [],
         "inputs": {},
         "computed": {},
         "selected_author_ids": [],
@@ -253,6 +261,15 @@ def create_session_impl(
         "errors": [],
     }
 
+    if (
+        isinstance(effective_model, dict)
+        and effective_model.get("flowmodel_kind") == "dsl_step_graph_v3"
+    ):
+        state = initialize_state(
+            state=state,
+            effective_model=effective_model,
+            session_id=session_id,
+        )
     atomic_write_json(engine._fs, RootName.WIZARDS, state_path, state)
     engine._append_decision(
         session_id,

@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from .dsl.interpreter_v3 import submit_current_step
+from .engine_actions_v3 import is_v3_effective_model
 from .engine_conflicts import (
     apply_conflict_policy,
     apply_conflict_resolve,
@@ -18,6 +20,7 @@ from .engine_util import (
     _emit_required,
     _exception_envelope,
     _iso_utc_now,
+    sync_session_cursor,
 )
 from .errors import StepSubmissionError, ascii_message, invariant_violation
 from .flow_runtime import CONDITIONAL_STEP_IDS
@@ -60,6 +63,24 @@ def submit_step_impl(
             raise StepSubmissionError("payload must be an object")
 
         effective_model = engine._load_effective_model(session_id)
+        if is_v3_effective_model(effective_model):
+            next_state = submit_current_step(
+                effective_model=effective_model,
+                state=state,
+                session_id=session_id,
+                step_id=step_id,
+                payload=payload,
+            )
+            next_state["updated_at"] = _iso_utc_now()
+            engine._append_decision(
+                session_id,
+                step_id=step_id,
+                payload=dict(payload),
+                result="accepted",
+                error=None,
+            )
+            engine._persist_state(session_id, next_state)
+            return next_state
         steps_any = effective_model.get("steps")
         if not isinstance(steps_any, list):
             raise StepSubmissionError("effective model missing steps")
@@ -142,6 +163,7 @@ def submit_step_impl(
             next_step_id=next_step,
             flow_cfg_norm=flow_cfg_norm,
         )
+        sync_session_cursor(state, step_id=str(state.get("current_step_id") or ""))
 
         state["updated_at"] = _iso_utc_now()
         engine._append_decision(

@@ -127,6 +127,36 @@ def _iso_utc_now() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
+def sync_session_cursor(state: dict[str, Any], *, step_id: str | None = None) -> dict[str, Any]:
+    cursor_any = state.get("cursor")
+    cursor = dict(cursor_any) if isinstance(cursor_any, dict) else {}
+    if step_id is None:
+        step_id = str(state.get("current_step_id") or cursor.get("step_id") or "")
+    cursor["step_id"] = str(step_id or "")
+    state["cursor"] = cursor
+    if step_id:
+        state["current_step_id"] = str(step_id)
+    return state
+
+
+MAX_TRACE_EVENTS = 128
+
+
+def append_trace_event(state: dict[str, Any], event: dict[str, Any]) -> dict[str, Any]:
+    trace_any = state.get("trace")
+    trace = list(trace_any) if isinstance(trace_any, list) else []
+    item = dict(event)
+    item["seq"] = len(trace) + 1
+    trace.append(item)
+    if len(trace) > MAX_TRACE_EVENTS:
+        trace = trace[-MAX_TRACE_EVENTS:]
+        for idx, trace_item in enumerate(trace, start=1):
+            if isinstance(trace_item, dict):
+                trace_item["seq"] = idx
+    state["trace"] = trace
+    return state
+
+
 def _ensure_session_state_fields(state: dict[str, Any]) -> dict[str, Any]:
     """Ensure SessionState contains minimally required fields (spec 10.*).
 
@@ -140,7 +170,12 @@ def _ensure_session_state_fields(state: dict[str, Any]) -> dict[str, Any]:
             state[key] = value
             changed = True
 
+    _setdefault("session_state_version", 1)
+    _setdefault("status", "in_progress")
     _setdefault("answers", {})
+    _setdefault("vars", {})
+    _setdefault("jobs", {"emitted": [], "submitted": []})
+    _setdefault("trace", [])
     _setdefault("computed", {})
     _setdefault("selected_author_ids", [])
     _setdefault("selected_book_ids", [])
@@ -162,6 +197,18 @@ def _ensure_session_state_fields(state: dict[str, Any]) -> dict[str, Any]:
     ):
         state["answers"] = dict(inputs_any)
         changed = True
+
+    sync_session_cursor(state)
+
+    jobs_any = state.get("jobs")
+    jobs = dict(jobs_any) if isinstance(jobs_any, dict) else {}
+    if "emitted" not in jobs or not isinstance(jobs.get("emitted"), list):
+        jobs["emitted"] = []
+        changed = True
+    if "submitted" not in jobs or not isinstance(jobs.get("submitted"), list):
+        jobs["submitted"] = []
+        changed = True
+    state["jobs"] = jobs
 
     if changed:
         state["updated_at"] = _iso_utc_now()

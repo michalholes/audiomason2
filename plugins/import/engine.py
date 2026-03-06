@@ -17,6 +17,7 @@ from plugins.file_io.service.types import RootName
 
 from . import flow_config_api
 from .defaults import ensure_default_models
+from .engine_actions_v3 import apply_action_v3, build_runtime_flow_model, is_v3_effective_model
 from .engine_diagnostics_required import create_process_job
 from .engine_processing import start_processing_impl
 from .engine_session_create import create_session_impl
@@ -94,6 +95,10 @@ class ImportWizardEngine:
     def get_flow_model(self) -> dict[str, Any]:
         """Return FlowModel JSON for the current configuration (spec 10.5)."""
         ensure_default_models(self._fs)
+        wizard_definition = load_or_bootstrap_wizard_definition(self._fs)
+        if int(wizard_definition.get("version") or 0) == 3:
+            return build_runtime_flow_model(wizard_definition=wizard_definition)
+
         catalog_dict = read_json(self._fs, RootName.WIZARDS, "import/catalog/catalog.json")
         flow_dict = read_json(self._fs, RootName.WIZARDS, "import/flow/current.json")
         flow_cfg = read_json(self._fs, RootName.WIZARDS, "import/config/flow_config.json")
@@ -104,7 +109,6 @@ class ImportWizardEngine:
         flow = FlowModel.from_dict(flow_dict)
         validate_models(catalog, flow)
 
-        wizard_definition = load_or_bootstrap_wizard_definition(self._fs)
         step_order = build_effective_workflow_snapshot(
             wizard_definition=wizard_definition,
             flow_config=flow_cfg_norm,
@@ -427,6 +431,9 @@ class ImportWizardEngine:
 
     def apply_action(self, session_id: str, action: str) -> dict[str, Any]:
         try:
+            effective_model = self._load_effective_model(session_id)
+            if is_v3_effective_model(effective_model):
+                return apply_action_v3(engine=self, session_id=session_id, action=str(action))
             state = self._load_state(session_id)
             if int(state.get("phase") or 1) == 2:
                 return invariant_violation(
