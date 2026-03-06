@@ -1346,6 +1346,52 @@ Constant socket names:
 - Consequence: single-instance socket in the selected scope; parallel runs conflict unless
   the name differs.
 
+Staged opt-in handshake extension (inactive in RUNNER_VERSION 4.3.31):
+- This extension is specified here before implementation so the next behavior-changing
+  runner version can activate it without introducing an undocumented control surface.
+- Until a later runner version implements this extension, the current supported command
+  set remains exactly the commands listed above and current socket lifecycle behavior
+  remains unchanged.
+
+Staged handshake configuration keys (Policy):
+- ipc_handshake_enabled: bool (default false)
+- ipc_handshake_wait_s: int (default 0)
+
+Staged handshake CLI overrides:
+- --ipc-handshake
+- --no-ipc-handshake
+- --ipc-handshake-wait-s N
+
+Staged handshake commands:
+- ready
+- drain_ack (args: {"seq":<int>})
+
+Staged handshake control events:
+- eos (runner -> client control event carrying the final emitted seq)
+
+Staged handshake semantics:
+- The startup handshake wait is placed after ipc.start() and before the first START/hello
+  event.
+- When ipc_handshake_enabled=false, the runner retains current legacy behavior.
+- When ipc_handshake_enabled=true, the runner waits at most ipc_handshake_wait_s seconds
+  for ready.
+- Startup handshake timeout is fail-open: processing continues and the runner falls back
+  to legacy IPC behavior for that run.
+- Shutdown handshake wait is used only if the same run completed a successful startup
+  ready handshake.
+- In runs with a successful startup ready handshake, the shutdown handshake wait replaces
+  ipc_socket_cleanup_delay_success_s / ipc_socket_cleanup_delay_failure_s; the waits do
+  not stack.
+- The runner emits control event eos before socket removal and waits at most
+  ipc_handshake_wait_s seconds for drain_ack(seq=<eos seq>) when shutdown handshake is
+  active.
+- pause_after_step semantics and the OK/FAIL safe-boundary definition remain unchanged;
+  the handshake is a distinct pre-run / post-run state and is not an extension of
+  pause_after_step.
+- Handshake text in human-readable stdout/stderr/file log is DEBUG-only.
+- IPC/NDJSON handshake control events are machine-facing and may be emitted regardless of
+  human-readable verbosity.
+
 ------------------------------------------------------------------------
 
 ## PatchHub Config Editor Contract
