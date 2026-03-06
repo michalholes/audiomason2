@@ -8,3 +8,7 @@ ASCII-only.
 """
 
 from __future__ import annotations
+
+from .expr_eval import eval_expr_ref
+
+__all__ = ["eval_expr_ref"]
