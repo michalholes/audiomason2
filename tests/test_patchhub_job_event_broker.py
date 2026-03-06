@@ -26,3 +26,14 @@ class TestPatchhubJobEventBroker(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(first, '{"type":"log","msg":"same"}')
         self.assertEqual(second, '{"type":"log","msg":"next"}')
+
+    async def test_close_keeps_termination_signal_when_queue_is_full(self) -> None:
+        broker = JobEventBroker(max_queue_items=1, max_replay_items=8)
+        q: asyncio.Queue[object] = asyncio.Queue(maxsize=1)
+        q.put_nowait((10, '{"type":"log","msg":"stale"}'))
+        broker._subs.add(q)
+
+        broker.close()
+
+        self.assertIsNone(q.get_nowait())
+        self.assertEqual(broker.dropped_total(), 1)

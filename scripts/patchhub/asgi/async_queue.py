@@ -301,9 +301,7 @@ class AsyncJobQueue:
                     effective_cmd, cwd=self._repo_root, log_path=runner_log
                 )
 
-                pump_task.cancel()
-                with contextlib.suppress(Exception):
-                    await pump_task
+                await pump_task
 
                 async with self._mu:
                     job = self._jobs.get(job_id)

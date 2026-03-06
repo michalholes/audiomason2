@@ -1,13 +1,29 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 from collections import deque
 from collections.abc import AsyncIterator
 from typing import TypeAlias
 
 _EventItem: TypeAlias = tuple[int, str]
 _QueueItem: TypeAlias = _EventItem | None
+
+
+def _enqueue_item(
+    q: asyncio.Queue[_QueueItem],
+    item: _QueueItem,
+) -> tuple[bool, int]:
+    dropped = 0
+    while True:
+        try:
+            q.put_nowait(item)
+            return True, dropped
+        except asyncio.QueueFull:
+            try:
+                q.get_nowait()
+            except asyncio.QueueEmpty:
+                return False, dropped
+            dropped += 1
 
 
 class JobEventBroker:
@@ -28,7 +44,7 @@ class JobEventBroker:
     def __init__(
         self,
         *,
-        max_queue_items: int = 2000,
+        max_queue_items: int = 10000,
         max_replay_items: int = 2000,
     ) -> None:
         self._max_queue_items = max(1, int(max_queue_items))
@@ -71,24 +87,18 @@ class JobEventBroker:
         item = (int(end_offset), line)
         self._recent.append(item)
         for q in list(self._subs):
-            try:
-                q.put_nowait(item)
-            except asyncio.QueueFull:
+            ok, dropped = _enqueue_item(q, item)
+            self._dropped_total += dropped
+            if not ok:
                 self._dropped_total += 1
-                with contextlib.suppress(asyncio.QueueEmpty):
-                    q.get_nowait()
-                try:
-                    q.put_nowait(item)
-                except asyncio.QueueFull:
-                    self._dropped_total += 1
 
     def close(self) -> None:
         if self._closed:
             return
         self._closed = True
         for q in list(self._subs):
-            with contextlib.suppress(Exception):
-                q.put_nowait(None)
+            _, dropped = _enqueue_item(q, None)
+            self._dropped_total += dropped
         self._subs.clear()
 
     def dropped_total(self) -> int:
