@@ -1,5 +1,7 @@
 ## 2026-03-06T00:00:00+01:00
 
+-   Issue 105: remove v3 baseline select_authors drift, normalize v3 trace results to OK/ERR, stop implicit prompt answers/inputs writes, enforce parallel.map write conflict guard, and raise trace retention to 1000 events.
+
 -   Issue 104: Define baseline DSL primitive semantics v1 (prompt payloads, output keys, stop/job semantics, and parallel.map merge baseline).
 -   spec: Bump specification version to 2.0.8-normalized-m1.
 

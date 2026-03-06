@@ -1,4 +1,4 @@
-"""Issue 105: minimal v3 runtime flow for non-interactive primitives."""
+"""Issue 105: parallel.map@1 forbids non-empty writes in v3 runtime."""
 
 from __future__ import annotations
 
@@ -15,30 +15,21 @@ WIZARD_DEFINITION_REL_PATH = import_module(
 ).WIZARD_DEFINITION_REL_PATH
 
 
-MINIMAL_V3 = {
+PARALLEL_MAP_WITH_WRITES = {
     "version": 3,
-    "entry_step_id": "hello",
+    "entry_step_id": "map_step",
     "nodes": [
         {
-            "step_id": "hello",
+            "step_id": "map_step",
             "op": {
-                "primitive_id": "ui.message",
+                "primitive_id": "parallel.map",
                 "primitive_version": 1,
-                "inputs": {"text": "hello"},
-                "writes": [],
+                "inputs": {"items": [1], "merge_mode": "fail_on_conflict"},
+                "writes": [{"to_path": "$.state.vars.value", "value": 1}],
             },
-        },
-        {
-            "step_id": "stop",
-            "op": {
-                "primitive_id": "ctrl.stop",
-                "primitive_version": 1,
-                "inputs": {},
-                "writes": [],
-            },
-        },
+        }
     ],
-    "edges": [{"from": "hello", "to": "stop"}],
+    "edges": [],
 }
 
 
@@ -76,20 +67,17 @@ def _make_engine(tmp_path: Path) -> ImportWizardEngine:
     return ImportWizardEngine(resolver=resolver)
 
 
-def test_v3_runtime_runs_ui_message_then_ctrl_stop(tmp_path: Path) -> None:
+def test_parallel_map_writes_fail_with_invariant_violation(tmp_path: Path) -> None:
     engine = _make_engine(tmp_path)
     fs = engine.get_file_service()
-    atomic_write_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_REL_PATH, MINIMAL_V3)
+    atomic_write_json(
+        fs,
+        RootName.WIZARDS,
+        WIZARD_DEFINITION_REL_PATH,
+        PARALLEL_MAP_WITH_WRITES,
+    )
 
     state = engine.create_session("inbox", "")
 
-    assert state["status"] == "completed"
-    assert state["current_step_id"] == "stop"
-    assert state["cursor"]["step_id"] == "stop"
-    assert state["answers"] == {}
-    assert state["inputs"] == {}
-    assert [entry["step_id"] for entry in state["trace"]] == ["hello", "stop"]
-    assert [entry["result"] for entry in state["trace"]] == ["OK", "OK"]
-
-    blocked = engine.apply_action(state["session_id"], "next")
-    assert blocked["error"]["code"] == "INVARIANT_VIOLATION"
+    assert state["error"]["code"] == "INVARIANT_VIOLATION"
+    assert state["error"]["message"] == "parallel.map@1 writes must be empty"

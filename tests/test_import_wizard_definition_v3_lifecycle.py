@@ -69,12 +69,12 @@ def _make_engine(tmp_path: Path) -> ImportWizardEngine:
 def _minimal_v3_definition() -> dict[str, object]:
     return {
         "version": 3,
-        "entry_step_id": "select_authors",
+        "entry_step_id": "pick_author",
         "nodes": [
             {
-                "step_id": "select_authors",
+                "step_id": "pick_author",
                 "op": {
-                    "primitive_id": "select_authors",
+                    "primitive_id": "ui.prompt_select",
                     "primitive_version": 1,
                     "inputs": {},
                     "writes": [],
@@ -109,7 +109,7 @@ def test_wizard_definition_v3_draft_activate_history_and_rollback(tmp_path: Path
 
     active1 = client.get("/import/ui/wizard-definition").json()["definition"]
     assert active1["version"] == 3
-    assert active1["entry_step_id"] == "select_authors"
+    assert active1["entry_step_id"] == "pick_author"
 
     history = client.get("/import/ui/wizard-definition/history")
     assert history.status_code == 200
@@ -141,7 +141,7 @@ def test_load_or_bootstrap_replaces_invalid_v3_with_v2_default(tmp_path: Path) -
                 {
                     "step_id": "Bad.Step",
                     "op": {
-                        "primitive_id": "select_authors",
+                        "primitive_id": "ui.prompt_select",
                         "primitive_version": 1,
                         "inputs": {},
                         "writes": [],

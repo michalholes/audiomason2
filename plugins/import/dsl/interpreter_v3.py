@@ -184,6 +184,19 @@ def _record_trace(
     )
 
 
+def _guard_parallel_map_writes(step: dict[str, Any]) -> None:
+    primitive_id = str(step.get("primitive_id") or "")
+    primitive_version = int(step.get("primitive_version") or 0)
+    writes_any = step.get("writes")
+    if (
+        primitive_id == "parallel.map"
+        and primitive_version == 1
+        and isinstance(writes_any, list)
+        and writes_any
+    ):
+        raise FinalizeError("parallel.map@1 writes must be empty")
+
+
 def run_automatic_steps(
     *,
     effective_model: dict[str, Any],
@@ -199,6 +212,7 @@ def run_automatic_steps(
             break
         if not is_non_interactive(primitive_id, primitive_version):
             raise FinalizeError("non_prompt_submit_payload_forbidden")
+        _guard_parallel_map_writes(step)
         inputs = resolve_inputs(step, state)
         outputs, jobs = execute_non_prompt(
             session_id=session_id,
@@ -225,7 +239,7 @@ def run_automatic_steps(
                 step_id=current,
                 primitive_id=primitive_id,
                 primitive_version=primitive_version,
-                result="completed",
+                result="OK",
                 writes=writes,
             )
         next_step = _next_step_id(effective_model, current, state)
@@ -236,7 +250,7 @@ def run_automatic_steps(
             step_id=current,
             primitive_id=primitive_id,
             primitive_version=primitive_version,
-            result="executed",
+            result="OK",
             writes=writes,
         )
         if next_step is None:
@@ -266,10 +280,6 @@ def submit_current_step(
     outputs = validate_submit_payload(primitive_id, primitive_version, payload)
     inputs = resolve_inputs(step, state)
     state = apply_writes(state=state, step=step, inputs=inputs, op_outputs=outputs)
-    step_answers = dict(state.get("answers") or {})
-    step_answers[step_id] = dict(outputs)
-    state["answers"] = step_answers
-    state["inputs"] = dict(step_answers)
     completed = list(state.get("completed_step_ids") or [])
     if step_id not in completed:
         completed.append(step_id)
@@ -288,7 +298,7 @@ def submit_current_step(
         step_id=step_id,
         primitive_id=primitive_id,
         primitive_version=primitive_version,
-        result="accepted",
+        result="OK",
         writes=writes,
     )
     if next_step is None:

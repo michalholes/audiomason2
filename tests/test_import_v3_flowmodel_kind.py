@@ -15,7 +15,7 @@ WIZARD_DEFINITION_REL_PATH = import_module(
 ).WIZARD_DEFINITION_REL_PATH
 
 
-PROMPT_V3 = {
+PROMPT_V3_WITH_WRITES = {
     "version": 3,
     "entry_step_id": "ask_name",
     "nodes": [
@@ -84,7 +84,7 @@ def _make_engine(tmp_path: Path) -> ImportWizardEngine:
 def test_get_flow_model_v3_declares_kind_and_primitive_metadata(tmp_path: Path) -> None:
     engine = _make_engine(tmp_path)
     fs = engine.get_file_service()
-    atomic_write_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_REL_PATH, PROMPT_V3)
+    atomic_write_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_REL_PATH, PROMPT_V3_WITH_WRITES)
 
     flow_model = engine.get_flow_model()
 
@@ -99,3 +99,47 @@ def test_get_flow_model_v3_declares_kind_and_primitive_metadata(tmp_path: Path) 
     out = engine.submit_step(state["session_id"], "ask_name", {"value": "Ada"})
     assert out["status"] == "completed"
     assert out["answers"]["ask_name"]["value"] == "Ada"
+    assert out["inputs"] == {}
+
+
+PROMPT_V3_NO_WRITES = {
+    "version": 3,
+    "entry_step_id": "ask_name",
+    "nodes": [
+        {
+            "step_id": "ask_name",
+            "op": {
+                "primitive_id": "ui.prompt_text",
+                "primitive_version": 1,
+                "inputs": {},
+                "writes": [],
+            },
+        },
+        {
+            "step_id": "stop",
+            "op": {
+                "primitive_id": "ctrl.stop",
+                "primitive_version": 1,
+                "inputs": {},
+                "writes": [],
+            },
+        },
+    ],
+    "edges": [{"from": "ask_name", "to": "stop"}],
+}
+
+
+def test_prompt_submit_without_writes_keeps_answers_and_inputs_empty(tmp_path: Path) -> None:
+    engine = _make_engine(tmp_path)
+    fs = engine.get_file_service()
+    atomic_write_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_REL_PATH, PROMPT_V3_NO_WRITES)
+
+    state = engine.create_session("inbox", "")
+    assert state["status"] == "in_progress"
+
+    out = engine.submit_step(state["session_id"], "ask_name", {"value": "Ada"})
+
+    assert out["status"] == "completed"
+    assert out["answers"] == {}
+    assert out["inputs"] == {}
+    assert [entry["result"] for entry in out["trace"]] == ["OK", "OK"]

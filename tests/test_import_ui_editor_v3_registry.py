@@ -82,7 +82,13 @@ def test_import_ui_v3_registry_endpoint_returns_bootstrapped_primitives(tmp_path
     primitive_ids = {str(item.get("primitive_id")) for item in registry.get("primitives", [])}
     assert primitive_ids
     assert all(primitive_ids)
-    assert "select_authors" in primitive_ids
+    assert "select_authors" not in primitive_ids
+    assert {
+        "ui.message",
+        "ui.prompt_text",
+        "ui.prompt_select",
+        "ui.prompt_confirm",
+    } <= primitive_ids
 
 
 def test_v3_registry_api_module_uses_existing_editor_endpoints_only() -> None:

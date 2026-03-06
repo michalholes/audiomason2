@@ -54,15 +54,6 @@ REGISTRY_ENTRIES: list[dict[str, Any]] = [
         "determinism_notes": "deterministic",
         "allowed_errors": ["VALIDATION_ERROR"],
     },
-    {
-        "primitive_id": "select_authors",
-        "version": 1,
-        "phase": 1,
-        "inputs_schema": _object_schema(),
-        "outputs_schema": _object_schema(required=["selection"]),
-        "determinism_notes": "legacy_compat",
-        "allowed_errors": ["VALIDATION_ERROR"],
-    },
 ]
 
 
@@ -70,7 +61,6 @@ PROMPT_IDS: set[str] = {
     "ui.prompt_text",
     "ui.prompt_select",
     "ui.prompt_confirm",
-    "select_authors",
 }
 
 
@@ -78,7 +68,6 @@ OUTPUT_KEYS: dict[str, str] = {
     "ui.prompt_text": "value",
     "ui.prompt_select": "selection",
     "ui.prompt_confirm": "confirmed",
-    "select_authors": "selection",
 }
 
 
@@ -97,7 +86,7 @@ def validate_submit_payload(
         if set(payload.keys()) != {"value"}:
             raise ValueError("ui.prompt_text@1 payload must be {'value': <json>}")
         return {"value": payload.get("value")}
-    if primitive_id in {"ui.prompt_select", "select_authors"}:
+    if primitive_id == "ui.prompt_select":
         if set(payload.keys()) != {"selection"}:
             raise ValueError("ui.prompt_select@1 payload must be {'selection': <json>}")
         return {"selection": payload.get("selection")}

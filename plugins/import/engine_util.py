@@ -139,7 +139,7 @@ def sync_session_cursor(state: dict[str, Any], *, step_id: str | None = None) ->
     return state
 
 
-MAX_TRACE_EVENTS = 128
+MAX_TRACE_EVENTS = 1000
 
 
 def append_trace_event(state: dict[str, Any], event: dict[str, Any]) -> dict[str, Any]:

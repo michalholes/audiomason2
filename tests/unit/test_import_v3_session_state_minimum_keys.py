@@ -8,6 +8,7 @@ from pathlib import Path
 from audiomason.core.config import ConfigResolver
 
 ImportWizardEngine = import_module("plugins.import.engine").ImportWizardEngine
+append_trace_event = import_module("plugins.import.engine_util").append_trace_event
 sync_session_cursor = import_module("plugins.import.engine_util").sync_session_cursor
 _ensure_session_state_fields = import_module(
     "plugins.import.engine_util"
@@ -108,3 +109,26 @@ def test_ensure_session_state_fields_upgrades_legacy_state() -> None:
     assert out["cursor"]["step_id"] == "hello"
     assert out["vars"] == {}
     assert out["jobs"] == {"emitted": [], "submitted": []}
+
+
+def test_append_trace_event_keeps_only_last_1000_events() -> None:
+    state = {"trace": []}
+
+    for index in range(1005):
+        append_trace_event(
+            state,
+            {
+                "step_id": f"step_{index}",
+                "primitive_id": "ui.message",
+                "primitive_version": 1,
+                "result": "OK",
+                "writes": [],
+            },
+        )
+
+    trace = state["trace"]
+    assert len(trace) == 1000
+    assert trace[0]["step_id"] == "step_5"
+    assert trace[-1]["step_id"] == "step_1004"
+    assert trace[0]["seq"] == 1
+    assert trace[-1]["seq"] == 1000
