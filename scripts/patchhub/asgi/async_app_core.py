@@ -54,6 +54,7 @@ class AsyncAppCore:
             lock_path=self.jail.lock_path(),
             jobs_root=self.jobs_root,
             executor=AsyncRunnerExecutor(),
+            ipc_handshake_wait_s=cfg.runner.ipc_handshake_wait_s,
         )
 
         self.indexer = AsyncJobsRunsIndexer(core=self)

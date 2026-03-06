@@ -189,14 +189,38 @@
 		return false;
 	}
 
+	function compactJson(value) {
+		try {
+			return JSON.stringify(value);
+		} catch (e) {
+			return "{}";
+		}
+	}
+
 	function formatLiveEvent(ev) {
 		var t = String(ev.type || "");
 		if (t === "hello") {
-			return `HELLO protocol=${String(ev.protocol || "")} mode=${String(ev.runner_mode || "")} issue=${String(ev.issue_id || "")}`;
+			return (
+				`HELLO protocol=${String(ev.protocol || "")} ` +
+				`mode=${String(ev.runner_mode || "")} ` +
+				`issue=${String(ev.issue_id || "")}`
+			);
 		}
 		if (t === "result") {
 			const ok = ev.ok ? "SUCCESS" : "FAIL";
 			return `RESULT: ${ok} rc=${String(ev.return_code)}`;
+		}
+		if (t === "reply") {
+			const replyData =
+				ev.data && typeof ev.data === "object" ? compactJson(ev.data) : "{}";
+			return (
+				`REPLY cmd=${String(ev.cmd || "")} ` +
+				`cmd_id=${String(ev.cmd_id || "")} ` +
+				`ok=${String(ev.ok === true)} data=${replyData}`
+			);
+		}
+		if (t === "control") {
+			return `CONTROL event=${String(ev.event || "")} ${compactJson(ev)}`;
 		}
 
 		var showPrefixes = liveLevel === "debug";
@@ -215,6 +239,10 @@
 			line = parts.join(" | ");
 		} else {
 			line = String(ev.msg || "");
+		}
+
+		if (!line) {
+			line = `JSON ${compactJson(ev)}`;
 		}
 
 		if (ev.stdout || ev.stderr) {

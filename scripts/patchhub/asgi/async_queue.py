@@ -36,7 +36,12 @@ def is_lock_held_sync(lock_path: Path) -> bool:
         fd.close()
 
 
-def _inject_web_overrides(argv: list[str], job_id: str) -> list[str]:
+def _inject_web_overrides(
+    argv: list[str],
+    job_id: str,
+    *,
+    ipc_handshake_wait_s: int,
+) -> list[str]:
     out = list(argv)
 
     script_idx = -1
@@ -59,6 +64,10 @@ def _inject_web_overrides(argv: list[str], job_id: str) -> list[str]:
 
     if not _has_override("ipc_socket_enabled"):
         overrides.extend(["--override", "ipc_socket_enabled=true"])
+    if not _has_override("ipc_handshake_enabled"):
+        overrides.extend(["--override", "ipc_handshake_enabled=true"])
+    if not _has_override("ipc_handshake_wait_s"):
+        overrides.extend(["--override", f"ipc_handshake_wait_s={int(ipc_handshake_wait_s)}"])
     if not _has_override("ipc_socket_path"):
         overrides.extend(["--override", f"ipc_socket_path={job_socket_path(job_id)}"])
 
@@ -116,11 +125,13 @@ class AsyncJobQueue:
         lock_path: Path,
         jobs_root: Path,
         executor: AsyncRunnerExecutor,
+        ipc_handshake_wait_s: int = 1,
     ) -> None:
         self._repo_root = repo_root
         self._lock_path = lock_path
         self._jobs_root = jobs_root
         self._executor = executor
+        self._ipc_handshake_wait_s = int(ipc_handshake_wait_s)
 
         self._mu = asyncio.Lock()
         self._stop = asyncio.Event()
@@ -272,7 +283,11 @@ class AsyncJobQueue:
             runner_log = job_dir / "runner.log"
 
             try:
-                effective_cmd = _inject_web_overrides(job.canonical_command, job_id)
+                effective_cmd = _inject_web_overrides(
+                    job.canonical_command,
+                    job_id,
+                    ipc_handshake_wait_s=self._ipc_handshake_wait_s,
+                )
 
                 sock_path = Path(job_socket_path(job_id))
                 sock_path.parent.mkdir(parents=True, exist_ok=True)
