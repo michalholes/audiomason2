@@ -40,7 +40,7 @@ def _scan_job_dirs_and_sig(jobs_root: Path) -> tuple[tuple[int, int], list[str]]
 
     with it:
         for ent in it:
-            if not ent.is_dir(follow_symlinks=False):
+            if not ent.is_dir():
                 continue
             name = ent.name
             names.append(name)

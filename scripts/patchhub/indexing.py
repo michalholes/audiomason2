@@ -154,7 +154,7 @@ def _scan_matching_logs(
             except Exception:
                 continue
             try:
-                st = ent.stat(follow_symlinks=False)
+                st = ent.stat()
             except Exception:
                 continue
             if not statlib.S_ISREG(st.st_mode):

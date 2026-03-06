@@ -73,7 +73,7 @@ def _latest_by_issue(
             except Exception:
                 continue
             try:
-                st = ent.stat(follow_symlinks=False)
+                st = ent.stat()
             except Exception:
                 continue
             if not statlib.S_ISREG(st.st_mode):
@@ -363,7 +363,7 @@ class AsyncJobsRunsIndexer:
 
         with it:
             for ent in it:
-                if not ent.is_dir(follow_symlinks=False):
+                if not ent.is_dir():
                     continue
                 jid = ent.name
                 seen.add(jid)
@@ -401,16 +401,23 @@ class AsyncJobsRunsIndexer:
                 if status != "canceled" or issue_id <= 0:
                     continue
 
+                job_mtime_ns = int(getattr(st, "st_mtime_ns", int(st.st_mtime * 1_000_000_000)))
+
                 log_path = Path(jobs_root) / jid / "runner.log"
                 use_log = False
+                log_mtime_ns: int | None = None
                 st2 = st
                 try:
                     st_log = log_path.stat()
                     if statlib.S_ISREG(st_log.st_mode):
                         st2 = st_log
                         use_log = True
+                        log_mtime_ns = int(
+                            getattr(st_log, "st_mtime_ns", int(st_log.st_mtime * 1_000_000_000))
+                        )
                 except Exception:
                     use_log = False
+                    log_mtime_ns = None
 
                 rel = str(
                     Path("artifacts") / "web_jobs" / jid / ("runner.log" if use_log else "job.json")
@@ -426,7 +433,10 @@ class AsyncJobsRunsIndexer:
                 )
 
                 count += 1
-                mtime_ns = int(getattr(st2, "st_mtime_ns", int(st2.st_mtime * 1_000_000_000)))
+                # Signature must incorporate job.json changes even when runner.log exists.
+                mtime_ns = job_mtime_ns
+                if log_mtime_ns is not None and log_mtime_ns > mtime_ns:
+                    mtime_ns = log_mtime_ns
                 if mtime_ns > max_mtime_ns:
                     max_mtime_ns = mtime_ns
 
