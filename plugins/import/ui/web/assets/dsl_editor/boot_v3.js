@@ -369,9 +369,7 @@
 			textArea.classList.remove("wdHidden");
 		}
 		const root = document.querySelector(".wdLayoutRoot");
-		if (root) {
-			root.classList.add("is-hidden");
-		}
+		if (root) root.classList.add("is-hidden");
 		renderSummary(
 			definition,
 			graphOps.primitiveMeta(graphOps.currentNode(), state.registry),

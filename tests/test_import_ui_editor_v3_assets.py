@@ -85,6 +85,9 @@ def test_import_ui_index_loads_v3_editor_assets_in_order(tmp_path: Path) -> None
         positions.append(html.index(needle))
 
     assert positions == sorted(positions)
+    assert html.index("/import/ui/assets/dsl_editor/graph_ops.js") < html.index(
+        "/import/ui/assets/dsl_editor/boot_v3.js"
+    )
     assert html.index(ASSET_PATHS[-1]) < html.index("/import/ui/assets/wizard_definition_editor.js")
 
 

@@ -24,12 +24,19 @@
 		return JSON.parse(textValue);
 	}
 
+	function currentWriteItem(pathInput, valueInput) {
+		return {
+			to_path: pathInput.value,
+			value: parseJSON(valueInput.value, null),
+		};
+	}
+
 	function writeRow(writeItem, index, onPatch, onRemove) {
 		const wrap = el("div", "flowStepSection");
 		const pathInput = document.createElement("input");
 		pathInput.value = String((writeItem && writeItem.to_path) || "");
 		pathInput.addEventListener("change", function () {
-			onPatch(index, { to_path: pathInput.value, value: writeItem.value });
+			onPatch(index, currentWriteItem(pathInput, valueInput));
 		});
 		wrap.appendChild(row("to_path", pathInput));
 
@@ -37,10 +44,7 @@
 		valueInput.rows = 4;
 		valueInput.value = JSON.stringify(writeItem && writeItem.value, null, 2);
 		valueInput.addEventListener("change", function () {
-			onPatch(index, {
-				to_path: pathInput.value,
-				value: parseJSON(valueInput.value, null),
-			});
+			onPatch(index, currentWriteItem(pathInput, valueInput));
 		});
 		wrap.appendChild(row("value", valueInput));
 

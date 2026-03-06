@@ -222,6 +222,10 @@
 		setSelectedStep(nodes[0] ? String(nodes[0].step_id || "") : null);
 	}
 
+	function createEmptyWrite() {
+		return { to_path: "", value: null };
+	}
+
 	function addWrite() {
 		withSelectedNode(function (node) {
 			if (!node.op || typeof node.op !== "object") {
@@ -230,7 +234,7 @@
 			if (!Array.isArray(node.op.writes)) {
 				node.op.writes = [];
 			}
-			node.op.writes.push({ to_path: "$.state.vars.value", value: null });
+			node.op.writes.push(createEmptyWrite());
 		});
 	}
 
