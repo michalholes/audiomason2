@@ -2,15 +2,16 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 @dataclass(frozen=True)
 class StepResult:
-    rc: Optional[int]
-    stdout: Optional[str]
-    stderr: Optional[str]
+    rc: int | None
+    stdout: str | None
+    stderr: str | None
     value: Any
+
 
 def _value_as_str(v: Any) -> str:
     if v is None:
@@ -20,7 +21,7 @@ def _value_as_str(v: Any) -> str:
     return str(v)
 
 
-def _value_as_list(v: Any) -> List[str]:
+def _value_as_list(v: Any) -> list[str]:
     if v is None:
         return []
     if isinstance(v, list) and all(isinstance(x, str) for x in v):
@@ -29,7 +30,8 @@ def _value_as_list(v: Any) -> List[str]:
         return [v]
     raise SystemExit("FAIL: value must be list[str] or string")
 
-def _as_list(v: Any) -> List[str]:
+
+def _as_list(v: Any) -> list[str]:
     if v is None:
         return []
     if isinstance(v, str):
@@ -39,8 +41,14 @@ def _as_list(v: Any) -> List[str]:
     raise SystemExit("FAIL: evaluation rule must be string or list[str]")
 
 
-def evaluate_step(*, rules: Dict[str, Any], result: StepResult, prior: Dict[int, StepResult],
-                  test_id: str, step_index: int) -> tuple[bool, str]:
+def evaluate_step(
+    *,
+    rules: dict[str, Any],
+    result: StepResult,
+    prior: dict[int, StepResult],
+    test_id: str,
+    step_index: int,
+) -> tuple[bool, str]:
     rc_eq = rules.get("rc_eq")
     rc_ne = rules.get("rc_ne")
     if rc_eq is not None:
@@ -68,7 +76,6 @@ def evaluate_step(*, rules: Dict[str, Any], result: StepResult, prior: Dict[int,
     for pat in out_regex:
         if re.search(pat, result.stdout or "", flags=re.MULTILINE) is None:
             return False, f"stdout regex not matched: {pat}"
-
 
     err_contains = _as_list(rules.get("stderr_contains"))
     for s in err_contains:

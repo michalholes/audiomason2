@@ -8,7 +8,6 @@ import time
 import tomllib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, List
 
 from badguys.bdg_evaluator import StepResult
 from badguys.bdg_loader import BdgStep, BdgTest
@@ -69,19 +68,14 @@ def _runner_socket_path(
 ) -> Path:
     if not test_mode:
         return patches_dir / socket_name
-    return (
-        patches_dir
-        / "_test_mode"
-        / f"issue_{issue_id}_pid_{runner_pid}"
-        / socket_name
-    )
+    return patches_dir / "_test_mode" / f"issue_{issue_id}_pid_{runner_pid}" / socket_name
 
 
 @dataclass(frozen=True)
 class ExecOutcome:
     ok: bool
-    results: List[StepResult]
-    messages: List[str]
+    results: list[StepResult]
+    messages: list[str]
 
 
 def execute_bdg(
@@ -95,7 +89,7 @@ def execute_bdg(
     mats: MaterializedAssets,
     step_runner_cfg: dict[str, object],
 ) -> list[StepResult]:
-    results: List[StepResult] = []
+    results: list[StepResult] = []
     for idx, step in enumerate(bdg.steps):
         results.append(
             _exec_one(
@@ -139,7 +133,6 @@ def execute_bdg_step(
         step_index=int(step_index),
         step_runner_cfg=step_runner_cfg,
     )
-
 
 
 def _exec_one(
@@ -290,9 +283,7 @@ def _exec_one(
                 except subprocess.TimeoutExpired:
                     elapsed = int(time.monotonic() - started)
                     mm, ss = divmod(elapsed, 60)
-                    _emit_hb(
-                        f"BadGuys {test_id} step={int(step_index)} ELAPSED: {mm:02d}:{ss:02d}"
-                    )
+                    _emit_hb(f"BadGuys {test_id} step={int(step_index)} ELAPSED: {mm:02d}:{ss:02d}")
                     continue
                 except KeyboardInterrupt:
                     try:
@@ -341,8 +332,6 @@ def _exec_one(
                 (artifacts_dir / "runner.stderr.txt").write_text(stderr, encoding="utf-8")
 
         return StepResult(rc=rc, stdout=None, stderr=None, value=value_text)
-
-
 
     if op == "DISCOVER_TESTS":
         from badguys.discovery import discover_tests
@@ -514,7 +503,6 @@ def _exec_one(
             )
         return StepResult(rc=0, stdout=None, stderr=None, value=str(sentinel))
 
-
     if op == "DELETE_PATCHED_ZIP":
         patched_zip = repo_root / "patches" / "patched.zip"
         try:
@@ -653,8 +641,7 @@ def _exec_one(
         ws_marker = ws_repo / marker_rel
         ws_marker.parent.mkdir(parents=True, exist_ok=True)
         ws_marker.write_text(
-            "badguys commit marker\n"
-            "test\n",
+            "badguys commit marker\ntest\n",
             encoding="utf-8",
         )
         try:
@@ -679,6 +666,7 @@ def _exec_one(
         inner_name = f"issue_{issue}__badguys_fix_marker__{stamp}.patch"
         import io
         import zipfile
+
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
             info = zipfile.ZipInfo(inner_name)

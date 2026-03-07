@@ -2,12 +2,11 @@ from __future__ import annotations
 
 import io
 import json
+import tomllib
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict
-
-import tomllib
+from typing import Any
 
 from badguys.bdg_loader import BdgAsset, BdgTest
 from badguys.bdg_recipe import (
@@ -23,7 +22,7 @@ from badguys.bdg_subst import SubstCtx, subst_text
 @dataclass(frozen=True)
 class MaterializedAssets:
     root: Path
-    files: Dict[str, Path]
+    files: dict[str, Path]
 
 
 def _safe_name(name: str) -> str:
@@ -80,9 +79,7 @@ def _string_list(
     field_name: str,
 ) -> list[str]:
     if not (isinstance(value, list) and all(isinstance(item, str) for item in value)):
-        raise SystemExit(
-            f"FAIL: bdg recipe: {test_id}.{asset_id}.{field_name} must be list[str]"
-        )
+        raise SystemExit(f"FAIL: bdg recipe: {test_id}.{asset_id}.{field_name} must be list[str]")
     return list(value)
 
 
@@ -195,7 +192,7 @@ def materialize_assets(
 ) -> MaterializedAssets:
     root = repo_root / "patches" / "badguys_artifacts" / f"issue_{subst.issue_id}" / bdg.test_id
     root.mkdir(parents=True, exist_ok=True)
-    files: Dict[str, Path] = {}
+    files: dict[str, Path] = {}
     subjects = subject_relpaths(
         repo_root=repo_root,
         config_path=config_path,
@@ -320,10 +317,7 @@ def _materialize_one(
                 ensure_allowed_keys(
                     table=recipe,
                     allowed={"declared_subjects", "kind", "subject", "zip_name"},
-                    label=(
-                        "recipes.tests."
-                        f"{test_id}.assets.{asset.asset_id}.entries.{ent.name}"
-                    ),
+                    label=(f"recipes.tests.{test_id}.assets.{asset.asset_id}.entries.{ent.name}"),
                 )
                 zip_name = recipe.get("zip_name")
                 if not isinstance(zip_name, str) or not zip_name:

@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 
 
@@ -36,6 +37,7 @@ class StatusReporter:
         self._thread: threading.Thread | None = None
         self._tty_line_open = False
         self._tty_last_len = 0
+        self._heartbeat_hook: Callable[[], None] | None = None
 
     def start(self) -> None:
         if not self._enabled:
@@ -69,6 +71,10 @@ class StatusReporter:
     def get_stage(self) -> str:
         with self._lock:
             return self._state.stage
+
+    def set_heartbeat_hook(self, hook: Callable[[], None] | None) -> None:
+        with self._lock:
+            self._heartbeat_hook = hook
 
     def break_line(self) -> None:
         """Terminate an active TTY status line with a newline.
@@ -113,6 +119,16 @@ class StatusReporter:
         sys.stderr.write(f"HEARTBEAT: {stage} elapsed={self._elapsed_mmss()}\n")
         sys.stderr.flush()
 
+    def _emit_heartbeat_hook(self) -> None:
+        with self._lock:
+            hook = self._heartbeat_hook
+        if hook is None:
+            return
+        try:
+            hook()
+        except Exception:
+            return
+
     def _run(self) -> None:
         is_tty = sys.stderr.isatty()
         interval = self._interval_tty if is_tty else self._interval_non_tty
@@ -125,5 +141,6 @@ class StatusReporter:
                     self._render_tty()
                 else:
                     self._render_non_tty()
+                self._emit_heartbeat_hook()
                 next_tick = now + interval
             self._stop.wait(0.2)

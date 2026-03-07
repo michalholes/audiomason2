@@ -43,6 +43,18 @@ def build_startup_logger_and_ipc(
         run_timeout_s=policy.runner_subprocess_timeout_s,
     )
 
+    def _emit_machine_heartbeat() -> None:
+        logger.emit(
+            severity="DEBUG",
+            channel="DETAIL",
+            kind="HEARTBEAT",
+            message="HEARTBEAT\n",
+            to_screen=False,
+            to_log=False,
+        )
+
+    status.set_heartbeat_hook(_emit_machine_heartbeat)
+
     ipc: IpcController | None = None
     startup_handshake_enabled = bool(getattr(policy, "ipc_handshake_enabled", False))
     startup_ready = False

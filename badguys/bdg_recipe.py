@@ -1,12 +1,10 @@
 from __future__ import annotations
 
+import tomllib
 from copy import deepcopy
-from functools import lru_cache
+from functools import cache
 from pathlib import Path
 from typing import Any
-
-import tomllib
-
 
 _BASE_CFG_KEYS = ("suite", "lock", "guard", "filters", "runner")
 
@@ -16,7 +14,7 @@ def _config_relpath(config_path: Path | str) -> str:
     return path.as_posix()
 
 
-@lru_cache(maxsize=None)
+@cache
 def _load_raw(repo_root_str: str, config_relpath: str) -> dict[str, Any]:
     repo_root = Path(repo_root_str)
     path = repo_root / Path(config_relpath)
@@ -73,9 +71,7 @@ def subject_relpaths(
     out: dict[str, str] = {}
     for name, item in table.items():
         if not isinstance(item, dict):
-            raise SystemExit(
-                f"FAIL: bdg recipe: subjects.tests.{test_id}.{name} must be a table"
-            )
+            raise SystemExit(f"FAIL: bdg recipe: subjects.tests.{test_id}.{name} must be a table")
         ensure_allowed_keys(
             table=item,
             allowed={"relpath"},
@@ -84,8 +80,7 @@ def subject_relpaths(
         relpath = item.get("relpath")
         if not isinstance(relpath, str) or not relpath:
             raise SystemExit(
-                f"FAIL: bdg recipe: subjects.tests.{test_id}.{name}.relpath "
-                "must be a string"
+                f"FAIL: bdg recipe: subjects.tests.{test_id}.{name}.relpath must be a string"
             )
         out[str(name)] = relpath
     return out

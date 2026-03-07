@@ -8,11 +8,10 @@ import os
 import shutil
 import sys
 import time
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
-
-import tomllib
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -62,7 +61,7 @@ def _load_config(repo_root: Path, config_path: Path) -> dict:
     return tomllib.loads(p.read_text(encoding="utf-8"))
 
 
-def _resolve_value(cli: Optional[str], cfg_val: Optional[str], default: str) -> str:
+def _resolve_value(cli: str | None, cfg_val: str | None, default: str) -> str:
     if cli is not None:
         return str(cli)
     if cfg_val is not None:
@@ -73,10 +72,10 @@ def _resolve_value(cli: Optional[str], cfg_val: Optional[str], default: str) -> 
 def _make_cfg(
     repo_root: Path,
     config_path: Path,
-    cli_runner_verbosity: Optional[str],
-    cli_console_verbosity: Optional[str],
-    cli_log_verbosity: Optional[str],
-    cli_per_run_logs_post_run: Optional[str],
+    cli_runner_verbosity: str | None,
+    cli_console_verbosity: str | None,
+    cli_log_verbosity: str | None,
+    cli_per_run_logs_post_run: str | None,
 ) -> SuiteCfg:
     raw = _load_config(repo_root, config_path)
     suite = raw.get("suite", {})
@@ -99,9 +98,11 @@ def _make_cfg(
     env_py = os.environ.get("AM_PATCH_BADGUYS_RUNNER_PYTHON")
     if env_py and runner_cmd:
         head = str(runner_cmd[0])
-        if head in {"python", "python3", "/usr/bin/python3", "/usr/bin/python"} or head.endswith(
-            "/python3"
-        ) or head.endswith("/python"):
+        if (
+            head in {"python", "python3", "/usr/bin/python3", "/usr/bin/python"}
+            or head.endswith("/python3")
+            or head.endswith("/python")
+        ):
             runner_cmd[0] = str(env_py)
 
     runner_verbosity = _resolve_value(
@@ -225,7 +226,7 @@ def _ensure_test_artifacts(ctx: Ctx, test_id: str) -> None:
     )
 
 
-def _log(ctx: Ctx, *, level: str, test_id: Optional[str], obj: dict[str, Any]) -> None:
+def _log(ctx: Ctx, *, level: str, test_id: str | None, obj: dict[str, Any]) -> None:
     if not _want(ctx.log_verbosity, level):
         return
 
@@ -260,7 +261,7 @@ def _post_run_cleanup_logs(cfg: SuiteCfg, per_test_ok: dict[str, bool]) -> None:
             shutil.rmtree(d)
 
 
-def _cleanup_issue_artifacts(ctx: Ctx, *, issue_id: str, test_id: Optional[str]) -> None:
+def _cleanup_issue_artifacts(ctx: Ctx, *, issue_id: str, test_id: str | None) -> None:
     repo_root = ctx.repo_root
 
     def _rm_tree(p: Path) -> None:
@@ -325,8 +326,8 @@ def _rules_for_step(evaluation: dict, *, test_id: str, step_index: int) -> dict:
 
 
 def _run_test_plan(test, ctx: Ctx) -> bool:
-    from badguys.bdg_executor import execute_bdg_step
     from badguys.bdg_evaluator import StepResult, evaluate_step
+    from badguys.bdg_executor import execute_bdg_step
     from badguys.bdg_loader import BdgTest
     from badguys.bdg_materializer import materialize_assets
     from badguys.bdg_subst import make_subst_ctx
@@ -519,8 +520,8 @@ def main(argv: list[str]) -> int:
     )
     run_id = time.strftime("%Y%m%d_%H%M%S")
 
-    from badguys.discovery import discover_tests
     from badguys._util import acquire_lock, fail_commit_limit, format_result_line, release_lock
+    from badguys.discovery import discover_tests
 
     acquire_lock(
         repo_root,
@@ -554,8 +555,7 @@ def main(argv: list[str]) -> int:
         if unknown:
             joined = ", ".join(unknown)
             raise SystemExit(
-                "FAIL: runner.full_runner_tests references unknown test_id(s): "
-                f"{joined}"
+                f"FAIL: runner.full_runner_tests references unknown test_id(s): {joined}"
             )
 
         if args.list_tests:

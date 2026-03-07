@@ -124,6 +124,9 @@ def record_ipc_stream(
             if valid is not None:
                 result = valid
 
+    if s is None:
+        return None, ""
+
     try:
         s.setblocking(False)
         pending = ""

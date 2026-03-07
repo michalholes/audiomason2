@@ -1,10 +1,9 @@
 from __future__ import annotations
 
+import tomllib
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable, List, Optional
-
-import tomllib
 
 from badguys.bdg_loader import BdgTest, load_bdg_test
 
@@ -25,7 +24,7 @@ class TestDef:
     run: Callable[..., object]
 
 
-class TestList(List[TestDef]):
+class TestList(list[TestDef]):
     commit_limit: int
     abort_on_guard_fail: bool
 
@@ -39,7 +38,7 @@ def _load_toml(path: Path) -> dict:
 def _policy_from_config(
     repo_root: Path,
     config_path: Path,
-    cli_commit_limit: Optional[int],
+    cli_commit_limit: int | None,
     cli_include: list[str],
     cli_exclude: list[str],
 ) -> tuple[SuitePolicy, list[str], list[str]]:
@@ -48,7 +47,9 @@ def _policy_from_config(
     guard = raw.get("guard", {})
     filters = raw.get("filters", {})
 
-    commit_limit = int(cli_commit_limit if cli_commit_limit is not None else suite.get("commit_limit", 1))
+    commit_limit = int(
+        cli_commit_limit if cli_commit_limit is not None else suite.get("commit_limit", 1)
+    )
     require_guard_test = bool(guard.get("require_guard_test", True))
     guard_test_name = str(guard.get("guard_test_name", "test_000_test_mode_smoke"))
     abort_on_guard_fail = bool(guard.get("abort_on_guard_fail", True))
@@ -68,7 +69,7 @@ def _policy_from_config(
     )
 
 
-def _load_test_from_bdg_file(path: Path) -> Optional[TestDef]:
+def _load_test_from_bdg_file(path: Path) -> TestDef | None:
     bdg = load_bdg_test(path)
 
     def _run(_ctx) -> BdgTest:
@@ -86,11 +87,13 @@ def discover_tests(
     *,
     repo_root: Path,
     config_path: Path,
-    cli_commit_limit: Optional[int],
+    cli_commit_limit: int | None,
     cli_include: list[str],
     cli_exclude: list[str],
 ) -> TestList:
-    policy, include, exclude = _policy_from_config(repo_root, config_path, cli_commit_limit, cli_include, cli_exclude)
+    policy, include, exclude = _policy_from_config(
+        repo_root, config_path, cli_commit_limit, cli_include, cli_exclude
+    )
 
     tests_dir = repo_root / "badguys" / "tests"
     tests: list[TestDef] = []

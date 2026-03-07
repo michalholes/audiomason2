@@ -1,12 +1,10 @@
 from __future__ import annotations
 
+import re
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
-import re
-from typing import Any, Dict, List, Optional
-
-import tomllib
-
+from typing import Any
 
 _FORBIDDEN_EVAL_KEYS = {
     "rc_eq",
@@ -64,14 +62,14 @@ class BdgAssetEntry:
 class BdgAsset:
     asset_id: str
     kind: str
-    content: Optional[str]
-    entries: List[BdgAssetEntry]
+    content: str | None
+    entries: list[BdgAssetEntry]
 
 
 @dataclass(frozen=True)
 class BdgStep:
     op: str
-    params: Dict[str, Any]
+    params: dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -79,8 +77,8 @@ class BdgTest:
     test_id: str
     makes_commit: bool
     is_guard: bool
-    assets: Dict[str, BdgAsset]
-    steps: List[BdgStep]
+    assets: dict[str, BdgAsset]
+    steps: list[BdgStep]
 
 
 def _as_str(d: dict, key: str, default: str = "") -> str:
@@ -159,7 +157,6 @@ def _validate_asset(item: dict, *, asset_id: str, kind: str) -> None:
         _validate_toml_delta(label=f"asset '{asset_id}'", content=content)
 
 
-
 def load_bdg_test(path: Path) -> BdgTest:
     raw = tomllib.loads(path.read_text(encoding="utf-8"))
     meta = raw.get("meta", {})
@@ -171,7 +168,7 @@ def load_bdg_test(path: Path) -> BdgTest:
     makes_commit = _as_bool(meta, "makes_commit", False)
     is_guard = _as_bool(meta, "is_guard", False)
 
-    assets: Dict[str, BdgAsset] = {}
+    assets: dict[str, BdgAsset] = {}
     for item in raw.get("asset", []):
         if not isinstance(item, dict):
             raise SystemExit("FAIL: bdg: [[asset]] must be a table")
@@ -180,7 +177,7 @@ def load_bdg_test(path: Path) -> BdgTest:
         _validate_asset(item, asset_id=asset_id, kind=kind)
         content = item.get("content")
 
-        entries: List[BdgAssetEntry] = []
+        entries: list[BdgAssetEntry] = []
         for ent in item.get("entry", []):
             if not isinstance(ent, dict):
                 raise SystemExit("FAIL: bdg: [[asset.entry]] must be a table")
@@ -204,7 +201,7 @@ def load_bdg_test(path: Path) -> BdgTest:
             raise SystemExit(f"FAIL: bdg: duplicate asset id: {asset_id}")
         assets[asset_id] = BdgAsset(asset_id=asset_id, kind=kind, content=content, entries=entries)
 
-    steps: List[BdgStep] = []
+    steps: list[BdgStep] = []
     for item in raw.get("step", []):
         if not isinstance(item, dict):
             raise SystemExit("FAIL: bdg: [[step]] must be a table")

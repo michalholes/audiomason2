@@ -2,14 +2,14 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import subprocess
 import sys
 import time
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Callable, Optional, Sequence, Union
+from typing import Union
 
 
 def now_stamp() -> str:
@@ -38,7 +38,7 @@ def _format_completed_process(cp: subprocess.CompletedProcess[str]) -> str:
 @dataclass(frozen=True)
 class CmdStep:
     argv: list[str]
-    cwd: Optional[Path] = None
+    cwd: Path | None = None
     expect_rc: int = 0
 
 
@@ -117,7 +117,7 @@ def _lock_path(repo_root: Path) -> Path:
     return repo_root / "patches" / "badguys.lock"
 
 
-def _parse_lock_started(lock_path: Path) -> Optional[int]:
+def _parse_lock_started(lock_path: Path) -> int | None:
     try:
         txt = lock_path.read_text(encoding="utf-8")
     except FileNotFoundError:
@@ -134,7 +134,7 @@ def _parse_lock_started(lock_path: Path) -> Optional[int]:
 def acquire_lock(
     repo_root: Path,
     *,
-    path: Optional[Path] = None,
+    path: Path | None = None,
     ttl_seconds: int = 3600,
     on_conflict: str = "fail",
 ) -> None:
@@ -169,7 +169,7 @@ def acquire_lock(
         os.close(fd)
 
 
-def release_lock(repo_root: Path, *, path: Optional[Path] = None) -> None:
+def release_lock(repo_root: Path, *, path: Path | None = None) -> None:
     lock_path = path if path is not None else _lock_path(repo_root)
     lock_path = lock_path if lock_path.is_absolute() else (repo_root / lock_path)
     try:
