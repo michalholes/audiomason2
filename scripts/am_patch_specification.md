@@ -135,7 +135,7 @@ The runner prints its version: - on every invocation - in `--help`
 
 Example:
 
-    am_patch RUNNER_VERSION=4.3.33
+    am_patch RUNNER_VERSION=4.3.34
 
 Version discipline: - Any change that alters runner behavior MUST bump
 `RUNNER_VERSION`. - Any change that alters runner behavior MUST update
@@ -220,7 +220,10 @@ Monolith gate failures (normative):
 
 Status indicator: - TTY: single-line overwrite on stderr:
 `STATUS: <STAGE>  ELAPSED: <mm:ss>` - non-TTY: periodic heartbeat on
-stderr (1s interval): `HEARTBEAT: <STAGE> elapsed=<mm:ss>` - Before
+stderr (1s interval): `HEARTBEAT: <STAGE> elapsed=<mm:ss>` - The same
+status tick MAY also emit a machine-facing liveness event through the
+existing `log` event model when NDJSON and/or IPC streaming is enabled;
+this supplements the stderr heartbeat and does not replace it. - Before
 printing any normal stdout line (e.g., `DO:`, `OK:`, `FAIL:`, `RUN:`,
 `LOG:`), the runner MUST first terminate any active TTY status line with
 a newline, so output never concatenates onto the status line. - enabled
@@ -1285,17 +1288,27 @@ Location:
 
 Behavior:
 - The NDJSON file is current-only and is truncated at the start of each run.
-- The NDJSON sink is debug-complete: it records every Logger.emit(...) call (no filtering by verbosity/log_level).
+- The NDJSON sink is debug-complete: it records every Logger.emit(...) call (no
+  filtering by verbosity/log_level).
+- During long-running subprocess steps, the machine-facing stream MAY also
+  include periodic liveness heartbeats emitted through the existing `log`
+  event model.
 - Full error detail (failed step stdout/stderr) must be included.
 - By default it must bypass filtering.
 - Exception: for Ruff/Biome autoformat/autofix steps, the failed-step dump must be
   emitted without bypass, using DETAIL+WARNING.
-- The JSON sink is best-effort; failures to write NDJSON must not change runner behavior.
+- The JSON sink is best-effort; failures to write NDJSON must not change runner
+  behavior.
 
 Format:
 - One JSON object per line (NDJSON).
 - Event types: hello, log, result.
-- log events include: seq, ts_mono_ms, stage, kind, sev, ch, summary, bypass, msg.
+- log events include: seq, ts_mono_ms, stage, kind, sev, ch, summary, bypass,
+  msg.
+- Machine-facing liveness heartbeats MUST remain `type="log"` events.
+- For liveness heartbeats, `kind` MUST be `HEARTBEAT`, `sev` MUST be `DEBUG`,
+  `ch` MUST be `DETAIL`, `summary` MUST be `false`, `bypass` MUST be `false`,
+  and `msg` MUST be `HEARTBEAT`.
 - Failed step detail may include stdout and stderr fields.
 
 ## IPC socket
@@ -1318,6 +1331,8 @@ Runner -> client reply:
 
 Event stream (runner -> client):
 - NDJSON events identical to the runner NDJSON event model (hello/log/result)
+- During long-running subprocess steps, the event stream MAY include periodic
+  `HEARTBEAT` log events from the same runner NDJSON event model.
 - control events: {"type":"control","event":"<name>", ...}
 
 Default location:
