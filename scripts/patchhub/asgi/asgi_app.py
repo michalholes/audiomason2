@@ -24,6 +24,7 @@ from patchhub.models import job_to_list_item_json
 from .async_app_core import AsyncAppCore
 from .async_offload import to_thread
 from .job_events_live_source import stream_job_events_live_source
+from .route_workspaces import handle_api_workspaces
 from .sse_jsonl_stream import stream_job_events_sse
 
 UPLOAD_PATCH_FILE: Any = File(...)
@@ -130,6 +131,10 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
     async def api_fs_stat(path: str = "") -> Response:
         status, data = await to_thread(core.api_fs_stat, path)
         return _json_bytes_response(status, data)
+
+    @app.get("/api/workspaces")
+    async def api_workspaces(request: Request) -> Response:
+        return await handle_api_workspaces(core, request)
 
     @app.get("/api/patches/latest")
     async def api_patches_latest(request: Request) -> Response:
@@ -742,11 +747,13 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
                     "snapshot": {
                         "jobs": list(snap.jobs_items),
                         "runs": list(snap.runs_items[:80]),
+                        "workspaces": list(snap.workspaces_items),
                         "header": dict(snap.header_body),
                     },
                     "sigs": {
                         "jobs": str(snap.jobs_sig),
                         "runs": str(snap.runs_sig),
+                        "workspaces": str(snap.workspaces_sig),
                         "header": str(snap.header_sig),
                         "snapshot": snapshot_sig,
                     },
@@ -767,6 +774,7 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
         from patchhub.app_support import canceled_runs_signature
         from patchhub.indexing import runs_signature
         from patchhub.job_store import job_json_signature, list_job_jsons
+        from patchhub.workspace_inventory import list_workspaces
 
         # Jobs signature: disk + memory queue.
         disk_sig = await to_thread(job_json_signature, core.jobs_root)
@@ -793,6 +801,8 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
             f":c={canceled_sig[0]}:{canceled_sig[1]}"
         )
 
+        workspaces_sig, workspaces_items = await to_thread(list_workspaces, core, mem)
+
         # Diagnostics signature (queue + lock + runs).
         qstate = None
         try:
@@ -818,7 +828,7 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
             f":c={canceled_sig[0]}:{canceled_sig[1]}"
         )
 
-        snapshot_sig = "|".join([jobs_sig, runs_sig, header_sig])
+        snapshot_sig = "|".join([jobs_sig, runs_sig, workspaces_sig, header_sig])
         etag = _etag_quote(snapshot_sig)
 
         inm = request.headers.get("if-none-match")
@@ -872,11 +882,13 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
             "snapshot": {
                 "jobs": jobs_items,
                 "runs": runs_list,
+                "workspaces": workspaces_items,
                 "header": header_body,
             },
             "sigs": {
                 "jobs": jobs_sig,
                 "runs": runs_sig,
+                "workspaces": workspaces_sig,
                 "header": header_sig,
                 "snapshot": snapshot_sig,
             },
@@ -912,6 +924,7 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
         from patchhub.app_support import canceled_runs_signature
         from patchhub.indexing import runs_signature
         from patchhub.job_store import job_json_signature
+        from patchhub.workspace_inventory import list_workspaces
 
         disk_sig = await to_thread(job_json_signature, core.jobs_root)
         mem = await core.queue.list_jobs()
@@ -939,6 +952,8 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
             f":c={canceled_sig[0]}:{canceled_sig[1]}"
         )
 
+        workspaces_sig, _workspaces_items = await to_thread(list_workspaces, core, mem)
+
         qstate = None
         try:
             qstate = await core.queue.state()
@@ -963,7 +978,7 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
             f":c={canceled_sig[0]}:{canceled_sig[1]}"
         )
 
-        snapshot_sig = "|".join([jobs_sig, runs_sig, header_sig])
+        snapshot_sig = "|".join([jobs_sig, runs_sig, workspaces_sig, header_sig])
         etag = _etag_quote(snapshot_sig)
 
         inm = request.headers.get("if-none-match")

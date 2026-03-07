@@ -47,6 +47,20 @@
 
       <section class="card card-tight">
         <div class="row">
+          <h2 style="margin:0">Workspaces</h2>
+          <span class="spacer"></span>
+          <button type="button" id="workspacesCollapse" class="btn btn-small">Show</button>
+        </div>
+        <div id="workspacesWrap" class="hidden">
+          <div class="row">
+            <button type="button" id="workspacesRefresh" class="btn btn-small">Refresh</button>
+          </div>
+          <div id="workspacesList" class="scroll scroll-tall"></div>
+        </div>
+      </section>
+
+      <section class="card card-tight">
+        <div class="row">
           <h2 style="margin:0">Runs</h2>
           <span class="spacer"></span>
           <button type="button" id="runsCollapse" class="btn btn-small">Show</button>
@@ -220,6 +234,6 @@
     </aside>
   </main>
 
-  <script src="/static/patchhub_bootstrap.js?v=1.5.0"></script>
+  <script src="/static/patchhub_bootstrap.js?v=1.8.0"></script>
 </body>
 </html>

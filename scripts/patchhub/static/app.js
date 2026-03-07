@@ -18,8 +18,10 @@ var liveEvents = [];
 var liveLevel = "normal";
 
 var previewVisible = false;
+var workspacesVisible = false;
 var runsVisible = false;
 var jobsVisible = false;
+var workspacesCache = [];
 
 function appLog(kind, message) {
 	var msg = String(message || "");
@@ -55,6 +57,7 @@ async function loadParts(rt) {
 	// App part files. wire_init is required for app start.
 	await PH.loadScript("/static/app_part_runs.js", "app_part_runs");
 	await PH.loadScript("/static/app_part_jobs.js", "app_part_jobs");
+	await PH.loadScript("/static/app_part_workspaces.js", "app_part_workspaces");
 	await PH.loadScript(
 		"/static/app_part_queue_upload.js",
 		"app_part_queue_upload",
@@ -101,7 +104,7 @@ __ph_w.PH_APP_MAIN = async function PH_APP_MAIN(rt) {
 var IDLE_BACKOFF_MS = [2000, 5000, 15000, 30000, 60000];
 var idleBackoffIdx = 0;
 var idleNextDueMs = 0;
-var idleSigs = { jobs: "", runs: "", hdr: "" };
+var idleSigs = { jobs: "", runs: "", workspaces: "", hdr: "", snapshot: "" };
 
 function setPreviewVisible(v) {
 	previewVisible = !!v;

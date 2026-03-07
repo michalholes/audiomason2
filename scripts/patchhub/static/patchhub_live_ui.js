@@ -13,6 +13,7 @@
 	var MAX_LIVE_EVENTS = 2000;
 	var liveRenderTimer = null;
 	var liveLevel = "normal";
+	var workspacesVisible = false;
 	var runsVisible = false;
 	var jobsVisible = false;
 	ui.liveEvents = liveEvents;
@@ -90,6 +91,15 @@
 	function loadUiVisibility() {
 		var v = null;
 		try {
+			v = localStorage.getItem("amp.ui.workspacesVisible");
+		} catch (e) {
+			v = null;
+		}
+		if (v === "1") workspacesVisible = true;
+		else if (v === "0") workspacesVisible = false;
+
+		v = null;
+		try {
 			v = localStorage.getItem("amp.ui.runsVisible");
 		} catch (e) {
 			v = null;
@@ -106,8 +116,20 @@
 		if (v === "1") jobsVisible = true;
 		else if (v === "0") jobsVisible = false;
 
+		setWorkspacesVisible(workspacesVisible);
 		setRunsVisible(runsVisible);
 		setJobsVisible(jobsVisible);
+		return {
+			workspacesVisible: workspacesVisible,
+			runsVisible: runsVisible,
+			jobsVisible: jobsVisible,
+		};
+	}
+
+	function saveWorkspacesVisible(v) {
+		try {
+			localStorage.setItem("amp.ui.workspacesVisible", v ? "1" : "0");
+		} catch (e) {}
 	}
 
 	function saveRunsVisible(v) {
@@ -120,6 +142,14 @@
 		try {
 			localStorage.setItem("amp.ui.jobsVisible", v ? "1" : "0");
 		} catch (e) {}
+	}
+
+	function setWorkspacesVisible(v) {
+		workspacesVisible = !!v;
+		var wrap = el("workspacesWrap");
+		var btn = el("workspacesCollapse");
+		if (wrap) wrap.classList.toggle("hidden", !workspacesVisible);
+		if (btn) btn.textContent = workspacesVisible ? "Hide" : "Show";
 	}
 
 	function setRunsVisible(v) {
@@ -426,8 +456,10 @@
 			getLiveLevel,
 			setLiveLevel,
 			loadUiVisibility,
+			saveWorkspacesVisible,
 			saveRunsVisible,
 			saveJobsVisible,
+			setWorkspacesVisible,
 			setRunsVisible,
 			setJobsVisible,
 			setLiveStreamStatus,
@@ -449,8 +481,10 @@
 	safeExport("getLiveLevel", getLiveLevel);
 	safeExport("setLiveLevel", setLiveLevel);
 	safeExport("loadUiVisibility", loadUiVisibility);
+	safeExport("saveWorkspacesVisible", saveWorkspacesVisible);
 	safeExport("saveRunsVisible", saveRunsVisible);
 	safeExport("saveJobsVisible", saveJobsVisible);
+	safeExport("setWorkspacesVisible", setWorkspacesVisible);
 	safeExport("setRunsVisible", setRunsVisible);
 	safeExport("setJobsVisible", setJobsVisible);
 	safeExport("setLiveStreamStatus", setLiveStreamStatus);

@@ -19,6 +19,9 @@ from patchhub import (
     app_api_upload as _upload,
 )
 from patchhub import (
+    app_api_workspaces as _workspaces,
+)
+from patchhub import (
     app_ui as _ui,
 )
 from patchhub import (
@@ -149,6 +152,7 @@ class AsyncAppCore:
     _pick_tail_job = _jobs._pick_tail_job
 
     api_upload_patch = _upload.api_upload_patch
+    api_workspaces = _workspaces.api_workspaces
 
     render_template = _ui.render_template
     render_index = _ui.render_index

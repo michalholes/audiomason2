@@ -104,6 +104,19 @@ def run_to_list_item_json(r: RunEntry) -> dict[str, Any]:
     }
 
 
+def workspace_to_list_item_json(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "issue_id": int(item.get("issue_id", 0) or 0),
+        "workspace_rel_path": str(item.get("workspace_rel_path", "")),
+        "state": str(item.get("state", "CLEAN")),
+        "busy": bool(item.get("busy", False)),
+        "mtime_utc": str(item.get("mtime_utc", "")),
+        "attempt": item.get("attempt"),
+        "commit_summary": item.get("commit_summary"),
+        "allowed_union_count": item.get("allowed_union_count"),
+    }
+
+
 @dataclass
 class StatsWindow:
     days: int

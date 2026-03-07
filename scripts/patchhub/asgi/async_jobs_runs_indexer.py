@@ -16,8 +16,14 @@ from typing import Any
 from patchhub.app_support import compute_success_archive_rel
 from patchhub.indexing import compute_stats, iter_runs_with_signature
 from patchhub.job_store import list_job_jsons_and_signature
-from patchhub.models import RunEntry, job_to_list_item_json, run_to_list_item_json
+from patchhub.models import (
+    RunEntry,
+    job_to_list_item_json,
+    run_to_list_item_json,
+    workspace_to_list_item_json,
+)
 from patchhub.proc_resources import snapshot as resources_snapshot
+from patchhub.workspace_inventory import list_workspaces
 
 from .async_offload import to_thread
 
@@ -26,9 +32,11 @@ from .async_offload import to_thread
 class IndexerSnapshot:
     jobs_items: list[dict[str, Any]]
     runs_items: list[dict[str, Any]]
+    workspaces_items: list[dict[str, Any]]
     header_body: dict[str, Any]
     jobs_sig: str
     runs_sig: str
+    workspaces_sig: str
     header_sig: str
     snapshot_sig: str
 
@@ -288,6 +296,9 @@ class AsyncJobsRunsIndexer:
             except Exception:
                 lock_held = 0
 
+            workspaces_sig, workspaces_raw = list_workspaces(self._core, mem_jobs=mem)
+            workspaces_items = [workspace_to_list_item_json(it) for it in workspaces_raw]
+
             stats = compute_stats(base_runs, self._core.cfg.indexing.stats_windows_days)
             usage = shutil.disk_usage(str(self._core.patches_root))
 
@@ -316,14 +327,16 @@ class AsyncJobsRunsIndexer:
                 f":r={base_sig[0]}:{base_sig[1]}:{base_sig[2]}"
                 f":c={canceled_sig[0]}:{canceled_sig[1]}"
             )
-            snapshot_sig = "|".join([jobs_sig, runs_sig, header_sig])
+            snapshot_sig = "|".join([jobs_sig, runs_sig, workspaces_sig, header_sig])
 
             return IndexerSnapshot(
                 jobs_items=jobs_items,
                 runs_items=runs_items,
+                workspaces_items=workspaces_items,
                 header_body=header_body,
                 jobs_sig=jobs_sig,
                 runs_sig=runs_sig,
+                workspaces_sig=workspaces_sig,
                 header_sig=header_sig,
                 snapshot_sig=snapshot_sig,
             )
@@ -335,6 +348,7 @@ class AsyncJobsRunsIndexer:
                 if (
                     prev.jobs_sig == snap.jobs_sig
                     and prev.runs_sig == snap.runs_sig
+                    and prev.workspaces_sig == snap.workspaces_sig
                     and prev.header_sig == snap.header_sig
                 ):
                     self._ready = True

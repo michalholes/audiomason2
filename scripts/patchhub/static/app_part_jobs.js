@@ -167,14 +167,20 @@ function idleRefreshTick() {
 
 			var js = String(sigs.jobs || "");
 			var rs = String(sigs.runs || "");
+			var ws = String(sigs.workspaces || "");
 			var hs = String(sigs.header || "");
 			if (js) idleSigs.jobs = js;
 			if (rs) idleSigs.runs = rs;
+			if (ws) idleSigs.workspaces = ws;
 			if (hs) idleSigs.hdr = hs;
 
 			var snap = r.snapshot || {};
 			renderJobsFromResponse({ ok: true, jobs: snap.jobs || [] });
 			__ph_w.renderRunsFromResponse({ ok: true, runs: snap.runs || [] });
+			__ph_w.renderWorkspacesFromResponse({
+				ok: true,
+				items: snap.workspaces || [],
+			});
 
 			var base = "";
 			if (cfg && cfg.server && cfg.server.host && cfg.server.port) {

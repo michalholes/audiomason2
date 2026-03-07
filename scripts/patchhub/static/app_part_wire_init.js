@@ -132,6 +132,16 @@ function wireButtons() {
 			});
 		});
 	}
+	el("workspacesRefresh").addEventListener("click", () => {
+		refreshWorkspaces({ mode: "user" });
+	});
+	el("workspacesCollapse").addEventListener("click", () => {
+		workspacesVisible = !workspacesVisible;
+		PH.call("setWorkspacesVisible", workspacesVisible);
+		AMP_UI.saveWorkspacesVisible(workspacesVisible);
+		if (workspacesVisible) refreshWorkspaces({ mode: "user" });
+	});
+
 	el("runsRefresh").addEventListener("click", refreshRuns);
 
 	if (el("runsCollapse")) {
@@ -252,6 +262,7 @@ function wireButtons() {
 	if (el("refreshAll")) {
 		el("refreshAll").addEventListener("click", () => {
 			refreshFs();
+			refreshWorkspaces({ mode: "user" });
 			refreshRuns();
 			PH.call("refreshStats");
 			refreshJobs();
@@ -267,7 +278,11 @@ function init() {
 		setupUpload();
 		wireButtons();
 		setPreviewVisible(false);
-		PH.call("loadUiVisibility");
+		var vis = PH.call("loadUiVisibility") || {};
+		workspacesVisible = !!vis.workspacesVisible;
+		runsVisible = !!vis.runsVisible;
+		jobsVisible = !!vis.jobsVisible;
+		PH.call("setWorkspacesVisible", workspacesVisible);
 		PH.call("setRunsVisible", runsVisible);
 		PH.call("setJobsVisible", jobsVisible);
 
@@ -322,8 +337,14 @@ function init() {
 
 				refreshTimer = setInterval(() => {
 					try {
-						if (activeJobId) refreshJobs({ mode: "periodic" });
-						else idleRefreshTick();
+						if (activeJobId) {
+							refreshJobs({ mode: "periodic" });
+							if (workspacesVisible) {
+								refreshWorkspaces({ mode: "periodic" });
+							}
+						} else {
+							idleRefreshTick();
+						}
 						refreshTail(tailLines);
 					} catch (e) {
 						setUiError(e);
@@ -343,6 +364,9 @@ function init() {
 
 			function resyncVisible() {
 				refreshFs();
+				if (workspacesVisible) {
+					refreshWorkspaces({ mode: "user" });
+				}
 				refreshRuns();
 				PH.call("refreshStats");
 				refreshJobs();
