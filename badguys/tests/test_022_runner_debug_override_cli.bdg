@@ -15,4 +15,3 @@ commit_limit = 0
 [[step]]
 op = "BUILD_CFG"
 input_asset = "cfg"
-cli_runner_verbosity = "debug"

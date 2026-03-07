@@ -349,6 +349,12 @@ args = ["-h"]
 [recipes.tests.test_020_help_all.steps.0]
 args = ["--help-all"]
 
+[recipes.tests.test_021_runner_verbose_override_cli.steps.0]
+runner_verbosity = "verbose"
+
+[recipes.tests.test_022_runner_debug_override_cli.steps.0]
+runner_verbosity = "debug"
+
 [recipes.tests.test_030_show_config.steps.0]
 args = ["-c"]
 

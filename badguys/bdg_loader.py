@@ -42,6 +42,15 @@ _FORBIDDEN_TOML_KEYS = {
     "path",
 }
 
+_FORBIDDEN_STEP_RECIPE_KEYS = {
+    "extra_args",
+    "marker_rel",
+    "cli_runner_verbosity",
+    "cli_console_verbosity",
+    "cli_log_verbosity",
+    "cli_commit_limit",
+}
+
 _PATH_LITERAL_RE = re.compile(r"['\"][^'\"\n]*[\\/][^'\"\n]*['\"]")
 
 
@@ -113,6 +122,28 @@ def _validate_toml_delta(*, label: str, content: str) -> None:
             raise SystemExit(f"FAIL: bdg: {label} must not embed lock.{key}")
 
 
+def _looks_like_python_payload(content: str) -> bool:
+    markers = (
+        "ctx.",
+        "from __future__ import annotations",
+        "FILES =",
+        "Path(",
+        "def ",
+        "class ",
+    )
+    return any(marker in content for marker in markers)
+
+
+def _validate_zip_entry(*, asset_id: str, entry_id: str, content: str) -> None:
+    label = f"asset.entry '{asset_id}.{entry_id}'"
+    if any(marker in content for marker in _FORBIDDEN_PATCH_MARKERS):
+        raise SystemExit(f"FAIL: bdg: {label} must not embed raw patch paths")
+    if _PATH_LITERAL_RE.search(content):
+        raise SystemExit(f"FAIL: bdg: {label} must not embed filesystem paths")
+    if _looks_like_python_payload(content):
+        _validate_python_payload(label=label, content=content)
+
+
 def _validate_asset(item: dict, *, asset_id: str, kind: str) -> None:
     content = item.get("content")
     if content is not None and not isinstance(content, str):
@@ -166,17 +197,7 @@ def load_bdg_test(path: Path) -> BdgTest:
             if not isinstance(econtent, str):
                 raise SystemExit("FAIL: bdg: asset.entry content must be string")
             if kind == "patch_zip_manifest":
-                if any(marker in econtent for marker in _FORBIDDEN_PATCH_MARKERS):
-                    raise SystemExit(
-                        f"FAIL: bdg: asset.entry '{asset_id}.{name}' must not embed raw patch paths"
-                    )
-                if "from __future__ import annotations" in econtent or "ctx." in econtent:
-                    pass
-                elif econtent.lstrip().startswith("from") or "FILES =" in econtent:
-                    _validate_python_payload(
-                        label=f"asset.entry '{asset_id}.{name}'",
-                        content=econtent,
-                    )
+                _validate_zip_entry(asset_id=asset_id, entry_id=name, content=econtent)
             entries.append(BdgAssetEntry(name=name, content=econtent))
 
         if asset_id in assets:
@@ -190,10 +211,13 @@ def load_bdg_test(path: Path) -> BdgTest:
         op = _as_str(item, "op")
         params = dict(item)
         params.pop("op", None)
-        if "extra_args" in params:
-            raise SystemExit("FAIL: bdg: extra_args moved to badguys/config.toml recipes")
-        if "marker_rel" in params:
-            raise SystemExit("FAIL: bdg: marker_rel moved to badguys/config.toml recipes")
+        bad_recipe_keys = sorted(_FORBIDDEN_STEP_RECIPE_KEYS.intersection(params.keys()))
+        if bad_recipe_keys:
+            joined = ", ".join(bad_recipe_keys)
+            raise SystemExit(
+                "FAIL: bdg: step-level recipe moved to badguys/config.toml recipes; "
+                f"remove: {joined}"
+            )
         bad_keys = sorted(_FORBIDDEN_EVAL_KEYS.intersection(params.keys()))
         if bad_keys:
             joined = ", ".join(bad_keys)

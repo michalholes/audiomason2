@@ -354,7 +354,12 @@ def _run_test_plan(test, ctx: Ctx) -> bool:
     )
 
     subst = make_subst_ctx(issue_id=ctx.cfg.issue_id)
-    mats = materialize_assets(repo_root=ctx.repo_root, subst=subst, bdg=bdg)
+    mats = materialize_assets(
+        repo_root=ctx.repo_root,
+        config_path=Path(ctx.cfg.config_path),
+        subst=subst,
+        bdg=bdg,
+    )
 
     ok = True
     prior: dict[int, StepResult] = {}
@@ -370,6 +375,7 @@ def _run_test_plan(test, ctx: Ctx) -> bool:
     for idx, step in enumerate(bdg.steps):
         r = execute_bdg_step(
             repo_root=ctx.repo_root,
+            config_path=Path(ctx.cfg.config_path),
             cfg_runner_cmd=list(ctx.cfg.runner_cmd),
             subst=subst,
             full_runner_tests=set(ctx.cfg.full_runner_tests),

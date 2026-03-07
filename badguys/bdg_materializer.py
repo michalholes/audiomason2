@@ -10,7 +10,13 @@ from typing import Any, Dict
 import tomllib
 
 from badguys.bdg_loader import BdgAsset, BdgTest
-from badguys.bdg_recipe import asset_recipe, base_cfg_sections, entry_recipe, subject_relpaths
+from badguys.bdg_recipe import (
+    asset_recipe,
+    base_cfg_sections,
+    ensure_allowed_keys,
+    entry_recipe,
+    subject_relpaths,
+)
 from badguys.bdg_subst import SubstCtx, subst_text
 
 
@@ -99,18 +105,18 @@ def _build_python_patch_script(
         )
         for name in declared_subjects
     ]
-    body = body.rstrip() + "\n"
     subjects_json = json.dumps(subjects, sort_keys=True)
     files_json = json.dumps(declared_relpaths)
     issue_json = json.dumps(issue_id)
+    script_json = json.dumps(body)
     return (
         "from __future__ import annotations\n\n"
         f"FILES = {files_json}\n\n"
         "from pathlib import Path\n\n"
         "REPO = Path(__file__).resolve().parents[1]\n"
         f"_SUBJECTS = {subjects_json}\n"
-        f"_ISSUE_ID = {issue_json}\n\n"
-        "\n"
+        f"_ISSUE_ID = {issue_json}\n"
+        f"_SCRIPT = {script_json}\n\n"
         "class _Ctx:\n"
         "    def path(self, name: str) -> Path:\n"
         "        rel = _SUBJECTS.get(name)\n"
@@ -129,9 +135,18 @@ def _build_python_patch_script(
         "    def write_outside_repo(self, text: str) -> None:\n"
         "        outside = (REPO / '..' / f'badguys_sentinel_issue_{_ISSUE_ID}.txt').resolve()\n"
         "        outside.write_text(text, encoding='utf-8')\n\n"
-        "\n"
-        "ctx = _Ctx()\n\n"
-        f"{body}"
+        "ctx = _Ctx()\n"
+        "_GLOBALS = {\n"
+        "    '__builtins__': __builtins__,\n"
+        "    '__file__': str(__file__),\n"
+        "    'FILES': FILES,\n"
+        "    'Path': Path,\n"
+        "    'REPO': REPO,\n"
+        "    '_ISSUE_ID': _ISSUE_ID,\n"
+        "    '_SUBJECTS': _SUBJECTS,\n"
+        "    'ctx': ctx,\n"
+        "}\n"
+        "exec(compile(_SCRIPT, str(__file__), 'exec'), _GLOBALS, _GLOBALS)\n"
     )
 
 
@@ -171,15 +186,26 @@ def _dump_toml_sections(data: dict[str, Any]) -> str:
     return "\n".join(parts).rstrip() + "\n"
 
 
-def materialize_assets(*, repo_root: Path, subst: SubstCtx, bdg: BdgTest) -> MaterializedAssets:
+def materialize_assets(
+    *,
+    repo_root: Path,
+    config_path: Path,
+    subst: SubstCtx,
+    bdg: BdgTest,
+) -> MaterializedAssets:
     root = repo_root / "patches" / "badguys_artifacts" / f"issue_{subst.issue_id}" / bdg.test_id
     root.mkdir(parents=True, exist_ok=True)
     files: Dict[str, Path] = {}
-    subjects = subject_relpaths(repo_root=repo_root, test_id=bdg.test_id)
+    subjects = subject_relpaths(
+        repo_root=repo_root,
+        config_path=config_path,
+        test_id=bdg.test_id,
+    )
     for asset_id, asset in bdg.assets.items():
         files[asset_id] = _materialize_one(
             root=root,
             repo_root=repo_root,
+            config_path=config_path,
             subst=subst,
             test_id=bdg.test_id,
             asset=asset,
@@ -192,6 +218,7 @@ def _materialize_one(
     *,
     root: Path,
     repo_root: Path,
+    config_path: Path,
     subst: SubstCtx,
     test_id: str,
     asset: BdgAsset,
@@ -205,7 +232,7 @@ def _materialize_one(
 
     if asset.kind == "toml_text":
         p = root / f"{safe_id}.toml"
-        base = base_cfg_sections(repo_root=repo_root)
+        base = base_cfg_sections(repo_root=repo_root, config_path=config_path)
         delta_raw = subst_text(asset.content or "", ctx=subst)
         delta = tomllib.loads(delta_raw) if delta_raw.strip() else {}
         if not isinstance(delta, dict):
@@ -215,7 +242,17 @@ def _materialize_one(
         return p
 
     if asset.kind == "python_patch_script":
-        recipe = asset_recipe(repo_root=repo_root, test_id=test_id, asset_id=asset.asset_id)
+        recipe = asset_recipe(
+            repo_root=repo_root,
+            config_path=config_path,
+            test_id=test_id,
+            asset_id=asset.asset_id,
+        )
+        ensure_allowed_keys(
+            table=recipe,
+            allowed={"declared_subjects"},
+            label=f"recipes.tests.{test_id}.assets.{asset.asset_id}",
+        )
         declared_subjects = _string_list(
             value=recipe.get("declared_subjects", []),
             test_id=test_id,
@@ -239,7 +276,17 @@ def _materialize_one(
         return p
 
     if asset.kind == "git_patch_text":
-        recipe = asset_recipe(repo_root=repo_root, test_id=test_id, asset_id=asset.asset_id)
+        recipe = asset_recipe(
+            repo_root=repo_root,
+            config_path=config_path,
+            test_id=test_id,
+            asset_id=asset.asset_id,
+        )
+        ensure_allowed_keys(
+            table=recipe,
+            allowed={"subject"},
+            label=f"recipes.tests.{test_id}.assets.{asset.asset_id}",
+        )
         rel_path = _subject_relpath(
             subjects=subjects,
             subject_name=recipe.get("subject"),
@@ -265,9 +312,18 @@ def _materialize_one(
             for ent in asset.entries:
                 recipe = entry_recipe(
                     repo_root=repo_root,
+                    config_path=config_path,
                     test_id=test_id,
                     asset_id=asset.asset_id,
                     entry_id=ent.name,
+                )
+                ensure_allowed_keys(
+                    table=recipe,
+                    allowed={"declared_subjects", "kind", "subject", "zip_name"},
+                    label=(
+                        "recipes.tests."
+                        f"{test_id}.assets.{asset.asset_id}.entries.{ent.name}"
+                    ),
                 )
                 zip_name = recipe.get("zip_name")
                 if not isinstance(zip_name, str) or not zip_name:

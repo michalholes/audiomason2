@@ -13,7 +13,7 @@ from typing import Any, List
 from badguys.bdg_evaluator import StepResult
 from badguys.bdg_loader import BdgStep, BdgTest
 from badguys.bdg_materializer import MaterializedAssets
-from badguys.bdg_recipe import step_recipe, subject_relpaths
+from badguys.bdg_recipe import ensure_allowed_keys, step_recipe, subject_relpaths
 from badguys.bdg_subst import SubstCtx, subst_text
 
 
@@ -40,8 +40,8 @@ def _outside_sentinel(repo_root: Path, *, issue_id: str) -> Path:
     return repo_root.parent / f"badguys_sentinel_issue_{issue_id}.txt"
 
 
-def _logs_dir(repo_root: Path) -> Path:
-    cfg_path = repo_root / "badguys" / "config.toml"
+def _logs_dir(*, repo_root: Path, config_path: Path) -> Path:
+    cfg_path = repo_root / config_path
     raw = tomllib.loads(cfg_path.read_text(encoding="utf-8"))
     logs_rel = raw.get("suite", {}).get("logs_dir", "patches/badguys_logs")
     return repo_root / Path(str(logs_rel))
@@ -87,6 +87,7 @@ class ExecOutcome:
 def execute_bdg(
     *,
     repo_root: Path,
+    config_path: Path,
     cfg_runner_cmd: list[str],
     subst: SubstCtx,
     full_runner_tests: set[str],
@@ -99,6 +100,7 @@ def execute_bdg(
         results.append(
             _exec_one(
                 repo_root=repo_root,
+                config_path=config_path,
                 cfg_runner_cmd=cfg_runner_cmd,
                 subst=subst,
                 full_runner_tests=full_runner_tests,
@@ -115,6 +117,7 @@ def execute_bdg(
 def execute_bdg_step(
     *,
     repo_root: Path,
+    config_path: Path,
     cfg_runner_cmd: list[str],
     subst: SubstCtx,
     full_runner_tests: set[str],
@@ -126,6 +129,7 @@ def execute_bdg_step(
 ) -> StepResult:
     return _exec_one(
         repo_root=repo_root,
+        config_path=config_path,
         cfg_runner_cmd=cfg_runner_cmd,
         subst=subst,
         full_runner_tests=full_runner_tests,
@@ -141,6 +145,7 @@ def execute_bdg_step(
 def _exec_one(
     *,
     repo_root: Path,
+    config_path: Path,
     cfg_runner_cmd: list[str],
     subst: SubstCtx,
     full_runner_tests: set[str],
@@ -158,7 +163,17 @@ def _exec_one(
             raise SystemExit("FAIL: bdg: input_asset must be string")
         if isinstance(input_asset, str):
             input_asset = _subst(input_asset, subst=subst)
-        recipe = step_recipe(repo_root=repo_root, test_id=test_id, step_index=step_index)
+        recipe = step_recipe(
+            repo_root=repo_root,
+            config_path=config_path,
+            test_id=test_id,
+            step_index=step_index,
+        )
+        ensure_allowed_keys(
+            table=recipe,
+            allowed={"args"},
+            label=f"recipes.tests.{test_id}.steps.{step_index}",
+        )
         extra_args = recipe.get("args", [])
         if not (isinstance(extra_args, list) and all(isinstance(x, str) for x in extra_args)):
             raise SystemExit(
@@ -343,7 +358,7 @@ def _exec_one(
         try:
             tests = discover_tests(
                 repo_root=repo_root,
-                config_path=Path("badguys/config.toml"),
+                config_path=config_path,
                 cli_commit_limit=None,
                 cli_include=list(include),
                 cli_exclude=list(exclude),
@@ -362,20 +377,36 @@ def _exec_one(
         if cfg_path is None:
             raise SystemExit(f"FAIL: bdg: missing materialized asset: {input_asset}")
 
-        cli_runner_verbosity = p.get("cli_runner_verbosity")
-        cli_console_verbosity = p.get("cli_console_verbosity")
-        cli_log_verbosity = p.get("cli_log_verbosity")
-        cli_commit_limit = p.get("cli_commit_limit")
+        recipe = step_recipe(
+            repo_root=repo_root,
+            config_path=config_path,
+            test_id=test_id,
+            step_index=step_index,
+        )
+        ensure_allowed_keys(
+            table=recipe,
+            allowed={
+                "commit_limit",
+                "console_verbosity",
+                "log_verbosity",
+                "runner_verbosity",
+            },
+            label=f"recipes.tests.{test_id}.steps.{step_index}",
+        )
+        cli_runner_verbosity = recipe.get("runner_verbosity")
+        cli_console_verbosity = recipe.get("console_verbosity")
+        cli_log_verbosity = recipe.get("log_verbosity")
+        cli_commit_limit = recipe.get("commit_limit")
 
         for key, val in [
-            ("cli_runner_verbosity", cli_runner_verbosity),
-            ("cli_console_verbosity", cli_console_verbosity),
-            ("cli_log_verbosity", cli_log_verbosity),
+            ("runner_verbosity", cli_runner_verbosity),
+            ("console_verbosity", cli_console_verbosity),
+            ("log_verbosity", cli_log_verbosity),
         ]:
             if val is not None and not isinstance(val, str):
-                raise SystemExit(f"FAIL: bdg: {key} must be string or omitted")
+                raise SystemExit(f"FAIL: bdg recipe: {key} must be string or omitted")
         if cli_commit_limit is not None and not isinstance(cli_commit_limit, int):
-            raise SystemExit("FAIL: bdg: cli_commit_limit must be int or omitted")
+            raise SystemExit("FAIL: bdg recipe: commit_limit must be int or omitted")
 
         from badguys.run_suite import _make_cfg
 
@@ -397,7 +428,7 @@ def _exec_one(
         if not isinstance(name, str):
             raise SystemExit("FAIL: bdg: test_name must be string")
         name = _subst(name, subst=subst)
-        log_dir = _logs_dir(repo_root)
+        log_dir = _logs_dir(repo_root=repo_root, config_path=config_path)
         log_path = log_dir / name / "badguys.test.jsonl"
         if not log_path.exists():
             return StepResult(rc=1, stdout=None, stderr=f"missing log: {log_path}", value="")
@@ -530,8 +561,22 @@ def _exec_one(
         return StepResult(rc=0, stdout=None, stderr=None, value=out)
 
     if op == "PREPARE_UNSUCCESSFUL_PATCH":
-        recipe = step_recipe(repo_root=repo_root, test_id=test_id, step_index=step_index)
-        subjects = subject_relpaths(repo_root=repo_root, test_id=test_id)
+        recipe = step_recipe(
+            repo_root=repo_root,
+            config_path=config_path,
+            test_id=test_id,
+            step_index=step_index,
+        )
+        ensure_allowed_keys(
+            table=recipe,
+            allowed={"marker_subject"},
+            label=f"recipes.tests.{test_id}.steps.{step_index}",
+        )
+        subjects = subject_relpaths(
+            repo_root=repo_root,
+            config_path=config_path,
+            test_id=test_id,
+        )
         marker_subject = recipe.get("marker_subject")
         if not isinstance(marker_subject, str) or not marker_subject:
             raise SystemExit(
@@ -575,8 +620,22 @@ def _exec_one(
         patches_dir = repo_root / "patches"
         patches_dir.mkdir(parents=True, exist_ok=True)
         ws_repo = patches_dir / "workspaces" / f"issue_{issue}" / "repo"
-        recipe = step_recipe(repo_root=repo_root, test_id=test_id, step_index=step_index)
-        subjects = subject_relpaths(repo_root=repo_root, test_id=test_id)
+        recipe = step_recipe(
+            repo_root=repo_root,
+            config_path=config_path,
+            test_id=test_id,
+            step_index=step_index,
+        )
+        ensure_allowed_keys(
+            table=recipe,
+            allowed={"marker_subject", "seed_subject"},
+            label=f"recipes.tests.{test_id}.steps.{step_index}",
+        )
+        subjects = subject_relpaths(
+            repo_root=repo_root,
+            config_path=config_path,
+            test_id=test_id,
+        )
         marker_subject = recipe.get("marker_subject")
         seed_subject = recipe.get("seed_subject")
         if not isinstance(marker_subject, str) or not isinstance(seed_subject, str):
