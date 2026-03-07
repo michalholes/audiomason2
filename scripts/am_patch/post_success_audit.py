@@ -15,6 +15,10 @@ def run_post_success_audit(logger: Logger, repo_root: Path, policy: Policy) -> N
         logger.line("audit_report=SKIP (post_success_audit=false)")
         return
 
-    r = logger.run_logged([sys.executable, "-u", "audit/audit_report.py"], cwd=repo_root)
+    r = logger.run_logged(
+        [sys.executable, "-u", "audit/audit_report.py"],
+        cwd=repo_root,
+        timeout_stage="AUDIT",
+    )
     if r.returncode != 0:
         raise RunnerError("AUDIT", "AUDIT_REPORT_FAILED", "audit/audit_report.py failed")

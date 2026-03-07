@@ -71,7 +71,13 @@ def promote_files(
 
     # Stage promoted files
     if files_to_promote:
-        logger.run_logged(["git", "add", "--"] + files_to_promote, cwd=live_repo)
+        r = logger.run_logged(
+            ["git", "add", "--"] + files_to_promote,
+            cwd=live_repo,
+            timeout_stage="PROMOTION",
+        )
+        if r.returncode != 0:
+            raise RunnerError("PROMOTION", "GIT", "git add failed")
 
     logger.info_core(
         f"promotion=OK promoted={len(files_to_promote)} live_changed={len(changed_live)}"

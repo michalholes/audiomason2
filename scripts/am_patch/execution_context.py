@@ -78,6 +78,7 @@ def open_execution_context(
         r = logger.run_logged(
             ["git", "status", "--porcelain", "--untracked-files=all"],
             cwd=repo_root,
+            timeout_stage="SECURITY",
         )
         live_guard_before = r.stdout or ""
         logger.line(f"live_repo_porcelain_len={len(live_guard_before)}")

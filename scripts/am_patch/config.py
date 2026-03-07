@@ -1,14 +1,13 @@
 from __future__ import annotations
 
 import re
-import shlex
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from .config_ipc_surface import IPC_NONNEGATIVE_IPC_INT_KEYS, apply_ipc_cfg_surface
-from .config_monolith_areas import parse_monolith_areas
+from .config_gate_execution import apply_gate_execution_cfg
+from .config_ipc_surface import apply_ipc_cfg_surface
 from .errors import RunnerError
 from .policy_monolith_mixin import PolicyMonolithMixin
 from .success_archive_retention import validate_success_archive_retention
@@ -118,6 +117,8 @@ class Policy(PolicyMonolithMixin):
     verbosity: str = "verbose"
 
     log_level: str = "verbose"
+
+    runner_subprocess_timeout_s: int = 1800
 
     json_out: bool = False
 
@@ -600,6 +601,12 @@ def build_policy(defaults: Policy, cfg: dict[str, Any]) -> Policy:
             f"invalid log_level={p.log_level!r}; allowed: debug|verbose|normal|warning|quiet",
         )
 
+    if "runner_subprocess_timeout_s" in cfg:
+        p.runner_subprocess_timeout_s = int(cfg["runner_subprocess_timeout_s"])
+        _mark_cfg(p, cfg, "runner_subprocess_timeout_s")
+    if p.runner_subprocess_timeout_s < 0:
+        raise RunnerError("CONFIG", "INVALID", "runner_subprocess_timeout_s must be >= 0")
+
     p.console_color = str(cfg.get("console_color", p.console_color))
     _mark_cfg(p, cfg, "console_color")
     if p.console_color not in ("auto", "always", "never"):
@@ -710,329 +717,14 @@ def build_policy(defaults: Policy, cfg: dict[str, Any]) -> Policy:
     p.enforce_allowed_files = _as_bool(cfg, "enforce_allowed_files", p.enforce_allowed_files)
     _mark_cfg(p, cfg, "enforce_allowed_files")
 
-    p.run_all_tests = _as_bool(cfg, "run_all_tests", p.run_all_tests)
-    _mark_cfg(p, cfg, "run_all_tests")
-    p.compile_check = _as_bool(cfg, "compile_check", p.compile_check)
-    _mark_cfg(p, cfg, "compile_check")
-    p.ruff_autofix = _as_bool(cfg, "ruff_autofix", p.ruff_autofix)
-    _mark_cfg(p, cfg, "ruff_autofix")
-    p.ruff_autofix_legalize_outside = _as_bool(
-        cfg, "ruff_autofix_legalize_outside", p.ruff_autofix_legalize_outside
+    apply_gate_execution_cfg(
+        cfg,
+        p,
+        as_bool=_as_bool,
+        as_str_required=_as_str_required,
+        as_list_str=_as_list_str,
+        mark_cfg=_mark_cfg,
     )
-    _mark_cfg(p, cfg, "ruff_autofix_legalize_outside")
-    p.ruff_format = _as_bool(cfg, "ruff_format", p.ruff_format)
-    _mark_cfg(p, cfg, "ruff_format")
-
-    p.gates_allow_fail = _as_bool(cfg, "gates_allow_fail", p.gates_allow_fail)
-    _mark_cfg(p, cfg, "gates_allow_fail")
-    p.apply_failure_partial_gates_policy = _as_str_required(
-        cfg, "apply_failure_partial_gates_policy", p.apply_failure_partial_gates_policy
-    )
-    _mark_cfg(p, cfg, "apply_failure_partial_gates_policy")
-    p.apply_failure_zero_gates_policy = _as_str_required(
-        cfg, "apply_failure_zero_gates_policy", p.apply_failure_zero_gates_policy
-    )
-    _mark_cfg(p, cfg, "apply_failure_zero_gates_policy")
-
-    p.gates_skip_dont_touch = _as_bool(cfg, "gates_skip_dont_touch", p.gates_skip_dont_touch)
-    _mark_cfg(p, cfg, "gates_skip_dont_touch")
-    p.dont_touch_paths = _as_list_str(cfg, "dont_touch_paths", p.dont_touch_paths)
-    _mark_cfg(p, cfg, "dont_touch_paths")
-
-    p.gates_skip_ruff = _as_bool(cfg, "gates_skip_ruff", p.gates_skip_ruff)
-    _mark_cfg(p, cfg, "gates_skip_ruff")
-    p.gates_skip_pytest = _as_bool(cfg, "gates_skip_pytest", p.gates_skip_pytest)
-    _mark_cfg(p, cfg, "gates_skip_pytest")
-    p.gates_skip_mypy = _as_bool(cfg, "gates_skip_mypy", p.gates_skip_mypy)
-    _mark_cfg(p, cfg, "gates_skip_mypy")
-    p.gates_skip_docs = _as_bool(cfg, "gates_skip_docs", p.gates_skip_docs)
-    _mark_cfg(p, cfg, "gates_skip_docs")
-
-    p.gates_skip_monolith = _as_bool(cfg, "gates_skip_monolith", p.gates_skip_monolith)
-    _mark_cfg(p, cfg, "gates_skip_monolith")
-
-    p.gate_monolith_enabled = _as_bool(cfg, "gate_monolith_enabled", p.gate_monolith_enabled)
-    _mark_cfg(p, cfg, "gate_monolith_enabled")
-
-    p.gate_monolith_mode = str(cfg.get("gate_monolith_mode", p.gate_monolith_mode)).strip()
-    _mark_cfg(p, cfg, "gate_monolith_mode")
-    if p.gate_monolith_mode not in ("strict", "warn_only", "report_only"):
-        raise RunnerError(
-            "CONFIG",
-            "INVALID",
-            (
-                "invalid gate_monolith_mode="
-                f"{p.gate_monolith_mode!r}; allowed: strict|warn_only|report_only"
-            ),
-        )
-
-    p.gate_monolith_scan_scope = str(
-        cfg.get("gate_monolith_scan_scope", p.gate_monolith_scan_scope)
-    ).strip()
-    _mark_cfg(p, cfg, "gate_monolith_scan_scope")
-    if p.gate_monolith_scan_scope not in ("patch", "workspace"):
-        raise RunnerError(
-            "CONFIG",
-            "INVALID",
-            (
-                "invalid gate_monolith_scan_scope="
-                f"{p.gate_monolith_scan_scope!r}; allowed: patch|workspace"
-            ),
-        )
-
-    if "gate_monolith_extensions" in cfg:
-        raw_ext = cfg["gate_monolith_extensions"]
-        if not isinstance(raw_ext, list) or not all(isinstance(x, str) for x in raw_ext):
-            raise RunnerError(
-                "CONFIG",
-                "INVALID",
-                "gate_monolith_extensions must be list[str]",
-            )
-        cleaned: list[str] = []
-        for item in raw_ext:
-            s = str(item).strip()
-            if not s:
-                continue
-            if not s.startswith("."):
-                s = "." + s
-            if s not in cleaned:
-                cleaned.append(s)
-        if not cleaned:
-            raise RunnerError(
-                "CONFIG",
-                "INVALID",
-                "gate_monolith_extensions must be non-empty",
-            )
-        p.gate_monolith_extensions = cleaned
-        _mark_cfg(p, cfg, "gate_monolith_extensions")
-
-    p.gate_monolith_compute_fanin = _as_bool(
-        cfg, "gate_monolith_compute_fanin", p.gate_monolith_compute_fanin
-    )
-    _mark_cfg(p, cfg, "gate_monolith_compute_fanin")
-
-    p.gate_monolith_on_parse_error = str(
-        cfg.get("gate_monolith_on_parse_error", p.gate_monolith_on_parse_error)
-    ).strip()
-    _mark_cfg(p, cfg, "gate_monolith_on_parse_error")
-    if p.gate_monolith_on_parse_error not in ("fail", "warn"):
-        raise RunnerError(
-            "CONFIG",
-            "INVALID",
-            (
-                "invalid gate_monolith_on_parse_error="
-                f"{p.gate_monolith_on_parse_error!r}; allowed: fail|warn"
-            ),
-        )
-
-    prefixes, names, dynamic = parse_monolith_areas(cfg)
-    p.gate_monolith_areas_prefixes = prefixes
-    _mark_cfg(p, cfg, "gate_monolith_areas_prefixes")
-    p.gate_monolith_areas_names = names
-    _mark_cfg(p, cfg, "gate_monolith_areas_names")
-    p.gate_monolith_areas_dynamic = dynamic
-    _mark_cfg(p, cfg, "gate_monolith_areas_dynamic")
-
-    for k in (
-        "gate_monolith_large_loc",
-        "gate_monolith_huge_loc",
-        "gate_monolith_large_allow_loc_increase",
-        "gate_monolith_huge_allow_loc_increase",
-        "gate_monolith_large_allow_exports_delta",
-        "gate_monolith_huge_allow_exports_delta",
-        "gate_monolith_large_allow_imports_delta",
-        "gate_monolith_huge_allow_imports_delta",
-        "gate_monolith_new_file_max_loc",
-        "gate_monolith_new_file_max_exports",
-        "gate_monolith_new_file_max_imports",
-        "gate_monolith_hub_fanin_delta",
-        "gate_monolith_hub_fanout_delta",
-        "gate_monolith_hub_exports_delta_min",
-        "gate_monolith_hub_loc_delta_min",
-        "gate_monolith_crossarea_min_distinct_areas",
-        *IPC_NONNEGATIVE_IPC_INT_KEYS,
-    ):
-        if k in cfg:
-            setattr(p, k, int(cfg[k]))
-            _mark_cfg(p, cfg, k)
-        if int(getattr(p, k)) < 0:
-            raise RunnerError("CONFIG", "INVALID", f"{k} must be >= 0")
-
-    if p.ipc_handshake_enabled and p.ipc_handshake_wait_s < 1:
-        raise RunnerError(
-            "CONFIG",
-            "INVALID",
-            "ipc_handshake_wait_s must be >= 1 when ipc_handshake_enabled=true",
-        )
-
-    p.gate_monolith_catchall_basenames = _as_list_str(
-        cfg, "gate_monolith_catchall_basenames", p.gate_monolith_catchall_basenames
-    )
-    _mark_cfg(p, cfg, "gate_monolith_catchall_basenames")
-    p.gate_monolith_catchall_dirs = _as_list_str(
-        cfg, "gate_monolith_catchall_dirs", p.gate_monolith_catchall_dirs
-    )
-    _mark_cfg(p, cfg, "gate_monolith_catchall_dirs")
-    p.gate_monolith_catchall_allowlist = _as_list_str(
-        cfg, "gate_monolith_catchall_allowlist", p.gate_monolith_catchall_allowlist
-    )
-    _mark_cfg(p, cfg, "gate_monolith_catchall_allowlist")
-
-    p.gates_skip_js = _as_bool(cfg, "gates_skip_js", p.gates_skip_js)
-    _mark_cfg(p, cfg, "gates_skip_js")
-
-    p.gate_js_extensions = _as_list_str(cfg, "gate_js_extensions", p.gate_js_extensions)
-    _mark_cfg(p, cfg, "gate_js_extensions")
-
-    if "gate_js_command" in cfg:
-        raw_cmd = cfg["gate_js_command"]
-        if isinstance(raw_cmd, str):
-            cmd_list = shlex.split(raw_cmd)
-        elif isinstance(raw_cmd, list) and all(isinstance(x, str) for x in raw_cmd):
-            cmd_list = raw_cmd
-        else:
-            raise RunnerError("CONFIG", "INVALID", "gate_js_command must be a string or list[str]")
-        if not cmd_list:
-            raise RunnerError("CONFIG", "INVALID", "gate_js_command must be non-empty")
-        p.gate_js_command = cmd_list
-        _mark_cfg(p, cfg, "gate_js_command")
-    p.gates_skip_biome = _as_bool(cfg, "gates_skip_biome", p.gates_skip_biome)
-    _mark_cfg(p, cfg, "gates_skip_biome")
-
-    p.gate_biome_extensions = _as_list_str(cfg, "gate_biome_extensions", p.gate_biome_extensions)
-    _mark_cfg(p, cfg, "gate_biome_extensions")
-
-    p.biome_autofix = _as_bool(cfg, "biome_autofix", p.biome_autofix)
-    _mark_cfg(p, cfg, "biome_autofix")
-    p.biome_autofix_legalize_outside = _as_bool(
-        cfg, "biome_autofix_legalize_outside", p.biome_autofix_legalize_outside
-    )
-    _mark_cfg(p, cfg, "biome_autofix_legalize_outside")
-
-    p.biome_format = _as_bool(cfg, "biome_format", p.biome_format)
-    _mark_cfg(p, cfg, "biome_format")
-    p.biome_format_legalize_outside = _as_bool(
-        cfg, "biome_format_legalize_outside", p.biome_format_legalize_outside
-    )
-    _mark_cfg(p, cfg, "biome_format_legalize_outside")
-
-    for k in ("gate_biome_command", "gate_biome_fix_command", "gate_biome_format_command"):
-        if k not in cfg:
-            continue
-        raw_cmd = cfg[k]
-        if isinstance(raw_cmd, str):
-            cmd_list = shlex.split(raw_cmd)
-        elif isinstance(raw_cmd, list) and all(isinstance(x, str) for x in raw_cmd):
-            cmd_list = raw_cmd
-        else:
-            raise RunnerError("CONFIG", "INVALID", f"{k} must be a string or list[str]")
-        # Normalize away empty/whitespace tokens so we fail early (CONFIG) instead of later (GATES).
-        cmd_list0 = [str(x).strip() for x in cmd_list if str(x).strip()]
-        if not cmd_list0:
-            raise RunnerError("CONFIG", "INVALID", f"{k} must be non-empty")
-        setattr(p, k, cmd_list0)
-        _mark_cfg(p, cfg, k)
-
-    p.gates_skip_typescript = _as_bool(cfg, "gates_skip_typescript", p.gates_skip_typescript)
-    _mark_cfg(p, cfg, "gates_skip_typescript")
-
-    p.gate_typescript_extensions = _as_list_str(
-        cfg, "gate_typescript_extensions", p.gate_typescript_extensions
-    )
-    _mark_cfg(p, cfg, "gate_typescript_extensions")
-
-    if "gate_typescript_command" in cfg:
-        raw_cmd = cfg["gate_typescript_command"]
-        if isinstance(raw_cmd, str):
-            cmd_list = shlex.split(raw_cmd)
-        elif isinstance(raw_cmd, list) and all(isinstance(x, str) for x in raw_cmd):
-            cmd_list = raw_cmd
-        else:
-            raise RunnerError(
-                "CONFIG",
-                "INVALID",
-                "gate_typescript_command must be a string or list[str]",
-            )
-        if not cmd_list:
-            raise RunnerError("CONFIG", "INVALID", "gate_typescript_command must be non-empty")
-        p.gate_typescript_command = cmd_list
-        _mark_cfg(p, cfg, "gate_typescript_command")
-
-    p.gate_docs_include = _as_list_str(cfg, "gate_docs_include", p.gate_docs_include)
-    _mark_cfg(p, cfg, "gate_docs_include")
-    p.gate_docs_exclude = _as_list_str(cfg, "gate_docs_exclude", p.gate_docs_exclude)
-    _mark_cfg(p, cfg, "gate_docs_exclude")
-    p.gate_docs_required_files = _as_list_str(
-        cfg, "gate_docs_required_files", p.gate_docs_required_files
-    )
-    _mark_cfg(p, cfg, "gate_docs_required_files")
-
-    p.gates_order = _as_list_str(cfg, "gates_order", p.gates_order)
-    _mark_cfg(p, cfg, "gates_order")
-
-    p.gate_badguys_runner = str(cfg.get("gate_badguys_runner", p.gate_badguys_runner))
-    _mark_cfg(p, cfg, "gate_badguys_runner")
-    if p.gate_badguys_runner not in ("auto", "on", "off"):
-        raise RunnerError(
-            "CONFIG",
-            "INVALID",
-            f"invalid gate_badguys_runner={p.gate_badguys_runner!r}; allowed: auto|on|off",
-        )
-
-    if "gate_badguys_command" in cfg:
-        raw_cmd = cfg["gate_badguys_command"]
-        if isinstance(raw_cmd, str):
-            cmd_list = shlex.split(raw_cmd)
-        elif isinstance(raw_cmd, list) and all(isinstance(x, str) for x in raw_cmd):
-            cmd_list = raw_cmd
-        else:
-            raise RunnerError(
-                "CONFIG",
-                "INVALID",
-                "gate_badguys_command must be a string or list[str]",
-            )
-        if not cmd_list:
-            raise RunnerError("CONFIG", "INVALID", "gate_badguys_command must be non-empty")
-        p.gate_badguys_command = cmd_list
-        _mark_cfg(p, cfg, "gate_badguys_command")
-
-    if "gate_badguys_cwd" in cfg:
-        p.gate_badguys_cwd = str(cfg["gate_badguys_cwd"]).strip().lower()
-        _mark_cfg(p, cfg, "gate_badguys_cwd")
-        if p.gate_badguys_cwd not in ("auto", "workspace", "clone", "live"):
-            raise RunnerError(
-                "CONFIG",
-                "INVALID",
-                (
-                    f"invalid gate_badguys_cwd={p.gate_badguys_cwd!r}; allowed: "
-                    "auto|workspace|clone|live"
-                ),
-            )
-
-    p.compile_targets = _as_list_str(cfg, "compile_targets", p.compile_targets)
-    _mark_cfg(p, cfg, "compile_targets")
-    p.compile_exclude = _as_list_str(cfg, "compile_exclude", p.compile_exclude)
-    _mark_cfg(p, cfg, "compile_exclude")
-
-    p.ruff_targets = _as_list_str(cfg, "ruff_targets", p.ruff_targets)
-    _mark_cfg(p, cfg, "ruff_targets")
-    p.pytest_targets = _as_list_str(cfg, "pytest_targets", p.pytest_targets)
-    _mark_cfg(p, cfg, "pytest_targets")
-    p.mypy_targets = _as_list_str(cfg, "mypy_targets", p.mypy_targets)
-    _mark_cfg(p, cfg, "mypy_targets")
-
-    p.typescript_targets = _as_list_str(cfg, "typescript_targets", p.typescript_targets)
-    _mark_cfg(p, cfg, "typescript_targets")
-
-    if "gate_typescript_base_tsconfig" in cfg:
-        p.gate_typescript_base_tsconfig = str(cfg["gate_typescript_base_tsconfig"]).strip()
-        _mark_cfg(p, cfg, "gate_typescript_base_tsconfig")
-    from .policy_gate_modes import apply_gate_modes
-
-    apply_gate_modes(cfg, p, _mark_cfg)
-
-    p.pytest_use_venv = _as_bool(cfg, "pytest_use_venv", p.pytest_use_venv)
-    _mark_cfg(p, cfg, "pytest_use_venv")
 
     p.fail_if_live_files_changed = _as_bool(
         cfg, "fail_if_live_files_changed", p.fail_if_live_files_changed

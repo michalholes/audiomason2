@@ -85,8 +85,8 @@ class RunContext:
     lock: FileLock | None = None
 
 
-def _resolve_repo_root() -> Path:
-    return resolve_repo_root()
+def _resolve_repo_root(timeout_s: int = 0) -> Path:
+    return resolve_repo_root(timeout_s=timeout_s)
 
 
 def _is_under(child: Path, parent: Path) -> bool:
@@ -219,7 +219,11 @@ def build_effective_policy(argv: list[str]) -> int | tuple[Any, Policy, Path, st
 def build_paths_and_logger(
     cli: Any, policy: Policy, config_path: Path, used_cfg: str
 ) -> RunContext:
-    repo_root = Path(policy.repo_root) if policy.repo_root else _resolve_repo_root()
+    repo_root = (
+        Path(policy.repo_root)
+        if policy.repo_root
+        else _resolve_repo_root(policy.runner_subprocess_timeout_s)
+    )
     patch_root = Path(policy.patch_dir) if policy.patch_dir else (repo_root / policy.patch_dir_name)
     isolated_work_patch_dir: Path | None = None
     patch_dir = patch_root
@@ -631,7 +635,9 @@ def run_mode(ctx: RunContext) -> RunResult:
         ):
             logger.section("LIVE REPO GUARD (after patch)")
             r2 = logger.run_logged(
-                ["git", "status", "--porcelain", "--untracked-files=all"], cwd=repo_root
+                ["git", "status", "--porcelain", "--untracked-files=all"],
+                cwd=repo_root,
+                timeout_stage="SECURITY",
             )
             live_guard_after = r2.stdout or ""
             logger.line(f"live_repo_porcelain_len={len(live_guard_after)}")
@@ -702,7 +708,9 @@ def run_mode(ctx: RunContext) -> RunResult:
         ):
             logger.section("LIVE REPO GUARD (after gates)")
             r2 = logger.run_logged(
-                ["git", "status", "--porcelain", "--untracked-files=all"], cwd=repo_root
+                ["git", "status", "--porcelain", "--untracked-files=all"],
+                cwd=repo_root,
+                timeout_stage="SECURITY",
             )
             live_guard_after = r2.stdout or ""
             logger.line(f"live_repo_porcelain_len={len(live_guard_after)}")

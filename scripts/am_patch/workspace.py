@@ -237,7 +237,11 @@ def drop_checkpoint(logger: Logger, repo: Path, ckpt: WorkspaceCheckpoint | None
     if ckpt.kind != "stash" or not ckpt.stash_ref:
         return
     logger.section("WORKSPACE CHECKPOINT DROP")
-    _ = logger.run_logged(["git", "stash", "drop", ckpt.stash_ref], cwd=repo)
+    _ = logger.run_logged(
+        ["git", "stash", "drop", ckpt.stash_ref],
+        cwd=repo,
+        timeout_hard_fail=False,
+    )
 
 
 def rollback_to_checkpoint(logger: Logger, repo: Path, ckpt: WorkspaceCheckpoint | None) -> None:
@@ -263,6 +267,10 @@ def rollback_to_checkpoint(logger: Logger, repo: Path, ckpt: WorkspaceCheckpoint
         r3 = logger.run_logged(["git", "stash", "apply", "--index", ckpt.stash_ref], cwd=repo)
         if r3.returncode != 0:
             raise RunnerError("ROLLBACK", "GIT", "git stash apply failed during rollback")
-        _ = logger.run_logged(["git", "stash", "drop", ckpt.stash_ref], cwd=repo)
+        _ = logger.run_logged(
+            ["git", "stash", "drop", ckpt.stash_ref],
+            cwd=repo,
+            timeout_hard_fail=False,
+        )
     else:
         logger.line("rollback_to=CLEAN (reset+clean only)")

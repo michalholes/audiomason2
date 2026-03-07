@@ -30,6 +30,7 @@ _SECTION_BY_KEY: dict[str, str] = {
     "patch_dir": "",
     "verbosity": "",
     "log_level": "",
+    "runner_subprocess_timeout_s": "",
     "json_out": "",
     "console_color": "",
     "ipc_socket_enabled": "",
@@ -214,6 +215,7 @@ _LABEL_BY_KEY: dict[str, str] = {
     "live_repo_guard": "Git safety: live repo guard",
     "live_repo_guard_scope": "Git safety: live repo guard scope",
     "repo_root": "Paths: repo root",
+    "runner_subprocess_timeout_s": "Runner: subprocess timeout (s)",
     "ruff_autofix": "Ruff: autofix",
     "ruff_autofix_legalize_outside": "Ruff: autofix legalize outside",
     "ruff_format": "Ruff: format",
@@ -332,6 +334,10 @@ _HELP_BY_KEY: dict[str, str] = {
     "repo_root": (
         "Optional override for the repository root path. "
         "See: scripts/am_patch_policy_glossary.md## Key: repo_root"
+    ),
+    "runner_subprocess_timeout_s": (
+        "Hard timeout for runner subprocesses in seconds; 0 disables it. "
+        "See: scripts/am_patch_policy_glossary.md## Key: runner_subprocess_timeout_s"
     ),
     "ruff_autofix": (
         "Run ruff in autofix mode before other gates. "

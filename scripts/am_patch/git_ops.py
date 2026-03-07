@@ -11,7 +11,7 @@ from .log import Logger
 
 
 def _git(logger: Logger, repo: Path, args: list[str]) -> str:
-    r = logger.run_logged(["git", *args], cwd=repo)
+    r = logger.run_logged(["git", *args], cwd=repo, timeout_stage="PREFLIGHT")
     if r.returncode != 0:
         raise RunnerError("PREFLIGHT", "GIT", f"git {' '.join(args)} failed (rc={r.returncode})")
     return (r.stdout or "").strip()
@@ -66,7 +66,9 @@ def require_up_to_date(logger: Logger, repo: Path, branch: str) -> None:
 def file_diff_since(logger: Logger, repo: Path, base_sha: str, paths: list[str]) -> list[str]:
     # return list of files that changed in repo since base_sha (repo-relative)
     r = logger.run_logged(
-        ["git", "diff", "--name-only", f"{base_sha}..HEAD", "--", *paths], cwd=repo
+        ["git", "diff", "--name-only", f"{base_sha}..HEAD", "--", *paths],
+        cwd=repo,
+        timeout_stage="PROMOTION",
     )
     if r.returncode != 0:
         raise RunnerError("PROMOTION", "GIT", f"git diff failed (rc={r.returncode})")
@@ -81,6 +83,7 @@ def unified_diff_since(logger: Logger, repo: Path, base_sha: str, rel_path: str)
     r = logger.run_logged(
         ["git", "diff", "--no-color", f"{base_sha}..HEAD", "--", rel_path],
         cwd=repo,
+        timeout_stage="PROMOTION",
     )
     if r.returncode != 0:
         raise RunnerError("PROMOTION", "GIT", f"git diff failed (rc={r.returncode})")
@@ -89,30 +92,38 @@ def unified_diff_since(logger: Logger, repo: Path, base_sha: str, rel_path: str)
 
 def commit(logger: Logger, repo: Path, message: str, *, stage_all: bool = True) -> str:
     if stage_all:
-        r1 = logger.run_logged(["git", "status", "--porcelain"], cwd=repo)
+        r1 = logger.run_logged(
+            ["git", "status", "--porcelain"],
+            cwd=repo,
+            timeout_stage="PROMOTION",
+        )
         if r1.returncode != 0:
             raise RunnerError("PROMOTION", "GIT", "git status failed")
         if not (r1.stdout or "").strip():
             raise RunnerError("PROMOTION", "NOOP", "no changes to commit")
-        r2 = logger.run_logged(["git", "add", "-A"], cwd=repo)
+        r2 = logger.run_logged(["git", "add", "-A"], cwd=repo, timeout_stage="PROMOTION")
         if r2.returncode != 0:
             raise RunnerError("PROMOTION", "GIT", "git add failed")
     else:
         # Commit only what is already staged (promotion stages files explicitly).
-        r_cached = logger.run_logged(["git", "diff", "--cached", "--name-only"], cwd=repo)
+        r_cached = logger.run_logged(
+            ["git", "diff", "--cached", "--name-only"],
+            cwd=repo,
+            timeout_stage="PROMOTION",
+        )
         if r_cached.returncode != 0:
             raise RunnerError("PROMOTION", "GIT", "git diff --cached failed")
         if not (r_cached.stdout or "").strip():
             raise RunnerError("PROMOTION", "NOOP", "no staged changes to commit")
 
-    r3 = logger.run_logged(["git", "commit", "-m", message], cwd=repo)
+    r3 = logger.run_logged(["git", "commit", "-m", message], cwd=repo, timeout_stage="PROMOTION")
     if r3.returncode != 0:
         raise RunnerError("PROMOTION", "GIT", "git commit failed")
     return head_sha(logger, repo)
 
 
 def push(logger: Logger, repo: Path, branch: str, *, allow_fail: bool = True) -> bool:
-    r = logger.run_logged(["git", "push", "origin", branch], cwd=repo)
+    r = logger.run_logged(["git", "push", "origin", branch], cwd=repo, timeout_stage="PROMOTION")
     if r.returncode == 0:
         return True
     if allow_fail:
@@ -125,7 +136,9 @@ def files_changed_since(logger: Logger, repo: Path, base_sha: str, files: list[s
     changed: list[str] = []
     for f in files:
         r = logger.run_logged(
-            ["git", "diff", "--name-only", f"{base_sha}..HEAD", "--", f], cwd=repo
+            ["git", "diff", "--name-only", f"{base_sha}..HEAD", "--", f],
+            cwd=repo,
+            timeout_stage="PROMOTION",
         )
         if r.returncode != 0:
             continue
@@ -145,6 +158,7 @@ def git_archive(logger: Logger, repo: Path, out_zip: Path, treeish: str = "HEAD"
         r = logger.run_logged(
             ["git", "archive", "--format=zip", "-o", str(tmp_path), treeish],
             cwd=repo,
+            timeout_stage="ARCHIVE",
         )
         if r.returncode != 0:
             raise RunnerError("ARCHIVE", "GIT", f"git archive failed (rc={r.returncode})")
@@ -171,6 +185,7 @@ def commit_changed_files_name_status(
     r = logger.run_logged(
         ["git", "show", "--name-status", "--pretty=format:", commit_sha],
         cwd=repo,
+        timeout_stage="PROMOTION",
     )
     if r.returncode != 0:
         raise RunnerError("PROMOTION", "GIT", f"git show name-status failed (rc={r.returncode})")

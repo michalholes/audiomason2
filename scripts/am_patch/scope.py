@@ -87,7 +87,11 @@ def _normalize_path(p: str) -> str:
 
 
 def changed_paths(logger: Logger, repo: Path) -> list[str]:
-    r = logger.run_logged(["git", "status", "--porcelain", "--untracked-files=all"], cwd=repo)
+    r = logger.run_logged(
+        ["git", "status", "--porcelain", "--untracked-files=all"],
+        cwd=repo,
+        timeout_stage="SCOPE",
+    )
     if r.returncode != 0:
         raise RunnerError("SCOPE", "GIT", "git status failed in workspace")
 

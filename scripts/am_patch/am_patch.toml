@@ -1,5 +1,6 @@
 verbosity = "normal" # debug | verbose | normal | quiet
 console_color = "auto" # auto | always | never
+runner_subprocess_timeout_s = 1800
 
 # IPC (Unix domain socket)
 ipc_socket_enabled = true

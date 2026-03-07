@@ -40,6 +40,7 @@ def build_startup_logger_and_ipc(
         json_enabled=getattr(policy, "json_out", False),
         json_path=json_path,
         stage_provider=status.get_stage,
+        run_timeout_s=policy.runner_subprocess_timeout_s,
     )
 
     ipc: IpcController | None = None

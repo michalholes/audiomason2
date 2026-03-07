@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Any
 
 from .console import colorize_console_message, stdout_color_enabled
+from .errors import RunnerError
 
 
 @dataclass
@@ -100,6 +101,7 @@ class Logger:
         json_enabled: bool = False,
         json_path: Path | None = None,
         stage_provider: Callable[[], str] | None = None,
+        run_timeout_s: int = 0,
     ) -> None:
         self.log_path = log_path
         self.symlink_path = symlink_path
@@ -113,6 +115,7 @@ class Logger:
         self._stage_provider = stage_provider
         self._json_fp = None
         self._json_seq = 0
+        self.run_timeout_s = int(run_timeout_s or 0)
         self._mono_start = time.monotonic()
 
         self._ipc_hook: Callable[[str, str], None] | None = None
@@ -240,6 +243,57 @@ class Logger:
             stage = stage.strip() if _sep else ""
             if stage:
                 hook(kind, stage)
+
+    def _timeout_runner_error(
+        self,
+        *,
+        timeout_s: int,
+        timeout_stage: str | None,
+        timeout_category: str,
+        timeout_message: str | None,
+        argv: list[str],
+    ) -> RunnerError:
+        stage = (timeout_stage or self._get_stage()).strip() or "PREFLIGHT"
+        category = str(timeout_category or "TIMEOUT").strip() or "TIMEOUT"
+        cmd0 = str(argv[0]) if argv else "subprocess"
+        if timeout_message is not None:
+            return RunnerError(stage, category, timeout_message)
+        if stage.startswith("GATE_"):
+            gate = stage[len("GATE_") :].strip().lower() or cmd0
+            return RunnerError(
+                "GATES",
+                category,
+                f"gate failed: {gate} (subprocess timeout after {timeout_s}s)",
+            )
+        if stage == "PATCH_APPLY":
+            return RunnerError(
+                "PATCH",
+                category,
+                f"patch apply subprocess timeout after {timeout_s}s ({cmd0})",
+            )
+        if stage == "PROMOTE":
+            return RunnerError(
+                "PROMOTION",
+                category,
+                f"promotion subprocess timeout after {timeout_s}s ({cmd0})",
+            )
+        if stage == "ARCHIVE":
+            return RunnerError(
+                "ARCHIVE",
+                category,
+                f"archive subprocess timeout after {timeout_s}s ({cmd0})",
+            )
+        if stage in {"PREFLIGHT", "SCOPE", "AUDIT", "SECURITY", "ROLLBACK", "CLEANUP"}:
+            return RunnerError(
+                stage,
+                category,
+                f"subprocess timeout after {timeout_s}s ({cmd0})",
+            )
+        return RunnerError(
+            "INTERNAL",
+            category,
+            f"subprocess timeout after {timeout_s}s during {stage} ({cmd0})",
+        )
 
     def emit_json_hello(
         self, *, issue_id: str | None, mode: str, verbosity: str, log_level: str
@@ -386,22 +440,77 @@ class Logger:
         env: dict[str, str] | None = None,
         *,
         failure_dump_mode: str = "bypass",
+        timeout_s: int | None = None,
+        timeout_hard_fail: bool = True,
+        timeout_stage: str | None = None,
+        timeout_category: str = "TIMEOUT",
+        timeout_message: str | None = None,
     ) -> RunResult:
         # RUN metadata must not appear in normal/warning/verbose; keep it in DETAIL+DEBUG.
-        self.emit(severity="DEBUG", channel="DETAIL", message="RUN\n")
-        self.emit(severity="DEBUG", channel="DETAIL", message=f"cmd={argv}\n")
+        self.emit(severity="DEBUG", channel="DETAIL", kind="RUN", message="RUN\n")
+        self.emit(severity="DEBUG", channel="DETAIL", kind="RUN", message=f"cmd={argv}\n")
         if cwd is not None:
-            self.emit(severity="DEBUG", channel="DETAIL", message=f"cwd={str(cwd)}\n")
+            self.emit(severity="DEBUG", channel="DETAIL", kind="RUN", message=f"cwd={str(cwd)}\n")
 
-        p = subprocess.run(
-            argv,
-            cwd=str(cwd) if cwd else None,
-            env=env,
-            text=True,
-            capture_output=True,
-        )
+        timeout_value = self.run_timeout_s if timeout_s is None else int(timeout_s or 0)
 
-        if p.returncode != 0:
+        result: RunResult
+        try:
+            completed = subprocess.run(
+                argv,
+                cwd=str(cwd) if cwd else None,
+                env=env,
+                text=True,
+                capture_output=True,
+                timeout=(timeout_value if timeout_value > 0 else None),
+            )
+        except subprocess.TimeoutExpired as exc:
+            stdout = exc.output or ""
+            stderr = exc.stderr or ""
+            if isinstance(stdout, bytes):
+                stdout = stdout.decode("utf-8", errors="replace")
+            if isinstance(stderr, bytes):
+                stderr = stderr.decode("utf-8", errors="replace")
+            marker = f"subprocess timeout after {timeout_value}s"
+            stderr = f"{marker}\n{stderr}" if stderr else marker + "\n"
+            result = RunResult(argv=argv, returncode=124, stdout=stdout, stderr=stderr)
+            if timeout_hard_fail:
+                self.emit_json_failed_step_detail(
+                    stdout=result.stdout or "",
+                    stderr=result.stderr or "",
+                    severity="ERROR",
+                    channel="CORE",
+                    bypass=True,
+                )
+                self.emit_error_detail(
+                    "\n" + ("=" * 80) + "\nFAILED STEP OUTPUT\n" + ("=" * 80) + "\n"
+                )
+                if result.stdout:
+                    self.emit_error_detail("[stdout]\n")
+                    self.emit_error_detail(result.stdout)
+                    if not result.stdout.endswith("\n"):
+                        self.emit_error_detail("\n")
+                if result.stderr:
+                    self.emit_error_detail("[stderr]\n")
+                    self.emit_error_detail(result.stderr)
+                    if not result.stderr.endswith("\n"):
+                        self.emit_error_detail("\n")
+                raise self._timeout_runner_error(
+                    timeout_s=timeout_value,
+                    timeout_stage=timeout_stage,
+                    timeout_category=timeout_category,
+                    timeout_message=timeout_message,
+                    argv=argv,
+                ) from exc
+        else:
+            result = RunResult(
+                argv=argv,
+                returncode=completed.returncode,
+                stdout=completed.stdout,
+                stderr=completed.stderr,
+            )
+
+        if result.returncode != 0:
             if failure_dump_mode not in ("bypass", "warn_detail"):
                 raise ValueError(f"unknown failure_dump_mode: {failure_dump_mode}")
 
@@ -409,8 +518,8 @@ class Logger:
             sev: Severity = "ERROR" if bypass else "WARNING"
             ch: Channel = "CORE" if bypass else "DETAIL"
             self.emit_json_failed_step_detail(
-                stdout=p.stdout or "",
-                stderr=p.stderr or "",
+                stdout=result.stdout or "",
+                stderr=result.stderr or "",
                 severity=sev,
                 channel=ch,
                 bypass=bypass,
@@ -420,18 +529,18 @@ class Logger:
             emit = self.emit_error_detail if bypass else self.emit_warning_detail
 
             emit("\n" + ("=" * 80) + "\nFAILED STEP OUTPUT\n" + ("=" * 80) + "\n")
-            if p.stdout:
+            if result.stdout:
                 emit("[stdout]\n")
-                emit(p.stdout)
-                if not p.stdout.endswith("\n"):
+                emit(result.stdout)
+                if not result.stdout.endswith("\n"):
                     emit("\n")
-            if p.stderr:
+            if result.stderr:
                 emit("[stderr]\n")
-                emit(p.stderr)
-                if not p.stderr.endswith("\n"):
+                emit(result.stderr)
+                if not result.stderr.endswith("\n"):
                     emit("\n")
 
-        return RunResult(argv=argv, returncode=p.returncode, stdout=p.stdout, stderr=p.stderr)
+        return result
 
 
 def new_log_file(
