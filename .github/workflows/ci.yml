@@ -38,7 +38,12 @@ jobs:
           . .venv/bin/activate
           pytest
 
-      - name: Detect changes in scripts/
+      - name: Install Playwright browser
+        run: |
+          . .venv/bin/activate
+          python -m playwright install --with-deps --only-shell
+          
+        - name: Detect changes in scripts/
         id: changes
         uses: dorny/paths-filter@v3
         with:
