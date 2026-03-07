@@ -24,6 +24,7 @@ from am_patch.engine_run_gates import run_finalize_gates
 from am_patch.engine_startup_runtime import build_startup_logger_and_ipc
 from am_patch.errors import CANCEL_EXIT_CODE, RunnerCancelledError, RunnerError, fingerprint
 from am_patch.execution_context import open_execution_context
+from am_patch.final_summary import emit_final_summary
 from am_patch.gates import run_badguys
 from am_patch.ipc_socket import IpcController
 from am_patch.lock import FileLock
@@ -819,6 +820,8 @@ def run_mode(ctx: RunContext) -> RunResult:
         logger.section("CANCELED")
         logger.line(str(e))
         logger.line(fingerprint(e))
+        final_fail_stage = e.stage
+        final_fail_reason = "cancel requested"
         return _result(CANCEL_EXIT_CODE)
 
     except RunnerError as e:
@@ -866,117 +869,19 @@ def finalize_and_report(ctx: RunContext, result: RunResult) -> int:
         logger.emit_json_result(
             ok=(exit_code == 0), return_code=exit_code, log_path=log_path, json_path=json_path
         )
-        if exit_code == 0:
-            logger.emit(
-                severity="INFO",
-                channel="CORE",
-                message="RESULT: SUCCESS\n",
-                kind="RESULT",
-                summary=True,
-                to_screen=True,
-            )
-            if push_ok_for_posthook is True and final_pushed_files is not None:
-                logger.emit(
-                    severity="INFO",
-                    channel="CORE",
-                    message="FILES:\n\n",
-                    kind="FILES",
-                    summary=True,
-                    to_screen=not screen_quiet,
-                    to_log=not log_quiet,
-                )
-                for line in final_pushed_files:
-                    logger.emit(
-                        severity="INFO",
-                        channel="CORE",
-                        message=f"{line}\n",
-                        summary=True,
-                        to_screen=not screen_quiet,
-                        to_log=not log_quiet,
-                    )
-            logger.emit(
-                severity="INFO",
-                channel="CORE",
-                message=f"COMMIT: {final_commit_sha or '(none)'}\n",
-                kind="COMMIT",
-                summary=True,
-                to_screen=not screen_quiet,
-                to_log=not log_quiet,
-            )
-            if policy.commit_and_push:
-                if push_ok_for_posthook is True:
-                    push_txt = "OK"
-                elif push_ok_for_posthook is False:
-                    push_txt = "FAIL"
-                else:
-                    push_txt = "UNKNOWN"
-                logger.emit(
-                    severity="INFO",
-                    channel="CORE",
-                    message=f"PUSH: {push_txt}\n",
-                    kind="PUSH",
-                    summary=True,
-                    to_screen=not screen_quiet,
-                    to_log=not log_quiet,
-                )
-            logger.emit(
-                severity="INFO",
-                channel="CORE",
-                message=f"LOG: {log_path}\n",
-                kind="TEXT",
-                summary=True,
-                to_screen=not screen_quiet,
-                to_log=not log_quiet,
-            )
-        elif exit_code == CANCEL_EXIT_CODE:
-            logger.summary("RESULT: CANCELED")
-            logger.emit(
-                severity="INFO",
-                channel="CORE",
-                message=f"LOG: {log_path}\n",
-                kind="TEXT",
-                summary=True,
-                to_screen=not screen_quiet,
-                to_log=not log_quiet,
-            )
-        else:
-            logger.emit(
-                severity="INFO",
-                channel="CORE",
-                message="RESULT: FAIL\n",
-                kind="RESULT",
-                summary=True,
-                to_screen=True,
-            )
-            stage = final_fail_stage or "INTERNAL"
-            reason = final_fail_reason or "unexpected error"
-            logger.emit(
-                severity="INFO",
-                channel="CORE",
-                message=f"STAGE: {stage}\n",
-                kind="STAGE",
-                summary=True,
-                to_screen=not screen_quiet,
-                to_log=not log_quiet,
-            )
-            logger.emit(
-                severity="INFO",
-                channel="CORE",
-                message=f"REASON: {reason}\n",
-                kind="REASON",
-                summary=True,
-                to_screen=not screen_quiet,
-                to_log=not log_quiet,
-            )
-            logger.emit(
-                severity="INFO",
-                channel="CORE",
-                message=f"LOG: {log_path}\n",
-                kind="TEXT",
-                summary=True,
-                to_screen=not screen_quiet,
-                to_log=not log_quiet,
-            )
+        emit_final_summary(
+            logger=logger,
+            log_path=log_path,
+            exit_code=exit_code,
+            commit_and_push=bool(getattr(policy, "commit_and_push", False)),
+            final_commit_sha=final_commit_sha,
+            final_pushed_files=final_pushed_files,
+            push_ok_for_posthook=push_ok_for_posthook,
+            final_fail_stage=final_fail_stage,
+            final_fail_reason=final_fail_reason,
+            screen_quiet=screen_quiet,
+            log_quiet=log_quiet,
+        )
     except Exception:
         pass
 

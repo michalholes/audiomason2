@@ -330,7 +330,11 @@ def test_finalize_and_report_emits_canceled_result(tmp_path: Path) -> None:
         json_path=None,
         isolated_work_patch_dir=None,
     )
-    result = run_result_cls(exit_code=cancel_exit_code)
+    result = run_result_cls(
+        exit_code=cancel_exit_code,
+        final_fail_stage="GATES",
+        final_fail_reason="cancel requested",
+    )
 
     import am_patch.engine as engine_mod
 
@@ -344,3 +348,6 @@ def test_finalize_and_report_emits_canceled_result(tmp_path: Path) -> None:
     assert rc == cancel_exit_code
     text = (tmp_path / "am_patch.log").read_text(encoding="utf-8")
     assert "RESULT: CANCELED" in text
+    assert "STAGE: GATES" in text
+    assert "REASON: cancel requested" in text
+    assert f"LOG: {tmp_path / 'am_patch.log'}" in text
