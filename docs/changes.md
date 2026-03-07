@@ -1,10 +1,8 @@
-## 2026-03-07T09:30:00+01:00
+## 2026-03-07T00:00:02+01:00
 
--   spec: Define PatchHub main UI layout ordering so the header does
-    not render parse or enqueue hints, the left sidebar orders
-    Workspaces before Stats, and the Advanced canonical runner
-    card lives below Preview in the right sidebar.
--   spec: Bump specification version to 2.0.10-normalized-m1.
+-   Issue 110: add first-class prompt primitive authoring controls to the
+    v3 web editor, keep Raw JSON authoritative, and keep ui.message@1
+    non-interactive in the editor.
 
 ## 2026-03-07T00:00:01+01:00
 

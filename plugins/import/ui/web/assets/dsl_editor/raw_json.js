@@ -28,13 +28,16 @@
 			typeof actions.onApply === "function" ? actions.onApply : function () {};
 
 		const toolbar = el("div", "buttonRow");
+		toolbar.setAttribute("data-am2-raw-json-toolbar", "true");
 		const visualBtn = el("button", "btn", "Visual");
 		visualBtn.type = "button";
+		visualBtn.setAttribute("data-am2-raw-json-toggle", "visual");
 		visualBtn.addEventListener("click", function () {
 			onSetMode(false);
 		});
 		const rawBtn = el("button", "btn", "Raw JSON");
 		rawBtn.type = "button";
+		rawBtn.setAttribute("data-am2-raw-json-toggle", "raw");
 		rawBtn.addEventListener("click", function () {
 			onSetMode(true);
 		});
@@ -44,8 +47,18 @@
 
 		textarea.classList.toggle("is-hidden", !mode);
 		if (!mode) return;
+
+		const note = el(
+			"div",
+			"flowStepDesc",
+			"Raw JSON is authoritative. Visual mode must preserve unknown keys.",
+		);
+		note.setAttribute("data-am2-raw-json-note", "authoritative");
+		mount.appendChild(note);
+
 		const applyBtn = el("button", "btn", "Apply Raw JSON");
 		applyBtn.type = "button";
+		applyBtn.setAttribute("data-am2-raw-json-apply", "true");
 		applyBtn.addEventListener("click", function () {
 			onApply(textarea.value || "{}");
 		});
