@@ -1,3 +1,11 @@
+## 2026-03-07T09:30:00+01:00
+
+-   spec: Define PatchHub main UI layout ordering so the header does
+    not render parse or enqueue hints, the left sidebar orders
+    Workspaces before Stats, and the Advanced canonical runner
+    card lives below Preview in the right sidebar.
+-   spec: Bump specification version to 2.0.10-normalized-m1.
+
 ## 2026-03-07T00:00:01+01:00
 
 -   Issue 109: add CLI/Web runtime parity for v3 prompt metadata, ship a

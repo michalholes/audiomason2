@@ -677,11 +677,47 @@ Preview visibility is controlled only by explicit user interaction
 The "Quick actions" card is not present in the main UI.
 Filesystem navigation remains available via the Files panel.
 
+7.1.6 Main UI Layout Ordering
+
+The main UI layout is deterministic and layout-only. This section changes card
+placement only; it does not change queue behavior, validation rules, or API
+semantics.
+
+Header rules (templates/index.html):
+- The header MUST render only the top title/status row.
+- The header MUST NOT render parseHint or enqueueHint.
+- enqueueHint MUST render inside the Start run card.
+- parseHint MUST render inside the Advanced card.
+
+Left sidebar order (top to bottom):
+- Active job
+- Workspaces
+- Stats
+- Runs
+
+Right sidebar order (top to bottom):
+- Progress
+- Jobs
+- Preview
+- Advanced
+
+Advanced card requirements:
+- The UI MUST provide a dedicated "Advanced" card in the right
+  sidebar.
+- The card MUST contain the canonical runner command controls:
+  - rawCommand
+  - parseBtn
+  - previewToggle
+  - parseHint
+- The Advanced card MUST render below the Preview card.
+
+This is a layout-only requirement. Existing element ids and existing client
+behavior remain unchanged.
 
 7.1.4 Sidebar Collapsible Lists (Runs, Jobs)
 
 The main UI includes three sidebar lists that are operator convenience only:
-- Workspaces list (left sidebar; between Stats and Runs)
+- Workspaces list (left sidebar; above Stats and Runs)
 - Runs list (left sidebar)
 - Jobs list (right sidebar)
 
