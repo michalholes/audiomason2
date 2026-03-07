@@ -1,6 +1,6 @@
 ## 2026-03-06T00:00:02+01:00
 
--   Issue 107: define v3 prompt metadata keys, PHASE 1 autofill/auto-advance semantics, and FlowModel ui exposure rules for baseline prompt primitives.
+-   Issue 107: define v3 prompt metadata keys in op.inputs, FlowModel ui projection, prompt metadata eval order, and ui.message@1 prompt-metadata exclusion.
 -   spec: Bump specification version to 2.0.9-normalized-m1.
 
 ## 2026-03-06T00:00:01+01:00
