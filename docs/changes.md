@@ -1,3 +1,10 @@
+## 2026-03-07T00:00:04+01:00
+
+-   Issue 112: harden the default v3 import path by restoring legacy
+    selection mirrors for the bootstrap steps, forcing plan preview state
+    refresh after the automatic preview hop, and adding coexistence,
+    editor-next-run, and acceptance coverage.
+
 ## 2026-03-07T00:00:03+01:00
 
 -   Issue 111: add a Python-defined v3 default import program for the CLI

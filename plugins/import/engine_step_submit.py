@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from plugins.file_io.service.types import RootName
+
 from .dsl.interpreter_v3 import submit_current_step
 from .engine_actions_v3 import is_v3_effective_model
 from .engine_conflicts import (
@@ -17,13 +19,128 @@ from .engine_conflicts import (
     persist_conflict_resolution,
 )
 from .engine_util import (
+    _derive_selection_items,
     _emit_required,
     _exception_envelope,
     _iso_utc_now,
+    _parse_selection_expr,
     sync_session_cursor,
 )
 from .errors import StepSubmissionError, ascii_message, invariant_violation
 from .flow_runtime import CONDITIONAL_STEP_IDS
+from .storage import read_json
+
+
+def _selection_ids_from_value(*, ordered_ids: list[str], selection: Any) -> list[str]:
+    if not ordered_ids:
+        return []
+
+    ordered_set = set(ordered_ids)
+    if isinstance(selection, list):
+        if all(isinstance(item, str) for item in selection):
+            requested = [str(item) for item in selection]
+            if all(item in ordered_set for item in requested):
+                requested_set = set(requested)
+                return [item_id for item_id in ordered_ids if item_id in requested_set]
+            return []
+        if all(isinstance(item, int) and not isinstance(item, bool) for item in selection):
+            requested_indices = {int(item) for item in selection if int(item) > 0}
+            return [
+                item_id
+                for index, item_id in enumerate(ordered_ids, start=1)
+                if index in requested_indices
+            ]
+        return []
+
+    if isinstance(selection, int) and not isinstance(selection, bool):
+        selection = str(selection)
+
+    if not isinstance(selection, str):
+        return []
+
+    try:
+        requested_indices = set(_parse_selection_expr(selection, max_index=len(ordered_ids)))
+    except ValueError:
+        return []
+
+    return [
+        item_id for index, item_id in enumerate(ordered_ids, start=1) if index in requested_indices
+    ]
+
+
+def _derive_v3_selected_ids(
+    *,
+    engine: Any,
+    session_id: str,
+    step_id: str,
+    selection: Any,
+) -> list[str]:
+    session_dir = f"import/sessions/{session_id}"
+    discovery_any = read_json(engine._fs, RootName.WIZARDS, f"{session_dir}/discovery.json")
+    if not isinstance(discovery_any, list) or not all(
+        isinstance(item, dict) for item in discovery_any
+    ):
+        return []
+
+    discovery = [dict(item) for item in discovery_any]
+    authors_items, books_items = _derive_selection_items(discovery)
+    items = authors_items if step_id == "select_authors" else books_items
+    ordered_ids = [
+        str(item.get("item_id")) for item in items if isinstance(item.get("item_id"), str)
+    ]
+    return _selection_ids_from_value(ordered_ids=ordered_ids, selection=selection)
+
+
+def _sync_v3_legacy_state(*, engine: Any, session_id: str, state: dict[str, Any]) -> dict[str, Any]:
+    answers = dict(state.get("answers") or {})
+    inputs = dict(state.get("inputs") or {})
+
+    for mirrored_step_id in (
+        "select_authors",
+        "select_books",
+        "conflict_policy",
+        "final_summary_confirm",
+    ):
+        answer_any = answers.get(mirrored_step_id)
+        if isinstance(answer_any, dict):
+            inputs[mirrored_step_id] = dict(answer_any)
+
+    state["inputs"] = inputs
+
+    authors_any = inputs.get("select_authors")
+    if isinstance(authors_any, dict):
+        state["selected_author_ids"] = _derive_v3_selected_ids(
+            engine=engine,
+            session_id=session_id,
+            step_id="select_authors",
+            selection=authors_any.get("selection_expr"),
+        )
+
+    books_any = inputs.get("select_books")
+    if isinstance(books_any, dict):
+        state["selected_book_ids"] = _derive_v3_selected_ids(
+            engine=engine,
+            session_id=session_id,
+            step_id="select_books",
+            selection=books_any.get("selection_expr"),
+        )
+
+    return state
+
+
+def _needs_v3_plan_refresh(state: dict[str, Any]) -> bool:
+    computed_any = state.get("computed")
+    if isinstance(computed_any, dict) and "plan_summary" in computed_any:
+        return False
+
+    trace_any = state.get("trace")
+    if not isinstance(trace_any, list):
+        return False
+
+    return any(
+        isinstance(entry, dict) and entry.get("step_id") == "plan_preview_batch"
+        for entry in trace_any
+    )
 
 
 def submit_step_impl(
@@ -71,7 +188,16 @@ def submit_step_impl(
                 step_id=step_id,
                 payload=payload,
             )
+            next_state = _sync_v3_legacy_state(
+                engine=engine,
+                session_id=session_id,
+                state=next_state,
+            )
             next_state["updated_at"] = _iso_utc_now()
+            engine._persist_state(session_id, next_state)
+            if _needs_v3_plan_refresh(next_state):
+                engine.compute_plan(session_id)
+                next_state = engine._load_state(session_id)
             engine._append_decision(
                 session_id,
                 step_id=step_id,
@@ -79,7 +205,6 @@ def submit_step_impl(
                 result="accepted",
                 error=None,
             )
-            engine._persist_state(session_id, next_state)
             return next_state
         steps_any = effective_model.get("steps")
         if not isinstance(steps_any, list):
