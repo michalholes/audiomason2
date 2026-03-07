@@ -1,3 +1,12 @@
+## 2026-03-07T00:00:05+01:00
+
+-   Issue 500: define PatchHub post-exit grace semantics for bounded stdout
+    tail drain and IPC shutdown-tail completion without changing return_code
+    status mapping.
+
+-   Issue 500: add runner.post_exit_grace_s to PatchHub TOML and bump the
+    PatchHub runtime version to 1.8.1.
+
 ## 2026-03-07T00:00:04+01:00
 
 -   Issue 112: harden the default v3 import path by restoring legacy

@@ -3,7 +3,7 @@ Status: AUTHORITATIVE SPECIFICATION
 Applies to: scripts/patchhub/*
 Language: ENGLISH (ASCII ONLY)
 
-Specification Version: 1.9.0-spec
+Specification Version: 1.9.1-spec
 Code Baseline: audiomason2-main.zip (as provided in this chat)
 
 -------------------------------------------------------------------------------
@@ -485,6 +485,18 @@ The loader (config.py) requires the following keys to exist:
 - [indexing] log_filename_regex, stats_windows_days
 
 UI/autofill have defaults (see config.py).
+
+5.2.0 Optional keys (runner)
+
+- [runner] ipc_handshake_wait_s (int, default 1)
+  - Handshake wait injected into AM Patch via web overrides.
+  - Value MUST be an integer >= 1.
+- [runner] post_exit_grace_s (int, default 5)
+  - Shared post-exit grace for bounded completion waits after runner exit.
+  - The same value MUST bound both:
+    - stdout tail drain in the runner executor, and
+    - IPC shutdown-tail completion in the async job queue.
+  - Value MUST be an integer >= 1.
 
 5.2.1 Optional keys (server)
 
@@ -1168,6 +1180,11 @@ Runner IPC event persistence robustness (HARD):
 - If a single line grows beyond 64 MiB without a newline, the pump MUST drop
   the partial buffer and emit a JSON notice line with:
   {"type":"patchhub_notice","code":"IPC_LINE_TOO_LARGE_DROPPED",...}.
+- After runner process exit, PatchHub MUST use cfg.runner.post_exit_grace_s as
+  the shared bounded wait for both stdout tail drain and IPC shutdown-tail
+  completion.
+- If the shared post-exit grace expires, PatchHub MUST cancel the pending tail
+  wait, record deterministic diagnostics, and continue finalization.
   - Emits periodic comment pings every ~10 seconds:
     : ping
   - Ends with:
@@ -1191,6 +1208,13 @@ Lifecycle invariants (HARD):
   - but MUST NOT drop the broker termination signal (subscriber loops MUST end).
 - After successful enqueue (HTTP 200 for POST /api/jobs/enqueue),
   GET /api/jobs/<job_id>/events MUST NOT return {"reason":"job_not_found"}
+- A stuck post-exit tail wait MUST NOT keep a memory-resident job in
+  status="running" indefinitely after runner exit.
+- When cfg.runner.post_exit_grace_s expires after runner exit, PatchHub MUST:
+  - stop waiting on the pending tail task,
+  - preserve completion status mapping from return_code,
+  - persist deterministic diagnostics describing the timed-out tail path, and
+  - unblock the single-runner queue for subsequent jobs.
 
 SSE source rule (HARD):
 - SSE MUST NOT connect to the runner IPC socket directly.
@@ -1509,6 +1533,12 @@ Duplicate suppression:
 After runner exits:
 - return_code == 0 => job.status = "success"
 - return_code != 0 => job.status = "fail"
+
+Post-exit grace rule:
+- Expiry of cfg.runner.post_exit_grace_s MUST NOT change job.status mapping.
+- The final status is determined exclusively by return_code.
+- Grace expiry diagnostics are additive and MUST NOT replace the return_code
+  mapping.
 
 Cancel Variant 2 rule:
 - A cancel request MUST NOT change job.status.
