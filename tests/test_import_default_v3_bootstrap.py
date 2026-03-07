@@ -1,4 +1,4 @@
-"""Issue 111: targeted v3 default bootstrap for new CLI import sessions."""
+"""Issue 113: v3 default bootstrap applies across import entry modes."""
 
 from __future__ import annotations
 
@@ -21,12 +21,26 @@ WIZARD_DEFINITION_REL_PATH = import_module(
 ).WIZARD_DEFINITION_REL_PATH
 
 
-def _make_engine(tmp_path: Path) -> ImportWizardEngine:
+def _make_engine(
+    tmp_path: Path,
+    *,
+    launcher_mode: str | None = "interactive",
+    noninteractive: bool = False,
+    nav_ui: str = "prompt",
+) -> tuple[ImportWizardEngine, dict[str, Path]]:
     roots = {
         name: tmp_path / name for name in ("inbox", "stage", "outbox", "jobs", "config", "wizards")
     }
     for root in roots.values():
         root.mkdir(parents=True, exist_ok=True)
+    cli_defaults: dict[str, object] = {
+        "default_root": "inbox",
+        "default_path": "",
+        "noninteractive": noninteractive,
+        "render": {"nav_ui": nav_ui},
+    }
+    if launcher_mode is not None:
+        cli_defaults["launcher_mode"] = launcher_mode
     defaults = {
         "file_io": {
             "roots": {
@@ -40,18 +54,25 @@ def _make_engine(tmp_path: Path) -> ImportWizardEngine:
         },
         "output_dir": str(roots["outbox"]),
         "diagnostics": {"enabled": False},
+        "plugins": {"import": {"cli": cli_defaults}},
     }
     resolver = ConfigResolver(
-        cli_args=defaults,
+        cli_args={},
         defaults=defaults,
         user_config_path=tmp_path / "no_user_config.yaml",
         system_config_path=tmp_path / "no_system_config.yaml",
     )
-    return ImportWizardEngine(resolver=resolver)
+    return ImportWizardEngine(resolver=resolver), roots
+
+
+def _write_source_tree(roots: dict[str, Path]) -> None:
+    book_dir = roots["inbox"] / "src" / "Author A" / "Book A"
+    book_dir.mkdir(parents=True, exist_ok=True)
+    (book_dir / "track01.mp3").write_text("x", encoding="utf-8")
 
 
 def test_load_or_bootstrap_can_create_python_defined_v3_default(tmp_path: Path) -> None:
-    engine = _make_engine(tmp_path)
+    engine, _ = _make_engine(tmp_path)
     fs = engine.get_file_service()
 
     out = load_or_bootstrap_wizard_definition(fs, bootstrap_default_version=3)
@@ -70,7 +91,7 @@ def test_load_or_bootstrap_can_create_python_defined_v3_default(tmp_path: Path) 
 
 
 def test_load_or_bootstrap_replaces_invalid_artifact_with_v3_default(tmp_path: Path) -> None:
-    engine = _make_engine(tmp_path)
+    engine, _ = _make_engine(tmp_path)
     fs = engine.get_file_service()
     atomic_write_json(
         fs,
@@ -83,3 +104,30 @@ def test_load_or_bootstrap_replaces_invalid_artifact_with_v3_default(tmp_path: P
 
     assert out == canonicalize_wizard_definition(out)
     assert out["version"] == 3
+
+
+def test_create_session_bootstraps_v3_for_all_import_entry_modes(tmp_path: Path) -> None:
+    cases = [
+        ("missing_launcher_mode", None, False, "prompt"),
+        ("launcher_disabled", "disabled", False, "prompt"),
+        ("noninteractive", "fixed", True, "prompt"),
+        ("inline_nav", "interactive", False, "inline"),
+        ("both_nav", "interactive", False, "both"),
+    ]
+
+    for label, launcher_mode, noninteractive, nav_ui in cases:
+        case_root = tmp_path / label
+        case_root.mkdir(parents=True, exist_ok=True)
+        engine, roots = _make_engine(
+            case_root,
+            launcher_mode=launcher_mode,
+            noninteractive=noninteractive,
+            nav_ui=nav_ui,
+        )
+        _write_source_tree(roots)
+
+        state = engine.create_session("inbox", "src")
+
+        assert state["session_id"], label
+        loaded = engine.get_state(str(state["session_id"]))
+        assert loaded["effective_model"]["flowmodel_kind"] == "dsl_step_graph_v3", label

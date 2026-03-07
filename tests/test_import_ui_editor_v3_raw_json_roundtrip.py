@@ -91,8 +91,25 @@ sandbox.window.AM2DSLEditorNodeForm.renderNodeForm({
 });
 
 function visit(node, fn) {
-  fn(node);
-  (node.children || []).forEach((child) => visit(child, fn));
+  const pathNodes = new Set();
+  let steps = 0;
+
+  function walk(current) {
+    if (!current) return;
+    steps += 1;
+    if (steps > 5000) {
+      throw new Error("render tree traversal exceeded 5000 steps");
+    }
+    if (pathNodes.has(current)) {
+      throw new Error("render tree traversal cycle detected");
+    }
+    pathNodes.add(current);
+    fn(current);
+    (current.children || []).forEach((child) => walk(child));
+    pathNodes.delete(current);
+  }
+
+  walk(node);
 }
 
 function findByAttr(node, name, value) {
@@ -216,8 +233,25 @@ sandbox.window.AM2DSLEditorRawJSON.renderRawJSON({
 });
 
 function visit(node, fn) {
-  fn(node);
-  (node.children || []).forEach((child) => visit(child, fn));
+  const pathNodes = new Set();
+  let steps = 0;
+
+  function walk(current) {
+    if (!current) return;
+    steps += 1;
+    if (steps > 5000) {
+      throw new Error("render tree traversal exceeded 5000 steps");
+    }
+    if (pathNodes.has(current)) {
+      throw new Error("render tree traversal cycle detected");
+    }
+    pathNodes.add(current);
+    fn(current);
+    (current.children || []).forEach((child) => walk(child));
+    pathNodes.delete(current);
+  }
+
+  walk(node);
 }
 
 function findByAttr(node, name, value) {
@@ -255,13 +289,17 @@ process.stdout.write(
 
 
 def _run_node(script: str, payload: dict[str, object]) -> object:
-    proc = subprocess.run(
-        ["node", "-e", script],
-        input=json.dumps(payload),
-        text=True,
-        capture_output=True,
-        check=True,
-    )
+    try:
+        proc = subprocess.run(
+            ["node", "-e", script],
+            input=json.dumps(payload),
+            text=True,
+            capture_output=True,
+            check=True,
+            timeout=5,
+        )
+    except subprocess.TimeoutExpired as err:
+        raise AssertionError("Node editor harness timed out") from err
     return json.loads(proc.stdout)
 
 

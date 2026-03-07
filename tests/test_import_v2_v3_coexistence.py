@@ -1,4 +1,4 @@
-"""Issue 112: deterministic v2/v3 coexistence after enabling the v3 default."""
+"""Issue 113: deterministic v2/v3 coexistence with the v3 default bootstrap."""
 
 from __future__ import annotations
 
@@ -16,7 +16,13 @@ WIZARD_DEFINITION_REL_PATH = import_module(
 ).WIZARD_DEFINITION_REL_PATH
 
 
-def _make_engine(tmp_path: Path) -> tuple[ImportWizardEngine, dict[str, Path]]:
+def _make_engine(
+    tmp_path: Path,
+    *,
+    launcher_mode: str = "fixed",
+    noninteractive: bool = False,
+    nav_ui: str = "prompt",
+) -> tuple[ImportWizardEngine, dict[str, Path]]:
     roots = {
         name: tmp_path / name for name in ("inbox", "stage", "outbox", "jobs", "config", "wizards")
     }
@@ -38,11 +44,11 @@ def _make_engine(tmp_path: Path) -> tuple[ImportWizardEngine, dict[str, Path]]:
         "plugins": {
             "import": {
                 "cli": {
-                    "launcher_mode": "fixed",
+                    "launcher_mode": launcher_mode,
                     "default_root": "inbox",
                     "default_path": "",
-                    "noninteractive": False,
-                    "render": {"nav_ui": "prompt"},
+                    "noninteractive": noninteractive,
+                    "render": {"nav_ui": nav_ui},
                 }
             }
         },
@@ -82,7 +88,12 @@ def _v2_definition() -> dict[str, object]:
 
 
 def test_v2_and_v3_sessions_can_coexist_deterministically(tmp_path: Path) -> None:
-    engine, roots = _make_engine(tmp_path)
+    engine, roots = _make_engine(
+        tmp_path,
+        launcher_mode="disabled",
+        noninteractive=True,
+        nav_ui="both",
+    )
     _write_source_tree(roots)
 
     state_v3 = engine.create_session("inbox", "src")

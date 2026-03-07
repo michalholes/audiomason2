@@ -43,21 +43,14 @@ if TYPE_CHECKING:
 
 
 def _preferred_bootstrap_default_version(*, engine: ImportWizardEngine) -> int:
-    if not engine._has_key("plugins.import.cli.launcher_mode"):
-        return 2
-    launcher_mode = str(engine._resolver.resolve("plugins.import.cli.launcher_mode")[0])
-    if launcher_mode == "disabled":
-        return 2
-    noninteractive = False
-    if engine._has_key("plugins.import.cli.noninteractive"):
-        noninteractive = bool(engine._resolver.resolve("plugins.import.cli.noninteractive")[0])
-    if noninteractive:
-        return 2
-    nav_ui = "prompt"
-    if engine._has_key("plugins.import.cli.render.nav_ui"):
-        nav_ui = str(engine._resolver.resolve("plugins.import.cli.render.nav_ui")[0])
-    nav_ui = nav_ui.strip().lower() or "prompt"
-    if nav_ui in {"inline", "both"}:
+    cli_scope_keys = (
+        "plugins.import.cli.launcher_mode",
+        "plugins.import.cli.default_root",
+        "plugins.import.cli.default_path",
+        "plugins.import.cli.noninteractive",
+        "plugins.import.cli.render.nav_ui",
+    )
+    if not any(engine._has_key(key) for key in cli_scope_keys):
         return 2
     return 3
 

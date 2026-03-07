@@ -84,7 +84,7 @@ def _load_only_session_state(roots: dict[str, Path]) -> dict[str, object]:
     return json.loads((sessions[0] / "state.json").read_text(encoding="utf-8"))
 
 
-def test_nav_ui_inline_current_bootstrap_scope_is_explicit_v2(tmp_path: Path) -> None:
+def test_nav_ui_inline_bootstraps_v3_default_program(tmp_path: Path) -> None:
     engine, resolver, roots = _make_engine(tmp_path, nav_ui="inline")
 
     inputs = iter(["all", ":cancel"])
@@ -109,7 +109,7 @@ def test_nav_ui_inline_current_bootstrap_scope_is_explicit_v2(tmp_path: Path) ->
     wizard_definition = json.loads(
         _active_wizard_definition_path(roots).read_text(encoding="utf-8")
     )
-    assert wizard_definition["version"] == 2
+    assert wizard_definition["version"] == 3
 
 
 def test_nav_ui_inline_existing_v3_definition_accepts_cancel_on_second_prompt(
