@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import select
 import socket
 import time
 from pathlib import Path
@@ -102,37 +103,67 @@ def record_ipc_stream(
     value_msgs: list[str] = []
     result: dict[str, Any] | None = None
 
+    def _handle_line(line: str, *, out_fp: Any) -> None:
+        nonlocal result
+
+        # Stream persistence rule: write exact lines.
+        out_fp.write(line)
+
+        try:
+            obj = json.loads(line)
+        except Exception:
+            return
+
+        if isinstance(obj, dict) and obj.get("type") == "log":
+            msg = obj.get("msg")
+            if isinstance(msg, str):
+                value_msgs.append(msg)
+
+        if isinstance(obj, dict) and obj.get("type") == "result":
+            valid = _validate_result(obj)
+            if valid is not None:
+                result = valid
+
     try:
-        s.settimeout(0.2)
-        fp = s.makefile("r", encoding="utf-8", newline="\n")
+        s.setblocking(False)
+        pending = ""
         with out_path.open("a", encoding="utf-8", newline="\n") as out_fp:
             while True:
-                if total_deadline is not None and time.monotonic() >= total_deadline:
-                    break
+                wait_s: float | None
+                if total_deadline is None:
+                    wait_s = None
+                else:
+                    wait_s = max(0.0, total_deadline - time.monotonic())
+                    if wait_s == 0.0:
+                        break
+
                 try:
-                    line = fp.readline()
+                    readable, _, _ = select.select([s], [], [], wait_s)
                 except (OSError, ValueError):
                     break
-                if not line:
+                if not readable:
                     break
 
-                # Stream persistence rule: write exact lines.
-                out_fp.write(line)
-
                 try:
-                    obj = json.loads(line)
-                except Exception:
+                    chunk = s.recv(65536)
+                except BlockingIOError:
                     continue
+                except OSError:
+                    break
+                if not chunk:
+                    break
 
-                if isinstance(obj, dict) and obj.get("type") == "log":
-                    msg = obj.get("msg")
-                    if isinstance(msg, str):
-                        value_msgs.append(msg)
+                pending += chunk.decode("utf-8", errors="replace")
+                while True:
+                    newline_at = pending.find("\n")
+                    if newline_at < 0:
+                        break
+                    line = pending[: newline_at + 1]
+                    pending = pending[newline_at + 1 :]
+                    _handle_line(line, out_fp=out_fp)
 
-                if isinstance(obj, dict) and obj.get("type") == "result":
-                    valid = _validate_result(obj)
-                    if valid is not None:
-                        result = valid
+            if pending:
+                _handle_line(pending, out_fp=out_fp)
 
     finally:
         try:
