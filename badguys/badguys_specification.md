@@ -2,7 +2,7 @@
 
 Status: normative
 
-Specification Version: 0.3.0
+Specification Version: 0.3.1
 
 This document is the authoritative specification for the BadGuys suite shipped in this repository.
 BadGuys exists to systematically break the AM Patch Runner and verify that it FAILs correctly.
@@ -52,6 +52,9 @@ BadGuys MUST support the following CLI options and semantics:
 - --config PATH
   - repo-relative path to a TOML config file
   - default: "badguys/config.toml"
+  - the selected config file MUST be the single source of truth for all configuration-driven
+    behavior, including [suite], [runner], [lock], [guard], [filters], [subjects], [recipes],
+    and [evaluation]
 
 - --commit-limit N
   - overrides [suite].commit_limit from config for this run
@@ -109,6 +112,9 @@ Default config path: badguys/config.toml
 
 The config file MUST be valid TOML. Missing top-level tables MUST be treated as empty.
 Unknown keys MAY exist but MUST NOT change behavior unless explicitly defined by this specification.
+Behavior-changing configuration for BadGuys is centralized in this one TOML file.
+Known behavior-changing top-level tables are: [suite], [runner], [lock], [guard], [filters],
+[subjects], [recipes], and [evaluation].
 
 ### 4.1 [suite]
 
@@ -219,6 +225,39 @@ Unknown keys MAY exist but MUST NOT change behavior unless explicitly defined by
 - exclude (array of strings)
   - default if missing: []
   - default exclude list (see precedence rules in 3.4)
+
+### 4.5 [subjects]
+
+[subjects] defines logical test subjects and their repo-relative target paths.
+
+- structure:
+  - [subjects.tests.<test_id>.<subject_id>]
+  - required key: relpath (string, repo-relative path)
+
+Rules (normative):
+- subject_id is a logical identifier used by `.bdg` payloads and recipe tables
+- relpath MUST be repo-relative
+- relpath entries MUST be read from the effective config selected by --config PATH
+- if a referenced subject is missing, the suite MUST FAIL deterministically before execution
+
+### 4.6 [recipes]
+
+[recipes] defines how `.bdg` payloads are materialized and how steps are executed.
+
+- structure:
+  - [recipes.tests.<test_id>.assets.<asset_id>]
+  - [recipes.tests.<test_id>.assets.<asset_id>.entries.<entry_id>]
+  - [recipes.tests.<test_id>.steps.<step_index>]
+
+Rules (normative):
+- asset and step recipes MUST be read from the effective config selected by --config PATH
+- recipe data is the single source of truth for filesystem paths, command-line arguments, and
+  step-level execution overrides
+- if a required asset recipe, entry recipe, or step recipe is missing, the suite MUST FAIL
+  deterministically before execution
+- if `.bdg` repeats behavior controlled by [recipes], the suite MUST FAIL deterministically
+- [recipes] and [evaluation] are distinct: [recipes] controls materialization/execution;
+  [evaluation] controls PASS/FAIL expectations
 
 ## 5. Environment variables
 
@@ -488,9 +527,14 @@ A `.bdg` file is TOML and contains:
 
 - `[meta]` with optional `makes_commit` (bool) and `is_guard` (bool)
 - `[[asset]]` entries with `id`, `kind`, and embedded content
+- `[[asset.entry]]` entries with logical entry ids and embedded content
 - `[[step]]` entries with `op` and parameters.
 
-`.bdg` MUST NOT contain filesystem paths, command lines, or expectations.
+Logical subject-to-path mapping and execution/materialization recipe MUST live in
+`badguys/config.toml` under [subjects] and [recipes].
+
+`.bdg` MUST NOT contain filesystem paths, command lines, expectations, or step-level execution
+overrides that are controlled by [recipes].
 
 ## Central evaluation
 
