@@ -8,18 +8,16 @@
   <link rel="stylesheet" href="/static/app.css" />
 </head>
 <body>
-  <div id="dropOverlay" class="drop-overlay" aria-hidden="true">Drop file to upload</div>
-  <header class="bar bar-stacked">
+  <div id="dropOverlay" class="drop-overlay" aria-hidden="true">
+    Drop file to upload
+  </div>
+  <header class="bar">
     <div class="bar-top">
       <div class="title">PatchHub <span id="ampWebVersion"></span></div>
       <div id="hdrMeta" class="hdrmeta"></div>
       <div class="actions">
         <a class="link" href="/debug">Debug</a>
       </div>
-    </div>
-    <div class="bar-bottom">
-      <span id="parseHint" class="muted"></span>
-      <span id="enqueueHint" class="muted"></span>
     </div>
   </header>
 
@@ -40,23 +38,34 @@
       </section>
 
       <section class="card card-tight">
-        <h2>Stats</h2>
-        <div id="stats" class="stats"></div>
-      </section>
-
-
-      <section class="card card-tight">
         <div class="row">
           <h2 style="margin:0">Workspaces</h2>
           <span class="spacer"></span>
-          <button type="button" id="workspacesCollapse" class="btn btn-small">Show</button>
+          <button
+            type="button"
+            id="workspacesCollapse"
+            class="btn btn-small"
+          >
+            Show
+          </button>
         </div>
         <div id="workspacesWrap" class="hidden">
           <div class="row">
-            <button type="button" id="workspacesRefresh" class="btn btn-small">Refresh</button>
+            <button
+              type="button"
+              id="workspacesRefresh"
+              class="btn btn-small"
+            >
+              Refresh
+            </button>
           </div>
           <div id="workspacesList" class="scroll scroll-tall"></div>
         </div>
+      </section>
+
+      <section class="card card-tight">
+        <h2>Stats</h2>
+        <div id="stats" class="stats"></div>
       </section>
 
       <section class="card card-tight">
@@ -110,16 +119,7 @@
         </div>
 
         <div id="uiStatusBar" class="statusbar" aria-live="polite"></div>
-
-        <details class="details">
-          <summary>Advanced: paste canonical runner command</summary>
-          <textarea id="rawCommand" class="textarea" rows="3" placeholder="python3 scripts/am_patch.py 1000 \"msg\" patches/issue_1000.zip"></textarea>
-        </details>
-
-        <div class="row">
-          <button type="button" id="parseBtn" class="btn btn-small">Parse</button>
-          <button type="button" id="previewToggle" class="btn btn-small">Preview</button>
-        </div>
+        <div id="enqueueHint" class="muted"></div>
 
 
 
@@ -230,6 +230,24 @@
         <div id="previewWrapRight" class="hidden">
           <pre id="previewRight" class="pre pre-box"></pre>
         </div>
+      </section>
+
+      <section class="card card-tight">
+        <h2>Advanced</h2>
+        <details class="details">
+          <summary>Paste canonical runner command</summary>
+          <textarea
+            id="rawCommand"
+            class="textarea"
+            rows="3"
+            placeholder="python3 scripts/am_patch.py 1000 &quot;msg&quot; patches/issue_1000.zip"
+          ></textarea>
+        </details>
+        <div class="row">
+          <button type="button" id="parseBtn" class="btn btn-small">Parse</button>
+          <button type="button" id="previewToggle" class="btn btn-small">Preview</button>
+        </div>
+        <div id="parseHint" class="muted"></div>
       </section>
     </aside>
   </main>
