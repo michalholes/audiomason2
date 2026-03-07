@@ -153,6 +153,7 @@ def test_audit_failure_switches_result_to_fail(tmp_path: Path) -> None:
     )
 
     post_run_mod = sys.modules[post_run_pipeline.__module__]
+    post_run_mod.changed_paths = lambda logger, repo_root: []
     post_run_mod.run_post_success_audit = lambda logger, repo_root, policy: (_ for _ in ()).throw(
         runner_error_cls("AUDIT", "AUDIT_REPORT_FAILED", "audit/audit_report.py failed")
     )
@@ -170,3 +171,56 @@ def test_audit_failure_switches_result_to_fail(tmp_path: Path) -> None:
     assert result.final_fail_stage == "AUDIT"
     assert result.final_fail_reason == "audit failed"
     assert captured["exit_code"] == 1
+
+
+def test_finalize_failure_uses_live_repo_union_for_failure_zip(tmp_path: Path) -> None:
+    _, build_run_result, post_run_pipeline = _import_am_patch()
+    logger = _FakeLogger()
+    ctx = _ctx(tmp_path, mode="finalize", logger=logger)
+    ctx.repo_root.mkdir(parents=True, exist_ok=True)
+    result = build_run_result(
+        lock=None,
+        exit_code=1,
+        unified_mode=False,
+        patch_script=None,
+        used_patch_for_zip=None,
+        files_for_fail_zip=["carry.py"],
+        failed_patch_blobs_for_zip=[],
+        patch_applied_successfully=True,
+        applied_ok_count=1,
+        rollback_ckpt_for_posthook=None,
+        rollback_ws_for_posthook=None,
+        issue_diff_base_sha="abc123",
+        issue_diff_paths=["alpha.py", "beta.py"],
+        delete_workspace_after_archive=False,
+        ws_for_posthook=None,
+        push_ok_for_posthook=False,
+        final_commit_sha=None,
+        final_pushed_files=None,
+        final_fail_stage="RUFF",
+        final_fail_reason="gate failed",
+        primary_fail_stage="RUFF",
+        primary_fail_reason="gate failed",
+        secondary_failures=[],
+    )
+
+    post_run_mod = sys.modules[post_run_pipeline.__module__]
+    post_run_mod.changed_paths = lambda logger, repo_root: ["beta.py", "gamma.py"]
+
+    captured: dict[str, Any] = {}
+
+    def _build_artifacts(**kwargs):
+        captured.update(kwargs)
+
+    post_run_mod.build_artifacts = _build_artifacts
+
+    exit_code = post_run_pipeline(ctx=ctx, result=result)
+
+    assert exit_code == 1
+    assert captured["ws_repo_for_fail_zip"] == ctx.repo_root
+    assert captured["files_for_fail_zip"] == [
+        "alpha.py",
+        "beta.py",
+        "carry.py",
+        "gamma.py",
+    ]

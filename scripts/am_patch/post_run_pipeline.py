@@ -9,6 +9,7 @@ from am_patch.errors import RunnerError
 from am_patch.post_success_audit import run_post_success_audit
 from am_patch.run_result import RunResult, _normalize_failure_summary
 from am_patch.runtime import _parse_gate_list, _stage_rank
+from am_patch.scope import changed_paths
 from am_patch.workspace import Workspace, delete_workspace, rollback_to_checkpoint
 
 
@@ -67,6 +68,52 @@ def _resolve_workspace_archive_path(
     logger.section("ARCHIVE PATCH")
     logger.line(f"no patch script found to archive; tried: {unique_candidates}")
     return None
+
+
+def _sorted_unique_paths(*groups: list[str]) -> list[str]:
+    seen: set[str] = set()
+    merged: list[str] = []
+    for group in groups:
+        for raw in group:
+            path = str(raw).strip().lstrip("/")
+            if not path or path in seen:
+                continue
+            seen.add(path)
+            merged.append(path)
+    return sorted(merged)
+
+
+def _resolve_failure_zip_inputs(
+    *,
+    cli: Any,
+    repo_root: Path,
+    paths: Any,
+    logger: Any,
+    result: RunResult,
+    issue_id: str,
+    workspace_deleted_before_audit: bool,
+) -> tuple[Path, list[str]]:
+    files_for_fail_zip = list(result.files_for_fail_zip)
+
+    if cli.mode == "finalize":
+        live_dirty_now: list[str] = []
+        if result.exit_code != 0:
+            live_dirty_now = changed_paths(logger, repo_root)
+        files_for_fail_zip = _sorted_unique_paths(
+            files_for_fail_zip,
+            list(result.issue_diff_paths),
+            live_dirty_now,
+        )
+        return repo_root, files_for_fail_zip
+
+    if workspace_deleted_before_audit:
+        return repo_root, files_for_fail_zip
+
+    if result.ws_for_posthook is not None and result.ws_for_posthook.repo.exists():
+        return result.ws_for_posthook.repo, files_for_fail_zip
+
+    workspace_repo = paths.workspaces_dir / f"issue_{issue_id}" / "repo"
+    return workspace_repo, files_for_fail_zip
 
 
 def _maybe_run_success_audit(
@@ -144,12 +191,15 @@ def run_post_run_pipeline(*, ctx: Any, result: RunResult) -> int:
                 result=result,
             )
 
-            if workspace_deleted_before_audit:
-                ws_repo_for_fail_zip = repo_root
-            elif result.ws_for_posthook is not None and result.ws_for_posthook.repo.exists():
-                ws_repo_for_fail_zip = result.ws_for_posthook.repo
-            else:
-                ws_repo_for_fail_zip = paths.workspaces_dir / f"issue_{issue_id}" / "repo"
+            ws_repo_for_fail_zip, files_for_fail_zip = _resolve_failure_zip_inputs(
+                cli=cli,
+                repo_root=repo_root,
+                paths=paths,
+                logger=logger,
+                result=result,
+                issue_id=issue_id,
+                workspace_deleted_before_audit=workspace_deleted_before_audit,
+            )
 
             build_artifacts(
                 logger=logger,
@@ -163,7 +213,7 @@ def run_post_run_pipeline(*, ctx: Any, result: RunResult) -> int:
                 patch_applied_successfully=result.patch_applied_successfully,
                 archived_patch=archived_path,
                 failed_patch_blobs_for_zip=result.failed_patch_blobs_for_zip,
-                files_for_fail_zip=result.files_for_fail_zip,
+                files_for_fail_zip=files_for_fail_zip,
                 ws_repo_for_fail_zip=ws_repo_for_fail_zip,
                 ws_attempt=(
                     result.ws_for_posthook.attempt if result.ws_for_posthook is not None else None
