@@ -223,6 +223,9 @@ Logging / output:
 
 - `--log-level {quiet,normal,warning,verbose,debug}` : filter what is written to the log file (independent from `--verbosity`).
 - `runner_subprocess_timeout_s` (config key) : hard timeout for runner subprocesses in seconds; `0` disables it.
+- When `json_out` is enabled, the machine-facing NDJSON/IPC stream may also include
+  periodic `HEARTBEAT` log events so listeners can detect liveness during long
+  subprocess steps.
 
 Long-only options (no short alias):
 
