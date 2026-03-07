@@ -143,6 +143,64 @@ class AsyncJobQueue:
         self._task: asyncio.Task[None] | None = None
         self._brokers: dict[str, JobEventBroker] = {}
 
+    async def _pop_broker(self, job_id: str) -> JobEventBroker | None:
+        async with self._mu:
+            if job_id not in self._brokers:
+                return None
+            return self._brokers.pop(job_id)
+
+    async def _close_broker(self, job_id: str) -> None:
+        broker = await self._pop_broker(job_id)
+        if broker is not None:
+            broker.close()
+
+    async def _finalize_running_job(
+        self,
+        job_id: str,
+        *,
+        return_code: int,
+        error: str | None,
+    ) -> bool:
+        async with self._mu:
+            job = self._jobs.get(job_id)
+            if job is None or job.status != "running":
+                return False
+            job.return_code = int(return_code)
+            job.error = error
+            if job.status == "canceled":
+                job.ended_utc = job.ended_utc or utc_now()
+            elif int(return_code) == 0:
+                job.status = "success"
+                job.ended_utc = utc_now()
+            else:
+                job.status = "fail"
+                job.ended_utc = utc_now()
+            await self._persist(job)
+        return True
+
+    async def _reconcile_active_job(
+        self,
+        job_id: str,
+        *,
+        return_code: int | None,
+        error: str | None,
+    ) -> bool:
+        async with self._mu:
+            job = self._jobs.get(job_id)
+            if job is None or job.status != "running":
+                return False
+
+        if await self._executor.is_running():
+            return False
+
+        fallback_error = error or "runner_completion_reconciliation_without_return_code"
+        fallback_rc = -1 if return_code is None else int(return_code)
+        return await self._finalize_running_job(
+            job_id,
+            return_code=fallback_rc,
+            error=fallback_error,
+        )
+
     async def start(self) -> None:
         if self._task is not None:
             return
@@ -280,6 +338,8 @@ class AsyncJobQueue:
     async def _run_loop(self) -> None:
         while not self._stop.is_set():
             job_id = await self._q.get()
+            result: ExecResult | None = None
+            pump_tail_timed_out = False
 
             async with self._mu:
                 job = self._jobs.get(job_id)
@@ -333,7 +393,7 @@ class AsyncJobQueue:
                     name=f"patchhub_event_pump_{job_id}",
                 )
 
-                res = await self._executor.run(
+                result = await self._executor.run(
                     effective_cmd,
                     cwd=self._repo_root,
                     log_path=runner_log,
@@ -349,27 +409,28 @@ class AsyncJobQueue:
                     job = self._jobs.get(job_id)
                     if job is None:
                         continue
-                    job.return_code = res.return_code
-                    job.error = self._compose_tail_timeout_error(
+                    error = self._compose_tail_timeout_error(
                         job,
-                        res=res,
+                        res=result,
                         pump_tail_timed_out=pump_tail_timed_out,
                     )
-                    if job.status == "canceled":
-                        job.ended_utc = job.ended_utc or utc_now()
-                    elif res.return_code == 0:
-                        job.status = "success"
-                        job.ended_utc = utc_now()
-                    else:
-                        job.status = "fail"
-                        job.ended_utc = utc_now()
-                    await self._persist(job)
 
-                async with self._mu:
-                    broker_to_close = self._brokers.pop(job_id) if job_id in self._brokers else None
-                if broker_to_close is not None:
-                    broker_to_close.close()
+                await self._finalize_running_job(
+                    job_id,
+                    return_code=result.return_code,
+                    error=error,
+                )
             except Exception as e:
+                if result is not None:
+                    async with self._mu:
+                        job = self._jobs.get(job_id)
+                        if job is not None:
+                            if job.error:
+                                job.error = f"{job.error}; {type(e).__name__}: {e}"
+                            else:
+                                job.error = f"{type(e).__name__}: {e}"
+                    continue
+
                 async with self._mu:
                     job = self._jobs.get(job_id)
                     if job is None:
@@ -378,8 +439,23 @@ class AsyncJobQueue:
                     job.ended_utc = utc_now()
                     job.error = f"{type(e).__name__}: {e}"
                     await self._persist(job)
+            finally:
+                reconcile_error: str | None = None
+                reconcile_return_code: int | None = None
+                if result is not None:
+                    reconcile_return_code = result.return_code
+                    async with self._mu:
+                        current_job = self._jobs.get(job_id)
+                    if current_job is not None:
+                        reconcile_error = self._compose_tail_timeout_error(
+                            current_job,
+                            res=result,
+                            pump_tail_timed_out=pump_tail_timed_out,
+                        )
 
-                async with self._mu:
-                    broker_to_close = self._brokers.pop(job_id) if job_id in self._brokers else None
-                if broker_to_close is not None:
-                    broker_to_close.close()
+                await self._reconcile_active_job(
+                    job_id,
+                    return_code=reconcile_return_code,
+                    error=reconcile_error,
+                )
+                await self._close_broker(job_id)
