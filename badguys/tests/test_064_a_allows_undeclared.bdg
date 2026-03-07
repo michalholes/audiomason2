@@ -5,8 +5,9 @@ is_guard = false
 [[asset]]
 id = "patch"
 kind = "python_patch_script"
-content = """ctx.write_text("declared", "declared" + chr(10))
-ctx.write_text("undeclared", "undeclared" + chr(10))
+content = """NL = chr(10)
+ctx.write_text("declared", "declared" + NL)
+ctx.write_text("undeclared", "undeclared" + NL)
 """
 
 [[step]]

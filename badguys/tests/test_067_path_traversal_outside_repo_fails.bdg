@@ -5,7 +5,8 @@ is_guard = false
 [[asset]]
 id = "script"
 kind = "python_patch_script"
-content = """ctx.write_outside_repo("pwned" + chr(10))
+content = """NL = chr(10)
+ctx.write_outside_repo("pwned" + NL)
 """
 
 [[step]]
