@@ -3,7 +3,7 @@ Status: AUTHORITATIVE SPECIFICATION
 Applies to: scripts/patchhub/*
 Language: ENGLISH (ASCII ONLY)
 
-Specification Version: 1.8.2-spec
+Specification Version: 1.9.0-spec
 Code Baseline: audiomason2-main.zip (as provided in this chat)
 
 -------------------------------------------------------------------------------
@@ -251,15 +251,17 @@ Payload
 - The response MUST include, at minimum:
   - jobs list (thin, see 2.11),
   - runs list (thin, see 2.11),
+  - workspaces list (thin, see 2.11),
   - header/status summary (diagnostics/stats payload used by the header).
 
 Tokens and caching
 - The server MUST compute and expose a stable sig for each sub-payload:
-  - jobs_sig, runs_sig, header_sig.
+  - jobs_sig, runs_sig, workspaces_sig, header_sig.
 - The server MUST compute a snapshot_sig that changes if any sub-payload changes.
 - The response MUST include:
-  { ok: true, snapshot: { jobs: [...], runs: [...], header: {...} },
-    sigs: { jobs: <jobs_sig>, runs: <runs_sig>, header: <header_sig>, snapshot: <snapshot_sig> } }
+  { ok: true, snapshot: { jobs: [...], runs: [...], workspaces: [...], header: {...} },
+    sigs: { jobs: <jobs_sig>, runs: <runs_sig>, workspaces: <workspaces_sig>,
+      header: <header_sig>, snapshot: <snapshot_sig> } }
 - The snapshot endpoint MUST support ETag/304 using snapshot_sig.
 
 Client behavior
@@ -297,6 +299,17 @@ Runs list item (RunListItem)
   - mtime_utc: string
   - log_rel_path: string
   - artifact_refs: array of string (may be empty)
+
+Workspaces list item (WorkspaceListItem)
+- workspace list endpoints MUST return a thin DTO with fields:
+  - issue_id: int
+  - workspace_rel_path: string
+  - state: string (DIRTY|CLEAN|KEPT_AFTER_SUCCESS)
+  - busy: bool
+  - mtime_utc: string
+  - attempt: int|null
+  - commit_summary: string|null (single line; deterministic truncation)
+  - allowed_union_count: int|null
 
 Detail separation
 - List DTOs MUST NOT include full commit message text, raw command text, or
@@ -444,6 +457,10 @@ Allowlist semantics:
 - If normalized contains no "/", it is a root-level entry (file or directory).
   It is allowed if "" is present in crud_allowlist, or if the exact name is present.
 - Otherwise, the top-level segment (before first "/") must be in crud_allowlist.
+- For the Workspace inventory feature, PatchHub CRUD MAY be enabled for workspace
+  trees by including "workspaces" in crud_allowlist.
+- When "workspaces" is present in crud_allowlist, the existing filesystem mutation
+  endpoints remain authoritative for workspace delete/rename/mkdir/unzip behavior.
 
 If allow_crud is false, all mutation endpoints MUST fail with an error.
 
@@ -663,13 +680,17 @@ Filesystem navigation remains available via the Files panel.
 
 7.1.4 Sidebar Collapsible Lists (Runs, Jobs)
 
-The main UI includes two sidebar lists that are operator convenience only:
+The main UI includes three sidebar lists that are operator convenience only:
+- Workspaces list (left sidebar; between Stats and Runs)
 - Runs list (left sidebar)
 - Jobs list (right sidebar)
 
 These lists MUST be collapsible and MUST be hidden by default.
 
 HTML elements (templates/index.html):
+- Workspaces:
+  - toggle button: <button id="workspacesCollapse" ...>
+  - wrapper: <div id="workspacesWrap" class="hidden"> ... </div>
 - Runs:
   - toggle button: <button id="runsCollapse" ...>
   - wrapper: <div id="runsWrap" class="hidden"> ... </div>
@@ -679,9 +700,11 @@ HTML elements (templates/index.html):
 
 Behavior (static/app.js):
 - Default visibility:
+  - workspacesVisible = false
   - runsVisible = false
   - jobsVisible = false
 - UI state persistence uses localStorage keys:
+  - amp.ui.workspacesVisible ("1" or "0")
   - amp.ui.runsVisible ("1" or "0")
   - amp.ui.jobsVisible ("1" or "0")
 - If a key is missing or invalid, the default is hidden ("0").
@@ -690,7 +713,37 @@ Button text:
 - When the wrapper is hidden, the corresponding button MUST display: Show
 - When the wrapper is visible, the corresponding button MUST display: Hide
 
-This is a UI-only behavior change. API surface and server behavior are unchanged.
+Workspace list item content (UI)
+
+The Workspaces list is an operator convenience view.
+Each list item MUST provide a meaningful summary without requiring a click.
+
+Required visible fields per item:
+- issue id (rendered as "#<id>")
+- state badge (DIRTY, CLEAN, or KEPT_AFTER_SUCCESS)
+- commit message summary when available
+- attempt when available
+- allowed_union_count when available
+- busy marker when the same issue currently has a queued/running job
+- actions: Open, Finalize (-w), Delete
+
+Layout requirements:
+- First line MUST show: issue id and state badge.
+- Commit summary MUST be on its own line when present.
+- Meta line MUST include: attempt, allowed_union_count, busy marker, and last
+  activity time when present.
+- Actions MUST operate as follows:
+  - Open: navigate the Files panel to workspace_rel_path.
+  - Finalize (-w): enqueue a standard finalize_workspace job via the existing
+    jobs enqueue API; PatchHub MUST NOT bypass the queue.
+  - Delete: use the existing filesystem delete endpoint against workspace_rel_path.
+
+Terminology rule:
+- The UI label for this card MUST be "Workspaces".
+- The UI MUST NOT label the card as "In-progress workspaces" or equivalent,
+  because a workspace directory may exist after a successful run.
+
+This is a UI/API behavior change. The queue model and runner authority are unchanged.
 
 Jobs list item content (UI)
 
@@ -911,6 +964,27 @@ Output:
 - Raw file bytes with guessed Content-Type and Content-Length.
 Errors:
 - JSON error with 400/404 if jail validation or file not found.
+
+7.2.5a GET /api/workspaces
+Output schema (success):
+{
+  "ok": true,
+  "items": [<WorkspaceListItem>, ...],
+  "sig": "<string>"
+}
+
+Rules:
+- The endpoint MUST derive workspace paths from runner config state, not from a
+  hardcoded patches/workspaces path.
+- The endpoint MUST expose workspace_rel_path relative to patches_root.
+- The endpoint MUST classify state deterministically:
+  - DIRTY: the workspace repository has tracked or untracked changes.
+  - CLEAN: the workspace exists and the workspace repository is clean.
+  - KEPT_AFTER_SUCCESS: the workspace exists and the latest known run result for
+    the same issue is success.
+- The endpoint MUST set busy=true when the same issue currently has a queued or
+  running job in PatchHub.
+- The endpoint MUST support ETag/304 using sig.
 
 7.2.6 GET /api/patches/latest
 Purpose:
