@@ -16,6 +16,12 @@ from ..primitives import (
     is_prompt_primitive,
     validate_submit_payload,
 )
+from ..primitives.ui_v1 import (
+    PROMPT_METADATA_KEYS,
+    normalize_prompt_ui,
+    project_prompt_ui,
+    prompt_output_key,
+)
 from .expr_eval import eval_expr_ref
 from .flowmodel_v3 import get_step
 
@@ -59,8 +65,24 @@ def resolve_inputs(step: dict[str, Any], state: dict[str, Any]) -> dict[str, Any
     raw_inputs = step.get("inputs")
     if not isinstance(raw_inputs, dict):
         return {}
+
+    primitive_id = str(step.get("primitive_id") or "")
+    primitive_version = int(step.get("primitive_version") or 0)
+    prompt_ui: dict[str, Any] | None = None
+    prompt_keys: set[str] = set()
+    if is_prompt_primitive(primitive_id, primitive_version):
+        try:
+            prompt_ui = project_prompt_ui(primitive_id, primitive_version, raw_inputs)
+        except ValueError as exc:
+            raise FinalizeError(str(exc)) from exc
+        prompt_keys = set(prompt_ui or {})
+    elif primitive_id == "ui.message" and primitive_version == 1:
+        prompt_keys = set(PROMPT_METADATA_KEYS)
+
     out: dict[str, Any] = {}
     for key, value in raw_inputs.items():
+        if key in prompt_keys:
+            continue
         if isinstance(value, dict) and set(value.keys()) == {"expr"}:
             out[str(key)] = _resolve_expr(
                 value,
@@ -72,6 +94,26 @@ def resolve_inputs(step: dict[str, Any], state: dict[str, Any]) -> dict[str, Any
             )
         else:
             out[str(key)] = value
+
+    if prompt_ui:
+        try:
+            prompt_inputs = normalize_prompt_ui(
+                primitive_id,
+                primitive_version,
+                prompt_ui,
+                resolve_expr=lambda expr_ref, path, metadata: _resolve_expr(
+                    expr_ref,
+                    state=state,
+                    inputs={**out, **metadata},
+                    op_outputs=None,
+                    allow_op_outputs=False,
+                    path=path,
+                ),
+                path_prefix="$.inputs",
+            )
+        except ValueError as exc:
+            raise FinalizeError(str(exc)) from exc
+        out.update(prompt_inputs)
     return out
 
 
@@ -210,6 +252,79 @@ def _guard_parallel_map_write_conflicts(
             raise FinalizeError("parallel_map_conflicting_writes")
 
 
+def _prompt_autofill_outputs(
+    step: dict[str, Any],
+    state: dict[str, Any],
+) -> tuple[dict[str, Any], dict[str, Any]] | None:
+    inputs = resolve_inputs(step, state)
+    if inputs.get("autofill_if") is not True:
+        return None
+
+    key = prompt_output_key(
+        str(step.get("primitive_id") or ""),
+        int(step.get("primitive_version") or 0),
+    )
+    if not isinstance(key, str) or not key:
+        return None
+
+    if "prefill" in inputs:
+        candidate = inputs["prefill"]
+    elif "default_value" in inputs:
+        candidate = inputs["default_value"]
+    else:
+        return None
+
+    try:
+        outputs = validate_submit_payload(
+            str(step.get("primitive_id") or ""),
+            int(step.get("primitive_version") or 0),
+            {key: candidate},
+        )
+    except ValueError as exc:
+        raise FinalizeError(str(exc)) from exc
+    return inputs, outputs
+
+
+def _advance_prompt_step(
+    *,
+    effective_model: dict[str, Any],
+    state: dict[str, Any],
+    step_id: str,
+    step: dict[str, Any],
+    inputs: dict[str, Any],
+    outputs: dict[str, Any],
+) -> tuple[dict[str, Any], str | None]:
+    primitive_id = str(step.get("primitive_id") or "")
+    primitive_version = int(step.get("primitive_version") or 0)
+    state = apply_writes(state=state, step=step, inputs=inputs, op_outputs=outputs)
+    completed = list(state.get("completed_step_ids") or [])
+    if step_id not in completed:
+        completed.append(step_id)
+    state["completed_step_ids"] = completed
+    next_step = _next_step_id(effective_model, step_id, state)
+    state["current_step_id"] = step_id if next_step is None else next_step
+    sync_session_cursor(state, step_id=state["current_step_id"])
+    writes_any = step.get("writes")
+    writes = (
+        [str(item.get("to_path")) for item in writes_any if isinstance(item, dict)]
+        if isinstance(writes_any, list)
+        else []
+    )
+    state = _record_trace(
+        state,
+        step_id=step_id,
+        primitive_id=primitive_id,
+        primitive_version=primitive_version,
+        result="OK",
+        writes=writes,
+    )
+    return state, next_step
+
+
+def prompt_ui_from_resolved_inputs(inputs: dict[str, Any]) -> dict[str, Any]:
+    return {key: inputs[key] for key in PROMPT_METADATA_KEYS if key in inputs}
+
+
 def run_automatic_steps(
     *,
     effective_model: dict[str, Any],
@@ -222,7 +337,22 @@ def run_automatic_steps(
         primitive_id = str(step.get("primitive_id") or "")
         primitive_version = int(step.get("primitive_version") or 0)
         if is_prompt_primitive(primitive_id, primitive_version):
-            break
+            prompt_outputs = _prompt_autofill_outputs(step, state)
+            if prompt_outputs is None:
+                break
+            inputs, outputs = prompt_outputs
+            state, next_step = _advance_prompt_step(
+                effective_model=effective_model,
+                state=state,
+                step_id=current,
+                step=step,
+                inputs=inputs,
+                outputs=outputs,
+            )
+            if next_step is None:
+                break
+            current = next_step
+            continue
         if not is_non_interactive(primitive_id, primitive_version):
             raise FinalizeError("non_prompt_submit_payload_forbidden")
         inputs = resolve_inputs(step, state)
@@ -292,31 +422,22 @@ def submit_current_step(
         raise StepSubmissionError("non-prompt primitive cannot be submitted")
     outputs = validate_submit_payload(primitive_id, primitive_version, payload)
     inputs = resolve_inputs(step, state)
-    state = apply_writes(state=state, step=step, inputs=inputs, op_outputs=outputs)
-    completed = list(state.get("completed_step_ids") or [])
-    if step_id not in completed:
-        completed.append(step_id)
-    state["completed_step_ids"] = completed
-    next_step = _next_step_id(effective_model, step_id, state)
-    state["current_step_id"] = step_id if next_step is None else next_step
-    sync_session_cursor(state, step_id=state["current_step_id"])
-    writes_any = step.get("writes")
-    writes = (
-        [str(item.get("to_path")) for item in writes_any if isinstance(item, dict)]
-        if isinstance(writes_any, list)
-        else []
-    )
-    state = _record_trace(
-        state,
+    state, next_step = _advance_prompt_step(
+        effective_model=effective_model,
+        state=state,
         step_id=step_id,
-        primitive_id=primitive_id,
-        primitive_version=primitive_version,
-        result="OK",
-        writes=writes,
+        step=step,
+        inputs=inputs,
+        outputs=outputs,
     )
     if next_step is None:
         return state
     return run_automatic_steps(effective_model=effective_model, state=state, session_id=session_id)
 
 
-__all__ = ["run_automatic_steps", "submit_current_step"]
+__all__ = [
+    "prompt_ui_from_resolved_inputs",
+    "resolve_inputs",
+    "run_automatic_steps",
+    "submit_current_step",
+]

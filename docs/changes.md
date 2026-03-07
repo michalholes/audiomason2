@@ -1,3 +1,9 @@
+## 2026-03-07T00:00:00+01:00
+
+-   Issue 108: project baseline prompt metadata into FlowModel v3 ui,
+    normalize prompt runtime metadata in step APIs, and add PHASE 1
+    autofill auto-advance for v3 prompt primitives.
+
 ## 2026-03-06T00:00:02+01:00
 
 -   Issue 107: define v3 prompt metadata keys in op.inputs, FlowModel ui projection, prompt metadata eval order, and ui.message@1 prompt-metadata exclusion.

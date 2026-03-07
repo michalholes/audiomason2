@@ -8,6 +8,7 @@ from __future__ import annotations
 from typing import Any
 
 from ..errors import FinalizeError
+from ..primitives.ui_v1 import project_prompt_ui
 
 FLOWMODEL_KIND = "dsl_step_graph_v3"
 FLOW_ID = "import_v3"
@@ -51,17 +52,26 @@ def build_flow_model_v3(*, wizard_definition: dict[str, Any]) -> dict[str, Any]:
         seen.add(step_id)
         inputs_any = op_any.get("inputs")
         writes_any = op_any.get("writes")
-        steps.append(
-            {
-                "step_id": step_id,
-                "phase": 1,
-                "title": step_id,
-                "primitive_id": primitive_id,
-                "primitive_version": primitive_version,
-                "inputs": dict(inputs_any) if isinstance(inputs_any, dict) else {},
-                "writes": list(writes_any) if isinstance(writes_any, list) else [],
-            }
-        )
+        step: dict[str, Any] = {
+            "step_id": step_id,
+            "phase": 1,
+            "title": step_id,
+            "primitive_id": primitive_id,
+            "primitive_version": primitive_version,
+            "inputs": dict(inputs_any) if isinstance(inputs_any, dict) else {},
+            "writes": list(writes_any) if isinstance(writes_any, list) else [],
+        }
+        try:
+            ui = project_prompt_ui(
+                primitive_id,
+                primitive_version,
+                step["inputs"],
+            )
+        except ValueError as exc:
+            raise FinalizeError(str(exc)) from exc
+        if ui:
+            step["ui"] = ui
+        steps.append(step)
 
     if entry_step_id not in seen:
         raise FinalizeError("wizard_definition entry_step_id must exist in nodes")
