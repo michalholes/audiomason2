@@ -243,6 +243,11 @@ strictly:
 -   `PUSH: OK|FAIL` (when commit/push is enabled) NOTE: 'PUSH: UNKNOWN'
     is forbidden; if it appears, it indicates a runner defect.
 -   `LOG: <path>`
+-   CANCELED:
+    -   `RESULT: CANCELED`
+    -   `STAGE: <stage-id>`
+    -   `REASON: cancel requested`
+    -   `LOG: <path>`
 -   FAIL:
     -   `RESULT: FAIL`
     -   `STAGE: <stage-id>[, <stage-id>...]`
@@ -1373,7 +1378,15 @@ Commands (cmd field):
 - drain_ack (args: {"seq":<int>})
 
 Semantics:
-- cancel requests termination at the next safe boundary.
+- cancel accepted while a runner-managed subprocess is active requests
+  immediate termination of the current subprocess tree.
+- cancel accepted while no runner-managed subprocess is active requests
+  termination at the next safe boundary.
+- A reply with `ok=true` confirms only that the cancel request was
+  accepted; it does not confirm that termination already completed.
+- If the run terminates because of an accepted cancel request before any
+  step failure is emitted, the final summary MUST be `RESULT: CANCELED`
+  and the process exit code MUST be 130.
 - stop_after_step terminates when the named step completes.
 - pause_after_step pauses the main thread when the named step completes; resume continues.
 - resume returns INVALID_STATE if the runner is not paused.

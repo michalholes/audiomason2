@@ -98,6 +98,11 @@ Final summary (at the end of each run):
   - `COMMIT: <sha>` (or `(none)` if commit/push dont runs)
   - `PUSH: OK|FAIL|UNKNOWN` (if commit/push is running)
   - `LOG: <path>`
+- CANCELED:
+  - `RESULT: CANCELED`
+  - `STAGE: <stage-id>`
+  - `REASON: cancel requested`
+  - `LOG: <path>`
 - FAIL:
   - `RESULT: FAIL`
   - `STAGE: <stage-id>`
@@ -226,6 +231,16 @@ Logging / output:
 - When `json_out` is enabled, the machine-facing NDJSON/IPC stream may also include
   periodic `HEARTBEAT` log events so listeners can detect liveness during long
   subprocess steps.
+
+IPC cancellation semantics:
+
+- `cancel` accepted during an active runner-managed subprocess requests immediate
+  termination of that subprocess tree.
+- `cancel` accepted when no runner-managed subprocess is active stops at the next
+  safe boundary (`OK:` or `FAIL:` step token).
+- A run ended by an accepted cancel request reports `RESULT: CANCELED` and exits
+  with code `130`.
+- `ok=true` in the IPC reply means only that the cancel request was accepted.
 
 Long-only options (no short alias):
 
