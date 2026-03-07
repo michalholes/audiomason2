@@ -10,7 +10,6 @@ from typing import Any
 from am_patch import git_ops, runtime
 from am_patch.apply_failure_gates_policy import evaluate_apply_failure_gates_policy_audited
 from am_patch.archive import archive_patch
-from am_patch.artifacts import build_artifacts
 from am_patch.audit_rubric_check import check_audit_rubric_coverage
 from am_patch.cli import parse_args
 from am_patch.config import (
@@ -25,7 +24,6 @@ from am_patch.engine_run_gates import run_finalize_gates
 from am_patch.engine_startup_runtime import build_startup_logger_and_ipc
 from am_patch.errors import RunnerError, fingerprint
 from am_patch.execution_context import open_execution_context
-from am_patch.failure_zip import cleanup_on_success_commit as cleanup_failure_zips_on_success
 from am_patch.gates import run_badguys
 from am_patch.ipc_socket import IpcController
 from am_patch.lock import FileLock
@@ -38,9 +36,9 @@ from am_patch.paths import (
     default_paths,
     ensure_dirs,
 )
-from am_patch.post_success_audit import run_post_success_audit
-from am_patch.promote import promote_files
+from am_patch.post_run_pipeline import run_post_run_pipeline
 from am_patch.repo_root import is_under, resolve_repo_root
+from am_patch.run_result import RunResult, _normalize_failure_summary, build_run_result
 from am_patch.runtime import (
     _gate_progress,
     _maybe_run_badguys,
@@ -51,15 +49,15 @@ from am_patch.runtime import (
     _stage_rank,
     _under_targets,
 )
-from am_patch.scope import blessed_gate_outputs_in, changed_paths, enforce_scope_delta
+from am_patch.scope import changed_paths, enforce_scope_delta
 from am_patch.state import save_state, update_union
 from am_patch.status import StatusReporter
 from am_patch.validation import run_validation
 from am_patch.version import RUNNER_VERSION
-from am_patch.workspace import (
-    delete_workspace,
-    drop_checkpoint,
-    rollback_to_checkpoint,
+from am_patch.workspace import drop_checkpoint
+from am_patch.workspace_promotion_pipeline import (
+    build_allowed_union_promotion_plan,
+    complete_workspace_promotion_pipeline,
 )
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -85,10 +83,6 @@ class RunContext:
     log_level: str
     ipc: IpcController | None
     lock: FileLock | None = None
-
-
-def _run_post_success_audit(logger: Logger, repo_root: Path, policy: Policy) -> None:
-    return run_post_success_audit(logger, repo_root, policy)
 
 
 def _resolve_repo_root() -> Path:
@@ -315,7 +309,7 @@ def build_paths_and_logger(
     )
 
 
-def run_mode(ctx: RunContext) -> dict[str, Any]:
+def run_mode(ctx: RunContext) -> RunResult:
     cli = ctx.cli
     policy = ctx.policy
     repo_root = ctx.repo_root
@@ -327,32 +321,32 @@ def run_mode(ctx: RunContext) -> dict[str, Any]:
     log_path = ctx.log_path
     logger = ctx.logger
 
-    def _result(exit_code: int) -> dict[str, Any]:
-        return {
-            "lock": lock,
-            "exit_code": exit_code,
-            "unified_mode": unified_mode,
-            "patch_script": patch_script,
-            "used_patch_for_zip": used_patch_for_zip,
-            "files_for_fail_zip": files_for_fail_zip,
-            "failed_patch_blobs_for_zip": failed_patch_blobs_for_zip,
-            "patch_applied_successfully": patch_applied_successfully,
-            "applied_ok_count": applied_ok_count,
-            "rollback_ckpt_for_posthook": rollback_ckpt_for_posthook,
-            "rollback_ws_for_posthook": rollback_ws_for_posthook,
-            "issue_diff_base_sha": issue_diff_base_sha,
-            "issue_diff_paths": issue_diff_paths,
-            "delete_workspace_after_archive": delete_workspace_after_archive,
-            "ws_for_posthook": ws_for_posthook,
-            "push_ok_for_posthook": push_ok_for_posthook,
-            "final_commit_sha": final_commit_sha,
-            "final_pushed_files": final_pushed_files,
-            "final_fail_stage": final_fail_stage,
-            "final_fail_reason": final_fail_reason,
-            "primary_fail_stage": primary_fail_stage,
-            "primary_fail_reason": primary_fail_reason,
-            "secondary_failures": secondary_failures,
-        }
+    def _result(exit_code: int) -> RunResult:
+        return build_run_result(
+            lock=lock,
+            exit_code=exit_code,
+            unified_mode=unified_mode,
+            patch_script=patch_script,
+            used_patch_for_zip=used_patch_for_zip,
+            files_for_fail_zip=files_for_fail_zip,
+            failed_patch_blobs_for_zip=failed_patch_blobs_for_zip,
+            patch_applied_successfully=patch_applied_successfully,
+            applied_ok_count=applied_ok_count,
+            rollback_ckpt_for_posthook=rollback_ckpt_for_posthook,
+            rollback_ws_for_posthook=rollback_ws_for_posthook,
+            issue_diff_base_sha=issue_diff_base_sha,
+            issue_diff_paths=issue_diff_paths,
+            delete_workspace_after_archive=delete_workspace_after_archive,
+            ws_for_posthook=ws_for_posthook,
+            push_ok_for_posthook=push_ok_for_posthook,
+            final_commit_sha=final_commit_sha,
+            final_pushed_files=final_pushed_files,
+            final_fail_stage=final_fail_stage,
+            final_fail_reason=final_fail_reason,
+            primary_fail_stage=primary_fail_stage,
+            primary_fail_reason=primary_fail_reason,
+            secondary_failures=secondary_failures,
+        )
 
     lock = FileLock(paths.lock_path)
     ctx.lock = lock
@@ -461,8 +455,6 @@ def run_mode(ctx: RunContext) -> dict[str, Any]:
                     # Best-effort only; never override SUCCESS contract.
                     final_pushed_files = None
 
-            if push_ok is True:
-                _run_post_success_audit(logger, repo_root, policy)
             return _result(0)
 
         issue_id = cli.issue_id
@@ -779,167 +771,58 @@ def run_mode(ctx: RunContext) -> dict[str, Any]:
             rollback_ws_for_posthook = ws
             raise RunnerError("PATCH", "PATCH_APPLY", primary_fail_reason or "patch apply failed")
 
-        allowed_union = set(st.allowed_union)
-        dirty_allowed = [p for p in dirty_all if p in allowed_union]
-        dirty_blessed = blessed_gate_outputs_in(
-            dirty_all, blessed_outputs=policy.blessed_gate_outputs
-        )
-        # Promote allowed_union paths + blessed gate outputs (without requiring -a).
-        to_promote: list[str] = []
-        seen_tp: set[str] = set()
-        for pp in dirty_allowed + dirty_blessed:
-            if pp in seen_tp:
-                continue
-            seen_tp.add(pp)
-            to_promote.append(pp)
-
-        logger.section("PROMOTION PLAN")
-        logger.line(f"dirty_all={dirty_all}")
-        logger.line(f"dirty_allowed={dirty_allowed}")
-        logger.line(f"dirty_blessed={dirty_blessed}")
-        logger.line(f"files_to_promote={to_promote}")
-
-        # Issue diff bundle context (used by posthook to build patches/artifacts).
-        issue_diff_base_sha = ws.base_sha
-        issue_diff_paths = list(to_promote)
-
-        promote_files(
+        promotion_plan = build_allowed_union_promotion_plan(
             logger=logger,
-            workspace_repo=ws.repo,
-            live_repo=repo_root,
-            base_sha=ws.base_sha,
-            files_to_promote=to_promote,
-            fail_if_live_changed=policy.fail_if_live_files_changed
-            and (not policy.update_workspace),
-            live_changed_resolution=policy.live_changed_resolution,
+            workspace_base_sha=ws.base_sha,
+            dirty_all=dirty_all,
+            allowed_union=set(st.allowed_union),
+            blessed_outputs=policy.blessed_gate_outputs,
+            files_for_fail_zip=files_for_fail_zip,
         )
+        files_for_fail_zip = list(promotion_plan.files_for_fail_zip)
 
-        decision_paths_post_promote = list(to_promote)
-        _maybe_run_badguys(cwd=repo_root, decision_paths=decision_paths_post_promote)
-
-        if policy.commit_and_push:
-            commit_sha = git_ops.commit(
-                logger,
-                repo_root,
-                (ws.message or f"Issue {issue_id}: apply patch"),
-                stage_all=False,
-            )
-            final_commit_sha = commit_sha
-
-            if commit_sha and issue_id is not None:
-                cleanup_failure_zips_on_success(
-                    patch_dir=paths.patch_dir,
-                    policy=policy,
-                    issue=str(issue_id),
-                )
-            push_ok = git_ops.push(
-                logger, repo_root, policy.default_branch, allow_fail=policy.allow_push_fail
-            )
-
-            if push_ok is True and commit_sha:
-                try:
-                    ns = git_ops.commit_changed_files_name_status(
-                        logger,
-                        repo_root,
-                        commit_sha,
-                    )
-                    final_pushed_files = [f"{st} {p}" for (st, p) in ns]
-                except Exception:
-                    # Best-effort only; never override SUCCESS contract.
-                    final_pushed_files = None
-
-        push_ok_for_posthook = push_ok
+        promotion_summary = complete_workspace_promotion_pipeline(
+            logger=logger,
+            repo_root=repo_root,
+            workspace_repo=ws.repo,
+            workspace_base_sha=ws.base_sha,
+            workspace_message=(ws.message or f"Issue {issue_id}: apply patch"),
+            paths=paths,
+            policy=policy,
+            issue_id=str(issue_id),
+            promotion_plan=promotion_plan,
+            badguys_runner=_maybe_run_badguys,
+            live_gates_runner=None,
+            delete_workspace_after_archive=bool(policy.delete_workspace_on_success),
+        )
+        issue_diff_base_sha = promotion_summary.issue_diff_base_sha
+        issue_diff_paths = list(promotion_summary.issue_diff_paths)
+        files_for_fail_zip = list(promotion_summary.files_for_fail_zip)
+        push_ok_for_posthook = promotion_summary.push_ok_for_posthook
+        final_commit_sha = promotion_summary.final_commit_sha
+        final_pushed_files = promotion_summary.final_pushed_files
+        delete_workspace_after_archive = promotion_summary.delete_workspace_after_archive
 
         used_patch_for_zip = archive_patch(logger, patch_script, paths.successful_dir)
-
         drop_checkpoint(logger, ws.repo, ckpt)
-
-        delete_workspace_after_archive = bool(policy.delete_workspace_on_success)
-
-        logger.section("SUCCESS")
-        if policy.commit_and_push:
-            logger.line(f"commit_sha={commit_sha}")
-            if push_ok is True:
-                logger.line("push=OK")
-            elif push_ok is False:
-                if policy.allow_push_fail:
-                    logger.line("push=FAILED_ALLOWED")
-                else:
-                    logger.line("push=FAILED")
-            else:
-                logger.line("push=UNKNOWN")
-        else:
-            logger.line("commit_sha=SKIPPED")
-            logger.line("push=SKIPPED")
         return _result(0)
 
     except RunnerError as e:
         logger.section("FAILURE")
         logger.line(str(e))
         logger.line(fingerprint(e))
-
-        # Contract: map internal error to stable STAGE/REASON for final summary.
-        # STAGE may be a comma-separated list of stage identifiers when multiple failures occur.
-        final_fail_stage = str(e.stage)
-        final_fail_reason = str(e.message)
-
-        # Accumulate all known failures for final on-screen summary.
-        stages: list[str] = []
-
-        # Patch apply is a primary failure even if gates failed later (partial apply diagnostics).
-        if primary_fail_stage is not None and primary_fail_stage == "PATCH":
-            stages.append("PATCH_APPLY")
-
-        # Secondary failures (e.g., scope after patch failure).
-        for stg, _msg in secondary_failures:
-            if stg == "PROMOTION":
-                stages.append("PROMOTE")
-            elif stg == "SCOPE":
-                stages.append("SCOPE")
-            elif stg:
-                stages.append(stg)
-
-        # Primary exception mapping.
-        if e.stage == "GATES":
-            msg = str(e.message)
-            gates = _parse_gate_list(msg)
-            for g in gates:
-                stages.append(f"GATE_{g.upper()}")
-            if not gates:
-                stages.append("GATES")
-            # Preserve existing reason mapping; keep it concise.
-            final_fail_reason = "gates failed"
-        elif e.stage == "PATCH":
-            stages.append("PATCH_APPLY")
-            final_fail_reason = "patch apply failed"
-        elif e.stage == "PREFLIGHT":
-            stages.append("PREFLIGHT")
-            final_fail_reason = "invalid inputs"
-        elif e.stage == "PROMOTION":
-            stages.append("PROMOTE")
-            final_fail_reason = "promotion failed"
-        elif e.stage == "SCOPE":
-            stages.append("SCOPE")
-            final_fail_reason = "scope failed"
-        else:
-            stages.append(str(e.stage))
-
-        # De-duplicate and sort deterministically.
-        uniq: list[str] = []
-        for s in stages:
-            if s and s not in uniq:
-                uniq.append(s)
-        uniq.sort(key=lambda s: (_stage_rank(s), s))
-        final_fail_stage = ", ".join(uniq) if uniq else (final_fail_stage or "INTERNAL")
-
+        final_fail_stage, final_fail_reason = _normalize_failure_summary(
+            error=e,
+            primary_fail_stage=primary_fail_stage,
+            secondary_failures=secondary_failures,
+            parse_gate_list=_parse_gate_list,
+            stage_rank=_stage_rank,
+        )
         return _result(1)
 
 
-def finalize_and_report(ctx: RunContext, result: dict[str, Any]) -> int:
-    cli = ctx.cli
+def finalize_and_report(ctx: RunContext, result: RunResult) -> int:
     policy = ctx.policy
-    repo_root = ctx.repo_root
-    paths = ctx.paths
     log_path = ctx.log_path
     logger = ctx.logger
     status = ctx.status
@@ -948,186 +831,13 @@ def finalize_and_report(ctx: RunContext, result: dict[str, Any]) -> int:
     json_path = ctx.json_path
     isolated_work_patch_dir = ctx.isolated_work_patch_dir
 
-    # Bring mode locals into scope exactly as in the legacy main().
-    lock = result.get("lock")
-    exit_code = int(result.get("exit_code", 1))
-    unified_mode = bool(result.get("unified_mode", False))
-    patch_script = result.get("patch_script")
-    used_patch_for_zip = result.get("used_patch_for_zip")
-
-    files_for_fail_zip_raw = result.get("files_for_fail_zip")
-    files_for_fail_zip: list[str] = (
-        list(files_for_fail_zip_raw) if isinstance(files_for_fail_zip_raw, list) else []
-    )
-
-    failed_patch_blobs_raw = result.get("failed_patch_blobs_for_zip")
-    failed_patch_blobs_for_zip: list[tuple[str, bytes]] = (
-        list(failed_patch_blobs_raw) if isinstance(failed_patch_blobs_raw, list) else []
-    )
-    patch_applied_successfully = bool(result.get("patch_applied_successfully", False))
-    applied_ok_count = int(result.get("applied_ok_count", 0))
-    rollback_ckpt_for_posthook = result.get("rollback_ckpt_for_posthook")
-    rollback_ws_for_posthook = result.get("rollback_ws_for_posthook")
-    issue_diff_base_sha = result.get("issue_diff_base_sha")
-    issue_diff_paths_raw = result.get("issue_diff_paths")
-    issue_diff_paths: list[str] = (
-        list(issue_diff_paths_raw) if isinstance(issue_diff_paths_raw, list) else []
-    )
-    delete_workspace_after_archive = bool(result.get("delete_workspace_after_archive", False))
-    ws_for_posthook = result.get("ws_for_posthook")
-    push_ok_for_posthook = result.get("push_ok_for_posthook")
-    final_commit_sha = result.get("final_commit_sha")
-    final_pushed_files = result.get("final_pushed_files")
-    final_fail_stage = result.get("final_fail_stage")
-    final_fail_reason = result.get("final_fail_reason")
-
-    # Posthook: always create an archive after a workspace-mode run.
-    # - on failure: patched.zip (as before)
-    # - on success: patched_success.zip
-    try:
-        if cli.mode in ("workspace", "finalize", "finalize_workspace") and (not policy.test_mode):
-            issue_id = cli.issue_id or "unknown"
-
-            archived_path: Path | None = used_patch_for_zip if cli.mode == "workspace" else None
-
-            # Post-success audit (if enabled by workflow). If audit fails, treat as failure and
-            # produce diagnostics archive instead of success archive.
-            if exit_code == 0 and push_ok_for_posthook is True:
-                try:
-                    _run_post_success_audit(logger, repo_root, policy)
-                except Exception as _audit_e:
-                    exit_code = 1
-                    logger.section("AUDIT")
-                    logger.line(f"post_success_audit_failed={_audit_e!r}")
-            if cli.mode == "workspace":
-                if exit_code == 0:
-                    # Best effort: if caller returned success before archiving, archive now.
-                    if archived_path is None and patch_script is not None and patch_script.exists():
-                        archived_path = archive_patch(logger, patch_script, paths.successful_dir)
-                else:
-                    # Failure: archive the exact patch script selected for this run into
-                    # unsuccessful/.
-                    ps: Path | None = None
-                    if patch_script is not None:
-                        ps = patch_script
-                    else:
-                        if cli.patch_script:
-                            raw = Path(cli.patch_script)
-                            if raw.is_absolute():
-                                ps = raw
-                            else:
-                                cand_repo = (repo_root / raw).resolve()
-                                cand_patchdir = (paths.patch_dir / raw).resolve()
-                                ps = cand_repo if cand_repo.exists() else cand_patchdir
-                        else:
-                            ps = (paths.patch_dir / f"issue_{issue_id}.py").resolve()
-
-                    candidates: list[Path] = []
-                    if ps is not None:
-                        candidates.append(ps)
-                        candidates.append((paths.patch_dir / ps.name).resolve())
-
-                    seen: set[str] = set()
-                    uniq: list[Path] = []
-                    for c in candidates:
-                        k = str(c)
-                        if k not in seen:
-                            seen.add(k)
-                            uniq.append(c)
-
-                    for c in uniq:
-                        if c.exists():
-                            archived_path = archive_patch(logger, c, paths.unsuccessful_dir)
-                            break
-
-                    if archived_path is None:
-                        logger.section("ARCHIVE PATCH")
-                        logger.line(f"no patch script found to archive; tried: {uniq}")
-
-            # Post-success audit (if enabled by workflow). If audit fails, treat as failure and
-            # produce diagnostics archive instead of success archive.
-            if exit_code == 0 and push_ok_for_posthook is True:
-                try:
-                    _run_post_success_audit(logger, repo_root, policy)
-                except Exception as _audit_e:
-                    exit_code = 1
-                    logger.section("AUDIT")
-                    logger.line(f"post_success_audit_failed={_audit_e!r}")
-            ws_repo = (
-                ws_for_posthook.repo
-                if ws_for_posthook is not None
-                else (paths.workspaces_dir / f"issue_{issue_id}" / "repo")
-            )
-
-            build_artifacts(
-                logger=logger,
-                cli=cli,
-                policy=policy,
-                paths=paths,
-                repo_root=repo_root,
-                log_path=log_path,
-                exit_code=exit_code,
-                unified_mode=unified_mode,
-                patch_applied_successfully=patch_applied_successfully,
-                archived_patch=archived_path,
-                failed_patch_blobs_for_zip=failed_patch_blobs_for_zip,
-                files_for_fail_zip=files_for_fail_zip,
-                ws_repo_for_fail_zip=ws_repo,
-                ws_attempt=(ws_for_posthook.attempt if ws_for_posthook is not None else None),
-                issue_diff_base_sha=issue_diff_base_sha,
-                issue_diff_paths=issue_diff_paths,
-            )
-            # Deferred rollback after diagnostics archive.
-            # Keeps workspace available for zip creation.
-            if (
-                exit_code != 0
-                and rollback_ws_for_posthook is not None
-                and rollback_ckpt_for_posthook is not None
-            ):
-                mode = getattr(policy, "rollback_workspace_on_fail", "none-applied")
-                do_rb = False
-                if mode == "never":
-                    do_rb = False
-                elif mode == "always":
-                    do_rb = True
-                else:  # none-applied (default)
-                    do_rb = applied_ok_count == 0
-
-                if do_rb:
-                    logger.line(f"ROLLBACK: executed (mode={mode} applied_ok={applied_ok_count})")
-                    rollback_to_checkpoint(
-                        logger,
-                        rollback_ws_for_posthook.repo,
-                        rollback_ckpt_for_posthook,
-                    )
-                else:
-                    logger.line(f"ROLLBACK: skipped (mode={mode} applied_ok={applied_ok_count})")
-
-            if exit_code == 0 and delete_workspace_after_archive and ws_for_posthook is not None:
-                delete_workspace(logger, ws_for_posthook)
-    except Exception as _e:
-        try:
-            logger.section("POSTHOOK-ERROR")
-            logger.line(repr(_e))
-        except Exception:
-            pass
-
-    if cli.mode == "workspace" and policy.test_mode:
-        try:
-            logger.section("TEST MODE CLEANUP")
-            if ws_for_posthook is None:
-                logger.line("workspace_present=0")
-            else:
-                logger.line("workspace_present=1")
-                logger.line(f"workspace_root={ws_for_posthook.root}")
-                logger.line("workspace_delete=1")
-                delete_workspace(logger, ws_for_posthook)
-        except Exception as _e2:
-            try:
-                logger.section("TEST_MODE_CLEANUP_ERROR")
-                logger.line(repr(_e2))
-            except Exception:
-                pass
+    lock = result.lock
+    exit_code = run_post_run_pipeline(ctx=ctx, result=result)
+    final_commit_sha = result.final_commit_sha
+    final_pushed_files = result.final_pushed_files
+    final_fail_stage = result.final_fail_stage
+    final_fail_reason = result.final_fail_reason
+    push_ok_for_posthook = result.push_ok_for_posthook
 
     with suppress(Exception):
         status.stop()
