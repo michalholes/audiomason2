@@ -497,6 +497,15 @@ UI/autofill have defaults (see config.py).
     - stdout tail drain in the runner executor, and
     - IPC shutdown-tail completion in the async job queue.
   - Value MUST be an integer >= 1.
+- [runner] terminate_grace_s (int, default 3)
+  - Grace between SIGTERM and SIGKILL for PatchHub-owned forced stop paths.
+  - The same value MUST bound both:
+    - running-cancel fallback termination after graceful IPC cancel cannot be
+      used or fails, and
+    - explicit hard-stop termination of the live runner process group.
+  - Value MUST be an integer >= 1.
+  - This key MUST NOT change post-exit status mapping semantics; it governs
+    only the pre-exit forced-stop ladder.
 
 5.2.1 Optional keys (server)
 
@@ -1333,7 +1342,7 @@ JobRecord JSON schema (models.JobRecord):
   "error": "<string|null>",
   "cancel_requested_utc": "<UTC ISO Z string|null>",
   "cancel_ack_utc": "<UTC ISO Z string|null>",
-  "cancel_source": "socket|terminate|null"
+  "cancel_source": "socket|terminate|hard_stop|null"
 }
 
 Notes:
@@ -1369,12 +1378,33 @@ Cancel semantics (queue.cancel):
 - If job.status == "queued":
   - PatchHub sets job.status = "canceled" and sets ended_utc immediately.
 - If job.status == "running":
-  - Cancel is request-only (Variant 2).
-  - PatchHub MUST NOT change job.status or ended_utc.
-  - PatchHub records cancel_requested_utc and cancel_source:
+  - Cancel is request-only for the graceful path.
+  - PatchHub MUST NOT change job.status or ended_utc at request time.
+  - PatchHub MUST set cancel_requested_utc when it accepts the running cancel
+    request.
+  - PatchHub MUST record cancel_source and cancel_ack_utc as follows:
     - "socket" when an IPC cancel reply ok is observed
-    - "terminate" when it falls back to terminating the process
-  - Final status is determined exclusively by runner return_code.
+    - "terminate" when PatchHub falls back to terminating the live runner
+      process group after the graceful IPC path cannot be used or fails
+  - Final status MUST be determined by Section 8.5 using return_code together
+    with the recorded stop context.
+
+7.3.3A POST /api/jobs/<job_id>/hard_stop
+Output (success):
+{ "ok": true, "job_id": "<string>" }
+Error:
+- 409 if cannot hard-stop (unknown job, job not running, or job already completed)
+
+Hard-stop semantics (queue.hard_stop):
+- This endpoint is permitted only when job.status == "running".
+- PatchHub MUST send signals directly to the live runner process group; it MUST
+  NOT use the AMP IPC cancel socket for this endpoint.
+- PatchHub MUST set cancel_requested_utc when it accepts the hard-stop request.
+- PatchHub MUST set cancel_source = "hard_stop" and set cancel_ack_utc when it
+  has accepted the live process-group stop request.
+- PatchHub MUST NOT change job.status or ended_utc at request time.
+- Final status MUST be determined by Section 8.5 using return_code together
+  with the recorded stop context.
 
 7.3.4 POST /api/upload/patch (multipart/form-data)
 Input:
@@ -1532,17 +1562,35 @@ Duplicate suppression:
 8.5 Completion status mapping
 After runner exits:
 - return_code == 0 => job.status = "success"
-- return_code != 0 => job.status = "fail"
+- return_code == 130 (AMP cancel exit code) and cancel_source == "socket" and
+  cancel_ack_utc is not null => job.status = "canceled"
+- cancel_source == "terminate" and cancel_ack_utc is not null =>
+  job.status = "canceled"
+- cancel_source == "hard_stop" and cancel_ack_utc is not null =>
+  job.status = "canceled"
+- otherwise => job.status = "fail"
+
+Status-mapping rule:
+- PatchHub MUST determine final status from return_code together with the
+  recorded stop context.
+- Running stop requests are request-only: they MUST NOT change job.status or
+  ended_utc before runner exit.
+- The stop-context fields used by final mapping are:
+  - cancel_source
+  - cancel_ack_utc
+- cancel_requested_utc is diagnostic metadata and MUST NOT by itself change the
+  final status.
 
 Post-exit grace rule:
 - Expiry of cfg.runner.post_exit_grace_s MUST NOT change job.status mapping.
-- The final status is determined exclusively by return_code.
-- Grace expiry diagnostics are additive and MUST NOT replace the return_code
-  mapping.
+- Grace expiry diagnostics are additive and MUST NOT replace the completion
+  mapping above.
 
-Cancel Variant 2 rule:
-- A cancel request MUST NOT change job.status.
-- Final status is determined exclusively by return_code.
+SSE + persisted state rule:
+- When Section 8.5 yields job.status = "canceled", PatchHub MUST persist the
+  canceled status before closing the live broker.
+- The SSE end trailer MUST carry status "canceled" when the persisted final
+  status is canceled.
 
 -------------------------------------------------------------------------------
 
