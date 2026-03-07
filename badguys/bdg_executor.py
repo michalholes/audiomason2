@@ -46,6 +46,36 @@ def _logs_dir(repo_root: Path) -> Path:
     return repo_root / Path(str(logs_rel))
 
 
+def _runner_socket_name(*, argv: list[str], issue_id: str) -> str:
+    prefix = "--ipc-socket-name-template="
+    template = "am_patch_ipc_{issue}.sock"
+    for arg in argv:
+        if arg.startswith(prefix):
+            value = arg[len(prefix) :].strip()
+            if value:
+                template = value
+            break
+    return template.replace("{issue}", issue_id)
+
+
+def _runner_socket_path(
+    *,
+    patches_dir: Path,
+    issue_id: str,
+    socket_name: str,
+    test_mode: bool,
+    runner_pid: int,
+) -> Path:
+    if not test_mode:
+        return patches_dir / socket_name
+    return (
+        patches_dir
+        / "_test_mode"
+        / f"issue_{issue_id}_pid_{runner_pid}"
+        / socket_name
+    )
+
+
 @dataclass(frozen=True)
 class ExecOutcome:
     ok: bool
@@ -160,29 +190,23 @@ def _exec_one(
                 raise SystemExit(f"FAIL: bdg: missing materialized asset: {input_asset}")
             argv.append(str(path))
 
-        socket_path = patches_dir / f"am_patch_ipc_{subst.issue_id}.sock"
+        socket_name = _runner_socket_name(argv=argv, issue_id=subst.issue_id)
         ipc_stream_path = artifacts_dir / f"runner.ipc.step{int(step_index)}.jsonl"
 
         ipc_holder: dict[str, object] = {"result": None, "value_text": ""}
+        socket_path_holder: dict[str, Path] = {"path": patches_dir / socket_name}
 
         def _run_recorder() -> None:
             from badguys.ipc_stream_recorder import record_ipc_stream
 
             res, value_text = record_ipc_stream(
-                socket_path,
+                socket_path_holder["path"],
                 out_path=ipc_stream_path,
                 connect_timeout_s=3.0,
                 total_timeout_s=0.0,
             )
             ipc_holder["result"] = res
             ipc_holder["value_text"] = value_text
-
-        ipc_thread = threading.Thread(
-            target=_run_recorder,
-            name="badguys_ipc_recorder",
-            daemon=True,
-        )
-        ipc_thread.start()
 
         heartbeat_enabled = console_verbosity in {"normal", "verbose", "debug"}
         started = time.monotonic()
@@ -195,6 +219,21 @@ def _exec_one(
             stderr=subprocess.PIPE,
             text=True,
         )
+
+        socket_path_holder["path"] = _runner_socket_path(
+            patches_dir=patches_dir,
+            issue_id=subst.issue_id,
+            socket_name=socket_name,
+            test_mode=(test_id not in full_runner_tests),
+            runner_pid=proc.pid,
+        )
+
+        ipc_thread = threading.Thread(
+            target=_run_recorder,
+            name="badguys_ipc_recorder",
+            daemon=True,
+        )
+        ipc_thread.start()
 
         stdout = ""
         stderr = ""

@@ -29,6 +29,26 @@ def _validate_result(obj: Any) -> dict[str, Any] | None:
     return out
 
 
+def _iter_socket_candidates(socket_path: Path) -> list[Path]:
+    root_candidate = socket_path
+    root_dir = socket_path.parent
+    socket_name = socket_path.name
+
+    candidates: list[Path] = [root_candidate]
+    seen = {root_candidate}
+
+    try:
+        for path in sorted(root_dir.rglob(socket_name)):
+            if path in seen:
+                continue
+            seen.add(path)
+            candidates.append(path)
+    except FileNotFoundError:
+        return candidates
+
+    return candidates
+
+
 def record_ipc_stream(
     socket_path: Path,
     *,
@@ -59,19 +79,25 @@ def record_ipc_stream(
     while True:
         if time.monotonic() >= connect_deadline:
             return None, ""
-        try:
-            s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-            s.settimeout(0.2)
-            s.connect(str(socket_path))
-            break
-        except (FileNotFoundError, ConnectionRefusedError, OSError):
+        connected = False
+        for candidate in _iter_socket_candidates(socket_path):
             try:
-                if s is not None:
-                    s.close()
-            except Exception:
-                pass
-            time.sleep(0.05)
-            continue
+                s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+                s.settimeout(0.2)
+                s.connect(str(candidate))
+                connected = True
+                break
+            except (FileNotFoundError, ConnectionRefusedError, OSError):
+                try:
+                    if s is not None:
+                        s.close()
+                except Exception:
+                    pass
+                s = None
+                continue
+        if connected:
+            break
+        time.sleep(0.005)
 
     value_msgs: list[str] = []
     result: dict[str, Any] | None = None
