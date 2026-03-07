@@ -1,3 +1,10 @@
+## 2026-03-07T00:00:03+01:00
+
+-   Issue 111: add a Python-defined v3 default import program for the CLI
+    bootstrap path, keep explicit v2 artifact dispatch unchanged, and
+    preserve inline-nav CLI behavior by limiting the v3 default path to
+    prompt-mode launcher sessions.
+
 ## 2026-03-07T00:00:02+01:00
 
 -   Issue 110: add first-class prompt primitive authoring controls to the

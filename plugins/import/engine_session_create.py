@@ -42,6 +42,26 @@ if TYPE_CHECKING:
     from .engine import ImportWizardEngine
 
 
+def _preferred_bootstrap_default_version(*, engine: ImportWizardEngine) -> int:
+    if not engine._has_key("plugins.import.cli.launcher_mode"):
+        return 2
+    launcher_mode = str(engine._resolver.resolve("plugins.import.cli.launcher_mode")[0])
+    if launcher_mode == "disabled":
+        return 2
+    noninteractive = False
+    if engine._has_key("plugins.import.cli.noninteractive"):
+        noninteractive = bool(engine._resolver.resolve("plugins.import.cli.noninteractive")[0])
+    if noninteractive:
+        return 2
+    nav_ui = "prompt"
+    if engine._has_key("plugins.import.cli.render.nav_ui"):
+        nav_ui = str(engine._resolver.resolve("plugins.import.cli.render.nav_ui")[0])
+    nav_ui = nav_ui.strip().lower() or "prompt"
+    if nav_ui in {"inline", "both"}:
+        return 2
+    return 3
+
+
 def create_session_impl(
     *,
     engine: ImportWizardEngine,
@@ -72,7 +92,10 @@ def create_session_impl(
     flow = FlowModel.from_dict(flow_dict)
     validate_models(catalog, flow)
 
-    wizard_definition = load_or_bootstrap_wizard_definition(engine._fs)
+    wizard_definition = load_or_bootstrap_wizard_definition(
+        engine._fs,
+        bootstrap_default_version=_preferred_bootstrap_default_version(engine=engine),
+    )
     if int(wizard_definition.get("version") or 0) == 3:
         effective_model = build_runtime_flow_model(wizard_definition=wizard_definition)
     else:

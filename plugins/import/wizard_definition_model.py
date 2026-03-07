@@ -17,6 +17,7 @@ from plugins.file_io.service import FileService
 from plugins.file_io.service.types import RootName
 
 from .conditions import find_invalid_condition_path
+from .dsl.default_wizard_v3 import build_default_wizard_definition_v3
 from .dsl.wizard_definition_v3_model import (
     canonicalize_wizard_definition_v3,
     validate_wizard_definition_v3_structure,
@@ -69,7 +70,19 @@ _MANDATORY_CHAIN: tuple[str, ...] = (
 )
 
 
-def load_or_bootstrap_wizard_definition(fs: FileService) -> dict[str, Any]:
+def _bootstrap_default_definition(version: int) -> dict[str, Any]:
+    if version == 3:
+        return build_default_wizard_definition_v3()
+    if version == 2:
+        return DEFAULT_WIZARD_DEFINITION
+    raise ValueError("bootstrap_default_version must be 2 or 3")
+
+
+def load_or_bootstrap_wizard_definition(
+    fs: FileService,
+    *,
+    bootstrap_default_version: int = 2,
+) -> dict[str, Any]:
     """Load WizardDefinition JSON, bootstrapping it if missing.
 
     The file is a runtime artifact located under the wizards root.
@@ -77,11 +90,13 @@ def load_or_bootstrap_wizard_definition(fs: FileService) -> dict[str, Any]:
 
     from .wizard_editor_storage import save_wizard_definition_with_history
 
+    default_definition = _bootstrap_default_definition(bootstrap_default_version)
+
     atomic_write_json_if_missing(
         fs,
         RootName.WIZARDS,
         WIZARD_DEFINITION_REL_PATH,
-        DEFAULT_WIZARD_DEFINITION,
+        default_definition,
     )
     wd = read_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_REL_PATH)
 
@@ -105,11 +120,14 @@ def load_or_bootstrap_wizard_definition(fs: FileService) -> dict[str, Any]:
 
         raise ValueError("WizardDefinition must be version 2 or 3")
     except (FieldSchemaValidationError, FinalizeError, ValueError, TypeError) as err:
-        default_any = canonicalize_wizard_definition(DEFAULT_WIZARD_DEFINITION)
-        if not isinstance(default_any, dict) or default_any.get("version") != 2:
-            raise RuntimeError("DEFAULT_WIZARD_DEFINITION must be v2") from err
+        default_any = canonicalize_wizard_definition(default_definition)
+        if not isinstance(default_any, dict):
+            raise RuntimeError("default WizardDefinition must be an object") from err
+        if default_any.get("version") != bootstrap_default_version:
+            raise RuntimeError("default WizardDefinition version mismatch") from err
+        if bootstrap_default_version == 2:
+            validate_wizard_definition_constraints_v2(default_any)
 
-        validate_wizard_definition_constraints_v2(default_any)
         atomic_write_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_REL_PATH, default_any)
         return default_any
 
