@@ -6,7 +6,7 @@ import pytest
 from scripts.patchhub.config import load_config
 
 
-def _config_text(wait_s: int) -> str:
+def _config_text(*, handshake_wait_s: int, post_exit_grace_s: int) -> str:
     return (
         textwrap.dedent(
             f"""
@@ -22,7 +22,8 @@ def _config_text(wait_s: int) -> str:
         default_verbosity = "normal"
         queue_enabled = true
         runner_config_toml = "scripts/am_patch/am_patch.toml"
-        ipc_handshake_wait_s = {wait_s}
+        ipc_handshake_wait_s = {handshake_wait_s}
+        post_exit_grace_s = {post_exit_grace_s}
 
         [paths]
         patches_root = "patches"
@@ -86,7 +87,10 @@ def _config_text(wait_s: int) -> str:
 
 def test_load_config_rejects_non_positive_ipc_handshake_wait(tmp_path) -> None:
     cfg_path = tmp_path / "patchhub.toml"
-    cfg_path.write_text(_config_text(0), encoding="utf-8")
+    cfg_path.write_text(
+        _config_text(handshake_wait_s=0, post_exit_grace_s=1),
+        encoding="utf-8",
+    )
 
     with pytest.raises(ValueError, match=r"runner\.ipc_handshake_wait_s"):
         load_config(cfg_path)
@@ -94,8 +98,34 @@ def test_load_config_rejects_non_positive_ipc_handshake_wait(tmp_path) -> None:
 
 def test_load_config_accepts_positive_ipc_handshake_wait(tmp_path) -> None:
     cfg_path = tmp_path / "patchhub.toml"
-    cfg_path.write_text(_config_text(2), encoding="utf-8")
+    cfg_path.write_text(
+        _config_text(handshake_wait_s=2, post_exit_grace_s=2),
+        encoding="utf-8",
+    )
 
     cfg = load_config(cfg_path)
 
     assert cfg.runner.ipc_handshake_wait_s == 2
+
+
+def test_load_config_rejects_non_positive_post_exit_grace(tmp_path) -> None:
+    cfg_path = tmp_path / "patchhub.toml"
+    cfg_path.write_text(
+        _config_text(handshake_wait_s=1, post_exit_grace_s=0),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match=r"runner\.post_exit_grace_s"):
+        load_config(cfg_path)
+
+
+def test_load_config_accepts_positive_post_exit_grace(tmp_path) -> None:
+    cfg_path = tmp_path / "patchhub.toml"
+    cfg_path.write_text(
+        _config_text(handshake_wait_s=2, post_exit_grace_s=2),
+        encoding="utf-8",
+    )
+
+    cfg = load_config(cfg_path)
+
+    assert cfg.runner.post_exit_grace_s == 2

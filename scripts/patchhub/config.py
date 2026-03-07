@@ -26,6 +26,7 @@ class RunnerConfig:
     queue_enabled: bool
     runner_config_toml: str
     ipc_handshake_wait_s: int = 1
+    post_exit_grace_s: int = 5
 
 
 @dataclass(frozen=True)
@@ -158,6 +159,11 @@ def load_config(path: Path) -> AppConfig:
             ipc_handshake_wait_s=_must_int_at_least(
                 runner.get("ipc_handshake_wait_s", 1),
                 key="runner.ipc_handshake_wait_s",
+                minimum=1,
+            ),
+            post_exit_grace_s=_must_int_at_least(
+                runner.get("post_exit_grace_s", 5),
+                key="runner.post_exit_grace_s",
                 minimum=1,
             ),
         ),

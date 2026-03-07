@@ -12,7 +12,8 @@ from patchhub.models import JobRecord
 
 from .async_event_pump import start_event_pump
 from .async_events_socket import job_socket_path, send_cancel_async
-from .async_runner_exec import AsyncRunnerExecutor
+from .async_runner_exec import AsyncRunnerExecutor, ExecResult
+from .async_task_grace import wait_with_grace
 from .job_event_broker import JobEventBroker
 
 
@@ -126,12 +127,14 @@ class AsyncJobQueue:
         jobs_root: Path,
         executor: AsyncRunnerExecutor,
         ipc_handshake_wait_s: int = 1,
+        post_exit_grace_s: int = 5,
     ) -> None:
         self._repo_root = repo_root
         self._lock_path = lock_path
         self._jobs_root = jobs_root
         self._executor = executor
         self._ipc_handshake_wait_s = int(ipc_handshake_wait_s)
+        self._post_exit_grace_s = max(1, int(post_exit_grace_s))
 
         self._mu = asyncio.Lock()
         self._stop = asyncio.Event()
@@ -256,6 +259,24 @@ class AsyncJobQueue:
                 return
             await asyncio.sleep(0.25)
 
+    def _compose_tail_timeout_error(
+        self,
+        job: JobRecord,
+        *,
+        res: ExecResult,
+        pump_tail_timed_out: bool,
+    ) -> str | None:
+        reasons: list[str] = []
+        if res.stdout_tail_timed_out:
+            reasons.append("stdout_tail_timeout_after_runner_exit")
+        if pump_tail_timed_out:
+            reasons.append("event_pump_tail_timeout_after_runner_exit")
+        if not reasons:
+            return job.error
+        if job.error:
+            reasons.insert(0, str(job.error))
+        return "; ".join(reasons)
+
     async def _run_loop(self) -> None:
         while not self._stop.is_set():
             job_id = await self._q.get()
@@ -313,16 +334,27 @@ class AsyncJobQueue:
                 )
 
                 res = await self._executor.run(
-                    effective_cmd, cwd=self._repo_root, log_path=runner_log
+                    effective_cmd,
+                    cwd=self._repo_root,
+                    log_path=runner_log,
+                    post_exit_grace_s=self._post_exit_grace_s,
                 )
 
-                await pump_task
+                pump_tail_timed_out = await wait_with_grace(
+                    pump_task,
+                    grace_s=self._post_exit_grace_s,
+                )
 
                 async with self._mu:
                     job = self._jobs.get(job_id)
                     if job is None:
                         continue
                     job.return_code = res.return_code
+                    job.error = self._compose_tail_timeout_error(
+                        job,
+                        res=res,
+                        pump_tail_timed_out=pump_tail_timed_out,
+                    )
                     if job.status == "canceled":
                         job.ended_utc = job.ended_utc or utc_now()
                     elif res.return_code == 0:

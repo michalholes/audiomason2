@@ -24,11 +24,22 @@ class _FakeExecutor:
     async def terminate(self) -> bool:
         return False
 
-    async def run(self, argv: list[str], cwd: Path, log_path: Path):
-        del argv, cwd
+    async def run(
+        self,
+        argv: list[str],
+        cwd: Path,
+        log_path: Path,
+        *,
+        post_exit_grace_s: int = 5,
+    ):
+        del argv, cwd, post_exit_grace_s
         log_path.parent.mkdir(parents=True, exist_ok=True)
         log_path.write_text("runner\n", encoding="utf-8")
-        return type("ExecResult", (), {"return_code": 0})()
+        return type(
+            "ExecResult",
+            (),
+            {"return_code": 0, "stdout_tail_timed_out": False},
+        )()
 
 
 class TestPatchhubAsyncQueueCompletion(unittest.IsolatedAsyncioTestCase):
@@ -44,6 +55,7 @@ class TestPatchhubAsyncQueueCompletion(unittest.IsolatedAsyncioTestCase):
                 lock_path=root / "am_patch.lock",
                 jobs_root=jobs_root,
                 executor=_FakeExecutor(),
+                post_exit_grace_s=1,
             )
             job = JobRecord(
                 job_id="job-504-tail",
@@ -113,3 +125,87 @@ class TestPatchhubAsyncQueueCompletion(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(jsonl_lines[-1], '{"type":"log","msg":"tail"}')
             job_json = json.loads((jobs_root / job.job_id / "job.json").read_text())
             self.assertEqual(job_json["status"], "success")
+
+
+class TestPatchhubAsyncQueueForcedCompletion(unittest.IsolatedAsyncioTestCase):
+    async def test_event_pump_timeout_finalizes_job_and_unblocks_queue(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            jobs_root = root / "patches" / "artifacts" / "web_jobs"
+            queue = async_queue_mod.AsyncJobQueue(
+                repo_root=root,
+                lock_path=root / "am_patch.lock",
+                jobs_root=jobs_root,
+                executor=_FakeExecutor(),
+                post_exit_grace_s=1,
+            )
+            first = JobRecord(
+                job_id="job-601-first",
+                created_utc="2026-03-06T00:00:00Z",
+                mode="patch",
+                issue_id="601",
+                commit_summary="First",
+                patch_basename="issue_601.zip",
+                raw_command="python3 scripts/am_patch.py 601",
+                canonical_command=["python3", "scripts/am_patch.py", "601"],
+            )
+            second = JobRecord(
+                job_id="job-601-second",
+                created_utc="2026-03-06T00:00:01Z",
+                mode="patch",
+                issue_id="602",
+                commit_summary="Second",
+                patch_basename="issue_602.zip",
+                raw_command="python3 scripts/am_patch.py 602",
+                canonical_command=["python3", "scripts/am_patch.py", "602"],
+            )
+
+            async def hanging_pump(
+                *,
+                socket_path: str,
+                jsonl_path: Path,
+                publish=None,
+                connect_timeout_s: float = 10.0,
+                retry_sleep_s: float = 0.25,
+            ) -> None:
+                del socket_path, jsonl_path, publish, connect_timeout_s, retry_sleep_s
+                await asyncio.sleep(3600)
+
+            async def wait_for_done(job_id: str) -> async_queue_mod.JobRecord:
+                deadline = asyncio.get_running_loop().time() + 3.0
+                while True:
+                    current = await queue.get_job(job_id)
+                    if current is not None and current.status in {"success", "fail", "canceled"}:
+                        return current
+                    if asyncio.get_running_loop().time() >= deadline:
+                        raise AssertionError(f"{job_id} did not finish")
+                    await asyncio.sleep(0.01)
+
+            with (
+                patch.object(
+                    async_queue_mod,
+                    "start_event_pump",
+                    side_effect=hanging_pump,
+                ),
+                patch.object(
+                    async_queue_mod,
+                    "job_socket_path",
+                    side_effect=lambda job_id: str(root / f"{job_id}.sock"),
+                ),
+            ):
+                await queue.start()
+                try:
+                    await queue.enqueue(first)
+                    await queue.enqueue(second)
+                    finished_first = await wait_for_done(first.job_id)
+                    finished_second = await wait_for_done(second.job_id)
+                finally:
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await queue.stop()
+
+            self.assertEqual(finished_first.status, "success")
+            self.assertEqual(finished_second.status, "success")
+            self.assertEqual(
+                finished_first.error,
+                "event_pump_tail_timeout_after_runner_exit",
+            )

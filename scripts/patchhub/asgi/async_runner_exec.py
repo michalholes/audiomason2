@@ -4,6 +4,8 @@ import asyncio
 from dataclasses import dataclass
 from pathlib import Path
 
+from .async_task_grace import wait_with_grace
+
 
 def _truncate_file_sync(path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -19,6 +21,7 @@ def _append_text_sync(path: Path, text: str) -> None:
 @dataclass(frozen=True)
 class ExecResult:
     return_code: int
+    stdout_tail_timed_out: bool = False
 
 
 class AsyncRunnerExecutor:
@@ -44,7 +47,30 @@ class AsyncRunnerExecutor:
             return False
         return True
 
-    async def run(self, argv: list[str], cwd: Path, log_path: Path) -> ExecResult:
+    async def _drain_stdout(
+        self,
+        stdout: asyncio.StreamReader,
+        *,
+        log_path: Path,
+    ) -> None:
+        while True:
+            raw = await stdout.readline()
+            if not raw:
+                return
+            try:
+                line = raw.decode("utf-8")
+            except Exception:
+                line = raw.decode("utf-8", errors="replace")
+            await asyncio.to_thread(_append_text_sync, log_path, line)
+
+    async def run(
+        self,
+        argv: list[str],
+        cwd: Path,
+        log_path: Path,
+        *,
+        post_exit_grace_s: int = 5,
+    ) -> ExecResult:
         await asyncio.to_thread(_truncate_file_sync, log_path)
 
         proc = await asyncio.create_subprocess_exec(
@@ -56,20 +82,19 @@ class AsyncRunnerExecutor:
         async with self._lock:
             self._proc = proc
 
+        reader_task: asyncio.Task[object] | None = None
         try:
             assert proc.stdout is not None
-            while True:
-                raw = await proc.stdout.readline()
-                if not raw:
-                    break
-                try:
-                    line = raw.decode("utf-8")
-                except Exception:
-                    line = raw.decode("utf-8", errors="replace")
-                await asyncio.to_thread(_append_text_sync, log_path, line)
-
+            reader_task = asyncio.create_task(
+                self._drain_stdout(proc.stdout, log_path=log_path),
+                name=f"patchhub_runner_stdout_{proc.pid}",
+            )
             rc = await proc.wait()
-            return ExecResult(return_code=int(rc))
+            timed_out = await wait_with_grace(reader_task, grace_s=post_exit_grace_s)
+            return ExecResult(
+                return_code=int(rc),
+                stdout_tail_timed_out=timed_out,
+            )
         finally:
             async with self._lock:
                 self._proc = None
