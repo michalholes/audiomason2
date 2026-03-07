@@ -5,18 +5,11 @@ is_guard = false
 [[asset]]
 id = "seed_patch"
 kind = "git_patch_text"
-content = """diff --git a/src/audiomason/_badguys_seed_fail.py b/src/audiomason/_badguys_seed_fail.py
-new file mode 100644
-index 0000000..1111111
---- /dev/null
-+++ b/src/audiomason/_badguys_seed_fail.py
-@@ -0,0 +1,1 @@
-+def oops(:
+content = """def oops(:
 """
 
 [[step]]
 op = "RUN_RUNNER"
-extra_args = ["${issue_id}", "badguys: seed run to create workspace"]
 input_asset = "seed_patch"
 
 [[step]]
@@ -28,4 +21,3 @@ stamp = "${now_stamp}"
 
 [[step]]
 op = "RUN_RUNNER"
-extra_args = ["${issue_id}", "badguys: apply latest bundle", "-l"]

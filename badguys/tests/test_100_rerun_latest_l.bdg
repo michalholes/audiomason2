@@ -4,9 +4,7 @@ is_guard = false
 
 [[step]]
 op = "PREPARE_UNSUCCESSFUL_PATCH"
-marker_rel = "badguys/tmp/rerun_latest_marker.txt"
 marker_text = "badguys rerun-latest ${issue_id}"
 
 [[step]]
 op = "RUN_RUNNER"
-extra_args = ["-l", "${issue_id}", "badguys: rerun-latest (-l) smoke"]

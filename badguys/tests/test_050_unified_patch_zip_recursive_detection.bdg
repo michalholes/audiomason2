@@ -7,17 +7,10 @@ id = "zip"
 kind = "patch_zip_manifest"
 
   [[asset.entry]]
-  name = "subdir/inner.patch"
-  content = """diff --git a/docs/badguys_batch1/unified_recursive.txt b/docs/badguys_batch1/unified_recursive.txt
-new file mode 100644
-index 0000000..1111111
---- /dev/null
-+++ b/docs/badguys_batch1/unified_recursive.txt
-@@ -0,0 +1,1 @@
-+ok
+  name = "patch_entry"
+  content = """ok
 """
 
 [[step]]
 op = "RUN_RUNNER"
-extra_args = ["${issue_id}", "badguys: unified zip recursive"]
 input_asset = "zip"

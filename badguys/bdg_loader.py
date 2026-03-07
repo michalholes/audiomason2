@@ -2,9 +2,47 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+import re
 from typing import Any, Dict, List, Optional
 
 import tomllib
+
+
+_FORBIDDEN_EVAL_KEYS = {
+    "rc_eq",
+    "rc_ne",
+    "stdout_contains",
+    "stdout_not_contains",
+    "stdout_regex",
+    "stderr_contains",
+    "stderr_not_contains",
+    "stderr_regex",
+    "value_eq",
+    "value_contains",
+    "value_not_contains",
+    "value_regex",
+    "list_eq",
+    "list_contains",
+    "list_not_contains",
+    "equals_step_index",
+}
+
+_FORBIDDEN_PATCH_MARKERS = (
+    "diff --git a/",
+    "+++ b/",
+    "--- a/",
+    "--- /dev/null",
+)
+
+_FORBIDDEN_TOML_KEYS = {
+    "runner_cmd",
+    "patches_dir",
+    "logs_dir",
+    "central_log_pattern",
+    "path",
+}
+
+_PATH_LITERAL_RE = re.compile(r"['\"][^'\"\n]*[\\/][^'\"\n]*['\"]")
 
 
 @dataclass(frozen=True)
@@ -50,6 +88,47 @@ def _as_bool(d: dict, key: str, default: bool = False) -> bool:
     return v
 
 
+def _validate_python_payload(*, label: str, content: str) -> None:
+    if any(marker in content for marker in ("FILES =", "REPO = Path", "__file__", ".parents[")):
+        raise SystemExit(f"FAIL: bdg: {label} must not embed FILES or repo path machinery")
+    if _PATH_LITERAL_RE.search(content):
+        raise SystemExit(f"FAIL: bdg: {label} must not embed filesystem paths")
+
+
+def _validate_toml_delta(*, label: str, content: str) -> None:
+    raw = tomllib.loads(content) if content.strip() else {}
+    if not isinstance(raw, dict):
+        raise SystemExit(f"FAIL: bdg: {label} must decode to a TOML table")
+    suite = raw.get("suite", {})
+    lock = raw.get("lock", {})
+    if not isinstance(suite, dict):
+        raise SystemExit(f"FAIL: bdg: {label} [suite] must be a table")
+    if not isinstance(lock, dict):
+        raise SystemExit(f"FAIL: bdg: {label} [lock] must be a table")
+    for key in suite.keys():
+        if key in _FORBIDDEN_TOML_KEYS:
+            raise SystemExit(f"FAIL: bdg: {label} must not embed suite.{key}")
+    for key in lock.keys():
+        if key in _FORBIDDEN_TOML_KEYS:
+            raise SystemExit(f"FAIL: bdg: {label} must not embed lock.{key}")
+
+
+def _validate_asset(item: dict, *, asset_id: str, kind: str) -> None:
+    content = item.get("content")
+    if content is not None and not isinstance(content, str):
+        raise SystemExit("FAIL: bdg: asset content must be string or omitted")
+    if kind == "git_patch_text" and isinstance(content, str):
+        if any(marker in content for marker in _FORBIDDEN_PATCH_MARKERS):
+            raise SystemExit(
+                f"FAIL: bdg: asset '{asset_id}' git_patch_text must not embed raw patch paths"
+            )
+    if kind == "python_patch_script" and isinstance(content, str):
+        _validate_python_payload(label=f"asset '{asset_id}'", content=content)
+    if kind == "toml_text" and isinstance(content, str):
+        _validate_toml_delta(label=f"asset '{asset_id}'", content=content)
+
+
+
 def load_bdg_test(path: Path) -> BdgTest:
     raw = tomllib.loads(path.read_text(encoding="utf-8"))
     meta = raw.get("meta", {})
@@ -67,18 +146,37 @@ def load_bdg_test(path: Path) -> BdgTest:
             raise SystemExit("FAIL: bdg: [[asset]] must be a table")
         asset_id = _as_str(item, "id")
         kind = _as_str(item, "kind")
+        _validate_asset(item, asset_id=asset_id, kind=kind)
         content = item.get("content")
-        if content is not None and not isinstance(content, str):
-            raise SystemExit("FAIL: bdg: asset content must be string or omitted")
 
         entries: List[BdgAssetEntry] = []
         for ent in item.get("entry", []):
             if not isinstance(ent, dict):
                 raise SystemExit("FAIL: bdg: [[asset.entry]] must be a table")
             name = _as_str(ent, "name")
+            if (
+                "/" in name
+                or "\\" in name
+                or name.endswith((".patch", ".py", ".txt", ".toml", ".zip"))
+            ):
+                raise SystemExit(
+                    f"FAIL: bdg: asset.entry '{asset_id}.{name}' must use a logical entry id"
+                )
             econtent = ent.get("content")
             if not isinstance(econtent, str):
                 raise SystemExit("FAIL: bdg: asset.entry content must be string")
+            if kind == "patch_zip_manifest":
+                if any(marker in econtent for marker in _FORBIDDEN_PATCH_MARKERS):
+                    raise SystemExit(
+                        f"FAIL: bdg: asset.entry '{asset_id}.{name}' must not embed raw patch paths"
+                    )
+                if "from __future__ import annotations" in econtent or "ctx." in econtent:
+                    pass
+                elif econtent.lstrip().startswith("from") or "FILES =" in econtent:
+                    _validate_python_payload(
+                        label=f"asset.entry '{asset_id}.{name}'",
+                        content=econtent,
+                    )
             entries.append(BdgAssetEntry(name=name, content=econtent))
 
         if asset_id in assets:
@@ -92,6 +190,14 @@ def load_bdg_test(path: Path) -> BdgTest:
         op = _as_str(item, "op")
         params = dict(item)
         params.pop("op", None)
+        if "extra_args" in params:
+            raise SystemExit("FAIL: bdg: extra_args moved to badguys/config.toml recipes")
+        if "marker_rel" in params:
+            raise SystemExit("FAIL: bdg: marker_rel moved to badguys/config.toml recipes")
+        bad_keys = sorted(_FORBIDDEN_EVAL_KEYS.intersection(params.keys()))
+        if bad_keys:
+            joined = ", ".join(bad_keys)
+            raise SystemExit(f"FAIL: bdg: expectations must be central; remove: {joined}")
         steps.append(BdgStep(op=op, params=params))
 
     if not steps:

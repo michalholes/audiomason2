@@ -4,5 +4,3 @@ is_guard = false
 
 [[step]]
 op = "RUN_RUNNER"
-extra_args = ["--verbosity=loud", "${issue_id}", "badguys: invalid runner verbosity must fail cleanly", "DOES_NOT_MATTER"]
-

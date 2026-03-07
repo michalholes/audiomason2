@@ -276,3 +276,193 @@ value_contains = [
   "PUSH: OK",
 ]
 value_regex = ["^COMMIT:\\s*[0-9a-f]{40}\\b"]
+
+[subjects.tests.test_000_test_mode_smoke.smoke_marker]
+relpath = "badguys/tmp/test_mode_smoke_marker.txt"
+
+[subjects.tests.test_040_test_mode_hard_stop_no_archives.test_mode_marker]
+relpath = "docs/badguys_batch1/test_mode_hard_stop_marker.txt"
+
+[subjects.tests.test_041_test_mode_cleanup_on_fail.compile_fail_script]
+relpath = "scripts/badguys_batch1_compile_fail.py"
+
+[subjects.tests.test_050_unified_patch_zip_recursive_detection.recursive_file]
+relpath = "docs/badguys_batch1/unified_recursive.txt"
+
+[subjects.tests.test_052_unified_patch_ignores_py_when_patch_present.ignore_py]
+relpath = "docs/badguys_batch1/ignore_py.txt"
+
+[subjects.tests.test_060_scope_touching_undeclared_fails.declared]
+relpath = "docs/badguys_batch1/scope_declared.txt"
+
+[subjects.tests.test_060_scope_touching_undeclared_fails.undeclared]
+relpath = "docs/badguys_batch1/scope_undeclared.txt"
+
+[subjects.tests.test_061_scope_declared_but_not_touched_fails.declared_untouched]
+relpath = "docs/badguys_batch1/declared_untouched.txt"
+
+[subjects.tests.test_061_scope_declared_but_not_touched_fails.touched]
+relpath = "docs/badguys_batch1/scope_touched.txt"
+
+[subjects.tests.test_062_scope_noop_patch_fails.noop]
+relpath = "docs/badguys_batch1/noop.txt"
+
+[subjects.tests.test_064_a_allows_undeclared.declared]
+relpath = "docs/badguys_batch1/a_declared.txt"
+
+[subjects.tests.test_064_a_allows_undeclared.undeclared]
+relpath = "docs/badguys_batch1/a_undeclared.txt"
+
+[subjects.tests.test_065_scope_py_undeclared_leaves_index_clean.declared]
+relpath = "docs/badguys_batch1/scope_declared_index_clean.txt"
+
+[subjects.tests.test_065_scope_py_undeclared_leaves_index_clean.undeclared]
+relpath = "docs/badguys_batch1/scope_undeclared_index_clean.txt"
+
+[subjects.tests.test_067_path_traversal_outside_repo_fails.declared_dummy]
+relpath = "docs/badguys_batch1/path_traversal_declared_dummy.txt"
+
+[subjects.tests.test_071_compile_exclude_respected.excluded_syntax]
+relpath = "scripts/badguys_batch1_excluded/syntax_error.py"
+
+[subjects.tests.test_072_g_continues_after_gate_fail.compile_fail]
+relpath = "src/test.py"
+
+[subjects.tests.test_100_rerun_latest_l.rerun_latest_marker]
+relpath = "badguys/tmp/rerun_latest_marker.txt"
+
+[subjects.tests.test_900_commit_push_timestamp.seed_fail]
+relpath = "src/audiomason/_badguys_seed_fail.py"
+
+[subjects.tests.test_900_commit_push_timestamp.commit_marker]
+relpath = "badguys/artifacts/commit_marker.txt"
+
+[recipes.tests.test_000_test_mode_smoke.assets.smoke_patch]
+subject = "smoke_marker"
+
+[recipes.tests.test_000_test_mode_smoke.steps.0]
+args = ["${issue_id}", "badguys: test-mode smoke"]
+
+[recipes.tests.test_010_help_short.steps.0]
+args = ["-h"]
+
+[recipes.tests.test_020_help_all.steps.0]
+args = ["--help-all"]
+
+[recipes.tests.test_030_show_config.steps.0]
+args = ["-c"]
+
+[recipes.tests.test_031_invalid_runner_verbosity_fails_cleanly.steps.0]
+args = [
+  "--verbosity=loud",
+  "${issue_id}",
+  "badguys: invalid runner verbosity must fail cleanly",
+  "DOES_NOT_MATTER",
+]
+
+[recipes.tests.test_040_test_mode_hard_stop_no_archives.assets.patch]
+subject = "test_mode_marker"
+
+[recipes.tests.test_040_test_mode_hard_stop_no_archives.steps.1]
+args = ["${issue_id}", "badguys: test-mode hard stop"]
+
+[recipes.tests.test_041_test_mode_cleanup_on_fail.assets.patch]
+subject = "compile_fail_script"
+
+[recipes.tests.test_041_test_mode_cleanup_on_fail.steps.1]
+args = ["${issue_id}", "badguys: test-mode cleanup on fail"]
+
+[recipes.tests.test_050_unified_patch_zip_recursive_detection.assets.zip.entries.patch_entry]
+kind = "git_patch_text"
+zip_name = "subdir/inner.patch"
+subject = "recursive_file"
+
+[recipes.tests.test_050_unified_patch_zip_recursive_detection.steps.0]
+args = ["${issue_id}", "badguys: unified zip recursive"]
+
+[recipes.tests.test_052_unified_patch_ignores_py_when_patch_present.assets.zip.entries.patch_entry]
+kind = "git_patch_text"
+zip_name = "x.patch"
+subject = "ignore_py"
+
+[recipes.tests.test_052_unified_patch_ignores_py_when_patch_present.assets.zip.entries.script_entry]
+kind = "python_patch_script"
+zip_name = "evil.py"
+declared_subjects = ["ignore_py"]
+
+[recipes.tests.test_052_unified_patch_ignores_py_when_patch_present.steps.0]
+args = ["${issue_id}", "badguys: unified ignores py"]
+
+[recipes.tests.test_060_scope_touching_undeclared_fails.assets.patch]
+declared_subjects = ["declared"]
+
+[recipes.tests.test_060_scope_touching_undeclared_fails.steps.0]
+args = ["${issue_id}", "badguys: scope touched undeclared fails"]
+
+[recipes.tests.test_061_scope_declared_but_not_touched_fails.assets.patch]
+declared_subjects = ["declared_untouched", "touched"]
+
+[recipes.tests.test_061_scope_declared_but_not_touched_fails.steps.0]
+args = ["${issue_id}", "badguys: scope declared but not touched fails"]
+
+[recipes.tests.test_062_scope_noop_patch_fails.assets.patch]
+declared_subjects = ["noop"]
+
+[recipes.tests.test_062_scope_noop_patch_fails.steps.0]
+args = ["${issue_id}", "badguys: noop patch fails"]
+
+[recipes.tests.test_064_a_allows_undeclared.assets.patch]
+declared_subjects = ["declared"]
+
+[recipes.tests.test_064_a_allows_undeclared.steps.0]
+args = ["-a", "${issue_id}", "badguys: -a allows undeclared"]
+
+[recipes.tests.test_065_scope_py_undeclared_leaves_index_clean.assets.patch]
+declared_subjects = ["declared"]
+
+[recipes.tests.test_065_scope_py_undeclared_leaves_index_clean.steps.1]
+args = ["${issue_id}", "badguys: scope undeclared leaves live tree unchanged"]
+
+[recipes.tests.test_067_path_traversal_outside_repo_fails.assets.script]
+declared_subjects = ["declared_dummy"]
+
+[recipes.tests.test_067_path_traversal_outside_repo_fails.steps.1]
+args = ["${issue_id}", "badguys: path traversal outside repo must fail"]
+
+[recipes.tests.test_071_compile_exclude_respected.assets.patch]
+subject = "excluded_syntax"
+
+[recipes.tests.test_071_compile_exclude_respected.steps.0]
+args = [
+  "--override",
+  "compile_exclude=['scripts/badguys_batch1_excluded']",
+  "${issue_id}",
+  "badguys: compile exclude respected",
+]
+
+[recipes.tests.test_072_g_continues_after_gate_fail.assets.bundle.entries.patch_entry]
+kind = "git_patch_text"
+zip_name = "inner.patch"
+subject = "compile_fail"
+
+[recipes.tests.test_072_g_continues_after_gate_fail.steps.0]
+args = ["-g", "${issue_id}", "badguys: -g continues after gate fail (compile)"]
+
+[recipes.tests.test_100_rerun_latest_l.steps.0]
+marker_subject = "rerun_latest_marker"
+
+[recipes.tests.test_100_rerun_latest_l.steps.1]
+args = ["-l", "${issue_id}", "badguys: rerun-latest (-l) smoke"]
+
+[recipes.tests.test_900_commit_push_timestamp.assets.seed_patch]
+subject = "seed_fail"
+
+[recipes.tests.test_900_commit_push_timestamp.steps.0]
+args = ["${issue_id}", "badguys: seed run to create workspace"]
+
+[recipes.tests.test_900_commit_push_timestamp.steps.2]
+marker_subject = "commit_marker"
+seed_subject = "seed_fail"
+
+[recipes.tests.test_900_commit_push_timestamp.steps.3]
+args = ["${issue_id}", "badguys: apply latest bundle", "-l"]

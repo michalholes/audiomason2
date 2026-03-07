@@ -13,6 +13,7 @@ from typing import Any, List
 from badguys.bdg_evaluator import StepResult
 from badguys.bdg_loader import BdgStep, BdgTest
 from badguys.bdg_materializer import MaterializedAssets
+from badguys.bdg_recipe import step_recipe, subject_relpaths
 from badguys.bdg_subst import SubstCtx, subst_text
 
 
@@ -157,13 +158,16 @@ def _exec_one(
             raise SystemExit("FAIL: bdg: input_asset must be string")
         if isinstance(input_asset, str):
             input_asset = _subst(input_asset, subst=subst)
-        extra_args = p.get("extra_args", [])
+        recipe = step_recipe(repo_root=repo_root, test_id=test_id, step_index=step_index)
+        extra_args = recipe.get("args", [])
         if not (isinstance(extra_args, list) and all(isinstance(x, str) for x in extra_args)):
-            raise SystemExit("FAIL: bdg: extra_args must be list[str]")
+            raise SystemExit(
+                "FAIL: bdg recipe: RUN_RUNNER args for "
+                f"{test_id} step {step_index} must be list[str]"
+            )
         if "--test-mode" in extra_args:
             raise SystemExit(
-                "FAIL: bdg: --test-mode is controlled by BadGuys; "
-                "remove it from extra_args"
+                "FAIL: bdg recipe: --test-mode is controlled by BadGuys; remove it from args"
             )
 
         patches_dir_obj = step_runner_cfg.get("patches_dir")
@@ -526,13 +530,22 @@ def _exec_one(
         return StepResult(rc=0, stdout=None, stderr=None, value=out)
 
     if op == "PREPARE_UNSUCCESSFUL_PATCH":
-        marker_rel = p.get("marker_rel")
+        recipe = step_recipe(repo_root=repo_root, test_id=test_id, step_index=step_index)
+        subjects = subject_relpaths(repo_root=repo_root, test_id=test_id)
+        marker_subject = recipe.get("marker_subject")
+        if not isinstance(marker_subject, str) or not marker_subject:
+            raise SystemExit(
+                "FAIL: bdg recipe: PREPARE_UNSUCCESSFUL_PATCH marker_subject "
+                f"missing for {test_id} step {step_index}"
+            )
+        marker_rel = subjects.get(marker_subject)
+        if marker_rel is None:
+            raise SystemExit(
+                f"FAIL: bdg recipe: unknown marker_subject '{marker_subject}' for {test_id}"
+            )
         marker_text = p.get("marker_text", "")
-        if not isinstance(marker_rel, str):
-            raise SystemExit("FAIL: bdg: marker_rel must be string")
         if not isinstance(marker_text, str):
             raise SystemExit("FAIL: bdg: marker_text must be string")
-        marker_rel = _subst(marker_rel, subst=subst)
         marker_text = _subst(marker_text, subst=subst)
         unsucc_dir = repo_root / "patches" / "unsuccessful"
         unsucc_dir.mkdir(parents=True, exist_ok=True)
@@ -562,8 +575,22 @@ def _exec_one(
         patches_dir = repo_root / "patches"
         patches_dir.mkdir(parents=True, exist_ok=True)
         ws_repo = patches_dir / "workspaces" / f"issue_{issue}" / "repo"
-        marker_rel = "badguys/artifacts/commit_marker.txt"
-        seed_rel = "src/audiomason/_badguys_seed_fail.py"
+        recipe = step_recipe(repo_root=repo_root, test_id=test_id, step_index=step_index)
+        subjects = subject_relpaths(repo_root=repo_root, test_id=test_id)
+        marker_subject = recipe.get("marker_subject")
+        seed_subject = recipe.get("seed_subject")
+        if not isinstance(marker_subject, str) or not isinstance(seed_subject, str):
+            raise SystemExit(
+                "FAIL: bdg recipe: PREPARE_LATEST_BUNDLE_900 subjects missing "
+                f"for {test_id} step {step_index}"
+            )
+        marker_rel = subjects.get(marker_subject)
+        seed_rel = subjects.get(seed_subject)
+        if marker_rel is None or seed_rel is None:
+            raise SystemExit(
+                "FAIL: bdg recipe: PREPARE_LATEST_BUNDLE_900 references "
+                f"unknown subjects for {test_id}"
+            )
         ws_marker = ws_repo / marker_rel
         ws_marker.parent.mkdir(parents=True, exist_ok=True)
         ws_marker.write_text(
