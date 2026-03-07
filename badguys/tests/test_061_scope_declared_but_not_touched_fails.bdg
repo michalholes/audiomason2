@@ -5,7 +5,7 @@ is_guard = false
 [[asset]]
 id = "patch"
 kind = "python_patch_script"
-content = """ctx.write_text("touched", "touched\n")
+content = """ctx.write_text("touched", "touched" + chr(10))
 """
 
 [[step]]
