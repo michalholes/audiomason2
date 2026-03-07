@@ -81,7 +81,7 @@ def wrap_bright_red(text: str, enabled: bool) -> str:
 _TOKEN_PREFIX_RE = re.compile(
     r"^(?P<prefix>(RUN|DO|STATUS|OK|FAIL|RESULT|WARNING|ERROR|PUSH|COMMIT):)"
 )
-_RESULT_WORD_RE = re.compile(r"^(RESULT:\s+)(?P<word>SUCCESS|FAIL)\b")
+_RESULT_WORD_RE = re.compile(r"^(RESULT:\s+)(?P<word>SUCCESS|FAIL|CANCELED)\b")
 
 
 def colorize_console_message(message: str, enabled: bool) -> str:
@@ -90,7 +90,7 @@ def colorize_console_message(message: str, enabled: bool) -> str:
     Rules:
     - Only the leading token prefix (e.g., 'OK:', 'FAIL:') may be colored.
     - The rest of the line remains uncolored.
-    - In 'RESULT: SUCCESS|FAIL', only the SUCCESS/FAIL word is colored.
+    - In 'RESULT: SUCCESS|FAIL|CANCELED', only the result word is colored.
     - Lines inside the final FILES block may be colored yellow when they start
       with 'A ', 'M ', or 'D '. (This is intentionally conservative.)
 
@@ -119,8 +119,10 @@ def colorize_console_message(message: str, enabled: bool) -> str:
             rest = raw[len(lead) + len(word) :]
             if word == "SUCCESS":
                 out_lines.append(lead + wrap_green(word, True) + rest + nl)
-            else:
+            elif word == "FAIL":
                 out_lines.append(lead + wrap_red(word, True) + rest + nl)
+            else:
+                out_lines.append(lead + wrap_yellow(word, True) + rest + nl)
             continue
 
         m = _TOKEN_PREFIX_RE.match(raw)

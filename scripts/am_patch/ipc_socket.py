@@ -220,6 +220,10 @@ class IpcController:
     def request_cancel(self) -> None:
         with self._lock:
             self._state.cancel = True
+        cancel_active = getattr(self._logger, "request_subprocess_cancel", None)
+        if callable(cancel_active):
+            with contextlib.suppress(Exception):
+                cancel_active()
         self._resume.set()
 
     def request_resume(self) -> None:

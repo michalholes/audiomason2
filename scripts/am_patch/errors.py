@@ -22,7 +22,10 @@ CATEGORIES = (
     "CONFIG",
     "INTERNAL",
     "SECURITY",
+    "CANCELED",
 )
+
+CANCEL_EXIT_CODE = 130
 
 
 @dataclass(frozen=True)
@@ -45,3 +48,8 @@ def fingerprint(err: RunnerError) -> str:
             f"- message: {err.message}",
         ]
     )
+
+
+class RunnerCancelledError(RunnerError):
+    def __init__(self, stage: str, message: str) -> None:
+        super().__init__(stage, "CANCELED", message)

@@ -22,7 +22,7 @@ from am_patch.config import (
 )
 from am_patch.engine_run_gates import run_finalize_gates
 from am_patch.engine_startup_runtime import build_startup_logger_and_ipc
-from am_patch.errors import RunnerError, fingerprint
+from am_patch.errors import CANCEL_EXIT_CODE, RunnerCancelledError, RunnerError, fingerprint
 from am_patch.execution_context import open_execution_context
 from am_patch.gates import run_badguys
 from am_patch.ipc_socket import IpcController
@@ -815,6 +815,12 @@ def run_mode(ctx: RunContext) -> RunResult:
         drop_checkpoint(logger, ws.repo, ckpt)
         return _result(0)
 
+    except RunnerCancelledError as e:
+        logger.section("CANCELED")
+        logger.line(str(e))
+        logger.line(fingerprint(e))
+        return _result(CANCEL_EXIT_CODE)
+
     except RunnerError as e:
         logger.section("FAILURE")
         logger.line(str(e))
@@ -913,6 +919,17 @@ def finalize_and_report(ctx: RunContext, result: RunResult) -> int:
                     to_screen=not screen_quiet,
                     to_log=not log_quiet,
                 )
+            logger.emit(
+                severity="INFO",
+                channel="CORE",
+                message=f"LOG: {log_path}\n",
+                kind="TEXT",
+                summary=True,
+                to_screen=not screen_quiet,
+                to_log=not log_quiet,
+            )
+        elif exit_code == CANCEL_EXIT_CODE:
+            logger.summary("RESULT: CANCELED")
             logger.emit(
                 severity="INFO",
                 channel="CORE",

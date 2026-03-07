@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from am_patch.config import Policy
-from am_patch.errors import RunnerError
+from am_patch.errors import RunnerCancelledError, RunnerError
 from am_patch.ipc_socket import IpcController, resolve_socket_path
 from am_patch.log import Logger
 from am_patch.status import StatusReporter
@@ -77,18 +77,17 @@ def build_startup_logger_and_ipc(
             action = ipc.check_boundary(completed_step=_stage)
             if action == "pause_after_step":
                 ipc.wait_if_paused()
-            st = ipc.snapshot()
-            if bool(st.get("cancel")):
-                raise RunnerError(
-                    "INTERNAL",
-                    "IPC",
-                    f"cancelled ({action or 'cancel'})",
-                )
             if action == "stop_after_step":
                 raise RunnerError(
                     "INTERNAL",
                     "IPC",
                     f"stop_after_step reached: {_stage}",
+                )
+            st = ipc.snapshot()
+            if bool(st.get("cancel")):
+                raise RunnerCancelledError(
+                    "INTERNAL",
+                    f"cancelled ({action or 'cancel'})",
                 )
 
         logger.set_ipc_hook(_ipc_hook)

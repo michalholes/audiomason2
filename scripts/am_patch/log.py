@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import contextlib
 import json
-import subprocess
 import sys
+import threading
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -11,7 +11,8 @@ from pathlib import Path
 from typing import Any
 
 from .console import colorize_console_message, stdout_color_enabled
-from .errors import RunnerError
+from .errors import RunnerCancelledError, RunnerError
+from .managed_subprocess import ManagedSubprocess
 
 
 @dataclass
@@ -121,6 +122,8 @@ class Logger:
         self._ipc_hook: Callable[[str, str], None] | None = None
 
         self._ipc_stream: Callable[[dict[str, Any]], None] | None = None
+        self._subprocess_lock = threading.Lock()
+        self._active_subprocess: ManagedSubprocess | None = None
 
         self.console_color = str(console_color or "").strip().lower() or "auto"
         self._console_color_enabled = stdout_color_enabled(self.console_color)
@@ -243,6 +246,23 @@ class Logger:
             stage = stage.strip() if _sep else ""
             if stage:
                 hook(kind, stage)
+
+    def request_subprocess_cancel(self) -> bool:
+        with self._subprocess_lock:
+            active = self._active_subprocess
+        if active is None:
+            return False
+        active.request_cancel()
+        return True
+
+    def _set_active_subprocess(self, managed: ManagedSubprocess | None) -> None:
+        with self._subprocess_lock:
+            self._active_subprocess = managed
+
+    def _cancel_runner_error(self, *, argv: list[str]) -> RunnerCancelledError:
+        stage = self._get_stage().strip() or "INTERNAL"
+        cmd0 = str(argv[0]) if argv else "subprocess"
+        return RunnerCancelledError(stage, f"subprocess canceled ({cmd0})")
 
     def _timeout_runner_error(
         self,
@@ -455,25 +475,31 @@ class Logger:
         timeout_value = self.run_timeout_s if timeout_s is None else int(timeout_s or 0)
 
         result: RunResult
+        managed = ManagedSubprocess.start(
+            argv=argv,
+            cwd=str(cwd) if cwd else None,
+            env=env,
+        )
+        self._set_active_subprocess(managed)
         try:
-            completed = subprocess.run(
-                argv,
-                cwd=str(cwd) if cwd else None,
-                env=env,
-                text=True,
-                capture_output=True,
-                timeout=(timeout_value if timeout_value > 0 else None),
-            )
-        except subprocess.TimeoutExpired as exc:
-            stdout = exc.output or ""
-            stderr = exc.stderr or ""
-            if isinstance(stdout, bytes):
-                stdout = stdout.decode("utf-8", errors="replace")
-            if isinstance(stderr, bytes):
-                stderr = stderr.decode("utf-8", errors="replace")
+            completed = managed.wait(timeout_s=(timeout_value if timeout_value > 0 else None))
+        finally:
+            self._set_active_subprocess(None)
+
+        if managed.cancel_requested:
+            raise self._cancel_runner_error(argv=argv)
+
+        result = RunResult(
+            argv=argv,
+            returncode=completed.returncode,
+            stdout=completed.stdout,
+            stderr=completed.stderr,
+        )
+
+        if completed.timed_out:
             marker = f"subprocess timeout after {timeout_value}s"
-            stderr = f"{marker}\n{stderr}" if stderr else marker + "\n"
-            result = RunResult(argv=argv, returncode=124, stdout=stdout, stderr=stderr)
+            result.stderr = f"{marker}\n{result.stderr}" if result.stderr else marker + "\n"
+            result.returncode = 124
             if timeout_hard_fail:
                 self.emit_json_failed_step_detail(
                     stdout=result.stdout or "",
@@ -501,14 +527,7 @@ class Logger:
                     timeout_category=timeout_category,
                     timeout_message=timeout_message,
                     argv=argv,
-                ) from exc
-        else:
-            result = RunResult(
-                argv=argv,
-                returncode=completed.returncode,
-                stdout=completed.stdout,
-                stderr=completed.stderr,
-            )
+                )
 
         if result.returncode != 0:
             if failure_dump_mode not in ("bypass", "warn_detail"):
