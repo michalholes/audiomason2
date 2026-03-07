@@ -66,7 +66,6 @@ def _head_json_response(status: int, *, etag: str = "") -> Response:
 def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
     app = FastAPI()
     core = AsyncAppCore(repo_root=repo_root, cfg=cfg)
-    core.queue._terminate_grace_s = max(1, int(cfg.runner.terminate_grace_s))
     app.state.core = core
 
     @app.on_event("startup")

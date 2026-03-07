@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+from collections.abc import Awaitable, Callable, Coroutine
 from pathlib import Path
 from typing import Any, cast
 
@@ -312,15 +314,33 @@ def api_jobs_log_tail(self, job_id: str, qs: dict[str, str]) -> tuple[int, bytes
     return _ok({"job_id": job_id, "tail": tail})
 
 
+def _run_queue_bool_sync(
+    fn: Callable[[str], Awaitable[bool]],
+    job_id: str,
+) -> bool:
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        coro = cast("Coroutine[Any, Any, bool]", fn(job_id))
+        return bool(asyncio.run(coro))
+    raise RuntimeError("Legacy jobs API cannot run inside an active event loop")
+
+
 def api_jobs_cancel(self, job_id: str) -> tuple[int, bytes]:
-    ok = self.queue.cancel(job_id)
+    try:
+        ok = _run_queue_bool_sync(self.queue.cancel, job_id)
+    except Exception:
+        return _err("Cannot cancel", status=409)
     if not ok:
         return _err("Cannot cancel", status=409)
     return _ok({"job_id": job_id})
 
 
 def api_jobs_hard_stop(self, job_id: str) -> tuple[int, bytes]:
-    ok = self.queue.hard_stop(job_id)
+    try:
+        ok = _run_queue_bool_sync(self.queue.hard_stop, job_id)
+    except Exception:
+        return _err("Cannot hard stop", status=409)
     if not ok:
         return _err("Cannot hard stop", status=409)
     return _ok({"job_id": job_id})

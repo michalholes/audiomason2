@@ -59,6 +59,7 @@ class AsyncAppCore:
             executor=AsyncRunnerExecutor(),
             ipc_handshake_wait_s=cfg.runner.ipc_handshake_wait_s,
             post_exit_grace_s=cfg.runner.post_exit_grace_s,
+            terminate_grace_s=cfg.runner.terminate_grace_s,
         )
 
         self.indexer = AsyncJobsRunsIndexer(core=self)
