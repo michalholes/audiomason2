@@ -66,6 +66,7 @@ def _head_json_response(status: int, *, etag: str = "") -> Response:
 def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
     app = FastAPI()
     core = AsyncAppCore(repo_root=repo_root, cfg=cfg)
+    core.queue._terminate_grace_s = max(1, int(cfg.runner.terminate_grace_s))
     app.state.core = core
 
     @app.on_event("startup")
@@ -516,6 +517,13 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
         ok = await core.queue.cancel(job_id)
         if not ok:
             return JSONResponse({"ok": False, "error": "Cannot cancel"}, status_code=409)
+        return JSONResponse({"ok": True, "job_id": job_id})
+
+    @app.post("/api/jobs/{job_id}/hard_stop")
+    async def api_jobs_hard_stop(job_id: str) -> Response:
+        ok = await core.queue.hard_stop(job_id)
+        if not ok:
+            return JSONResponse({"ok": False, "error": "Cannot hard stop"}, status_code=409)
         return JSONResponse({"ok": True, "job_id": job_id})
 
     @app.post("/api/jobs/enqueue")

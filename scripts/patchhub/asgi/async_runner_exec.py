@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import os
+import signal
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -34,17 +36,37 @@ class AsyncRunnerExecutor:
             proc = self._proc
         return proc is not None and proc.returncode is None
 
-    async def terminate(self) -> bool:
+    async def terminate(self, *, grace_s: int = 3) -> bool:
         async with self._lock:
             proc = self._proc
         if proc is None or proc.returncode is not None:
             return False
+
+        pid = int(proc.pid or 0)
+        if pid <= 0:
+            return False
+
         try:
-            proc.terminate()
+            os.killpg(pid, signal.SIGTERM)
         except ProcessLookupError:
             return False
         except Exception:
             return False
+
+        try:
+            await asyncio.wait_for(proc.wait(), timeout=max(1, int(grace_s)))
+            return True
+        except TimeoutError:
+            pass
+
+        try:
+            os.killpg(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            return True
+        except Exception:
+            return False
+
+        await proc.wait()
         return True
 
     async def _drain_stdout(
@@ -78,6 +100,7 @@ class AsyncRunnerExecutor:
             cwd=str(cwd),
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.STDOUT,
+            start_new_session=True,
         )
         async with self._lock:
             self._proc = proc

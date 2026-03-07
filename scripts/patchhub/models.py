@@ -24,7 +24,7 @@ class JobRecord:
     return_code: int | None = None
     error: str | None = None
 
-    # Cancel metadata (Variant 2)
+    # Cancel metadata (PatchHub cancel + hard-stop flow)
     cancel_requested_utc: str | None = None
     cancel_ack_utc: str | None = None
     cancel_source: str | None = None

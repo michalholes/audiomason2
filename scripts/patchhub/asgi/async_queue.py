@@ -128,6 +128,7 @@ class AsyncJobQueue:
         executor: AsyncRunnerExecutor,
         ipc_handshake_wait_s: int = 1,
         post_exit_grace_s: int = 5,
+        terminate_grace_s: int = 3,
     ) -> None:
         self._repo_root = repo_root
         self._lock_path = lock_path
@@ -135,6 +136,7 @@ class AsyncJobQueue:
         self._executor = executor
         self._ipc_handshake_wait_s = int(ipc_handshake_wait_s)
         self._post_exit_grace_s = max(1, int(post_exit_grace_s))
+        self._terminate_grace_s = max(1, int(terminate_grace_s))
 
         self._mu = asyncio.Lock()
         self._stop = asyncio.Event()
@@ -167,14 +169,22 @@ class AsyncJobQueue:
                 return False
             job.return_code = int(return_code)
             job.error = error
-            if job.status == "canceled":
-                job.ended_utc = job.ended_utc or utc_now()
-            elif int(return_code) == 0:
+            if int(return_code) == 0:
                 job.status = "success"
-                job.ended_utc = utc_now()
+            elif (
+                job.cancel_source == "socket"
+                and job.cancel_requested_utc is not None
+                and job.cancel_ack_utc is not None
+                and int(return_code) == 130
+            ) or (
+                job.cancel_source in {"terminate", "hard_stop"}
+                and job.cancel_requested_utc is not None
+                and job.cancel_ack_utc is not None
+            ):
+                job.status = "canceled"
             else:
                 job.status = "fail"
-                job.ended_utc = utc_now()
+            job.ended_utc = utc_now()
             await self._persist(job)
         return True
 
@@ -283,16 +293,39 @@ class AsyncJobQueue:
                         await self._persist(job)
                 return True
 
-            ok = await self._executor.terminate()
+            ok = await self._executor.terminate(grace_s=self._terminate_grace_s)
             if ok:
                 async with self._mu:
                     job = self._jobs.get(job_id)
                     if job is not None:
+                        job.cancel_ack_utc = utc_now()
                         job.cancel_source = "terminate"
                         await self._persist(job)
             return ok
 
         return False
+
+    async def hard_stop(self, job_id: str) -> bool:
+        async with self._mu:
+            job = self._jobs.get(job_id)
+            if job is None or str(job.status) != "running":
+                return False
+            if job.cancel_requested_utc is None:
+                job.cancel_requested_utc = utc_now()
+                await self._persist(job)
+
+        ok = await self._executor.terminate(grace_s=self._terminate_grace_s)
+        if not ok:
+            return False
+
+        async with self._mu:
+            job = self._jobs.get(job_id)
+            if job is None:
+                return False
+            job.cancel_ack_utc = utc_now()
+            job.cancel_source = "hard_stop"
+            await self._persist(job)
+        return True
 
     def jobs_root(self) -> Path:
         return self._jobs_root

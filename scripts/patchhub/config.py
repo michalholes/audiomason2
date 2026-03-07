@@ -27,6 +27,7 @@ class RunnerConfig:
     runner_config_toml: str
     ipc_handshake_wait_s: int = 1
     post_exit_grace_s: int = 5
+    terminate_grace_s: int = 3
 
 
 @dataclass(frozen=True)
@@ -164,6 +165,11 @@ def load_config(path: Path) -> AppConfig:
             post_exit_grace_s=_must_int_at_least(
                 runner.get("post_exit_grace_s", 5),
                 key="runner.post_exit_grace_s",
+                minimum=1,
+            ),
+            terminate_grace_s=_must_int_at_least(
+                runner.get("terminate_grace_s", 3),
+                key="runner.terminate_grace_s",
                 minimum=1,
             ),
         ),

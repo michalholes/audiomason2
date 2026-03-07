@@ -315,7 +315,8 @@
 			html += `<div><b>running</b> ${escapeHtml(active.job_id || "")}</div>`;
 			html += `<div class="muted">mode=${escapeHtml(active.mode || "")} issue=${escapeHtml(active.issue_id || "")}</div>`;
 			html +=
-				'<div class="row"><button class="btn btn-small" id="cancelActive">Cancel</button>';
+				'<div class="row"><button class="btn btn-small" id="cancelActive">Cancel</button>' +
+				'<button class="btn btn-small" id="hardStopActive">Hard stop AMP</button>';
 			html +=
 				'<a class="linklike" href="/api/jobs/' +
 				jidEnc +
@@ -333,6 +334,18 @@
 			cancelBtn.addEventListener("click", () => {
 				apiPost(
 					`/api/jobs/${encodeURIComponent(active.job_id)}/cancel`,
+					{},
+				).then(() => {
+					refreshJobs();
+				});
+			});
+		}
+
+		var hardStopBtn = el("hardStopActive");
+		if (hardStopBtn && active && active.job_id) {
+			hardStopBtn.addEventListener("click", () => {
+				apiPost(
+					`/api/jobs/${encodeURIComponent(active.job_id)}/hard_stop`,
 					{},
 				).then(() => {
 					refreshJobs();

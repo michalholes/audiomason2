@@ -317,3 +317,10 @@ def api_jobs_cancel(self, job_id: str) -> tuple[int, bytes]:
     if not ok:
         return _err("Cannot cancel", status=409)
     return _ok({"job_id": job_id})
+
+
+def api_jobs_hard_stop(self, job_id: str) -> tuple[int, bytes]:
+    ok = self.queue.hard_stop(job_id)
+    if not ok:
+        return _err("Cannot hard stop", status=409)
+    return _ok({"job_id": job_id})

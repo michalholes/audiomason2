@@ -6,7 +6,9 @@ import pytest
 from scripts.patchhub.config import load_config
 
 
-def _config_text(*, handshake_wait_s: int, post_exit_grace_s: int) -> str:
+def _config_text(
+    *, handshake_wait_s: int, post_exit_grace_s: int, terminate_grace_s: int = 3
+) -> str:
     return (
         textwrap.dedent(
             f"""
@@ -24,6 +26,7 @@ def _config_text(*, handshake_wait_s: int, post_exit_grace_s: int) -> str:
         runner_config_toml = "scripts/am_patch/am_patch.toml"
         ipc_handshake_wait_s = {handshake_wait_s}
         post_exit_grace_s = {post_exit_grace_s}
+        terminate_grace_s = {terminate_grace_s}
 
         [paths]
         patches_root = "patches"
@@ -129,3 +132,26 @@ def test_load_config_accepts_positive_post_exit_grace(tmp_path) -> None:
     cfg = load_config(cfg_path)
 
     assert cfg.runner.post_exit_grace_s == 2
+
+
+def test_load_config_rejects_non_positive_terminate_grace(tmp_path) -> None:
+    cfg_path = tmp_path / "patchhub.toml"
+    cfg_path.write_text(
+        _config_text(handshake_wait_s=1, post_exit_grace_s=1, terminate_grace_s=0),
+        encoding="utf-8",
+    )
+
+    with pytest.raises(ValueError, match=r"runner\.terminate_grace_s"):
+        load_config(cfg_path)
+
+
+def test_load_config_accepts_positive_terminate_grace(tmp_path) -> None:
+    cfg_path = tmp_path / "patchhub.toml"
+    cfg_path.write_text(
+        _config_text(handshake_wait_s=2, post_exit_grace_s=2, terminate_grace_s=4),
+        encoding="utf-8",
+    )
+
+    cfg = load_config(cfg_path)
+
+    assert cfg.runner.terminate_grace_s == 4

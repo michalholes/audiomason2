@@ -161,3 +161,44 @@ class TestPatchhubLiveEventsSource(unittest.IsolatedAsyncioTestCase):
         payload = b"".join(chunks).decode("utf-8")
         self.assertIn("from_history", payload)
         self.assertIn("event: end", payload)
+
+    async def test_active_job_emits_canceled_end_status(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            jsonl_path = Path(tmpdir) / "job.jsonl"
+            jsonl_path.write_text('{"type":"log","msg":"queued"}\n', encoding="utf-8")
+            status = {"value": "running"}
+            broker = JobEventBroker()
+
+            async def job_status() -> str | None:
+                return str(status["value"])
+
+            async def get_broker() -> JobEventBroker | None:
+                return broker
+
+            async def historical_stream():
+                raise AssertionError("historical fallback must not run for active jobs")
+                yield b""
+
+            async def finish_stream() -> None:
+                await asyncio.sleep(0.02)
+                status["value"] = "canceled"
+                broker.close()
+
+            task = asyncio.create_task(finish_stream())
+            chunks = [
+                chunk
+                async for chunk in stream_job_events_live_source(
+                    job_id="job-652-canceled",
+                    jsonl_path=jsonl_path,
+                    in_memory_job=True,
+                    job_status=job_status,
+                    get_broker=get_broker,
+                    historical_stream=historical_stream,
+                    broker_poll_interval_s=0.01,
+                )
+            ]
+            await task
+
+        payload = b"".join(chunks).decode("utf-8")
+        self.assertIn("event: end", payload)
+        self.assertIn('"status": "canceled"', payload)

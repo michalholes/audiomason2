@@ -21,7 +21,8 @@ class _FakeExecutor:
     async def is_running(self) -> bool:
         return False
 
-    async def terminate(self) -> bool:
+    async def terminate(self, *, grace_s: int = 3) -> bool:
+        del grace_s
         return False
 
     async def run(
@@ -378,3 +379,217 @@ class TestPatchhubAsyncQueueForcedCompletion(unittest.IsolatedAsyncioTestCase):
 
             self.assertEqual(finished.status, "success")
             self.assertEqual(persisted_statuses, ["success"])
+
+
+class _ControllableExecutor:
+    def __init__(self, *, return_code: int) -> None:
+        self.return_code = int(return_code)
+        self.started = asyncio.Event()
+        self.released = asyncio.Event()
+        self.running = False
+        self.terminate_calls: list[int] = []
+
+    async def is_running(self) -> bool:
+        return self.running
+
+    async def terminate(self, *, grace_s: int = 3) -> bool:
+        self.terminate_calls.append(int(grace_s))
+        self.released.set()
+        return True
+
+    async def run(
+        self,
+        argv: list[str],
+        cwd: Path,
+        log_path: Path,
+        *,
+        post_exit_grace_s: int = 5,
+    ):
+        del argv, cwd, post_exit_grace_s
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        log_path.write_text("runner\n", encoding="utf-8")
+        self.running = True
+        self.started.set()
+        await self.released.wait()
+        self.running = False
+        return async_queue_mod.ExecResult(return_code=self.return_code, stdout_tail_timed_out=False)
+
+
+class TestPatchhubAsyncQueueCancelStates(unittest.IsolatedAsyncioTestCase):
+    async def test_socket_cancel_exit_code_130_finalizes_as_canceled(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            jobs_root = root / "patches" / "artifacts" / "web_jobs"
+            executor = _ControllableExecutor(return_code=130)
+            queue = async_queue_mod.AsyncJobQueue(
+                repo_root=root,
+                lock_path=root / "am_patch.lock",
+                jobs_root=jobs_root,
+                executor=executor,
+                post_exit_grace_s=1,
+                terminate_grace_s=3,
+            )
+            job = JobRecord(
+                job_id="job-650-socket-cancel",
+                created_utc="2026-03-07T00:00:00Z",
+                mode="patch",
+                issue_id="650",
+                commit_summary="Socket cancel",
+                patch_basename="issue_650.zip",
+                raw_command="python3 scripts/am_patch.py 650",
+                canonical_command=["python3", "scripts/am_patch.py", "650"],
+            )
+
+            async def idle_pump(**kwargs):
+                del kwargs
+                return None
+
+            async def wait_for_status(expected: str) -> async_queue_mod.JobRecord:
+                deadline = asyncio.get_running_loop().time() + 3.0
+                while True:
+                    current = await queue.get_job(job.job_id)
+                    if current is not None and current.status == expected:
+                        return current
+                    if asyncio.get_running_loop().time() >= deadline:
+                        raise AssertionError(f"{job.job_id} did not reach {expected}")
+                    await asyncio.sleep(0.01)
+
+            with (
+                patch.object(async_queue_mod, "start_event_pump", side_effect=idle_pump),
+                patch.object(
+                    async_queue_mod, "job_socket_path", return_value=str(root / "job-650.sock")
+                ),
+                patch.object(async_queue_mod, "send_cancel_async", return_value=True),
+            ):
+                await queue.start()
+                try:
+                    await queue.enqueue(job)
+                    await asyncio.wait_for(executor.started.wait(), timeout=1.0)
+                    self.assertTrue(await queue.cancel(job.job_id))
+                    executor.released.set()
+                    finished = await wait_for_status("canceled")
+                finally:
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await queue.stop()
+
+            self.assertEqual(finished.return_code, 130)
+            self.assertEqual(finished.cancel_source, "socket")
+            self.assertIsNotNone(finished.cancel_ack_utc)
+            self.assertEqual(executor.terminate_calls, [])
+
+    async def test_cancel_fallback_terminate_finalizes_as_canceled(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            jobs_root = root / "patches" / "artifacts" / "web_jobs"
+            executor = _ControllableExecutor(return_code=-15)
+            queue = async_queue_mod.AsyncJobQueue(
+                repo_root=root,
+                lock_path=root / "am_patch.lock",
+                jobs_root=jobs_root,
+                executor=executor,
+                post_exit_grace_s=1,
+                terminate_grace_s=4,
+            )
+            job = JobRecord(
+                job_id="job-651-terminate-cancel",
+                created_utc="2026-03-07T00:00:00Z",
+                mode="patch",
+                issue_id="651",
+                commit_summary="Terminate cancel",
+                patch_basename="issue_651.zip",
+                raw_command="python3 scripts/am_patch.py 651",
+                canonical_command=["python3", "scripts/am_patch.py", "651"],
+            )
+
+            async def idle_pump(**kwargs):
+                del kwargs
+                return None
+
+            async def wait_for_status(expected: str) -> async_queue_mod.JobRecord:
+                deadline = asyncio.get_running_loop().time() + 3.0
+                while True:
+                    current = await queue.get_job(job.job_id)
+                    if current is not None and current.status == expected:
+                        return current
+                    if asyncio.get_running_loop().time() >= deadline:
+                        raise AssertionError(f"{job.job_id} did not reach {expected}")
+                    await asyncio.sleep(0.01)
+
+            with (
+                patch.object(async_queue_mod, "start_event_pump", side_effect=idle_pump),
+                patch.object(
+                    async_queue_mod, "job_socket_path", return_value=str(root / "job-651.sock")
+                ),
+                patch.object(async_queue_mod, "send_cancel_async", return_value=False),
+            ):
+                await queue.start()
+                try:
+                    await queue.enqueue(job)
+                    await asyncio.wait_for(executor.started.wait(), timeout=1.0)
+                    self.assertTrue(await queue.cancel(job.job_id))
+                    finished = await wait_for_status("canceled")
+                finally:
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await queue.stop()
+
+            self.assertEqual(finished.cancel_source, "terminate")
+            self.assertIsNotNone(finished.cancel_ack_utc)
+            self.assertEqual(executor.terminate_calls, [4])
+
+    async def test_hard_stop_running_job_finalizes_as_canceled(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            jobs_root = root / "patches" / "artifacts" / "web_jobs"
+            executor = _ControllableExecutor(return_code=-9)
+            queue = async_queue_mod.AsyncJobQueue(
+                repo_root=root,
+                lock_path=root / "am_patch.lock",
+                jobs_root=jobs_root,
+                executor=executor,
+                post_exit_grace_s=1,
+                terminate_grace_s=5,
+            )
+            job = JobRecord(
+                job_id="job-652-hard-stop",
+                created_utc="2026-03-07T00:00:00Z",
+                mode="patch",
+                issue_id="652",
+                commit_summary="Hard stop",
+                patch_basename="issue_652.zip",
+                raw_command="python3 scripts/am_patch.py 652",
+                canonical_command=["python3", "scripts/am_patch.py", "652"],
+            )
+
+            async def idle_pump(**kwargs):
+                del kwargs
+                return None
+
+            async def wait_for_status(expected: str) -> async_queue_mod.JobRecord:
+                deadline = asyncio.get_running_loop().time() + 3.0
+                while True:
+                    current = await queue.get_job(job.job_id)
+                    if current is not None and current.status == expected:
+                        return current
+                    if asyncio.get_running_loop().time() >= deadline:
+                        raise AssertionError(f"{job.job_id} did not reach {expected}")
+                    await asyncio.sleep(0.01)
+
+            with (
+                patch.object(async_queue_mod, "start_event_pump", side_effect=idle_pump),
+                patch.object(
+                    async_queue_mod, "job_socket_path", return_value=str(root / "job-652.sock")
+                ),
+            ):
+                await queue.start()
+                try:
+                    await queue.enqueue(job)
+                    await asyncio.wait_for(executor.started.wait(), timeout=1.0)
+                    self.assertTrue(await queue.hard_stop(job.job_id))
+                    finished = await wait_for_status("canceled")
+                finally:
+                    with contextlib.suppress(asyncio.CancelledError):
+                        await queue.stop()
+
+            self.assertEqual(finished.cancel_source, "hard_stop")
+            self.assertIsNotNone(finished.cancel_ack_utc)
+            self.assertEqual(executor.terminate_calls, [5])
