@@ -1,3 +1,8 @@
+## 2026-03-07T00:00:07+01:00
+
+-   Issue 114: define Phase II import DSL capabilities for parallel.fork_join@1, flow.invoke@1, flow.loop@1, file-local libraries/macros, deterministic FlowModel projection, SessionState bookkeeping, and editor authoring boundaries.
+-   spec: Bump specification version to 2.0.11-normalized-m1.
+
 ## 2026-03-07T00:00:06+01:00
 
 -   Issue 110 corrective: restore inline :back/:cancel handling for v3
