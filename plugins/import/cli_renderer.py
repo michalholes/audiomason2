@@ -175,6 +175,10 @@ def _render_loop(
 ) -> int:
     while True:
         state = engine.get_state(session_id)
+        status = str(state.get("status") or "")
+        if status and status != "in_progress":
+            print_fn(_json_dump({"state": state}))
+            return 0 if status == "completed" else 1
         cur = str(state.get("current_step_id") or "")
         if not cur:
             print_fn(_json_dump({"state": state}))
@@ -193,6 +197,23 @@ def _render_loop(
             print_fn(f"Step: {title} [{cur}]")
         else:
             print_fn(f"Step: {title}")
+
+        v3_prompt = _v3_prompt_metadata(step)
+        if v3_prompt is not None:
+            if cfg.noninteractive:
+                print_fn("ERROR: noninteractive mode requires explicit wizard step payloads.")
+                return 1
+            v3_payload = _collect_v3_prompt_payload(
+                step=step,
+                metadata=v3_prompt,
+                input_fn=input_fn,
+                print_fn=print_fn,
+                confirm_defaults=cfg.confirm_defaults,
+            )
+            state3 = engine.submit_step(session_id, cur, v3_payload)
+            if int(state3.get("phase") or 1) == 2:
+                return _finalize(engine, session_id, print_fn=print_fn)
+            continue
 
         computed_only = bool(step.get("computed_only"))
         fields_any = step.get("fields")
@@ -343,6 +364,98 @@ def _show_select_items(
             print_fn(f"  {idx}. {label}")
     if len(items) > cfg.max_list_items:
         print_fn(f"  ... ({len(items) - cfg.max_list_items} more)")
+
+
+def _v3_prompt_metadata(step: dict[str, Any]) -> dict[str, Any] | None:
+    primitive_id = str(step.get("primitive_id") or "")
+    primitive_version = int(step.get("primitive_version") or 0)
+    ui_any = step.get("ui")
+    if primitive_version != 1 or primitive_id not in {
+        "ui.prompt_text",
+        "ui.prompt_select",
+        "ui.prompt_confirm",
+    }:
+        return None
+    return dict(ui_any) if isinstance(ui_any, dict) else None
+
+
+def _prompt_seed_value(metadata: dict[str, Any]) -> Any:
+    if "prefill" in metadata:
+        return metadata["prefill"]
+    if "default_value" in metadata:
+        return metadata["default_value"]
+    return None
+
+
+def _stringify_prompt_value(value: Any) -> str:
+    if value is None:
+        return "null"
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float, str)):
+        return str(value)
+    return json.dumps(value, ensure_ascii=True, indent=2, sort_keys=True)
+
+
+def _parse_prompt_value(raw: str) -> Any:
+    if raw == "":
+        return ""
+    try:
+        return json.loads(raw)
+    except Exception:
+        return raw
+
+
+def _collect_v3_prompt_payload(
+    *,
+    step: dict[str, Any],
+    metadata: dict[str, Any],
+    input_fn: Callable[[str], str],
+    print_fn: Callable[[str], None],
+    confirm_defaults: bool,
+) -> dict[str, Any]:
+    primitive_id = str(step.get("primitive_id") or "")
+    label = str(metadata.get("label") or "")
+    prompt = str(metadata.get("prompt") or "")
+    help_text = str(metadata.get("help") or "")
+    hint = str(metadata.get("hint") or "")
+    examples = metadata.get("examples")
+    seed = _prompt_seed_value(metadata)
+    seed_defined = "prefill" in metadata or "default_value" in metadata
+
+    if label:
+        print_fn(f"Label: {label}")
+    if prompt:
+        print_fn(f"Prompt: {prompt}")
+    if help_text:
+        print_fn(f"Help: {help_text}")
+    if hint:
+        print_fn(f"Hint: {hint}")
+    if isinstance(examples, list) and examples:
+        print_fn("Examples:")
+        for example in examples:
+            print_fn(f"  - {_stringify_prompt_value(example)}")
+    if seed_defined:
+        print_fn(f"Prefill: {_stringify_prompt_value(seed)}")
+
+    if primitive_id == "ui.prompt_confirm":
+        prompt_text = prompt or label or "Confirm"
+        default_hint = ""
+        if confirm_defaults and seed_defined and isinstance(seed, bool):
+            default_hint = " (Enter=default)"
+        raw = input_fn(f"{prompt_text} (y/n){default_hint}: ").strip().lower()
+        if raw == "" and confirm_defaults and seed_defined and isinstance(seed, bool):
+            return {"confirmed": seed}
+        return {"confirmed": raw in {"y", "yes", "1", "true", "t"}}
+
+    prompt_text = prompt or label or "Value"
+    default_hint = ""
+    if confirm_defaults and seed_defined:
+        default_hint = " (Enter=default)"
+    raw = input_fn(f"{prompt_text}{default_hint}: ").rstrip("\n")
+    value = seed if raw == "" and confirm_defaults and seed_defined else _parse_prompt_value(raw)
+    key = "value" if primitive_id == "ui.prompt_text" else "selection"
+    return {key: value}
 
 
 def _finalize(

@@ -1,3 +1,9 @@
+## 2026-03-07T00:00:01+01:00
+
+-   Issue 109: add CLI/Web runtime parity for v3 prompt metadata, ship a
+    dedicated web v3 renderer, and keep autofill/backend-driven prompt
+    advancement renderer-neutral.
+
 ## 2026-03-07T00:00:00+01:00
 
 -   Issue 108: project baseline prompt metadata into FlowModel v3 ui,
