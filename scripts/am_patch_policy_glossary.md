@@ -105,6 +105,17 @@ Default: true
 Meaning: If true, run pytest under the configured venv python.
 Related: venv_bootstrap_mode, venv_bootstrap_python
 
+## Key: runner_subprocess_timeout_s
+Key: runner_subprocess_timeout_s
+Type: int
+Default: 1800
+Meaning: Hard timeout in seconds for runner-managed subprocesses.
+Notes:
+- Value 0 disables the timeout.
+- Timeout is a hard failure for the owning stage, except for explicit best-effort cleanup paths.
+- Repository root discovery keeps its fail-open fallback to Path.cwd().
+Related: repo_root, gates_order, post_success_audit
+
 ## Key: run_all_tests
 Key: run_all_tests
 Type: bool

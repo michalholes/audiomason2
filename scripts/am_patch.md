@@ -222,6 +222,7 @@ Short-help options (have short aliases):
 Logging / output:
 
 - `--log-level {quiet,normal,warning,verbose,debug}` : filter what is written to the log file (independent from `--verbosity`).
+- `runner_subprocess_timeout_s` (config key) : hard timeout for runner subprocesses in seconds; `0` disables it.
 
 Long-only options (no short alias):
 

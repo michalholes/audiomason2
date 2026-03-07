@@ -42,6 +42,7 @@ The following keys are normative (defaults shown):
 -   current_log_symlink_enabled = true
 -   log_level = "verbose" (allowed:
     quiet\|normal\|warning\|verbose\|debug)
+-   runner_subprocess_timeout_s = 1800 (0 disables timeout)
 -   log_ts_format = "%Y%m%d\_%H%M%S"
 -   log_template_issue = "am_patch_issue\_{issue}\_{ts}.log"
 -   log_template_finalize = "am_patch_finalize\_{ts}.log"
@@ -94,7 +95,32 @@ These keys affect concrete behavior: - filesystem locations (patch dir
 layout and workspace layout), - log naming and the optional current-log
 symlink, - the name and internal structure of the failure diagnostics
 zip, - which changed paths are ignored for scope enforcement and
-promotion hygiene, - early venv interpreter bootstrap behavior.
+promotion hygiene, - early venv interpreter bootstrap behavior, - hard timeout
+limits for runner-managed subprocess execution.
+
+
+### 0.1.1 Runner subprocess timeout policy
+
+The runner has one global subprocess timeout policy key:
+
+-   `runner_subprocess_timeout_s = int` (default: `1800`)
+-   `0` disables the timeout
+
+Scope:
+
+-   applies to subprocesses executed through the runner logger wrapper
+-   applies to repository root discovery (`git rev-parse --show-toplevel`)
+
+Timeout outcome:
+
+-   a timed-out subprocess MUST NOT leave the runner waiting indefinitely
+-   the owning runner stage MUST fail deterministically on timeout
+-   the timeout MUST surface as a stage failure, not only as a synthetic return code
+
+Explicit exceptions:
+
+-   repository root discovery remains fail-open and falls back to `Path.cwd()`
+-   best-effort cleanup subprocesses may log the timeout without overriding the primary run result
 
 ## 0.2 Determinism over convenience
 
