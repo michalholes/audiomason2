@@ -120,6 +120,13 @@ def _must_get(d: dict[str, Any], key: str) -> Any:
     return d[key]
 
 
+def _must_int_at_least(value: Any, *, key: str, minimum: int) -> int:
+    parsed = int(value)
+    if parsed < minimum:
+        raise ValueError(f"Config key {key} must be >= {minimum}; got {parsed}")
+    return parsed
+
+
 def load_config(path: Path) -> AppConfig:
     raw = tomllib.loads(path.read_text(encoding="utf-8"))
 
@@ -148,7 +155,11 @@ def load_config(path: Path) -> AppConfig:
             default_verbosity=str(_must_get(runner, "default_verbosity")),
             queue_enabled=bool(_must_get(runner, "queue_enabled")),
             runner_config_toml=str(_must_get(runner, "runner_config_toml")),
-            ipc_handshake_wait_s=int(runner.get("ipc_handshake_wait_s", 1)),
+            ipc_handshake_wait_s=_must_int_at_least(
+                runner.get("ipc_handshake_wait_s", 1),
+                key="runner.ipc_handshake_wait_s",
+                minimum=1,
+            ),
         ),
         paths=PathsConfig(
             patches_root=str(_must_get(paths, "patches_root")),

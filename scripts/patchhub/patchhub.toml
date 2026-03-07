@@ -4,7 +4,7 @@ port = 8099
 backend = "asgi"
 
 [meta]
-version = "1.7.0"
+version = "1.7.1"
 
 [runner]
 command = ["python3", "scripts/am_patch.py"]
@@ -12,6 +12,7 @@ default_verbosity = "normal"
 queue_enabled = true
 runner_config_toml = "scripts/am_patch/am_patch.toml"
 ipc_handshake_wait_s = 1
+# Must stay >= 1 to satisfy AM Patch handshake validation.
 
 [paths]
 patches_root = "patches"

@@ -89,3 +89,47 @@ class TestPatchhubAsyncEventPumpHandshake(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(received_cmds[1]["cmd"], "drain_ack")
         self.assertEqual(received_cmds[1]["cmd_id"], "patchhub_drain_ack_7")
         self.assertEqual(received_cmds[1]["args"], {"seq": 7})
+
+    async def test_missing_reply_does_not_abort_raw_capture(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            socket_path = root / "job.sock"
+            jsonl_path = root / "job.jsonl"
+
+            async def handle(
+                reader: asyncio.StreamReader,
+                writer: asyncio.StreamWriter,
+            ) -> None:
+                writer.write(b'{"type":"control","event":"connected"}\n')
+                await writer.drain()
+
+                await reader.readline()
+                writer.write(b'{"type":"log","msg":"tail"}\n')
+                writer.write(b'{"type":"control","event":"eos","seq":9}\n')
+                await writer.drain()
+
+                await reader.readline()
+                writer.close()
+                await writer.wait_closed()
+
+            server = await asyncio.start_unix_server(handle, path=str(socket_path))
+            try:
+                await start_event_pump(
+                    socket_path=str(socket_path),
+                    jsonl_path=jsonl_path,
+                    publish=None,
+                )
+            finally:
+                server.close()
+                await server.wait_closed()
+
+            lines = jsonl_path.read_text(encoding="utf-8").splitlines()
+
+        self.assertEqual(
+            lines,
+            [
+                '{"type":"control","event":"connected"}',
+                '{"type":"log","msg":"tail"}',
+                '{"type":"control","event":"eos","seq":9}',
+            ],
+        )
