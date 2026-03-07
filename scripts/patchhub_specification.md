@@ -1357,8 +1357,14 @@ Persistence source (HARD):
 - PatchHub MUST NOT rewrite NDJSON lines.
 - After receiving a control frame with event="connected", the job event pump
   MUST send the IPC command ready.
+- If sending ready fails, or if a reply frame for ready is missing or carries
+  ok=false, the pump MUST continue raw capture without aborting the job event
+  stream.
 - After receiving a control frame with event="eos" and seq=<n>, the job event
   pump MUST first persist that eos line and then send drain_ack(seq=<n>).
+- If sending drain_ack fails, or if a reply frame for drain_ack is missing or
+  carries ok=false, the pump MUST continue shutdown tail capture without
+  dropping already-received lines.
 
 jobs_root is fixed:
 - jobs_root = patches_root/artifacts/web_jobs
@@ -1375,6 +1381,7 @@ deterministically and idempotently:
 - --override ipc_socket_enabled=true
 - --override ipc_handshake_enabled=true
 - --override ipc_handshake_wait_s=<cfg.runner.ipc_handshake_wait_s>
+  - cfg.runner.ipc_handshake_wait_s MUST be an integer >= 1
 - --override ipc_socket_path=/tmp/audiomason/patchhub_<job_id>.sock
 - --override patch_layout_json_dir=artifacts/web_jobs/<job_id>
 
