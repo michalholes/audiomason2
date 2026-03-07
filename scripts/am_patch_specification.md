@@ -894,6 +894,14 @@ after workspace gates (to capture gate-induced edits such as
 formatting), - the `files_to_promote` list computed from the promotable
 workspace change set.
 
+Finalize-live failure subset: - In `-f` / `--finalize`, if the run
+fails after finalize gates start, `patched.zip` MUST be built from the
+live repo root. - The archived repo-file subset is the deterministic
+union of: - live `changed_paths` snapshot before finalize gates, - live
+`changed_paths` snapshot after finalize gates (to capture gate-induced
+edits such as formatting), - live `changed_paths` snapshot at
+failure-zip creation time.
+
 ## 1.2 Workspace rollback after failure
 
 Workspace rollback after a failed run is controlled by
