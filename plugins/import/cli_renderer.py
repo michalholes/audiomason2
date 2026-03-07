@@ -203,13 +203,20 @@ def _render_loop(
             if cfg.noninteractive:
                 print_fn("ERROR: noninteractive mode requires explicit wizard step payloads.")
                 return 1
-            v3_payload = _collect_v3_prompt_payload(
+            v3_payload, v3_rc = _collect_v3_prompt_payload(
+                engine=engine,
+                session_id=session_id,
                 step=step,
                 metadata=v3_prompt,
                 input_fn=input_fn,
                 print_fn=print_fn,
                 confirm_defaults=cfg.confirm_defaults,
+                allow_inline=cfg.nav_ui in {"inline", "both"},
             )
+            if v3_payload is None:
+                if v3_rc is not None:
+                    return v3_rc
+                continue
             state3 = engine.submit_step(session_id, cur, v3_payload)
             if int(state3.get("phase") or 1) == 2:
                 return _finalize(engine, session_id, print_fn=print_fn)
@@ -408,12 +415,15 @@ def _parse_prompt_value(raw: str) -> Any:
 
 def _collect_v3_prompt_payload(
     *,
+    engine: ImportWizardEngine,
+    session_id: str,
     step: dict[str, Any],
     metadata: dict[str, Any],
     input_fn: Callable[[str], str],
     print_fn: Callable[[str], None],
     confirm_defaults: bool,
-) -> dict[str, Any]:
+    allow_inline: bool,
+) -> tuple[dict[str, Any] | None, int | None]:
     primitive_id = str(step.get("primitive_id") or "")
     label = str(metadata.get("label") or "")
     prompt = str(metadata.get("prompt") or "")
@@ -438,24 +448,42 @@ def _collect_v3_prompt_payload(
     if seed_defined:
         print_fn(f"Prefill: {_stringify_prompt_value(seed)}")
 
+    def _handle_inline_nav(raw: str) -> tuple[dict[str, Any] | None, int | None] | None:
+        if not allow_inline:
+            return None
+        expr = raw.strip().lower()
+        if expr in {":back", "back"}:
+            engine.apply_action(session_id, "back")
+            return None, None
+        if expr in {":cancel", "cancel"}:
+            engine.apply_action(session_id, "cancel")
+            return None, 1
+        return None
+
     if primitive_id == "ui.prompt_confirm":
         prompt_text = prompt or label or "Confirm"
         default_hint = ""
         if confirm_defaults and seed_defined and isinstance(seed, bool):
             default_hint = " (Enter=default)"
         raw = input_fn(f"{prompt_text} (y/n){default_hint}: ").strip().lower()
+        nav_result = _handle_inline_nav(raw)
+        if nav_result is not None:
+            return nav_result
         if raw == "" and confirm_defaults and seed_defined and isinstance(seed, bool):
-            return {"confirmed": seed}
-        return {"confirmed": raw in {"y", "yes", "1", "true", "t"}}
+            return {"confirmed": seed}, None
+        return {"confirmed": raw in {"y", "yes", "1", "true", "t"}}, None
 
     prompt_text = prompt or label or "Value"
     default_hint = ""
     if confirm_defaults and seed_defined:
         default_hint = " (Enter=default)"
     raw = input_fn(f"{prompt_text}{default_hint}: ").rstrip("\n")
+    nav_result = _handle_inline_nav(raw)
+    if nav_result is not None:
+        return nav_result
     value = seed if raw == "" and confirm_defaults and seed_defined else _parse_prompt_value(raw)
     key = "value" if primitive_id == "ui.prompt_text" else "selection"
-    return {key: value}
+    return {key: value}, None
 
 
 def _finalize(

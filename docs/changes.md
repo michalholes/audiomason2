@@ -1,3 +1,9 @@
+## 2026-03-07T00:00:06+01:00
+
+-   Issue 110 corrective: restore inline :back/:cancel handling for v3
+    prompt-mode CLI steps so existing v3 definitions abort or rewind
+    immediately instead of requesting extra prompts.
+
 ## 2026-03-07T00:00:05+01:00
 
 -   Issue 500: define PatchHub post-exit grace semantics for bounded stdout
