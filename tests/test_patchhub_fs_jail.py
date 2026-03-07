@@ -58,6 +58,18 @@ class TestFsJail(unittest.TestCase):
             with self.assertRaises(FsJailError):
                 jail.assert_crud_allowed("a.zip")
 
+    def test_crud_allowlist_workspace_tree_allowed(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "patches").mkdir()
+            jail = FsJail(
+                repo_root=root,
+                patches_root_rel="patches",
+                crud_allowlist=["workspaces"],
+                allow_crud=True,
+            )
+            jail.assert_crud_allowed("workspaces/issue_501/repo")
+
     def test_crud_allowlist_subpath_allowed(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)

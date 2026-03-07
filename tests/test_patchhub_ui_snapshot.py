@@ -1,0 +1,105 @@
+# ruff: noqa: E402
+from __future__ import annotations
+
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+
+_SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
+sys.path.insert(0, str(_SCRIPTS))
+
+from patchhub.asgi.asgi_app import create_app
+from patchhub.asgi.async_app_core import AsyncAppCore
+from patchhub.asgi.async_jobs_runs_indexer import IndexerSnapshot
+from patchhub.config import load_config
+
+
+async def _noop_async(self) -> None:
+    return None
+
+
+class _DummyIndexer:
+    def __init__(self, snap: IndexerSnapshot) -> None:
+        self._snap = snap
+
+    def ready(self) -> bool:
+        return True
+
+    def get_ui_snapshot(self) -> IndexerSnapshot:
+        return self._snap
+
+
+class TestPatchhubUiSnapshot(unittest.TestCase):
+    def test_ui_snapshot_includes_workspaces_payload_and_sig(self) -> None:
+        try:
+            from fastapi.testclient import TestClient
+        except Exception as exc:  # pragma: no cover
+            self.skipTest(str(exc))
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            cfg = load_config(
+                Path(__file__).resolve().parents[1] / "scripts" / "patchhub" / "patchhub.toml"
+            )
+            snap = IndexerSnapshot(
+                jobs_items=[{"job_id": "j1"}],
+                runs_items=[{"issue_id": 501}],
+                workspaces_items=[{"issue_id": 501, "workspace_rel_path": "workspaces/issue_501"}],
+                header_body={"queue": {"queued": 0, "running": 0}},
+                jobs_sig="jobs:s1",
+                runs_sig="runs:s1",
+                workspaces_sig="workspaces:s1",
+                header_sig="header:s1",
+                snapshot_sig="snapshot:s1",
+            )
+            with (
+                patch.object(AsyncAppCore, "startup", _noop_async),
+                patch.object(AsyncAppCore, "shutdown", _noop_async),
+            ):
+                app = create_app(repo_root=root, cfg=cfg)
+                app.state.core.indexer = _DummyIndexer(snap)
+                with TestClient(app) as client:
+                    resp = client.get("/api/ui_snapshot")
+            self.assertEqual(resp.status_code, 200)
+            self.assertEqual(resp.headers.get("etag"), '"snapshot:s1"')
+            body = resp.json()
+            self.assertEqual(body["snapshot"]["workspaces"], snap.workspaces_items)
+            self.assertEqual(body["sigs"]["workspaces"], "workspaces:s1")
+            self.assertEqual(body["sigs"]["snapshot"], "snapshot:s1")
+
+    def test_ui_snapshot_returns_304_for_matching_etag(self) -> None:
+        try:
+            from fastapi.testclient import TestClient
+        except Exception as exc:  # pragma: no cover
+            self.skipTest(str(exc))
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            cfg = load_config(
+                Path(__file__).resolve().parents[1] / "scripts" / "patchhub" / "patchhub.toml"
+            )
+            snap = IndexerSnapshot(
+                jobs_items=[],
+                runs_items=[],
+                workspaces_items=[],
+                header_body={},
+                jobs_sig="jobs:s2",
+                runs_sig="runs:s2",
+                workspaces_sig="workspaces:s2",
+                header_sig="header:s2",
+                snapshot_sig="snapshot:s2",
+            )
+            with (
+                patch.object(AsyncAppCore, "startup", _noop_async),
+                patch.object(AsyncAppCore, "shutdown", _noop_async),
+            ):
+                app = create_app(repo_root=root, cfg=cfg)
+                app.state.core.indexer = _DummyIndexer(snap)
+                with TestClient(app) as client:
+                    resp = client.get(
+                        "/api/ui_snapshot",
+                        headers={"If-None-Match": '"snapshot:s2"'},
+                    )
+            self.assertEqual(resp.status_code, 304)
+            self.assertEqual(resp.headers.get("etag"), '"snapshot:s2"')
+            self.assertEqual(resp.text, "")
