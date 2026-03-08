@@ -2,7 +2,7 @@
 
 Status: normative
 
-Specification Version: 0.3.1
+Specification Version: 0.3.2
 
 This document is the authoritative specification for the BadGuys suite shipped in this repository.
 BadGuys exists to systematically break the AM Patch Runner and verify that it FAILs correctly.
@@ -19,16 +19,44 @@ BadGuys is NOT a happy-path test runner. The primary goals are:
 Non-goals:
 - replacing pytest for AM2
 - benchmarking performance
-- prescribing the full test matrix (test coverage is intentionally variable)
+- prescribing a full matrix of every runner combination
+
+### 1.1 AMP-facing coverage contract
+
+BadGuys coverage for the AM Patch Runner is capability-based, not exhaustive.
+
+Capability groups (normative):
+- G1: discovery, filters, guard enforcement, and suite locking
+- G2: patch intake, execution scope, and runner test-mode isolation
+- G3: runner gate families and skip controls, including dont-touch, compile, js,
+  biome, typescript, ruff, pytest, mypy, docs, and monolith
+- G4: workspace, archive, rerun, and promotion semantics
+- G5: IPC, NDJSON, heartbeat, handshake, and cancel control flow
+
+Coverage rules (normative):
+- BadGuys MUST maintain at least one normative test path for each capability group.
+- A capability group MAY be covered by multiple tests; a single test MAY cover
+  multiple groups.
+- BadGuys MUST NOT claim full runner coverage merely from a passing partial or
+  historical matrix.
+- New runner-facing capability added to scripts/am_patch.py or its normative
+  specification MUST be assigned to one of the capability groups in this
+  document before related coverage is claimed.
+- Capability-based coverage does not require enumerating every flag
+  combination or every policy permutation.
 
 ## 2. Terminology
 
 - repo_root: the Git repository root (parent directory of "badguys/").
 - suite run: one invocation of "python3 badguys/badguys.py ...".
-- test: one file in "badguys/tests/" with name "test_*.py".
+- test: one file in "badguys/tests/" with the ".bdg" extension.
 - plan: an ordered list of steps returned by a test.
 - commit test: a test declaring makes_commit=true.
 - config: a TOML file providing BadGuys configuration.
+- capability group: one normative runner-facing coverage area defined in
+  section 1.1.
+- observability primitive: a step capability whose only purpose is to expose
+  deterministic data to central evaluation.
 
 ## 3. Entry points and CLI
 
@@ -379,8 +407,41 @@ Runner artifact copy rule:
 - If the IPC result includes json_path, BadGuys MUST copy it into logs_dir/<test_id>/ as:
   runner.result.json
 - If the IPC result includes log_path:
-  - if suite.copy_runner_log=true, BadGuys MAY copy it into logs_dir/<test_id>/ as: runner.log.txt
+  - if suite.copy_runner_log=true, BadGuys MAY copy it into logs_dir/<test_id>/ as:
+    runner.log.txt
   - otherwise, BadGuys MUST NOT copy it.
+
+#### 7.3.1 Required AMP-facing observability primitives (normative)
+
+To satisfy the capability groups in section 1.1 without moving expectations
+into `.bdg` files, BadGuys MUST provide the following observability primitives,
+whether implemented as step operations, executor hooks, or equivalent centrally
+controlled mechanisms:
+
+- text file read
+  - MUST read a deterministic UTF-8 text artifact from either:
+    - a repo-relative path, or
+    - a path relative to the current test artifacts directory
+  - intended use: runner result JSON, generated manifests, or copied artifacts
+
+- zip entry listing
+  - MUST return the sorted entry names from a zip artifact addressed by
+    repo-relative path or test-artifact-relative path
+  - intended use: archive hygiene and bundle layout assertions
+
+- git status inspection
+  - MUST support at least two scopes: repo_root and runner workspace
+  - MUST return deterministic porcelain-style paths for the selected scope
+  - intended use: workspace, promotion, and finalize semantics
+
+- IPC command send
+  - MUST send a newline-delimited JSON command to the runner IPC socket used by
+    the current step
+  - reply and control events observed after the command MUST remain available
+    to central evaluation via the persisted IPC stream
+
+These primitives are observability-only. They MUST NOT move filesystem paths,
+command lines, or PASS/FAIL expectations out of [recipes] and [evaluation].
 
 
 ### 7.4 Runner test mode (normative)
