@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import re
+
 import pytest
 from _browser_probe import BrowserProbe
-from playwright.async_api import Page
+from playwright.async_api import Page, expect
 
 pytestmark = pytest.mark.only_browser("chromium")
 
@@ -10,55 +12,31 @@ pytestmark = pytest.mark.only_browser("chromium")
 @pytest.mark.asyncio(loop_scope="session")
 async def test_import_ui_flow_editor_shell_is_present_and_wired(
     page: Page,
-    e2e_web_base_url: str,
+    e2e_web_v3_base_url: str,
 ) -> None:
     probe = BrowserProbe(page)
 
     response = await page.goto(
-        f"{e2e_web_base_url}/import/ui/",
+        f"{e2e_web_v3_base_url}/import/ui/",
         wait_until="domcontentloaded",
         timeout=10_000,
     )
     assert response is not None and response.ok, "GET /import/ui/ did not return success"
 
-    shell = await page.evaluate(
-        """
-        () => ({
-          hasFlowTabButton: !!document.querySelector(
-            '#tabs .tabBtn[data-tab="flow"]'
-          ),
-          hasReloadAll: !!document.getElementById('flowReloadAll'),
-          hasValidateAll: !!document.getElementById('flowValidateAll'),
-          hasFlowStepHeader: !!document.getElementById('flowStepHeader'),
-          hasTransitionsPanel: !!document.getElementById('flowTransitionsPanel'),
-          hasPalettePanel: !!document.getElementById('flowPalettePanel'),
-        })
-        """
-    )
-    assert shell == {
-        "hasFlowTabButton": True,
-        "hasReloadAll": True,
-        "hasValidateAll": True,
-        "hasFlowStepHeader": True,
-        "hasTransitionsPanel": True,
-        "hasPalettePanel": True,
-    }
+    flow_tab = page.locator('#tabs .tabBtn[data-tab="flow"]')
+    flow_panel = page.locator('.tabPanel[data-panel="flow"]')
 
-    wiring = await page.evaluate(
-        """
-        () => ({
-          hasFlowEditorState: !!window.AM2FlowEditorState,
-          hasDslEditorV3: !!window.AM2DSLEditorV3,
-          hasWizardDefinitionEditor: !!window.AM2WizardDefinitionEditor,
-          hasReloadAll: !!(window.AM2UI && window.AM2UI.doReloadAll),
-        })
-        """
-    )
-    assert wiring == {
-        "hasFlowEditorState": True,
-        "hasDslEditorV3": True,
-        "hasWizardDefinitionEditor": True,
-        "hasReloadAll": True,
-    }
+    await flow_tab.click()
+    await expect(flow_tab).to_have_class(re.compile(r"\bactive\b"))
+    await expect(flow_panel).to_have_class(re.compile(r"\bactive\b"))
+
+    await expect(page.locator("#flowReloadAll")).to_be_visible()
+    await expect(page.locator("#flowValidateAll")).to_be_visible()
+    await expect(page.locator("#flowSaveAll")).to_be_visible()
+    await expect(page.locator("#flowResetAll")).to_be_visible()
+
+    await expect(page.locator("#flowStepHeader")).to_have_text(re.compile(r"\S"))
+    await expect(page.locator("#flowTransitionsPanel")).to_be_visible()
+    await expect(page.locator("#flowPalettePanel")).to_be_visible()
 
     await probe.assert_clean()

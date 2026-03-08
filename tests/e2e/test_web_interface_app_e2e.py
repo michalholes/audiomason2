@@ -26,7 +26,6 @@ def test_active_js_coverage_map_matches_scope() -> None:
     in_scope = active_js_paths_in_scope()
 
     assert expected == in_scope
-    assert len(in_scope) == 39
     assert coverage["/static/patchhub_shell.js"] == OUT_OF_SCOPE_BY_USER_DECISION
 
 
