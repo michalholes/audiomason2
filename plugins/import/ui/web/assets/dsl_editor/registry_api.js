@@ -12,6 +12,16 @@
 		});
 	}
 
+	function sanitizeWizardDefinitionForWire(definition) {
+		const payload = JSON.parse(
+			JSON.stringify(definition === undefined ? {} : definition),
+		);
+		if (payload && typeof payload === "object" && !Array.isArray(payload)) {
+			delete payload._am2_ui;
+		}
+		return payload;
+	}
+
 	window["AM2DSLEditorRegistryAPI"] = {
 		getPrimitiveRegistry: function getPrimitiveRegistry() {
 			return H.requestJSON("/import/ui/primitive-registry");
@@ -21,12 +31,12 @@
 		},
 		validateWizardDefinition: function validateWizardDefinition(definition) {
 			return postJSON("/import/ui/wizard-definition/validate", {
-				definition: definition,
+				definition: sanitizeWizardDefinitionForWire(definition),
 			});
 		},
 		saveWizardDefinition: function saveWizardDefinition(definition) {
 			return postJSON("/import/ui/wizard-definition", {
-				definition: definition,
+				definition: sanitizeWizardDefinitionForWire(definition),
 			});
 		},
 		activateWizardDefinition: function activateWizardDefinition() {

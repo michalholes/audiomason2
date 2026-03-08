@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import json
 import re
+import subprocess
 from importlib import import_module
 from pathlib import Path
 
@@ -36,6 +38,68 @@ ALLOWED_UI_ENDPOINTS = {
     "/import/ui/wizard-definition/history",
     "/import/ui/wizard-definition/rollback",
 }
+
+
+_NODE_REGISTRY_SCRIPT = r"""
+const fs = require("fs");
+const vm = require("vm");
+
+const calls = [];
+const sandbox = {
+  window: {
+    AM2EditorHTTP: {
+      requestJSON(url, options) {
+        calls.push({ url, options: options || null });
+        return Promise.resolve({ ok: true, data: {} });
+      },
+    },
+  },
+  globalThis: {},
+  console,
+};
+sandbox.globalThis = sandbox.window;
+vm.createContext(sandbox);
+vm.runInContext(
+  fs.readFileSync("plugins/import/ui/web/assets/dsl_editor/registry_api.js", "utf8"),
+  sandbox,
+  { filename: "registry_api.js" },
+);
+const payload = JSON.parse(fs.readFileSync(0, "utf8"));
+const api = sandbox.window.AM2DSLEditorRegistryAPI;
+Promise.resolve()
+  .then(() => api.validateWizardDefinition(payload.definition))
+  .then(() => api.saveWizardDefinition(payload.definition))
+  .then(() => {
+    process.stdout.write(
+      JSON.stringify({
+        original: payload.definition,
+        calls: calls.map((item) => ({
+          url: item.url,
+          body: JSON.parse(String((item.options && item.options.body) || "{}")),
+        })),
+      }),
+    );
+  })
+  .catch((err) => {
+    console.error(String(err && err.stack ? err.stack : err));
+    process.exit(1);
+  });
+"""
+
+
+def _run_node_registry_api(payload: dict[str, object], *, timeout: int = 5) -> dict[str, object]:
+    try:
+        proc = subprocess.run(
+            ["node", "-e", _NODE_REGISTRY_SCRIPT],
+            input=json.dumps(payload),
+            text=True,
+            capture_output=True,
+            check=True,
+            timeout=timeout,
+        )
+    except subprocess.TimeoutExpired as err:
+        raise AssertionError("Node registry_api harness timed out") from err
+    return json.loads(proc.stdout)
 
 
 def _make_engine(tmp_path: Path) -> ImportWizardEngine:
@@ -97,3 +161,39 @@ def test_v3_registry_api_module_uses_existing_editor_endpoints_only() -> None:
     )
     endpoints = set(re.findall(r'"(/import/ui/[^"]+)"', source))
     assert endpoints == ALLOWED_UI_ENDPOINTS
+
+
+def test_v3_registry_api_strips_editor_metadata_from_wire_payload() -> None:
+    out = _run_node_registry_api(
+        {
+            "definition": {
+                "version": 3,
+                "entry_step_id": "pick_author",
+                "nodes": [
+                    {
+                        "step_id": "pick_author",
+                        "op": {
+                            "primitive_id": "ui.prompt_select",
+                            "primitive_version": 1,
+                            "inputs": {},
+                            "writes": [],
+                        },
+                    }
+                ],
+                "edges": [],
+                "_am2_ui": {
+                    "showOptional": True,
+                    "dsl_editor": {"selected_library_id": ""},
+                },
+            }
+        }
+    )
+
+    assert out["original"]["_am2_ui"]["showOptional"] is True
+    assert [item["url"] for item in out["calls"]] == [
+        "/import/ui/wizard-definition/validate",
+        "/import/ui/wizard-definition",
+    ]
+    assert all("_am2_ui" not in item["body"]["definition"] for item in out["calls"])
+    assert out["calls"][0]["body"]["definition"]["version"] == 3
+    assert out["calls"][1]["body"]["definition"]["entry_step_id"] == "pick_author"

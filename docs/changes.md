@@ -1,3 +1,9 @@
+## 2026-03-08T00:00:03+01:00
+
+-   Issue 118: strip WizardDefinition editor-only `_am2_ui` metadata from the
+    v3 registry wire payload so Validate/Save/Save All work again without
+    weakening backend strict validation.
+
 ## 2026-03-08T00:00:02+01:00
 
 -   Issue 117: close the v3 dream editor/import work with end-to-end Phase II
