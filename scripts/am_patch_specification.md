@@ -178,6 +178,9 @@ lower mode.
 -   debug:
     -   verbose + full internal command metadata (RUN cmd=..., cwd=...,
         returncode=...)
+    -   when `json_out` is enabled, the NDJSON stream also includes live
+        subprocess stdout/stderr payload during the step; this is
+        machine-facing only and does not change the screen/file log filters
     -   verbose + full diagnostic dumps
     -   On FAIL: full stdout + stderr
 
@@ -1298,6 +1301,16 @@ Behavior:
 - During long-running subprocess steps, the machine-facing stream MAY also
   include periodic liveness heartbeats emitted through the existing `log`
   event model.
+- In `--verbosity debug`, the NDJSON stream MAY also include live subprocess
+  stdout/stderr payload as additional `log` events. This live stream is
+  supplemental only: it does not replace buffering, `RunResult`, or the
+  failed-step dump contract.
+- Live subprocess payload is line-framed: complete newline-terminated lines
+  are emitted one event at a time, and any trailing non-newline fragment
+  MUST be emitted once at EOF.
+- Ordering is guaranteed per stream only: stdout order is preserved and
+  stderr order is preserved, but global interleaving between stdout and
+  stderr is not guaranteed.
 - Full error detail (failed step stdout/stderr) must be included.
 - By default it must bypass filtering.
 - Exception: for Ruff/Biome autoformat/autofix steps, the failed-step dump must be
@@ -1314,6 +1327,11 @@ Format:
 - For liveness heartbeats, `kind` MUST be `HEARTBEAT`, `sev` MUST be `DEBUG`,
   `ch` MUST be `DETAIL`, `summary` MUST be `false`, `bypass` MUST be `false`,
   and `msg` MUST be `HEARTBEAT`.
+- Live subprocess stdout payload MUST use `kind="SUBPROCESS_STDOUT"`.
+- Live subprocess stderr payload MUST use `kind="SUBPROCESS_STDERR"`.
+- Live subprocess payload events MUST use `sev="DEBUG"`, `ch="DETAIL"`,
+  `summary=false`, and `bypass=false`.
+- Live subprocess payload text is carried in `msg`.
 - Failed step detail may include stdout and stderr fields.
 
 ## IPC socket

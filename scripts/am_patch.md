@@ -71,6 +71,9 @@ Levels are inherited: each higher mode includes everything from the lower mode.
 
 - debug:
   - verbose + full internal command metadata (RUN cmd=..., cwd=..., returncode=...)
+  - when `json_out` is enabled, the NDJSON stream also includes live subprocess
+    stdout/stderr payload during the step; this is machine-facing only and
+    does not change the screen/file log filters
   - verbose + full diagnostic dumps
   - On FAIL: full stdout + stderr
 
@@ -228,9 +231,12 @@ Logging / output:
 
 - `--log-level {quiet,normal,warning,verbose,debug}` : filter what is written to the log file (independent from `--verbosity`).
 - `runner_subprocess_timeout_s` (config key) : hard timeout for runner subprocesses in seconds; `0` disables it.
-- When `json_out` is enabled, the machine-facing NDJSON/IPC stream may also include
+- When `json_out` is enabled, the machine-facing NDJSON stream may also include
   periodic `HEARTBEAT` log events so listeners can detect liveness during long
   subprocess steps.
+- In `--verbosity debug`, the same NDJSON stream may also include live
+  subprocess stdout/stderr payload as line-framed events. The runner still
+  buffers full stdout/stderr for `RunResult` and failed-step dumps.
 
 IPC cancellation semantics:
 
