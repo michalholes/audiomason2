@@ -114,7 +114,8 @@ Final summary (at the end of each run):
 
 Quiet sinks:
 - If `--verbosity quiet`, the console prints only START + RESULT (plus error detail on FAIL).
-- If `--log-level quiet`, the log file contains only START + RESULT (plus error detail on FAIL).
+- If `--log-level quiet`, the log file contains only START + RESULT (plus error detail on FAIL),
+  except that the final `CANCELED` summary still logs `STAGE`, `REASON`, and `LOG`.
 
 - **Workspace mode (default)**: runner creates/uses an issue workspace, runs patch + gates there, then promotes results to the live repo.
 - **Finalize mode (-f)**: runner works directly on the live repo (no workspace). Use only when you intentionally want a direct/live operation.

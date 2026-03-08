@@ -262,7 +262,9 @@ strictly:
 
 Quiet sinks: - If `--verbosity quiet`, the console prints only START +
 RESULT (plus error detail on FAIL). - If `--log-level quiet`, the log
-file contains only START + RESULT (plus error detail on FAIL).
+file contains only START + RESULT (plus error detail on FAIL), except
+that the final `CANCELED` summary still logs `STAGE`, `REASON`, and
+`LOG`.
 
 Priority rule (normative): - If patch application fails (e.g.,
 `git apply` fails in unified patch mode), the final FAIL summary MUST
