@@ -3,6 +3,7 @@ var __ph_w = /** @type {any} */ (window);
 var snapshotEventsSource = null;
 var snapshotEventsHealthy = false;
 var snapshotEventSeq = 0;
+var overviewSnapshotCache = null;
 
 function updateSnapshotEventSigs(payload) {
 	var sigs = (payload && payload.sigs) || {};
@@ -24,6 +25,151 @@ function handleSnapshotEventPayload(payload) {
 	if (!Number.isNaN(seq)) snapshotEventSeq = seq;
 	updateSnapshotEventSigs(payload);
 	return true;
+}
+
+function overviewHeaderBaseLabel() {
+	if (cfg && cfg.server && cfg.server.host && cfg.server.port) {
+		return "server: " + cfg.server.host + ":" + cfg.server.port;
+	}
+	return "";
+}
+
+function cloneOverviewSnapshot(snapshot) {
+	if (!snapshot) return null;
+	return {
+		jobs: Array.isArray(snapshot.jobs)
+			? snapshot.jobs.map((x) => ({ ...x }))
+			: [],
+		runs: Array.isArray(snapshot.runs)
+			? snapshot.runs.map((x) => ({ ...x }))
+			: [],
+		workspaces: Array.isArray(snapshot.workspaces)
+			? snapshot.workspaces.map((x) => ({ ...x }))
+			: [],
+		header: snapshot.header ? { ...snapshot.header } : {},
+	};
+}
+
+function applyOverviewSnapshotData(snapshot, sigs) {
+	snapshot = snapshot || {};
+	overviewSnapshotCache = cloneOverviewSnapshot(snapshot);
+	updateSnapshotEventSigs({ sigs: sigs || {} });
+	renderJobsFromResponse({ ok: true, jobs: snapshot.jobs || [] });
+	__ph_w.renderRunsFromResponse({ ok: true, runs: snapshot.runs || [] });
+	__ph_w.renderWorkspacesFromResponse({
+		ok: true,
+		items: snapshot.workspaces || [],
+	});
+	renderHeaderFromSummary(snapshot.header || {}, overviewHeaderBaseLabel());
+}
+
+function overviewJobKey(item) {
+	return String((item && item.job_id) || "");
+}
+
+function overviewRunKey(item) {
+	return (
+		String((item && item.issue_id) || "") +
+		"|" +
+		String((item && item.mtime_utc) || "")
+	);
+}
+
+function overviewWorkspaceKey(item) {
+	return (
+		String((item && item.issue_id) || "") +
+		"|" +
+		String((item && item.workspace_rel_path) || "")
+	);
+}
+
+function mergeDeltaItems(before, delta, keyFn) {
+	var items = Array.isArray(before) ? before.map((x) => ({ ...x })) : [];
+	var index = new Map();
+	items.forEach((item, idx) => {
+		index.set(keyFn(item), idx);
+	});
+
+	(delta.removed || []).forEach((item) => {
+		var key = keyFn(item);
+		if (!index.has(key)) return;
+		var idx = index.get(key);
+		items.splice(idx, 1);
+		index = new Map();
+		items.forEach((nextItem, nextIdx) => {
+			index.set(keyFn(nextItem), nextIdx);
+		});
+	});
+
+	(delta.updated || []).forEach((item) => {
+		var key = keyFn(item);
+		if (!index.has(key)) return;
+		items[index.get(key)] = { ...item };
+	});
+
+	(delta.added || []).forEach((item) => {
+		var key = keyFn(item);
+		if (index.has(key)) {
+			items[index.get(key)] = { ...item };
+			return;
+		}
+		items.push({ ...item });
+	});
+	return items;
+}
+
+function applyOverviewDelta(delta) {
+	if (!overviewSnapshotCache) return false;
+	if (!delta || delta.ok === false) return false;
+	if (delta.resync_needed) return false;
+	var next = cloneOverviewSnapshot(overviewSnapshotCache) || {
+		jobs: [],
+		runs: [],
+		workspaces: [],
+		header: {},
+	};
+	next.jobs = mergeDeltaItems(next.jobs, delta.jobs || {}, overviewJobKey);
+	next.runs = mergeDeltaItems(next.runs, delta.runs || {}, overviewRunKey);
+	next.workspaces = mergeDeltaItems(
+		next.workspaces,
+		delta.workspaces || {},
+		overviewWorkspaceKey,
+	);
+	if (delta.header_changed) {
+		next.header = delta.header ? { ...delta.header } : {};
+	}
+	applyOverviewSnapshotData(next, delta.sigs || {});
+	var seq = Number((delta && delta.seq) || 0);
+	if (!Number.isNaN(seq)) snapshotEventSeq = seq;
+	return true;
+}
+
+function fetchOverviewDelta() {
+	if (!snapshotEventSeq) {
+		return Promise.resolve({ ok: true, resync_needed: true, seq: 0 });
+	}
+	return apiGet(
+		"/api/ui_snapshot_delta?since_seq=" +
+			encodeURIComponent(String(snapshotEventSeq)),
+	);
+}
+
+function refreshOverviewSnapshot(opts) {
+	opts = opts || {};
+	var mode = String(opts.mode || "user");
+	var qs = "";
+	if (idleSigs.snapshot) {
+		qs = "?since_sig=" + encodeURIComponent(idleSigs.snapshot);
+	}
+	return apiGetETag("ui_snapshot", "/api/ui_snapshot" + qs, {
+		mode: mode,
+		single_flight: mode === "periodic",
+	}).then((r) => {
+		if (!r || r.ok === false) return { changed: false };
+		if (r.unchanged) return { changed: false };
+		applyOverviewSnapshotData(r.snapshot || {}, r.sigs || {});
+		return { changed: true };
+	});
 }
 
 function stopSnapshotEvents() {
@@ -64,9 +210,20 @@ function openSnapshotEvents() {
 		}
 		if (!handleSnapshotEventPayload(payload)) return;
 		snapshotEventsHealthy = true;
-		__ph_w.refreshOverviewSnapshot({ mode: "latest" }).catch((e) => {
-			setUiError(e);
-		});
+		fetchOverviewDelta()
+			.then((delta) => {
+				if (!applyOverviewDelta(delta)) {
+					return __ph_w.refreshOverviewSnapshot({ mode: "latest" });
+				}
+				return { changed: true };
+			})
+			.catch((e) => {
+				setUiError(e);
+				return __ph_w.refreshOverviewSnapshot({ mode: "latest" });
+			})
+			.catch((e) => {
+				setUiError(e);
+			});
 	});
 	es.onerror = () => {
 		stopSnapshotEvents();
@@ -87,6 +244,7 @@ function snapshotEventsNeedPolling() {
 	return !snapshotEventsHealthy;
 }
 
+__ph_w.refreshOverviewSnapshot = refreshOverviewSnapshot;
 __ph_w.ensureSnapshotEvents = ensureSnapshotEvents;
 __ph_w.stopSnapshotEvents = stopSnapshotEvents;
 __ph_w.snapshotEventsNeedPolling = snapshotEventsNeedPolling;

@@ -27,8 +27,10 @@ from .job_events_live_source import stream_job_events_live_source
 from .route_diagnostics import handle_api_debug_diagnostics
 from .route_snapshot_events import handle_api_snapshot_events
 from .route_ui_snapshot import handle_api_ui_snapshot
+from .route_ui_snapshot_delta import handle_api_ui_snapshot_delta
 from .route_workspaces import handle_api_workspaces
 from .snapshot_change_broker import SnapshotChangeBroker
+from .snapshot_delta_store import SnapshotDeltaStore
 from .sse_jsonl_stream import stream_job_events_sse
 
 UPLOAD_PATCH_FILE: Any = File(...)
@@ -71,8 +73,11 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
     app = FastAPI()
     core = AsyncAppCore(repo_root=repo_root, cfg=cfg)
     snapshot_change_broker = SnapshotChangeBroker()
-    core.indexer.set_snapshot_change_callback(
-        lambda snap: snapshot_change_broker.publish(
+    snapshot_delta_store = SnapshotDeltaStore()
+
+    def _publish_snapshot_change(snap: Any) -> None:
+        snapshot_delta_store.record_snapshot(snap)
+        snapshot_change_broker.publish(
             {
                 "seq": int(getattr(snap, "seq", 0) or 0),
                 "sigs": {
@@ -84,9 +89,11 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
                 },
             }
         )
-    )
+
+    core.indexer.set_snapshot_change_callback(_publish_snapshot_change)
     app.state.core = core
     app.state.snapshot_change_broker = snapshot_change_broker
+    app.state.snapshot_delta_store = snapshot_delta_store
 
     @app.on_event("startup")
     async def _startup() -> None:
@@ -704,6 +711,10 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
     @app.get("/api/events")
     async def api_snapshot_events() -> StreamingResponse:
         return await handle_api_snapshot_events(core, snapshot_change_broker)
+
+    @app.get("/api/ui_snapshot_delta")
+    async def api_ui_snapshot_delta(request: Request) -> Response:
+        return await handle_api_ui_snapshot_delta(request, snapshot_delta_store)
 
     @app.get("/api/jobs/{job_id}/events")
     async def api_jobs_events(job_id: str) -> StreamingResponse:
