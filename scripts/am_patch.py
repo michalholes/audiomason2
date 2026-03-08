@@ -263,6 +263,9 @@ def main(argv: list[str]) -> int:
                     threading.Event().wait(float(delay))
             with contextlib.suppress(Exception):
                 ctx.ipc.stop()
+        if ctx is not None:
+            with contextlib.suppress(Exception):
+                ctx.logger.close()
 
 
 if __name__ == "__main__":

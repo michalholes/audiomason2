@@ -529,6 +529,8 @@ def run_mode(ctx: RunContext) -> RunResult:
             history_oldpatches_dir=policy.workspace_history_oldpatches_dir,
         )
         ckpt = exec_ctx.checkpoint
+        rollback_ckpt_for_posthook = ckpt
+        rollback_ws_for_posthook = ws
         before = exec_ctx.changed_before
         st = exec_ctx.state_before
         live_guard_before = exec_ctx.live_guard_before
@@ -675,9 +677,6 @@ def run_mode(ctx: RunContext) -> RunResult:
             logger.line(audit_line)
 
             if not should_run_gates:
-                # Defer rollback until after diagnostics archive is created.
-                rollback_ckpt_for_posthook = ckpt
-                rollback_ws_for_posthook = ws
                 raise RunnerError(
                     "PATCH", "PATCH_APPLY", primary_fail_reason or "patch apply failed"
                 )
@@ -775,9 +774,6 @@ def run_mode(ctx: RunContext) -> RunResult:
         if defer_patch_apply_failure:
             # Ensure failure archive includes any gate-induced changes.
             files_for_fail_zip = sorted(set(files_for_fail_zip) | set(dirty_all))
-            # Defer rollback until after diagnostics archive is created.
-            rollback_ckpt_for_posthook = ckpt
-            rollback_ws_for_posthook = ws
             raise RunnerError("PATCH", "PATCH_APPLY", primary_fail_reason or "patch apply failed")
 
         promotion_plan = build_allowed_union_promotion_plan(
@@ -884,8 +880,6 @@ def finalize_and_report(ctx: RunContext, result: RunResult) -> int:
         )
     except Exception:
         pass
-
-    logger.close()
 
     if policy.test_mode and isolated_work_patch_dir is not None:
         with suppress(Exception):

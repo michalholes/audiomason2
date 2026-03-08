@@ -60,6 +60,7 @@ class CliArgs:
     verbosity: str | None
 
     log_level: str | None
+    json_out: bool | None
 
     console_color: str | None
 
@@ -800,6 +801,7 @@ def parse_args(argv: list[str]) -> CliArgs:
             config_path=ns.config_path,
             verbosity=ns.verbosity,
             log_level=getattr(ns, "log_level", None),
+            json_out=getattr(ns, "json_out", None),
             console_color=getattr(ns, "console_color", None),
             run_all_tests=ns.run_all_tests,
             allow_no_op=ns.allow_no_op,
@@ -889,6 +891,7 @@ def parse_args(argv: list[str]) -> CliArgs:
         config_path=ns.config_path,
         verbosity=ns.verbosity,
         log_level=getattr(ns, "log_level", None),
+        json_out=getattr(ns, "json_out", None),
         console_color=getattr(ns, "console_color", None),
         run_all_tests=ns.run_all_tests,
         allow_no_op=ns.allow_no_op,

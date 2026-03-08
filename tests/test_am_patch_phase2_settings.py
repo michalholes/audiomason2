@@ -163,6 +163,15 @@ def test_phase2_cli_flags_set_overrides() -> None:
     assert p.venv_bootstrap_python == ".venv/bin/python"
 
 
+def test_parse_args_workspace_carries_json_out_to_cli_args() -> None:
+    _, _, _, parse_args = _import_am_patch()
+
+    cli = parse_args(["--json-out", "123", "msg"])
+
+    assert cli.mode == "workspace"
+    assert cli.json_out is True
+
+
 def test_parse_args_finalize_allows_flags_after_f() -> None:
     _, _, _, parse_args = _import_am_patch()
 
