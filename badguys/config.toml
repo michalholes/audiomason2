@@ -682,7 +682,8 @@ value_contains = ['"cmd": "drain_ack"']
 
 [evaluation.tests.test_082_ipc_handshake_ready_and_drain_ack.steps.6]
 rc_eq = 0
-value_contains = ['"ok": false', '"code": "EOF"']
+value_contains = ['"ok": true']
+value_not_contains = ['"code": "EOF"']
 
 [evaluation.tests.test_082_ipc_handshake_ready_and_drain_ack.steps.7]
 rc_eq = 0
@@ -693,7 +694,11 @@ rc_eq = 0
 value_contains = ["queued:ipc_reply.step0.json"]
 
 [evaluation.tests.test_083_ipc_cancel_command_stops_runner.steps.1]
-rc_ne = 0
+rc_eq = 130
+value_contains = [
+  'RESULT: CANCELED',
+  'REASON: cancel requested',
+]
 
 [evaluation.tests.test_083_ipc_cancel_command_stops_runner.steps.2]
 rc_eq = 0
@@ -707,7 +712,8 @@ value_contains = ['"ok": true']
 rc_eq = 0
 value_contains = [
   '"type":"result"',
-  '"return_code":',
+  '"return_code":130',
+  'RESULT: CANCELED',
 ]
 
 [evaluation.tests.test_084_workspace_git_state_matches_mode.steps.0]
@@ -769,7 +775,7 @@ args = [
 
 [recipes.tests.test_080_json_out_writes_ndjson_log.steps.1]
 scope = "artifacts"
-relpath = "runner.ipc.step0.jsonl"
+relpath = "runner.result.json"
 
 [recipes.tests.test_081_ipc_heartbeat_events_present.assets.patch]
 subject = "heartbeat_marker"
