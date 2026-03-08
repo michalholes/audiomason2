@@ -625,9 +625,6 @@ def run_mode(ctx: RunContext) -> RunResult:
 
         except Exception:
             _stage_fail("PATCH_APPLY")
-            # Defer rollback until after diagnostics archive is created.
-            rollback_ckpt_for_posthook = ckpt
-            rollback_ws_for_posthook = ws
             raise
 
         # Live repo guard: after patching (before gates) if scope includes patch.
