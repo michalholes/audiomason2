@@ -2,7 +2,8 @@
 var __ph_w = /** @type {any} */ (window);
 var snapshotEventsSource = null;
 var snapshotEventsHealthy = false;
-var snapshotEventSeq = 0;
+var snapshotSeenSeq = 0;
+var snapshotAppliedSeq = 0;
 var overviewSnapshotCache = null;
 
 function updateSnapshotEventSigs(payload) {
@@ -21,8 +22,8 @@ function updateSnapshotEventSigs(payload) {
 
 function handleSnapshotEventPayload(payload) {
 	var seq = Number((payload && payload.seq) || 0);
-	if (!Number.isNaN(seq) && seq < snapshotEventSeq) return false;
-	if (!Number.isNaN(seq)) snapshotEventSeq = seq;
+	if (!Number.isNaN(seq) && seq <= snapshotSeenSeq) return false;
+	if (!Number.isNaN(seq)) snapshotSeenSeq = seq;
 	updateSnapshotEventSigs(payload);
 	return true;
 }
@@ -50,7 +51,7 @@ function cloneOverviewSnapshot(snapshot) {
 	};
 }
 
-function applyOverviewSnapshotData(snapshot, sigs) {
+function applyOverviewSnapshotData(snapshot, sigs, seq) {
 	snapshot = snapshot || {};
 	overviewSnapshotCache = cloneOverviewSnapshot(snapshot);
 	updateSnapshotEventSigs({ sigs: sigs || {} });
@@ -61,6 +62,11 @@ function applyOverviewSnapshotData(snapshot, sigs) {
 		items: snapshot.workspaces || [],
 	});
 	renderHeaderFromSummary(snapshot.header || {}, overviewHeaderBaseLabel());
+	seq = Number(seq || 0);
+	if (!Number.isNaN(seq) && seq > 0) {
+		snapshotAppliedSeq = seq;
+		if (seq > snapshotSeenSeq) snapshotSeenSeq = seq;
+	}
 }
 
 function overviewJobKey(item) {
@@ -138,19 +144,17 @@ function applyOverviewDelta(delta) {
 	if (delta.header_changed) {
 		next.header = delta.header ? { ...delta.header } : {};
 	}
-	applyOverviewSnapshotData(next, delta.sigs || {});
-	var seq = Number((delta && delta.seq) || 0);
-	if (!Number.isNaN(seq)) snapshotEventSeq = seq;
+	applyOverviewSnapshotData(next, delta.sigs || {}, delta && delta.seq);
 	return true;
 }
 
 function fetchOverviewDelta() {
-	if (!snapshotEventSeq) {
+	if (!snapshotAppliedSeq) {
 		return Promise.resolve({ ok: true, resync_needed: true, seq: 0 });
 	}
 	return apiGet(
 		"/api/ui_snapshot_delta?since_seq=" +
-			encodeURIComponent(String(snapshotEventSeq)),
+			encodeURIComponent(String(snapshotAppliedSeq)),
 	);
 }
 
@@ -167,7 +171,7 @@ function refreshOverviewSnapshot(opts) {
 	}).then((r) => {
 		if (!r || r.ok === false) return { changed: false };
 		if (r.unchanged) return { changed: false };
-		applyOverviewSnapshotData(r.snapshot || {}, r.sigs || {});
+		applyOverviewSnapshotData(r.snapshot || {}, r.sigs || {}, r.seq);
 		return { changed: true };
 	});
 }

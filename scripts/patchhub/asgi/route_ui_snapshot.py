@@ -126,8 +126,14 @@ async def _legacy_snapshot_payload(core: AsyncAppCore) -> dict[str, Any]:
     )
     header_sig = build_header_sig(header_body)
     snapshot_sig = "|".join([jobs_sig, runs_sig, workspaces_sig, header_sig])
+    current_seq = 0
+    try:
+        current_seq = int(core.indexer.snapshot_seq())
+    except Exception:
+        current_seq = 0
     return {
         "ok": True,
+        "seq": current_seq,
         "snapshot": {
             "jobs": jobs_items,
             "runs": runs_items,
@@ -177,6 +183,7 @@ async def handle_api_ui_snapshot(
                 return Response(status_code=200, headers={"ETag": etag})
             payload: dict[str, Any] = {
                 "ok": True,
+                "seq": int(getattr(snap, "seq", 0) or 0),
                 "snapshot": {
                     "jobs": list(snap.jobs_items),
                     "runs": list(snap.runs_items[:80]),

@@ -102,7 +102,7 @@ class SnapshotDeltaStore:
         if previous is None:
             return {"ok": True, "resync_needed": True, "seq": current.seq}
 
-        return {
+        payload = {
             "ok": True,
             "seq": current.seq,
             "sigs": dict(current.sigs),
@@ -115,8 +115,10 @@ class SnapshotDeltaStore:
                 _removed_workspace,
             ),
             "header_changed": previous.header != current.header,
-            "header": dict(current.header) if previous.header != current.header else None,
         }
+        if previous.header != current.header:
+            payload["header"] = dict(current.header)
+        return payload
 
     def _diff(
         self,

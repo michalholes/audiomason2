@@ -131,3 +131,13 @@ class TestPatchhubUiSnapshotDelta(unittest.TestCase):
         self.assertTrue(payload["ok"])
         self.assertEqual(payload["seq"], 2)
         self.assertEqual(payload["jobs"]["updated"][0]["status"], "running")
+
+    def test_delta_store_omits_header_when_header_is_unchanged(self) -> None:
+        store = SnapshotDeltaStore()
+        store.record_snapshot(self._snap(seq=1, header_count=1))
+        store.record_snapshot(self._snap(seq=2, header_count=1, job_status="running"))
+
+        delta = store.build_delta(1)
+        self.assertTrue(delta["ok"])
+        self.assertFalse(delta["header_changed"])
+        self.assertNotIn("header", delta)

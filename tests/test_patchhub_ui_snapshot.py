@@ -1,6 +1,7 @@
 # ruff: noqa: E402
 from __future__ import annotations
 
+import asyncio
 import sys
 import tempfile
 import unittest
@@ -13,6 +14,7 @@ sys.path.insert(0, str(_SCRIPTS))
 from patchhub.asgi.asgi_app import create_app
 from patchhub.asgi.async_app_core import AsyncAppCore
 from patchhub.asgi.async_jobs_runs_indexer import IndexerSnapshot, build_header_sig
+from patchhub.asgi.route_ui_snapshot import _legacy_snapshot_payload
 from patchhub.config import load_config
 
 
@@ -73,6 +75,7 @@ class TestPatchhubUiSnapshot(unittest.TestCase):
                 workspaces_sig="workspaces:s1",
                 header_sig="header:s1",
                 snapshot_sig="snapshot:s1",
+                seq=7,
             )
             try:
                 with (
@@ -90,6 +93,7 @@ class TestPatchhubUiSnapshot(unittest.TestCase):
             self.assertEqual(resp.status_code, 200)
             self.assertEqual(resp.headers.get("etag"), '"snapshot:s1"')
             body = resp.json()
+            self.assertEqual(body["seq"], 7)
             self.assertEqual(body["snapshot"]["workspaces"], snap.workspaces_items)
             self.assertEqual(body["sigs"]["workspaces"], "workspaces:s1")
             self.assertEqual(body["sigs"]["snapshot"], "snapshot:s1")
@@ -134,3 +138,61 @@ class TestPatchhubUiSnapshot(unittest.TestCase):
             self.assertEqual(resp.status_code, 304)
             self.assertEqual(resp.headers.get("etag"), '"snapshot:s2"')
             self.assertEqual(resp.text, "")
+
+    def test_legacy_snapshot_payload_includes_seq(self) -> None:
+        class _DummyQueue:
+            async def state(self) -> object:
+                return type("QState", (), {"queued": 0, "running": 0})()
+
+            async def list_jobs(self) -> list[object]:
+                return []
+
+        class _DummyIndexer:
+            def snapshot_seq(self) -> int:
+                return 9
+
+        class _DummyCore:
+            def __init__(self) -> None:
+                self.queue = _DummyQueue()
+                self.indexer = _DummyIndexer()
+                self.jobs_root = Path(".")
+                self.patches_root = Path(".")
+                self.cfg = type(
+                    "Cfg",
+                    (),
+                    {
+                        "paths": type("Paths", (), {"patches_root": "patches"})(),
+                        "indexing": type(
+                            "Indexing",
+                            (),
+                            {
+                                "log_filename_regex": r"am_patch_issue_(\d+)_",
+                                "stats_windows_days": [7, 30],
+                            },
+                        )(),
+                    },
+                )()
+
+            def _load_job_from_disk(self, _job_id: str) -> None:
+                return None
+
+            def api_runs(self, _query: dict[str, str]) -> tuple[int, bytes]:
+                return 200, b'{"runs": []}'
+
+        core = _DummyCore()
+        with (
+            patch("patchhub.asgi.route_ui_snapshot.job_json_signature", return_value=(0, 0)),
+            patch("patchhub.asgi.route_ui_snapshot.runs_signature", return_value=(0, 0, 0)),
+            patch("patchhub.asgi.route_ui_snapshot.canceled_runs_signature", return_value=(0, 0)),
+            patch("patchhub.asgi.route_ui_snapshot.list_job_jsons", return_value=[]),
+            patch(
+                "patchhub.asgi.route_ui_snapshot.list_workspaces",
+                return_value=("workspaces:s0", []),
+            ),
+            patch("patchhub.asgi.route_ui_snapshot.iter_runs", return_value=[]),
+        ):
+            payload = asyncio.run(_legacy_snapshot_payload(core))
+
+        self.assertEqual(payload["seq"], 9)
+        self.assertEqual(payload["snapshot"]["jobs"], [])
+        self.assertEqual(payload["snapshot"]["runs"], [])
