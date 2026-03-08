@@ -193,8 +193,8 @@ WORKSPACE
   --keep-workspace
       Keep workspace even on success.
 
-  --rollback-workspace-on-fail {{auto, never, always}}
-      Whether to rollback workspace to pre-apply state on failure.
+  --rollback-workspace-on-fail {{none-applied, never, always}}
+      Whether to rollback workspace to pre-apply state on patch failure.
 
   --no-rollback
       Disable rollback on failure.

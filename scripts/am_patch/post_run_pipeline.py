@@ -228,10 +228,18 @@ def run_post_run_pipeline(*, ctx: Any, result: RunResult) -> int:
             ):
                 mode = getattr(policy, "rollback_workspace_on_fail", "none-applied")
                 do_rollback = False
-                if mode == "always":
-                    do_rollback = True
-                elif mode == "none-applied":
-                    do_rollback = result.applied_ok_count == 0
+                skip_reason = "non-patch-failure"
+                is_patch_failure = result.primary_fail_stage == "PATCH"
+
+                if is_patch_failure:
+                    if mode == "always":
+                        do_rollback = True
+                    elif mode == "none-applied":
+                        do_rollback = result.applied_ok_count == 0
+                        if not do_rollback:
+                            skip_reason = "applied-ok"
+                    else:
+                        skip_reason = "mode-never"
 
                 if do_rollback:
                     logger.line(
@@ -244,7 +252,9 @@ def run_post_run_pipeline(*, ctx: Any, result: RunResult) -> int:
                     )
                 else:
                     logger.line(
-                        f"ROLLBACK: skipped (mode={mode} applied_ok={result.applied_ok_count})"
+                        "ROLLBACK: skipped "
+                        f"(mode={mode} reason={skip_reason} "
+                        f"applied_ok={result.applied_ok_count})"
                     )
 
             if (

@@ -346,6 +346,20 @@ Notes:
 - This changes failure recovery semantics.
 Related: rollback_workspace_on_fail
 
+## Key: rollback_workspace_on_fail
+Key: rollback_workspace_on_fail
+Type: enum
+Default: none-applied
+Meaning: Control automatic workspace rollback after patch failure.
+Allowed values:
+- none-applied: rollback only when applied_ok == 0
+- always: rollback on any patch failure, including partial apply
+- never: never rollback automatically
+Notes:
+- Gate failures do not trigger rollback.
+- The failed workspace state is preserved for repair after non-patch failures.
+Related: no_rollback
+
 ## Key: post_success_audit
 Key: post_success_audit
 Type: bool

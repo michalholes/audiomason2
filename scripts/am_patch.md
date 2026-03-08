@@ -340,7 +340,8 @@ It should still obey logging and gate policies, but it does not use a workspace.
 
 ### Rollback behavior
 
-- On patch or gate failure, the workspace is rolled back to the exact state before patch execution.
+- On patch failure, the workspace is rolled back to the exact state before patch execution.
+- Gate failures do not trigger rollback and leave the failed workspace state intact for repair.
 - This rollback is transactional and includes tracked and untracked files.
 
 ### Ruff formatting
