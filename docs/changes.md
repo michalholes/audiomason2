@@ -2,8 +2,8 @@
 
 -   Issue 115: implement the import DSL Phase II runtime for
     `parallel.fork_join@1`, `flow.invoke@1`, `flow.loop@1`,
-    file-local libraries/macros, deterministic FlowModel projection, and
-    deterministic runtime trace ordering.
+    file-local libraries/macros, Raw JSON Phase II execution, and
+    deterministic FlowModel projection and runtime trace ordering.
 
 ## 2026-03-07T00:00:07+01:00
 
