@@ -733,7 +733,7 @@ rc_eq = 0
 [evaluation.tests.test_085_success_archive_zip_hygiene.steps.1]
 rc_eq = 0
 list_contains = [
-  "docs/badguys_batch4/success_archive_hygiene_marker_085.txt",
+  "docs/badguys_batch4/success_archive_hygiene_issue_664_marker.txt",
   "docs/changes.md",
 ]
 list_not_contains = [
@@ -758,7 +758,7 @@ relpath = "docs/badguys_batch3/ipc_cancel_marker.txt"
 relpath = "scripts/badguys_batch3/workspace_compile_fail.py"
 
 [subjects.tests.test_085_success_archive_zip_hygiene.archive_marker]
-relpath = "docs/badguys_batch4/success_archive_hygiene_marker_085.txt"
+relpath = "docs/badguys_batch4/success_archive_hygiene_issue_664_marker.txt"
 
 [recipes.tests.test_080_json_out_writes_ndjson_log.assets.patch]
 subject = "json_out_marker"
