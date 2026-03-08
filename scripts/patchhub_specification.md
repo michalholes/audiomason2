@@ -3,7 +3,7 @@ Status: AUTHORITATIVE SPECIFICATION
 Applies to: scripts/patchhub/*
 Language: ENGLISH (ASCII ONLY)
 
-Specification Version: 1.9.1-spec
+Specification Version: 1.10.0-spec
 Code Baseline: audiomason2-main.zip (as provided in this chat)
 
 -------------------------------------------------------------------------------
@@ -277,6 +277,70 @@ Client behavior
   - exact string match => 304 with empty body.
 - The server MUST include the ETag header on 200 responses.
 - The server MAY include the ETag header on 304 responses.
+
+2.10.1 Global Snapshot Events (HARD)
+
+Goal: push overview invalidation without endpoint-by-endpoint polling.
+
+Endpoint
+- GET /api/events
+
+Event model
+- This endpoint is the authoritative SSE channel for overview snapshot state.
+- On connect, the server MUST send exactly one initial snapshot_state event.
+- When the overview snapshot changes, the server MUST send a snapshot_changed
+  event.
+- Events MUST be deterministic and ordered.
+- Events MUST be keyed to the single overview snapshot model used by
+  /api/ui_snapshot.
+
+Payload requirements
+- snapshot_state and snapshot_changed MUST include at minimum:
+  - seq: <int>
+  - sigs.jobs
+  - sigs.runs
+  - sigs.workspaces
+  - sigs.header
+  - sigs.snapshot
+- The sig values in SSE payloads MUST match the current overview snapshot.
+
+Client behavior
+- The UI MUST use /api/events only for overview invalidation.
+- On snapshot_changed, the UI MAY fetch /api/ui_snapshot or
+  /api/ui_snapshot_delta.
+- SSE events MUST NOT replace specialized ACTIVE-mode job live event streams.
+
+2.10.2 Snapshot Delta Cursor (HARD)
+
+Goal: transfer overview changes without re-sending the full snapshot.
+
+Cursor model
+- PatchHub MUST use exactly one monotonic cursor seq for the entire overview
+  snapshot model.
+- Separate cursors for jobs, runs, workspaces, or header are forbidden.
+
+Endpoint
+- GET /api/ui_snapshot_delta?since_seq=<int>
+
+Delta payload
+- The response MUST include at minimum:
+  - seq: <int>
+  - sigs.jobs
+  - sigs.runs
+  - sigs.workspaces
+  - sigs.header
+  - sigs.snapshot
+  - jobs: { added: [...], updated: [...], removed: [...] }
+  - runs: { added: [...], updated: [...], removed: [...] }
+  - workspaces: { added: [...], updated: [...], removed: [...] }
+  - header_changed: <bool>
+  - header: {...} only when header_changed is true
+
+Failure and resync rules
+- If since_seq is outside the retained delta window, the server MUST return an
+  explicit resync-needed response.
+- The UI MUST fall back to a full GET /api/ui_snapshot on delta failure,
+  stale cursor, or resync-needed response.
 
 2.11 Thin DTO Contracts (HARD)
 
@@ -1264,6 +1328,56 @@ Schema (best-effort, current implementation):
 }
 StatsWindow schema:
 { "days": <int>, "total": <int>, "success": <int>, "fail": <int>, "unknown": <int> }
+
+7.2.13 GET /api/events
+Output: SSE stream.
+Event names:
+- snapshot_state
+- snapshot_changed
+
+Event payload:
+{
+  "seq": <int>,
+  "sigs": {
+    "jobs": "<string>",
+    "runs": "<string>",
+    "workspaces": "<string>",
+    "header": "<string>",
+    "snapshot": "<string>"
+  }
+}
+
+Rules:
+- On connect, exactly one snapshot_state event MUST be sent first.
+- Subsequent overview changes MUST emit snapshot_changed.
+- No per-endpoint invalidation events are permitted on this channel.
+
+7.2.14 GET /api/ui_snapshot_delta?since_seq=<int>
+Output (success):
+{
+  "ok": true,
+  "seq": <int>,
+  "sigs": {
+    "jobs": "<string>",
+    "runs": "<string>",
+    "workspaces": "<string>",
+    "header": "<string>",
+    "snapshot": "<string>"
+  },
+  "jobs": { "added": [...], "updated": [...], "removed": [...] },
+  "runs": { "added": [...], "updated": [...], "removed": [...] },
+  "workspaces": { "added": [...], "updated": [...], "removed": [...] },
+  "header_changed": <bool>,
+  "header": { ... }
+}
+
+Output (resync needed):
+{ "ok": true, "resync_needed": true, "seq": <int> }
+
+Rules:
+- removed arrays MUST contain stable item identities only.
+- header MUST be present only when header_changed is true.
+- The endpoint MUST operate on the single overview seq defined in 2.10.2.
 
 -------------------------------------------------------------------------------
 
