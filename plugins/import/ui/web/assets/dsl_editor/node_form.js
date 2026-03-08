@@ -351,7 +351,10 @@
 		clear(mount);
 
 		const definition = (opts && opts.definition) || {};
-		const nodes = Array.isArray(definition.nodes) ? definition.nodes : [];
+		const graphDefinition = (opts && opts.graphDefinition) || definition;
+		const nodes = Array.isArray(graphDefinition.nodes)
+			? graphDefinition.nodes
+			: [];
 		const selectedStepId = String((opts && opts.selectedStepId) || "");
 		const node =
 			nodes.find((item) => String(item.step_id || "") === selectedStepId) ||
@@ -426,6 +429,17 @@
 			appendPromptPrimitiveFields(mount, node, onPatchNode);
 		} else if (isMessagePrimitive(node)) {
 			appendMessagePrimitiveFields(mount, node, onPatchNode);
+		} else if (
+			window["AM2DSLEditorCapabilityForms"] &&
+			window["AM2DSLEditorCapabilityForms"].renderCapabilityForm &&
+			window["AM2DSLEditorCapabilityForms"].renderCapabilityForm({
+				definition: definition,
+				mount: mount,
+				node: node,
+				onPatchNode: onPatchNode,
+			})
+		) {
+			// capability-specific rendering is owned by capability_forms.js
 		} else {
 			const inputsArea = document.createElement("textarea");
 			inputsArea.rows = 6;

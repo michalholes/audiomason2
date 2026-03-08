@@ -1,3 +1,9 @@
+## 2026-03-08T00:00:01+01:00
+
+-   Issue 116: add Phase II visual editor authoring for `parallel.fork_join@1`,
+    `flow.invoke@1`, `flow.loop@1`, and file-local libraries while keeping
+    Raw JSON authoritative and preserving unknown valid keys across visual edits.
+
 ## 2026-03-08T00:00:00+01:00
 
 -   Issue 115: implement the import DSL Phase II runtime for

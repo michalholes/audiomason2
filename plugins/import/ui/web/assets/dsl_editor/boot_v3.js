@@ -279,13 +279,16 @@
 		}
 		const diff = $("flowStepDiff");
 		if (diff) {
+			const graph = graphOps.currentGraphDefinition();
 			diff.textContent =
-				"entry_step_id=" +
-				String(definition.entry_step_id || "") +
+				"graph=" +
+				String(graphOps.currentGraphLabel()) +
+				" entry_step_id=" +
+				String((graph && graph.entry_step_id) || "") +
 				" nodes=" +
-				String((definition.nodes || []).length) +
+				String(((graph && graph.nodes) || []).length) +
 				" edges=" +
-				String((definition.edges || []).length) +
+				String(((graph && graph.edges) || []).length) +
 				" selected=" +
 				String(graphOps.selectedStepId() || "");
 		}
@@ -293,6 +296,7 @@
 
 	function renderForms(definition) {
 		const textArea = $("wdJson");
+		const graphDefinition = graphOps.currentGraphDefinition();
 		if (window["AM2DSLEditorRawJSON"]) {
 			window["AM2DSLEditorRawJSON"].renderRawJSON({
 				mount: $("flowStepForm"),
@@ -311,6 +315,7 @@
 			window["AM2DSLEditorNodeForm"].renderNodeForm({
 				mount: $("flowStepForm"),
 				definition: definition,
+				graphDefinition: graphDefinition,
 				selectedStepId: graphOps.selectedStepId(),
 				actions: {
 					onAddWrite: graphOps.addWrite,
@@ -325,7 +330,7 @@
 		if (window["AM2DSLEditorEdgeForm"]) {
 			window["AM2DSLEditorEdgeForm"].renderEdgeForm({
 				mount: $("flowTransitionsPanel"),
-				definition: definition,
+				definition: graphDefinition,
 				actions: {
 					onAddEdge: graphOps.addEdge,
 					onPatchEdge: graphOps.patchEdge,
@@ -333,9 +338,36 @@
 				},
 			});
 		}
+		const palettePanel = $("flowPalettePanel");
+		clear(palettePanel);
+		const libraryMount = document.createElement("div");
+		const paletteMount = document.createElement("div");
+		if (palettePanel) {
+			palettePanel.appendChild(libraryMount);
+			palettePanel.appendChild(paletteMount);
+		}
+		if (window["AM2DSLEditorLibraryPanel"]) {
+			window["AM2DSLEditorLibraryPanel"].renderLibraryPanel({
+				mount: libraryMount,
+				definition: definition,
+				state: {
+					selectedLibraryId: graphOps.selectedLibraryId(),
+				},
+				actions: {
+					onAddLibrary: graphOps.addLibrary,
+					onPatchLibrary: graphOps.patchLibrary,
+					onRemoveLibrary: graphOps.removeLibrary,
+					onSelectLibrary: graphOps.setSelectedLibrary,
+					onSelectRoot: function () {
+						graphOps.setSelectedLibrary("");
+						renderAll();
+					},
+				},
+			});
+		}
 		if (window["AM2DSLEditorPalette"]) {
 			window["AM2DSLEditorPalette"].renderPalette({
-				mount: $("flowPalettePanel"),
+				mount: paletteMount,
 				registry: graphOps.primitiveItems(state.registry),
 				state: {
 					onAddPrimitive: graphOps.addPrimitiveNode,

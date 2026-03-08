@@ -61,6 +61,7 @@
 			.filter((item) => matches(item, searchText))
 			.forEach((item) => {
 				const row = el("div", "historyItem");
+				row.setAttribute("data-am2-palette-primitive", primitiveLine(item));
 				const meta = el("div", "historyMeta");
 				meta.appendChild(el("div", null, primitiveLine(item)));
 				meta.appendChild(
@@ -75,6 +76,7 @@
 				);
 				const btn = el("button", "btn", "Add Node");
 				btn.type = "button";
+				btn.setAttribute("data-am2-palette-add", primitiveLine(item));
 				btn.addEventListener("click", function () {
 					onAdd(item);
 				});
