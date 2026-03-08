@@ -106,6 +106,13 @@ list_eq = [
   "test_067_path_traversal_outside_repo_fails",
   "test_071_compile_exclude_respected",
   "test_072_g_continues_after_gate_fail",
+  "test_073_dont_touch_gate_blocks_protected_path",
+  "test_074_js_gate_runs_on_js_change",
+  "test_075_biome_gate_runs_on_biome_target",
+  "test_076_typescript_gate_runs_on_targeted_change",
+  "test_077_docs_gate_requires_changes_md",
+  "test_078_monolith_gate_reports_violation",
+  "test_079_skip_flags_short_circuit_selected_gates",
   "test_100_rerun_latest_l",
   "test_900_commit_push_timestamp",
 ]
@@ -254,6 +261,63 @@ rc_eq = 0
 value_contains = ["LOG: "]
 
 
+
+[evaluation.tests.test_073_dont_touch_gate_blocks_protected_path.steps.0]
+rc_eq = 1
+value_contains = [
+  "GATE: dont-touch",
+  "gate_dont_touch=FAIL",
+  "STAGE: GATE_DONT-TOUCH",
+]
+
+[evaluation.tests.test_074_js_gate_runs_on_js_change.steps.0]
+rc_eq = 1
+value_contains = [
+  "GATE: JS SYNTAX",
+  "FAIL: GATE_JS",
+  "STAGE: GATE_JS",
+]
+
+[evaluation.tests.test_075_biome_gate_runs_on_biome_target.steps.0]
+rc_eq = 1
+value_contains = [
+  "GATE: BIOME FORMAT",
+  "FAIL: GATE_BIOME",
+  "STAGE: GATE_BIOME",
+]
+
+[evaluation.tests.test_076_typescript_gate_runs_on_targeted_change.steps.0]
+rc_eq = 1
+value_contains = [
+  "DO: GATE_TYPESCRIPT",
+  "FAIL: GATE_TYPESCRIPT",
+  "STAGE: GATE_TYPESCRIPT",
+]
+
+[evaluation.tests.test_077_docs_gate_requires_changes_md.steps.0]
+rc_eq = 1
+value_contains = [
+  "gate_docs=FAIL",
+  "gate_docs_missing=docs/changes.md",
+  "STAGE: GATE_DOCS",
+]
+
+[evaluation.tests.test_078_monolith_gate_reports_violation.steps.0]
+rc_eq = 1
+value_contains = [
+  "GATE: MONOLITH",
+  "MONO.CATCHALL",
+  "STAGE: GATE_MONOLITH",
+]
+
+[evaluation.tests.test_079_skip_flags_short_circuit_selected_gates.steps.0]
+rc_eq = 0
+value_contains = [
+  "gate_biome=SKIP (skipped_by_user)",
+  "gate_typescript=SKIP (skipped_by_user)",
+  "RESULT: SUCCESS",
+]
+
 [evaluation.tests.test_100_rerun_latest_l.steps.0]
 rc_eq = 0
 
@@ -327,6 +391,28 @@ relpath = "scripts/badguys_batch1_excluded/syntax_error.py"
 
 [subjects.tests.test_072_g_continues_after_gate_fail.compile_fail]
 relpath = "src/test.py"
+
+
+[subjects.tests.test_073_dont_touch_gate_blocks_protected_path.protected]
+relpath = "biome.json"
+
+[subjects.tests.test_074_js_gate_runs_on_js_change.js_invalid]
+relpath = "docs/badguys_batch2/js_gate_invalid.js"
+
+[subjects.tests.test_075_biome_gate_runs_on_biome_target.biome_invalid]
+relpath = "docs/badguys_batch2/biome_gate_invalid.ts"
+
+[subjects.tests.test_076_typescript_gate_runs_on_targeted_change.typescript_invalid]
+relpath = "types/badguys_typescript_invalid.ts"
+
+[subjects.tests.test_077_docs_gate_requires_changes_md.docs_marker]
+relpath = "plugins/import/badguys_batch2/docs_gate_marker.txt"
+
+[subjects.tests.test_078_monolith_gate_reports_violation.monolith_helper]
+relpath = "docs/badguys_batch2/helpers.py"
+
+[subjects.tests.test_079_skip_flags_short_circuit_selected_gates.skip_invalid]
+relpath = "types/badguys_skip_invalid.ts"
 
 [subjects.tests.test_100_rerun_latest_l.rerun_latest_marker]
 relpath = "badguys/tmp/rerun_latest_marker.txt"
@@ -453,6 +539,63 @@ subject = "compile_fail"
 
 [recipes.tests.test_072_g_continues_after_gate_fail.steps.0]
 args = ["-g", "${issue_id}", "badguys: -g continues after gate fail (compile)"]
+
+
+[recipes.tests.test_073_dont_touch_gate_blocks_protected_path.assets.script]
+declared_subjects = ["protected"]
+
+[recipes.tests.test_073_dont_touch_gate_blocks_protected_path.steps.0]
+args = ["${issue_id}", "badguys: dont-touch gate blocks protected path"]
+
+[recipes.tests.test_074_js_gate_runs_on_js_change.assets.patch]
+subject = "js_invalid"
+
+[recipes.tests.test_074_js_gate_runs_on_js_change.steps.0]
+args = [
+  "--skip-biome",
+  "--skip-monolith",
+  "${issue_id}",
+  "badguys: js gate runs on js change",
+]
+
+[recipes.tests.test_075_biome_gate_runs_on_biome_target.assets.patch]
+subject = "biome_invalid"
+
+[recipes.tests.test_075_biome_gate_runs_on_biome_target.steps.0]
+args = ["--skip-js", "${issue_id}", "badguys: biome gate runs on ts target"]
+
+[recipes.tests.test_076_typescript_gate_runs_on_targeted_change.assets.patch]
+subject = "typescript_invalid"
+
+[recipes.tests.test_076_typescript_gate_runs_on_targeted_change.steps.0]
+args = [
+  "--skip-biome",
+  "${issue_id}",
+  "badguys: typescript gate runs on targeted change",
+]
+
+[recipes.tests.test_077_docs_gate_requires_changes_md.assets.patch]
+subject = "docs_marker"
+
+[recipes.tests.test_077_docs_gate_requires_changes_md.steps.0]
+args = ["${issue_id}", "badguys: docs gate requires changes dot md"]
+
+[recipes.tests.test_078_monolith_gate_reports_violation.assets.patch]
+subject = "monolith_helper"
+
+[recipes.tests.test_078_monolith_gate_reports_violation.steps.0]
+args = ["${issue_id}", "badguys: monolith gate reports violation"]
+
+[recipes.tests.test_079_skip_flags_short_circuit_selected_gates.assets.patch]
+subject = "skip_invalid"
+
+[recipes.tests.test_079_skip_flags_short_circuit_selected_gates.steps.0]
+args = [
+  "--skip-biome",
+  "--skip-typescript",
+  "${issue_id}",
+  "badguys: skip flags short circuit selected gates",
+]
 
 [recipes.tests.test_100_rerun_latest_l.steps.0]
 marker_subject = "rerun_latest_marker"
