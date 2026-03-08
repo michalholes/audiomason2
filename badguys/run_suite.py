@@ -330,6 +330,7 @@ def _run_test_plan(test, ctx: Ctx) -> bool:
     from badguys.bdg_executor import execute_bdg_step
     from badguys.bdg_loader import BdgTest
     from badguys.bdg_materializer import materialize_assets
+    from badguys.bdg_ops_ipc import has_pending_ipc_plans
     from badguys.bdg_subst import make_subst_ctx
 
     name = getattr(test, "name", "(unknown)")
@@ -455,6 +456,15 @@ def _run_test_plan(test, ctx: Ctx) -> bool:
         _log(ctx, level="normal", test_id=bdg.test_id, obj=step_obj)
 
         prior[idx] = r
+
+    if has_pending_ipc_plans(step_runner_cfg):
+        ok = False
+        _log(
+            ctx,
+            level="quiet",
+            test_id=bdg.test_id,
+            obj={"type": "fail", "reason": "unused_ipc_send_command_steps"},
+        )
 
     _log(
         ctx,

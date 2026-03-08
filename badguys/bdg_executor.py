@@ -5,13 +5,22 @@ import subprocess
 import sys
 import threading
 import time
-import tomllib
-from dataclasses import dataclass
 from pathlib import Path
 
 from badguys.bdg_evaluator import StepResult
 from badguys.bdg_loader import BdgStep, BdgTest
 from badguys.bdg_materializer import MaterializedAssets
+from badguys.bdg_ops_files import execute_read_step_log, execute_read_text_file, execute_zip_list
+from badguys.bdg_ops_git import execute_git_status_porcelain
+from badguys.bdg_ops_ipc import (
+    execute_ipc_send_command,
+    has_pending_ipc_plans,
+    pop_ipc_plans,
+    runner_socket_name,
+    runner_socket_path,
+    start_ipc_plan_threads,
+    wait_for_ipc_plan_threads,
+)
 from badguys.bdg_recipe import ensure_allowed_keys, step_recipe, subject_relpaths
 from badguys.bdg_subst import SubstCtx, subst_text
 
@@ -37,45 +46,6 @@ def _lock_path_for_test(repo_root: Path, *, test_id: str) -> Path:
 
 def _outside_sentinel(repo_root: Path, *, issue_id: str) -> Path:
     return repo_root.parent / f"badguys_sentinel_issue_{issue_id}.txt"
-
-
-def _logs_dir(*, repo_root: Path, config_path: Path) -> Path:
-    cfg_path = repo_root / config_path
-    raw = tomllib.loads(cfg_path.read_text(encoding="utf-8"))
-    logs_rel = raw.get("suite", {}).get("logs_dir", "patches/badguys_logs")
-    return repo_root / Path(str(logs_rel))
-
-
-def _runner_socket_name(*, argv: list[str], issue_id: str) -> str:
-    prefix = "--ipc-socket-name-template="
-    template = "am_patch_ipc_{issue}.sock"
-    for arg in argv:
-        if arg.startswith(prefix):
-            value = arg[len(prefix) :].strip()
-            if value:
-                template = value
-            break
-    return template.replace("{issue}", issue_id)
-
-
-def _runner_socket_path(
-    *,
-    patches_dir: Path,
-    issue_id: str,
-    socket_name: str,
-    test_mode: bool,
-    runner_pid: int,
-) -> Path:
-    if not test_mode:
-        return patches_dir / socket_name
-    return patches_dir / "_test_mode" / f"issue_{issue_id}_pid_{runner_pid}" / socket_name
-
-
-@dataclass(frozen=True)
-class ExecOutcome:
-    ok: bool
-    results: list[StepResult]
-    messages: list[str]
 
 
 def execute_bdg(
@@ -135,6 +105,20 @@ def execute_bdg_step(
     )
 
 
+def _artifacts_dir(step_runner_cfg: dict[str, object]) -> Path:
+    out = step_runner_cfg.get("artifacts_dir")
+    if not isinstance(out, Path):
+        raise SystemExit("FAIL: bdg: artifacts_dir must be Path")
+    return out
+
+
+def _patches_dir(step_runner_cfg: dict[str, object]) -> Path:
+    out = step_runner_cfg.get("patches_dir")
+    if not isinstance(out, Path):
+        raise SystemExit("FAIL: bdg: patches_dir must be Path")
+    return out
+
+
 def _exec_one(
     *,
     repo_root: Path,
@@ -178,18 +162,11 @@ def _exec_one(
                 "FAIL: bdg recipe: --test-mode is controlled by BadGuys; remove it from args"
             )
 
-        patches_dir_obj = step_runner_cfg.get("patches_dir")
-        artifacts_dir_obj = step_runner_cfg.get("artifacts_dir")
+        patches_dir = _patches_dir(step_runner_cfg)
+        artifacts_dir = _artifacts_dir(step_runner_cfg)
         copy_runner_log = bool(step_runner_cfg.get("copy_runner_log", False))
         write_subprocess_stdio = bool(step_runner_cfg.get("write_subprocess_stdio", False))
         console_verbosity = str(step_runner_cfg.get("console_verbosity", "normal"))
-
-        if not isinstance(patches_dir_obj, Path):
-            raise SystemExit("FAIL: bdg: patches_dir must be Path")
-        if not isinstance(artifacts_dir_obj, Path):
-            raise SystemExit("FAIL: bdg: artifacts_dir must be Path")
-        patches_dir = patches_dir_obj
-        artifacts_dir = artifacts_dir_obj
         artifacts_dir.mkdir(parents=True, exist_ok=True)
 
         argv = list(cfg_runner_cmd)
@@ -202,9 +179,8 @@ def _exec_one(
                 raise SystemExit(f"FAIL: bdg: missing materialized asset: {input_asset}")
             argv.append(str(path))
 
-        socket_name = _runner_socket_name(argv=argv, issue_id=subst.issue_id)
+        socket_name = runner_socket_name(argv=argv, issue_id=subst.issue_id)
         ipc_stream_path = artifacts_dir / f"runner.ipc.step{int(step_index)}.jsonl"
-
         ipc_holder: dict[str, object] = {"result": None, "value_text": ""}
         socket_path_holder: dict[str, Path] = {"path": patches_dir / socket_name}
 
@@ -232,7 +208,7 @@ def _exec_one(
             text=True,
         )
 
-        socket_path_holder["path"] = _runner_socket_path(
+        socket_path_holder["path"] = runner_socket_path(
             patches_dir=patches_dir,
             issue_id=subst.issue_id,
             socket_name=socket_name,
@@ -246,6 +222,13 @@ def _exec_one(
             daemon=True,
         )
         ipc_thread.start()
+
+        ipc_handles = start_ipc_plan_threads(
+            plans=pop_ipc_plans(step_runner_cfg),
+            socket_path=socket_path_holder["path"],
+            ipc_stream_path=ipc_stream_path,
+            artifacts_dir=artifacts_dir,
+        )
 
         stdout = ""
         stderr = ""
@@ -265,9 +248,7 @@ def _exec_one(
             last_msg = out
 
         def _clear_hb() -> None:
-            if not sys.stderr.isatty():
-                return
-            if last_msg is None:
+            if not sys.stderr.isatty() or last_msg is None:
                 return
             sys.stderr.write("\r" + (" " * len(last_msg)) + "\r")
             sys.stderr.flush()
@@ -300,8 +281,8 @@ def _exec_one(
             _clear_hb()
 
         rc = int(proc.returncode or 0)
-
         ipc_thread.join(timeout=2.0)
+        wait_for_ipc_plan_threads(handles=ipc_handles, timeout_s=5.0)
         ipc_result = ipc_holder.get("result")
         value_text = str(ipc_holder.get("value_text") or "")
 
@@ -416,16 +397,38 @@ def _exec_one(
             name = test_id
         if not isinstance(name, str):
             raise SystemExit("FAIL: bdg: test_name must be string")
-        name = _subst(name, subst=subst)
-        log_dir = _logs_dir(repo_root=repo_root, config_path=config_path)
-        log_path = log_dir / name / "badguys.test.jsonl"
-        if not log_path.exists():
-            return StepResult(rc=1, stdout=None, stderr=f"missing log: {log_path}", value="")
-        return StepResult(
-            rc=0,
-            stdout=None,
-            stderr=None,
-            value=log_path.read_text(encoding="utf-8"),
+        return execute_read_step_log(
+            repo_root=repo_root,
+            config_path=config_path,
+            test_name=_subst(name, subst=subst),
+        )
+
+    if op == "READ_TEXT_FILE":
+        return execute_read_text_file(
+            repo_root=repo_root,
+            config_path=config_path,
+            test_id=test_id,
+            step_index=step_index,
+            artifacts_dir=_artifacts_dir(step_runner_cfg),
+            issue_id=subst.issue_id,
+        )
+
+    if op == "ZIP_LIST":
+        return execute_zip_list(
+            repo_root=repo_root,
+            config_path=config_path,
+            test_id=test_id,
+            step_index=step_index,
+            artifacts_dir=_artifacts_dir(step_runner_cfg),
+            issue_id=subst.issue_id,
+        )
+
+    if op == "IPC_SEND_COMMAND":
+        return execute_ipc_send_command(
+            step_runner_cfg=step_runner_cfg,
+            params=p,
+            test_id=test_id,
+            step_index=step_index,
         )
 
     if op == "LOCK_DELETE":
@@ -537,16 +540,14 @@ def _exec_one(
         return StepResult(rc=0, stdout=None, stderr=None, value=str(ws_repo))
 
     if op == "GIT_STATUS_PORCELAIN":
-        cp = subprocess.run(
-            ["git", "status", "--porcelain"],
-            cwd=str(repo_root),
-            capture_output=True,
-            text=True,
-            check=False,
+        scope = p.get("scope", "root")
+        if not isinstance(scope, str):
+            raise SystemExit("FAIL: bdg: scope must be 'root' or 'workspace'")
+        return execute_git_status_porcelain(
+            repo_root=repo_root,
+            issue_id=subst.issue_id,
+            scope=_subst(scope, subst=subst),
         )
-        lines = (cp.stdout or "").splitlines()
-        out = [ln.rstrip("\n") for ln in lines if ln.strip()]
-        return StepResult(rc=0, stdout=None, stderr=None, value=out)
 
     if op == "PREPARE_UNSUCCESSFUL_PATCH":
         recipe = step_recipe(
@@ -597,7 +598,6 @@ def _exec_one(
         return StepResult(rc=0, stdout=None, stderr=None, value=str(patch_path))
 
     if op == "PREPARE_LATEST_BUNDLE_900":
-        # This op is dedicated to test_900_commit_push_timestamp.
         issue = str(subst.issue_id)
         stamp_raw = p.get("stamp", "${now_stamp}")
         if not isinstance(stamp_raw, str):
@@ -640,16 +640,11 @@ def _exec_one(
             )
         ws_marker = ws_repo / marker_rel
         ws_marker.parent.mkdir(parents=True, exist_ok=True)
-        ws_marker.write_text(
-            "badguys commit marker\ntest\n",
-            encoding="utf-8",
-        )
+        ws_marker.write_text("badguys commit marker\ntest\n", encoding="utf-8")
         try:
             (ws_repo / seed_rel).unlink()
         except FileNotFoundError:
             pass
-        old_line = "test\n"
-        new_line = f"{stamp}\n"
         patch_txt = (
             f"diff --git a/{marker_rel} b/{marker_rel}\n"
             "index 1111111..2222222 100644\n"
@@ -657,8 +652,8 @@ def _exec_one(
             f"+++ b/{marker_rel}\n"
             "@@ -1,2 +1,2 @@\n"
             " badguys commit marker\n"
-            f"-{old_line}"
-            f"+{new_line}"
+            "-test\n"
+            f"+{stamp}\n"
         )
         unsucc_dir = patches_dir / "unsuccessful"
         unsucc_dir.mkdir(parents=True, exist_ok=True)
