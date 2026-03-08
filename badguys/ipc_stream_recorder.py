@@ -146,6 +146,7 @@ def record_ipc_stream(
     try:
         s.setblocking(False)
         pending = ""
+        pending_handled_text: str | None = None
         with out_path.open("a", encoding="utf-8", newline="\n") as out_fp:
             while True:
                 _maybe_send_ready_commands(s, plans, connected_at)
@@ -177,14 +178,29 @@ def record_ipc_stream(
                         line = pending[: newline_at + 1]
                         pending = pending[newline_at + 1 :]
                         out_fp.write(line)
+                        line_text = line[:-1] if line.endswith("\n") else line
+                        if pending_handled_text == line_text:
+                            pending_handled_text = None
+                            continue
                         try:
                             obj = json.loads(line)
                         except Exception:
                             continue
                         if isinstance(obj, dict):
                             _handle_obj(obj)
-
-                _maybe_send_waiting_commands(s, plans, connected_at)
+                    if pending:
+                        try:
+                            pending_obj = json.loads(pending)
+                        except Exception:
+                            pending_handled_text = None
+                        else:
+                            if (
+                                isinstance(pending_obj, dict)
+                                and pending_handled_text != pending
+                            ):
+                                _handle_obj(pending_obj)
+                                pending_handled_text = pending
+                    _maybe_send_waiting_commands(s, plans, connected_at)
                 if result is not None and all(plan["done"] for plan in plans):
                     if total_deadline is None:
                         extra_deadline = time.monotonic() + 0.2
@@ -223,7 +239,7 @@ def record_ipc_stream(
                     obj = json.loads(pending)
                 except Exception:
                     obj = None
-                if isinstance(obj, dict):
+                if isinstance(obj, dict) and pending_handled_text != pending:
                     _handle_obj(obj)
     finally:
         try:

@@ -228,3 +228,11 @@ def test_failure_zip_template_rejects_missing_uniqueness_key() -> None:
         assert "must contain at least one of" in str(e)
     else:
         raise AssertionError("expected failure")
+
+
+def test_parse_args_preserves_json_out_flag() -> None:
+    _, _, _, parse_args = _import_am_patch()
+
+    cli = parse_args(["--json-out", "123", "msg"])
+
+    assert cli.json_out is True

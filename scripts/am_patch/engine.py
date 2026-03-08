@@ -267,7 +267,10 @@ def build_paths_and_logger(
             json_name = f"am_patch_issue_{cli.issue_id}.jsonl"
         else:
             json_name = "am_patch_finalize.jsonl"
-        json_path = paths.json_dir / json_name
+        if policy.test_mode and isolated_work_patch_dir is not None:
+            json_path = patch_root / policy.patch_layout_json_dir / json_name
+        else:
+            json_path = paths.json_dir / json_name
 
     startup = build_startup_logger_and_ipc(
         cli=cli,

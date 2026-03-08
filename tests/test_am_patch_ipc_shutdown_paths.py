@@ -145,3 +145,42 @@ def test_main_falls_back_to_legacy_cleanup_delay_without_startup_ready(
     assert ipc.wait_calls == 0
     assert ipc.stop_calls == 1
     assert waits == [expected_delay]
+
+
+def test_main_reserves_eos_seq_before_emitting_control_event(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mod = _load_runner_script_module()
+    order: list[str] = []
+
+    class _OrderLogger(_FakeLogger):
+        def emit_control_event(self, payload: dict[str, object]) -> None:
+            order.append("emit")
+            super().emit_control_event(payload)
+
+    class _OrderIpc(_FakeIpc):
+        def begin_shutdown_handshake(self, *, eos_seq: int) -> bool:
+            order.append("begin")
+            return super().begin_shutdown_handshake(eos_seq=eos_seq)
+
+    logger = _OrderLogger()
+    ipc = _OrderIpc(startup_done=True)
+    cli = SimpleNamespace(mode="workspace")
+    policy = SimpleNamespace(
+        ipc_socket_cleanup_delay_success_s=0,
+        ipc_socket_cleanup_delay_failure_s=0,
+        test_mode=False,
+    )
+    ctx = SimpleNamespace(cli=cli, policy=policy, logger=logger, ipc=ipc)
+
+    monkeypatch.setattr(
+        mod, "build_effective_policy", lambda argv: (cli, policy, Path("cfg"), "cfg")
+    )
+    monkeypatch.setattr(mod, "build_paths_and_logger", lambda *args: ctx)
+    monkeypatch.setattr(mod, "run_mode", lambda run_ctx: {"ok": True})
+    monkeypatch.setattr(mod, "finalize_and_report", lambda run_ctx, result: 0)
+
+    rc = mod.main([])
+
+    assert rc == 0
+    assert order[:2] == ["begin", "emit"]

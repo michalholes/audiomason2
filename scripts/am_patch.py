@@ -248,9 +248,9 @@ def main(argv: list[str]) -> int:
                         message="DEBUG: IPC shutdown handshake waiting for drain_ack\n",
                         kind="TEXT",
                     )
-                    ctx.logger.emit_control_event({"type": "control", "event": "eos"})
-                    eos_seq = ctx.logger.get_last_json_seq()
+                    eos_seq = int(ctx.logger.get_last_json_seq()) + 1
                     shutdown_handshake_active = ctx.ipc.begin_shutdown_handshake(eos_seq=eos_seq)
+                    ctx.logger.emit_control_event({"type": "control", "event": "eos"})
                     if shutdown_handshake_active:
                         ctx.ipc.wait_for_drain_ack()
             if not shutdown_handshake_active:
