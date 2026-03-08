@@ -1,3 +1,9 @@
+## 2026-03-08T00:00:02+01:00
+
+-   Issue 117: close the v3 dream editor/import work with end-to-end Phase II
+    acceptance coverage, Phase II next-run draft activation coverage, and
+    explicit v2/v3 default-selection coexistence tests.
+
 ## 2026-03-08T00:00:01+01:00
 
 -   Issue 116: add Phase II visual editor authoring for `parallel.fork_join@1`,

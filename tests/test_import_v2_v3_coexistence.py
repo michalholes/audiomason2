@@ -62,8 +62,8 @@ def _make_engine(
     return ImportWizardEngine(resolver=resolver), roots
 
 
-def _write_source_tree(roots: dict[str, Path]) -> None:
-    book_dir = roots["inbox"] / "src" / "Author A" / "Book A"
+def _write_source_tree(roots: dict[str, Path], *, relative_path: str = "src") -> None:
+    book_dir = roots["inbox"] / relative_path / "Author A" / "Book A"
     book_dir.mkdir(parents=True, exist_ok=True)
     (book_dir / "track01.mp3").write_text("x", encoding="utf-8")
 
@@ -115,3 +115,34 @@ def test_v2_and_v3_sessions_can_coexist_deterministically(tmp_path: Path) -> Non
 
     state_v3_reloaded = engine.get_state(str(state_v3["session_id"]))
     assert state_v3_reloaded["effective_model"]["flowmodel_kind"] == "dsl_step_graph_v3"
+
+
+def test_default_selection_policy_is_missing_means_v3_and_explicit_v2_wins(
+    tmp_path: Path,
+) -> None:
+    engine, roots = _make_engine(
+        tmp_path,
+        launcher_mode="fixed",
+        noninteractive=False,
+        nav_ui="prompt",
+    )
+    _write_source_tree(roots, relative_path="v3_default")
+    _write_source_tree(roots, relative_path="v2_explicit")
+    _write_source_tree(roots, relative_path="v3_default_again")
+
+    state_default_v3 = engine.create_session("inbox", "v3_default")
+    loaded_default_v3 = engine.get_state(str(state_default_v3["session_id"]))
+    assert loaded_default_v3["effective_model"]["flowmodel_kind"] == "dsl_step_graph_v3"
+
+    fs = engine.get_file_service()
+    atomic_write_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_REL_PATH, _v2_definition())
+
+    state_explicit_v2 = engine.create_session("inbox", "v2_explicit")
+    loaded_explicit_v2 = engine.get_state(str(state_explicit_v2["session_id"]))
+    assert loaded_explicit_v2["effective_model"].get("flowmodel_kind") != "dsl_step_graph_v3"
+
+    fs.delete_file(RootName.WIZARDS, WIZARD_DEFINITION_REL_PATH)
+
+    state_default_v3_again = engine.create_session("inbox", "v3_default_again")
+    loaded_default_v3_again = engine.get_state(str(state_default_v3_again["session_id"]))
+    assert loaded_default_v3_again["effective_model"]["flowmodel_kind"] == "dsl_step_graph_v3"
