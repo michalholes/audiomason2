@@ -19,6 +19,13 @@ def _workspace_repo_root(*, repo_root: Path, issue_id: str) -> Path:
     return repo_root / "patches" / "workspaces" / f"issue_{issue_id}" / "repo"
 
 
+def _expand_relpath_vars(*, relpath: str, repo_root: Path, issue_id: str) -> str:
+    out = str(relpath)
+    out = out.replace("${issue_id}", str(issue_id))
+    out = out.replace("${repo_name}", repo_root.name)
+    return out
+
+
 def _normalize_relpath(*, relpath: str, label: str) -> Path:
     if not relpath.strip():
         raise SystemExit(f"FAIL: bdg recipe: {label} must be non-empty")
@@ -85,7 +92,7 @@ def _resolve_recipe_path(
     if root is None:
         return None, err
     path = root / _normalize_relpath(
-        relpath=relpath,
+        relpath=_expand_relpath_vars(relpath=relpath, repo_root=repo_root, issue_id=issue_id),
         label=f"recipes.tests.{test_id}.steps.{step_index}.relpath",
     )
     return path, None

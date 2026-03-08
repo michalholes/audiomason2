@@ -36,7 +36,7 @@ logs_dir = "patches/badguys_logs"
 central_log_pattern = "patches/badguys_{run_id}.log"
 
 # Maximum number of tests in one run that are allowed to perform a real commit+push.
-commit_limit = 1
+commit_limit = 2
 
 [lock]
 path = "patches/badguys.lock"
@@ -113,12 +113,22 @@ list_eq = [
   "test_077_docs_gate_requires_changes_md",
   "test_078_monolith_gate_reports_violation",
   "test_079_skip_flags_short_circuit_selected_gates",
+  "test_080_json_out_writes_ndjson_log",
+  "test_081_ipc_heartbeat_events_present",
+  "test_082_ipc_handshake_ready_and_drain_ack",
+  "test_083_ipc_cancel_command_stops_runner",
+  "test_084_workspace_git_state_matches_mode",
+  "test_085_success_archive_zip_hygiene",
   "test_100_rerun_latest_l",
   "test_900_commit_push_timestamp",
 ]
 
 [runner]
-full_runner_tests = ["test_900_commit_push_timestamp"]
+full_runner_tests = [
+  "test_084_workspace_git_state_matches_mode",
+  "test_085_success_archive_zip_hygiene",
+  "test_900_commit_push_timestamp",
+]
 
 [evaluation.tests.test_011_include_single.steps.0]
 rc_eq = 0
@@ -615,3 +625,245 @@ seed_subject = "seed_fail"
 
 [recipes.tests.test_900_commit_push_timestamp.steps.3]
 args = ["${issue_id}", "badguys: apply latest bundle", "-l"]
+
+
+[evaluation.tests.test_080_json_out_writes_ndjson_log.steps.0]
+rc_eq = 0
+value_contains = ["RESULT: SUCCESS"]
+
+[evaluation.tests.test_080_json_out_writes_ndjson_log.steps.1]
+rc_eq = 0
+value_contains = [
+  '"event":"connected"',
+  '"kind":"HEARTBEAT"',
+  '"type":"result"',
+  '"msg":"RESULT: SUCCESS"',
+]
+
+[evaluation.tests.test_081_ipc_heartbeat_events_present.steps.0]
+rc_eq = 0
+value_contains = ["RESULT: SUCCESS"]
+
+[evaluation.tests.test_081_ipc_heartbeat_events_present.steps.1]
+rc_eq = 0
+value_contains = [
+  '"kind":"HEARTBEAT"',
+  '"msg":"HEARTBEAT"',
+  '"type":"result"',
+]
+
+[evaluation.tests.test_082_ipc_handshake_ready_and_drain_ack.steps.0]
+rc_eq = 0
+value_contains = ["queued:ipc_reply.step0.json"]
+
+[evaluation.tests.test_082_ipc_handshake_ready_and_drain_ack.steps.1]
+rc_eq = 0
+value_contains = ["queued:ipc_reply.step1.json"]
+
+[evaluation.tests.test_082_ipc_handshake_ready_and_drain_ack.steps.2]
+rc_eq = 0
+value_contains = [
+  "DEBUG: IPC startup handshake completed before START",
+  "DEBUG: IPC shutdown handshake waiting for drain_ack",
+  "RESULT: SUCCESS",
+]
+
+[evaluation.tests.test_082_ipc_handshake_ready_and_drain_ack.steps.3]
+rc_eq = 0
+value_contains = ['"cmd": "ready"']
+
+[evaluation.tests.test_082_ipc_handshake_ready_and_drain_ack.steps.4]
+rc_eq = 0
+value_contains = ['"ok": true', '"ready": true']
+
+[evaluation.tests.test_082_ipc_handshake_ready_and_drain_ack.steps.5]
+rc_eq = 0
+value_contains = ['"cmd": "drain_ack"']
+
+[evaluation.tests.test_082_ipc_handshake_ready_and_drain_ack.steps.6]
+rc_eq = 0
+value_contains = ['"ok": false', '"code": "EOF"']
+
+[evaluation.tests.test_082_ipc_handshake_ready_and_drain_ack.steps.7]
+rc_eq = 0
+value_contains = ['"event":"eos"']
+
+[evaluation.tests.test_083_ipc_cancel_command_stops_runner.steps.0]
+rc_eq = 0
+value_contains = ["queued:ipc_reply.step0.json"]
+
+[evaluation.tests.test_083_ipc_cancel_command_stops_runner.steps.1]
+rc_ne = 0
+
+[evaluation.tests.test_083_ipc_cancel_command_stops_runner.steps.2]
+rc_eq = 0
+value_contains = ['"cmd": "cancel"']
+
+[evaluation.tests.test_083_ipc_cancel_command_stops_runner.steps.3]
+rc_eq = 0
+value_contains = ['"ok": true']
+
+[evaluation.tests.test_083_ipc_cancel_command_stops_runner.steps.4]
+rc_eq = 0
+value_contains = [
+  '"type":"result"',
+  '"return_code":',
+]
+
+[evaluation.tests.test_084_workspace_git_state_matches_mode.steps.0]
+rc_eq = 1
+
+[evaluation.tests.test_084_workspace_git_state_matches_mode.steps.1]
+rc_eq = 0
+list_eq = []
+
+[evaluation.tests.test_084_workspace_git_state_matches_mode.steps.2]
+rc_eq = 0
+list_contains = ["?? scripts/badguys_batch3/"]
+
+[evaluation.tests.test_085_success_archive_zip_hygiene.steps.0]
+rc_eq = 0
+
+[evaluation.tests.test_085_success_archive_zip_hygiene.steps.1]
+rc_eq = 0
+list_contains = [
+  "docs/badguys_batch4/success_archive_hygiene_marker_085.txt",
+  "docs/changes.md",
+]
+list_not_contains = [
+  ".git/HEAD",
+  "patches/patched.zip",
+  "patches/badguys_success_archive_085.zip",
+]
+
+[subjects.tests.test_080_json_out_writes_ndjson_log.json_out_marker]
+relpath = "docs/badguys_batch3/json_out_marker.txt"
+
+[subjects.tests.test_081_ipc_heartbeat_events_present.heartbeat_marker]
+relpath = "docs/badguys_batch3/ipc_heartbeat_marker.txt"
+
+[subjects.tests.test_082_ipc_handshake_ready_and_drain_ack.handshake_marker]
+relpath = "docs/badguys_batch3/ipc_handshake_marker.txt"
+
+[subjects.tests.test_083_ipc_cancel_command_stops_runner.cancel_marker]
+relpath = "docs/badguys_batch3/ipc_cancel_marker.txt"
+
+[subjects.tests.test_084_workspace_git_state_matches_mode.workspace_fail]
+relpath = "scripts/badguys_batch3/workspace_compile_fail.py"
+
+[subjects.tests.test_085_success_archive_zip_hygiene.archive_marker]
+relpath = "docs/badguys_batch4/success_archive_hygiene_marker_085.txt"
+
+[recipes.tests.test_080_json_out_writes_ndjson_log.assets.patch]
+subject = "json_out_marker"
+
+[recipes.tests.test_080_json_out_writes_ndjson_log.steps.0]
+args = [
+  "--json-out",
+  "--skip-ruff",
+  "--skip-pytest",
+  "--skip-mypy",
+  "${issue_id}",
+  "badguys: json out writes ndjson log",
+]
+
+[recipes.tests.test_080_json_out_writes_ndjson_log.steps.1]
+scope = "artifacts"
+relpath = "runner.ipc.step0.jsonl"
+
+[recipes.tests.test_081_ipc_heartbeat_events_present.assets.patch]
+subject = "heartbeat_marker"
+
+[recipes.tests.test_081_ipc_heartbeat_events_present.steps.0]
+args = [
+  "--skip-ruff",
+  "--skip-pytest",
+  "--skip-mypy",
+  "${issue_id}",
+  "badguys: ipc heartbeat events present",
+]
+
+[recipes.tests.test_081_ipc_heartbeat_events_present.steps.1]
+scope = "artifacts"
+relpath = "runner.ipc.step0.jsonl"
+
+[recipes.tests.test_082_ipc_handshake_ready_and_drain_ack.assets.patch]
+subject = "handshake_marker"
+
+[recipes.tests.test_082_ipc_handshake_ready_and_drain_ack.steps.2]
+args = [
+  "--ipc-handshake",
+  "--ipc-handshake-wait-s",
+  "2",
+  "--skip-ruff",
+  "--skip-pytest",
+  "--skip-mypy",
+  "${issue_id}",
+  "badguys: ipc handshake ready and drain ack",
+]
+
+[recipes.tests.test_082_ipc_handshake_ready_and_drain_ack.steps.3]
+scope = "artifacts"
+relpath = "ipc_request.step0.json"
+
+[recipes.tests.test_082_ipc_handshake_ready_and_drain_ack.steps.4]
+scope = "artifacts"
+relpath = "ipc_reply.step0.json"
+
+[recipes.tests.test_082_ipc_handshake_ready_and_drain_ack.steps.5]
+scope = "artifacts"
+relpath = "ipc_request.step1.json"
+
+[recipes.tests.test_082_ipc_handshake_ready_and_drain_ack.steps.6]
+scope = "artifacts"
+relpath = "ipc_reply.step1.json"
+
+[recipes.tests.test_082_ipc_handshake_ready_and_drain_ack.steps.7]
+scope = "artifacts"
+relpath = "runner.ipc.step2.jsonl"
+
+[recipes.tests.test_083_ipc_cancel_command_stops_runner.assets.patch]
+subject = "cancel_marker"
+
+[recipes.tests.test_083_ipc_cancel_command_stops_runner.steps.1]
+args = [
+  "--skip-ruff",
+  "--skip-pytest",
+  "--skip-mypy",
+  "${issue_id}",
+  "badguys: ipc cancel command stops runner",
+]
+
+[recipes.tests.test_083_ipc_cancel_command_stops_runner.steps.2]
+scope = "artifacts"
+relpath = "ipc_request.step0.json"
+
+[recipes.tests.test_083_ipc_cancel_command_stops_runner.steps.3]
+scope = "artifacts"
+relpath = "ipc_reply.step0.json"
+
+[recipes.tests.test_083_ipc_cancel_command_stops_runner.steps.4]
+scope = "artifacts"
+relpath = "runner.ipc.step1.jsonl"
+
+[recipes.tests.test_084_workspace_git_state_matches_mode.assets.patch]
+subject = "workspace_fail"
+
+[recipes.tests.test_084_workspace_git_state_matches_mode.steps.0]
+args = ["${issue_id}", "badguys: workspace git state matches mode"]
+
+[recipes.tests.test_085_success_archive_zip_hygiene.assets.patch]
+subject = "archive_marker"
+
+[recipes.tests.test_085_success_archive_zip_hygiene.steps.0]
+args = [
+  "--skip-ruff",
+  "--skip-pytest",
+  "--skip-mypy",
+  "${issue_id}",
+  "badguys: success archive zip hygiene",
+]
+
+[recipes.tests.test_085_success_archive_zip_hygiene.steps.1]
+scope = "repo"
+relpath = "patches/${repo_name}-main_${issue_id}.zip"

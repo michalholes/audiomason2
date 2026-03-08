@@ -18,8 +18,6 @@ from badguys.bdg_ops_ipc import (
     pop_ipc_plans,
     runner_socket_name,
     runner_socket_path,
-    start_ipc_plan_threads,
-    wait_for_ipc_plan_threads,
 )
 from badguys.bdg_recipe import ensure_allowed_keys, step_recipe, subject_relpaths
 from badguys.bdg_subst import SubstCtx, subst_text
@@ -184,14 +182,35 @@ def _exec_one(
         ipc_holder: dict[str, object] = {"result": None, "value_text": ""}
         socket_path_holder: dict[str, Path] = {"path": patches_dir / socket_name}
 
+        plans = pop_ipc_plans(step_runner_cfg)
+
         def _run_recorder() -> None:
             from badguys.ipc_stream_recorder import record_ipc_stream
+
+            command_plans: list[dict[str, object]] = []
+            for plan in plans:
+                command_plans.append(
+                    {
+                        "protocol": "am_patch_ipc/1",
+                        "step_index": int(plan.step_index),
+                        "cmd": plan.cmd,
+                        "cmd_id": plan.cmd_id,
+                        "args": dict(plan.args),
+                        "delay_s": float(plan.delay_s),
+                        "wait_event_type": plan.wait_event_type,
+                        "wait_event_name": plan.wait_event_name,
+                        "event_arg_map": dict(plan.event_arg_map),
+                        "request_path": artifacts_dir / f"ipc_request.step{int(plan.step_index)}.json",
+                        "reply_path": artifacts_dir / f"ipc_reply.step{int(plan.step_index)}.json",
+                    }
+                )
 
             res, value_text = record_ipc_stream(
                 socket_path_holder["path"],
                 out_path=ipc_stream_path,
                 connect_timeout_s=3.0,
                 total_timeout_s=0.0,
+                command_plans=command_plans,
             )
             ipc_holder["result"] = res
             ipc_holder["value_text"] = value_text
@@ -222,13 +241,6 @@ def _exec_one(
             daemon=True,
         )
         ipc_thread.start()
-
-        ipc_handles = start_ipc_plan_threads(
-            plans=pop_ipc_plans(step_runner_cfg),
-            socket_path=socket_path_holder["path"],
-            ipc_stream_path=ipc_stream_path,
-            artifacts_dir=artifacts_dir,
-        )
 
         stdout = ""
         stderr = ""
@@ -282,7 +294,6 @@ def _exec_one(
 
         rc = int(proc.returncode or 0)
         ipc_thread.join(timeout=2.0)
-        wait_for_ipc_plan_threads(handles=ipc_handles, timeout_s=5.0)
         ipc_result = ipc_holder.get("result")
         value_text = str(ipc_holder.get("value_text") or "")
 

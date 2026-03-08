@@ -56,17 +56,16 @@ def record_ipc_stream(
     out_path: Path,
     connect_timeout_s: float,
     total_timeout_s: float,
+    command_plans: list[dict[str, Any]] | None = None,
 ) -> tuple[dict[str, Any] | None, str]:
     """Record the full runner IPC NDJSON stream and compute runner value_text.
 
-    Returns: (validated_result_or_none, value_text)
-
-    - out_path receives the exact NDJSON lines read from the socket (no filtering).
-    - value_text is concatenation of obj['msg'] for all type='log' events, joined by '\n'.
+    Optional command_plans are executed over the same IPC connection so that
+    stream recording and command/reply traffic can coexist even when the runner
+    serves clients serially.
     """
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    # Ensure the file exists even if connection fails.
     out_path.open("w", encoding="utf-8", newline="\n").close()
 
     connect_deadline = time.monotonic() + max(0.0, float(connect_timeout_s))
@@ -79,6 +78,11 @@ def record_ipc_stream(
     s: socket.socket | None = None
     while True:
         if time.monotonic() >= connect_deadline:
+            _finalize_unresolved_plans(
+                _prepare_command_plans(command_plans or []),
+                code="CONNECT_TIMEOUT",
+                message="ipc connect timeout",
+            )
             return None, ""
         connected = False
         for candidate in _iter_socket_candidates(socket_path):
@@ -102,29 +106,41 @@ def record_ipc_stream(
 
     value_msgs: list[str] = []
     result: dict[str, Any] | None = None
+    plans = _prepare_command_plans(command_plans or [])
+    connected_at = time.monotonic()
 
-    def _handle_line(line: str, *, out_fp: Any) -> None:
+    def _handle_obj(obj: dict[str, Any]) -> None:
         nonlocal result
-
-        # Stream persistence rule: write exact lines.
-        out_fp.write(line)
-
-        try:
-            obj = json.loads(line)
-        except Exception:
-            return
-
-        if isinstance(obj, dict) and obj.get("type") == "log":
+        if obj.get("type") == "log":
             msg = obj.get("msg")
             if isinstance(msg, str):
                 value_msgs.append(msg)
-
-        if isinstance(obj, dict) and obj.get("type") == "result":
+        if obj.get("type") == "result":
             valid = _validate_result(obj)
             if valid is not None:
                 result = valid
+        for plan in plans:
+            if plan["matched_event"] is not None:
+                continue
+            evt_type = plan["wait_event_type"]
+            evt_name = plan["wait_event_name"]
+            if evt_type is None and evt_name is None:
+                continue
+            if evt_type is not None and str(obj.get("type", "")) != evt_type:
+                continue
+            if evt_name is not None and str(obj.get("event", "")) != evt_name:
+                continue
+            plan["matched_event"] = obj
+        if obj.get("type") == "reply":
+            cmd_id = str(obj.get("cmd_id", ""))
+            for plan in plans:
+                if plan["sent"] and not plan["done"] and str(plan["cmd_id"]) == cmd_id:
+                    _write_json(plan["reply_path"], obj)
+                    plan["done"] = True
+                    break
 
     if s is None:
+        _finalize_unresolved_plans(plans, code="CONNECT_TIMEOUT", message="ipc connect timeout")
         return None, ""
 
     try:
@@ -132,11 +148,11 @@ def record_ipc_stream(
         pending = ""
         with out_path.open("a", encoding="utf-8", newline="\n") as out_fp:
             while True:
-                wait_s: float | None
+                _maybe_send_ready_commands(s, plans, connected_at)
                 if total_deadline is None:
-                    wait_s = None
+                    wait_s: float | None = 0.05
                 else:
-                    wait_s = max(0.0, total_deadline - time.monotonic())
+                    wait_s = max(0.0, min(0.05, total_deadline - time.monotonic()))
                     if wait_s == 0.0:
                         break
 
@@ -144,30 +160,71 @@ def record_ipc_stream(
                     readable, _, _ = select.select([s], [], [], wait_s)
                 except (OSError, ValueError):
                     break
-                if not readable:
-                    break
-
-                try:
-                    chunk = s.recv(65536)
-                except BlockingIOError:
-                    continue
-                except OSError:
-                    break
-                if not chunk:
-                    break
-
-                pending += chunk.decode("utf-8", errors="replace")
-                while True:
-                    newline_at = pending.find("\n")
-                    if newline_at < 0:
+                if readable:
+                    try:
+                        chunk = s.recv(65536)
+                    except BlockingIOError:
+                        chunk = b""
+                    except OSError:
                         break
-                    line = pending[: newline_at + 1]
-                    pending = pending[newline_at + 1 :]
-                    _handle_line(line, out_fp=out_fp)
+                    if chunk == b"":
+                        break
+                    pending += chunk.decode("utf-8", errors="replace")
+                    while True:
+                        newline_at = pending.find("\n")
+                        if newline_at < 0:
+                            break
+                        line = pending[: newline_at + 1]
+                        pending = pending[newline_at + 1 :]
+                        out_fp.write(line)
+                        try:
+                            obj = json.loads(line)
+                        except Exception:
+                            continue
+                        if isinstance(obj, dict):
+                            _handle_obj(obj)
+
+                _maybe_send_waiting_commands(s, plans, connected_at)
+                if result is not None and all(plan["done"] for plan in plans):
+                    if total_deadline is None:
+                        extra_deadline = time.monotonic() + 0.2
+                        while time.monotonic() < extra_deadline:
+                            try:
+                                readable, _, _ = select.select([s], [], [], 0.02)
+                            except (OSError, ValueError):
+                                readable = []
+                            if not readable:
+                                break
+                            try:
+                                chunk = s.recv(65536)
+                            except (BlockingIOError, OSError):
+                                break
+                            if not chunk:
+                                break
+                            pending += chunk.decode("utf-8", errors="replace")
+                            while True:
+                                newline_at = pending.find("\n")
+                                if newline_at < 0:
+                                    break
+                                line = pending[: newline_at + 1]
+                                pending = pending[newline_at + 1 :]
+                                out_fp.write(line)
+                                try:
+                                    obj = json.loads(line)
+                                except Exception:
+                                    continue
+                                if isinstance(obj, dict):
+                                    _handle_obj(obj)
+                    break
 
             if pending:
-                _handle_line(pending, out_fp=out_fp)
-
+                out_fp.write(pending)
+                try:
+                    obj = json.loads(pending)
+                except Exception:
+                    obj = None
+                if isinstance(obj, dict):
+                    _handle_obj(obj)
     finally:
         try:
             if s is not None:
@@ -175,5 +232,118 @@ def record_ipc_stream(
         except Exception:
             pass
 
+    _finalize_unresolved_plans(plans, code="EOF", message="ipc connection closed before reply")
     value_text = "\n".join(value_msgs)
     return result, value_text
+
+
+def _prepare_command_plans(raw_plans: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    plans: list[dict[str, Any]] = []
+    for item in raw_plans:
+        plan = dict(item)
+        plan.setdefault("args", {})
+        plan.setdefault("delay_s", 0.0)
+        plan.setdefault("wait_event_type", None)
+        plan.setdefault("wait_event_name", None)
+        plan.setdefault("event_arg_map", {})
+        plan["matched_event"] = None
+        plan["sent"] = False
+        plan["done"] = False
+        plans.append(plan)
+    return plans
+
+
+def _maybe_send_ready_commands(
+    sock: socket.socket,
+    plans: list[dict[str, Any]],
+    connected_at: float,
+) -> None:
+    _maybe_send_waiting_commands(sock, plans, connected_at)
+
+
+def _maybe_send_waiting_commands(
+    sock: socket.socket,
+    plans: list[dict[str, Any]],
+    connected_at: float,
+) -> None:
+    now = time.monotonic()
+    for plan in plans:
+        if plan["sent"] or plan["done"]:
+            continue
+        evt_type = plan["wait_event_type"]
+        evt_name = plan["wait_event_name"]
+        matched_event = plan["matched_event"]
+        if evt_type is not None or evt_name is not None:
+            if matched_event is None:
+                continue
+        if now < connected_at + float(plan.get("delay_s", 0.0) or 0.0):
+            continue
+        args = dict(plan.get("args", {}))
+        if matched_event is not None:
+            for arg_name, field_name in dict(plan.get("event_arg_map", {})).items():
+                args[arg_name] = matched_event.get(field_name)
+        request = {
+            "protocol": plan["protocol"],
+            "type": "cmd",
+            "cmd": plan["cmd"],
+            "cmd_id": plan["cmd_id"],
+            "args": args,
+        }
+        _write_json(plan["request_path"], request)
+        try:
+            sock.sendall(_json_line(request))
+            plan["sent"] = True
+        except OSError:
+            _write_json(
+                plan["reply_path"],
+                {
+                    "ok": False,
+                    "error": {
+                        "code": "SEND_ERROR",
+                        "message": "ipc command send failed",
+                    },
+                },
+            )
+            plan["done"] = True
+
+
+def _finalize_unresolved_plans(plans: list[dict[str, Any]], *, code: str, message: str) -> None:
+    for plan in plans:
+        if plan.get("done"):
+            continue
+        if not plan.get("sent") and (
+            plan.get("wait_event_type") is not None or plan.get("wait_event_name") is not None
+        ):
+            _write_json(
+                plan["reply_path"],
+                {
+                    "ok": False,
+                    "error": {
+                        "code": "EVENT_TIMEOUT",
+                        "message": "ipc stream event not observed",
+                    },
+                },
+            )
+        else:
+            _write_json(
+                plan["reply_path"],
+                {
+                    "ok": False,
+                    "error": {
+                        "code": code,
+                        "message": message,
+                    },
+                },
+            )
+        plan["done"] = True
+
+
+def _json_line(obj: dict[str, Any]) -> bytes:
+    return (json.dumps(obj, ensure_ascii=True, separators=(",", ":")) + "\n").encode("utf-8")
+
+
+def _write_json(path: Path, obj: dict[str, Any]) -> None:
+    path.write_text(
+        json.dumps(obj, ensure_ascii=True, indent=2, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
