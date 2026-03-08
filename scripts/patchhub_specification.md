@@ -3,7 +3,7 @@ Status: AUTHORITATIVE SPECIFICATION
 Applies to: scripts/patchhub/*
 Language: ENGLISH (ASCII ONLY)
 
-Specification Version: 1.10.0-spec
+Specification Version: 1.10.1-spec
 Code Baseline: audiomason2-main.zip (as provided in this chat)
 
 -------------------------------------------------------------------------------
@@ -252,14 +252,22 @@ Payload
   - jobs list (thin, see 2.11),
   - runs list (thin, see 2.11),
   - workspaces list (thin, see 2.11),
-  - header/status summary (diagnostics/stats payload used by the header).
+  - header/status summary for stable overview rendering.
+- The snapshot header payload MUST contain only stable overview fields.
+- Volatile host or telemetry diagnostics MUST NOT be included in
+  snapshot.header.
 
 Tokens and caching
 - The server MUST compute and expose a stable sig for each sub-payload:
   - jobs_sig, runs_sig, workspaces_sig, header_sig.
+- header_sig MUST cover all user-visible state present in snapshot.header.
+- Volatile diagnostics fields exposed by /api/debug/diagnostics MUST NOT be
+  included in header_sig and MUST NOT invalidate the overview snapshot.
 - The server MUST compute a snapshot_sig that changes if any sub-payload changes.
+- The full snapshot response MUST include the authoritative current overview seq.
 - The response MUST include:
-  { ok: true, snapshot: { jobs: [...], runs: [...], workspaces: [...], header: {...} },
+  { ok: true, seq: <int>,
+    snapshot: { jobs: [...], runs: [...], workspaces: [...], header: {...} },
     sigs: { jobs: <jobs_sig>, runs: <runs_sig>, workspaces: <workspaces_sig>,
       header: <header_sig>, snapshot: <snapshot_sig> } }
 - The snapshot endpoint MUST support ETag/304 using snapshot_sig.
@@ -268,6 +276,8 @@ Client behavior
 - In IDLE mode, the UI SHOULD prefer /api/ui_snapshot over multiple list calls.
 - ACTIVE mode MAY continue to use specialized endpoints for near-realtime
   (tail, live stream) without routing through the snapshot endpoint.
+- On a successful full snapshot apply, the client MUST treat the returned seq
+  as the authoritative locally applied overview seq.
 
 2.10 HTTP ETag and 304 Not Modified (HARD)
 
@@ -308,6 +318,10 @@ Client behavior
 - The UI MUST use /api/events only for overview invalidation.
 - On snapshot_changed, the UI MAY fetch /api/ui_snapshot or
   /api/ui_snapshot_delta.
+- The seq carried by an SSE event is the authoritative current backend overview
+  seq.
+- The client MUST NOT use the just-received event seq as since_seq unless that
+  same seq is already the locally applied overview seq.
 - SSE events MUST NOT replace specialized ACTIVE-mode job live event streams.
 
 2.10.2 Snapshot Delta Cursor (HARD)
@@ -339,6 +353,9 @@ Delta payload
 Failure and resync rules
 - If since_seq is outside the retained delta window, the server MUST return an
   explicit resync-needed response.
+- The client MUST send the last locally applied overview seq as since_seq.
+- The client MUST advance its locally applied overview seq only after a delta
+  apply succeeds or after a full /api/ui_snapshot apply succeeds.
 - The UI MUST fall back to a full GET /api/ui_snapshot on delta failure,
   stale cursor, or resync-needed response.
 
@@ -1310,6 +1327,14 @@ End-of-stream rule:
 
 7.2.12 GET /api/debug/diagnostics
 Output: JSON object (NOT envelope).
+Rules:
+- This endpoint is the authoritative diagnostics and telemetry payload for the
+  PatchHub header debug details.
+- Volatile diagnostics fields returned here MUST NOT be duplicated inside
+  ui_snapshot.header.
+- Volatile diagnostics fields returned here MUST NOT be included in header_sig.
+- Volatile diagnostics fields returned here MUST NOT trigger overview snapshot
+  invalidation.
 Schema (best-effort, current implementation):
 {
   "queue": { "queued": <int>, "running": <int> },
@@ -1377,6 +1402,7 @@ Output (resync needed):
 Rules:
 - removed arrays MUST contain stable item identities only.
 - header MUST be present only when header_changed is true.
+- If header_changed is false, the header field MUST be omitted, not null.
 - The endpoint MUST operate on the single overview seq defined in 2.10.2.
 
 -------------------------------------------------------------------------------
