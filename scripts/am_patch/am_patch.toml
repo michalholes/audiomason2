@@ -162,7 +162,7 @@ dont_touch_paths = [
   "biome.json",
   "pyproject.toml",
   "am_patch.toml",
-  "ci.yml"
+  ".github/workflows/ci.yml"
 ]
 apply_failure_partial_gates_policy = "repair_only"
 apply_failure_zero_gates_policy = "repair_only"
