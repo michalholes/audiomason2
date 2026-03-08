@@ -1044,3 +1044,5 @@
 -   Issue 24: PatchHub /debug page will expose per-section Flush and Copy actions for debug feeds.
 
 -   spec: Bump specification version to 1.1.35.
+
+-   Issue 117: WizardDefinition draft reset now seeds from the active definition, stale draft shadowing is quarantined, and stale activate no longer downgrades active runtime.
