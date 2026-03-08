@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sys
 from pathlib import Path
 
@@ -101,3 +102,22 @@ def test_cli_accepts_warning_and_log_level():
     ns = parse_args(["--verbosity", "warning", "--log-level", "warning", "1", "msg"])
     assert ns.verbosity == "warning"
     assert ns.log_level == "warning"
+
+
+def test_subprocess_live_json_requires_debug_screen_level(tmp_path: Path):
+    logger = _mk_logger(tmp_path, screen_level="normal", log_level="debug")
+    logger.json_enabled = True
+    logger.json_path = tmp_path / "am_patch.jsonl"
+    logger._json_fp = logger._close_stack.enter_context(
+        logger.json_path.open("w", encoding="utf-8")
+    )
+    try:
+        logger.run_logged([sys.executable, "-c", "print('hello', flush=True)"])
+    finally:
+        logger.close()
+
+    events = [
+        json.loads(line)
+        for line in (tmp_path / "am_patch.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    assert not any(evt.get("kind") == "SUBPROCESS_STDOUT" for evt in events)

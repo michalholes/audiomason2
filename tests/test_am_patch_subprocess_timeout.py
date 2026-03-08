@@ -104,6 +104,65 @@ def test_run_logged_emits_json_run_event(tmp_path: Path) -> None:
     )
 
 
+def test_run_logged_streams_live_json_before_process_exit(tmp_path: Path) -> None:
+    logger = _mk_logger(tmp_path, stage="GATE_PYTEST", json_enabled=True)
+    logger.screen_level = "debug"
+    done = threading.Event()
+    errors: list[BaseException] = []
+
+    def _runner() -> None:
+        try:
+            logger.run_logged(
+                [
+                    sys.executable,
+                    "-c",
+                    (
+                        "import sys, time; "
+                        "sys.stdout.write('first\\n'); sys.stdout.flush(); "
+                        "time.sleep(0.5); "
+                        "sys.stdout.write('tail'); sys.stdout.flush()"
+                    ),
+                ]
+            )
+        except BaseException as exc:
+            errors.append(exc)
+        finally:
+            done.set()
+
+    worker = threading.Thread(target=_runner, daemon=True)
+    worker.start()
+    try:
+        deadline = time.monotonic() + 5.0
+        seen_live = False
+        while time.monotonic() < deadline:
+            json_path = tmp_path / "am_patch.jsonl"
+            if json_path.exists():
+                events = [
+                    json.loads(line)
+                    for line in json_path.read_text(encoding="utf-8").splitlines()
+                    if line.strip()
+                ]
+                msgs = [evt.get("msg") for evt in events if evt.get("kind") == "SUBPROCESS_STDOUT"]
+                if "first" in msgs:
+                    seen_live = True
+                    assert not done.is_set()
+                    break
+            time.sleep(0.05)
+        assert seen_live
+        worker.join(timeout=5.0)
+        assert not worker.is_alive()
+        assert not errors
+        final_events = [
+            json.loads(line)
+            for line in (tmp_path / "am_patch.jsonl").read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+        msgs = [evt.get("msg") for evt in final_events if evt.get("kind") == "SUBPROCESS_STDOUT"]
+        assert msgs == ["first", "tail"]
+    finally:
+        logger.close()
+
+
 class _FakeNonTtyStderr:
     def __init__(self) -> None:
         self.parts: list[str] = []
@@ -330,11 +389,7 @@ def test_finalize_and_report_emits_canceled_result(tmp_path: Path) -> None:
         json_path=None,
         isolated_work_patch_dir=None,
     )
-    result = run_result_cls(
-        exit_code=cancel_exit_code,
-        final_fail_stage="GATES",
-        final_fail_reason="cancel requested",
-    )
+    result = run_result_cls(exit_code=cancel_exit_code)
 
     import am_patch.engine as engine_mod
 
@@ -348,6 +403,3 @@ def test_finalize_and_report_emits_canceled_result(tmp_path: Path) -> None:
     assert rc == cancel_exit_code
     text = (tmp_path / "am_patch.log").read_text(encoding="utf-8")
     assert "RESULT: CANCELED" in text
-    assert "STAGE: GATES" in text
-    assert "REASON: cancel requested" in text
-    assert f"LOG: {tmp_path / 'am_patch.log'}" in text

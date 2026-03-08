@@ -6,11 +6,14 @@ import signal
 import subprocess
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import TextIO
 
 _POLL_INTERVAL_S = 0.05
 _CANCEL_GRACE_S = 1.0
+
+StreamCallback = Callable[[str], None]
 
 
 @dataclass(frozen=True)
@@ -25,6 +28,8 @@ class CompletedManagedProcess:
 @dataclass
 class ManagedSubprocess:
     process: subprocess.Popen[str]
+    stdout_callback: StreamCallback | None = None
+    stderr_callback: StreamCallback | None = None
     _stdout_chunks: list[str] = field(default_factory=list)
     _stderr_chunks: list[str] = field(default_factory=list)
     _lock: threading.Lock = field(default_factory=threading.Lock)
@@ -35,12 +40,12 @@ class ManagedSubprocess:
     def __post_init__(self) -> None:
         self._stdout_thread = threading.Thread(
             target=_drain_stream,
-            args=(self.process.stdout, self._stdout_chunks),
+            args=(self.process.stdout, self._stdout_chunks, self.stdout_callback),
             daemon=True,
         )
         self._stderr_thread = threading.Thread(
             target=_drain_stream,
-            args=(self.process.stderr, self._stderr_chunks),
+            args=(self.process.stderr, self._stderr_chunks, self.stderr_callback),
             daemon=True,
         )
         self._stdout_thread.start()
@@ -53,6 +58,8 @@ class ManagedSubprocess:
         argv: list[str],
         cwd: str | None,
         env: dict[str, str] | None,
+        stdout_callback: StreamCallback | None = None,
+        stderr_callback: StreamCallback | None = None,
     ) -> ManagedSubprocess:
         process = subprocess.Popen(
             argv,
@@ -63,7 +70,11 @@ class ManagedSubprocess:
             stderr=subprocess.PIPE,
             start_new_session=(os.name == "posix"),
         )
-        return cls(process=process)
+        return cls(
+            process=process,
+            stdout_callback=stdout_callback,
+            stderr_callback=stderr_callback,
+        )
 
     def wait(self, *, timeout_s: int | None = None) -> CompletedManagedProcess:
         deadline = None
@@ -107,18 +118,43 @@ class ManagedSubprocess:
         return True
 
 
-def _drain_stream(stream: TextIO | None, chunks: list[str]) -> None:
+def _drain_stream(
+    stream: TextIO | None,
+    chunks: list[str],
+    callback: StreamCallback | None,
+) -> None:
     if stream is None:
         return
     try:
-        while True:
-            part = stream.read(4096)
-            if not part:
-                break
-            chunks.append(part)
+        if callback is None:
+            _drain_buffered_stream(stream, chunks)
+        else:
+            _drain_line_stream(stream, chunks, callback)
     finally:
         with contextlib.suppress(Exception):
             stream.close()
+
+
+def _drain_buffered_stream(stream: TextIO, chunks: list[str]) -> None:
+    while True:
+        part = stream.read(4096)
+        if not part:
+            return
+        chunks.append(part)
+
+
+def _drain_line_stream(
+    stream: TextIO,
+    chunks: list[str],
+    callback: StreamCallback,
+) -> None:
+    while True:
+        part = stream.readline()
+        if not part:
+            return
+        chunks.append(part)
+        with contextlib.suppress(Exception):
+            callback(part)
 
 
 def _terminate_process_tree(process: subprocess.Popen[str]) -> None:
