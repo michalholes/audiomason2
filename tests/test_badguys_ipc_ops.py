@@ -154,7 +154,7 @@ def test_record_ipc_stream_copies_result_artifact_before_source_disappears(
     assert not result_src.exists()
 
 
-def test_record_ipc_stream_reports_missing_result_artifact(
+def test_record_ipc_stream_falls_back_to_ipc_stream_when_result_artifact_is_missing(
     tmp_path: Path,
 ) -> None:
     from badguys.ipc_stream_recorder import record_ipc_stream
@@ -180,16 +180,20 @@ def test_record_ipc_stream_reports_missing_result_artifact(
     server = threading.Thread(target=_target, name="ipc_missing_result_server", daemon=True)
     server.start()
 
+    out_path = tmp_path / "runner.ipc.jsonl"
+    copied_path = tmp_path / "artifacts" / "runner.result.json"
+
     _, _, artifact_copy = record_ipc_stream(
         socket_path,
-        out_path=tmp_path / "runner.ipc.jsonl",
+        out_path=out_path,
         connect_timeout_s=3.0,
         total_timeout_s=3.0,
-        result_json_copy_path=tmp_path / "artifacts" / "runner.result.json",
+        result_json_copy_path=copied_path,
     )
     server.join(timeout=3.0)
 
-    assert artifact_copy == {
-        "ok": False,
-        "error": f"missing runner json_path: {missing_src}",
-    }
+    assert artifact_copy == {"ok": True, "error": None}
+    copied_text = copied_path.read_text(encoding="utf-8")
+    assert copied_text == out_path.read_text(encoding="utf-8")
+    copied_obj = json.loads(copied_text)
+    assert copied_obj["json_path"] == str(missing_src)

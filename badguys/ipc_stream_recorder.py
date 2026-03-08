@@ -53,6 +53,20 @@ def _result_artifact_copy_status(*, error: str | None) -> dict[str, Any]:
     return {"ok": error is None, "error": error}
 
 
+def _copy_ipc_stream_fallback(*, out_path: Path, dst_path: Path) -> str | None:
+    if not out_path.exists():
+        return f"missing ipc stream for runner json_path fallback: {out_path}"
+    dst_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        shutil.copy2(out_path, dst_path)
+    except OSError as exc:
+        return (
+            "copy runner json_path fallback failed: "
+            f"{out_path} -> {dst_path}: {exc}"
+        )
+    return None
+
+
 def _validate_result(obj: Any) -> dict[str, Any] | None:
     if not isinstance(obj, dict):
         return None
@@ -157,9 +171,10 @@ def record_ipc_stream(
     connected_at = time.monotonic()
 
     artifact_copy_error: str | None = None
+    result_json_missing = False
 
     def _handle_obj(obj: dict[str, Any]) -> None:
-        nonlocal artifact_copy_error, result
+        nonlocal artifact_copy_error, result, result_json_missing
         if obj.get("type") == "log":
             msg = obj.get("msg")
             if isinstance(msg, str):
@@ -174,6 +189,13 @@ def record_ipc_stream(
                         result_json_copy_path=result_json_copy_path,
                         runner_log_copy_path=runner_log_copy_path,
                     )
+                    if (
+                        artifact_copy_error is not None
+                        and result_json_copy_path is not None
+                        and isinstance(valid.get("json_path"), str)
+                        and artifact_copy_error.startswith("missing runner json_path: ")
+                    ):
+                        result_json_missing = True
         for plan in plans:
             if plan["matched_event"] is not None:
                 continue
@@ -288,6 +310,11 @@ def record_ipc_stream(
             pass
 
     _finalize_unresolved_plans(plans, code="EOF", message="ipc connection closed before reply")
+    if result_json_missing and artifact_copy_error is not None and result_json_copy_path is not None:
+        artifact_copy_error = _copy_ipc_stream_fallback(
+            out_path=out_path,
+            dst_path=result_json_copy_path,
+        )
     value_text = "\n".join(value_msgs)
     return result, value_text, _result_artifact_copy_status(error=artifact_copy_error)
 
