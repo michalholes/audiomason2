@@ -25,8 +25,10 @@ from .async_app_core import AsyncAppCore
 from .async_offload import to_thread
 from .job_events_live_source import stream_job_events_live_source
 from .route_diagnostics import handle_api_debug_diagnostics
+from .route_snapshot_events import handle_api_snapshot_events
 from .route_ui_snapshot import handle_api_ui_snapshot
 from .route_workspaces import handle_api_workspaces
+from .snapshot_change_broker import SnapshotChangeBroker
 from .sse_jsonl_stream import stream_job_events_sse
 
 UPLOAD_PATCH_FILE: Any = File(...)
@@ -68,7 +70,23 @@ def _head_json_response(status: int, *, etag: str = "") -> Response:
 def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
     app = FastAPI()
     core = AsyncAppCore(repo_root=repo_root, cfg=cfg)
+    snapshot_change_broker = SnapshotChangeBroker()
+    core.indexer.set_snapshot_change_callback(
+        lambda snap: snapshot_change_broker.publish(
+            {
+                "seq": int(getattr(snap, "seq", 0) or 0),
+                "sigs": {
+                    "jobs": str(snap.jobs_sig),
+                    "runs": str(snap.runs_sig),
+                    "workspaces": str(snap.workspaces_sig),
+                    "header": str(snap.header_sig),
+                    "snapshot": str(snap.snapshot_sig),
+                },
+            }
+        )
+    )
     app.state.core = core
+    app.state.snapshot_change_broker = snapshot_change_broker
 
     @app.on_event("startup")
     async def _startup() -> None:
@@ -76,6 +94,7 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
 
     @app.on_event("shutdown")
     async def _shutdown() -> None:
+        snapshot_change_broker.close()
         await core.shutdown()
 
     @app.get("/")
@@ -681,6 +700,10 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
     @app.head("/api/ui_snapshot")
     async def api_ui_snapshot_head(request: Request) -> Response:
         return await handle_api_ui_snapshot(core, request, head_only=True)
+
+    @app.get("/api/events")
+    async def api_snapshot_events() -> StreamingResponse:
+        return await handle_api_snapshot_events(core, snapshot_change_broker)
 
     @app.get("/api/jobs/{job_id}/events")
     async def api_jobs_events(job_id: str) -> StreamingResponse:

@@ -66,6 +66,10 @@ async function loadParts(rt) {
 		"/static/app_part_autofill_header.js",
 		"app_part_autofill_header",
 	);
+	await PH.loadScript(
+		"/static/app_part_snapshot_events.js",
+		"app_part_snapshot_events",
+	);
 	var okWire = await PH.loadScript(
 		"/static/app_part_wire_init.js",
 		"app_part_wire_init",

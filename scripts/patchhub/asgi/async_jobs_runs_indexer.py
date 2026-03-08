@@ -5,8 +5,9 @@ import json
 import os
 import re
 import stat as statlib
+from collections.abc import Callable
 from contextlib import suppress
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from hashlib import sha1
 from pathlib import Path
@@ -37,6 +38,7 @@ class IndexerSnapshot:
     workspaces_sig: str
     header_sig: str
     snapshot_sig: str
+    seq: int = 0
 
 
 def _utc_iso(ts: float) -> str:
@@ -176,6 +178,8 @@ class AsyncJobsRunsIndexer:
         self._ready = False
         self._last_err: str | None = None
         self._snap: IndexerSnapshot | None = None
+        self._snapshot_seq = 0
+        self._snapshot_change_callback: Callable[[IndexerSnapshot], None] | None = None
         self._mu = asyncio.Lock()
         self._success_zip_rel: str = ""
 
@@ -201,6 +205,15 @@ class AsyncJobsRunsIndexer:
 
     def ready(self) -> bool:
         return bool(self._ready) and self._snap is not None
+
+    def snapshot_seq(self) -> int:
+        return int(self._snapshot_seq)
+
+    def set_snapshot_change_callback(
+        self,
+        callback: Callable[[IndexerSnapshot], None] | None,
+    ) -> None:
+        self._snapshot_change_callback = callback
 
     def last_error(self) -> str | None:
         return self._last_err
@@ -366,9 +379,13 @@ class AsyncJobsRunsIndexer:
                     self._last_err = None
                     return
 
+            self._snapshot_seq += 1
+            snap = replace(snap, seq=self._snapshot_seq)
             self._snap = snap
             self._ready = True
             self._last_err = None
+            if self._snapshot_change_callback is not None:
+                self._snapshot_change_callback(snap)
         except Exception as e:
             self._ready = False
             self._last_err = f"indexer_failed:{reason}:{type(e).__name__}:{e}"

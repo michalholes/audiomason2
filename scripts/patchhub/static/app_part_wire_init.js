@@ -336,6 +336,9 @@ function init() {
 					patchStatTimer = null;
 				}
 				stopAutofillPolling();
+				if (typeof __ph_w.stopSnapshotEvents === "function") {
+					__ph_w.stopSnapshotEvents();
+				}
 				PH.call("closeLiveStream");
 			}
 
@@ -347,12 +350,23 @@ function init() {
 				refreshTimer = setInterval(() => {
 					try {
 						if (activeJobId) {
+							if (typeof __ph_w.stopSnapshotEvents === "function") {
+								__ph_w.stopSnapshotEvents();
+							}
 							refreshJobs({ mode: "periodic" });
 							if (workspacesVisible) {
 								refreshWorkspaces({ mode: "periodic" });
 							}
 						} else {
-							idleRefreshTick();
+							if (typeof __ph_w.ensureSnapshotEvents === "function") {
+								__ph_w.ensureSnapshotEvents();
+							}
+							if (
+								typeof __ph_w.snapshotEventsNeedPolling !== "function" ||
+								__ph_w.snapshotEventsNeedPolling()
+							) {
+								idleRefreshTick();
+							}
 						}
 						refreshTail(tailLines);
 					} catch (e) {
@@ -369,6 +383,13 @@ function init() {
 				}, 5000);
 
 				startAutofillPolling();
+				if (activeJobId) {
+					if (typeof __ph_w.stopSnapshotEvents === "function") {
+						__ph_w.stopSnapshotEvents();
+					}
+				} else if (typeof __ph_w.ensureSnapshotEvents === "function") {
+					__ph_w.ensureSnapshotEvents();
+				}
 			}
 
 			function resyncVisible() {
