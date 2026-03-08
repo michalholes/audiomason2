@@ -4,7 +4,6 @@ import asyncio
 import json
 import os
 import re
-import shutil
 import stat as statlib
 from contextlib import suppress
 from dataclasses import dataclass
@@ -22,7 +21,6 @@ from patchhub.models import (
     run_to_list_item_json,
     workspace_to_list_item_json,
 )
-from patchhub.proc_resources import snapshot as resources_snapshot
 from patchhub.workspace_inventory import list_workspaces
 
 from .async_offload import to_thread
@@ -56,6 +54,39 @@ def _etag_sig_jobs(*, disk_sig: tuple[int, int], mem: list[Any]) -> str:
         mem_parts.append("|".join([jid, st, isu, su, eu]))
     mem_sig = sha1("\n".join(mem_parts).encode("utf-8")).hexdigest()
     return f"jobs:d={disk_sig[0]}:{disk_sig[1]}:m={mem_sig}"
+
+
+def build_header_summary(
+    *,
+    core: Any,
+    queued: int,
+    running: int,
+    lock_held: bool,
+    base_runs: list[RunEntry],
+) -> dict[str, Any]:
+    stats = compute_stats(base_runs, core.cfg.indexing.stats_windows_days)
+    return {
+        "queue": {"queued": int(queued), "running": int(running)},
+        "lock": {
+            "path": str(Path(core.cfg.paths.patches_root) / "am_patch.lock"),
+            "held": bool(lock_held),
+        },
+        "runs": {"count": len(base_runs)},
+        "stats": {
+            "all_time": stats.all_time.__dict__,
+            "windows": [w.__dict__ for w in stats.windows],
+        },
+    }
+
+
+def build_header_sig(header_body: dict[str, Any]) -> str:
+    payload = json.dumps(
+        header_body,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=True,
+    ).encode("utf-8")
+    return "header:" + sha1(payload).hexdigest()
 
 
 def _latest_by_issue(
@@ -299,34 +330,14 @@ class AsyncJobsRunsIndexer:
             workspaces_sig, workspaces_raw = list_workspaces(self._core, mem_jobs=mem)
             workspaces_items = [workspace_to_list_item_json(it) for it in workspaces_raw]
 
-            stats = compute_stats(base_runs, self._core.cfg.indexing.stats_windows_days)
-            usage = shutil.disk_usage(str(self._core.patches_root))
-
-            header_body: dict[str, Any] = {
-                "queue": {"queued": queued, "running": running},
-                "lock": {
-                    "path": str(Path(self._core.cfg.paths.patches_root) / "am_patch.lock"),
-                    "held": bool(lock_held),
-                },
-                "disk": {
-                    "total": int(usage.total),
-                    "used": int(usage.used),
-                    "free": int(usage.free),
-                },
-                "resources": resources_snapshot(),
-                "runs": {"count": len(base_runs)},
-                "stats": {
-                    "all_time": stats.all_time.__dict__,
-                    "windows": [w.__dict__ for w in stats.windows],
-                },
-            }
-
-            header_sig = (
-                f"diag:q={queued}:{running}"
-                f":l={lock_held}"
-                f":r={base_sig[0]}:{base_sig[1]}:{base_sig[2]}"
-                f":c={canceled_sig[0]}:{canceled_sig[1]}"
+            header_body = build_header_summary(
+                core=self._core,
+                queued=queued,
+                running=running,
+                lock_held=bool(lock_held),
+                base_runs=base_runs,
             )
+            header_sig = build_header_sig(header_body)
             snapshot_sig = "|".join([jobs_sig, runs_sig, workspaces_sig, header_sig])
 
             return IndexerSnapshot(

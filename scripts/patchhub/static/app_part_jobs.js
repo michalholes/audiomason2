@@ -144,53 +144,59 @@ function refreshJobsIdle() {
 	});
 }
 
+function headerBaseLabel() {
+	if (cfg && cfg.server && cfg.server.host && cfg.server.port) {
+		return "server: " + cfg.server.host + ":" + cfg.server.port;
+	}
+	return "";
+}
+
+function applyOverviewSnapshot(r) {
+	if (!r || r.ok === false || r.unchanged) return false;
+	var sigs = r.sigs || {};
+	var snapSig = String(sigs.snapshot || "");
+	if (snapSig) idleSigs.snapshot = snapSig;
+
+	var js = String(sigs.jobs || "");
+	var rs = String(sigs.runs || "");
+	var ws = String(sigs.workspaces || "");
+	var hs = String(sigs.header || "");
+	if (js) idleSigs.jobs = js;
+	if (rs) idleSigs.runs = rs;
+	if (ws) idleSigs.workspaces = ws;
+	if (hs) idleSigs.hdr = hs;
+
+	var snap = r.snapshot || {};
+	renderJobsFromResponse({ ok: true, jobs: snap.jobs || [] });
+	__ph_w.renderRunsFromResponse({ ok: true, runs: snap.runs || [] });
+	__ph_w.renderWorkspacesFromResponse({
+		ok: true,
+		items: snap.workspaces || [],
+	});
+	renderHeaderFromSummary(snap.header || {}, headerBaseLabel());
+	return true;
+}
+
+function refreshOverviewSnapshot(opts) {
+	opts = opts || {};
+	var mode = String(opts.mode || "user");
+	var qs = "";
+	if (idleSigs.snapshot) {
+		qs = "?since_sig=" + encodeURIComponent(idleSigs.snapshot);
+	}
+	return apiGetETag("ui_snapshot", "/api/ui_snapshot" + qs, {
+		mode: mode,
+		single_flight: mode === "periodic",
+	}).then((r) => ({ changed: applyOverviewSnapshot(r) }));
+}
+
 function idleRefreshTick() {
 	if (document.hidden) return;
 	if (!idleNextDueMs) idleNextDueMs = 0;
 	if (Date.now() < idleNextDueMs) return;
 
-	var qs = "";
-	if (idleSigs.snapshot)
-		qs = "?since_sig=" + encodeURIComponent(idleSigs.snapshot);
-
-	apiGetETag("ui_snapshot", "/api/ui_snapshot" + qs, {
-		mode: "periodic",
-		single_flight: true,
-	})
-		.then((r) => {
-			if (!r || r.ok === false) return { changed: false };
-			if (r.unchanged) return { changed: false };
-
-			var sigs = r.sigs || {};
-			var snapSig = String(sigs.snapshot || "");
-			if (snapSig) idleSigs.snapshot = snapSig;
-
-			var js = String(sigs.jobs || "");
-			var rs = String(sigs.runs || "");
-			var ws = String(sigs.workspaces || "");
-			var hs = String(sigs.header || "");
-			if (js) idleSigs.jobs = js;
-			if (rs) idleSigs.runs = rs;
-			if (ws) idleSigs.workspaces = ws;
-			if (hs) idleSigs.hdr = hs;
-
-			var snap = r.snapshot || {};
-			renderJobsFromResponse({ ok: true, jobs: snap.jobs || [] });
-			__ph_w.renderRunsFromResponse({ ok: true, runs: snap.runs || [] });
-			__ph_w.renderWorkspacesFromResponse({
-				ok: true,
-				items: snap.workspaces || [],
-			});
-
-			var base = "";
-			if (cfg && cfg.server && cfg.server.host && cfg.server.port) {
-				base = "server: " + cfg.server.host + ":" + cfg.server.port;
-			}
-			renderHeaderFromDiagnostics(snap.header || {}, base);
-
-			return { changed: true };
-		})
-		.catch((e) => ({ changed: false }))
+	refreshOverviewSnapshot({ mode: "periodic" })
+		.catch((_) => ({ changed: false }))
 		.then((res) => {
 			var changed = !!(res && res.changed);
 			if (changed) {
@@ -271,3 +277,5 @@ function computeCanonicalPreview(mode, issueId, commitMsg, patchPath) {
 	argv.push(String(patchPath || ""));
 	return argv;
 }
+
+__ph_w.refreshOverviewSnapshot = refreshOverviewSnapshot;

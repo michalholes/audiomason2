@@ -12,7 +12,7 @@ sys.path.insert(0, str(_SCRIPTS))
 
 from patchhub.asgi.asgi_app import create_app
 from patchhub.asgi.async_app_core import AsyncAppCore
-from patchhub.asgi.async_jobs_runs_indexer import IndexerSnapshot
+from patchhub.asgi.async_jobs_runs_indexer import IndexerSnapshot, build_header_sig
 from patchhub.config import load_config
 
 
@@ -32,6 +32,27 @@ class _DummyIndexer:
 
 
 class TestPatchhubUiSnapshot(unittest.TestCase):
+    def test_header_sig_tracks_only_snapshot_header_payload(self) -> None:
+        header_a = {
+            "queue": {"queued": 1, "running": 0},
+            "lock": {"path": "patches/am_patch.lock", "held": False},
+            "runs": {"count": 7},
+            "stats": {"all_time": {"total": 7}, "windows": []},
+        }
+        header_b = {
+            "queue": {"queued": 1, "running": 0},
+            "lock": {"path": "patches/am_patch.lock", "held": False},
+            "runs": {"count": 8},
+            "stats": {"all_time": {"total": 8}, "windows": []},
+        }
+
+        sig_a = build_header_sig(header_a)
+        sig_a_repeat = build_header_sig(dict(header_a))
+        sig_b = build_header_sig(header_b)
+
+        self.assertEqual(sig_a, sig_a_repeat)
+        self.assertNotEqual(sig_a, sig_b)
+
     def test_ui_snapshot_includes_workspaces_payload_and_sig(self) -> None:
         try:
             from fastapi.testclient import TestClient
@@ -53,14 +74,19 @@ class TestPatchhubUiSnapshot(unittest.TestCase):
                 header_sig="header:s1",
                 snapshot_sig="snapshot:s1",
             )
-            with (
-                patch.object(AsyncAppCore, "startup", _noop_async),
-                patch.object(AsyncAppCore, "shutdown", _noop_async),
-            ):
-                app = create_app(repo_root=root, cfg=cfg)
-                app.state.core.indexer = _DummyIndexer(snap)
-                with TestClient(app) as client:
-                    resp = client.get("/api/ui_snapshot")
+            try:
+                with (
+                    patch.object(AsyncAppCore, "startup", _noop_async),
+                    patch.object(AsyncAppCore, "shutdown", _noop_async),
+                ):
+                    app = create_app(repo_root=root, cfg=cfg)
+                    app.state.core.indexer = _DummyIndexer(snap)
+                    with TestClient(app) as client:
+                        resp = client.get("/api/ui_snapshot")
+            except RuntimeError as exc:
+                if "python-multipart" in str(exc):
+                    self.skipTest(str(exc))
+                raise
             self.assertEqual(resp.status_code, 200)
             self.assertEqual(resp.headers.get("etag"), '"snapshot:s1"')
             body = resp.json()
@@ -89,17 +115,22 @@ class TestPatchhubUiSnapshot(unittest.TestCase):
                 header_sig="header:s2",
                 snapshot_sig="snapshot:s2",
             )
-            with (
-                patch.object(AsyncAppCore, "startup", _noop_async),
-                patch.object(AsyncAppCore, "shutdown", _noop_async),
-            ):
-                app = create_app(repo_root=root, cfg=cfg)
-                app.state.core.indexer = _DummyIndexer(snap)
-                with TestClient(app) as client:
-                    resp = client.get(
-                        "/api/ui_snapshot",
-                        headers={"If-None-Match": '"snapshot:s2"'},
-                    )
+            try:
+                with (
+                    patch.object(AsyncAppCore, "startup", _noop_async),
+                    patch.object(AsyncAppCore, "shutdown", _noop_async),
+                ):
+                    app = create_app(repo_root=root, cfg=cfg)
+                    app.state.core.indexer = _DummyIndexer(snap)
+                    with TestClient(app) as client:
+                        resp = client.get(
+                            "/api/ui_snapshot",
+                            headers={"If-None-Match": '"snapshot:s2"'},
+                        )
+            except RuntimeError as exc:
+                if "python-multipart" in str(exc):
+                    self.skipTest(str(exc))
+                raise
             self.assertEqual(resp.status_code, 304)
             self.assertEqual(resp.headers.get("etag"), '"snapshot:s2"')
             self.assertEqual(resp.text, "")

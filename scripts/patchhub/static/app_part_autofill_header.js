@@ -1,6 +1,8 @@
 /** @type {any} */
 var __ph_w = /** @type {any} */ (window);
 var PH = /** @type {any} */ (window).PH;
+var headerSummaryCache = {};
+var headerDiagnosticsCache = null;
 function applyAutofillFromPayload(p) {
 	if (!cfg || !cfg.autofill || !p) return;
 
@@ -104,38 +106,68 @@ function startAutofillPolling() {
 	pollLatestPatchOnce();
 }
 
-function renderHeaderFromDiagnostics(d, base) {
-	if (!d || d.ok === false) return;
-	var lock = d.lock || {};
-	var disk = d.disk || {};
-	var held = lock.held ? "LOCK:held" : "LOCK:free";
+function headerBaseMeta(base) {
+	var meta = String(base || "");
+	if (cfg && cfg.paths && cfg.paths.patches_root) {
+		meta += " | patches: " + cfg.paths.patches_root;
+	}
+	return meta;
+}
+
+function extractHeaderSummary(d) {
+	var src = d || {};
+	return {
+		queue: src.queue || {},
+		lock: src.lock || {},
+		runs: src.runs || {},
+		stats: src.stats || {},
+	};
+}
+
+function buildHeaderSummaryMeta(summary, base) {
+	var meta = headerBaseMeta(base);
+	var lock = (summary && summary.lock) || {};
+	meta += lock.held ? " | LOCK:held" : " | LOCK:free";
+
+	var queue = (summary && summary.queue) || {};
+	var q = Number(queue.queued || 0);
+	var r = Number(queue.running || 0);
+	if (!Number.isNaN(q) || !Number.isNaN(r)) {
+		meta += " | queue:" + String(q) + "/" + String(r);
+	}
+
+	var runs = (summary && summary.runs) || {};
+	var count = Number(runs.count || 0);
+	if (!Number.isNaN(count)) {
+		meta += " | runs:" + String(count);
+	}
+	return meta;
+}
+
+function appendTelemetryMeta(meta, d) {
+	var disk = (d && d.disk) || {};
 	var pct = "";
 	if (disk.total && disk.used) {
 		pct = "disk:" + String(Math.round((disk.used / disk.total) * 100)) + "%";
 	}
-
-	var meta = base;
-	if (cfg && cfg.paths && cfg.paths.patches_root) {
-		meta += " | patches: " + cfg.paths.patches_root;
-	}
-	meta += " | " + held;
 	if (pct) meta += " | " + pct;
-	var res = d.resources || {};
+
+	var res = (d && d.resources) || {};
 	var proc = res.process || {};
 	var host = res.host || {};
 	var rss = "";
+	var cpu = "";
+	var net = "";
+	var l1 = null;
+	var rx = null;
+	var tx = null;
 	if (proc.rss_bytes) {
 		rss = "rss:" + String(Math.round(proc.rss_bytes / 1048576)) + "MiB";
 	}
-	var cpu = "";
-	var l1 = 0;
 	if (host.loadavg_1 != null) {
 		l1 = Number(host.loadavg_1);
 		if (!Number.isNaN(l1)) cpu = "cpu:load" + l1.toFixed(2);
 	}
-	var net = "";
-	var rx = 0;
-	var tx = 0;
 	if (host.net_rx_bytes_total != null && host.net_tx_bytes_total != null) {
 		rx = Number(host.net_rx_bytes_total);
 		tx = Number(host.net_tx_bytes_total);
@@ -148,12 +180,30 @@ function renderHeaderFromDiagnostics(d, base) {
 				"MiB";
 		}
 	}
-
 	if (rss) meta += " | " + rss;
 	if (cpu) meta += " | " + cpu;
 	if (net) meta += " | " + net;
+	return meta;
+}
 
+function updateHeaderMeta(base) {
+	var meta = buildHeaderSummaryMeta(headerSummaryCache || {}, base);
+	if (headerDiagnosticsCache) {
+		meta = appendTelemetryMeta(meta, headerDiagnosticsCache);
+	}
 	if (el("hdrMeta")) el("hdrMeta").textContent = meta;
+}
+
+function renderHeaderFromSummary(summary, base) {
+	headerSummaryCache = extractHeaderSummary(summary);
+	updateHeaderMeta(base);
+}
+
+function renderHeaderFromDiagnostics(d, base) {
+	if (!d || d.ok === false) return;
+	headerSummaryCache = extractHeaderSummary(d);
+	headerDiagnosticsCache = d;
+	updateHeaderMeta(base);
 }
 
 function refreshHeader(opts) {

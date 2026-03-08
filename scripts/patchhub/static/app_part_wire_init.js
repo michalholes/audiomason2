@@ -262,13 +262,20 @@ function wireButtons() {
 	if (el("refreshAll")) {
 		el("refreshAll").addEventListener("click", () => {
 			refreshFs();
-			refreshWorkspaces({ mode: "user" });
-			refreshRuns();
 			PH.call("refreshStats");
-			refreshJobs();
-			refreshHeader();
-			renderIssueDetail();
-			validateAndPreview();
+			if (activeJobId) {
+				refreshWorkspaces({ mode: "user" });
+				refreshRuns({ mode: "user" });
+				refreshJobs({ mode: "user" });
+				refreshHeader({ mode: "user" });
+				renderIssueDetail();
+				validateAndPreview();
+				return;
+			}
+			__ph_w.refreshOverviewSnapshot({ mode: "user" }).finally(() => {
+				renderIssueDetail();
+				validateAndPreview();
+			});
 		});
 	}
 }
@@ -296,13 +303,15 @@ function init() {
 
 		loadConfig().then(() => {
 			refreshFs();
-			refreshRuns();
 			PH.call("refreshStats");
-			refreshJobs();
-			refreshTail(tailLines);
-			refreshHeader();
-			renderIssueDetail();
-			validateAndPreview();
+			__ph_w
+				.refreshOverviewSnapshot({ mode: "user" })
+				.catch((e) => setUiError(e))
+				.finally(() => {
+					refreshTail(tailLines);
+					renderIssueDetail();
+					validateAndPreview();
+				});
 
 			if (patchStatTimer) {
 				clearInterval(patchStatTimer);
@@ -364,16 +373,27 @@ function init() {
 
 			function resyncVisible() {
 				refreshFs();
-				if (workspacesVisible) {
-					refreshWorkspaces({ mode: "user" });
-				}
-				refreshRuns();
 				PH.call("refreshStats");
-				refreshJobs();
-				refreshTail(tailLines);
-				refreshHeader();
-				renderIssueDetail();
-				validateAndPreview();
+				if (activeJobId) {
+					if (workspacesVisible) {
+						refreshWorkspaces({ mode: "user" });
+					}
+					refreshRuns({ mode: "user" });
+					refreshJobs({ mode: "user" });
+					refreshTail(tailLines);
+					refreshHeader({ mode: "user" });
+					renderIssueDetail();
+					validateAndPreview();
+					return;
+				}
+				__ph_w
+					.refreshOverviewSnapshot({ mode: "user" })
+					.catch((e) => setUiError(e))
+					.finally(() => {
+						refreshTail(tailLines);
+						renderIssueDetail();
+						validateAndPreview();
+					});
 			}
 
 			document.addEventListener("visibilitychange", () => {

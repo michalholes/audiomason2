@@ -65,7 +65,9 @@ function renderRunsFromResponse(r) {
 	);
 }
 
-function refreshRuns() {
+function refreshRuns(opts) {
+	opts = opts || {};
+	var mode = String(opts.mode || "user");
 	var q = [];
 	var issue = String(el("runsIssue").value || "").trim();
 	var res = String(el("runsResult").value || "");
@@ -73,11 +75,17 @@ function refreshRuns() {
 	if (res) q.push(`result=${encodeURIComponent(res)}`);
 	q.push("limit=80");
 
-	apiGet(`/api/runs?${q.join("&")}`).then((r) => {
+	apiGetETag("runs_list", `/api/runs?${q.join("&")}`, {
+		mode: mode,
+		single_flight: mode === "periodic",
+	}).then((r) => {
 		if (!r || r.ok === false) {
 			setPre("runsList", r);
 			return;
 		}
+		if (r.unchanged) return;
+		var sig = String(r.sig || "");
+		if (sig) idleSigs.runs = sig;
 		renderRunsFromResponse(r);
 	});
 }
@@ -165,7 +173,7 @@ function parseProgressFromText(text) {
 
 	function ensureStep(name) {
 		if (!name) return;
-		if (!Object.prototype.hasOwnProperty.call(state, name)) {
+		if (!Object.hasOwn(state, name)) {
 			state[name] = "pending";
 		}
 		if (order.indexOf(name) < 0) order.push(name);
@@ -220,8 +228,7 @@ function parseProgressFromText(text) {
 
 	for (let k = 0; k < order.length; k++) {
 		const nm2 = order[k];
-		if (!Object.prototype.hasOwnProperty.call(state, nm2))
-			state[nm2] = "pending";
+		if (!Object.hasOwn(state, nm2)) state[nm2] = "pending";
 	}
 
 	return { order: order, state: state };
