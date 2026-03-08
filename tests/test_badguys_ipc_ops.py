@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import socket
 import threading
+import time
 from pathlib import Path
 
 from badguys.bdg_executor import execute_bdg_step
@@ -105,3 +106,90 @@ def test_send_ipc_command_returns_reply(tmp_path: Path) -> None:
     assert seen[0]["cmd"] == "ping"
     assert reply["ok"] is True
     assert reply["data"] == {"seen_cmd": "ping"}
+
+
+def test_record_ipc_stream_copies_result_artifact_before_source_disappears(
+    tmp_path: Path,
+) -> None:
+    from badguys.ipc_stream_recorder import record_ipc_stream
+
+    socket_path = tmp_path / "ipc.sock"
+    result_src = tmp_path / "result.jsonl"
+    result_src.write_text('{"ok":true}\n', encoding="utf-8")
+    copied_path = tmp_path / "artifacts" / "runner.result.json"
+
+    def _target() -> None:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as srv:
+            srv.bind(str(socket_path))
+            srv.listen(1)
+            conn, _ = srv.accept()
+            with conn:
+                fp = conn.makefile("rwb", buffering=0)
+                result = {
+                    "type": "result",
+                    "ok": True,
+                    "return_code": 0,
+                    "json_path": str(result_src),
+                }
+                fp.write((json.dumps(result) + "\n").encode("utf-8"))
+                time.sleep(0.05)
+                result_src.unlink()
+
+    server = threading.Thread(target=_target, name="ipc_result_copy_server", daemon=True)
+    server.start()
+
+    result, value_text, artifact_copy = record_ipc_stream(
+        socket_path,
+        out_path=tmp_path / "runner.ipc.jsonl",
+        connect_timeout_s=3.0,
+        total_timeout_s=3.0,
+        result_json_copy_path=copied_path,
+    )
+    server.join(timeout=3.0)
+
+    assert result == {"ok": True, "return_code": 0, "json_path": str(result_src)}
+    assert value_text == ""
+    assert artifact_copy == {"ok": True, "error": None}
+    assert copied_path.read_text(encoding="utf-8") == '{"ok":true}\n'
+    assert not result_src.exists()
+
+
+def test_record_ipc_stream_reports_missing_result_artifact(
+    tmp_path: Path,
+) -> None:
+    from badguys.ipc_stream_recorder import record_ipc_stream
+
+    socket_path = tmp_path / "ipc.sock"
+    missing_src = tmp_path / "missing.jsonl"
+
+    def _target() -> None:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as srv:
+            srv.bind(str(socket_path))
+            srv.listen(1)
+            conn, _ = srv.accept()
+            with conn:
+                fp = conn.makefile("rwb", buffering=0)
+                result = {
+                    "type": "result",
+                    "ok": True,
+                    "return_code": 0,
+                    "json_path": str(missing_src),
+                }
+                fp.write((json.dumps(result) + "\n").encode("utf-8"))
+
+    server = threading.Thread(target=_target, name="ipc_missing_result_server", daemon=True)
+    server.start()
+
+    _, _, artifact_copy = record_ipc_stream(
+        socket_path,
+        out_path=tmp_path / "runner.ipc.jsonl",
+        connect_timeout_s=3.0,
+        total_timeout_s=3.0,
+        result_json_copy_path=tmp_path / "artifacts" / "runner.result.json",
+    )
+    server.join(timeout=3.0)
+
+    assert artifact_copy == {
+        "ok": False,
+        "error": f"missing runner json_path: {missing_src}",
+    }

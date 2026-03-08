@@ -2,10 +2,55 @@ from __future__ import annotations
 
 import json
 import select
+import shutil
 import socket
 import time
 from pathlib import Path
 from typing import Any
+
+
+def _copy_result_artifact(
+    result: dict[str, Any],
+    *,
+    result_json_copy_path: Path | None,
+    runner_log_copy_path: Path | None,
+) -> str | None:
+    json_path = result.get("json_path")
+    if result_json_copy_path is not None and isinstance(json_path, str) and json_path:
+        err = _copy_result_artifact_path(
+            src_path=json_path,
+            dst_path=result_json_copy_path,
+            label="json_path",
+        )
+        if err is not None:
+            return err
+
+    log_path = result.get("log_path")
+    if runner_log_copy_path is not None and isinstance(log_path, str) and log_path:
+        err = _copy_result_artifact_path(
+            src_path=log_path,
+            dst_path=runner_log_copy_path,
+            label="log_path",
+        )
+        if err is not None:
+            return err
+    return None
+
+
+def _copy_result_artifact_path(*, src_path: str, dst_path: Path, label: str) -> str | None:
+    src = Path(src_path)
+    if not src.exists():
+        return f"missing runner {label}: {src}"
+    dst_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        shutil.copy2(src, dst_path)
+    except OSError as exc:
+        return f"copy runner {label} failed: {src} -> {dst_path}: {exc}"
+    return None
+
+
+def _result_artifact_copy_status(*, error: str | None) -> dict[str, Any]:
+    return {"ok": error is None, "error": error}
 
 
 def _validate_result(obj: Any) -> dict[str, Any] | None:
@@ -57,7 +102,9 @@ def record_ipc_stream(
     connect_timeout_s: float,
     total_timeout_s: float,
     command_plans: list[dict[str, Any]] | None = None,
-) -> tuple[dict[str, Any] | None, str]:
+    result_json_copy_path: Path | None = None,
+    runner_log_copy_path: Path | None = None,
+) -> tuple[dict[str, Any] | None, str, dict[str, Any]]:
     """Record the full runner IPC NDJSON stream and compute runner value_text.
 
     Optional command_plans are executed over the same IPC connection so that
@@ -83,7 +130,7 @@ def record_ipc_stream(
                 code="CONNECT_TIMEOUT",
                 message="ipc connect timeout",
             )
-            return None, ""
+            return None, "", _result_artifact_copy_status(error=None)
         connected = False
         for candidate in _iter_socket_candidates(socket_path):
             try:
@@ -109,8 +156,10 @@ def record_ipc_stream(
     plans = _prepare_command_plans(command_plans or [])
     connected_at = time.monotonic()
 
+    artifact_copy_error: str | None = None
+
     def _handle_obj(obj: dict[str, Any]) -> None:
-        nonlocal result
+        nonlocal artifact_copy_error, result
         if obj.get("type") == "log":
             msg = obj.get("msg")
             if isinstance(msg, str):
@@ -119,6 +168,12 @@ def record_ipc_stream(
             valid = _validate_result(obj)
             if valid is not None:
                 result = valid
+                if artifact_copy_error is None:
+                    artifact_copy_error = _copy_result_artifact(
+                        valid,
+                        result_json_copy_path=result_json_copy_path,
+                        runner_log_copy_path=runner_log_copy_path,
+                    )
         for plan in plans:
             if plan["matched_event"] is not None:
                 continue
@@ -141,7 +196,7 @@ def record_ipc_stream(
 
     if s is None:
         _finalize_unresolved_plans(plans, code="CONNECT_TIMEOUT", message="ipc connect timeout")
-        return None, ""
+        return None, "", _result_artifact_copy_status(error=None)
 
     try:
         s.setblocking(False)
@@ -234,7 +289,7 @@ def record_ipc_stream(
 
     _finalize_unresolved_plans(plans, code="EOF", message="ipc connection closed before reply")
     value_text = "\n".join(value_msgs)
-    return result, value_text
+    return result, value_text, _result_artifact_copy_status(error=artifact_copy_error)
 
 
 def _prepare_command_plans(raw_plans: list[dict[str, Any]]) -> list[dict[str, Any]]:

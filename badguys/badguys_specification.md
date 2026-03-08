@@ -410,6 +410,10 @@ Runner artifact copy rule:
   - if suite.copy_runner_log=true, BadGuys MAY copy it into logs_dir/<test_id>/ as:
     runner.log.txt
   - otherwise, BadGuys MUST NOT copy it.
+- The copy operation for json_path and log_path MUST occur eagerly when the valid IPC
+  type="result" event is received, not after the runner subprocess exits.
+- After eager copy succeeds, BadGuys MUST treat the copied artifact in logs_dir/<test_id>/ as
+  authoritative and MUST NOT require the original source path to remain present after runner exit.
 
 #### 7.3.1 Required AMP-facing observability primitives (normative)
 

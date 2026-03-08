@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import shutil
 import subprocess
 import sys
 import threading
@@ -205,15 +204,20 @@ def _exec_one(
                     }
                 )
 
-            res, value_text = record_ipc_stream(
+            res, value_text, artifact_copy = record_ipc_stream(
                 socket_path_holder["path"],
                 out_path=ipc_stream_path,
                 connect_timeout_s=3.0,
                 total_timeout_s=0.0,
                 command_plans=command_plans,
+                result_json_copy_path=artifacts_dir / "runner.result.json",
+                runner_log_copy_path=(
+                    artifacts_dir / "runner.log.txt" if copy_runner_log else None
+                ),
             )
             ipc_holder["result"] = res
             ipc_holder["value_text"] = value_text
+            ipc_holder["artifact_copy"] = artifact_copy
 
         heartbeat_enabled = console_verbosity in {"normal", "verbose", "debug"}
         started = time.monotonic()
@@ -303,19 +307,10 @@ def _exec_one(
             except Exception:
                 pass
 
-            json_path = ipc_result.get("json_path")
-            if isinstance(json_path, str) and json_path:
-                src = Path(json_path)
-                if not src.exists():
-                    raise SystemExit(f"FAIL: bdg: missing runner json_path: {src}")
-                shutil.copy2(src, artifacts_dir / "runner.result.json")
-
-            log_path = ipc_result.get("log_path")
-            if copy_runner_log and isinstance(log_path, str) and log_path:
-                src = Path(log_path)
-                if not src.exists():
-                    raise SystemExit(f"FAIL: bdg: missing runner log_path: {src}")
-                shutil.copy2(src, artifacts_dir / "runner.log.txt")
+            artifact_copy = ipc_holder.get("artifact_copy")
+            if isinstance(artifact_copy, dict) and not bool(artifact_copy.get("ok", False)):
+                error = str(artifact_copy.get("error") or "runner artifact copy failed")
+                raise SystemExit(f"FAIL: bdg: {error}")
 
         if write_subprocess_stdio:
             if stdout:
