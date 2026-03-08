@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import socket
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -27,6 +28,12 @@ class QueuedIpcCommand:
     event_arg_map: dict[str, str]
 
 
+@dataclass(frozen=True)
+class IpcPlanHandle:
+    plan: QueuedIpcCommand
+    request_path: Path
+    reply_path: Path
+    thread: threading.Thread
 
 
 def runner_socket_name(*, argv: list[str], issue_id: str) -> str:
@@ -126,6 +133,51 @@ def has_pending_ipc_plans(step_runner_cfg: dict[str, object]) -> bool:
     return isinstance(raw, list) and bool(raw)
 
 
+def start_ipc_plan_threads(
+    *,
+    plans: list[QueuedIpcCommand],
+    socket_path: Path,
+    ipc_stream_path: Path,
+    artifacts_dir: Path,
+) -> list[IpcPlanHandle]:
+    handles: list[IpcPlanHandle] = []
+    for plan in plans:
+        request_path = artifacts_dir / f"ipc_request.step{int(plan.step_index)}.json"
+        reply_path = artifacts_dir / f"ipc_reply.step{int(plan.step_index)}.json"
+        thread = threading.Thread(
+            target=_execute_plan,
+            args=(plan, socket_path, ipc_stream_path, request_path, reply_path),
+            name=f"badguys_ipc_step_{int(plan.step_index)}",
+            daemon=True,
+        )
+        thread.start()
+        handles.append(
+            IpcPlanHandle(
+                plan=plan,
+                request_path=request_path,
+                reply_path=reply_path,
+                thread=thread,
+            )
+        )
+    return handles
+
+
+def wait_for_ipc_plan_threads(*, handles: list[IpcPlanHandle], timeout_s: float) -> None:
+    deadline = time.monotonic() + max(0.0, float(timeout_s))
+    for handle in handles:
+        remaining = max(0.0, deadline - time.monotonic())
+        handle.thread.join(remaining)
+        if handle.thread.is_alive() and not handle.reply_path.exists():
+            _write_json(
+                handle.reply_path,
+                {
+                    "ok": False,
+                    "error": {
+                        "code": "TIMEOUT",
+                        "message": "ipc command thread did not finish",
+                    },
+                },
+            )
 
 
 def send_ipc_command(
@@ -229,6 +281,92 @@ def send_ipc_command(
             pass
 
 
+def _execute_plan(
+    plan: QueuedIpcCommand,
+    socket_path: Path,
+    ipc_stream_path: Path,
+    request_path: Path,
+    reply_path: Path,
+) -> None:
+    if plan.delay_s > 0:
+        time.sleep(plan.delay_s)
+
+    matched_event: dict[str, Any] | None = None
+    if plan.wait_event_type is not None or plan.wait_event_name is not None:
+        matched_event = _wait_for_stream_event(
+            ipc_stream_path=ipc_stream_path,
+            wait_timeout_s=plan.wait_timeout_s,
+            event_type=plan.wait_event_type,
+            event_name=plan.wait_event_name,
+        )
+        if matched_event is None:
+            _write_json(
+                reply_path,
+                {
+                    "ok": False,
+                    "error": {
+                        "code": "EVENT_TIMEOUT",
+                        "message": "ipc stream event not observed",
+                    },
+                },
+            )
+            return
+
+    args = dict(plan.args)
+    if matched_event is not None:
+        for arg_name, field_name in plan.event_arg_map.items():
+            args[arg_name] = matched_event.get(field_name)
+
+    request = {
+        "protocol": _PROTOCOL,
+        "type": "cmd",
+        "cmd": plan.cmd,
+        "cmd_id": plan.cmd_id,
+        "args": args,
+    }
+    _write_json(request_path, request)
+    reply = send_ipc_command(
+        socket_path=socket_path,
+        cmd=plan.cmd,
+        args=args,
+        cmd_id=plan.cmd_id,
+        connect_timeout_s=plan.connect_timeout_s,
+        reply_timeout_s=plan.reply_timeout_s,
+    )
+    _write_json(reply_path, reply)
+
+
+def _wait_for_stream_event(
+    *,
+    ipc_stream_path: Path,
+    wait_timeout_s: float,
+    event_type: str | None,
+    event_name: str | None,
+) -> dict[str, Any] | None:
+    deadline = time.monotonic() + max(0.0, float(wait_timeout_s))
+    offset = 0
+    while time.monotonic() < deadline:
+        if ipc_stream_path.exists():
+            with ipc_stream_path.open("r", encoding="utf-8") as fp:
+                fp.seek(offset)
+                while True:
+                    line = fp.readline()
+                    if not line:
+                        offset = fp.tell()
+                        break
+                    try:
+                        obj = json.loads(line)
+                    except Exception:
+                        continue
+                    if not isinstance(obj, dict):
+                        continue
+                    if event_type is not None and str(obj.get("type", "")) != event_type:
+                        continue
+                    if event_name is not None and str(obj.get("event", "")) != event_name:
+                        continue
+                    return obj
+        time.sleep(0.02)
+    return None
 
 
 def _as_timeout(value: object, *, label: str) -> float:

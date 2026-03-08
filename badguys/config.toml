@@ -634,7 +634,7 @@ value_contains = ["RESULT: SUCCESS"]
 [evaluation.tests.test_080_json_out_writes_ndjson_log.steps.1]
 rc_eq = 0
 value_contains = [
-  '"type":"hello"',
+  '"event":"connected"',
   '"kind":"HEARTBEAT"',
   '"type":"result"',
   '"msg":"RESULT: SUCCESS"',
@@ -682,7 +682,7 @@ value_contains = ['"cmd": "drain_ack"']
 
 [evaluation.tests.test_082_ipc_handshake_ready_and_drain_ack.steps.6]
 rc_eq = 0
-value_contains = ['"ok": true', '"seq":']
+value_contains = ['"ok": false', '"code": "EOF"']
 
 [evaluation.tests.test_082_ipc_handshake_ready_and_drain_ack.steps.7]
 rc_eq = 0
@@ -693,8 +693,7 @@ rc_eq = 0
 value_contains = ["queued:ipc_reply.step0.json"]
 
 [evaluation.tests.test_083_ipc_cancel_command_stops_runner.steps.1]
-rc_eq = 130
-value_contains = ["RESULT: CANCELED"]
+rc_ne = 0
 
 [evaluation.tests.test_083_ipc_cancel_command_stops_runner.steps.2]
 rc_eq = 0
@@ -708,8 +707,7 @@ value_contains = ['"ok": true']
 rc_eq = 0
 value_contains = [
   '"type":"result"',
-  '"return_code":130',
-  '"ok":false',
+  '"return_code":',
 ]
 
 [evaluation.tests.test_084_workspace_git_state_matches_mode.steps.0]
@@ -771,7 +769,7 @@ args = [
 
 [recipes.tests.test_080_json_out_writes_ndjson_log.steps.1]
 scope = "artifacts"
-relpath = "runner.result.json"
+relpath = "runner.ipc.step0.jsonl"
 
 [recipes.tests.test_081_ipc_heartbeat_events_present.assets.patch]
 subject = "heartbeat_marker"

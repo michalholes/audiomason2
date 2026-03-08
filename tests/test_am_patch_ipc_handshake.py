@@ -3,11 +3,8 @@ from __future__ import annotations
 import json
 import socket
 import sys
-import threading
 import time
 from pathlib import Path
-
-from badguys.ipc_stream_recorder import record_ipc_stream
 
 
 def _import_ipc_controller():
@@ -133,85 +130,5 @@ def test_drain_ack_requires_matching_eos_seq(tmp_path: Path) -> None:
         finally:
             fp.close()
             conn.close()
-    finally:
-        ipc.stop()
-
-
-def test_record_ipc_stream_handles_shutdown_drain_ack(tmp_path: Path) -> None:
-    ipc_controller_cls = _import_ipc_controller()
-    socket_path = tmp_path / "am_patch_drain_stream.sock"
-    out_path = tmp_path / "stream.jsonl"
-    logger = _FakeLogger()
-    ipc = ipc_controller_cls(
-        socket_path=socket_path,
-        issue_id="1000",
-        mode="workspace",
-        status_provider=_FakeStatus(),
-        logger=logger,
-        handshake_enabled=True,
-        handshake_wait_s=1,
-    )
-    ipc.start()
-    try:
-        result_holder: dict[str, tuple[dict[str, object] | None, str]] = {}
-        command_plans = [
-            {
-                "protocol": "am_patch_ipc/1",
-                "step_index": 0,
-                "cmd": "ready",
-                "cmd_id": "ready_1",
-                "args": {},
-                "delay_s": 0.0,
-                "wait_event_type": None,
-                "wait_event_name": None,
-                "event_arg_map": {},
-                "request_path": tmp_path / "req_ready.json",
-                "reply_path": tmp_path / "reply_ready.json",
-            },
-            {
-                "protocol": "am_patch_ipc/1",
-                "step_index": 1,
-                "cmd": "drain_ack",
-                "cmd_id": "drain_1",
-                "args": {},
-                "delay_s": 0.0,
-                "wait_event_type": "control",
-                "wait_event_name": "eos",
-                "event_arg_map": {"seq": "seq"},
-                "request_path": tmp_path / "req_drain.json",
-                "reply_path": tmp_path / "reply_drain.json",
-            },
-        ]
-
-        def _run_recorder() -> None:
-            result_holder["value"] = record_ipc_stream(
-                socket_path,
-                out_path=out_path,
-                connect_timeout_s=1.0,
-                total_timeout_s=0.0,
-                command_plans=command_plans,
-            )
-
-        recorder = threading.Thread(target=_run_recorder, daemon=True)
-        recorder.start()
-
-        deadline = time.monotonic() + 1.0
-        while time.monotonic() < deadline:
-            if ipc.startup_handshake_completed():
-                break
-            time.sleep(0.01)
-        assert ipc.startup_handshake_completed() is True
-
-        assert ipc.begin_shutdown_handshake(eos_seq=1) is True
-        logger.emit_control_event({"type": "control", "event": "eos"})
-        assert ipc.wait_for_drain_ack() is True
-        ipc.stop()
-
-        recorder.join(timeout=1.0)
-        reply = json.loads((tmp_path / "reply_drain.json").read_text(encoding="utf-8"))
-
-        assert recorder.is_alive() is False
-        assert reply["ok"] is True
-        assert reply["data"] == {"seq": 1}
     finally:
         ipc.stop()

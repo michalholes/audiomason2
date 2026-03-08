@@ -3,10 +3,9 @@ from __future__ import annotations
 import contextlib
 import json
 import os
-import select
 import socket
 import threading
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -83,27 +82,6 @@ def _render_template(tpl: str, *, issue_id: str | None, pid: int) -> str:
 
 
 @dataclass
-class _IpcClient:
-    conn: socket.socket
-    fp: Any
-    lock: threading.Lock = field(default_factory=threading.Lock)
-
-    def write_line(self, obj: dict[str, Any]) -> bool:
-        try:
-            with self.lock:
-                self.conn.sendall(_json_line(obj))
-            return True
-        except Exception:
-            return False
-
-    def close(self) -> None:
-        with contextlib.suppress(Exception):
-            self.fp.close()
-        with contextlib.suppress(Exception):
-            self.conn.close()
-
-
-@dataclass
 class IpcState:
     paused: bool = False
     cancel: bool = False
@@ -136,7 +114,7 @@ class IpcController:
         self._thread: threading.Thread | None = None
 
         self._clients_lock = threading.Lock()
-        self._clients: list[_IpcClient] = []
+        self._clients: list[Any] = []
 
         self._handshake_enabled = bool(handshake_enabled)
         self._handshake_wait_s = max(0, int(handshake_wait_s or 0))
@@ -208,8 +186,9 @@ class IpcController:
         with self._clients_lock:
             clients = list(self._clients)
             self._clients.clear()
-        for client in clients:
-            self._close_client(client)
+        for fp in clients:
+            with contextlib.suppress(Exception):
+                fp.close()
         _safe_unlink(self.socket_path)
 
     def snapshot(self) -> dict[str, Any]:
@@ -340,21 +319,18 @@ class IpcController:
         with contextlib.suppress(Exception):
             emit(payload)
 
-    def _write_client(self, client: _IpcClient, obj: dict[str, Any]) -> bool:
-        return client.write_line(obj)
-
-    def _close_client(self, client: _IpcClient) -> None:
-        client.close()
-
     def _on_log_event(self, evt: dict[str, Any]) -> None:
+        line = _json_line(evt)
         with self._clients_lock:
             clients = list(self._clients)
-        keep: list[_IpcClient] = []
-        for client in clients:
-            if self._write_client(client, evt):
-                keep.append(client)
-            else:
-                self._close_client(client)
+        keep: list[Any] = []
+        for fp in clients:
+            try:
+                fp.write(line)
+                keep.append(fp)
+            except Exception:
+                with contextlib.suppress(Exception):
+                    fp.close()
         with self._clients_lock:
             self._clients = keep
 
@@ -394,33 +370,20 @@ class IpcController:
             except Exception:
                 break
 
-            conn.settimeout(None)
-            client = _IpcClient(conn=conn, fp=conn.makefile("rwb", buffering=0))
-            fp = client.fp
+            conn.settimeout(1.0)
+            fp = conn.makefile("rwb", buffering=0)
             with self._clients_lock:
-                self._clients.append(client)
+                self._clients.append(fp)
 
             # A small deterministic marker for clients.
-            if not self._write_client(
-                client,
-                {"type": "control", "event": "connected", **self.snapshot()},
-            ):
-                self._close_client(client)
-                self._close_client(client)
-                with contextlib.suppress(Exception):
-                    conn.close()
-                continue
+            fp.write(_json_line({"type": "control", "event": "connected", **self.snapshot()}))
 
             try:
                 while not self._stop.is_set():
                     try:
-                        readable, _, _ = select.select([conn], [], [], 0.25)
-                    except Exception:
-                        break
-                    if not readable:
-                        continue
-                    try:
                         line = fp.readline()
+                    except TimeoutError:
+                        continue
                     except Exception:
                         break
                     if not line:
@@ -432,56 +395,61 @@ class IpcController:
                     try:
                         req = json.loads(raw.decode("utf-8", errors="strict"))
                     except Exception:
-                        self._write_client(
-                            client,
-                            self._reply_err(cmd_id="", code="BAD_JSON", message="bad json"),
+                        fp.write(
+                            _json_line(
+                                self._reply_err(cmd_id="", code="BAD_JSON", message="bad json")
+                            )
                         )
                         continue
 
                     if not isinstance(req, dict):
-                        self._write_client(
-                            client,
-                            self._reply_err(
-                                cmd_id="",
-                                code="VALIDATION_ERROR",
-                                message="request must be an object",
-                            ),
+                        fp.write(
+                            _json_line(
+                                self._reply_err(
+                                    cmd_id="",
+                                    code="VALIDATION_ERROR",
+                                    message="request must be an object",
+                                )
+                            )
                         )
                         continue
 
                     if "protocol" in req and str(req.get("protocol", "")) != PROTOCOL:
                         cmd_id = str(req.get("cmd_id", "") or "")
-                        self._write_client(
-                            client,
-                            self._reply_err(
-                                cmd_id=cmd_id,
-                                code="BAD_PROTOCOL",
-                                message="bad protocol",
-                            ),
+                        fp.write(
+                            _json_line(
+                                self._reply_err(
+                                    cmd_id=cmd_id,
+                                    code="BAD_PROTOCOL",
+                                    message="bad protocol",
+                                )
+                            )
                         )
                         continue
 
                     if str(req.get("type", "")) != "cmd":
                         cmd_id = str(req.get("cmd_id", "") or "")
-                        self._write_client(
-                            client,
-                            self._reply_err(
-                                cmd_id=cmd_id,
-                                code="VALIDATION_ERROR",
-                                message="missing type=cmd",
-                            ),
+                        fp.write(
+                            _json_line(
+                                self._reply_err(
+                                    cmd_id=cmd_id,
+                                    code="VALIDATION_ERROR",
+                                    message="missing type=cmd",
+                                )
+                            )
                         )
                         continue
 
                     cmd_id = str(req.get("cmd_id", "") or "").strip()
                     if not cmd_id:
-                        self._write_client(
-                            client,
-                            self._reply_err(
-                                cmd_id="",
-                                code="VALIDATION_ERROR",
-                                message="missing cmd_id",
-                            ),
+                        fp.write(
+                            _json_line(
+                                self._reply_err(
+                                    cmd_id="",
+                                    code="VALIDATION_ERROR",
+                                    message="missing cmd_id",
+                                )
+                            )
                         )
                         continue
 
@@ -490,62 +458,58 @@ class IpcController:
                     if args is None:
                         args = {}
                     if not isinstance(args, dict):
-                        self._write_client(
-                            client,
-                            self._reply_err(
-                                cmd_id=cmd_id,
-                                code="VALIDATION_ERROR",
-                                message="args must be an object",
-                            ),
+                        fp.write(
+                            _json_line(
+                                self._reply_err(
+                                    cmd_id=cmd_id,
+                                    code="VALIDATION_ERROR",
+                                    message="args must be an object",
+                                )
+                            )
                         )
                         continue
 
                     if cmd == "ping":
-                        self._write_client(
-                            client,
-                            self._reply_ok(cmd_id=cmd_id, data={"pong": True}),
-                        )
+                        fp.write(_json_line(self._reply_ok(cmd_id=cmd_id, data={"pong": True})))
                         continue
 
                     if cmd == "get_state":
-                        self._write_client(
-                            client,
-                            self._reply_ok(cmd_id=cmd_id, data=self.snapshot()),
-                        )
+                        fp.write(_json_line(self._reply_ok(cmd_id=cmd_id, data=self.snapshot())))
                         continue
 
                     if cmd == "cancel":
                         self.request_cancel()
-                        self._write_client(client, self._reply_ok(cmd_id=cmd_id))
+                        fp.write(_json_line(self._reply_ok(cmd_id=cmd_id)))
                         continue
 
                     if cmd == "stop_after_step":
                         step = args.get("step")
                         self.set_stop_after_step(str(step) if step is not None else None)
-                        self._write_client(client, self._reply_ok(cmd_id=cmd_id))
+                        fp.write(_json_line(self._reply_ok(cmd_id=cmd_id)))
                         continue
 
                     if cmd == "pause_after_step":
                         step = args.get("step")
                         self.set_pause_after_step(str(step) if step is not None else None)
-                        self._write_client(client, self._reply_ok(cmd_id=cmd_id))
+                        fp.write(_json_line(self._reply_ok(cmd_id=cmd_id)))
                         continue
 
                     if cmd == "resume":
                         with self._lock:
                             paused = self._state.paused
                         if not paused:
-                            self._write_client(
-                                client,
-                                self._reply_err(
-                                    cmd_id=cmd_id,
-                                    code="INVALID_STATE",
-                                    message="runner is not paused",
-                                ),
+                            fp.write(
+                                _json_line(
+                                    self._reply_err(
+                                        cmd_id=cmd_id,
+                                        code="INVALID_STATE",
+                                        message="runner is not paused",
+                                    )
+                                )
                             )
                             continue
                         self.request_resume()
-                        self._write_client(client, self._reply_ok(cmd_id=cmd_id))
+                        fp.write(_json_line(self._reply_ok(cmd_id=cmd_id)))
                         continue
 
                     if cmd == "set_verbosity":
@@ -555,27 +519,31 @@ class IpcController:
                             verbosity=(str(v) if v is not None else None),
                             log_level=(str(ll) if ll is not None else None),
                         )
-                        self._write_client(
-                            client,
-                            self._reply_ok(
-                                cmd_id=cmd_id,
-                                data={
-                                    "verbosity": getattr(self._logger, "screen_level", "verbose"),
-                                    "log_level": getattr(self._logger, "log_level", "verbose"),
-                                },
-                            ),
+                        fp.write(
+                            _json_line(
+                                self._reply_ok(
+                                    cmd_id=cmd_id,
+                                    data={
+                                        "verbosity": getattr(
+                                            self._logger, "screen_level", "verbose"
+                                        ),
+                                        "log_level": getattr(self._logger, "log_level", "verbose"),
+                                    },
+                                )
+                            )
                         )
                         continue
 
                     if cmd == "ready":
                         if not self._handshake_enabled:
-                            self._write_client(
-                                client,
-                                self._reply_err(
-                                    cmd_id=cmd_id,
-                                    code="INVALID_STATE",
-                                    message="startup handshake is disabled",
-                                ),
+                            fp.write(
+                                _json_line(
+                                    self._reply_err(
+                                        cmd_id=cmd_id,
+                                        code="INVALID_STATE",
+                                        message="startup handshake is disabled",
+                                    )
+                                )
                             )
                             continue
                         with self._lock:
@@ -584,100 +552,103 @@ class IpcController:
                                 self._startup_state = "completed"
                                 self._startup_ready.set()
                             elif state != "completed":
-                                self._write_client(
-                                    client,
-                                    self._reply_err(
-                                        cmd_id=cmd_id,
-                                        code="INVALID_STATE",
-                                        message="startup handshake is not active",
-                                    ),
+                                fp.write(
+                                    _json_line(
+                                        self._reply_err(
+                                            cmd_id=cmd_id,
+                                            code="INVALID_STATE",
+                                            message="startup handshake is not active",
+                                        )
+                                    )
                                 )
                             else:
-                                self._write_client(
-                                    client,
-                                    self._reply_ok(cmd_id=cmd_id, data={"ready": True}),
+                                fp.write(
+                                    _json_line(self._reply_ok(cmd_id=cmd_id, data={"ready": True}))
                                 )
                                 continue
                         if state == "pending":
-                            self._write_client(
-                                client,
-                                self._reply_ok(cmd_id=cmd_id, data={"ready": True}),
+                            fp.write(
+                                _json_line(self._reply_ok(cmd_id=cmd_id, data={"ready": True}))
                             )
                         continue
 
                     if cmd == "drain_ack":
                         raw_seq = args.get("seq")
                         if raw_seq is None:
-                            self._write_client(
-                                client,
-                                self._reply_err(
-                                    cmd_id=cmd_id,
-                                    code="VALIDATION_ERROR",
-                                    message="drain_ack seq must be an integer",
-                                ),
+                            fp.write(
+                                _json_line(
+                                    self._reply_err(
+                                        cmd_id=cmd_id,
+                                        code="VALIDATION_ERROR",
+                                        message="drain_ack seq must be an integer",
+                                    )
+                                )
                             )
                             continue
                         try:
                             ack_seq = int(raw_seq)
                         except Exception:
-                            self._write_client(
-                                client,
-                                self._reply_err(
-                                    cmd_id=cmd_id,
-                                    code="VALIDATION_ERROR",
-                                    message="drain_ack seq must be an integer",
-                                ),
+                            fp.write(
+                                _json_line(
+                                    self._reply_err(
+                                        cmd_id=cmd_id,
+                                        code="VALIDATION_ERROR",
+                                        message="drain_ack seq must be an integer",
+                                    )
+                                )
                             )
                             continue
                         with self._lock:
                             if self._startup_state != "completed":
-                                self._write_client(
-                                    client,
-                                    self._reply_err(
-                                        cmd_id=cmd_id,
-                                        code="INVALID_STATE",
-                                        message="startup handshake did not complete",
-                                    ),
+                                fp.write(
+                                    _json_line(
+                                        self._reply_err(
+                                            cmd_id=cmd_id,
+                                            code="INVALID_STATE",
+                                            message="startup handshake did not complete",
+                                        )
+                                    )
                                 )
                                 continue
                             expected = self._expected_drain_seq
                             if expected is None:
-                                self._write_client(
-                                    client,
-                                    self._reply_err(
-                                        cmd_id=cmd_id,
-                                        code="INVALID_STATE",
-                                        message="eos was not emitted",
-                                    ),
+                                fp.write(
+                                    _json_line(
+                                        self._reply_err(
+                                            cmd_id=cmd_id,
+                                            code="INVALID_STATE",
+                                            message="eos was not emitted",
+                                        )
+                                    )
                                 )
                                 continue
                             if ack_seq != expected:
-                                self._write_client(
-                                    client,
-                                    self._reply_err(
-                                        cmd_id=cmd_id,
-                                        code="VALIDATION_ERROR",
-                                        message=f"expected seq={expected}",
-                                    ),
+                                fp.write(
+                                    _json_line(
+                                        self._reply_err(
+                                            cmd_id=cmd_id,
+                                            code="VALIDATION_ERROR",
+                                            message=f"expected seq={expected}",
+                                        )
+                                    )
                                 )
                                 continue
                             self._drain_ack.set()
-                        self._write_client(
-                            client,
-                            self._reply_ok(cmd_id=cmd_id, data={"seq": ack_seq}),
-                        )
+                        fp.write(_json_line(self._reply_ok(cmd_id=cmd_id, data={"seq": ack_seq})))
                         continue
 
-                    self._write_client(
-                        client,
-                        self._reply_err(
-                            cmd_id=cmd_id,
-                            code="UNKNOWN_CMD",
-                            message="unknown cmd",
-                        ),
+                    fp.write(
+                        _json_line(
+                            self._reply_err(
+                                cmd_id=cmd_id,
+                                code="UNKNOWN_CMD",
+                                message="unknown cmd",
+                            )
+                        )
                     )
             finally:
-                self._close_client(client)
+                with contextlib.suppress(Exception):
+                    conn.close()
 
         with contextlib.suppress(Exception):
             srv.close()
