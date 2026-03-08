@@ -1,10 +1,9 @@
-# AM Patch Runner - Functional Specification v4 (UPDATED)
+# AM Patch Runner - Functional Specification v5 (UPDATED)
 
-This document reflects the **current, implemented behavior** of the AM
-Patch Runner after introduction of: - `-w` / `--finalize-workspace` -
-blessed gate outputs - workspace cleanup semantics parity
+This document is **authoritative** for the AM Patch Runner contract.
 
-This document is **authoritative** for current runner behavior.
+It defines the normative runner behavior, including rollback policy,
+even when implementation updates land in a later issue.
 
 ------------------------------------------------------------------------
 
@@ -941,20 +940,24 @@ union of: - live `changed_paths` snapshot before finalize gates, - live
 edits such as formatting), - live `changed_paths` snapshot at
 failure-zip creation time.
 
-## 1.2 Workspace rollback after failure
+## 1.2 Workspace rollback after patch failure
 
-Workspace rollback after a failed run is controlled by
+Workspace rollback after a patch-apply failure is controlled by
 `rollback_workspace_on_fail`.
 
 CLI: - `--rollback-workspace-on-fail {none-applied,always,never}`
 
 Config: - `rollback_workspace_on_fail = "none-applied"|"always"|"never"`
 
-Semantics on failure (`RESULT: FAIL`): - `none-applied`: rollback
-workspace only if 0 patches were applied successfully
-(`applied_ok == 0`) - `always`: rollback workspace on any failure
-(including partial apply) - `never`: never rollback workspace
-automatically
+Evaluation scope: - This policy is evaluated only when patch apply
+fails. - Non-patch failures after apply, including gates, audit, and
+promotion, MUST NOT trigger rollback automatically. - Such failures
+MUST preserve the failed workspace state for repair.
+
+Semantics on patch failure: - `none-applied`: rollback workspace only
+if 0 patches were applied successfully (`applied_ok == 0`) - `always`:
+rollback workspace on any patch failure (including partial apply) -
+`never`: never rollback workspace automatically
 
 The runner MUST log a single summary line stating whether rollback was
 executed or skipped, including the selected mode and `applied_ok`.
