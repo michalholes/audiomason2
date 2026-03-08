@@ -1,3 +1,10 @@
+## 2026-03-08T00:00:00+01:00
+
+-   Issue 115: implement the import DSL Phase II runtime for
+    `parallel.fork_join@1`, `flow.invoke@1`, `flow.loop@1`,
+    file-local libraries/macros, deterministic FlowModel projection, and
+    deterministic runtime trace ordering.
+
 ## 2026-03-07T00:00:07+01:00
 
 -   Issue 113: make the v3 import bootstrap default independent of CLI

@@ -143,3 +143,142 @@ def test_prompt_submit_without_writes_keeps_answers_and_inputs_empty(tmp_path: P
     assert out["answers"] == {}
     assert out["inputs"] == {}
     assert [entry["result"] for entry in out["trace"]] == ["OK", "OK"]
+
+
+PHASE2_FLOW = {
+    "version": 3,
+    "entry_step_id": "fork",
+    "macros": {
+        "fork_write": {
+            "params": ["target_path"],
+            "template": {
+                "to_path": {"param_ref": "target_path"},
+                "value": {"expr": "$.op.outputs.branch_order"},
+            },
+        }
+    },
+    "libraries": {
+        "left_flow": {
+            "entry_step_id": "left_set",
+            "params": [],
+            "nodes": [
+                {
+                    "step_id": "left_set",
+                    "op": {
+                        "primitive_id": "data.set",
+                        "primitive_version": 1,
+                        "inputs": {"value": "L"},
+                        "writes": [
+                            {
+                                "to_path": "$.state.vars.left.value",
+                                "value": {"expr": "$.op.outputs.value"},
+                            }
+                        ],
+                    },
+                },
+                {
+                    "step_id": "left_stop",
+                    "op": {
+                        "primitive_id": "ctrl.stop",
+                        "primitive_version": 1,
+                        "inputs": {},
+                        "writes": [],
+                    },
+                },
+            ],
+            "edges": [{"from": "left_set", "to": "left_stop"}],
+        }
+    },
+    "nodes": [
+        {
+            "step_id": "fork",
+            "op": {
+                "primitive_id": "parallel.fork_join",
+                "primitive_version": 1,
+                "inputs": {
+                    "branch_order": ["left"],
+                    "join_policy": "all",
+                    "merge_mode": "fail_on_conflict",
+                    "branches": {
+                        "left": {
+                            "target_library": "left_flow",
+                            "target_subflow": "left_flow",
+                            "param_bindings": [],
+                        }
+                    },
+                },
+                "writes": [
+                    {
+                        "macro_ref": "fork_write",
+                        "args": {"target_path": "$.state.vars.fork.order"},
+                    }
+                ],
+            },
+        },
+        {
+            "step_id": "invoke",
+            "op": {
+                "primitive_id": "flow.invoke",
+                "primitive_version": 1,
+                "inputs": {
+                    "target_library": "left_flow",
+                    "target_subflow": "left_flow",
+                    "param_bindings": [],
+                },
+                "writes": [],
+            },
+        },
+        {
+            "step_id": "loop",
+            "op": {
+                "primitive_id": "flow.loop",
+                "primitive_version": 1,
+                "inputs": {
+                    "iterable_expr": {"expr": "$.state.vars.items"},
+                    "item_var": "item",
+                    "max_iterations": 3,
+                },
+                "writes": [],
+            },
+        },
+        {
+            "step_id": "stop",
+            "op": {
+                "primitive_id": "ctrl.stop",
+                "primitive_version": 1,
+                "inputs": {},
+                "writes": [],
+            },
+        },
+    ],
+    "edges": [
+        {"from": "fork", "to": "invoke"},
+        {"from": "invoke", "to": "loop"},
+        {"from": "loop", "to": "stop"},
+    ],
+}
+
+
+def test_get_flow_model_v3_projects_phase2_capability_fields(tmp_path: Path) -> None:
+    engine = _make_engine(tmp_path)
+    fs = engine.get_file_service()
+    atomic_write_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_REL_PATH, PHASE2_FLOW)
+
+    flow_model = engine.get_flow_model()
+    steps = {step["step_id"]: step for step in flow_model["steps"]}
+
+    assert steps["fork"]["branch_order"] == ["left"]
+    assert steps["fork"]["join_policy"] == "all"
+    assert steps["fork"]["merge_mode"] == "fail_on_conflict"
+    assert list(steps["fork"]["branches"]) == ["left"]
+
+    assert steps["invoke"]["target_library"] == "left_flow"
+    assert steps["invoke"]["target_subflow"] == "left_flow"
+    assert steps["invoke"]["param_bindings"] == []
+
+    assert steps["loop"]["item_var"] == "item"
+    assert steps["loop"]["max_iterations"] == 3
+    assert steps["loop"]["iterable_expr"] == {"expr": "$.state.vars.items"}
+
+    assert flow_model["libraries"]["left_flow"]["entry_step_id"] == "left_set"
+    assert flow_model["libraries"]["left_flow"]["steps"][0]["step_id"] == "left_set"

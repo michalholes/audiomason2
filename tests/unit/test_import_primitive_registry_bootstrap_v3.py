@@ -35,6 +35,9 @@ BASELINE_IDS = {
     ("job.emit", 1),
     ("job.submit", 1),
     ("parallel.map", 1),
+    ("parallel.fork_join", 1),
+    ("flow.invoke", 1),
+    ("flow.loop", 1),
 }
 
 

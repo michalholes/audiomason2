@@ -7,7 +7,17 @@ from __future__ import annotations
 
 from typing import Any
 
-from . import control_v1, data_v1, io_v1, job_v1, parallel_v1, ui_v1
+from . import (
+    control_v1,
+    data_v1,
+    fork_join_v1,
+    io_v1,
+    job_v1,
+    loop_v1,
+    parallel_v1,
+    subflow_v1,
+    ui_v1,
+)
 
 _REGISTRY_ENTRIES: list[dict[str, Any]] = sorted(
     [
@@ -17,6 +27,9 @@ _REGISTRY_ENTRIES: list[dict[str, Any]] = sorted(
         *io_v1.REGISTRY_ENTRIES,
         *job_v1.REGISTRY_ENTRIES,
         *parallel_v1.REGISTRY_ENTRIES,
+        *fork_join_v1.REGISTRY_ENTRIES,
+        *subflow_v1.REGISTRY_ENTRIES,
+        *loop_v1.REGISTRY_ENTRIES,
     ],
     key=lambda item: (str(item.get("primitive_id") or ""), int(item.get("version") or 0)),
 )
@@ -41,6 +54,9 @@ NON_INTERACTIVE_IDS: set[str] = {
     "job.emit",
     "job.submit",
     "parallel.map",
+    "parallel.fork_join",
+    "flow.invoke",
+    "flow.loop",
 }
 
 

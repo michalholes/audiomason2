@@ -24,6 +24,13 @@ from ..primitives.ui_v1 import (
 )
 from .expr_eval import eval_expr_ref
 from .flowmodel_v3 import get_step
+from .subflow_runtime import (
+    execute_phase2_step,
+    guard_parallel_map_write_conflicts,
+    record_trace,
+    resolve_phase2_input_value,
+    runtime_input_context,
+)
 
 
 def _state_view(state: dict[str, Any]) -> dict[str, Any]:
@@ -79,21 +86,35 @@ def resolve_inputs(step: dict[str, Any], state: dict[str, Any]) -> dict[str, Any
     elif primitive_id == "ui.message" and primitive_version == 1:
         prompt_keys = set(PROMPT_METADATA_KEYS)
 
+    phase2 = (primitive_id, primitive_version) in {
+        ("parallel.fork_join", 1),
+        ("flow.invoke", 1),
+        ("flow.loop", 1),
+    }
+    current_inputs = runtime_input_context(state)
     out: dict[str, Any] = {}
     for key, value in raw_inputs.items():
         if key in prompt_keys:
+            continue
+        if phase2:
+            out[str(key)] = resolve_phase2_input_value(
+                value,
+                state=state,
+                inputs={**current_inputs, **out},
+                path=f"$.inputs.{key}",
+            )
             continue
         if isinstance(value, dict) and set(value.keys()) == {"expr"}:
             out[str(key)] = _resolve_expr(
                 value,
                 state=state,
-                inputs=out,
+                inputs={**current_inputs, **out},
                 op_outputs=None,
                 allow_op_outputs=False,
                 path=f"$.inputs.{key}",
             )
-        else:
-            out[str(key)] = value
+            continue
+        out[str(key)] = value
 
     if prompt_ui:
         try:
@@ -104,7 +125,7 @@ def resolve_inputs(step: dict[str, Any], state: dict[str, Any]) -> dict[str, Any
                 resolve_expr=lambda expr_ref, path, metadata: _resolve_expr(
                     expr_ref,
                     state=state,
-                    inputs={**out, **metadata},
+                    inputs={**current_inputs, **out, **metadata},
                     op_outputs=None,
                     allow_op_outputs=False,
                     path=path,
@@ -195,7 +216,7 @@ def _next_step_id(
             value = _resolve_expr(
                 cond,
                 state=state,
-                inputs={},
+                inputs=runtime_input_context(state),
                 op_outputs=None,
                 allow_op_outputs=False,
                 path="$.condition_expr",
@@ -203,53 +224,6 @@ def _next_step_id(
             if value is True:
                 return to
     return unconditional
-
-
-def _record_trace(
-    state: dict[str, Any],
-    *,
-    step_id: str,
-    primitive_id: str,
-    primitive_version: int,
-    result: str,
-    writes: list[str],
-) -> dict[str, Any]:
-    return append_trace_event(
-        state,
-        {
-            "step_id": step_id,
-            "primitive_id": primitive_id,
-            "primitive_version": primitive_version,
-            "result": result,
-            "writes": writes,
-        },
-    )
-
-
-def _guard_parallel_map_write_conflicts(
-    step: dict[str, Any],
-    inputs: dict[str, Any],
-) -> None:
-    primitive_id = str(step.get("primitive_id") or "")
-    primitive_version = int(step.get("primitive_version") or 0)
-    if primitive_id != "parallel.map" or primitive_version != 1:
-        return
-    if inputs.get("merge_mode", "fail_on_conflict") != "fail_on_conflict":
-        return
-    writes_any = step.get("writes")
-    if not isinstance(writes_any, list) or not writes_any:
-        return
-
-    write_counts: dict[str, int] = {}
-    for write_any in writes_any:
-        if not isinstance(write_any, dict):
-            continue
-        to_path = write_any.get("to_path")
-        if not isinstance(to_path, str) or not to_path:
-            continue
-        write_counts[to_path] = write_counts.get(to_path, 0) + 1
-        if write_counts[to_path] > 1:
-            raise FinalizeError("parallel_map_conflicting_writes")
 
 
 def _prompt_autofill_outputs(
@@ -310,13 +284,14 @@ def _advance_prompt_step(
         if isinstance(writes_any, list)
         else []
     )
-    state = _record_trace(
+    state = record_trace(
         state,
         step_id=step_id,
         primitive_id=primitive_id,
         primitive_version=primitive_version,
         result="OK",
         writes=writes,
+        append_trace=append_trace_event,
     )
     return state, next_step
 
@@ -356,17 +331,39 @@ def run_automatic_steps(
         if not is_non_interactive(primitive_id, primitive_version):
             raise FinalizeError("non_prompt_submit_payload_forbidden")
         inputs = resolve_inputs(step, state)
-        _guard_parallel_map_write_conflicts(step, inputs)
-        outputs, jobs = execute_non_prompt(
+        guard_parallel_map_write_conflicts(step, inputs)
+        writes_applied = False
+        phase2 = execute_phase2_step(
+            effective_model=effective_model,
+            state=state,
             session_id=session_id,
             step_id=current,
-            primitive_id=primitive_id,
-            primitive_version=primitive_version,
+            step=step,
             inputs=inputs,
-            state=state,
+            run_graph=(
+                lambda model, graph_state, graph_session_id: run_automatic_steps(
+                    effective_model=model,
+                    state=graph_state,
+                    session_id=graph_session_id,
+                )
+            ),
+            apply_writes=apply_writes,
+            append_trace=append_trace_event,
         )
+        if phase2 is None:
+            outputs, jobs = execute_non_prompt(
+                session_id=session_id,
+                step_id=current,
+                primitive_id=primitive_id,
+                primitive_version=primitive_version,
+                inputs=inputs,
+                state=state,
+            )
+        else:
+            state, outputs, jobs, writes_applied = phase2
         state["jobs"] = jobs
-        state = apply_writes(state=state, step=step, inputs=inputs, op_outputs=outputs)
+        if not writes_applied:
+            state = apply_writes(state=state, step=step, inputs=inputs, op_outputs=outputs)
         writes_any = step.get("writes")
         writes = (
             [str(item.get("to_path")) for item in writes_any if isinstance(item, dict)]
@@ -377,24 +374,26 @@ def run_automatic_steps(
             state["status"] = "completed"
             state["current_step_id"] = current
             sync_session_cursor(state, step_id=current)
-            return _record_trace(
+            return record_trace(
                 state,
                 step_id=current,
                 primitive_id=primitive_id,
                 primitive_version=primitive_version,
                 result="OK",
                 writes=writes,
+                append_trace=append_trace_event,
             )
         next_step = _next_step_id(effective_model, current, state)
         state["current_step_id"] = current if next_step is None else next_step
         sync_session_cursor(state, step_id=state["current_step_id"])
-        state = _record_trace(
+        state = record_trace(
             state,
             step_id=current,
             primitive_id=primitive_id,
             primitive_version=primitive_version,
             result="OK",
             writes=writes,
+            append_trace=append_trace_event,
         )
         if next_step is None:
             break
