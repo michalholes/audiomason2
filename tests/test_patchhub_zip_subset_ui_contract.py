@@ -23,3 +23,20 @@ def test_zip_subset_modal_is_hidden_by_css_specificity_rule() -> None:
     css = (REPO_ROOT / "scripts" / "patchhub" / "static" / "app.css").read_text(encoding="utf-8")
     assert ".modal-backdrop.hidden" in css
     assert "display: none;" in css
+
+
+def test_zip_subset_runtime_exports_match_queue_upload_calls() -> None:
+    subset_js = (
+        REPO_ROOT / "scripts" / "patchhub" / "static" / "app_part_zip_subset.js"
+    ).read_text(encoding="utf-8")
+    queue_js = (
+        REPO_ROOT / "scripts" / "patchhub" / "static" / "app_part_queue_upload.js"
+    ).read_text(encoding="utf-8")
+    for capability in [
+        "syncZipSubsetUiFromInputs",
+        "applyZipSubsetPreview",
+        "getZipSubsetValidationState",
+        "getZipSubsetEnqueuePayload",
+    ]:
+        assert capability in queue_js
+        assert capability in subset_js

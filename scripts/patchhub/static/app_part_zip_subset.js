@@ -395,11 +395,11 @@
 	var PH = w.PH;
 	if (PH && typeof PH.register === "function") {
 		PH.register("zip_subset", {
-			syncFromInputs,
-			enqueuePayload,
-			validationState,
-			applyPreview,
-			openModal,
+			syncZipSubsetUiFromInputs: syncFromInputs,
+			getZipSubsetEnqueuePayload: enqueuePayload,
+			getZipSubsetValidationState: validationState,
+			applyZipSubsetPreview: applyPreview,
+			openZipSubsetModal: openModal,
 		});
 	}
 	ui.syncZipSubsetUiFromInputs = syncFromInputs;
