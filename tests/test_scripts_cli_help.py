@@ -16,6 +16,7 @@ def _repo_root() -> Path:
     "rel_script, extra_env",
     [
         ("scripts/am_patch.py", {"AM_PATCH_VENV_BOOTSTRAPPED": "1"}),
+        ("scripts/check_patch_pm.py", {}),
         ("scripts/gov_versions.py", {}),
         ("scripts/sync_issues_archive.py", {}),
     ],
