@@ -53,6 +53,13 @@ def _open_client(socket_path: Path):
             time.sleep(0.05)
 
 
+def _read_control_event(fp, *, event: str) -> dict[str, object]:
+    while True:
+        msg = json.loads(fp.readline().decode("utf-8"))
+        if msg.get("type") == "control" and msg.get("event") == event:
+            return msg
+
+
 def _send_cmd(
     fp,
     *,
@@ -130,5 +137,73 @@ def test_drain_ack_requires_matching_eos_seq(tmp_path: Path) -> None:
         finally:
             fp.close()
             conn.close()
+    finally:
+        ipc.stop()
+
+
+def test_drain_ack_survives_idle_connection_on_same_socket(tmp_path: Path) -> None:
+    ipc_controller_cls = _import_ipc_controller()
+    socket_path = tmp_path / "am_patch_idle.sock"
+    ipc = ipc_controller_cls(
+        socket_path=socket_path,
+        issue_id="1000",
+        mode="workspace",
+        status_provider=_FakeStatus(),
+        logger=_FakeLogger(),
+        handshake_enabled=True,
+        handshake_wait_s=1,
+    )
+    ipc.start()
+    try:
+        conn, fp = _open_client(socket_path)
+        try:
+            ready_reply = _send_cmd(fp, cmd="ready", cmd_id="c1")
+            assert ready_reply["ok"] is True
+            assert ipc.wait_for_ready() is True
+
+            time.sleep(1.2)
+            assert ipc.begin_shutdown_handshake(eos_seq=7) is True
+            ipc._on_log_event({"seq": 7, "type": "control", "event": "eos"})
+
+            eos = _read_control_event(fp, event="eos")
+            assert eos["seq"] == 7
+
+            ok_reply = _send_cmd(fp, cmd="drain_ack", cmd_id="c2", args={"seq": 7})
+            assert ok_reply["ok"] is True
+            assert ipc.wait_for_drain_ack() is True
+        finally:
+            fp.close()
+            conn.close()
+    finally:
+        ipc.stop()
+
+
+def test_eof_removes_client_from_broadcast_list(tmp_path: Path) -> None:
+    ipc_controller_cls = _import_ipc_controller()
+    socket_path = tmp_path / "am_patch_cleanup.sock"
+    ipc = ipc_controller_cls(
+        socket_path=socket_path,
+        issue_id="1000",
+        mode="workspace",
+        status_provider=_FakeStatus(),
+        logger=_FakeLogger(),
+        handshake_enabled=True,
+        handshake_wait_s=1,
+    )
+    ipc.start()
+    try:
+        conn, fp = _open_client(socket_path)
+        fp.close()
+        conn.close()
+
+        deadline = time.monotonic() + 1.5
+        while time.monotonic() < deadline:
+            with ipc._clients_lock:
+                if not ipc._clients:
+                    break
+            time.sleep(0.05)
+
+        with ipc._clients_lock:
+            assert ipc._clients == []
     finally:
         ipc.stop()
