@@ -1,3 +1,9 @@
+## 2026-03-09T00:00:03+01:00
+
+-   Issue 126: audio_processor now exposes deterministic import conversion
+    planning for `.m4a`, `.m4b`, and `.opus` sources, with explicit loudnorm
+    and chapter-split ordering for Phase 2 runtime callers.
+
 ## 2026-03-09T00:00:02+01:00
 
 -   Issue 125: id3_tagger now exposes deterministic wipe-before-write and
