@@ -1065,3 +1065,7 @@
 -   spec: Bump specification version to 1.1.35.
 
 -   Issue 117: WizardDefinition draft reset now seeds from the active definition, stale draft shadowing is quarantined, and stale activate no longer downgrades active runtime.
+
+-   Issue 121: Import spec authority disambiguation now makes StepCatalog projection-only, separates WorkflowDefinition defaults from FlowConfig behavior overrides, and pins import precedence without dual authority.
+
+-   spec: Bump specification version to 2.0.12-normalized-m1.
