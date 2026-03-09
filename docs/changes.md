@@ -1069,3 +1069,5 @@
 -   Issue 121: Import spec authority disambiguation now makes StepCatalog projection-only, separates WorkflowDefinition defaults from FlowConfig behavior overrides, and pins import precedence without dual authority.
 
 -   spec: Bump specification version to 2.0.12-normalized-m1.
+
+-   Issue 122: metadata_openlibrary now provides deterministic author/title validation and lookup helpers for import Phase 1.

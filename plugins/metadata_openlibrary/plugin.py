@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
+import unicodedata
 from functools import partial
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -23,11 +25,6 @@ class OpenLibraryPlugin:
     DEFAULT_MAX_RESPONSE_BYTES = 2 * 1024 * 1024
 
     def __init__(self, config: dict | None = None) -> None:
-        """Initialize plugin.
-
-        Args:
-            config: Plugin configuration
-        """
         self.config = config or {}
 
         timeout = self.config.get("timeout_seconds", self.DEFAULT_TIMEOUT_SECONDS)
@@ -44,46 +41,158 @@ class OpenLibraryPlugin:
             self.max_response_bytes = self.DEFAULT_MAX_RESPONSE_BYTES
 
     async def fetch(self, query: dict[str, Any]) -> dict[str, Any]:
-        """Fetch metadata from OpenLibrary.
-
-        Args:
-            query: Query dict with keys:
-                - author: Book author
-                - title: Book title
-                - isbn: ISBN (optional)
-
-        Returns:
-            Dict with metadata
-        """
-        author = query.get("author", "")
-        title = query.get("title", "")
+        author = str(query.get("author") or "")
+        title = str(query.get("title") or "")
         isbn = query.get("isbn")
+        docs = await self._search_docs(author=author, title=title, isbn=isbn, limit=20)
+        if not docs:
+            raise MetadataError("No results found")
+        if isbn:
+            return self._extract_metadata(docs[0])
+        match = self._best_book_match(author=author, title=title, docs=docs)
+        if match is None:
+            raise MetadataError("No results found")
+        return self._extract_metadata(match[0])
 
-        if not author and not title and not isbn:
-            raise MetadataError("Need at least author, title, or ISBN")
+    async def validate_author(self, name: str) -> dict[str, Any]:
+        if not self._normalize_text(name):
+            raise MetadataError("Need author name")
+        docs = await self._search_docs(author=name, limit=20)
+        candidate = self._best_author_name(name=name, docs=docs)
+        if candidate is None:
+            return {"valid": False, "canonical": None, "suggestion": None}
+        if self._same_text(name, candidate):
+            return {"valid": True, "canonical": candidate, "suggestion": None}
+        return {"valid": False, "canonical": None, "suggestion": candidate}
 
-        # Build search query
-        params = []
+    async def validate_book(self, author: str, title: str) -> dict[str, Any]:
+        if not self._normalize_text(author) and not self._normalize_text(title):
+            raise MetadataError("Need author or title")
+        docs = await self._search_docs(author=author, title=title, limit=20)
+        match = self._best_book_match(author=author, title=title, docs=docs)
+        if match is None:
+            return {"valid": False, "canonical": None, "suggestion": None}
+        doc, author_name = match
+        canonical = {"author": author_name, "title": str(doc.get("title") or "")}
+        if self._same_text(author, canonical["author"]) and self._same_text(
+            title, canonical["title"]
+        ):
+            return {"valid": True, "canonical": canonical, "suggestion": None}
+        return {"valid": False, "canonical": None, "suggestion": canonical}
+
+    async def lookup_book(self, author: str, title: str) -> dict[str, Any]:
+        if not self._normalize_text(author) and not self._normalize_text(title):
+            raise MetadataError("Need author or title")
+        docs = await self._search_docs(author=author, title=title, limit=20)
+        match = self._best_book_match(author=author, title=title, docs=docs)
+        if match is None:
+            raise MetadataError("No results found")
+        return self._extract_metadata(match[0])
+
+    async def _search_docs(
+        self,
+        *,
+        author: str = "",
+        title: str = "",
+        isbn: str | None = None,
+        limit: int = 1,
+    ) -> list[dict[str, Any]]:
+        params: list[str] = []
         if author:
             params.append(f"author={quote_plus(author)}")
         if title:
             params.append(f"title={quote_plus(title)}")
         if isbn:
             params.append(f"isbn={isbn}")
+        if not params:
+            raise MetadataError("Need at least author, title, or ISBN")
+        data = await self._api_request(f"{self.SEARCH_URL}?{'&'.join(params)}&limit={limit}")
+        docs = data.get("docs")
+        return [doc for doc in docs if isinstance(doc, dict)] if isinstance(docs, list) else []
 
-        url = f"{self.SEARCH_URL}?{'&'.join(params)}&limit=1"
+    @staticmethod
+    def _normalize_text(text: str) -> str:
+        normalized = unicodedata.normalize("NFKD", text)
+        normalized = "".join(ch for ch in normalized if not unicodedata.combining(ch))
+        normalized = re.sub(r"[^a-z0-9]+", " ", normalized.casefold())
+        return " ".join(normalized.split())
 
-        # Fetch from API
-        data = await self._api_request(url)
+    def _same_text(self, left: str, right: str) -> bool:
+        return self._normalize_text(left) == self._normalize_text(right)
 
-        # Parse response
-        if not data or "docs" not in data or not data["docs"]:
-            raise MetadataError("No results found")
+    def _candidate_rank(self, query_norm: str, candidate: str) -> tuple[int, int, str, str]:
+        candidate_norm = self._normalize_text(candidate)
+        shared = len(set(query_norm.split()) & set(candidate_norm.split()))
+        return (self._match_rank(query_norm, candidate_norm), -shared, candidate_norm, candidate)
 
-        # Get first result
-        doc = data["docs"][0]
+    def _best_author_name(self, *, name: str, docs: list[dict[str, Any]]) -> str | None:
+        query_norm = self._normalize_text(name)
+        best: tuple[tuple[int, int, str, str], str] | None = None
+        for doc in docs:
+            raw_authors = doc.get("author_name")
+            if not isinstance(raw_authors, list):
+                continue
+            for raw_name in raw_authors:
+                candidate = str(raw_name or "").strip()
+                if not self._normalize_text(candidate):
+                    continue
+                rank = self._candidate_rank(query_norm, candidate)
+                if best is None or rank < best[0]:
+                    best = (rank, candidate)
+        return None if best is None else best[1]
 
-        # Extract metadata
+    def _best_book_match(
+        self,
+        *,
+        author: str,
+        title: str,
+        docs: list[dict[str, Any]],
+    ) -> tuple[dict[str, Any], str] | None:
+        author_norm = self._normalize_text(author)
+        title_norm = self._normalize_text(title)
+        best: tuple[tuple[Any, ...], dict[str, Any], str] | None = None
+        for doc in docs:
+            title_value = str(doc.get("title") or "").strip()
+            if not self._normalize_text(title_value):
+                continue
+            raw_authors = doc.get("author_name")
+            if not isinstance(raw_authors, list) or not raw_authors:
+                continue
+            authors = [str(raw_name or "").strip() for raw_name in raw_authors]
+            authors = [candidate for candidate in authors if self._normalize_text(candidate)]
+            if not authors:
+                continue
+            author_name = min(
+                authors,
+                key=lambda candidate: self._candidate_rank(author_norm, candidate),
+            )
+            title_rank = self._candidate_rank(title_norm, title_value)
+            author_rank = self._candidate_rank(author_norm, author_name)
+            rank = (
+                title_rank[0],
+                title_rank[1],
+                author_rank[0],
+                author_rank[1],
+                title_rank[2],
+                author_rank[2],
+                str(doc.get("key") or ""),
+            )
+            if best is None or rank < best[0]:
+                best = (rank, doc, author_name)
+        return None if best is None else (best[1], best[2])
+
+    @staticmethod
+    def _match_rank(query_norm: str, candidate_norm: str) -> int:
+        if not query_norm or query_norm == candidate_norm:
+            return 0
+        if candidate_norm.startswith(query_norm) or query_norm.startswith(candidate_norm):
+            return 1
+        if query_norm in candidate_norm or candidate_norm in query_norm:
+            return 2
+        return 3
+
+    @classmethod
+    def _extract_metadata(cls, doc: dict[str, Any]) -> dict[str, Any]:
         metadata = {
             "title": doc.get("title"),
             "subtitle": doc.get("subtitle"),
@@ -93,25 +202,13 @@ class OpenLibraryPlugin:
             "publisher": doc.get("publisher", [None])[0] if doc.get("publisher") else None,
             "isbn": doc.get("isbn", [None])[0] if doc.get("isbn") else None,
             "language": doc.get("language", [None])[0] if doc.get("language") else None,
-            "cover_url": self._get_cover_url(doc.get("cover_i")),
+            "cover_url": cls._get_cover_url(doc.get("cover_i")),
             "subjects": doc.get("subject", []),
             "ebook_access": doc.get("ebook_access"),
         }
-
-        # Remove None values
-        metadata = {k: v for k, v in metadata.items() if v is not None}
-
-        return metadata
+        return {key: value for key, value in metadata.items() if value is not None}
 
     async def _api_request(self, url: str) -> dict[str, Any]:
-        """Make API request.
-
-        Args:
-            url: Request URL
-
-        Returns:
-            API response dict
-        """
         return await asyncio.to_thread(
             partial(
                 self._http_get_json,
@@ -126,7 +223,6 @@ class OpenLibraryPlugin:
         *, url: str, timeout_seconds: float, max_response_bytes: int
     ) -> dict[str, Any]:
         req = Request(url, headers={"User-Agent": "AudioMason2/metadata_openlibrary"})
-
         try:
             with urlopen(req, timeout=timeout_seconds) as resp:
                 data = resp.read(max_response_bytes + 1)
@@ -138,26 +234,15 @@ class OpenLibraryPlugin:
             raise MetadataError("API request failed: timeout") from e
         except Exception as e:
             raise MetadataError(f"API request failed: {e}") from e
-
         if len(data) > max_response_bytes:
             raise MetadataError("API request failed: response too large")
-
         try:
             return json.loads(data.decode("utf-8"))
         except json.JSONDecodeError as e:
             raise MetadataError(f"Invalid API response: {e}") from e
 
-    def _get_cover_url(self, cover_id: int | None) -> str | None:
-        """Get cover URL from cover ID.
-
-        Args:
-            cover_id: OpenLibrary cover ID
-
-        Returns:
-            Cover URL or None
-        """
+    @classmethod
+    def _get_cover_url(cls, cover_id: int | None) -> str | None:
         if not cover_id:
             return None
-
-        # Return large cover
-        return f"{self.COVERS_URL}/{cover_id}-L.jpg"
+        return f"{cls.COVERS_URL}/{cover_id}-L.jpg"
