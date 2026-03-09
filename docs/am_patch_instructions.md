@@ -160,6 +160,7 @@ The chat MUST provide:
 1b. The downloadable .zip patch MUST include COMMIT_MESSAGE.txt at the zip root (see Commit message file).
 2.  A canonical invocation command in a code block.
 3.  The exact PATCH argument used in invocation.
+4.  A validator evidence block as defined in PM patch validator (HARD).
 
 Canonical invocation format (NO VARIANTS):
 
@@ -221,11 +222,40 @@ The runner remains the authority.
 
 ------------------------------------------------------------------------
 
+## PM patch validator (HARD)
+
+Before delivering any initial patch or repair patch, the chat MUST run:
+
+    python3 scripts/check_patch_pm.py ISSUE_ID "commit message" PATCH
+
+Rules:
+
+1.  Delivery is forbidden unless the validator exits with status 0 and
+    reports PASS.
+2.  The chat MUST include a validator evidence block containing:
+    - the exact command,
+    - the exact exit status,
+    - the full raw validator output without paraphrase or summarization.
+3.  The validator evidence block is mandatory for both initial patches
+    and repair patches.
+4.  PASS means only that machine-verifiable PM checks covered by the
+    validator passed.
+5.  Manual-only PM requirements remain mandatory even when the
+    validator reports PASS.
+6.  The chat MUST NOT claim "PM fully verified" unless manual-only PM
+    requirements are also independently evidenced.
+7.  The validator evidence block is additive. The runner remains the
+    authority for apply and runtime results.
+
+------------------------------------------------------------------------
+
 # REPAIR PATCH RULES (HARD)
 
 These rules apply when user provides .zip file with filename beginning with patched_issue{ISSUE}_.
 
 Repair patches MUST also include COMMIT_MESSAGE.txt and obey the same matching rule defined in Commit message file (HARD).
+
+Repair patches MUST also satisfy PM patch validator (HARD) before delivery.
 
 ## Authoritative overlay model
 
@@ -387,6 +417,7 @@ For repair patches, the chat MUST provide evidence of:
 
 1.  `git apply --check` success per file
 2.  `python -m compileall` success (at least modified files)
+3.  validator evidence as defined in PM patch validator (HARD)
 
 If evidence is not shown, the chat MUST NOT claim patch was tested.
 
