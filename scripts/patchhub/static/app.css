@@ -737,6 +737,10 @@ input::placeholder {
 	z-index: 2000;
 }
 
+.modal-backdrop.hidden {
+	display: none;
+}
+
 .modal-card {
 	width: min(960px, 100%);
 	max-height: calc(100vh - 48px);

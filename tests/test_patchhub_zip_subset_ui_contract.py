@@ -17,3 +17,9 @@ def test_main_ui_contains_zip_subset_and_progress_applied_hooks() -> None:
 def test_app_boot_sequence_loads_zip_subset_module() -> None:
     app_js = (REPO_ROOT / "scripts" / "patchhub" / "static" / "app.js").read_text(encoding="utf-8")
     assert "/static/app_part_zip_subset.js" in app_js
+
+
+def test_zip_subset_modal_is_hidden_by_css_specificity_rule() -> None:
+    css = (REPO_ROOT / "scripts" / "patchhub" / "static" / "app.css").read_text(encoding="utf-8")
+    assert ".modal-backdrop.hidden" in css
+    assert "display: none;" in css

@@ -6,29 +6,7 @@ from pathlib import Path
 from typing import Any
 
 _SUMMARY_STOP_RE = re.compile(r"^[A-Z][A-Z_ ]+:\s*")
-
-
-def _find_latest_artifact_rel(patches_root: Path, dir_name: str, contains: str) -> str | None:
-    base = patches_root / dir_name
-    if not base.exists() or not base.is_dir():
-        return None
-    best_name = None
-    best_mtime = -1.0
-    for item in base.iterdir():
-        if not item.is_file():
-            continue
-        if contains not in item.name:
-            continue
-        try:
-            st = item.stat()
-        except Exception:
-            continue
-        if st.st_mtime > best_mtime:
-            best_mtime = st.st_mtime
-            best_name = item.name
-    if not best_name:
-        return None
-    return str(Path(dir_name) / best_name)
+_ISSUE_DIFF_LINE_RE = re.compile(r"^issue_diff_zip=(.+)$")
 
 
 def _parse_diff_manifest(data: bytes) -> list[str]:
@@ -75,6 +53,53 @@ def _parse_final_summary_files(text: str) -> list[str]:
     return files
 
 
+def _parse_issue_diff_zip_from_log(text: str) -> str | None:
+    match_value: str | None = None
+    for raw in text.splitlines():
+        match = _ISSUE_DIFF_LINE_RE.match(raw.strip())
+        if not match:
+            continue
+        value = match.group(1).strip()
+        if value:
+            match_value = value
+    return match_value
+
+
+def _resolve_logged_diff_path(patches_root: Path, raw_path: str) -> Path | None:
+    raw = str(raw_path or "").strip()
+    if not raw:
+        return None
+
+    patches_real = patches_root.resolve()
+    candidates: list[Path] = []
+    p = Path(raw)
+    if p.is_absolute():
+        candidates.append(p)
+    else:
+        candidates.append((patches_root.parent / p).resolve())
+        candidates.append((patches_root / p).resolve())
+
+    for cand in candidates:
+        try:
+            cand_real = cand.resolve()
+            cand_real.relative_to(patches_real)
+        except Exception:
+            continue
+        if cand_real.exists() and cand_real.is_file():
+            return cand_real
+    return None
+
+
+def _read_diff_manifest(diff_path: Path) -> list[str]:
+    if not diff_path.exists() or not diff_path.is_file():
+        return []
+    try:
+        with zipfile.ZipFile(diff_path, "r") as zf:
+            return _parse_diff_manifest(zf.read("manifest.txt"))
+    except Exception:
+        return []
+
+
 def collect_job_applied_files(
     *,
     patches_root: Path,
@@ -84,28 +109,24 @@ def collect_job_applied_files(
     if str(getattr(job, "status", "")) != "success":
         return [], "non_success"
 
-    issue_id = str(getattr(job, "issue_id", "") or "")
-    if issue_id.isdigit():
-        diff_rel = _find_latest_artifact_rel(patches_root, "artifacts", f"issue_{issue_id}_diff")
-        if diff_rel:
-            diff_path = patches_root / diff_rel
-            if diff_path.exists() and diff_path.is_file():
-                try:
-                    with zipfile.ZipFile(diff_path, "r") as zf:
-                        files = _parse_diff_manifest(zf.read("manifest.txt"))
-                except Exception:
-                    files = []
-                if files:
-                    return files, "diff_manifest"
-
     log_path = jobs_root / str(getattr(job, "job_id", "")) / "runner.log"
+    log_text = ""
     if log_path.exists() and log_path.is_file():
         try:
-            text = log_path.read_text(encoding="utf-8", errors="replace")
+            log_text = log_path.read_text(encoding="utf-8", errors="replace")
         except Exception:
-            text = ""
-        files = _parse_final_summary_files(text)
-        if files:
-            return files, "final_summary"
+            log_text = ""
+
+    logged_diff = _parse_issue_diff_zip_from_log(log_text)
+    if logged_diff:
+        diff_path = _resolve_logged_diff_path(patches_root, logged_diff)
+        if diff_path is not None:
+            files = _read_diff_manifest(diff_path)
+            if files:
+                return files, "diff_manifest"
+
+    files = _parse_final_summary_files(log_text)
+    if files:
+        return files, "final_summary"
 
     return [], "unavailable"

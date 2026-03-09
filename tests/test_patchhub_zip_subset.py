@@ -226,17 +226,32 @@ def test_api_jobs_enqueue_rejects_raw_command_with_selected_patch_entries(tmp_pa
     assert "raw_command" in payload["error"]
 
 
-def test_collect_job_applied_files_prefers_diff_manifest(tmp_path: Path) -> None:
+def test_collect_job_applied_files_prefers_logged_job_diff_manifest(tmp_path: Path) -> None:
     patches_root = tmp_path / "patches"
     jobs_root = patches_root / "artifacts" / "web_jobs"
-    jobs_root.mkdir(parents=True, exist_ok=True)
-    diff_zip = patches_root / "artifacts" / "issue_506_diff_20260309_010203.zip"
-    diff_zip.parent.mkdir(parents=True, exist_ok=True)
-    with ZipFile(diff_zip, "w") as zf:
+    job_root = jobs_root / "j1"
+    job_root.mkdir(parents=True, exist_ok=True)
+    artifacts_root = patches_root / "artifacts"
+    artifacts_root.mkdir(parents=True, exist_ok=True)
+
+    exact_diff = artifacts_root / "issue_506_diff.zip"
+    with ZipFile(exact_diff, "w") as zf:
         zf.writestr(
             "manifest.txt",
-            "FILE scripts/patchhub/app_api_jobs.py\nFILE scripts/patchhub/models.py\n",
+            "FILE scripts/patchhub/app_api_jobs.py\n",
         )
+
+    newer_diff = artifacts_root / "issue_506_diff_v2.zip"
+    with ZipFile(newer_diff, "w") as zf:
+        zf.writestr(
+            "manifest.txt",
+            "FILE scripts/patchhub/models.py\n",
+        )
+
+    (job_root / "runner.log").write_text(
+        "issue_diff_zip=patches/artifacts/issue_506_diff.zip\n",
+        encoding="utf-8",
+    )
 
     job = type("Job", (), {"status": "success", "issue_id": "506", "job_id": "j1"})()
     files, source = collect_job_applied_files(
@@ -244,5 +259,5 @@ def test_collect_job_applied_files_prefers_diff_manifest(tmp_path: Path) -> None
         jobs_root=jobs_root,
         job=job,
     )
-    assert files == ["scripts/patchhub/app_api_jobs.py", "scripts/patchhub/models.py"]
+    assert files == ["scripts/patchhub/app_api_jobs.py"]
     assert source == "diff_manifest"
