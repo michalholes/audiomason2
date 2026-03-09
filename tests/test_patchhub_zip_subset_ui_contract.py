@@ -12,6 +12,12 @@ def test_main_ui_contains_zip_subset_and_progress_applied_hooks() -> None:
     assert 'id="zipSubsetStrip"' in html
     assert 'id="zipSubsetModal"' in html
     assert 'id="progressApplied"' in html
+    assert 'id="zipSubsetModalTitle"' in html
+    assert 'id="zipSubsetModalSubtitle"' in html
+    assert 'id="zipSubsetSelectionCount"' in html
+    assert ">patch<" in html
+    assert ">Repo path<" in html
+    assert 'id="zipSubsetApplyBtn"' not in html
 
 
 def test_app_boot_sequence_loads_zip_subset_module() -> None:
@@ -40,3 +46,13 @@ def test_zip_subset_runtime_exports_match_queue_upload_calls() -> None:
     ]:
         assert capability in queue_js
         assert capability in subset_js
+
+
+def test_zip_subset_modal_contract_matches_approved_layout_copy() -> None:
+    subset_js = (
+        REPO_ROOT / "scripts" / "patchhub" / "static" / "app_part_zip_subset.js"
+    ).read_text(encoding="utf-8")
+    assert "Select target files (" in subset_js
+    assert "Contents of " in subset_js
+    assert "All " in subset_js
+    assert " selected" in subset_js

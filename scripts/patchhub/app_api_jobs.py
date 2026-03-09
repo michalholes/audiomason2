@@ -461,7 +461,10 @@ def api_jobs_list(self) -> tuple[int, bytes]:
 
 
 def api_jobs_get(self, job_id: str) -> tuple[int, bytes]:
-    job = self.queue.get_job(job_id)
+    try:
+        job = _run_queue_get_sync(self.queue.get_job, job_id)
+    except Exception:
+        job = None
     if job is None:
         job = self._load_job_from_disk(job_id)
     if job is None:
@@ -496,6 +499,21 @@ def _run_queue_bool_sync(
         coro = cast("Coroutine[Any, Any, bool]", fn(job_id))
         return bool(asyncio.run(coro))
     raise RuntimeError("Legacy jobs API cannot run inside an active event loop")
+
+
+def _run_queue_get_sync(
+    fn: Callable[[str], JobRecord | Awaitable[JobRecord | None] | None],
+    job_id: str,
+) -> JobRecord | None:
+    result = fn(job_id)
+    if asyncio.iscoroutine(result):
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            coro = cast("Coroutine[Any, Any, JobRecord | None]", result)
+            return asyncio.run(coro)
+        raise RuntimeError("Legacy jobs API cannot run inside an active event loop")
+    return cast("JobRecord | None", result)
 
 
 def api_jobs_cancel(self, job_id: str) -> tuple[int, bytes]:

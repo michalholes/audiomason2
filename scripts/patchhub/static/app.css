@@ -742,7 +742,7 @@ input::placeholder {
 }
 
 .modal-card {
-	width: min(960px, 100%);
+	width: min(700px, 100%);
 	max-height: calc(100vh - 48px);
 	overflow: auto;
 	background: #141414;
@@ -752,10 +752,52 @@ input::placeholder {
 	box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
 }
 
-.zip-subset-list {
-	margin-top: 12px;
+.zip-subset-modal-head {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 16px;
+	margin-bottom: 10px;
+}
+
+.zip-subset-modal-title {
+	margin: 0;
+}
+
+.zip-subset-close {
+	border: 0;
+	background: transparent;
+	color: var(--fg);
+	font-size: 30px;
+	line-height: 1;
+	cursor: pointer;
+	padding: 0 4px;
+}
+
+.zip-subset-close:hover {
+	color: var(--accent);
+}
+
+.zip-subset-modal-tools {
+	margin-bottom: 12px;
+}
+
+.zip-subset-list-head {
+	display: grid;
+	grid-template-columns: 32px minmax(0, 1.5fr) minmax(0, 1fr);
+	gap: 12px;
+	align-items: center;
+	padding: 10px 12px;
 	border: 1px solid #2a2a2a;
-	border-radius: 8px;
+	border-bottom: 0;
+	border-radius: 8px 8px 0 0;
+	background: #0f214f;
+	font-weight: 700;
+}
+
+.zip-subset-list {
+	border: 1px solid #2a2a2a;
+	border-radius: 0 0 8px 8px;
 	background: #0b0b0b;
 	max-height: 420px;
 	overflow: auto;
@@ -763,7 +805,7 @@ input::placeholder {
 
 .zip-subset-item {
 	display: grid;
-	grid-template-columns: 32px minmax(0, 1fr) minmax(0, 1fr);
+	grid-template-columns: 32px minmax(0, 1.5fr) minmax(0, 1fr);
 	gap: 12px;
 	align-items: center;
 	padding: 10px 12px;
@@ -784,8 +826,20 @@ input::placeholder {
 	word-break: break-all;
 }
 
+.zip-subset-path {
+	color: #d8dfef;
+}
+
 .zip-subset-member {
 	color: #8ea0c9;
+}
+
+.zip-subset-modal-footer {
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+	gap: 12px;
+	margin-top: 12px;
 }
 
 .progress-applied {

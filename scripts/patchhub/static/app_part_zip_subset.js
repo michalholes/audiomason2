@@ -202,12 +202,16 @@
 	}
 
 	function renderModal() {
-		var summary = el("zipSubsetModalSummary");
+		var title = el("zipSubsetModalTitle");
+		var subtitle = el("zipSubsetModalSubtitle");
+		var summary = el("zipSubsetSelectionCount");
 		var list = el("zipSubsetModalList");
-		var applyBtn = el("zipSubsetApplyBtn");
-		if (!summary || !list || !applyBtn) return;
+		if (!title || !subtitle || !summary || !list) return;
 
 		var manifest = state.manifest || {};
+		var total = selectableCount();
+		var selected = selectedEntries().length;
+		var baseName = currentPatchPath().split("/").pop() || "patch.zip";
 		ensureSelectionDefaults();
 		var rows = manifestEntries()
 			.map((item) => {
@@ -223,20 +227,24 @@
 					(checked ? 'checked="checked" ' : "") +
 					(disabled ? 'disabled="disabled" ' : "") +
 					"/>" +
-					'<span class="zip-subset-path">' +
-					escapeHtml(repo || name) +
-					"</span>" +
 					'<span class="zip-subset-member">' +
 					escapeHtml(name) +
+					"</span>" +
+					'<span class="zip-subset-path">' +
+					escapeHtml(repo || name) +
 					"</span>" +
 					"</label>"
 				);
 			})
 			.join("");
 
+		title.textContent = "Select target files (" + String(total) + ")";
+		subtitle.textContent = "Contents of " + baseName;
+		summary.textContent =
+			selected === total
+				? "All " + String(total) + " selected"
+				: "Selected " + String(selected) + " / " + String(total);
 		list.innerHTML = rows || '<div class="muted">(no patch entries)</div>';
-		summary.textContent = selectionStatusText() || "Using uploaded zip";
-		applyBtn.disabled = selectableCount() > 0 && selectedEntries().length === 0;
 	}
 
 	function openModal() {
@@ -362,11 +370,6 @@
 				renderStrip();
 				if (typeof validateAndPreview === "function") validateAndPreview();
 				return;
-			}
-			if (t.id === "zipSubsetApplyBtn") {
-				closeModal();
-				renderStrip();
-				if (typeof validateAndPreview === "function") validateAndPreview();
 			}
 		});
 
