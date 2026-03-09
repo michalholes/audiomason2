@@ -154,6 +154,77 @@ def test_record_ipc_stream_copies_result_artifact_before_source_disappears(
     assert not result_src.exists()
 
 
+def test_record_ipc_stream_falls_back_to_ipc_stream_when_result_artifact_disappears_during_copy(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    from badguys import ipc_stream_recorder
+
+    socket_path = tmp_path / "ipc.sock"
+    result_src = tmp_path / "result.jsonl"
+    result_src.write_text('{"ok":true}\n', encoding="utf-8")
+    out_path = tmp_path / "runner.ipc.jsonl"
+    copied_path = tmp_path / "artifacts" / "runner.result.json"
+
+    real_copy2 = ipc_stream_recorder.shutil.copy2
+    copy_attempted = {"value": False}
+
+    def _copy2_with_missing_source(src, dst, *args, **kwargs):
+        src_path = Path(src)
+        if src_path == result_src and not copy_attempted["value"]:
+            copy_attempted["value"] = True
+            src_path.unlink()
+            raise FileNotFoundError(2, "No such file or directory", str(src_path))
+        return real_copy2(src, dst, *args, **kwargs)
+
+    monkeypatch.setattr(
+        ipc_stream_recorder.shutil,
+        "copy2",
+        _copy2_with_missing_source,
+    )
+
+    def _target() -> None:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as srv:
+            srv.bind(str(socket_path))
+            srv.listen(1)
+            conn, _ = srv.accept()
+            with conn:
+                fp = conn.makefile("rwb", buffering=0)
+                result = {
+                    "type": "result",
+                    "ok": True,
+                    "return_code": 0,
+                    "json_path": str(result_src),
+                }
+                fp.write((json.dumps(result) + "\n").encode("utf-8"))
+
+    server = threading.Thread(
+        target=_target,
+        name="ipc_result_copy_disappears_server",
+        daemon=True,
+    )
+    server.start()
+
+    result, value_text, artifact_copy = ipc_stream_recorder.record_ipc_stream(
+        socket_path,
+        out_path=out_path,
+        connect_timeout_s=3.0,
+        total_timeout_s=3.0,
+        result_json_copy_path=copied_path,
+    )
+    server.join(timeout=3.0)
+
+    assert copy_attempted["value"] is True
+    assert result == {"ok": True, "return_code": 0, "json_path": str(result_src)}
+    assert value_text == ""
+    assert artifact_copy == {"ok": True, "error": None}
+    copied_text = copied_path.read_text(encoding="utf-8")
+    assert copied_text == out_path.read_text(encoding="utf-8")
+    copied_obj = json.loads(copied_text)
+    assert copied_obj["json_path"] == str(result_src)
+    assert not result_src.exists()
+
+
 def test_record_ipc_stream_falls_back_to_ipc_stream_when_result_artifact_is_missing(
     tmp_path: Path,
 ) -> None:

@@ -14,39 +14,49 @@ def _copy_result_artifact(
     *,
     result_json_copy_path: Path | None,
     runner_log_copy_path: Path | None,
-) -> str | None:
+) -> tuple[str | None, bool]:
+    result_json_missing = False
+
     json_path = result.get("json_path")
     if result_json_copy_path is not None and isinstance(json_path, str) and json_path:
-        err = _copy_result_artifact_path(
+        err, missing_source = _copy_result_artifact_path(
             src_path=json_path,
             dst_path=result_json_copy_path,
             label="json_path",
         )
+        result_json_missing = missing_source
         if err is not None:
-            return err
+            return err, result_json_missing
 
     log_path = result.get("log_path")
     if runner_log_copy_path is not None and isinstance(log_path, str) and log_path:
-        err = _copy_result_artifact_path(
+        err, _ = _copy_result_artifact_path(
             src_path=log_path,
             dst_path=runner_log_copy_path,
             label="log_path",
         )
         if err is not None:
-            return err
-    return None
+            return err, result_json_missing
+    return None, result_json_missing
 
 
-def _copy_result_artifact_path(*, src_path: str, dst_path: Path, label: str) -> str | None:
+def _copy_result_artifact_path(
+    *,
+    src_path: str,
+    dst_path: Path,
+    label: str,
+) -> tuple[str | None, bool]:
     src = Path(src_path)
     if not src.exists():
-        return f"missing runner {label}: {src}"
+        return f"missing runner {label}: {src}", True
     dst_path.parent.mkdir(parents=True, exist_ok=True)
     try:
         shutil.copy2(src, dst_path)
+    except FileNotFoundError:
+        return f"missing runner {label}: {src}", True
     except OSError as exc:
-        return f"copy runner {label} failed: {src} -> {dst_path}: {exc}"
-    return None
+        return f"copy runner {label} failed: {src} -> {dst_path}: {exc}", False
+    return None, False
 
 
 def _result_artifact_copy_status(*, error: str | None) -> dict[str, Any]:
@@ -184,18 +194,11 @@ def record_ipc_stream(
             if valid is not None:
                 result = valid
                 if artifact_copy_error is None:
-                    artifact_copy_error = _copy_result_artifact(
+                    artifact_copy_error, result_json_missing = _copy_result_artifact(
                         valid,
                         result_json_copy_path=result_json_copy_path,
                         runner_log_copy_path=runner_log_copy_path,
                     )
-                    if (
-                        artifact_copy_error is not None
-                        and result_json_copy_path is not None
-                        and isinstance(valid.get("json_path"), str)
-                        and artifact_copy_error.startswith("missing runner json_path: ")
-                    ):
-                        result_json_missing = True
         for plan in plans:
             if plan["matched_event"] is not None:
                 continue
@@ -310,7 +313,11 @@ def record_ipc_stream(
             pass
 
     _finalize_unresolved_plans(plans, code="EOF", message="ipc connection closed before reply")
-    if result_json_missing and artifact_copy_error is not None and result_json_copy_path is not None:
+    if (
+        result_json_missing
+        and artifact_copy_error is not None
+        and result_json_copy_path is not None
+    ):
         artifact_copy_error = _copy_ipc_stream_fallback(
             out_path=out_path,
             dst_path=result_json_copy_path,
