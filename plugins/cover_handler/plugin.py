@@ -13,6 +13,7 @@ from __future__ import annotations
 import asyncio
 import shutil
 from pathlib import Path
+from typing import Any
 from urllib.parse import urlparse
 
 from audiomason.core import CoverChoice, ProcessingContext
@@ -20,6 +21,21 @@ from audiomason.core.errors import CoverError
 from audiomason.core.logging import get_logger
 
 logger = get_logger(__name__)
+
+_FILE_COVER_NAMES = (
+    "cover.jpg",
+    "cover.jpeg",
+    "cover.png",
+    "cover.webp",
+    "folder.jpg",
+    "folder.jpeg",
+    "folder.png",
+    "front.jpg",
+    "front.png",
+)
+
+_GENERIC_COVER_SUFFIXES = (".jpg", ".jpeg", ".png", ".webp")
+_EMBEDDED_SUFFIXES = {".mp3", ".m4a", ".m4b"}
 
 
 class CoverHandlerPlugin:
@@ -50,17 +66,35 @@ class CoverHandlerPlugin:
         cover_path: Path | None = None
 
         try:
+            candidates = self.discover_cover_candidates(
+                context.source.parent,
+                audio_file=context.source,
+            )
+
             if context.cover_choice == CoverChoice.EMBEDDED:
-                cover_path = await self.extract_embedded_cover(context.source)
+                candidate = next(
+                    (item for item in candidates if item.get("kind") == "embedded"),
+                    None,
+                )
+                if candidate is not None:
+                    cover_path = await self.apply_cover_candidate(candidate)
 
             elif context.cover_choice == CoverChoice.FILE:
-                cover_path = self.find_file_cover(context.source.parent)
+                candidate = next(
+                    (item for item in candidates if item.get("kind") == "file"),
+                    None,
+                )
+                if candidate is not None:
+                    file_output_dir = context.stage_dir if context.stage_dir is not None else None
+                    cover_path = await self.apply_cover_candidate(
+                        candidate,
+                        output_dir=file_output_dir,
+                    )
 
             elif context.cover_choice == CoverChoice.URL and context.cover_url:
                 cover_path = await self.download_cover(context.cover_url, context.stage_dir)
 
             if cover_path and cover_path.exists():
-                # Convert to JPEG if needed
                 cover_path = await self.convert_to_jpeg(cover_path)
                 context.cover_path = cover_path
                 context.add_warning(f"Cover: {cover_path.name}")
@@ -72,62 +106,139 @@ class CoverHandlerPlugin:
 
         return context
 
-    async def extract_embedded_cover(self, audio_file: Path) -> Path | None:
-        """Extract embedded cover from audio file.
+    def discover_cover_candidates(
+        self,
+        directory: Path,
+        *,
+        audio_file: Path | None = None,
+    ) -> list[dict[str, str]]:
+        """Return canonical cover candidates for a source directory."""
+        if not directory.exists() or not directory.is_dir():
+            return []
 
-        Args:
-            audio_file: Audio file (MP3 or M4A)
+        candidates: list[dict[str, str]] = []
+        seen: set[str] = set()
 
-        Returns:
-            Path to extracted cover or None
-        """
-        output = audio_file.parent / "cover_extracted.jpg"
+        for name in _FILE_COVER_NAMES:
+            candidate = directory / name
+            if candidate.exists() and candidate.is_file():
+                path_text = str(candidate)
+                seen.add(path_text)
+                candidates.append(
+                    {
+                        "kind": "file",
+                        "candidate_id": f"file:{candidate.name.lower()}",
+                        "apply_mode": "copy",
+                        "path": path_text,
+                    }
+                )
 
-        # Try MP3 first
-        if audio_file.suffix.lower() == ".mp3":
-            cmd = [
-                "ffmpeg",
-                "-hide_banner",
-                "-nostdin",
-                "-loglevel",
-                "error",
-                "-y",
-                "-i",
-                str(audio_file),
-                "-an",  # No audio
-                "-c:v",
-                "copy",
-                str(output),
-            ]
-        else:
-            # M4A and others
-            cmd = [
-                "ffmpeg",
-                "-hide_banner",
-                "-nostdin",
-                "-loglevel",
-                "error",
-                "-y",
-                "-i",
-                str(audio_file),
-                "-an",
-                str(output),
-            ]
-
-        try:
-            proc = await asyncio.create_subprocess_exec(
-                *cmd,
-                stdout=asyncio.subprocess.PIPE,
-                stderr=asyncio.subprocess.PIPE,
+        generic_candidates = sorted(
+            candidate
+            for candidate in directory.iterdir()
+            if candidate.is_file()
+            and candidate.suffix.lower() in _GENERIC_COVER_SUFFIXES
+            and str(candidate) not in seen
+        )
+        for candidate in generic_candidates:
+            candidates.append(
+                {
+                    "kind": "file",
+                    "candidate_id": f"file:{candidate.name.lower()}",
+                    "apply_mode": "copy",
+                    "path": str(candidate),
+                }
             )
 
-            await proc.communicate()
+        if audio_file is not None and audio_file.suffix.lower() in _EMBEDDED_SUFFIXES:
+            candidates.append(
+                {
+                    "kind": "embedded",
+                    "candidate_id": f"embedded:{audio_file.name}",
+                    "apply_mode": "extract_embedded",
+                    "path": str(audio_file),
+                }
+            )
 
-            if proc.returncode == 0 and output.exists() and output.stat().st_size > 0:
-                return output
+        return candidates
 
-        except Exception:
-            pass
+    async def apply_cover_candidate(
+        self,
+        candidate: dict[str, Any],
+        *,
+        output_dir: Path | None = None,
+    ) -> Path | None:
+        """Materialize a discovered candidate through its declared apply mode."""
+        mode = str(candidate.get("apply_mode") or "")
+        source_path = Path(str(candidate.get("path") or ""))
+
+        if not source_path.exists():
+            return None
+
+        if mode == "copy":
+            if output_dir is None:
+                return source_path
+
+            output_dir.mkdir(parents=True, exist_ok=True)
+            copied_path = output_dir / source_path.name
+            await asyncio.to_thread(shutil.copy2, source_path, copied_path)
+            return copied_path
+
+        if mode == "extract_embedded":
+            return await self.extract_embedded_cover(source_path)
+
+        raise CoverError(f"Unsupported apply_mode: {mode}")
+
+    def build_embedded_extract_commands(
+        self,
+        audio_file: Path,
+        output: Path,
+    ) -> list[list[str]]:
+        """Return deterministic ffmpeg command candidates for embedded extraction."""
+        base = [
+            "ffmpeg",
+            "-hide_banner",
+            "-nostdin",
+            "-loglevel",
+            "error",
+            "-y",
+            "-i",
+            str(audio_file),
+            "-an",
+        ]
+
+        suffix = audio_file.suffix.lower()
+        if suffix == ".mp3":
+            return [base + ["-c:v", "copy", str(output)]]
+
+        if suffix in {".m4a", ".m4b"}:
+            return [
+                base + ["-map", "0:v:0", "-c:v", "copy", str(output)],
+                base + ["-map", "0:v:0", "-frames:v", "1", str(output)],
+            ]
+
+        return [base + ["-frames:v", "1", str(output)]]
+
+    async def extract_embedded_cover(self, audio_file: Path) -> Path | None:
+        """Extract embedded cover from audio file."""
+        output = audio_file.parent / "cover_extracted.jpg"
+
+        for cmd in self.build_embedded_extract_commands(audio_file, output):
+            try:
+                if output.exists():
+                    output.unlink()
+
+                proc = await asyncio.create_subprocess_exec(
+                    *cmd,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                await proc.communicate()
+
+                if proc.returncode == 0 and output.exists() and output.stat().st_size > 0:
+                    return output
+            except Exception:
+                continue
 
         if output.exists():
             output.unlink()
@@ -135,42 +246,10 @@ class CoverHandlerPlugin:
         return None
 
     def find_file_cover(self, directory: Path) -> Path | None:
-        """Find cover file in directory.
-
-        Looks for: cover.jpg, cover.png, folder.jpg, etc.
-
-        Args:
-            directory: Directory to search
-
-        Returns:
-            Cover file path or None
-        """
-        if not directory.exists() or not directory.is_dir():
-            return None
-
-        cover_names = [
-            "cover.jpg",
-            "cover.jpeg",
-            "cover.png",
-            "cover.webp",
-            "folder.jpg",
-            "folder.jpeg",
-            "folder.png",
-            "front.jpg",
-            "front.png",
-        ]
-
-        for name in cover_names:
-            candidate = directory / name
-            if candidate.exists() and candidate.is_file():
-                return candidate
-
-        # Try any jpg/png in directory
-        for ext in [".jpg", ".jpeg", ".png"]:
-            candidates = list(directory.glob(f"*{ext}"))
-            if candidates:
-                return candidates[0]
-
+        """Find the first deterministic file-cover candidate in a directory."""
+        for candidate in self.discover_cover_candidates(directory):
+            if candidate.get("kind") == "file":
+                return Path(str(candidate.get("path") or ""))
         return None
 
     async def download_cover(self, url: str, output_dir: Path | None = None) -> Path | None:

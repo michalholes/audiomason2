@@ -177,8 +177,6 @@
 
 ## 2026-02-26T00:00:00+01:00
 
--   Issue 124: file_io now provides deterministic import runtime stage/publish/cleanup surfaces over root + relative_path references.
-
 - Issue 267: Import UI Flow Editor - row click selects step, drag handle grip for reorder, and per-row actions reduced to trash only.
 - Issue 268: Flow Editor - eliminate remaining deficiencies: migrate WizardDefinition v1 to v2 (graph),
   enforce v2 at runtime and editor API, and fix deterministic icon/CSS wiring.
@@ -1073,3 +1071,5 @@
 -   spec: Bump specification version to 2.0.12-normalized-m1.
 
 -   Issue 122: metadata_openlibrary now provides deterministic author/title validation and lookup helpers for import Phase 1.
+
+-   Issue 123: cover_handler now exposes deterministic cover candidate discovery and apply surfaces for import Phase 1.
