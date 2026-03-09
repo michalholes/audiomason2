@@ -6,7 +6,7 @@ future web interface.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -18,3 +18,12 @@ class ProcessRequest:
     contexts: list[ProcessingContext]
     pipeline_path: Path
     plugin_loader: Any
+
+
+@dataclass(frozen=True)
+class ProcessContractRequest:
+    contract_id: str
+    plugin_name: str
+    entrypoint_name: str
+    plugin_loader: Any
+    job_meta: dict[str, str] = field(default_factory=dict)

@@ -32,9 +32,10 @@ from audiomason.core.logging import (
     set_log_sink,
     set_verbosity,
 )
-from audiomason.core.orchestration_models import ProcessRequest
+from audiomason.core.orchestration_models import ProcessContractRequest, ProcessRequest
 from audiomason.core.phase import PhaseContractError, PhaseGuard
 from audiomason.core.pipeline import PipelineExecutor
+from audiomason.core.process_job_contracts import resolve_process_job_contract
 
 
 def _utcnow_iso() -> str:
@@ -189,6 +190,35 @@ class Orchestrator:
             raise RuntimeError("job is not pending")
 
         if job.type == JobType.PROCESS:
+            contract = resolve_process_job_contract(job.meta)
+            if contract is not None:
+                job.transition(JobState.RUNNING)
+                job.started_at = _utcnow_iso()
+                job.meta["verbosity_override"] = str(int(verbosity))
+                self._jobs.store.save_job(job)
+                request = ProcessContractRequest(
+                    contract_id=contract.contract_id,
+                    plugin_name=contract.plugin_name,
+                    entrypoint_name=contract.entrypoint_name,
+                    plugin_loader=plugin_loader,
+                    job_meta=dict(job.meta),
+                )
+
+                prev_sink = get_log_sink()
+                set_log_sink(lambda line: self._jobs.append_log_line(job.job_id, line))
+                try:
+                    _LOGGER.info("started")
+                finally:
+                    set_log_sink(prev_sink)
+
+                try:
+                    loop = asyncio.get_running_loop()
+                except RuntimeError:
+                    _run_coro_sync(self._run_process_contract_job(job.job_id, request))
+                else:
+                    loop.create_task(self._run_process_contract_job(job.job_id, request))
+                return
+
             pipeline_path = job.meta.get("pipeline_path")
             sources_json = job.meta.get("sources_json", "[]")
             if not isinstance(pipeline_path, str) or not pipeline_path:
@@ -245,6 +275,127 @@ class Orchestrator:
         self, job_id: str, offset: int = 0, limit_bytes: int = 64 * 1024
     ) -> tuple[str, int]:
         return self._jobs.read_log(job_id, offset=offset, limit_bytes=limit_bytes)
+
+    async def _run_process_contract_job(self, job_id: str, request: ProcessContractRequest) -> None:
+        prev_sink = get_log_sink()
+        set_log_sink(lambda line: self._jobs.append_log_line(job_id, line))
+        set_verbosity(_resolve_effective_verbosity())
+        start_time = time.monotonic()
+        try:
+            job = self._jobs.get_job(job_id)
+            override = job.meta.get("verbosity_override")
+            if isinstance(override, str) and override.isdigit():
+                set_verbosity(_parse_verbosity(int(override)))
+
+            with PhaseGuard.processing():
+                plugin = request.plugin_loader.get_plugin(request.plugin_name)
+                handler = getattr(plugin, request.entrypoint_name)
+                _emit_diag(
+                    "diag.boundary.start",
+                    operation=OP_EXECUTE_PIPELINE,
+                    data={
+                        "job_id": job_id,
+                        "contract_id": request.contract_id,
+                        "plugin_name": request.plugin_name,
+                    },
+                )
+                try:
+                    result = handler(
+                        job_id=job_id,
+                        job_meta=dict(request.job_meta),
+                        plugin_loader=request.plugin_loader,
+                    )
+                    if asyncio.iscoroutine(result):
+                        await result
+                except Exception as e:
+                    _emit_diag(
+                        "diag.boundary.fail",
+                        operation=OP_EXECUTE_PIPELINE,
+                        data={
+                            "job_id": job_id,
+                            "contract_id": request.contract_id,
+                            "error_type": type(e).__name__,
+                            "error_message": str(e),
+                        },
+                    )
+                    raise
+                else:
+                    _emit_diag(
+                        "diag.boundary.end",
+                        operation=OP_EXECUTE_PIPELINE,
+                        data={
+                            "job_id": job_id,
+                            "contract_id": request.contract_id,
+                            "status": "succeeded",
+                        },
+                    )
+
+            job = self._jobs.get_job(job_id)
+            job.progress = 1.0
+            job.transition(JobState.SUCCEEDED)
+            job.finished_at = _utcnow_iso()
+            self._jobs.store.save_job(job)
+            _emit_diag(
+                "diag.job.end",
+                operation=OP_RUN_JOB,
+                data={
+                    "job_id": job_id,
+                    "job_type": "process",
+                    "status": "succeeded",
+                    "duration_ms": _duration_ms(start_time, time.monotonic()),
+                },
+            )
+            _LOGGER.info("succeeded")
+        except PhaseContractError as e:
+            job = self._jobs.get_job(job_id)
+            job.transition(JobState.FAILED)
+            job.error = str(e)
+            job.finished_at = _utcnow_iso()
+            self._jobs.store.save_job(job)
+            _emit_diag(
+                "diag.job.end",
+                operation=OP_RUN_JOB,
+                data={
+                    "job_id": job_id,
+                    "job_type": "process",
+                    "status": "failed",
+                    "duration_ms": _duration_ms(start_time, time.monotonic()),
+                    "error_type": type(e).__name__,
+                    "error_message": str(e),
+                },
+            )
+            _LOGGER.error(f"failed: {e}")
+        except Exception as e:
+            job = self._jobs.get_job(job_id)
+            job.transition(JobState.FAILED)
+            job.error = str(e)
+            job.finished_at = _utcnow_iso()
+            self._jobs.store.save_job(job)
+            _emit_diag(
+                "diag.boundary.end",
+                operation=OP_EXECUTE_PIPELINE,
+                data={
+                    "job_id": job_id,
+                    "status": "failed",
+                    "error_type": type(e).__name__,
+                    "error_message": str(e),
+                },
+            )
+            _emit_diag(
+                "diag.job.end",
+                operation=OP_RUN_JOB,
+                data={
+                    "job_id": job_id,
+                    "job_type": "process",
+                    "status": "failed",
+                    "duration_ms": _duration_ms(start_time, time.monotonic()),
+                    "error_type": type(e).__name__,
+                    "error_message": str(e),
+                },
+            )
+            _LOGGER.error(f"failed: {e}")
+        finally:
+            set_log_sink(prev_sink)
 
     async def _run_process_job(self, job_id: str, request: ProcessRequest) -> None:
         prev_sink = get_log_sink()
