@@ -1,3 +1,8 @@
+## 2026-03-09T00:00:01+01:00
+
+- Emit runner-owned ERROR DETAIL records for RunnerError failures, keep the
+  FAIL summary fixed, and guarantee failure fingerprints in the file log.
+
 ## 2026-03-09T00:00:00+01:00
 
 - Define runner-owned failure detail records for RunnerError failures, keep

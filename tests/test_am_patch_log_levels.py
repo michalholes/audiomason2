@@ -121,3 +121,36 @@ def test_subprocess_live_json_requires_debug_screen_level(tmp_path: Path):
         for line in (tmp_path / "am_patch.jsonl").read_text(encoding="utf-8").splitlines()
     ]
     assert not any(evt.get("kind") == "SUBPROCESS_STDOUT" for evt in events)
+
+
+def test_runner_failure_detail_and_fingerprint_bypass_quiet(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path
+):
+    logger = _mk_logger(tmp_path, screen_level="quiet", log_level="quiet")
+    try:
+        logger.emit(
+            severity="ERROR",
+            channel="CORE",
+            message="ERROR DETAIL: PREFLIGHT:PATCH_ASCII: bad patch\n",
+            error_detail=True,
+        )
+        logger.emit(
+            severity="ERROR",
+            channel="CORE",
+            message=(
+                "AM_PATCH_FAILURE_FINGERPRINT:\n- stage: PREFLIGHT\n- category: PATCH_ASCII\n"
+            ),
+            error_detail=True,
+            to_screen=False,
+            to_log=True,
+        )
+    finally:
+        logger.close()
+
+    out = capsys.readouterr().out
+    data = (tmp_path / "am_patch.log").read_text(encoding="utf-8")
+
+    assert "ERROR DETAIL: PREFLIGHT:PATCH_ASCII: bad patch" in out
+    assert "AM_PATCH_FAILURE_FINGERPRINT" not in out
+    assert "ERROR DETAIL: PREFLIGHT:PATCH_ASCII: bad patch" in data
+    assert "AM_PATCH_FAILURE_FINGERPRINT" in data

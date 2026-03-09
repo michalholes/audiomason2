@@ -18,6 +18,17 @@ class TestIndexParseResult(unittest.TestCase):
         self.assertEqual(res, "success")
         self.assertEqual(line, "RESULT: SUCCESS")
 
+    def test_fail_with_error_detail_records(self) -> None:
+        text = (
+            "ERROR DETAIL: PREFLIGHT:PATCH_ASCII: bad patch\n"
+            "AM_PATCH_FAILURE_FINGERPRINT:\n"
+            "- stage: PREFLIGHT\n"
+            "RESULT: FAIL\n"
+        )
+        res, line = parse_run_result_from_log_text(text)
+        self.assertEqual(res, "fail")
+        self.assertEqual(line, "RESULT: FAIL")
+
     def test_unknown(self) -> None:
         res, line = parse_run_result_from_log_text("nope\n")
         self.assertEqual(res, "unknown")

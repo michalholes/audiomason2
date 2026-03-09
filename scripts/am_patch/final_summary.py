@@ -36,6 +36,8 @@ def emit_final_summary(
     push_ok_for_posthook: bool | None,
     final_fail_stage: str | None,
     final_fail_reason: str | None,
+    final_fail_detail: str | None,
+    final_fail_fingerprint: str | None,
     screen_quiet: bool,
     log_quiet: bool,
 ) -> None:
@@ -67,6 +69,8 @@ def emit_final_summary(
         log_path=log_path,
         stage=final_fail_stage,
         reason=final_fail_reason,
+        detail=final_fail_detail,
+        fingerprint=final_fail_fingerprint,
         screen_quiet=screen_quiet,
         log_quiet=log_quiet,
     )
@@ -180,9 +184,31 @@ def _emit_fail_summary(
     log_path: Path,
     stage: str | None,
     reason: str | None,
+    detail: str | None,
+    fingerprint: str | None,
     screen_quiet: bool,
     log_quiet: bool,
 ) -> None:
+    if detail:
+        logger.emit(
+            severity="ERROR",
+            channel="CORE",
+            message=detail,
+            error_detail=True,
+            kind="TEXT",
+            to_screen=True,
+            to_log=True,
+        )
+    if fingerprint:
+        logger.emit(
+            severity="ERROR",
+            channel="CORE",
+            message=fingerprint,
+            error_detail=True,
+            kind="TEXT",
+            to_screen=False,
+            to_log=True,
+        )
     _emit_summary_line(
         logger,
         message="RESULT: FAIL\n",

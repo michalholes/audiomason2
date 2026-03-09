@@ -40,6 +40,10 @@ from am_patch.paths import (
 from am_patch.post_run_pipeline import run_post_run_pipeline
 from am_patch.repo_root import is_under, resolve_repo_root
 from am_patch.run_result import RunResult, _normalize_failure_summary, build_run_result
+from am_patch.runner_failure_detail import (
+    render_runner_error_detail,
+    render_runner_error_fingerprint,
+)
 from am_patch.runtime import (
     _gate_progress,
     _maybe_run_badguys,
@@ -348,6 +352,8 @@ def run_mode(ctx: RunContext) -> RunResult:
             final_pushed_files=final_pushed_files,
             final_fail_stage=final_fail_stage,
             final_fail_reason=final_fail_reason,
+            final_fail_detail=final_fail_detail,
+            final_fail_fingerprint=final_fail_fingerprint,
             primary_fail_stage=primary_fail_stage,
             primary_fail_reason=primary_fail_reason,
             secondary_failures=secondary_failures,
@@ -376,6 +382,8 @@ def run_mode(ctx: RunContext) -> RunResult:
     final_pushed_files: list[str] | None = None
     final_fail_stage: str | None = None
     final_fail_reason: str | None = None
+    final_fail_detail: str | None = None
+    final_fail_fingerprint: str | None = None
     primary_fail_stage: str | None = None
     primary_fail_reason: str | None = None
     secondary_failures: list[tuple[str, str]] = []
@@ -820,7 +828,8 @@ def run_mode(ctx: RunContext) -> RunResult:
     except RunnerError as e:
         logger.section("FAILURE")
         logger.line(str(e))
-        logger.line(fingerprint(e))
+        final_fail_detail = render_runner_error_detail(e)
+        final_fail_fingerprint = render_runner_error_fingerprint(e)
         final_fail_stage, final_fail_reason = _normalize_failure_summary(
             error=e,
             primary_fail_stage=primary_fail_stage,
@@ -847,6 +856,8 @@ def finalize_and_report(ctx: RunContext, result: RunResult) -> int:
     final_pushed_files = result.final_pushed_files
     final_fail_stage = result.final_fail_stage
     final_fail_reason = result.final_fail_reason
+    final_fail_detail = result.final_fail_detail
+    final_fail_fingerprint = result.final_fail_fingerprint
     push_ok_for_posthook = result.push_ok_for_posthook
 
     with suppress(Exception):
@@ -872,6 +883,8 @@ def finalize_and_report(ctx: RunContext, result: RunResult) -> int:
             push_ok_for_posthook=push_ok_for_posthook,
             final_fail_stage=final_fail_stage,
             final_fail_reason=final_fail_reason,
+            final_fail_detail=final_fail_detail,
+            final_fail_fingerprint=final_fail_fingerprint,
             screen_quiet=screen_quiet,
             log_quiet=log_quiet,
         )

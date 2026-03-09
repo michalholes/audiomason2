@@ -29,6 +29,8 @@ class RunResult:
     final_pushed_files: list[str] | None = None
     final_fail_stage: str | None = None
     final_fail_reason: str | None = None
+    final_fail_detail: str | None = None
+    final_fail_fingerprint: str | None = None
     primary_fail_stage: str | None = None
     primary_fail_reason: str | None = None
     secondary_failures: list[tuple[str, str]] = field(default_factory=list)
@@ -54,11 +56,13 @@ def build_run_result(
     push_ok_for_posthook: bool | None,
     final_commit_sha: str | None,
     final_pushed_files: list[str] | None,
-    final_fail_stage: str | None,
-    final_fail_reason: str | None,
-    primary_fail_stage: str | None,
-    primary_fail_reason: str | None,
-    secondary_failures: list[tuple[str, str]],
+    final_fail_stage: str | None = None,
+    final_fail_reason: str | None = None,
+    final_fail_detail: str | None = None,
+    final_fail_fingerprint: str | None = None,
+    primary_fail_stage: str | None = None,
+    primary_fail_reason: str | None = None,
+    secondary_failures: list[tuple[str, str]] | None = None,
 ) -> RunResult:
     return RunResult(
         lock=lock,
@@ -83,9 +87,11 @@ def build_run_result(
         ),
         final_fail_stage=final_fail_stage,
         final_fail_reason=final_fail_reason,
+        final_fail_detail=final_fail_detail,
+        final_fail_fingerprint=final_fail_fingerprint,
         primary_fail_stage=primary_fail_stage,
         primary_fail_reason=primary_fail_reason,
-        secondary_failures=list(secondary_failures),
+        secondary_failures=list(secondary_failures or []),
     )
 
 

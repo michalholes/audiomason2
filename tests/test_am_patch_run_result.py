@@ -42,3 +42,22 @@ def test_normalize_failure_summary_maps_audit_failures() -> None:
 
     assert stage == "AUDIT"
     assert reason == "audit failed"
+
+
+def test_normalize_failure_summary_keeps_preflight_reason_generic() -> None:
+    runner_error_cls, _normalize_failure_summary, parse_gate_list, stage_rank = _import_am_patch()
+
+    stage, reason = _normalize_failure_summary(
+        error=runner_error_cls(
+            "PREFLIGHT",
+            "PATCH_ASCII",
+            "patch contains non-ascii characters: patch.zip",
+        ),
+        primary_fail_stage=None,
+        secondary_failures=[],
+        parse_gate_list=parse_gate_list,
+        stage_rank=stage_rank,
+    )
+
+    assert stage == "PREFLIGHT"
+    assert reason == "invalid inputs"

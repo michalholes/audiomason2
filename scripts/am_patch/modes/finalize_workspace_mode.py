@@ -3,9 +3,13 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from am_patch.errors import RunnerError, fingerprint
+from am_patch.errors import RunnerError
 from am_patch.gates_policy_wiring import run_policy_gates
 from am_patch.run_result import RunResult, _normalize_failure_summary, build_run_result
+from am_patch.runner_failure_detail import (
+    render_runner_error_detail,
+    render_runner_error_fingerprint,
+)
 from am_patch.runtime import _gate_progress, _maybe_run_badguys, _parse_gate_list, _stage_rank
 from am_patch.scope import changed_paths
 from am_patch.workspace import bump_existing_workspace_attempt, open_existing_workspace
@@ -45,6 +49,8 @@ def run_finalize_workspace_mode(ctx: RunContext) -> RunResult:
     final_pushed_files: list[str] | None = None
     final_fail_stage: str | None = None
     final_fail_reason: str | None = None
+    final_fail_detail: str | None = None
+    final_fail_fingerprint: str | None = None
     primary_fail_stage: str | None = None
     primary_fail_reason: str | None = None
     secondary_failures: list[tuple[str, str]] = []
@@ -150,7 +156,8 @@ def run_finalize_workspace_mode(ctx: RunContext) -> RunResult:
     except RunnerError as e:
         logger.section("FAILURE")
         logger.line(str(e))
-        logger.line(fingerprint(e))
+        final_fail_detail = render_runner_error_detail(e)
+        final_fail_fingerprint = render_runner_error_fingerprint(e)
         final_fail_stage, final_fail_reason = _normalize_failure_summary(
             error=e,
             primary_fail_stage=primary_fail_stage,
@@ -181,6 +188,8 @@ def run_finalize_workspace_mode(ctx: RunContext) -> RunResult:
         final_pushed_files=final_pushed_files,
         final_fail_stage=final_fail_stage,
         final_fail_reason=final_fail_reason,
+        final_fail_detail=final_fail_detail,
+        final_fail_fingerprint=final_fail_fingerprint,
         primary_fail_stage=primary_fail_stage,
         primary_fail_reason=primary_fail_reason,
         secondary_failures=secondary_failures,
