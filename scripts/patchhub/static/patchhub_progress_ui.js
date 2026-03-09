@@ -321,16 +321,16 @@
 		if (!jobId || status === "idle" || status === "running") {
 			appliedJobKey = "";
 			renderAppliedFilesBlock("", true);
-			return;
+			return Promise.resolve();
 		}
 		var key = `${jobId}:${status}`;
-		if (appliedJobKey === key) return;
+		if (appliedJobKey === key) return Promise.resolve();
 		appliedJobKey = key;
 		if (status !== "success") {
 			renderAppliedFilesUnavailable(`result=${status}`);
-			return;
+			return Promise.resolve();
 		}
-		apiGet(`/api/jobs/${encodeURIComponent(jobId)}`).then((r) => {
+		return apiGet(`/api/jobs/${encodeURIComponent(jobId)}`).then((r) => {
 			if (!r || r.ok === false || !r.job) {
 				renderAppliedFilesUnavailable("job detail unavailable");
 				return;
@@ -346,7 +346,7 @@
 		var summary = deriveProgressSummaryFromEvents(events, progress);
 		renderProgressSummary(summary.text);
 		setProgressSummaryState(summary);
-		refreshAppliedFilesForCurrentJob(summary);
+		return refreshAppliedFilesForCurrentJob(summary);
 	}
 
 	function refreshStats() {

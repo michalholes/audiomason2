@@ -197,8 +197,8 @@ async def test_patchhub_progress_renders_applied_files_from_job_detail(
     )
     await page.evaluate(
         """
-        () => {
-          window.AMP_PATCHHUB_UI.updateProgressPanelFromEvents();
+        async () => {
+          await window.AMP_PATCHHUB_UI.updateProgressPanelFromEvents();
         }
         """
     )
