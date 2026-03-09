@@ -1,3 +1,13 @@
+## 2026-03-09T00:00:19+01:00
+
+-   Issue 128: add infrastructure-only Core PROCESS dispatch for explicit
+    import process contracts, preserve the legacy pipeline path, and keep
+    import business logic in the plugin-owned entrypoint.
+
+-   Issue 129: add a plugin-owned PHASE 2 process-contract runner that
+    executes canonical `job_requests.json` capability order deterministically
+    via Core dispatch while preserving idempotent job creation.
+
 ## 2026-03-09T00:00:18+01:00
 
 -   Issue 130: import finalize now persists deterministic success-only
