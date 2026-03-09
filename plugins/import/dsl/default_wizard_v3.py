@@ -25,7 +25,9 @@ DEFAULT_WIZARD_DEFINITION_V3: dict[str, Any] = {
                         "Press Enter to accept the default all selector."
                     ),
                     "examples": ["all", "1", "1,2"],
-                    "default_value": "all",
+                    "default_expr": {"expr": "$.state.vars.phase1.select_authors.selection_expr"},
+                    "prefill_expr": {"expr": "$.state.vars.phase1.select_authors.selection_expr"},
+                    "autofill_if": {"expr": "$.state.vars.phase1.select_authors.autofill_if"},
                 },
                 "writes": [
                     {
@@ -48,7 +50,9 @@ DEFAULT_WIZARD_DEFINITION_V3: dict[str, Any] = {
                         "Press Enter to accept the default all selector."
                     ),
                     "examples": ["all", "1", "1,2"],
-                    "default_value": "all",
+                    "default_expr": {"expr": "$.state.vars.phase1.select_books.selection_expr"},
+                    "prefill_expr": {"expr": "$.state.vars.phase1.select_books.selection_expr"},
+                    "autofill_if": {"expr": "$.state.vars.phase1.select_books.autofill_if"},
                 },
                 "writes": [
                     {
@@ -80,7 +84,8 @@ DEFAULT_WIZARD_DEFINITION_V3: dict[str, Any] = {
                     "label": "Conflict policy",
                     "prompt": "Choose how conflicts should be handled",
                     "examples": ["ask", "skip", "overwrite"],
-                    "default_value": "ask",
+                    "default_expr": {"expr": "$.state.vars.phase1.policy.conflict_policy.mode"},
+                    "prefill_expr": {"expr": "$.state.vars.phase1.policy.conflict_policy.mode"},
                 },
                 "writes": [
                     {

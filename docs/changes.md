@@ -1,3 +1,10 @@
+## 2026-03-09T00:00:17+01:00
+
+-   Issue 127: project deterministic PHASE 0/1 session authority into
+    state.vars.phase1, drive default v3 prompt selection/autofill from that
+    projection, and refresh the projection on create, submit, and resume
+    without expanding engine.py.
+
 ## 2026-03-09T00:00:03+01:00
 
 -   Issue 126: audio_processor now exposes deterministic import conversion

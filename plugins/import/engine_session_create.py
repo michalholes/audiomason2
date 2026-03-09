@@ -26,6 +26,7 @@ from .engine_util import (
 )
 from .errors import FinalizeError
 from .fingerprints import fingerprint_json, sha256_hex
+from .phase1_source_intake import build_phase1_projection, phase1_session_authority_applies
 from .storage import (
     atomic_write_json,
     atomic_write_text,
@@ -170,6 +171,11 @@ def create_session_impl(
         runtime_fp = engine._runtime_effective_model_fingerprint(session_id)
         if runtime_fp and loaded_state.get("model_fingerprint") != runtime_fp:
             loaded_state["model_fingerprint"] = runtime_fp
+        if phase1_session_authority_applies(effective_model=effective_model):
+            loaded_state.setdefault("vars", {})["phase1"] = build_phase1_projection(
+                discovery=discovery,
+                state=loaded_state,
+            )
         engine._persist_state(session_id, loaded_state)
         return loaded_state
 
@@ -264,6 +270,8 @@ def create_session_impl(
         "errors": [],
     }
 
+    if phase1_session_authority_applies(effective_model=effective_model):
+        state["vars"] = {"phase1": build_phase1_projection(discovery=discovery, state=state)}
     if (
         isinstance(effective_model, dict)
         and effective_model.get("flowmodel_kind") == "dsl_step_graph_v3"
@@ -273,6 +281,11 @@ def create_session_impl(
             effective_model=effective_model,
             session_id=session_id,
         )
+        if phase1_session_authority_applies(effective_model=effective_model):
+            state.setdefault("vars", {})["phase1"] = build_phase1_projection(
+                discovery=discovery,
+                state=state,
+            )
     atomic_write_json(engine._fs, RootName.WIZARDS, state_path, state)
     engine._append_decision(
         session_id,

@@ -28,6 +28,7 @@ from .engine_util import (
 )
 from .errors import StepSubmissionError, ascii_message, invariant_violation
 from .flow_runtime import CONDITIONAL_STEP_IDS
+from .phase1_source_intake import build_phase1_projection, phase1_session_authority_applies
 from .storage import read_json
 
 
@@ -193,6 +194,17 @@ def submit_step_impl(
                 session_id=session_id,
                 state=next_state,
             )
+            session_dir = f"import/sessions/{session_id}"
+            discovery_any = read_json(engine._fs, RootName.WIZARDS, f"{session_dir}/discovery.json")
+            if (
+                phase1_session_authority_applies(effective_model=effective_model)
+                and isinstance(discovery_any, list)
+                and all(isinstance(item, dict) for item in discovery_any)
+            ):
+                next_state.setdefault("vars", {})["phase1"] = build_phase1_projection(
+                    discovery=discovery_any,
+                    state=next_state,
+                )
             next_state["updated_at"] = _iso_utc_now()
             engine._persist_state(session_id, next_state)
             if _needs_v3_plan_refresh(next_state):

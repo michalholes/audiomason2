@@ -53,6 +53,7 @@ from .flow_runtime import (
 )
 from .job_requests import planned_units_count
 from .models import CatalogModel, FlowModel, validate_models
+from .phase1_source_intake import build_phase1_projection, phase1_session_authority_applies
 from .plan import PlanSelectionError, compute_plan
 from .preview import preview_action_impl
 from .session_effective_model import load_effective_model_json
@@ -917,6 +918,20 @@ class ImportWizardEngine:
         state = read_json(self._fs, RootName.WIZARDS, state_path)
         if isinstance(state, dict):
             state = _ensure_session_state_fields(state)
+            discovery_path = f"{session_dir}/discovery.json"
+            if self._fs.exists(RootName.WIZARDS, discovery_path):
+                discovery_any = read_json(self._fs, RootName.WIZARDS, discovery_path)
+                if (
+                    phase1_session_authority_applies(
+                        effective_model=self._load_effective_model(session_id)
+                    )
+                    and isinstance(discovery_any, list)
+                    and all(isinstance(item, dict) for item in discovery_any)
+                ):
+                    state.setdefault("vars", {})["phase1"] = build_phase1_projection(
+                        discovery=discovery_any,
+                        state=state,
+                    )
             self._persist_state(session_id, state)
         return state
 
