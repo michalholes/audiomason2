@@ -220,6 +220,20 @@ Monolith gate failures (normative):
   `--verbosity quiet` and `--log-level quiet`.
 - The one-line failure summary (e.g. `MONOLITH: FAIL`) is not sufficient on its own.
 
+Runner-owned failure detail (normative):
+
+- If a run fails with `RunnerError` and there is no failed-step stdout/stderr
+  dump for that failure, the runner MUST emit a single-line runner-owned error
+  detail record.
+- The record format MUST be exactly:
+  `ERROR DETAIL: <stage>:<category>: <single-line-message>`
+- `<single-line-message>` MUST be produced by replacing every embedded newline
+  with ` | ` and trimming leading/trailing whitespace.
+- This record is error detail on FAIL. It is not part of the final summary.
+- The file log MUST include an `AM_PATCH_FAILURE_FINGERPRINT` block for every
+  FAIL, regardless of `--log-level`. The runner MAY omit that block from screen
+  output.
+
 Status indicator: - TTY: single-line overwrite on stderr:
 `STATUS: <STAGE>  ELAPSED: <mm:ss>` - non-TTY: periodic heartbeat on
 stderr (1s interval): `HEARTBEAT: <STAGE> elapsed=<mm:ss>` - The same
@@ -258,6 +272,10 @@ strictly:
         stages (deterministic order).
     -   `REASON: <one line>`
     -   `LOG: <path>`
+
+Additional `ERROR DETAIL:` records MAY appear before the final summary.
+They are failure detail, not summary lines, and MUST NOT change the
+fixed FAIL summary shape.
 
 Quiet sinks: - If `--verbosity quiet`, the console prints only START +
 RESULT (plus error detail on FAIL). - If `--log-level quiet`, the log

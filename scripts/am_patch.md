@@ -83,6 +83,11 @@ The runner supports an independent file log filter:
 
 Both `--verbosity` and `--log-level` use the same level names and meanings, but may be set to different values.
 
+On FAIL, the runner may also emit a runner-owned error detail line in the form
+`ERROR DETAIL: <stage>:<category>: <single-line-message>` when a `RunnerError`
+produces no failed-step stdout/stderr dump. This line is error detail, not part
+of the final summary.
+
 Inheritance rule (contract):
 
 - Verbosity modes are cumulative.
@@ -111,6 +116,10 @@ Final summary (at the end of each run):
   - `STAGE: <stage-id>`
   - `REASON: <one line>`
   - `LOG: <path>`
+
+Additional `ERROR DETAIL:` records may appear before the final summary.
+They are failure detail, not summary lines, and do not change the fixed
+FAIL summary shape.
 
 Quiet sinks:
 - If `--verbosity quiet`, the console prints only START + RESULT (plus error detail on FAIL).
@@ -201,7 +210,7 @@ The log contains:
 - full stdout+stderr of patch and all gates,
 - promotion actions,
 - commit SHA on success,
-- failure fingerprint on failure.
+- runner-owned failure detail and failure fingerprint on failure.
 
 ### 4) Close the issue
 Only close an issue when:

@@ -1,3 +1,9 @@
+## 2026-03-09T00:00:00+01:00
+
+- Define runner-owned failure detail records for RunnerError failures, keep
+  the FAIL final summary shape fixed, and require failure fingerprint blocks
+  in the file log.
+
 ## 2026-03-08T00:00:03+01:00
 
 -   Issue 118: strip WizardDefinition editor-only `_am2_ui` metadata from the
