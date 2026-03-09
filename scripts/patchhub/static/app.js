@@ -62,6 +62,10 @@ async function loadParts(rt) {
 		"/static/app_part_queue_upload.js",
 		"app_part_queue_upload",
 	);
+	await PH.loadScript(
+		"/static/app_part_zip_subset_modal.js",
+		"app_part_zip_subset_modal",
+	);
 	await PH.loadScript("/static/app_part_zip_subset.js", "app_part_zip_subset");
 	await PH.loadScript(
 		"/static/app_part_autofill_header.js",

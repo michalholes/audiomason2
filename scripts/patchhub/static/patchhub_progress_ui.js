@@ -288,14 +288,36 @@
 		renderAppliedFilesBlock(html, false);
 	}
 
-	function refreshAppliedFilesForCurrentJob(summary) {
-		var status = summary && summary.status ? String(summary.status) : "idle";
+	function getCurrentLiveJobId() {
 		var jobId = "";
 		try {
-			jobId = String(PH.call("getLiveJobId") || "");
+			jobId = String(
+				(PH && typeof PH.call === "function" && PH.call("getLiveJobId")) || "",
+			);
 		} catch (e) {
 			jobId = "";
 		}
+		if (jobId) return jobId;
+		try {
+			jobId = String(
+				(ui && typeof ui.getLiveJobId === "function" && ui.getLiveJobId()) ||
+					"",
+			);
+		} catch (e) {
+			jobId = "";
+		}
+		if (jobId) return jobId;
+		try {
+			jobId = String(localStorage.getItem("amp.liveJobId") || "");
+		} catch (e) {
+			jobId = "";
+		}
+		return jobId;
+	}
+
+	function refreshAppliedFilesForCurrentJob(summary) {
+		var status = summary && summary.status ? String(summary.status) : "idle";
+		var jobId = getCurrentLiveJobId();
 		if (!jobId || status === "idle" || status === "running") {
 			appliedJobKey = "";
 			renderAppliedFilesBlock("", true);

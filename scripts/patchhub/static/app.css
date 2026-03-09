@@ -742,11 +742,11 @@ input::placeholder {
 }
 
 .modal-card {
-	width: min(700px, 100%);
+	width: min(860px, 100%);
 	max-height: calc(100vh - 48px);
 	overflow: auto;
-	background: #141414;
-	border: 1px solid #2a2a2a;
+	background: #121f3b;
+	border: 1px solid #2b467b;
 	border-radius: 10px;
 	padding: 16px;
 	box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
@@ -788,17 +788,17 @@ input::placeholder {
 	gap: 12px;
 	align-items: center;
 	padding: 10px 12px;
-	border: 1px solid #2a2a2a;
+	border: 1px solid #2b467b;
 	border-bottom: 0;
 	border-radius: 8px 8px 0 0;
-	background: #0f214f;
+	background: #183264;
 	font-weight: 700;
 }
 
 .zip-subset-list {
-	border: 1px solid #2a2a2a;
+	border: 1px solid #2b467b;
 	border-radius: 0 0 8px 8px;
-	background: #0b0b0b;
+	background: #0f1c33;
 	max-height: 420px;
 	overflow: auto;
 }
@@ -809,7 +809,7 @@ input::placeholder {
 	gap: 12px;
 	align-items: center;
 	padding: 10px 12px;
-	border-bottom: 1px solid #1f1f1f;
+	border-bottom: 1px solid #1f3460;
 }
 
 .zip-subset-item:last-child {
@@ -837,7 +837,7 @@ input::placeholder {
 .zip-subset-modal-footer {
 	display: flex;
 	align-items: center;
-	justify-content: flex-end;
+	justify-content: space-between;
 	gap: 12px;
 	margin-top: 12px;
 }
@@ -866,4 +866,10 @@ input::placeholder {
 		"Courier New", monospace;
 	font-size: 12px;
 	word-break: break-all;
+}
+
+.zip-subset-modal-actions {
+	display: flex;
+	gap: 10px;
+	align-items: center;
 }

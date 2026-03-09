@@ -10,17 +10,23 @@
 		key: "",
 		loading: false,
 		manifest: null,
-		selected: {},
+		committedSelected: {},
+		draftSelected: {},
 		modalOpen: false,
 		error: "",
 	};
 
-	/**
-	 * @param {string} id
-	 * @returns {any}
-	 */
 	function el(id) {
 		return /** @type {any} */ (document.getElementById(id));
+	}
+
+	function escapeHtml(s) {
+		return String(s || "")
+			.replace(/&/g, "&amp;")
+			.replace(/</g, "&lt;")
+			.replace(/>/g, "&gt;")
+			.replace(/"/g, "&quot;")
+			.replace(/'/g, "&#39;");
 	}
 
 	function safeExport(name, fn) {
@@ -66,23 +72,69 @@
 		return Array.isArray(manifest.entries) ? manifest.entries : [];
 	}
 
-	function selectedEntries() {
+	function selectionMap(kind) {
+		return kind === "draft" ? state.draftSelected : state.committedSelected;
+	}
+
+	function ensureSelectionDefaults(kind) {
+		var selected = selectionMap(kind);
+		manifestEntries().forEach((item) => {
+			var name = String(item && item.zip_member ? item.zip_member : "");
+			if (!name || item.selectable !== true) return;
+			if (!Object.hasOwn(selected, name)) {
+				selected[name] = true;
+			}
+		});
+	}
+
+	function resetSelectionToAll(kind) {
+		var next = {};
+		manifestEntries().forEach((item) => {
+			var name = String(item && item.zip_member ? item.zip_member : "");
+			if (!name || item.selectable !== true) return;
+			next[name] = true;
+		});
+		if (kind === "draft") {
+			state.draftSelected = next;
+			return;
+		}
+		state.committedSelected = next;
+	}
+
+	function cloneCommittedToDraft() {
+		state.draftSelected = Object.assign({}, state.committedSelected);
+		ensureSelectionDefaults("draft");
+	}
+
+	function clearDraftSelection() {
+		var next = {};
+		manifestEntries().forEach((item) => {
+			var name = String(item && item.zip_member ? item.zip_member : "");
+			if (!name || item.selectable !== true) return;
+			next[name] = false;
+		});
+		state.draftSelected = next;
+	}
+
+	function selectedEntries(kind) {
+		var selected = selectionMap(kind || "committed");
 		var out = [];
 		manifestEntries().forEach((item) => {
 			var name = String(item && item.zip_member ? item.zip_member : "");
 			if (!name || item.selectable !== true) return;
-			if (state.selected[name] !== false) out.push(name);
+			if (selected[name] !== false) out.push(name);
 		});
 		return out;
 	}
 
-	function selectedRepoPaths() {
+	function selectedRepoPaths(kind) {
+		var selected = selectionMap(kind || "committed");
 		var out = [];
 		manifestEntries().forEach((item) => {
 			var name = String(item && item.zip_member ? item.zip_member : "");
 			var repo = String(item && item.repo_path ? item.repo_path : "");
 			if (!name || !repo || item.selectable !== true) return;
-			if (state.selected[name] !== false) out.push(repo);
+			if (selected[name] !== false) out.push(repo);
 		});
 		return out;
 	}
@@ -91,53 +143,39 @@
 		return manifestEntries().filter((item) => item.selectable === true).length;
 	}
 
-	function ensureSelectionDefaults() {
-		manifestEntries().forEach((item) => {
-			var name = String(item && item.zip_member ? item.zip_member : "");
-			if (!name || item.selectable !== true) return;
-			if (!Object.hasOwn(state.selected, name)) {
-				state.selected[name] = true;
-			}
-		});
-	}
-
-	function resetSelectionToAll() {
-		state.selected = {};
-		manifestEntries().forEach((item) => {
-			var name = String(item && item.zip_member ? item.zip_member : "");
-			if (!name || item.selectable !== true) return;
-			state.selected[name] = true;
-		});
+	function hideModal() {
+		state.modalOpen = false;
+		if (typeof ui.closeZipSubsetModalView === "function") {
+			ui.closeZipSubsetModalView();
+		}
 	}
 
 	function clearState() {
 		state.key = "";
 		state.loading = false;
 		state.manifest = null;
-		state.selected = {};
+		state.committedSelected = {};
+		state.draftSelected = {};
+		state.modalOpen = false;
 		state.error = "";
+		hideModal();
 		renderStrip();
-		closeModal();
-	}
-
-	function setModalVisible(on) {
-		state.modalOpen = !!on;
-		var node = el("zipSubsetModal");
-		if (!node) return;
-		node.classList.toggle("hidden", !state.modalOpen);
-		node.setAttribute("aria-hidden", state.modalOpen ? "false" : "true");
-	}
-
-	function closeModal() {
-		setModalVisible(false);
 	}
 
 	function selectionStatusText() {
 		var total = selectableCount();
-		var selected = selectedEntries().length;
+		var selected = selectedEntries("committed").length;
 		if (!total) return "";
 		if (selected === total) return `Using uploaded zip (${total} files)`;
 		return `Selected ${selected} / ${total} files`;
+	}
+
+	function draftStatusText() {
+		var total = selectableCount();
+		var selected = selectedEntries("draft").length;
+		if (!total) return "All 0 selected";
+		if (selected === total) return `All ${total} selected`;
+		return `Selected ${selected} / ${total}`;
 	}
 
 	function renderStrip() {
@@ -153,8 +191,10 @@
 		if (state.loading) {
 			box.innerHTML =
 				'<div class="zip-subset-strip-inner">' +
-				'<div><b>ZIP patch detected</b><div class="muted">Loading target files...</div></div>' +
-				'<button type="button" class="btn btn-small" disabled>Loading...</button></div>';
+				"<div><b>ZIP patch detected</b>" +
+				'<div class="muted">Loading target files...</div></div>' +
+				'<button type="button" class="btn btn-small" disabled>Loading...</button>' +
+				"</div>";
 			return;
 		}
 
@@ -172,7 +212,7 @@
 		var manifest = state.manifest || {};
 		var total = Number(manifest.patch_entry_count || 0);
 		var selectable = manifest.selectable === true;
-		ensureSelectionDefaults();
+		ensureSelectionDefaults("committed");
 		var detail = selectable
 			? selectionStatusText()
 			: String(manifest.reason || "read only");
@@ -201,56 +241,55 @@
 			"</div>";
 	}
 
-	function renderModal() {
-		var title = el("zipSubsetModalTitle");
-		var subtitle = el("zipSubsetModalSubtitle");
-		var summary = el("zipSubsetSelectionCount");
-		var list = el("zipSubsetModalList");
-		if (!title || !subtitle || !summary || !list) return;
-
-		var manifest = state.manifest || {};
+	function modalModel() {
 		var total = selectableCount();
-		var selected = selectedEntries().length;
 		var baseName = currentPatchPath().split("/").pop() || "patch.zip";
-		ensureSelectionDefaults();
-		var rows = manifestEntries()
-			.map((item) => {
+		ensureSelectionDefaults("draft");
+		return {
+			title: "Select target files (" + String(total) + ")",
+			subtitle: "Contents of " + baseName,
+			selection_count: draftStatusText(),
+			apply_disabled: !state.manifest || isRawLocked(),
+			rows: manifestEntries().map((item) => {
 				var name = String(item && item.zip_member ? item.zip_member : "");
 				var repo = String(item && item.repo_path ? item.repo_path : "");
-				var checked = state.selected[name] !== false;
-				var disabled = item.selectable !== true || isRawLocked();
-				return (
-					'<label class="zip-subset-item">' +
-					'<input type="checkbox" class="zip-subset-check" data-zip-entry="' +
-					escapeHtml(name) +
-					'" ' +
-					(checked ? 'checked="checked" ' : "") +
-					(disabled ? 'disabled="disabled" ' : "") +
-					"/>" +
-					'<span class="zip-subset-member">' +
-					escapeHtml(name) +
-					"</span>" +
-					'<span class="zip-subset-path">' +
-					escapeHtml(repo || name) +
-					"</span>" +
-					"</label>"
-				);
-			})
-			.join("");
+				return {
+					zip_member: name,
+					repo_path: repo || name,
+					checked: state.draftSelected[name] !== false,
+					disabled: item.selectable !== true || isRawLocked(),
+				};
+			}),
+		};
+	}
 
-		title.textContent = "Select target files (" + String(total) + ")";
-		subtitle.textContent = "Contents of " + baseName;
-		summary.textContent =
-			selected === total
-				? "All " + String(total) + " selected"
-				: "Selected " + String(selected) + " / " + String(total);
-		list.innerHTML = rows || '<div class="muted">(no patch entries)</div>';
+	function renderModal() {
+		if (typeof ui.renderZipSubsetModal !== "function") return;
+		ui.renderZipSubsetModal(modalModel());
+	}
+
+	function discardDraftAndClose() {
+		state.draftSelected = {};
+		hideModal();
 	}
 
 	function openModal() {
 		if (!state.manifest) return;
+		cloneCommittedToDraft();
+		state.modalOpen = true;
+		if (typeof ui.openZipSubsetModalView === "function") {
+			ui.openZipSubsetModalView(modalModel());
+			return;
+		}
 		renderModal();
-		setModalVisible(true);
+	}
+
+	function applyModalDraft() {
+		state.committedSelected = Object.assign({}, state.draftSelected);
+		ensureSelectionDefaults("committed");
+		hideModal();
+		renderStrip();
+		if (typeof validateAndPreview === "function") validateAndPreview();
 	}
 
 	function fetchManifestForCurrentPath() {
@@ -258,7 +297,8 @@
 		state.loading = true;
 		state.error = "";
 		state.manifest = null;
-		state.selected = {};
+		state.committedSelected = {};
+		state.draftSelected = {};
 		renderStrip();
 		apiGet(
 			"/api/patches/zip_manifest?path=" + encodeURIComponent(patchPath),
@@ -272,7 +312,8 @@
 				return;
 			}
 			state.manifest = r.manifest;
-			resetSelectionToAll();
+			resetSelectionToAll("committed");
+			state.draftSelected = {};
 			renderStrip();
 			if (state.modalOpen) renderModal();
 			if (typeof validateAndPreview === "function") validateAndPreview();
@@ -297,7 +338,7 @@
 	function enqueuePayload() {
 		if (!state.manifest || state.loading || isRawLocked()) return {};
 		if (state.manifest.selectable !== true) return {};
-		var selected = selectedEntries();
+		var selected = selectedEntries("committed");
 		var total = selectableCount();
 		if (!selected.length) {
 			return { error: "no selected files" };
@@ -310,24 +351,27 @@
 		if (!isPatchZipMode()) return { ok: true, hint: "" };
 		if (state.loading) return { ok: false, hint: "loading zip target files" };
 		if (state.error) return { ok: false, hint: state.error };
-		if (!state.manifest || state.manifest.selectable !== true)
+		if (!state.manifest || state.manifest.selectable !== true) {
 			return { ok: true, hint: "" };
+		}
 		if (isRawLocked()) return { ok: true, hint: "" };
-		if (!selectedEntries().length)
+		if (!selectedEntries("committed").length) {
 			return { ok: false, hint: "no selected files" };
+		}
 		return { ok: true, hint: "" };
 	}
 
 	function applyPreview(preview) {
 		if (!preview || typeof preview !== "object") return preview;
 		if (!state.manifest || !isPatchZipMode()) return preview;
+		var selected = selectedEntries("committed");
 		preview.zip_subset = {
 			selectable: state.manifest.selectable === true,
 			selection_status: selectionStatusText(),
-			selected_patch_entries: selectedEntries(),
-			selected_repo_paths: selectedRepoPaths(),
+			selected_patch_entries: selected,
+			selected_repo_paths: selectedRepoPaths("committed"),
 			effective_patch_kind:
-				selectedEntries().length < selectableCount()
+				selected.length < selectableCount()
 					? "derived_subset_pending"
 					: "original",
 		};
@@ -344,54 +388,40 @@
 			}
 			if (t.id === "zipSubsetRetryBtn") {
 				fetchManifestForCurrentPath();
-				return;
-			}
-			if (t.id === "zipSubsetCloseBtn" || t.id === "zipSubsetCancelBtn") {
-				closeModal();
-				return;
-			}
-			if (t.id === "zipSubsetSelectAllBtn") {
-				resetSelectionToAll();
-				renderModal();
-				renderStrip();
-				if (typeof validateAndPreview === "function") validateAndPreview();
-				return;
-			}
-			if (t.id === "zipSubsetClearBtn") {
-				state.selected = {};
-				renderModal();
-				renderStrip();
-				if (typeof validateAndPreview === "function") validateAndPreview();
-				return;
-			}
-			if (t.id === "zipSubsetResetBtn") {
-				resetSelectionToAll();
-				renderModal();
-				renderStrip();
-				if (typeof validateAndPreview === "function") validateAndPreview();
-				return;
 			}
 		});
-
-		document.addEventListener("change", (ev) => {
-			var t = /** @type {any} */ (ev && ev.target ? ev.target : null);
-			if (!t || !t.classList || !t.classList.contains("zip-subset-check"))
-				return;
-			var name = String(t.getAttribute("data-zip-entry") || "");
-			if (!name) return;
-			state.selected[name] = !!t.checked;
-			renderModal();
-			renderStrip();
-			if (typeof validateAndPreview === "function") validateAndPreview();
-		});
-
-		var backdrop = el("zipSubsetModal");
-		if (backdrop) {
-			backdrop.addEventListener("click", (ev) => {
-				if (ev.target === backdrop) closeModal();
-			});
-		}
 	}
+
+	ui.zipSubsetModalController = {
+		onToggle(name, checked) {
+			state.draftSelected[String(name || "")] = !!checked;
+			renderModal();
+		},
+		onSelectAll() {
+			resetSelectionToAll("draft");
+			renderModal();
+		},
+		onClear() {
+			clearDraftSelection();
+			renderModal();
+		},
+		onReset() {
+			resetSelectionToAll("draft");
+			renderModal();
+		},
+		onCancel() {
+			discardDraftAndClose();
+		},
+		onClose() {
+			discardDraftAndClose();
+		},
+		onBackdrop() {
+			discardDraftAndClose();
+		},
+		onApply() {
+			applyModalDraft();
+		},
+	};
 
 	bindEvents();
 
