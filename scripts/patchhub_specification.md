@@ -22,7 +22,8 @@ PatchHub provides:
 
 PatchHub does NOT:
 - Generate patches
-- Modify patch zip contents
+- Modify uploaded patch zip contents in place
+- Create a derived zip unless the user explicitly requested zip subset selection
 - Bypass runner gates
 - Replace or re-implement runner logic
 
@@ -740,6 +741,7 @@ using runner textual markers found in the active log tail.
 HTML elements (templates/index.html):
 - <div id="progressSteps" class="progress-steps"></div>
 - <div id="progressSummary" class="progress-summary muted"></div>
+- <div id="progressApplied" class="progress-applied hidden"></div>
 
 Parsing source (static/app.js):
 - The UI consumes the live log tail text (same source used for the Tail view).
@@ -761,6 +763,17 @@ Rendering rules:
 Summary rule:
 - progressSummary shows the most recent RESULT:/STATUS:/FAIL:/OK:/DO: line
   (compact single-line status for quick scanning).
+
+Applied files rule:
+- For a successful selected or just-finished job, Progress MUST render an
+  Applied files block directly below RESULT: SUCCESS.
+- The block is a first-glance surface; it MUST NOT require opening Preview,
+  Issue detail tabs, or the log pane.
+- Applied files are sourced from runner artifacts only:
+  - primary: issue_<ISSUE>_diff*.zip -> manifest.txt -> FILE <repo-path>
+  - fallback: FILES: section from final summary text
+- For non-success results, the UI MUST render an explicit unavailable state;
+  it MUST NOT fabricate applied files from the UI selection.
 
 This is a UI-only rendering rule. Runner output format is unchanged.
 
@@ -1234,6 +1247,42 @@ Output:
 { "ok": true, "job": <JobRecord JSON> }
 Error 404 if not found in memory or on disk.
 
+Detail-only additive fields for patch/repair jobs:
+- original_patch_path: "<string|null>"
+- effective_patch_path: "<string|null>"
+- effective_patch_kind: "original|derived_subset|null"
+- selected_patch_entries: ["<zip member>", ...]
+- selected_repo_paths: ["<repo path>", ...]
+- applied_files: ["<repo path>", ...]
+- applied_files_source: "diff_manifest|final_summary|non_success|unavailable"
+
+GET /api/jobs remains the thin list endpoint defined elsewhere in this spec;
+these fields are detail-only and MUST NOT be added to list items.
+
+7.2.9A GET /api/patches/zip_manifest?path=<string>
+Output:
+{ "ok": true, "manifest": <ZipPatchManifest JSON> }
+Error 400 if path missing, path is not a zip, or the zip cannot be resolved.
+
+ZipPatchManifest JSON:
+{
+  "path": "<string>",
+  "is_zip": true,
+  "selectable": <bool>,
+  "reason": "ok|zip_has_no_patch_entries|zip_not_pm_per_file_layout",
+  "patch_entry_count": <int>,
+  "entries": [
+    {
+      "zip_member": "<string>",
+      "repo_path": "<string|null>",
+      "selectable": <bool>
+    }
+  ],
+  "root_metadata_present": ["COMMIT_MESSAGE.txt", "ISSUE_NUMBER.txt", ...]
+}
+
+Subset selection is available only when selectable is true.
+
 7.2.10 GET /api/jobs/<job_id>/log_tail?lines=<int>
 Output:
 { "ok": true, "job_id": "<string>", "tail": "<string>" }
@@ -1445,18 +1494,32 @@ Input JSON fields (minimum accepted by app_api_jobs.py):
 - commit_message: "<string>"     (required for patch/repair unless raw_command provides)
 - patch_path: "<string>"         (required for patch/repair unless raw_command provides)
 - raw_command: "<string>"        (optional; if provided, it is parsed and canonicalized)
+- selected_patch_entries: ["<zip member>", ...] (optional; patch/repair zip subset only)
 
 Behavior:
 - If raw_command is present:
   - parse_runner_command(raw_command)
   - canonical argv from parsed command is used
   - missing fields may be filled from body fields as fallback
+  - raw_command MUST NOT be combined with selected_patch_entries
 - If raw_command is absent:
   - finalize_live requires commit_message and builds: runner_prefix + ['-f', commit_message]
   - finalize_workspace requires issue_id (digits) and builds: runner_prefix + ['-w', issue_id]
   - rerun_latest builds: runner_prefix + ['-l']
   - patch/repair requires commit_message and patch_path
   - if issue_id missing, PatchHub auto-allocates it (see Section 11)
+- Zip subset semantics for patch/repair:
+  - No-subset branch is unchanged: if selected_patch_entries is absent, empty, or
+    selects all selectable entries, PatchHub runs the original zip path.
+  - Subset selection is supported only for PM-compliant per-file zip layout where
+    patches/per_file/<repo path encoded with __>.patch maps deterministically to a repo path.
+  - The uploaded/original zip MUST NOT be modified in place.
+  - When a proper subset is selected, PatchHub MAY create a derived zip under the
+    root patches directory and use that derived zip as the effective runner input.
+  - The derived zip preserves root metadata files used by the runner contract
+    (COMMIT_MESSAGE.txt and ISSUE_NUMBER.txt when present).
+  - selected target files and applied files are different concepts: selected_* comes
+    from the UI request; applied_files comes only from runner artifacts after success.
 
 Output (success):
 {
@@ -1482,7 +1545,12 @@ JobRecord JSON schema (models.JobRecord):
   "error": "<string|null>",
   "cancel_requested_utc": "<UTC ISO Z string|null>",
   "cancel_ack_utc": "<UTC ISO Z string|null>",
-  "cancel_source": "socket|terminate|hard_stop|null"
+  "cancel_source": "socket|terminate|hard_stop|null",
+  "original_patch_path": "<string|null>",
+  "effective_patch_path": "<string|null>",
+  "effective_patch_kind": "original|derived_subset|null",
+  "selected_patch_entries": ["<string>", ...],
+  "selected_repo_paths": ["<string>", ...]
 }
 
 Notes:
@@ -1507,6 +1575,13 @@ Contract:
 - commit_summary MUST be a single line and use deterministic truncation consistent with Section 2.11.
 - patch_basename MUST be filename-only (no directory); it MUST be null if absent.
 - GET /api/jobs MUST NOT include additional keys in list items; full details are available via GET /api/jobs/<job_id>.
+
+UI contract for zip subset controls:
+- The Start run card MAY render an inline zip subset strip directly below patchPath.
+- The strip is the pre-modal first-glance surface for zip subset state.
+- The subset chooser MAY use a modal dialog.
+- Preview remains collapsed-by-default; zip subset selection MUST NOT require Preview
+  to be opened.
 
 7.3.3 POST /api/jobs/<job_id>/cancel
 Output (success):
