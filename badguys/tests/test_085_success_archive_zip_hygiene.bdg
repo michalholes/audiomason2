@@ -5,8 +5,7 @@ is_guard = false
 [[asset]]
 id = "patch"
 kind = "git_patch_text"
-content = "success archive marker
-"
+content = "success archive marker"
 
 [[step]]
 op = "DELETE_SUBJECT"
