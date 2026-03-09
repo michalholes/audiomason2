@@ -1,3 +1,15 @@
+## 2026-03-09T00:00:20+01:00
+
+-   Bump specification version to 2.0.13-normalized-m1.
+
+-   Define import parity authority across WizardDefinition, StepSchema,
+    FlowConfig, StepCatalog projection, primitive registry, and the single
+    Core PROCESS contract binding.
+
+-   Define import parity minimums for Phase 1 selection/metadata/cover/policy
+    semantics, resolver-bound runtime access, and success-only finalize
+    artifacts used by rerun and resume.
+
 ## 2026-03-09T00:00:19+01:00
 
 -   Issue 128: add infrastructure-only Core PROCESS dispatch for explicit
