@@ -2,7 +2,6 @@ import json
 import sys
 from collections import defaultdict
 
-
 FORBIDDEN_FIELDS = {
     "derivation",
     "generated_from",
