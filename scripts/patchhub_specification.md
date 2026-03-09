@@ -165,7 +165,12 @@ Reset and advance rules
 Failure mode
 - If a sig is incorrect (false-unchanged), UI updates will be delayed.
 - Therefore, sig MUST cover all user-visible state for that payload, including
-  memory-resident queue jobs and on-disk job.json files.
+  memory-resident queue jobs and persisted web-jobs state for the active
+  backend mode.
+- In `db_primary` mode, sig MUST NOT depend on per-job file-tree artifacts
+  under `patches/artifacts/web_jobs/<job_id>/`.
+- In `file_emergency` mode, sig MUST cover the emergency file-backed web-jobs
+  state.
 
 Server contract (canonical transport: HTTP ETag/304)
 - Each refresh API MUST compute a stable string token field: sig.
@@ -193,8 +198,11 @@ JSON fallback (compatibility)
 Normal path behavior
 - When a background indexer is ready, list endpoints MUST NOT perform any
   filesystem scan or parsing work in the request handler path.
-  - This includes scanning logs, scanning web job artifacts, reading job.json,
-    and reading/parsing run logs.
+  - This includes scanning logs, scanning legacy web-job artifacts, reading
+    legacy `job.json`, and reading/parsing run logs.
+- In `db_primary` mode, jobs/ui_snapshot request handlers MUST use the
+  persisted web-jobs DB and/or precomputed in-memory snapshots; they MUST NOT
+  read legacy per-job files under `patches/artifacts/web_jobs/<job_id>/`.
 - In this state, list endpoints MUST serve precomputed, in-memory snapshots and
   MUST limit request handler work to O(n) filtering + JSON serialization.
 
@@ -206,19 +214,21 @@ Indexer behavior
 - On server startup, the indexer MUST perform an initial full scan/build for
   those snapshots.
 - After startup, the indexer MUST refresh snapshots on a deterministic polling
-  interval configured by cfg.indexing.poll_interval_seconds.
+  interval configured by `cfg.indexing.poll_interval_seconds`.
 - The refresh work MUST execute outside request handlers.
 
 Failure mode
 - A bug or crash in the indexer can cause stale UI data.
 - If the indexer is not ready, or if it is in an error state, endpoints MAY
-  fall back to legacy on-demand disk scanning behavior.
-  - This is the only permitted case where request handlers may scan or parse
-    disk state for jobs/runs/ui_snapshot.
+  fall back to legacy on-demand request-path behavior.
+- In `db_primary` mode, this fallback MAY query the web-jobs DB directly, but
+  MUST NOT scan legacy per-job files under `patches/artifacts/web_jobs/`.
+- In `file_emergency` mode, this fallback MAY read the emergency file-backed
+  web-jobs state.
 
 Debug support
 - PatchHub MUST provide a debug-only endpoint to trigger a full rescan:
-  POST /api/debug/indexer/force_rescan (see 7.3.10).
+  `POST /api/debug/indexer/force_rescan` (see 7.3.10).
 
 2.7 Live Events Rendering Limits (HARD)
 
@@ -398,8 +408,12 @@ Detail separation
   patch filesystem paths.
 - Detailed job/run fields MUST be served only by detail endpoints.
 - For runs, PatchHub does not define a separate run-detail JSON route beyond
-  GET /api/runs?issue_id=<int> (optionally with limit=1); log text MUST be fetched
-  via GET /api/fs/read_text using the run's log_rel_path (tail_lines recommended).
+  `GET /api/runs?issue_id=<int>` (optionally with `limit=1`); log text MUST be
+  fetched via `GET /api/fs/read_text` using the run's `log_rel_path`
+  (`tail_lines` recommended).
+- A `log_rel_path` under `artifacts/web_jobs/...` is a PatchHub-owned virtual
+  read-only path. In `db_primary` mode it MAY resolve to DB-backed content and
+  does not require a physical file to exist.
 
 2.12 Server Sorting and Filtering Cost (HARD)
 
@@ -1102,13 +1116,18 @@ Outputs (success):
   { "ok": true, "path": "<string>", "text": "<string>", "truncated": <bool> }
 
 Notes:
-- Head mode reads full file bytes first, then truncates in memory.
+- Head mode reads full source bytes first, then truncates in memory.
 - UTF-8 decode uses errors="replace".
+- `artifacts/web_jobs/...` is a PatchHub-owned virtual read-only namespace.
+- In `db_primary` mode, `read_text` for `artifacts/web_jobs/...` MUST resolve
+  from persisted DB-backed content.
+- In `file_emergency` mode, `read_text` for `artifacts/web_jobs/...` MAY read
+  the emergency file-backed web-jobs state.
 
 Errors:
 - 400 for jail validation errors
-- 404 if not a file
-- 500 if read_bytes fails
+- 404 if the resolved source does not exist
+- 500 if the resolved source cannot be read
 
 7.2.5 GET /api/fs/download?path=<string>
 Output:
@@ -1187,23 +1206,24 @@ Inputs:
 - limit (optional): default 100; clamped to [1, 500]
 
 Data sources:
-- logs-based runs from indexing.iter_runs(patches_root, log_filename_regex)
-- plus canceled runs derived from PatchHub job.json under artifacts/web_jobs
+- logs-based runs from `indexing.iter_runs(patches_root, log_filename_regex)`
+- plus canceled runs derived from persisted PatchHub web-jobs state for the
+  active backend mode
 
 Sorting:
-- runs sorted by (mtime_utc, issue_id) descending
-- truncated to limit
+- runs sorted by `(mtime_utc, issue_id)` descending
+- truncated to `limit`
 
 Output (success):
 {
   "ok": true,
   "runs": [
     {
-"issue_id": <int>,
-"log_rel_path": "<string>",
-"result": "success|fail|unknown|canceled",
-"mtime_utc": "<UTC ISO Z string>",
-"artifact_refs": ["<string>", ...]
+      "issue_id": <int>,
+      "log_rel_path": "<string>",
+      "result": "success|fail|unknown|canceled",
+      "mtime_utc": "<UTC ISO Z string>",
+      "artifact_refs": ["<string>", ...]
     },
     ...
   ]
@@ -1239,13 +1259,14 @@ Output:
 }
 Jobs are the union of:
 - in-memory queue jobs, plus
-- on-disk job.json entries (up to 200) not present in memory
-Sorted by created_utc descending.
+- persisted PatchHub web-jobs entries from the active backend mode (up to 200)
+  not present in memory
+Sorted by `created_utc` descending.
 
 7.2.9 GET /api/jobs/<job_id>
 Output:
 { "ok": true, "job": <JobRecord JSON> }
-Error 404 if not found in memory or on disk.
+Error 404 if not found in memory or in the active backend mode.
 
 Detail-only additive fields for patch/repair jobs:
 - original_patch_path: "<string|null>"
@@ -1287,92 +1308,90 @@ Subset selection is available only when selectable is true.
 Output:
 { "ok": true, "job_id": "<string>", "tail": "<string>" }
 Source:
-- jobs_root/<job_id>/runner.log (last N lines)
-If runner.log missing: tail is empty string.
+- active backend mode human-readable job log store (last N lines)
+- In `db_primary` mode, source is the persisted DB-backed web-jobs log store.
+- In `file_emergency` mode, source is the emergency file-backed `runner.log`.
+If the source log is missing: tail is empty string.
 
 7.2.11 GET /api/jobs/<job_id>/events
 Output:
-- text/event-stream; charset=utf-8 (SSE)
+- `text/event-stream; charset=utf-8` (SSE)
 
-Semantics (asgi/asgi_app.py):
-- If job not found (neither memory nor disk):
+Semantics (`asgi/asgi_app.py`):
+- If job not found in memory and not found in the active backend mode:
   - returns 200 and immediately emits:
     event: end
     data: {"reason":"job_not_found"}
 - Otherwise:
-- On enqueue (job created and queued), the server MUST ensure the job JSONL exists
-  and contains at least one "queued/accepted" event line, so that clients see
-  immediate output without waiting for the job to enter "running".
-- While job status is "queued" (or "running"), the server MUST NOT emit an "end"
-  event solely because the JSONL file does not yet exist.
-  - Streams "data: <json line>" for each complete line appended to the job jsonl.
-  - On connection, the server SHOULD replay a recent tail of persisted JSONL events
-    (default: last 500 lines) before switching to broker live streaming.
+  - On enqueue (job created and queued), the server MUST ensure that persisted
+    event history exists and contains at least one accepted/queued event record,
+    so that clients see immediate output without waiting for the job to enter
+    `running`.
+  - While job status is `queued` (or `running`), the server MUST NOT emit an
+    `end` event solely because persisted event history does not yet exist.
+  - The server streams `data: <json line>` for each complete persisted event
+    line.
+  - On connection, the server SHOULD replay a recent tail of persisted event
+    history (default: last 500 lines) before switching to broker live streaming.
   - Live events SHOULD appear in the UI with low latency (no polling batching).
 
 Runner IPC event persistence robustness (HARD):
-- The job event pump MUST NOT rely on asyncio StreamReader.readline() limits.
-- The pump MUST read the IPC stream in chunks and split on "\n".
+- The job event pump MUST NOT rely on `asyncio StreamReader.readline()` limits.
+- The pump MUST read the IPC stream in chunks and split on `"\n"`.
 - The pump MUST persist each complete JSONL line as-is (after UTF-8 decode).
 - This raw capture rule includes IPC control and reply frames received on the
   job socket.
 - If a single line grows beyond 64 MiB without a newline, the pump MUST drop
   the partial buffer and emit a JSON notice line with:
-  {"type":"patchhub_notice","code":"IPC_LINE_TOO_LARGE_DROPPED",...}.
-- After runner process exit, PatchHub MUST use cfg.runner.post_exit_grace_s as
+  `{"type":"patchhub_notice","code":"IPC_LINE_TOO_LARGE_DROPPED",...}`.
+- After runner process exit, PatchHub MUST use `cfg.runner.post_exit_grace_s` as
   the shared bounded wait for both stdout tail drain and IPC shutdown-tail
   completion.
 - If the shared post-exit grace expires, PatchHub MUST cancel the pending tail
   wait, record deterministic diagnostics, and continue finalization.
-  - Emits periodic comment pings every ~10 seconds:
-    : ping
-  - Ends with:
-    event: end
-    data: {"reason":"job_completed","status":"<job.status>"}
+- Emits periodic comment pings every ~10 seconds:
+  `: ping`
+- Ends with:
+  event: end
+  data: {"reason":"job_completed","status":"<job.status>"}
 
 Lifecycle invariants (HARD):
-- The server MUST treat tail-based streaming and broker-based streaming as
+- The server MUST treat historical replay and broker-based streaming as
   equivalent with respect to termination semantics.
 - Completion ordering MUST be:
-  1) Set final job status (success|fail|canceled)
-  2) Persist final job state to disk
+  1) Set final job status (`success|fail|canceled`)
+  2) Persist final job state to the active backend mode
   3) Close the live broker (if any)
   4) Emit SSE end trailer:
      event: end
      data: {"reason":"job_completed","status":"<job.status>"}
   The status carried in the end trailer MUST be the final persisted status.
-- Silent termination (stream ends without an explicit "event: end") is forbidden.
+- Silent termination (stream ends without an explicit `event: end`) is forbidden.
 - Broker close MUST be deterministic:
   - Backpressure MAY drop data lines,
   - but MUST NOT drop the broker termination signal (subscriber loops MUST end).
-- After successful enqueue (HTTP 200 for POST /api/jobs/enqueue),
-  GET /api/jobs/<job_id>/events MUST NOT return {"reason":"job_not_found"}
+- After successful enqueue (HTTP 200 for `POST /api/jobs/enqueue`),
+  `GET /api/jobs/<job_id>/events` MUST NOT return `{"reason":"job_not_found"}`.
 - A stuck post-exit tail wait MUST NOT keep a memory-resident job in
-  status="running" indefinitely after runner exit.
-- When cfg.runner.post_exit_grace_s expires after runner exit, PatchHub MUST:
+  `status="running"` indefinitely after runner exit.
+- When `cfg.runner.post_exit_grace_s` expires after runner exit, PatchHub MUST:
   - stop waiting on the pending tail task,
-  - preserve completion status mapping from return_code,
+  - preserve completion status mapping from `return_code`,
   - persist deterministic diagnostics describing the timed-out tail path, and
   - unblock the single-runner queue for subsequent jobs.
 
 SSE source rule (HARD):
 - SSE MUST NOT connect to the runner IPC socket directly.
-- Live SSE streaming MUST use an in-memory job event broker fed by the job event pump.
-- JSONL tailing is permitted only as a fallback for historical jobs or after restart.
-
-JSONL source file selection:
-- If job exists only on disk:
-  - path determined by _job_jsonl_path_from_fields(job_id, mode, issue_id)
-- If job in memory:
-  - path determined by _job_jsonl_path(job)
-
-JSONL file naming rules:
-- finalize_live/finalize_workspace => am_patch_finalize.jsonl
-- otherwise issue_id digits => am_patch_issue_<issue_id>.jsonl
-- else fallback to am_patch_finalize.jsonl
+- Live SSE streaming MUST use an in-memory job event broker fed by the job
+  event pump.
+- Historical replay in `db_primary` mode MUST use the persisted DB-backed event
+  store only.
+- Historical replay in `file_emergency` mode MAY use the persisted file-backed
+  event store.
 
 End-of-stream rule:
-- If job status != running and no growth observed for >= 0.5 seconds, stream ends.
+- If job status != `running` and no growth observed for >= 0.5 seconds, stream
+  ends.
 
 7.2.12 GET /api/debug/diagnostics
 Output: JSON object (NOT envelope).
@@ -1734,50 +1753,101 @@ Semantics:
 Job IDs are generated by uuid.uuid4().hex (32 lowercase hex characters).
 
 8.2 Persistence
-For each job, PatchHub writes:
-- jobs_root/<job_id>/job.json
-- jobs_root/<job_id>/runner.log (runner stdout/stderr)
-Additionally, PatchHub persists a jsonl store into jobs_root/<job_id>/:
-- am_patch_issue_<issue_id>.jsonl or am_patch_finalize.jsonl
 
-Persistence source (HARD):
-- Runtime source is the runner IPC socket NDJSON stream.
-- PatchHub MUST persist every received NDJSON line into the job jsonl store.
-- This includes runner events, control frames, and reply frames received on
-  the job socket.
+Backend modes (HARD)
+- PatchHub web-jobs persistence operates in exactly one authoritative backend
+  mode at a time:
+  - `db_primary`
+  - `file_emergency`
+- Dual-write and dual-read authority are forbidden.
+- Automatic fallback to files is permitted only as a mode switch from
+  `db_primary` to `file_emergency`; it MUST NOT create a second concurrent
+  source of truth.
+
+Primary DB artifact
+- In `db_primary` mode, PatchHub persists web-jobs state in a PatchHub-local DB
+  artifact under `patches/artifacts/`.
+- The DB artifact path and related tuning, retention, backup and recovery
+  settings are configured by PatchHub TOML under dedicated `web_jobs_*` blocks.
+
+Primary DB contents
+- persisted job metadata
+- persisted human-readable job log lines
+- persisted raw NDJSON event lines captured by the job event pump
+- revision and meta state needed for cheap unchanged checks and snapshots
+
+Crash-safety contract (HARD)
+- Commit-before-observe is mandatory.
+- A job state, log line or event line MUST become visible to API/SSE consumers
+  only after the corresponding DB transaction commits successfully.
+- PatchHub MUST NOT report a final job status in user-visible APIs before that
+  final status is durably persisted in the active backend mode.
+- During migration, recovery or restore, source data cleanup MUST NOT occur in
+  the same phase as import or restore.
+
+Backup and recovery contract (HARD)
+- PatchHub MUST support creation of a physical backup into a separate file.
+- A verified backup MUST be restorable without the original runtime process.
+- On detection of unclean shutdown, DB open failure, or DB integrity failure in
+  `db_primary` mode, PatchHub MUST automatically attempt recovery in this order:
+  1) main DB artifact
+  2) latest verified backup
+  3) emergency export or restore into `file_emergency` mode
+- Queue processing and mutating web-jobs operations MUST remain blocked until
+  exactly one authoritative backend mode is selected.
+
+Persistence source (HARD)
+- Runtime source for structured events is the runner IPC socket NDJSON stream.
+- In `db_primary` mode, PatchHub MUST persist every received NDJSON line into
+  the DB-backed event store.
+- In `file_emergency` mode, PatchHub MAY persist NDJSON lines into the
+  emergency file-backed event store.
+- This includes runner events, control frames and reply frames received on the
+  job socket.
 - PatchHub MUST NOT rewrite NDJSON lines.
-- After receiving a control frame with event="connected", the job event pump
-  MUST send the IPC command ready.
-- If sending ready fails, or if a reply frame for ready is missing or carries
-  ok=false, the pump MUST continue raw capture without aborting the job event
-  stream.
-- After receiving a control frame with event="eos" and seq=<n>, the job event
-  pump MUST first persist that eos line and then send drain_ack(seq=<n>).
-- If sending drain_ack fails, or if a reply frame for drain_ack is missing or
-  carries ok=false, the pump MUST continue shutdown tail capture without
+- After receiving a control frame with `event="connected"`, the job event pump
+  MUST send the IPC command `ready`.
+- If sending `ready` fails, or if a reply frame for `ready` is missing or
+  carries `ok=false`, the pump MUST continue raw capture without aborting the
+  job event stream.
+- After receiving a control frame with `event="eos"` and `seq=<n>`, the job
+  event pump MUST first persist that eos line and then send
+  `drain_ack(seq=<n>)`.
+- If sending `drain_ack` fails, or if a reply frame for `drain_ack` is missing
+  or carries `ok=false`, the pump MUST continue shutdown-tail capture without
   dropping already-received lines.
 
-jobs_root is fixed:
-- jobs_root = patches_root/artifacts/web_jobs
+Legacy file-tree status
+- `patches/artifacts/web_jobs/<job_id>/job.json`, `runner.log` and
+  `am_patch_issue_<issue_id>.jsonl` / `am_patch_finalize.jsonl` are legacy file
+  artifacts.
+- In `db_primary` mode they MUST NOT be created during normal runtime.
+- In `file_emergency` mode they MAY be used as the active backend.
+
+jobs_root naming
+- `jobs_root = patches_root/artifacts/web_jobs`
+- In `db_primary` mode this path is a PatchHub-owned virtual namespace for
+  compatibility paths such as `artifacts/web_jobs/...`.
 
 8.3 Single-runner rule
 Only one runner execution may be active at a time.
 Queue worker waits until BOTH are true:
-- executor.is_running() is false, AND
-- is_lock_held(patches_root/am_patch.lock) is false
+- `executor.is_running()` is false, AND
+- `is_lock_held(patches_root/am_patch.lock)` is false
 
-8.4 Web override injection (queue._inject_web_overrides)
+8.4 Web override injection (`queue._inject_web_overrides`)
 Before executing a job, PatchHub injects runner overrides into argv
 deterministically and idempotently:
-- --override ipc_socket_enabled=true
-- --override ipc_handshake_enabled=true
-- --override ipc_handshake_wait_s=<cfg.runner.ipc_handshake_wait_s>
-  - cfg.runner.ipc_handshake_wait_s MUST be an integer >= 1
-- --override ipc_socket_path=/tmp/audiomason/patchhub_<job_id>.sock
-- --override patch_layout_json_dir=artifacts/web_jobs/<job_id>
+- `--override ipc_socket_enabled=true`
+- `--override ipc_handshake_enabled=true`
+- `--override ipc_handshake_wait_s=<cfg.runner.ipc_handshake_wait_s>`
+  - `cfg.runner.ipc_handshake_wait_s` MUST be an integer >= 1
+- `--override ipc_socket_path=/tmp/audiomason/patchhub_<job_id>.sock`
+- PatchHub-run jobs MUST deterministically disable runner-side JSON file output
+  into the legacy web-jobs file tree.
 
-PatchHub MUST NOT inject:
-- --override json_out=true
+PatchHub MUST NOT inject a value that causes runner JSON output to become the
+normal authoritative source for `web_jobs` state.
 
 Insertion point:
 - immediately after the first argv element that ends with "am_patch.py"
@@ -1821,25 +1891,66 @@ SSE + persisted state rule:
 
 -------------------------------------------------------------------------------
 
-9. Runner Observation Model (Log + JSONL)
+9. Runner Observation Model (Log + Event Store)
 
 PatchHub provides two complementary streams:
-- runner.log (stdout/stderr text) for human reading
-- PatchHub jsonl store (am_patch_issue_*.jsonl) for structured UI updates
+- a human-readable job log store for text viewing
+- a structured persisted event store for UI updates
 
 Runtime source:
 - IPC socket NDJSON stream
+- runner stdout/stderr stream
 
 Persistence:
-- PatchHub jsonl store (single pump per job)
+- In `db_primary` mode:
+  - DB-backed human-readable log store
+  - DB-backed structured event store (single pump per job)
+- In `file_emergency` mode:
+  - file-backed `runner.log`
+  - file-backed PatchHub event store
 
-SSE (/api/jobs/<job_id>/events) streams JSONL lines by tailing the PatchHub
-jsonl store only. PatchHub does not parse or rewrite JSONL lines.
+SSE (`/api/jobs/<job_id>/events`) streams persisted event lines from the active
+backend mode only. PatchHub does not parse or rewrite persisted NDJSON lines.
 Debug live view requirements (HARD):
-- In debug level, the UI MUST display every persisted JSONL line, including
+- In debug level, the UI MUST display every persisted event line, including
   non-log IPC reply/control frames.
 - Debug rendering MUST provide a deterministic non-empty fallback for reply,
   control, and other non-log JSON objects.
+
+Bounded-growth contract (HARD)
+- Raw log and event history in `db_primary` mode MUST be subject to retention
+  and compaction after jobs reach terminal state.
+- Long-term retention MUST preserve thin job metadata plus compact derived data
+  needed for common UI reads after prune.
+
+9.1 PatchHub TOML config blocks for web-jobs DB (HARD)
+
+PatchHub MUST expose dedicated TOML config blocks for web-jobs DB behavior:
+- `[web_jobs_db]`
+- `[web_jobs_migration]`
+- `[web_jobs_backup]`
+- `[web_jobs_recovery]`
+- `[web_jobs_fallback]`
+- `[web_jobs_retention]`
+- `[web_jobs_derived]`
+
+Configurable knobs SHOULD include, where applicable:
+- paths and path templates
+- polling intervals and batch sizes
+- timeouts and busy timeouts
+- verification toggles and startup checks
+- backup triggers, retention counts and restore priority knobs
+- recovery thresholds, export controls and emergency fallback policy knobs
+- retention windows, prune limits and compaction thresholds
+- virtual-path compatibility toggles
+
+The following safety invariants MUST remain non-configurable:
+- single authoritative backend mode
+- no dual-write authority
+- commit-before-observe
+- recovery attempt order
+- no normal runtime write into legacy `web_jobs/<job_id>/*` files in
+  `db_primary` mode
 
 -------------------------------------------------------------------------------
 
