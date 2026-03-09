@@ -83,7 +83,7 @@ The runner supports an independent file log filter:
 
 Both `--verbosity` and `--log-level` use the same level names and meanings, but may be set to different values.
 
-On FAIL, the runner may also emit a runner-owned error detail line in the form
+On FAIL, the runner emits a runner-owned error detail line in the form
 `ERROR DETAIL: <stage>:<category>: <single-line-message>` when a `RunnerError`
 produces no failed-step stdout/stderr dump. This line is error detail, not part
 of the final summary.

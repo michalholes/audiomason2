@@ -1,3 +1,8 @@
+## 2026-03-09T00:00:02+01:00
+
+- Sync the AMP runner docs with the implemented failure-detail contract and
+  current RUNNER_VERSION example.
+
 ## 2026-03-09T00:00:01+01:00
 
 - Emit runner-owned ERROR DETAIL records for RunnerError failures, keep the
