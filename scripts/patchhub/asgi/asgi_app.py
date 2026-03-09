@@ -519,14 +519,15 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
             return _head_json_response(200, etag=etag)
         return _head_json_response(200, etag=etag)
 
+    @app.get("/api/patches/zip_manifest")
+    async def api_patch_zip_manifest(path: str) -> Response:
+        status, data = await to_thread(core.api_patch_zip_manifest, {"path": path})
+        return Response(content=data, status_code=status, media_type="application/json")
+
     @app.get("/api/jobs/{job_id}")
-    async def api_jobs_get(job_id: str) -> JSONResponse:
-        job = await core.queue.get_job(job_id)
-        if job is None:
-            job = await to_thread(core._load_job_from_disk, job_id)
-        if job is None:
-            return JSONResponse({"ok": False, "error": "Not found"}, status_code=404)
-        return JSONResponse({"ok": True, "job": job.to_json()})
+    async def api_jobs_get(job_id: str) -> Response:
+        status, data = await to_thread(core.api_jobs_get, job_id)
+        return Response(content=data, status_code=status, media_type="application/json")
 
     @app.get("/api/jobs/{job_id}/log_tail")
     async def api_jobs_log_tail(job_id: str, lines: int = 200) -> JSONResponse:

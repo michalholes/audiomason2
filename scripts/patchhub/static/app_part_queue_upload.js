@@ -21,6 +21,7 @@ function validateAndPreview() {
 	el("patchPath").value = patchPath;
 
 	var raw = getRawCommand();
+	PH.call("syncZipSubsetUiFromInputs");
 
 	var modeRules = null;
 	if (mode === "patch") {
@@ -91,6 +92,12 @@ function validateAndPreview() {
 			canonical_argv: canonical,
 		};
 	}
+	preview = PH.call("applyZipSubsetPreview", preview) || preview;
+	var subsetState = PH.call("getZipSubsetValidationState") || {
+		ok: true,
+		hint: "",
+	};
+	if (subsetState.ok === false) ok = false;
 	setPre("previewRight", preview);
 	el("enqueueBtn").disabled = !ok;
 
@@ -101,6 +108,8 @@ function validateAndPreview() {
 		} else {
 			if (ok) {
 				hint2.textContent = "";
+			} else if (subsetState && subsetState.hint) {
+				hint2.textContent = String(subsetState.hint || "");
 			} else if (mode === "finalize_live") {
 				hint2.textContent = "missing message";
 			} else if (mode === "finalize_workspace") {
@@ -116,6 +125,7 @@ function validateAndPreview() {
 
 function enqueue() {
 	var mode = String(el("mode").value || "patch");
+	var subsetPayload = {};
 	var body = {
 		mode: mode,
 		raw_command: el("rawCommand")
@@ -131,6 +141,15 @@ function enqueue() {
 		body.patch_path = normalizePatchPath(
 			String(el("patchPath").value || "").trim(),
 		);
+		subsetPayload = PH.call("getZipSubsetEnqueuePayload") || {};
+		if (subsetPayload.error) {
+			setUiError(String(subsetPayload.error || "invalid zip subset state"));
+			return;
+		}
+		if (Array.isArray(subsetPayload.selected_patch_entries)) {
+			body.selected_patch_entries =
+				subsetPayload.selected_patch_entries.slice();
+		}
 	} else if (mode === "finalize_live") {
 		body.commit_message = String(el("commitMsg").value || "").trim();
 	} else if (mode === "finalize_workspace") {

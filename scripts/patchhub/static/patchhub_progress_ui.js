@@ -252,6 +252,71 @@
 		if (st === "idle") node.classList.add("muted");
 	}
 
+	var appliedJobKey = "";
+
+	function renderAppliedFilesBlock(html, hidden) {
+		var node = el("progressApplied");
+		if (!node) return;
+		node.classList.toggle("hidden", !!hidden);
+		node.innerHTML = hidden ? "" : html;
+	}
+
+	function renderAppliedFilesUnavailable(statusText) {
+		renderAppliedFilesBlock(
+			'<div class="progress-applied-title">Applied files unavailable</div>' +
+				`<div class="muted">${escapeHtml(statusText)}</div>`,
+			false,
+		);
+	}
+
+	function renderAppliedFiles(job) {
+		var files = Array.isArray(job.applied_files) ? job.applied_files : [];
+		if (!files.length) {
+			renderAppliedFilesUnavailable("successful run with no applied file list");
+			return;
+		}
+		var visible = files.slice(0, 8);
+		var html = `<div class="progress-applied-title">Applied files (${files.length})</div>`;
+		html += '<div class="progress-applied-list">';
+		visible.forEach((path) => {
+			html += `<div class="progress-applied-item">${escapeHtml(path)}</div>`;
+		});
+		if (files.length > visible.length) {
+			html += `<div class="progress-applied-more">+${files.length - visible.length} more</div>`;
+		}
+		html += "</div>";
+		renderAppliedFilesBlock(html, false);
+	}
+
+	function refreshAppliedFilesForCurrentJob(summary) {
+		var status = summary && summary.status ? String(summary.status) : "idle";
+		var jobId = "";
+		try {
+			jobId = String(PH.call("getLiveJobId") || "");
+		} catch (e) {
+			jobId = "";
+		}
+		if (!jobId || status === "idle" || status === "running") {
+			appliedJobKey = "";
+			renderAppliedFilesBlock("", true);
+			return;
+		}
+		var key = `${jobId}:${status}`;
+		if (appliedJobKey === key) return;
+		appliedJobKey = key;
+		if (status !== "success") {
+			renderAppliedFilesUnavailable(`result=${status}`);
+			return;
+		}
+		apiGet(`/api/jobs/${encodeURIComponent(jobId)}`).then((r) => {
+			if (!r || r.ok === false || !r.job) {
+				renderAppliedFilesUnavailable("job detail unavailable");
+				return;
+			}
+			renderAppliedFiles(r.job || {});
+		});
+	}
+
 	function updateProgressPanelFromEvents() {
 		var events = ui.liveEvents || [];
 		var progress = deriveProgressFromEvents(events);
@@ -259,6 +324,7 @@
 		var summary = deriveProgressSummaryFromEvents(events, progress);
 		renderProgressSummary(summary.text);
 		setProgressSummaryState(summary);
+		refreshAppliedFilesForCurrentJob(summary);
 	}
 
 	function refreshStats() {
@@ -313,7 +379,9 @@
 		if (active) {
 			jidEnc = encodeURIComponent(active.job_id || "");
 			html += `<div><b>running</b> ${escapeHtml(active.job_id || "")}</div>`;
-			html += `<div class="muted">mode=${escapeHtml(active.mode || "")} issue=${escapeHtml(active.issue_id || "")}</div>`;
+			html +=
+				`<div class="muted">mode=${escapeHtml(active.mode || "")} ` +
+				`issue=${escapeHtml(active.issue_id || "")}</div>`;
 			html +=
 				'<div class="row"><button class="btn btn-small" id="cancelActive">Cancel</button>' +
 				'<button class="btn btn-small" id="hardStopActive">Hard stop AMP</button>';

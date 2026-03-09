@@ -62,6 +62,7 @@ async function loadParts(rt) {
 		"/static/app_part_queue_upload.js",
 		"app_part_queue_upload",
 	);
+	await PH.loadScript("/static/app_part_zip_subset.js", "app_part_zip_subset");
 	await PH.loadScript(
 		"/static/app_part_autofill_header.js",
 		"app_part_autofill_header",
@@ -408,7 +409,7 @@ function setFsHint(msg) {
 function fsUpdateSelCount() {
 	var n = 0;
 	for (var k in fsChecked) {
-		if (Object.prototype.hasOwnProperty.call(fsChecked, k)) n += 1;
+		if (Object.hasOwn(fsChecked, k)) n += 1;
 	}
 	var node = el("fsSelCount");
 	if (node) {
@@ -425,7 +426,7 @@ function fsClearSelection() {
 function fsDownloadSelected() {
 	var paths = [];
 	for (var k in fsChecked) {
-		if (Object.prototype.hasOwnProperty.call(fsChecked, k)) paths.push(k);
+		if (Object.hasOwn(fsChecked, k)) paths.push(k);
 	}
 	if (!paths.length) {
 		setFsHint("select at least one item");

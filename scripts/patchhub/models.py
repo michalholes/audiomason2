@@ -29,6 +29,13 @@ class JobRecord:
     cancel_ack_utc: str | None = None
     cancel_source: str | None = None
 
+    # Zip provenance and selection detail (detail endpoint only)
+    original_patch_path: str | None = None
+    effective_patch_path: str | None = None
+    effective_patch_kind: str | None = None
+    selected_patch_entries: list[str] = field(default_factory=list)
+    selected_repo_paths: list[str] = field(default_factory=list)
+
     def to_json(self) -> dict[str, Any]:
         return asdict(self)
 

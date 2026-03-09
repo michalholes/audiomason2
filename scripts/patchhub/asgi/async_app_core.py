@@ -152,6 +152,8 @@ class AsyncAppCore:
     _load_job_from_disk = _jobs._load_job_from_disk
     _job_jsonl_path = _jobs._job_jsonl_path
     _pick_tail_job = _jobs._pick_tail_job
+    api_patch_zip_manifest = _jobs.api_patch_zip_manifest
+    api_jobs_get = _jobs.api_jobs_get
 
     api_upload_patch = _upload.api_upload_patch
     api_workspaces = _workspaces.api_workspaces

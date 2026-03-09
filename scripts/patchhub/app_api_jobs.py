@@ -21,11 +21,20 @@ from .models import (
     compute_patch_basename,
     job_to_list_item_json,
 )
+from .run_applied_files import collect_job_applied_files
 from .zip_commit_message import (
     ZipCommitConfig,
     ZipIssueConfig,
     read_commit_message_from_zip_path,
     read_issue_number_from_zip_path,
+)
+from .zip_patch_subset import (
+    build_zip_patch_manifest,
+    create_subset_zip,
+    derive_subset_patch_rel_path,
+    resolve_patch_zip_path,
+    selected_repo_paths_from_manifest,
+    validate_selected_patch_entries,
 )
 
 
@@ -79,6 +88,31 @@ def _try_fill_issue_from_zip(self, patch_path: str) -> str:
     return zid or ""
 
 
+def _selected_patch_entries_from_body(body: dict[str, Any]) -> list[str]:
+    raw = body.get("selected_patch_entries")
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        raise ValueError("selected_patch_entries must be a JSON array")
+    out: list[str] = []
+    seen: set[str] = set()
+    for item in raw:
+        name = str(item or "")
+        if not name or name in seen:
+            continue
+        out.append(name)
+        seen.add(name)
+    return out
+
+
+def _job_patch_path_from_canonical(job: JobRecord) -> str | None:
+    if job.mode not in ("patch", "repair"):
+        return None
+    if len(job.canonical_command) < 4:
+        return None
+    return str(job.canonical_command[-1] or "") or None
+
+
 def _job_jsonl_path_from_fields(self, job_id: str, mode: str, issue_id: str) -> Path:
     d = self.jobs_root / str(job_id)
     if mode in ("finalize_live", "finalize_workspace"):
@@ -120,12 +154,10 @@ def _load_job_from_disk(self, job_id: str) -> JobRecord | None:
         cache.pop(job_id, None)
         return None
     try:
-        # The on-disk schema matches JobRecord.to_json().
         job = JobRecord(**raw)
         cache[job_id] = (st.st_mtime_ns, job)
         return job
     except Exception:
-        # Be tolerant: return minimal info if schema drifted.
         try:
             jid = str(raw.get("job_id", job_id))
             created = str(raw.get("created_utc", ""))
@@ -167,6 +199,13 @@ def _load_job_from_disk(self, job_id: str) -> JobRecord | None:
             jr.cancel_requested_utc = raw.get("cancel_requested_utc")
             jr.cancel_ack_utc = raw.get("cancel_ack_utc")
             jr.cancel_source = raw.get("cancel_source")
+            jr.original_patch_path = raw.get("original_patch_path")
+            jr.effective_patch_path = raw.get("effective_patch_path")
+            jr.effective_patch_kind = raw.get("effective_patch_kind")
+            jr.selected_patch_entries = [
+                str(x) for x in list(raw.get("selected_patch_entries") or [])
+            ]
+            jr.selected_repo_paths = [str(x) for x in list(raw.get("selected_repo_paths") or [])]
             cache[job_id] = (st.st_mtime_ns, jr)
             return jr
         except Exception:
@@ -191,6 +230,48 @@ def _pick_tail_job(self) -> JobRecord | None:
     return jobs[0] if jobs else None
 
 
+def _job_detail_json(self, job: JobRecord) -> dict[str, Any]:
+    payload = job.to_json()
+    if not payload.get("original_patch_path"):
+        patch_path = _job_patch_path_from_canonical(job)
+        if patch_path:
+            payload["original_patch_path"] = patch_path
+    if not payload.get("effective_patch_path"):
+        patch_path = _job_patch_path_from_canonical(job)
+        if patch_path:
+            payload["effective_patch_path"] = patch_path
+    if not payload.get("effective_patch_kind") and payload.get("effective_patch_path"):
+        payload["effective_patch_kind"] = "original"
+
+    jobs_root = getattr(self, "jobs_root", self.patches_root / "artifacts" / "web_jobs")
+    files, source = collect_job_applied_files(
+        patches_root=self.patches_root,
+        jobs_root=jobs_root,
+        job=job,
+    )
+    payload["applied_files"] = files
+    payload["applied_files_source"] = source
+    return payload
+
+
+def api_patch_zip_manifest(self, qs: dict[str, str]) -> tuple[int, bytes]:
+    patch_path = str(qs.get("path", "")).strip()
+    if not patch_path:
+        return _err("Missing path", status=400)
+    try:
+        _rel, zpath = resolve_patch_zip_path(
+            jail=self.jail,
+            patches_root_rel=self.cfg.paths.patches_root,
+            patch_path=patch_path,
+        )
+        manifest = build_zip_patch_manifest(patch_path=patch_path, zpath=zpath)
+    except ValueError as e:
+        return _err(str(e), status=400)
+    except Exception:
+        return _err("Cannot inspect patch zip", status=500)
+    return _ok({"manifest": manifest})
+
+
 def api_jobs_enqueue(self, body: dict[str, Any]) -> tuple[int, bytes]:
     mode_s = str(body.get("mode", "patch"))
     if mode_s not in ("patch", "repair", "finalize_live", "finalize_workspace", "rerun_latest"):
@@ -203,6 +284,18 @@ def api_jobs_enqueue(self, body: dict[str, Any]) -> tuple[int, bytes]:
     commit_message = str(body.get("commit_message", ""))
     patch_path = str(body.get("patch_path", ""))
     raw_command = str(body.get("raw_command", ""))
+    try:
+        selected_patch_entries = _selected_patch_entries_from_body(body)
+    except ValueError as e:
+        return _err(str(e), status=400)
+
+    original_patch_path = patch_path or None
+    effective_patch_path = patch_path or None
+    effective_patch_kind = "original" if patch_path else None
+    selected_repo_paths: list[str] = []
+
+    if raw_command and selected_patch_entries:
+        return _err("raw_command cannot be combined with selected_patch_entries", status=400)
 
     if raw_command:
         try:
@@ -210,12 +303,14 @@ def api_jobs_enqueue(self, body: dict[str, Any]) -> tuple[int, bytes]:
         except CommandParseError as e:
             return _err(str(e), status=400)
         if parsed.mode != mode and parsed.mode != "patch":
-            # Allow parsing a patch command and submitting as repair.
             pass
         canonical = parsed.canonical_argv
         issue_id = parsed.issue_id or issue_id
         commit_message = parsed.commit_message or commit_message
         patch_path = parsed.patch_path or patch_path
+        original_patch_path = patch_path or None
+        effective_patch_path = patch_path or None
+        effective_patch_kind = "original" if patch_path else None
     else:
         if mode == "finalize_live":
             if not commit_message:
@@ -231,7 +326,6 @@ def api_jobs_enqueue(self, body: dict[str, Any]) -> tuple[int, bytes]:
             if not issue_id and patch_path:
                 issue_id = _try_fill_issue_from_zip(self, patch_path)
             if not issue_id:
-                # Auto-allocate for standard patch.
                 issue_id = str(
                     allocate_next_issue_id(
                         self.patches_root,
@@ -246,14 +340,87 @@ def api_jobs_enqueue(self, body: dict[str, Any]) -> tuple[int, bytes]:
                 commit_message = _try_fill_commit_from_zip(self, patch_path)
             if not commit_message:
                 return _err("Missing commit_message", status=400)
+
+            job_id = new_job_id()
+            if selected_patch_entries:
+                try:
+                    _rel, zpath = resolve_patch_zip_path(
+                        jail=self.jail,
+                        patches_root_rel=self.cfg.paths.patches_root,
+                        patch_path=patch_path,
+                    )
+                    manifest = build_zip_patch_manifest(patch_path=patch_path, zpath=zpath)
+                    selected_patch_entries = validate_selected_patch_entries(
+                        manifest,
+                        selected_patch_entries,
+                    )
+                except ValueError as e:
+                    return _err(str(e), status=400)
+
+                all_entries = [
+                    str(item.get("zip_member", ""))
+                    for item in list(manifest.get("entries") or [])
+                    if item.get("selectable")
+                ]
+                selected_repo_paths = selected_repo_paths_from_manifest(
+                    manifest,
+                    selected_patch_entries,
+                )
+                if selected_patch_entries != all_entries:
+                    derived_rel = derive_subset_patch_rel_path(
+                        original_patch_path=patch_path,
+                        job_id=job_id,
+                    )
+                    derived_path = self.patches_root / derived_rel
+                    try:
+                        create_subset_zip(
+                            source_zip=zpath,
+                            dest_zip=derived_path,
+                            selected_patch_entries=selected_patch_entries,
+                        )
+                    except Exception:
+                        return _err("Cannot create derived subset zip", status=500)
+                    effective_patch_path = str(Path(self.cfg.paths.patches_root) / derived_rel)
+                    effective_patch_kind = "derived_subset"
+                else:
+                    effective_patch_path = patch_path
+                    effective_patch_kind = "original"
+            else:
+                job_id = new_job_id()
+
             canonical = build_canonical_command(
-                runner_prefix, mode, issue_id, commit_message, patch_path
+                runner_prefix,
+                mode,
+                issue_id,
+                commit_message,
+                str(effective_patch_path or patch_path),
             )
+            commit_summary = compute_commit_summary(commit_message)
+            if not commit_summary:
+                commit_summary = f"({mode})"
+            patch_basename = compute_patch_basename(str(effective_patch_path or patch_path))
+            job = JobRecord(
+                job_id=job_id,
+                created_utc=_utc_now(),
+                mode=mode,
+                issue_id=issue_id,
+                commit_summary=commit_summary,
+                patch_basename=patch_basename,
+                raw_command=raw_command,
+                canonical_command=canonical,
+                original_patch_path=original_patch_path,
+                effective_patch_path=effective_patch_path,
+                effective_patch_kind=effective_patch_kind,
+                selected_patch_entries=selected_patch_entries,
+                selected_repo_paths=selected_repo_paths,
+            )
+            self.queue.enqueue(job)
+            return _ok({"job_id": job_id, "job": _job_detail_json(self, job)})
 
     commit_summary = compute_commit_summary(commit_message)
     if not commit_summary:
         commit_summary = f"({mode})"
-    patch_basename = compute_patch_basename(patch_path)
+    patch_basename = compute_patch_basename(str(effective_patch_path or patch_path))
 
     job_id = new_job_id()
     job = JobRecord(
@@ -265,9 +432,14 @@ def api_jobs_enqueue(self, body: dict[str, Any]) -> tuple[int, bytes]:
         patch_basename=patch_basename,
         raw_command=raw_command,
         canonical_command=canonical,
+        original_patch_path=original_patch_path,
+        effective_patch_path=effective_patch_path,
+        effective_patch_kind=effective_patch_kind,
+        selected_patch_entries=selected_patch_entries,
+        selected_repo_paths=selected_repo_paths,
     )
     self.queue.enqueue(job)
-    return _ok({"job_id": job_id, "job": job.to_json()})
+    return _ok({"job_id": job_id, "job": _job_detail_json(self, job)})
 
 
 def api_jobs_list(self) -> tuple[int, bytes]:
@@ -294,7 +466,7 @@ def api_jobs_get(self, job_id: str) -> tuple[int, bytes]:
         job = self._load_job_from_disk(job_id)
     if job is None:
         return _err("Not found", status=404)
-    return _ok({"job": job.to_json()})
+    return _ok({"job": _job_detail_json(self, job)})
 
 
 def api_jobs_log_tail(self, job_id: str, qs: dict[str, str]) -> tuple[int, bytes]:

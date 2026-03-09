@@ -117,6 +117,7 @@
           <input id="patchPath" class="input" placeholder="patch path (e.g. patches/incoming/issue_1000.zip)" />
           <button type="button" id="browsePatch" class="btn btn-small">From file manager</button>
         </div>
+        <div id="zipSubsetStrip" class="zip-subset-strip hidden"></div>
 
         <div id="uiStatusBar" class="statusbar" aria-live="polite"></div>
         <div id="enqueueHint" class="muted"></div>
@@ -204,6 +205,7 @@
         <h2>Progress</h2>
         <div id="progressSteps" class="progress-steps"></div>
         <div id="progressSummary" class="progress-summary muted">(idle)</div>
+        <div id="progressApplied" class="progress-applied hidden"></div>
       </section>
 
       <section class="card card-tight">
@@ -251,6 +253,32 @@
       </section>
     </aside>
   </main>
+
+  <div id="zipSubsetModal" class="modal-backdrop hidden" aria-hidden="true">
+    <div class="modal-card zip-subset-modal-card" role="dialog" aria-modal="true">
+      <div class="row">
+        <h2 style="margin:0">Select target files</h2>
+        <span class="spacer"></span>
+        <button type="button" id="zipSubsetCloseBtn" class="btn btn-small">Close</button>
+      </div>
+      <div id="zipSubsetModalSummary" class="muted"></div>
+      <div class="row">
+        <button type="button" id="zipSubsetSelectAllBtn" class="btn btn-small">Select all</button>
+        <button type="button" id="zipSubsetClearBtn" class="btn btn-small">Clear</button>
+        <button
+          type="button"
+          id="zipSubsetResetBtn"
+          class="btn btn-small"
+        >Reset to uploaded zip</button>
+      </div>
+      <div id="zipSubsetModalList" class="zip-subset-list"></div>
+      <div class="row">
+        <span class="spacer"></span>
+        <button type="button" id="zipSubsetCancelBtn" class="btn btn-small">Cancel</button>
+        <button type="button" id="zipSubsetApplyBtn" class="btn btn-danger">Apply</button>
+      </div>
+    </div>
+  </div>
 
   <script src="/static/patchhub_bootstrap.js?v=1.8.0"></script>
 </body>
