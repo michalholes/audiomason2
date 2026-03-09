@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import contextlib
 import glob
 import json
 import os
@@ -273,10 +274,8 @@ def _cleanup_issue_artifacts(ctx: Ctx, *, issue_id: str, test_id: str | None) ->
             if p.is_dir():
                 shutil.rmtree(p, ignore_errors=True)
             else:
-                try:
+                with contextlib.suppress(FileNotFoundError):
                     p.unlink()
-                except FileNotFoundError:
-                    pass
 
     ws = repo_root / "patches" / "workspaces" / f"issue_{issue_id}"
     _log(ctx, level="verbose", test_id=test_id, obj={"type": "cleanup", "path": str(ws)})
@@ -289,10 +288,8 @@ def _cleanup_issue_artifacts(ctx: Ctx, *, issue_id: str, test_id: str | None) ->
             if p.is_dir():
                 shutil.rmtree(p, ignore_errors=True)
             else:
-                try:
+                with contextlib.suppress(FileNotFoundError):
                     p.unlink()
-                except FileNotFoundError:
-                    pass
 
     for pat in (
         str(repo_root / "patches" / "successful" / f"issue_{issue_id}*"),
@@ -403,7 +400,7 @@ def _run_test_plan(test, ctx: Ctx) -> bool:
             )
         else:
             if step.op == "RUN_RUNNER":
-                for k in rules.keys():
+                for k in rules:
                     if k.startswith("stdout_") or k.startswith("stderr_"):
                         ok = False
                         _log(

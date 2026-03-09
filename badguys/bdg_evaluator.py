@@ -93,9 +93,8 @@ def evaluate_step(
             return False, f"stderr regex not matched: {pat}"
 
     value_eq = rules.get("value_eq")
-    if value_eq is not None:
-        if result.value != value_eq:
-            return False, "value != value_eq"
+    if value_eq is not None and result.value != value_eq:
+        return False, "value != value_eq"
 
     value_contains = _as_list(rules.get("value_contains"))
     vstr = _value_as_str(result.value)

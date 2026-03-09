@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import json
 import socket
 import time
@@ -158,10 +159,8 @@ def send_ipc_command(
             break
         except (FileNotFoundError, ConnectionRefusedError, OSError):
             if sock is not None:
-                try:
+                with contextlib.suppress(Exception):
                     sock.close()
-                except Exception:
-                    pass
             sock = None
             time.sleep(0.02)
 
@@ -219,10 +218,8 @@ def send_ipc_command(
                 continue
             return obj
     finally:
-        try:
+        with contextlib.suppress(Exception):
             sock.close()
-        except Exception:
-            pass
 
 
 def _as_timeout(value: object, *, label: str) -> float:

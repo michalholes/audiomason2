@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import json
 import select
 import shutil
@@ -164,11 +165,9 @@ def record_ipc_stream(
                 connected = True
                 break
             except (FileNotFoundError, ConnectionRefusedError, OSError):
-                try:
+                with contextlib.suppress(Exception):
                     if s is not None:
                         s.close()
-                except Exception:
-                    pass
                 s = None
                 continue
         if connected:
@@ -306,11 +305,9 @@ def record_ipc_stream(
                 if isinstance(obj, dict):
                     _handle_obj(obj)
     finally:
-        try:
+        with contextlib.suppress(Exception):
             if s is not None:
                 s.close()
-        except Exception:
-            pass
 
     _finalize_unresolved_plans(plans, code="EOF", message="ipc connection closed before reply")
     if (
@@ -362,9 +359,8 @@ def _maybe_send_waiting_commands(
         evt_type = plan["wait_event_type"]
         evt_name = plan["wait_event_name"]
         matched_event = plan["matched_event"]
-        if evt_type is not None or evt_name is not None:
-            if matched_event is None:
-                continue
+        if (evt_type is not None or evt_name is not None) and matched_event is None:
+            continue
         if now < connected_at + float(plan.get("delay_s", 0.0) or 0.0):
             continue
         args = dict(plan.get("args", {}))

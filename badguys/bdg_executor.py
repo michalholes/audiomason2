@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import contextlib
 import subprocess
 import sys
 import threading
@@ -198,7 +199,9 @@ def _exec_one(
                         "wait_event_type": plan.wait_event_type,
                         "wait_event_name": plan.wait_event_name,
                         "event_arg_map": dict(plan.event_arg_map),
-                        "request_path": artifacts_dir / f"ipc_request.step{int(plan.step_index)}.json",
+                        "request_path": (
+                            artifacts_dir / f"ipc_request.step{int(plan.step_index)}.json"
+                        ),
                         "reply_path": artifacts_dir / f"ipc_reply.step{int(plan.step_index)}.json",
                     }
                 )
@@ -282,15 +285,13 @@ def _exec_one(
                     _emit_hb(f"BadGuys {test_id} step={int(step_index)} ELAPSED: {mm:02d}:{ss:02d}")
                     continue
                 except KeyboardInterrupt:
-                    try:
+                    with contextlib.suppress(Exception):
                         if proc.poll() is None:
                             proc.terminate()
                             try:
                                 proc.wait(timeout=2.0)
                             except subprocess.TimeoutExpired:
                                 proc.kill()
-                    except Exception:
-                        pass
                     raise
         finally:
             _clear_hb()
@@ -301,10 +302,8 @@ def _exec_one(
         value_text = str(ipc_holder.get("value_text") or "")
 
         if isinstance(ipc_result, dict):
-            try:
+            with contextlib.suppress(Exception):
                 rc = int(ipc_result["return_code"])
-            except Exception:
-                pass
 
             artifact_copy = ipc_holder.get("artifact_copy")
             if isinstance(artifact_copy, dict) and not bool(artifact_copy.get("ok", False)):
@@ -438,10 +437,8 @@ def _exec_one(
 
     if op == "LOCK_DELETE":
         lock_path = _lock_path_for_test(repo_root, test_id=test_id)
-        try:
+        with contextlib.suppress(FileNotFoundError):
             lock_path.unlink()
-        except FileNotFoundError:
-            pass
         return StepResult(rc=0, stdout=None, stderr=None, value=str(lock_path))
 
     if op == "LOCK_WRITE_STALE":
@@ -486,18 +483,14 @@ def _exec_one(
 
     if op == "CLEAN_OUTSIDE_SENTINEL":
         sentinel = _outside_sentinel(repo_root, issue_id=subst.issue_id)
-        try:
+        with contextlib.suppress(FileNotFoundError):
             sentinel.unlink()
-        except FileNotFoundError:
-            pass
         return StepResult(rc=0, stdout=None, stderr=None, value=str(sentinel))
 
     if op == "DELETE_REPO_COMMIT_MARKER":
         marker = repo_root / "badguys" / "artifacts" / "commit_marker.txt"
-        try:
+        with contextlib.suppress(FileNotFoundError):
             marker.unlink()
-        except FileNotFoundError:
-            pass
         return StepResult(rc=0, stdout=None, stderr=None, value=str(marker))
 
     if op == "ASSERT_NO_OUTSIDE_SENTINEL":
@@ -513,10 +506,8 @@ def _exec_one(
 
     if op == "DELETE_PATCHED_ZIP":
         patched_zip = repo_root / "patches" / "patched.zip"
-        try:
+        with contextlib.suppress(FileNotFoundError):
             patched_zip.unlink()
-        except FileNotFoundError:
-            pass
         return StepResult(rc=0, stdout=None, stderr=None, value=str(patched_zip))
 
     if op == "ASSERT_NO_WORKSPACE_AND_NO_ARCHIVES":
@@ -646,10 +637,8 @@ def _exec_one(
         ws_marker = ws_repo / marker_rel
         ws_marker.parent.mkdir(parents=True, exist_ok=True)
         ws_marker.write_text("badguys commit marker\ntest\n", encoding="utf-8")
-        try:
+        with contextlib.suppress(FileNotFoundError):
             (ws_repo / seed_rel).unlink()
-        except FileNotFoundError:
-            pass
         patch_txt = (
             f"diff --git a/{marker_rel} b/{marker_rel}\n"
             "index 1111111..2222222 100644\n"

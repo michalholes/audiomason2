@@ -1,15 +1,17 @@
 from __future__ import annotations
 
+import contextlib
+import fnmatch
 import json
 import os
 import subprocess
 import sys
 import time
+import zipfile
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Union
 
 
 def now_stamp() -> str:
@@ -59,7 +61,7 @@ class ExpectPathExists:
     path: Path
 
 
-Step = Union[CmdStep, FuncStep, ExpectPathExists]
+Step = CmdStep | FuncStep | ExpectPathExists
 
 
 @dataclass
@@ -154,10 +156,8 @@ def acquire_lock(
         if not stale:
             raise SystemExit(f"FAIL: lock exists (not stale): {lock_path}") from e
 
-        try:
+        with contextlib.suppress(FileNotFoundError):
             lock_path.unlink()
-        except FileNotFoundError:
-            pass
 
         # retry once
         fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o644)
@@ -172,10 +172,8 @@ def acquire_lock(
 def release_lock(repo_root: Path, *, path: Path | None = None) -> None:
     lock_path = path if path is not None else _lock_path(repo_root)
     lock_path = lock_path if lock_path.is_absolute() else (repo_root / lock_path)
-    try:
+    with contextlib.suppress(FileNotFoundError):
         lock_path.unlink()
-    except FileNotFoundError:
-        pass
 
 
 def format_result_line(test_name: str, ok: bool) -> str:
@@ -188,10 +186,7 @@ def format_result_line(test_name: str, ok: bool) -> str:
     if os.environ.get("NO_COLOR"):
         colored = status
     else:
-        if ok:
-            colored = f"\x1b[32m{status}\x1b[0m"
-        else:
-            colored = f"\x1b[31m{status}\x1b[0m"
+        colored = f"\x1b[32m{status}\x1b[0m" if ok else f"\x1b[31m{status}\x1b[0m"
 
     return f"{test_name} ... {colored}\n"
 
@@ -230,9 +225,6 @@ def fail_commit_limit(central_log: Path, commit_limit: int, commit_tests: Sequen
 
 
 # --- Additional helpers for new tests (Batch 1) ---
-
-import fnmatch
-import zipfile
 
 
 def assert_path_missing(path: Path) -> None:

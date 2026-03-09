@@ -112,10 +112,10 @@ def _validate_toml_delta(*, label: str, content: str) -> None:
         raise SystemExit(f"FAIL: bdg: {label} [suite] must be a table")
     if not isinstance(lock, dict):
         raise SystemExit(f"FAIL: bdg: {label} [lock] must be a table")
-    for key in suite.keys():
+    for key in suite:
         if key in _FORBIDDEN_TOML_KEYS:
             raise SystemExit(f"FAIL: bdg: {label} must not embed suite.{key}")
-    for key in lock.keys():
+    for key in lock:
         if key in _FORBIDDEN_TOML_KEYS:
             raise SystemExit(f"FAIL: bdg: {label} must not embed lock.{key}")
 
@@ -146,11 +146,12 @@ def _validate_asset(item: dict, *, asset_id: str, kind: str) -> None:
     content = item.get("content")
     if content is not None and not isinstance(content, str):
         raise SystemExit("FAIL: bdg: asset content must be string or omitted")
-    if kind == "git_patch_text" and isinstance(content, str):
-        if any(marker in content for marker in _FORBIDDEN_PATCH_MARKERS):
-            raise SystemExit(
-                f"FAIL: bdg: asset '{asset_id}' git_patch_text must not embed raw patch paths"
-            )
+    if kind == "git_patch_text" and isinstance(content, str) and any(
+        marker in content for marker in _FORBIDDEN_PATCH_MARKERS
+    ):
+        raise SystemExit(
+            f"FAIL: bdg: asset '{asset_id}' git_patch_text must not embed raw patch paths"
+        )
     if kind == "python_patch_script" and isinstance(content, str):
         _validate_python_payload(label=f"asset '{asset_id}'", content=content)
     if kind == "toml_text" and isinstance(content, str):
@@ -208,14 +209,14 @@ def load_bdg_test(path: Path) -> BdgTest:
         op = _as_str(item, "op")
         params = dict(item)
         params.pop("op", None)
-        bad_recipe_keys = sorted(_FORBIDDEN_STEP_RECIPE_KEYS.intersection(params.keys()))
+        bad_recipe_keys = sorted(_FORBIDDEN_STEP_RECIPE_KEYS.intersection(params))
         if bad_recipe_keys:
             joined = ", ".join(bad_recipe_keys)
             raise SystemExit(
                 "FAIL: bdg: step-level recipe moved to badguys/config.toml recipes; "
                 f"remove: {joined}"
             )
-        bad_keys = sorted(_FORBIDDEN_EVAL_KEYS.intersection(params.keys()))
+        bad_keys = sorted(_FORBIDDEN_EVAL_KEYS.intersection(params))
         if bad_keys:
             joined = ", ".join(bad_keys)
             raise SystemExit(f"FAIL: bdg: expectations must be central; remove: {joined}")
