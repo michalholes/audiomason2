@@ -246,9 +246,7 @@ def _as_arg_map(value: object) -> dict[str, str]:
     out: dict[str, str] = {}
     for key, item in value.items():
         if not isinstance(key, str) or not isinstance(item, str):
-            raise SystemExit(
-                "FAIL: bdg: IPC_SEND_COMMAND event_arg_map must be dict[str, str]"
-            )
+            raise SystemExit("FAIL: bdg: IPC_SEND_COMMAND event_arg_map must be dict[str, str]")
         out[key] = item
     return out
 

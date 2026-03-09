@@ -390,9 +390,12 @@ def _exec_one(
             cli_runner_verbosity,
             cli_console_verbosity,
             cli_log_verbosity,
-            cli_commit_limit,
+            None,
         )
-        joined = " ".join(cfg.runner_cmd)
+        runner_cmd = list(cfg.runner_cmd)
+        if cli_commit_limit is not None:
+            runner_cmd.append(f"--commit-limit={cli_commit_limit}")
+        joined = " ".join(runner_cmd)
         return StepResult(rc=0, stdout=None, stderr=None, value=joined)
 
     if op == "READ_STEP_LOG":

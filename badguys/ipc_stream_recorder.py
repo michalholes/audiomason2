@@ -71,10 +71,7 @@ def _copy_ipc_stream_fallback(*, out_path: Path, dst_path: Path) -> str | None:
     try:
         shutil.copy2(out_path, dst_path)
     except OSError as exc:
-        return (
-            "copy runner json_path fallback failed: "
-            f"{out_path} -> {dst_path}: {exc}"
-        )
+        return f"copy runner json_path fallback failed: {out_path} -> {dst_path}: {exc}"
     return None
 
 

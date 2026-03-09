@@ -146,8 +146,10 @@ def _validate_asset(item: dict, *, asset_id: str, kind: str) -> None:
     content = item.get("content")
     if content is not None and not isinstance(content, str):
         raise SystemExit("FAIL: bdg: asset content must be string or omitted")
-    if kind == "git_patch_text" and isinstance(content, str) and any(
-        marker in content for marker in _FORBIDDEN_PATCH_MARKERS
+    if (
+        kind == "git_patch_text"
+        and isinstance(content, str)
+        and any(marker in content for marker in _FORBIDDEN_PATCH_MARKERS)
     ):
         raise SystemExit(
             f"FAIL: bdg: asset '{asset_id}' git_patch_text must not embed raw patch paths"
