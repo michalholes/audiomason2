@@ -13,7 +13,6 @@ from badguys.bdg_ops_files import execute_read_step_log, execute_read_text_file,
 from badguys.bdg_ops_git import execute_git_status_porcelain
 from badguys.bdg_ops_ipc import (
     execute_ipc_send_command,
-    has_pending_ipc_plans,
     pop_ipc_plans,
     runner_socket_name,
     runner_socket_path,
