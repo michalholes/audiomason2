@@ -42,7 +42,10 @@ class WebJobsDbConfig:
     backup_destination_template: str
     backup_retain_count: int
     backup_verify_after_write: bool
-    restore_source_preference: tuple[str, ...]
+    backup_restore_source_preference: tuple[str, ...]
+    recovery_restore_source_preference: tuple[str, ...]
+    fallback_virtual_artifacts_web_jobs_enabled: bool
+    derived_virtual_artifacts_web_jobs_enabled: bool
     compatibility_enabled: bool
     retention_defaults: dict[str, int]
     retention_thresholds: dict[str, int]

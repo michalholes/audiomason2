@@ -109,6 +109,7 @@ restore_source_preference = ["explicit", "latest_backup"]
 restore_source_preference = ["explicit", "latest_backup", "main_db"]
 
 [web_jobs_fallback]
+# This toggle controls the live virtual artifacts/web_jobs compatibility namespace.
 virtual_artifacts_web_jobs_enabled = true
 
 [web_jobs_retention]
@@ -120,4 +121,5 @@ compact_after_log_lines = 100000
 compact_after_event_lines = 100000
 
 [web_jobs_derived]
+# Derived default kept for config parity; fallback remains the runtime authority.
 virtual_artifacts_web_jobs_enabled = true

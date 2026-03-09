@@ -27,8 +27,12 @@ def _jobs_root(repo_root: Path) -> Path:
     return _patches_root(repo_root) / "artifacts" / "web_jobs"
 
 
+def _build_cfg(repo_root: Path):
+    return load_web_jobs_db_config(repo_root, _patches_root(repo_root))
+
+
 def _build_db(repo_root: Path) -> WebJobsDatabase:
-    cfg = load_web_jobs_db_config(repo_root, _patches_root(repo_root))
+    cfg = _build_cfg(repo_root)
     return WebJobsDatabase(cfg)
 
 
@@ -97,6 +101,52 @@ def _migrate(repo_root: Path) -> list[str]:
     return imported
 
 
+def _resolve_config_path(repo_root: Path, raw_path: str) -> Path:
+    path = Path(str(raw_path or "").strip())
+    if not str(path):
+        return _build_cfg(repo_root).db_path
+    if path.is_absolute():
+        return path
+    return (_patches_root(repo_root) / path).resolve()
+
+
+def _latest_backup_path(repo_root: Path) -> Path | None:
+    cfg = _build_cfg(repo_root)
+    template = str(cfg.backup_destination_template or "").strip()
+    if not template:
+        return None
+    candidate = _resolve_config_path(repo_root, template.format(timestamp="latest"))
+    if "{timestamp}" not in template:
+        return candidate if candidate.is_file() else None
+    pattern = template.replace("{timestamp}", "*")
+    parent = _resolve_config_path(repo_root, pattern).parent
+    name_glob = Path(pattern).name
+    matches = [path for path in parent.glob(name_glob) if path.is_file()]
+    if not matches:
+        return None
+    matches.sort(key=lambda path: path.stat().st_mtime_ns, reverse=True)
+    return matches[0]
+
+
+def _resolve_restore_source(repo_root: Path, source: Path | None) -> Path:
+    cfg = _build_cfg(repo_root)
+    explicit = None
+    if source is not None and str(source).strip():
+        explicit = source if source.is_absolute() else (repo_root / source).resolve()
+    for item in cfg.recovery_restore_source_preference:
+        if item == "explicit" and explicit is not None and explicit.is_file():
+            return explicit
+        if item == "latest_backup":
+            backup = _latest_backup_path(repo_root)
+            if backup is not None:
+                return backup
+        if item == "main_db" and cfg.db_path.is_file():
+            return cfg.db_path
+    if explicit is not None:
+        return explicit
+    raise FileNotFoundError("No configured web_jobs restore source is available")
+
+
 def _verify(repo_root: Path) -> list[dict[str, Any]]:
     db = _build_db(repo_root)
     out: list[dict[str, Any]] = []
@@ -124,6 +174,9 @@ def _verify(repo_root: Path) -> list[dict[str, Any]]:
 
 
 def _cleanup(repo_root: Path) -> list[str]:
+    cfg = _build_cfg(repo_root)
+    if not cfg.cleanup_enabled:
+        raise RuntimeError("web_jobs cleanup is disabled by config")
     removed: list[str] = []
     for item in _verify(repo_root):
         if not item["ok"]:
@@ -140,10 +193,11 @@ def _backup(repo_root: Path) -> str:
     return str(db.create_backup())
 
 
-def _restore(repo_root: Path, source: Path) -> str:
+def _restore(repo_root: Path, source: Path | None = None) -> str:
     db = _build_db(repo_root)
-    db.restore_backup(source)
-    return str(source)
+    resolved = _resolve_restore_source(repo_root, source)
+    db.restore_backup(resolved)
+    return str(resolved)
 
 
 def _export_legacy(repo_root: Path, dest: Path | None = None) -> str:
@@ -182,11 +236,10 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({"backup": _backup(repo_root)}, ensure_ascii=True, indent=2))
         return 0
     if ns.command == "restore":
-        if not ns.source:
-            raise SystemExit("--source is required for restore")
+        source = Path(ns.source) if ns.source else None
         print(
             json.dumps(
-                {"restored": _restore(repo_root, Path(ns.source))},
+                {"restored": _restore(repo_root, source)},
                 ensure_ascii=True,
                 indent=2,
             )

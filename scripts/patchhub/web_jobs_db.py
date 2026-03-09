@@ -31,6 +31,13 @@ def _resolve_under_patches(patches_root: Path, rel_or_abs: str) -> Path:
     return (patches_root / path).resolve()
 
 
+def _tuple_of_strings(raw: Any, default: tuple[str, ...]) -> tuple[str, ...]:
+    if not isinstance(raw, list | tuple):
+        return default
+    items = tuple(str(item).strip() for item in raw if str(item).strip())
+    return items or default
+
+
 def load_web_jobs_db_config(repo_root: Path, patches_root: Path) -> WebJobsDbConfig:
     cfg_path = repo_root / "scripts" / "patchhub" / "patchhub.toml"
     raw: dict[str, Any] = {}
@@ -39,8 +46,22 @@ def load_web_jobs_db_config(repo_root: Path, patches_root: Path) -> WebJobsDbCon
     db_raw = raw.get("web_jobs_db", {})
     migration_raw = raw.get("web_jobs_migration", {})
     backup_raw = raw.get("web_jobs_backup", {})
+    recovery_raw = raw.get("web_jobs_recovery", {})
+    fallback_raw = raw.get("web_jobs_fallback", {})
     retention_raw = raw.get("web_jobs_retention", {})
     derived_raw = raw.get("web_jobs_derived", {})
+    fallback_virtual_enabled = bool(
+        fallback_raw.get(
+            "virtual_artifacts_web_jobs_enabled",
+            derived_raw.get("virtual_artifacts_web_jobs_enabled", True),
+        )
+    )
+    derived_virtual_enabled = bool(
+        derived_raw.get(
+            "virtual_artifacts_web_jobs_enabled",
+            fallback_raw.get("virtual_artifacts_web_jobs_enabled", True),
+        )
+    )
     return WebJobsDbConfig(
         db_path=_resolve_under_patches(
             patches_root,
@@ -59,13 +80,17 @@ def load_web_jobs_db_config(repo_root: Path, patches_root: Path) -> WebJobsDbCon
         ),
         backup_retain_count=max(0, int(backup_raw.get("retain_count", 5))),
         backup_verify_after_write=bool(backup_raw.get("verify_after_write", True)),
-        restore_source_preference=tuple(
-            str(item)
-            for item in list(
-                backup_raw.get("restore_source_preference", ["explicit", "latest_backup"])
-            )
+        backup_restore_source_preference=_tuple_of_strings(
+            backup_raw.get("restore_source_preference"),
+            ("explicit", "latest_backup"),
         ),
-        compatibility_enabled=bool(derived_raw.get("virtual_artifacts_web_jobs_enabled", True)),
+        recovery_restore_source_preference=_tuple_of_strings(
+            recovery_raw.get("restore_source_preference"),
+            ("explicit", "latest_backup", "main_db"),
+        ),
+        fallback_virtual_artifacts_web_jobs_enabled=fallback_virtual_enabled,
+        derived_virtual_artifacts_web_jobs_enabled=derived_virtual_enabled,
+        compatibility_enabled=fallback_virtual_enabled,
         retention_defaults={
             "jobs_keep_days": int(retention_raw.get("jobs_keep_days", 30)),
             "logs_keep_days": int(retention_raw.get("logs_keep_days", 30)),
