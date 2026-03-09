@@ -2,7 +2,7 @@
 
 Status: normative
 
-Specification Version: 0.3.2
+Specification Version: 0.3.3
 
 This document is the authoritative specification for the BadGuys suite shipped in this repository.
 BadGuys exists to systematically break the AM Patch Runner and verify that it FAILs correctly.
@@ -481,6 +481,24 @@ BadGuys provides two cleanup layers:
    - each path in cleanup_paths MUST be deleted after the test plan finishes (pass or fail)
 
 Tests MUST NOT rely on artifacts from any previous test.
+
+#### 7.5.1 Subject-scoped workspace preparation (normative)
+
+BadGuys MAY provide engine-level workspace preparation steps that operate on declared
+subjects before runner execution.
+
+DELETE_SUBJECT semantics (normative):
+- A step with `op = "DELETE_SUBJECT"` MUST resolve its target exclusively from:
+  - `recipes.tests.<test_id>.steps.<step_index>.subject`, and
+  - `subjects.tests.<test_id>.<subject_id>.relpath`
+- The `.bdg` step for `DELETE_SUBJECT` MUST NOT embed filesystem path parameters.
+- The step recipe for `DELETE_SUBJECT` MUST allow exactly one key: `subject`.
+- If the referenced subject is missing, the suite MUST FAIL deterministically.
+- If the resolved path does not exist, the operation MUST succeed with `rc=0`.
+- If the resolved path is a regular file or a symlink, the operation MUST delete it and
+  succeed with `rc=0`.
+- If the resolved path is a directory, the operation MUST FAIL deterministically.
+- `DELETE_SUBJECT` MUST NOT target any path that is not declared in `[subjects]`.
 
 ### 7.6 Forbidden patterns
 
