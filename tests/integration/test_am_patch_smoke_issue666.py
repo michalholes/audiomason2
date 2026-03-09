@@ -95,6 +95,7 @@ def test_am_patch_smoke_issue_666() -> None:
         str(runner),
         "--verbosity=quiet",
         "--no-patch-jail",
+        "--skip-up-to-date",
         # "--test-mode",
         # "-g",
         # "--skip-pytest",
