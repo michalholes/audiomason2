@@ -1,6 +1,6 @@
 
 # AUDIOMASON2_PROJECT_CONTRACT.md
-Version: 1.4
+Version: 1.5
 
 Status: AUTHORITATIVE / IMMUTABLE BASE CONTRACT  
 Applies to: Entire AudioMason2 project (core, plugins, UI, tests, tooling, docs)  
@@ -143,6 +143,12 @@ They are not stylistic preferences.
 
 Any change that increases hidden coupling, reduces separation of
 concerns, or erodes modular independence is a contract violation.
+
+This Structural Integrity invariant does NOT apply to patching of
+.md and .json files.
+
+Growth of .md and .json files is not, by itself, a Structural
+Integrity violation.
 
 Tooling may enforce these constraints, but the invariant itself is
 architectural and exists independently of any specific enforcement

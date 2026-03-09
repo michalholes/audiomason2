@@ -54,6 +54,9 @@ Refusal to proceed solely on the basis that the snapshot is provided as a `.zip`
 A chat MUST NOT create a monolith or contribute to monolith growth.
 Changes MUST preserve modular boundaries and remain localized.
 
+This anti-monolith discipline does NOT apply to patching of
+.md and .json files.
+
 The system evaluates structural changes using metrics such as:
 - growth of non-empty lines (LOC),
 - total module size,
@@ -123,13 +126,11 @@ Rules:
 
 1.   Paths are repo-relative.
 2.   Deterministic behavior only.
-3.   No randomness, no time dependence, no interactive prompts during
-    runtime, no network access.
-4.   All changes MUST be expressed as unified diff patches, packaged per
-    file.
+3.   No randomness, no time dependence, no interactive prompts during runtime, no network access.
+4.   All changes MUST be expressed as unified diff patches, packaged per file.
 5.   `git apply --check <patch>.patch` MUST succeed.
-6.  Structural changes MUST preserve modular boundaries as defined by
-   the Monolith gate ownership areas.
+6.  Structural changes MUST preserve modular boundaries as defined by the Monolith gate ownership areas, except that this requirement does NOT apply to patching of .md and .json files.
+
 
 ## Line Length and Style Safety (HARD)
 
@@ -199,12 +200,15 @@ Before sending:
 3.  Modified files MUST compile (`python -m compileall` minimum).
 3a. Modified JavaScript files MUST pass a syntax check. For each modified file with extension .js, .mjs, or .cjs, the chat MUST run:  node --check <file>
 4.  Patch MUST not introduce new dependencies without explicit approval.
-5.  Patch MUST not introduce Monolith gate violations.
-     This includes:
-       - uncontrolled growth of existing modules,
-       - introduction of hub/catch-all files,
-       - cross-area ownership violations,
-       - structural coupling expansion.
+5.  Patch MUST not introduce Monolith gate violations, except that
+    this requirement does NOT apply to patching of .md and .json
+    files.
+    This includes:
+      - uncontrolled growth of existing modules,
+      - introduction of hub/catch-all files,
+      - cross-area ownership violations,
+      - structural coupling expansion.
+
 
 The chat MUST NOT claim success without evidence.
 
@@ -292,6 +296,9 @@ Even after escalation, only the minimal required files may be modified.
 Mechanical replacement of the entire repository tree is prohibited.
 
 ## Monolith gate repair instructions (HARD)
+
+This section does NOT apply to patching of .md and .json
+files.
 
 If the Monolith gate fails, the chat MUST correct the structural
 violation before attempting any other modification.
