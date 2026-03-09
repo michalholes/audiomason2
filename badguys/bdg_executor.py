@@ -513,6 +513,47 @@ def _exec_one(
             patched_zip.unlink()
         return StepResult(rc=0, stdout=None, stderr=None, value=str(patched_zip))
 
+    if op == "DELETE_SUBJECT":
+        recipe = step_recipe(
+            repo_root=repo_root,
+            config_path=config_path,
+            test_id=test_id,
+            step_index=step_index,
+        )
+        ensure_allowed_keys(
+            table=recipe,
+            allowed={"subject"},
+            label=f"recipes.tests.{test_id}.steps.{step_index}",
+        )
+        subjects = subject_relpaths(
+            repo_root=repo_root,
+            config_path=config_path,
+            test_id=test_id,
+        )
+        subject = recipe.get("subject")
+        if not isinstance(subject, str) or not subject:
+            raise SystemExit(
+                f"FAIL: bdg recipe: DELETE_SUBJECT subject missing for {test_id} step {step_index}"
+            )
+        target_rel = subjects.get(subject)
+        if target_rel is None:
+            raise SystemExit(f"FAIL: bdg recipe: unknown subject '{subject}' for {test_id}")
+        target_path = repo_root / target_rel
+        if target_path.is_symlink():
+            target_path.unlink()
+            return StepResult(rc=0, stdout=None, stderr=None, value=str(target_path))
+        if not target_path.exists():
+            return StepResult(rc=0, stdout=None, stderr=None, value=str(target_path))
+        if target_path.is_dir():
+            return StepResult(
+                rc=1,
+                stdout=None,
+                stderr="DELETE_SUBJECT target is directory",
+                value=str(target_path),
+            )
+        target_path.unlink()
+        return StepResult(rc=0, stdout=None, stderr=None, value=str(target_path))
+
     if op == "ASSERT_NO_WORKSPACE_AND_NO_ARCHIVES":
         ws_dir = repo_root / "patches" / "workspaces" / f"issue_{subst.issue_id}"
         patched_zip = repo_root / "patches" / "patched.zip"

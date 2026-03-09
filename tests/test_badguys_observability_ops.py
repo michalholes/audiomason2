@@ -4,6 +4,7 @@ import subprocess
 import zipfile
 from pathlib import Path
 
+import pytest
 from badguys.bdg_executor import execute_bdg_step
 from badguys.bdg_loader import BdgStep
 from badguys.bdg_materializer import MaterializedAssets
@@ -42,6 +43,12 @@ exclude = []
 [runner]
 full_runner_tests = []
 
+[subjects.tests.test_ops.delete_marker]
+relpath = "docs/delete_me.txt"
+
+[subjects.tests.test_ops.delete_dir]
+relpath = "docs/delete_dir"
+
 [recipes.tests.test_ops.steps.0]
 scope = "repo"
 relpath = "docs/repo_note.txt"
@@ -53,6 +60,18 @@ relpath = "bundle.zip"
 [recipes.tests.test_ops.steps.2]
 scope = "workspace"
 relpath = "docs/workspace_note.txt"
+
+[recipes.tests.test_ops.steps.3]
+subject = "delete_marker"
+
+[recipes.tests.test_ops.steps.4]
+subject = "delete_marker"
+
+[recipes.tests.test_ops.steps.5]
+subject = "missing_subject"
+
+[recipes.tests.test_ops.steps.6]
+subject = "delete_dir"
 """.strip()
         + "\n",
         encoding="utf-8",
@@ -173,3 +192,107 @@ def test_git_status_porcelain_supports_workspace_scope(tmp_path: Path) -> None:
 
     assert result.rc == 0
     assert result.value == ["?? dirty.txt"]
+
+
+def test_delete_subject_removes_existing_file_subject(tmp_path: Path) -> None:
+    repo_root = tmp_path
+    cfg_path = _write_config(repo_root)
+    target = repo_root / "docs" / "delete_me.txt"
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("delete me\n", encoding="utf-8")
+
+    result = execute_bdg_step(
+        repo_root=repo_root,
+        config_path=cfg_path.relative_to(repo_root),
+        cfg_runner_cmd=["python3", "scripts/am_patch.py"],
+        subst=SubstCtx(issue_id="777", now_stamp="20260308_090000"),
+        full_runner_tests=set(),
+        step=BdgStep(op="DELETE_SUBJECT", params={}),
+        mats=MaterializedAssets(root=repo_root / "patches" / "mats", files={}),
+        test_id="test_ops",
+        step_index=3,
+        step_runner_cfg=_step_runner_cfg(
+            repo_root,
+            artifacts_dir=repo_root / "patches" / "badguys_logs" / "test_ops",
+        ),
+    )
+
+    assert result.rc == 0
+    assert result.value == str(target)
+    assert not target.exists()
+
+
+def test_delete_subject_is_idempotent_when_file_missing(tmp_path: Path) -> None:
+    repo_root = tmp_path
+    cfg_path = _write_config(repo_root)
+    target = repo_root / "docs" / "delete_me.txt"
+
+    result = execute_bdg_step(
+        repo_root=repo_root,
+        config_path=cfg_path.relative_to(repo_root),
+        cfg_runner_cmd=["python3", "scripts/am_patch.py"],
+        subst=SubstCtx(issue_id="777", now_stamp="20260308_090000"),
+        full_runner_tests=set(),
+        step=BdgStep(op="DELETE_SUBJECT", params={}),
+        mats=MaterializedAssets(root=repo_root / "patches" / "mats", files={}),
+        test_id="test_ops",
+        step_index=4,
+        step_runner_cfg=_step_runner_cfg(
+            repo_root,
+            artifacts_dir=repo_root / "patches" / "badguys_logs" / "test_ops",
+        ),
+    )
+
+    assert result.rc == 0
+    assert result.value == str(target)
+    assert not target.exists()
+
+
+def test_delete_subject_fails_for_unknown_subject(tmp_path: Path) -> None:
+    repo_root = tmp_path
+    cfg_path = _write_config(repo_root)
+
+    with pytest.raises(SystemExit, match="unknown subject 'missing_subject'"):
+        execute_bdg_step(
+            repo_root=repo_root,
+            config_path=cfg_path.relative_to(repo_root),
+            cfg_runner_cmd=["python3", "scripts/am_patch.py"],
+            subst=SubstCtx(issue_id="777", now_stamp="20260308_090000"),
+            full_runner_tests=set(),
+            step=BdgStep(op="DELETE_SUBJECT", params={}),
+            mats=MaterializedAssets(root=repo_root / "patches" / "mats", files={}),
+            test_id="test_ops",
+            step_index=5,
+            step_runner_cfg=_step_runner_cfg(
+                repo_root,
+                artifacts_dir=repo_root / "patches" / "badguys_logs" / "test_ops",
+            ),
+        )
+
+
+def test_delete_subject_fails_for_directory_target(tmp_path: Path) -> None:
+    repo_root = tmp_path
+    cfg_path = _write_config(repo_root)
+    target = repo_root / "docs" / "delete_dir"
+    target.mkdir(parents=True, exist_ok=True)
+
+    result = execute_bdg_step(
+        repo_root=repo_root,
+        config_path=cfg_path.relative_to(repo_root),
+        cfg_runner_cmd=["python3", "scripts/am_patch.py"],
+        subst=SubstCtx(issue_id="777", now_stamp="20260308_090000"),
+        full_runner_tests=set(),
+        step=BdgStep(op="DELETE_SUBJECT", params={}),
+        mats=MaterializedAssets(root=repo_root / "patches" / "mats", files={}),
+        test_id="test_ops",
+        step_index=6,
+        step_runner_cfg=_step_runner_cfg(
+            repo_root,
+            artifacts_dir=repo_root / "patches" / "badguys_logs" / "test_ops",
+        ),
+    )
+
+    assert result.rc == 1
+    assert result.stderr == "DELETE_SUBJECT target is directory"
+    assert result.value == str(target)
+    assert target.exists()

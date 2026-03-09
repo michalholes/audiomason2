@@ -732,6 +732,9 @@ rc_eq = 0
 
 [evaluation.tests.test_085_success_archive_zip_hygiene.steps.1]
 rc_eq = 0
+
+[evaluation.tests.test_085_success_archive_zip_hygiene.steps.2]
+rc_eq = 0
 list_contains = [
   "docs/badguys_batch4/success_archive_hygiene_issue_664_marker.txt",
   "docs/changes.md",
@@ -862,6 +865,9 @@ args = ["${issue_id}", "badguys: workspace git state matches mode"]
 subject = "archive_marker"
 
 [recipes.tests.test_085_success_archive_zip_hygiene.steps.0]
+subject = "archive_marker"
+
+[recipes.tests.test_085_success_archive_zip_hygiene.steps.1]
 args = [
   "--skip-ruff",
   "--skip-pytest",
@@ -870,6 +876,6 @@ args = [
   "badguys: success archive zip hygiene",
 ]
 
-[recipes.tests.test_085_success_archive_zip_hygiene.steps.1]
+[recipes.tests.test_085_success_archive_zip_hygiene.steps.2]
 scope = "repo"
 relpath = "patches/${repo_name}-main_${issue_id}.zip"
