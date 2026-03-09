@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
+from typing import Any
 
 from audiomason.core import ProcessingContext
 from audiomason.core.errors import AudioMasonError
@@ -15,11 +16,24 @@ class ID3Error(AudioMasonError):
     pass
 
 
+_TAG_ORDER = (
+    "title",
+    "artist",
+    "album",
+    "album_artist",
+    "date",
+    "genre",
+    "composer",
+    "comment",
+    "track",
+)
+
+
 class ID3TaggerPlugin:
     """ID3 tagger plugin.
 
     Writes metadata tags to MP3 files using FFmpeg.
-    Supports: title, artist, album, year, genre, track number.
+    Supports deterministic wipe-before-write semantics for import runtime.
     """
 
     def __init__(self, config: dict | None = None) -> None:
@@ -43,53 +57,54 @@ class ID3TaggerPlugin:
             context.add_warning("No MP3 files to tag")
             return context
 
-        # Tag each converted file
-        for mp3_file in context.converted_files:
-            if mp3_file.suffix.lower() == ".mp3":
-                await self._tag_file(mp3_file, context)
+        tags = self.build_context_tags(context)
+        if not tags:
+            return context
 
-        context.add_warning(f"Tagged {len(context.converted_files)} file(s)")
+        tagged_count = 0
+        for mp3_file in context.converted_files:
+            if mp3_file.suffix.lower() != ".mp3":
+                continue
+            await self.write_tags(mp3_file, tags)
+            tagged_count += 1
+
+        context.add_warning(f"Tagged {tagged_count} file(s)")
         return context
 
-    async def _tag_file(self, mp3_file: Path, context: ProcessingContext) -> None:
-        """Tag a single MP3 file.
+    def build_context_tags(self, context: ProcessingContext) -> dict[str, str]:
+        """Build canonical ID3 tags from ProcessingContext."""
+        values: dict[str, str] = {}
 
-        Args:
-            mp3_file: MP3 file to tag
-            context: Processing context with metadata
-        """
-        # Build metadata dict
-        metadata = {}
+        def add(key: str, value: Any) -> None:
+            text = str(value).strip() if value is not None else ""
+            if text:
+                values[key] = text
 
-        if context.title:
-            metadata["title"] = context.title
-        if context.author:
-            metadata["artist"] = context.author
-            metadata["album_artist"] = context.author
-        if context.year:
-            metadata["date"] = str(context.year)
-        if context.genre:
-            metadata["genre"] = context.genre
-        if context.narrator:
-            metadata["composer"] = context.narrator  # Use composer for narrator
-
-        # Album is usually same as title for audiobooks
-        if context.title:
-            metadata["album"] = context.title
-
-        # Series info in comment
-        if context.series and context.series_number:
-            metadata["comment"] = f"{context.series} #{context.series_number}"
+        add("title", context.title)
+        add("artist", context.author)
+        add("album", context.title)
+        add("album_artist", context.author)
+        add("date", context.year)
+        add("genre", context.genre)
+        add("composer", context.narrator)
+        if context.series and context.series_number is not None:
+            add("comment", f"{context.series} #{context.series_number}")
         elif context.series:
-            metadata["comment"] = context.series
+            add("comment", context.series)
 
-        if not metadata:
-            return
+        return self._ordered_tags(values)
 
-        # Create temporary file for tagging
-        temp_file = mp3_file.with_suffix(".tagged.mp3")
-
-        # Build FFmpeg command
+    def build_write_tags_command(
+        self,
+        mp3_file: Path,
+        output_file: Path,
+        tags: dict[str, str],
+        *,
+        wipe_before_write: bool = True,
+        preserve_cover: bool = True,
+    ) -> list[str]:
+        """Build deterministic FFmpeg command for wipe-before-write tagging."""
+        ordered_tags = self._ordered_tags(tags)
         cmd = [
             "ffmpeg",
             "-hide_banner",
@@ -99,15 +114,38 @@ class ID3TaggerPlugin:
             "-y",
             "-i",
             str(mp3_file),
-            "-c",
-            "copy",  # Copy streams without re-encoding
+            "-map",
+            "0" if preserve_cover else "0:a:0",
         ]
-
-        # Add metadata tags
-        for key, value in metadata.items():
+        if wipe_before_write:
+            cmd.extend(["-map_metadata", "-1"])
+        cmd.extend(["-c", "copy", "-id3v2_version", "3"])
+        for key, value in ordered_tags.items():
             cmd.extend(["-metadata", f"{key}={value}"])
+        cmd.append(str(output_file))
+        return cmd
 
-        cmd.append(str(temp_file))
+    async def write_tags(
+        self,
+        mp3_file: Path,
+        tags: dict[str, str],
+        *,
+        wipe_before_write: bool = True,
+        preserve_cover: bool = True,
+    ) -> None:
+        """Write canonical tags to a single MP3 file."""
+        ordered_tags = self._ordered_tags(tags)
+        if not ordered_tags:
+            return
+
+        temp_file = mp3_file.with_suffix(".tagged.mp3")
+        cmd = self.build_write_tags_command(
+            mp3_file,
+            temp_file,
+            ordered_tags,
+            wipe_before_write=wipe_before_write,
+            preserve_cover=preserve_cover,
+        )
 
         try:
             proc = await asyncio.create_subprocess_exec(
@@ -115,20 +153,33 @@ class ID3TaggerPlugin:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-
-            stdout, stderr = await proc.communicate()
-
+            _stdout, stderr = await proc.communicate()
             if proc.returncode != 0:
                 error_msg = stderr.decode() if stderr else "Unknown error"
                 raise ID3Error(f"Tagging failed: {error_msg}")
-
-            # Replace original with tagged version
             temp_file.replace(mp3_file)
-
         except Exception as e:
             if temp_file.exists():
                 temp_file.unlink()
             raise ID3Error(f"Failed to tag {mp3_file.name}: {e}") from e
+
+    def _ordered_tags(self, tags: dict[str, str]) -> dict[str, str]:
+        """Return tags in canonical write order."""
+        ordered: dict[str, str] = {}
+        for key in _TAG_ORDER:
+            value = str(tags.get(key) or "").strip()
+            if value:
+                ordered[key] = value
+        extra_keys = sorted(key for key in tags if key not in _TAG_ORDER)
+        for key in extra_keys:
+            value = str(tags.get(key) or "").strip()
+            if value:
+                ordered[key] = value
+        return ordered
+
+    async def _tag_file(self, mp3_file: Path, context: ProcessingContext) -> None:
+        """Backward-compatible wrapper for context-based tagging."""
+        await self.write_tags(mp3_file, self.build_context_tags(context))
 
     async def read_tags(self, mp3_file: Path) -> dict[str, str]:
         """Read existing ID3 tags from MP3 file.
@@ -157,16 +208,15 @@ class ID3TaggerPlugin:
                 stderr=asyncio.subprocess.PIPE,
             )
 
-            stdout, stderr = await proc.communicate()
+            stdout, _stderr = await proc.communicate()
 
             if proc.returncode != 0:
                 return {}
 
-            # Parse output: TAG:key=value
             metadata = {}
             for line in stdout.decode().split("\n"):
                 if line.startswith("TAG:"):
-                    line = line[4:]  # Remove "TAG:" prefix
+                    line = line[4:]
                     if "=" in line:
                         key, value = line.split("=", 1)
                         metadata[key.lower()] = value

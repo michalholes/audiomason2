@@ -1,3 +1,9 @@
+## 2026-03-09T00:00:02+01:00
+
+-   Issue 125: id3_tagger now exposes deterministic wipe-before-write and
+    tag-write surfaces for import Phase 2 while preserving attached cover
+    streams during tag rewrites.
+
 ## 2026-03-09T00:00:01+01:00
 
 -   Issue 120: remove runtime authority reads of persisted legacy import
