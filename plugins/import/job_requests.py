@@ -12,6 +12,128 @@ from typing import Any
 from .fingerprints import fingerprint_json
 
 
+def _policy_dict(inputs: dict[str, Any], key: str) -> dict[str, Any]:
+    value = inputs.get(key)
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def _split_source_relative_path(source_relative_path: str) -> tuple[str, str]:
+    rel = str(source_relative_path).replace("\\", "/").strip("/")
+    if not rel:
+        return "", ""
+    parts = [part for part in rel.split("/") if part]
+    if len(parts) == 1:
+        return parts[0], parts[0]
+    return parts[0], parts[-1]
+
+
+def _tag_values_for_action(*, source_relative_path: str, inputs: dict[str, Any]) -> dict[str, str]:
+    author_name, book_title = _split_source_relative_path(source_relative_path)
+    values = {
+        "title": book_title,
+        "artist": author_name,
+        "album": book_title,
+        "album_artist": author_name,
+    }
+    id3_policy = _policy_dict(inputs, "id3_policy")
+    values_any = id3_policy.get("values")
+    if isinstance(values_any, dict):
+        for key, value in values_any.items():
+            text_value = str(value or "").strip()
+            if text_value:
+                values[str(key)] = text_value
+    return {key: value for key, value in values.items() if value}
+
+
+def _build_capabilities(
+    *,
+    root: str,
+    source_relative_path: str,
+    target_root: str,
+    target_relative_path: str,
+    inputs: dict[str, Any],
+) -> list[dict[str, Any]]:
+    audio_processing = _policy_dict(inputs, "audio_processing")
+    covers_policy = _policy_dict(inputs, "covers_policy")
+    conflict_policy = _policy_dict(inputs, "conflict_policy")
+    delete_policy = _policy_dict(inputs, "delete_source_policy")
+
+    cover_mode = str(covers_policy.get("mode") or "skip")
+    conflict_mode = str(conflict_policy.get("mode") or "ask")
+    tag_values = _tag_values_for_action(
+        source_relative_path=source_relative_path,
+        inputs=inputs,
+    )
+
+    capabilities: list[dict[str, Any]] = [
+        {
+            "kind": "audio.import",
+            "order": 10,
+            "plugin": "audio_processor",
+            "options": {
+                "bitrate": str(audio_processing.get("bitrate") or "128k"),
+                "loudnorm": bool(audio_processing.get("loudnorm", False)),
+                "split_chapters": bool(audio_processing.get("split_chapters", False)),
+            },
+        }
+    ]
+    if cover_mode != "skip":
+        cover_cap: dict[str, Any] = {
+            "kind": "cover.embed",
+            "order": 20,
+            "plugin": "cover_handler",
+            "mode": cover_mode,
+        }
+        cover_url = str(covers_policy.get("url") or "")
+        if cover_url:
+            cover_cap["url"] = cover_url
+        capabilities.append(cover_cap)
+
+    capabilities.append(
+        {
+            "kind": "metadata.tags",
+            "order": 30,
+            "plugin": "id3_tagger",
+            "field_map": {
+                "title": "book_title",
+                "artist": "author",
+                "album": "book_title",
+                "album_artist": "author",
+            },
+            "values": tag_values,
+            "wipe_before_write": True,
+            "preserve_cover": True,
+        }
+    )
+    capabilities.append(
+        {
+            "kind": "publish.write",
+            "order": 40,
+            "root": target_root,
+            "relative_path": target_relative_path,
+            "overwrite": conflict_mode == "overwrite",
+        }
+    )
+
+    delete_mode = str(delete_policy.get("mode") or "")
+    delete_enabled = bool(delete_policy.get("enabled", False)) or delete_mode in {
+        "delete",
+        "after_publish",
+        "always",
+    }
+    if delete_enabled:
+        capabilities.append(
+            {
+                "kind": "source.delete",
+                "order": 50,
+                "root": root,
+                "relative_path": source_relative_path,
+                "enabled": True,
+            }
+        )
+    return capabilities
+
+
 def build_job_requests(
     *,
     session_id: str,
@@ -62,8 +184,17 @@ def build_job_requests(
                 "book_id": book_id,
                 "source": {"root": root, "relative_path": src_rel},
                 "target": {"root": target_root, "relative_path": tgt_rel},
+                "capabilities": _build_capabilities(
+                    root=root,
+                    source_relative_path=src_rel,
+                    target_root=target_root,
+                    target_relative_path=tgt_rel,
+                    inputs=inputs,
+                ),
             }
         )
+
+    plan_fingerprint = fingerprint_json({"selected_books": selected_any})
 
     doc: dict[str, Any] = {
         "job_type": "import.process",
@@ -75,12 +206,13 @@ def build_job_requests(
         "policies": dict(inputs),
         "actions": actions,
         "diagnostics_context": dict(diagnostics_context),
+        "plan_fingerprint": plan_fingerprint,
     }
 
     idem_payload = {
         "mode": mode,
         "config_fingerprint": config_fingerprint,
-        "plan_fingerprint": fingerprint_json({"selected_books": selected_any}),
+        "plan_fingerprint": plan_fingerprint,
         "policies_fingerprint": fingerprint_json(inputs),
     }
     doc["idempotency_key"] = fingerprint_json(idem_payload)

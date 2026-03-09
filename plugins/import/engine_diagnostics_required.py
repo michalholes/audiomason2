@@ -14,6 +14,7 @@ from audiomason.core.diagnostics import build_envelope
 from audiomason.core.events import get_event_bus as _core_get_event_bus
 from audiomason.core.jobs.api import JobService
 from audiomason.core.jobs.model import JobType
+from audiomason.core.process_job_contracts import IMPORT_PROCESS_CONTRACT_ID
 
 
 def emit_required(
@@ -79,5 +80,7 @@ def create_process_job(*, meta: dict[str, Any]) -> str:
     This is a thin core-facing facade to keep core imports out of engine.py.
     """
 
-    job = JobService().create_job(JobType.PROCESS, meta=meta)
+    payload = dict(meta)
+    payload.setdefault("contract_id", IMPORT_PROCESS_CONTRACT_ID)
+    job = JobService().create_job(JobType.PROCESS, meta=payload)
     return str(job.job_id)

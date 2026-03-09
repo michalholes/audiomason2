@@ -12,6 +12,7 @@ from audiomason.core.config import ConfigResolver
 from . import processed_registry_required
 from .cli import import_cli_main
 from .engine import ImportWizardEngine
+from .phase2_job_runner import run_phase2_job_requests
 from .ui_api import build_router
 
 
@@ -23,6 +24,16 @@ class ImportPlugin:
         self._resolver = resolver or ConfigResolver(cli_args={})
         self.engine = ImportWizardEngine(resolver=self._resolver)
         processed_registry_required._install_processed_registry_subscriber(resolver=self._resolver)
+
+    async def run_process_contract(
+        self, *, job_id: str, job_meta: dict[str, object], plugin_loader: object
+    ) -> None:
+        await run_phase2_job_requests(
+            engine=self.engine,
+            job_id=job_id,
+            job_meta=dict(job_meta),
+            plugin_loader=plugin_loader,
+        )
 
     def get_engine(self) -> ImportWizardEngine:
         return self.engine
