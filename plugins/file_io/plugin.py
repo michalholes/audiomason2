@@ -22,6 +22,7 @@ from audiomason.core.detection import (
 )
 from audiomason.core.errors import FileError
 
+from . import import_runtime
 from .service import FileService, RootName
 
 
@@ -78,6 +79,44 @@ class FileIOPlugin:
                 self.file_service = FileService.from_resolver(resolver)
         else:
             self.file_service = FileService.from_resolver(resolver)
+
+    def stage_import_path(
+        self,
+        root: RootName | str,
+        relative_path: str,
+        *,
+        work_relative_path: str | None = None,
+    ) -> dict[str, dict[str, str]]:
+        """Stage an import source into a deterministic work path under stage."""
+        return import_runtime.stage_source(
+            self.file_service,
+            source_root=root,
+            source_relative_path=relative_path,
+            work_relative_path=work_relative_path,
+        )
+
+    def publish_import_path(
+        self,
+        *,
+        work_relative_path: str,
+        final_relative_path: str,
+        mode: str,
+        overwrite: bool = False,
+        cleanup: bool = True,
+    ) -> dict[str, object]:
+        """Publish a staged work path to its final root for the selected mode."""
+        return import_runtime.publish_for_mode(
+            self.file_service,
+            work_relative_path=work_relative_path,
+            final_relative_path=final_relative_path,
+            mode=mode,
+            overwrite=overwrite,
+            cleanup=cleanup,
+        )
+
+    def cleanup_import_path(self, work_relative_path: str) -> None:
+        """Remove a deterministic work path under the stage root."""
+        import_runtime.cleanup_stage(self.file_service, work_relative_path=work_relative_path)
 
     async def import_file(self, context: ProcessingContext) -> ProcessingContext:
         """Import source file to staging area.

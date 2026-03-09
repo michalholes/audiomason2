@@ -177,6 +177,8 @@
 
 ## 2026-02-26T00:00:00+01:00
 
+-   Issue 124: file_io now provides deterministic import runtime stage/publish/cleanup surfaces over root + relative_path references.
+
 - Issue 267: Import UI Flow Editor - row click selects step, drag handle grip for reorder, and per-row actions reduced to trash only.
 - Issue 268: Flow Editor - eliminate remaining deficiencies: migrate WizardDefinition v1 to v2 (graph),
   enforce v2 at runtime and editor API, and fix deterministic icon/CSS wiring.
