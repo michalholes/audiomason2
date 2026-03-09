@@ -279,7 +279,7 @@ class AsyncJobsRunsIndexer:
         running = int(getattr(qstate, "running", 0) or 0) if qstate is not None else 0
 
         def _sync_build() -> IndexerSnapshot:
-            disk_sig, disk_raw = list_job_jsons_and_signature(self._core.jobs_root, limit=200)
+            disk_sig, disk_raw = list_job_jsons_and_signature(self._core.web_jobs_db, limit=200)
             jobs_sig = _etag_sig_jobs(disk_sig=disk_sig, mem=mem)
 
             mem_by_id = {str(getattr(j, "job_id", "")) for j in mem}
@@ -298,12 +298,7 @@ class AsyncJobsRunsIndexer:
                     j.status = "fail"
                     j.ended_utc = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
                     j.error = "orphaned: not in memory queue"
-                    job_dir = self._core.jobs_root / jid
-                    job_dir.mkdir(parents=True, exist_ok=True)
-                    (job_dir / "job.json").write_text(
-                        json.dumps(j.to_json(), ensure_ascii=True, indent=2),
-                        encoding="utf-8",
-                    )
+                    self._core.web_jobs_db.mark_orphaned(jid)
 
                 disk_jobs.append(j)
 
@@ -391,100 +386,30 @@ class AsyncJobsRunsIndexer:
             self._last_err = f"indexer_failed:{reason}:{type(e).__name__}:{e}"
 
     def _build_canceled_runs_sync(self) -> tuple[list[RunEntry], tuple[int, int]]:
-        jobs_root = self._core.patches_root / "artifacts" / "web_jobs"
-        try:
-            it = os.scandir(jobs_root)
-        except (FileNotFoundError, NotADirectoryError, PermissionError):
-            self._cancel_job_cache.clear()
-            return [], (0, 0)
-
-        seen: set[str] = set()
+        rows = self._core.web_jobs_db.list_job_jsons(limit=1000000)
         out: list[RunEntry] = []
         count = 0
-        max_mtime_ns = 0
-
-        with it:
-            for ent in it:
-                if not ent.is_dir():
-                    continue
-                jid = ent.name
-                seen.add(jid)
-
-                job_json = Path(jobs_root) / jid / "job.json"
-                try:
-                    st = job_json.stat()
-                except Exception:
-                    self._cancel_job_cache.pop(jid, None)
-                    continue
-                if not statlib.S_ISREG(st.st_mode):
-                    self._cancel_job_cache.pop(jid, None)
-                    continue
-
-                cached = self._cancel_job_cache.get(jid)
-                status = ""
-                issue_id = 0
-                if cached is not None and cached[0] == int(st.st_mtime_ns):
-                    status = cached[1]
-                    issue_id = int(cached[2])
-                else:
-                    try:
-                        raw = json.loads(job_json.read_text(encoding="utf-8", errors="replace"))
-                    except Exception:
-                        raw = None
-                    if isinstance(raw, dict):
-                        status = str(raw.get("status", ""))
-                        issue_s = str(raw.get("issue_id", ""))
-                        try:
-                            issue_id = int(issue_s)
-                        except Exception:
-                            issue_id = 0
-                    self._cancel_job_cache[jid] = (int(st.st_mtime_ns), status, issue_id)
-
-                if status != "canceled" or issue_id <= 0:
-                    continue
-
-                job_mtime_ns = int(getattr(st, "st_mtime_ns", int(st.st_mtime * 1_000_000_000)))
-
-                log_path = Path(jobs_root) / jid / "runner.log"
-                use_log = False
-                log_mtime_ns: int | None = None
-                st2 = st
-                try:
-                    st_log = log_path.stat()
-                    if statlib.S_ISREG(st_log.st_mode):
-                        st2 = st_log
-                        use_log = True
-                        log_mtime_ns = int(
-                            getattr(st_log, "st_mtime_ns", int(st_log.st_mtime * 1_000_000_000))
-                        )
-                except Exception:
-                    use_log = False
-                    log_mtime_ns = None
-
-                rel = str(
-                    Path("artifacts") / "web_jobs" / jid / ("runner.log" if use_log else "job.json")
+        max_rev = 0
+        for raw in rows:
+            if str(raw.get("status", "")) != "canceled":
+                continue
+            try:
+                issue_id = int(str(raw.get("issue_id", "")))
+            except Exception:
+                continue
+            job_id = str(raw.get("job_id", ""))
+            event_name = self._core.web_jobs_db.legacy_event_filename(job_id)
+            ended_utc = str(raw.get("ended_utc") or raw.get("created_utc") or "")
+            out.append(
+                RunEntry(
+                    issue_id=issue_id,
+                    log_rel_path=str(Path("artifacts") / "web_jobs" / job_id / event_name),
+                    result="canceled",
+                    result_line="RESULT: CANCELED",
+                    mtime_utc=ended_utc,
                 )
-                out.append(
-                    RunEntry(
-                        issue_id=issue_id,
-                        log_rel_path=rel,
-                        result="canceled",
-                        result_line="RESULT: CANCELED",
-                        mtime_utc=_utc_iso(float(st2.st_mtime)),
-                    )
-                )
-
-                count += 1
-                # Signature must incorporate job.json changes even when runner.log exists.
-                mtime_ns = job_mtime_ns
-                if log_mtime_ns is not None and log_mtime_ns > mtime_ns:
-                    mtime_ns = log_mtime_ns
-                if mtime_ns > max_mtime_ns:
-                    max_mtime_ns = mtime_ns
-
-        for jid in list(self._cancel_job_cache.keys()):
-            if jid not in seen:
-                self._cancel_job_cache.pop(jid, None)
-
+            )
+            count += 1
+            max_rev = max(max_rev, int(raw.get("row_rev", 0) or 0))
         out.sort(key=lambda r: (r.mtime_utc, r.issue_id), reverse=True)
-        return out, (count, max_mtime_ns)
+        return out, (count, max_rev)

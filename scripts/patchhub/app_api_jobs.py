@@ -13,7 +13,7 @@ from .command_parse import (
 )
 from .issue_alloc import allocate_next_issue_id
 from .job_ids import new_job_id
-from .job_store import list_job_jsons, load_job_json
+from .job_store import list_job_jsons, load_job_record
 from .models import (
     JobMode,
     JobRecord,
@@ -127,89 +127,8 @@ def _load_job_from_disk(self, job_id: str) -> JobRecord | None:
     job_id = str(job_id)
     if not job_id:
         return None
-
-    cache_any: Any = getattr(self, "_disk_job_cache", None)
-    cache: dict[str, tuple[int, JobRecord]]
-    if isinstance(cache_any, dict):
-        cache = cast(dict[str, tuple[int, JobRecord]], cache_any)
-    else:
-        cache = {}
-        self._disk_job_cache = cache
-
-    job_json_path = self.jobs_root / job_id / "job.json"
-    if not job_json_path.exists() or not job_json_path.is_file():
-        cache.pop(job_id, None)
-        return None
-    try:
-        st = job_json_path.stat()
-    except Exception:
-        return None
-
-    cached = cache.get(job_id)
-    if cached is not None and cached[0] == st.st_mtime_ns:
-        return cached[1]
-
-    raw = load_job_json(self.jobs_root, job_id)
-    if raw is None:
-        cache.pop(job_id, None)
-        return None
-    try:
-        job = JobRecord(**raw)
-        cache[job_id] = (st.st_mtime_ns, job)
-        return job
-    except Exception:
-        try:
-            jid = str(raw.get("job_id", job_id))
-            created = str(raw.get("created_utc", ""))
-            mode = str(raw.get("mode", "patch"))
-            issue = str(raw.get("issue_id", ""))
-            commit_summary = str(raw.get("commit_summary", ""))
-            patch_basename = raw.get("patch_basename")
-            if patch_basename is not None:
-                patch_basename = str(patch_basename)
-            raw_cmd = str(raw.get("raw_command", ""))
-            canon = raw.get("canonical_command")
-            if not isinstance(canon, list):
-                canon = []
-            status = str(raw.get("status", "unknown"))
-
-            if not commit_summary:
-                commit_message = str(raw.get("commit_message", ""))
-                commit_summary = compute_commit_summary(commit_message)
-                if not commit_summary:
-                    commit_summary = f"({mode})"
-            if not patch_basename:
-                patch_path = str(raw.get("patch_path", ""))
-                patch_basename = compute_patch_basename(patch_path)
-            jr = JobRecord(
-                job_id=jid,
-                created_utc=created,
-                mode=mode,  # type: ignore[arg-type]
-                issue_id=issue,
-                commit_summary=commit_summary,
-                patch_basename=patch_basename,
-                raw_command=raw_cmd,
-                canonical_command=[str(x) for x in canon],
-            )
-            jr.status = status  # type: ignore[assignment]
-            jr.started_utc = raw.get("started_utc")
-            jr.ended_utc = raw.get("ended_utc")
-            jr.return_code = raw.get("return_code")
-            jr.error = raw.get("error")
-            jr.cancel_requested_utc = raw.get("cancel_requested_utc")
-            jr.cancel_ack_utc = raw.get("cancel_ack_utc")
-            jr.cancel_source = raw.get("cancel_source")
-            jr.original_patch_path = raw.get("original_patch_path")
-            jr.effective_patch_path = raw.get("effective_patch_path")
-            jr.effective_patch_kind = raw.get("effective_patch_kind")
-            jr.selected_patch_entries = [
-                str(x) for x in list(raw.get("selected_patch_entries") or [])
-            ]
-            jr.selected_repo_paths = [str(x) for x in list(raw.get("selected_repo_paths") or [])]
-            cache[job_id] = (st.st_mtime_ns, jr)
-            return jr
-        except Exception:
-            return None
+    source = getattr(self, "web_jobs_db", getattr(self, "jobs_root", None))
+    return load_job_record(source, job_id)
 
 
 def _job_jsonl_path(self, job: JobRecord) -> Path:
@@ -248,6 +167,7 @@ def _job_detail_json(self, job: JobRecord) -> dict[str, Any]:
         patches_root=self.patches_root,
         jobs_root=jobs_root,
         job=job,
+        job_db=getattr(self, "web_jobs_db", None),
     )
     payload["applied_files"] = files
     payload["applied_files_source"] = source
@@ -445,7 +365,8 @@ def api_jobs_enqueue(self, body: dict[str, Any]) -> tuple[int, bytes]:
 def api_jobs_list(self) -> tuple[int, bytes]:
     mem = self.queue.list_jobs()
     mem_by_id = {j.job_id: j for j in mem}
-    disk_raw = list_job_jsons(self.jobs_root, limit=200)
+    source = getattr(self, "web_jobs_db", getattr(self, "jobs_root", None))
+    disk_raw = list_job_jsons(source, limit=200)
     disk: list[JobRecord] = []
     for r in disk_raw:
         jid = str(r.get("job_id", ""))
@@ -480,12 +401,15 @@ def api_jobs_log_tail(self, job_id: str, qs: dict[str, str]) -> tuple[int, bytes
         return _err("Not found", status=404)
     lines = int(qs.get("lines", "200"))
     log_path = self.jobs_root / str(job_id) / "runner.log"
-    tail = read_tail(
-        log_path,
-        lines,
-        max_bytes=self.cfg.server.tail_max_bytes,
-        cache_max_entries=self.cfg.server.tail_cache_max_entries,
-    )
+    if getattr(self, "web_jobs_db", None) is not None:
+        tail = self.web_jobs_db.read_log_tail(job_id, lines=lines)
+    else:
+        tail = read_tail(
+            log_path,
+            lines,
+            max_bytes=self.cfg.server.tail_max_bytes,
+            cache_max_entries=self.cfg.server.tail_cache_max_entries,
+        )
     return _ok({"job_id": job_id, "tail": tail})
 
 

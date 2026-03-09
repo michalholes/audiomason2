@@ -18,12 +18,11 @@ from fastapi.responses import (
 )
 
 from patchhub import app_api_core as _core_api
-from patchhub.app_support import read_tail
 from patchhub.models import job_to_list_item_json
 
 from .async_app_core import AsyncAppCore
 from .async_offload import to_thread
-from .job_events_live_source import stream_job_events_live_source
+from .job_events_db_stream import stream_job_events_db_live
 from .route_diagnostics import handle_api_debug_diagnostics
 from .route_snapshot_events import handle_api_snapshot_events
 from .route_ui_snapshot import handle_api_ui_snapshot
@@ -31,7 +30,6 @@ from .route_ui_snapshot_delta import handle_api_ui_snapshot_delta
 from .route_workspaces import handle_api_workspaces
 from .snapshot_change_broker import SnapshotChangeBroker
 from .snapshot_delta_store import SnapshotDeltaStore
-from .sse_jsonl_stream import stream_job_events_sse
 
 UPLOAD_PATCH_FILE: Any = File(...)
 
@@ -197,6 +195,16 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
 
     @app.get("/api/fs/download")
     async def api_fs_download(path: str = "") -> Response:
+        if core.virtual_jobs_fs.handles(path):
+            download = core.virtual_jobs_fs.download(path)
+            if download is None:
+                data = json.dumps({"ok": False, "error": "Not found"}, ensure_ascii=True).encode(
+                    "utf-8"
+                )
+                return Response(content=data, status_code=404, media_type="application/json")
+            headers = {"Content-Disposition": f'attachment; filename="{download.filename}"'}
+            return Response(content=download.data, media_type=download.media_type, headers=headers)
+
         def _resolve_download_sync(path: str) -> Path:
             return core.jail.resolve_rel(path)
 
@@ -210,10 +218,9 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
             return p.exists() and p.is_file()
 
         if not await to_thread(_exists_file_sync, p):
-            data = json.dumps(
-                {"ok": False, "error": "Not found"},
-                ensure_ascii=True,
-            ).encode("utf-8")
+            data = json.dumps({"ok": False, "error": "Not found"}, ensure_ascii=True).encode(
+                "utf-8"
+            )
             return Response(content=data, status_code=404, media_type="application/json")
         return FileResponse(p, media_type=_guess_content_type(p), filename=p.name)
 
@@ -415,7 +422,7 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
 
         from patchhub.job_store import job_json_signature, list_job_jsons
 
-        disk_sig = await to_thread(job_json_signature, core.jobs_root)
+        disk_sig = await to_thread(job_json_signature, core.web_jobs_db)
         mem_parts: list[str] = []
         for j in sorted(mem, key=lambda x: str(getattr(x, "job_id", ""))):
             jid = str(getattr(j, "job_id", ""))
@@ -441,7 +448,7 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
         def _load_disk_jobs_sync(mem_by_id: dict[str, object]) -> list[Any]:
             from datetime import UTC, datetime
 
-            disk_raw = list_job_jsons(core.jobs_root, limit=200)
+            disk_raw = list_job_jsons(core.web_jobs_db, limit=200)
             disk: list[Any] = []
             for r in disk_raw:
                 jid = str(r.get("job_id", ""))
@@ -456,12 +463,7 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
                     j.status = "fail"
                     j.ended_utc = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
                     j.error = "orphaned: not in memory queue"
-                    job_dir = core.jobs_root / jid
-                    job_dir.mkdir(parents=True, exist_ok=True)
-                    (job_dir / "job.json").write_text(
-                        json.dumps(j.to_json(), ensure_ascii=True, indent=2),
-                        encoding="utf-8",
-                    )
+                    core.web_jobs_db.mark_orphaned(jid)
 
                 disk.append(j)
             return disk
@@ -497,7 +499,7 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
         from patchhub.job_store import job_json_signature
 
         mem = await core.queue.list_jobs()
-        disk_sig = await to_thread(job_json_signature, core.jobs_root)
+        disk_sig = await to_thread(job_json_signature, core.web_jobs_db)
 
         mem_parts: list[str] = []
         for j in sorted(mem, key=lambda x: str(getattr(x, "job_id", ""))):
@@ -536,8 +538,7 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
             job = await to_thread(core._load_job_from_disk, job_id)
         if job is None:
             return JSONResponse({"ok": False, "error": "Not found"}, status_code=404)
-        log_path = core.jobs_root / str(job_id) / "runner.log"
-        tail = await to_thread(read_tail, log_path, lines)
+        tail = await to_thread(core.web_jobs_db.read_log_tail, job_id, lines=lines)
         return JSONResponse({"ok": True, "job_id": job_id, "tail": tail})
 
     @app.post("/api/jobs/{job_id}/cancel")
@@ -730,44 +731,27 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
                 yield f"event: end\ndata: {data}\n\n".encode()
                 return
 
-            if disk_job is not None and job is None:
-                jsonl_path = core._job_jsonl_path_from_fields(
-                    job_id=str(job_id),
-                    mode=str(disk_job.mode),
-                    issue_id=str(disk_job.issue_id),
-                )
-            else:
-                assert job is not None
-                jsonl_path = core._job_jsonl_path(job)
-
             async def job_status() -> str | None:
                 j = await core.queue.get_job(job_id)
                 if j is not None:
                     return str(j.status)
-                if disk_job is not None:
-                    return str(disk_job.status)
-                return None
+                if disk_job is None:
+                    current = await to_thread(core._load_job_from_disk, job_id)
+                else:
+                    current = disk_job
+                return str(current.status) if current is not None else None
 
             async def get_broker() -> Any:
                 if job is None:
                     return None
                 return await core.queue.get_broker(job_id)
 
-            async def historical_stream() -> AsyncIterator[bytes]:
-                async for chunk in stream_job_events_sse(
-                    job_id=str(job_id),
-                    jsonl_path=jsonl_path,
-                    job_status=job_status,
-                ):
-                    yield chunk
-
-            async for chunk in stream_job_events_live_source(
+            async for chunk in stream_job_events_db_live(
                 job_id=str(job_id),
-                jsonl_path=jsonl_path,
+                db=core.web_jobs_db,
                 in_memory_job=job is not None,
                 job_status=job_status,
                 get_broker=get_broker,
-                historical_stream=historical_stream,
             ):
                 yield chunk
 

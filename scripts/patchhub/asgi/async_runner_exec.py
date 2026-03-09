@@ -6,6 +6,8 @@ import signal
 from dataclasses import dataclass
 from pathlib import Path
 
+from patchhub.web_jobs_db import WebJobsDatabase
+
 from .async_task_grace import wait_with_grace
 
 
@@ -73,7 +75,9 @@ class AsyncRunnerExecutor:
         self,
         stdout: asyncio.StreamReader,
         *,
-        log_path: Path,
+        log_path: Path | None,
+        job_db: WebJobsDatabase | None,
+        job_id: str,
     ) -> None:
         while True:
             raw = await stdout.readline()
@@ -83,17 +87,24 @@ class AsyncRunnerExecutor:
                 line = raw.decode("utf-8")
             except Exception:
                 line = raw.decode("utf-8", errors="replace")
-            await asyncio.to_thread(_append_text_sync, log_path, line)
+            normalized = line.rstrip("\n")
+            if job_db is not None and job_id:
+                await asyncio.to_thread(job_db.append_log_line, job_id, normalized)
+            elif log_path is not None:
+                await asyncio.to_thread(_append_text_sync, log_path, line)
 
     async def run(
         self,
         argv: list[str],
         cwd: Path,
-        log_path: Path,
+        log_path: Path | None = None,
         *,
+        job_db: WebJobsDatabase | None = None,
+        job_id: str = "",
         post_exit_grace_s: int = 5,
     ) -> ExecResult:
-        await asyncio.to_thread(_truncate_file_sync, log_path)
+        if job_db is None and log_path is not None:
+            await asyncio.to_thread(_truncate_file_sync, log_path)
 
         proc = await asyncio.create_subprocess_exec(
             *argv,
@@ -109,15 +120,17 @@ class AsyncRunnerExecutor:
         try:
             assert proc.stdout is not None
             reader_task = asyncio.create_task(
-                self._drain_stdout(proc.stdout, log_path=log_path),
+                self._drain_stdout(
+                    proc.stdout,
+                    log_path=log_path,
+                    job_db=job_db,
+                    job_id=str(job_id),
+                ),
                 name=f"patchhub_runner_stdout_{proc.pid}",
             )
             rc = await proc.wait()
             timed_out = await wait_with_grace(reader_task, grace_s=post_exit_grace_s)
-            return ExecResult(
-                return_code=int(rc),
-                stdout_tail_timed_out=timed_out,
-            )
+            return ExecResult(return_code=int(rc), stdout_tail_timed_out=timed_out)
         finally:
             async with self._lock:
                 self._proc = None

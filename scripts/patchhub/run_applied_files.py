@@ -5,6 +5,8 @@ import zipfile
 from pathlib import Path
 from typing import Any
 
+from .web_jobs_db import WebJobsDatabase
+
 _SUMMARY_STOP_RE = re.compile(r"^[A-Z][A-Z_ ]+:\s*")
 _ISSUE_DIFF_LINE_RE = re.compile(r"^issue_diff_zip=(.+)$")
 
@@ -105,13 +107,23 @@ def collect_job_applied_files(
     patches_root: Path,
     jobs_root: Path,
     job: Any,
+    job_db: WebJobsDatabase | None = None,
 ) -> tuple[list[str], str]:
     if str(getattr(job, "status", "")) != "success":
         return [], "non_success"
 
-    log_path = jobs_root / str(getattr(job, "job_id", "")) / "runner.log"
-    log_text = ""
-    if log_path.exists() and log_path.is_file():
+    if job_db is not None:
+        raw = job_db.load_job_json(str(getattr(job, "job_id", "")))
+        if raw is not None:
+            files = [str(item) for item in list(raw.get("applied_files") or [])]
+            source = str(raw.get("applied_files_source", "unavailable"))
+            if files or source not in {"", "unavailable"}:
+                return files, source
+            log_text = job_db.read_full_log(str(getattr(job, "job_id", "")))
+        else:
+            log_text = ""
+    else:
+        log_path = Path(jobs_root) / str(getattr(job, "job_id", "")) / "runner.log"
         try:
             log_text = log_path.read_text(encoding="utf-8", errors="replace")
         except Exception:
@@ -123,10 +135,16 @@ def collect_job_applied_files(
         if diff_path is not None:
             files = _read_diff_manifest(diff_path)
             if files:
+                if job_db is not None:
+                    job_db.update_applied_files(
+                        str(getattr(job, "job_id", "")), files, "diff_manifest"
+                    )
                 return files, "diff_manifest"
 
     files = _parse_final_summary_files(log_text)
     if files:
+        if job_db is not None:
+            job_db.update_applied_files(str(getattr(job, "job_id", "")), files, "final_summary")
         return files, "final_summary"
 
     return [], "unavailable"

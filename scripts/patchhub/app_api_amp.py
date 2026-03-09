@@ -127,6 +127,9 @@ def api_amp_schema(self) -> tuple[int, bytes]:
     policy = schema.get("policy")
     if not isinstance(policy, dict):
         return _err("amp_schema_invalid: policy missing")
+    props = policy.get("properties")
+    if isinstance(props, dict):
+        props.pop("json_out", None)
 
     return _ok({"schema": schema})
 
@@ -135,6 +138,7 @@ def api_amp_config_get(self) -> tuple[int, bytes]:
     try:
         cfg_path = _runner_config_path(self.repo_root, self.cfg)
         values = _read_policy_values(cfg_path)
+        values.pop("json_out", None)
     except Exception as e:
         return _err(f"amp_config_read_failed: {type(e).__name__}: {e}")
     return _ok({"values": values})
@@ -148,6 +152,8 @@ def api_amp_config_post(self, body: dict[str, Any]) -> tuple[int, bytes]:
     if not isinstance(values, dict):
         return _err("values must be an object")
     dry_run = bool(body.get("dry_run", False))
+    if "json_out" in values:
+        return _err("json_out is PatchHub-managed and cannot be changed")
 
     from am_patch.config_edit import (
         apply_update_to_config_text,

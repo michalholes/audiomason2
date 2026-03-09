@@ -8,7 +8,17 @@ from .app_support import _err, _ok, read_tail
 from .fs_jail import FsJailError, list_dir, safe_rename
 
 
+def _virtual_denied(self, rel: str) -> tuple[int, bytes] | None:
+    vfs = getattr(self, "virtual_jobs_fs", None)
+    if vfs is not None and vfs.is_mutable_path(rel):
+        return _err("Virtual DB-backed path is read-only", status=409)
+    return None
+
+
 def api_fs_list(self, rel_path: str) -> tuple[int, bytes]:
+    vfs = getattr(self, "virtual_jobs_fs", None)
+    if vfs is not None and vfs.handles(rel_path):
+        return _ok({"path": rel_path, "items": vfs.list_dir(rel_path), "virtual": True})
     try:
         p = self.jail.resolve_rel(rel_path)
     except FsJailError as e:
@@ -19,6 +29,9 @@ def api_fs_list(self, rel_path: str) -> tuple[int, bytes]:
 
 
 def api_fs_stat(self, rel_path: str) -> tuple[int, bytes]:
+    vfs = getattr(self, "virtual_jobs_fs", None)
+    if vfs is not None and vfs.handles(rel_path):
+        return _ok(vfs.json_stat_payload(rel_path))
     if rel_path == "":
         return _ok({"path": rel_path, "exists": True})
     try:
@@ -33,6 +46,13 @@ def api_fs_read_text(self, qs: dict[str, str]) -> tuple[int, bytes]:
     tail_lines_s = qs.get("tail_lines", "")
     max_bytes = int(qs.get("max_bytes", "200000"))
     max_bytes = max(1, min(max_bytes, 2000000))
+    vfs = getattr(self, "virtual_jobs_fs", None)
+    if vfs is not None and vfs.handles(rel):
+        tail_lines = int(tail_lines_s) if tail_lines_s else None
+        text = vfs.read_text(rel, tail_lines=tail_lines, max_bytes=max_bytes)
+        if text is None:
+            return _err("Not a file", status=404)
+        return _ok({"path": rel, "text": text, "truncated": False, "virtual": True})
     try:
         p = self.jail.resolve_rel(rel)
     except FsJailError as e:
@@ -50,7 +70,6 @@ def api_fs_read_text(self, qs: dict[str, str]) -> tuple[int, bytes]:
         )
         return _ok({"path": rel, "text": text, "truncated": False})
 
-    # head read with truncation (byte-based)
     try:
         data = p.read_bytes()
     except Exception:
@@ -62,12 +81,15 @@ def api_fs_read_text(self, qs: dict[str, str]) -> tuple[int, bytes]:
 
 
 def api_fs_download(self, rel_path: str) -> tuple[int, bytes] | None:
-    # handled in server layer (stream bytes)
+    del rel_path
     return None
 
 
 def api_fs_mkdir(self, body: dict[str, Any]) -> tuple[int, bytes]:
     rel = str(body.get("path", ""))
+    denied = _virtual_denied(self, rel)
+    if denied is not None:
+        return denied
     try:
         self.jail.assert_crud_allowed(rel)
         p = self.jail.resolve_rel(rel)
@@ -80,6 +102,9 @@ def api_fs_mkdir(self, body: dict[str, Any]) -> tuple[int, bytes]:
 def api_fs_rename(self, body: dict[str, Any]) -> tuple[int, bytes]:
     src_rel = str(body.get("src", ""))
     dst_rel = str(body.get("dst", ""))
+    denied = _virtual_denied(self, src_rel) or _virtual_denied(self, dst_rel)
+    if denied is not None:
+        return denied
     try:
         self.jail.assert_crud_allowed(src_rel)
         self.jail.assert_crud_allowed(dst_rel)
@@ -95,6 +120,9 @@ def api_fs_rename(self, body: dict[str, Any]) -> tuple[int, bytes]:
 
 def api_fs_delete(self, body: dict[str, Any]) -> tuple[int, bytes]:
     rel = str(body.get("path", ""))
+    denied = _virtual_denied(self, rel)
+    if denied is not None:
+        return denied
     try:
         self.jail.assert_crud_allowed(rel)
         p = self.jail.resolve_rel(rel)
@@ -112,6 +140,9 @@ def api_fs_delete(self, body: dict[str, Any]) -> tuple[int, bytes]:
 def api_fs_unzip(self, body: dict[str, Any]) -> tuple[int, bytes]:
     zip_rel = str(body.get("zip_path", ""))
     dest_rel = str(body.get("dest_dir", ""))
+    denied = _virtual_denied(self, zip_rel) or _virtual_denied(self, dest_rel)
+    if denied is not None:
+        return denied
     try:
         self.jail.assert_crud_allowed(zip_rel)
         self.jail.assert_crud_allowed(dest_rel)

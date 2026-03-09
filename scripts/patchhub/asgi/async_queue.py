@@ -9,6 +9,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 from patchhub.models import JobRecord
+from patchhub.run_applied_files import collect_job_applied_files
+from patchhub.web_jobs_db import WebJobsDatabase
 
 from .async_event_pump import start_event_pump
 from .async_events_socket import job_socket_path, send_cancel_async
@@ -37,44 +39,72 @@ def is_lock_held_sync(lock_path: Path) -> bool:
         fd.close()
 
 
+def _drop_override_pairs(argv: list[str], keys: set[str]) -> list[str]:
+    out: list[str] = []
+    idx = 0
+    while idx < len(argv):
+        if idx + 1 < len(argv) and argv[idx] == "--override":
+            raw = str(argv[idx + 1])
+            key = raw.split("=", 1)[0]
+            if key in keys:
+                idx += 2
+                continue
+        out.append(argv[idx])
+        idx += 1
+    return out
+
+
 def _inject_web_overrides(
     argv: list[str],
     job_id: str,
     *,
     ipc_handshake_wait_s: int,
+    db_primary: bool = False,
 ) -> list[str]:
-    out = list(argv)
+    drop_keys = {"patch_layout_json_dir", "ipc_socket_path"}
+    if db_primary:
+        drop_keys.update(
+            {
+                "json_out",
+                "ipc_socket_enabled",
+                "ipc_handshake_enabled",
+                "ipc_handshake_wait_s",
+            }
+        )
+    out = _drop_override_pairs(list(argv), drop_keys)
 
     script_idx = -1
     for i, a in enumerate(out):
         if a.endswith("am_patch.py"):
             script_idx = i
             break
-
     insert_at = script_idx + 1 if script_idx >= 0 else len(out)
 
-    def _has_override(key: str) -> bool:
-        for j in range(len(out) - 1):
-            if out[j] == "--override" and out[j + 1].startswith(key + "="):
-                return True
-        return False
+    existing = set()
+    idx = 0
+    while idx + 1 < len(out):
+        if out[idx] == "--override":
+            existing.add(str(out[idx + 1]).split("=", 1)[0])
+            idx += 2
+            continue
+        idx += 1
 
     overrides: list[str] = []
-    if not _has_override("patch_layout_json_dir"):
-        overrides.extend(["--override", "patch_layout_json_dir=artifacts/web_jobs/" + job_id])
 
-    if not _has_override("ipc_socket_enabled"):
-        overrides.extend(["--override", "ipc_socket_enabled=true"])
-    if not _has_override("ipc_handshake_enabled"):
-        overrides.extend(["--override", "ipc_handshake_enabled=true"])
-    if not _has_override("ipc_handshake_wait_s"):
-        overrides.extend(["--override", f"ipc_handshake_wait_s={int(ipc_handshake_wait_s)}"])
-    if not _has_override("ipc_socket_path"):
-        overrides.extend(["--override", f"ipc_socket_path={job_socket_path(job_id)}"])
+    def _add(pair: str) -> None:
+        key = pair.split("=", 1)[0]
+        if db_primary or key not in existing:
+            overrides.extend(["--override", pair])
 
-    if overrides:
-        out[insert_at:insert_at] = overrides
-
+    if db_primary:
+        _add("json_out=false")
+    else:
+        _add(f"patch_layout_json_dir=artifacts/web_jobs/{job_id}")
+    _add("ipc_socket_enabled=true")
+    _add("ipc_handshake_enabled=true")
+    _add(f"ipc_handshake_wait_s={int(ipc_handshake_wait_s)}")
+    _add(f"ipc_socket_path={job_socket_path(job_id)}")
+    out[insert_at:insert_at] = overrides
     return out
 
 
@@ -97,19 +127,11 @@ def _job_jsonl_path_from_fields(job_dir: Path, mode: str, issue_id: str) -> Path
 def _ensure_job_jsonl_exists_sync(job_dir: Path, mode: str, issue_id: str) -> None:
     job_dir.mkdir(parents=True, exist_ok=True)
     jsonl_path = _job_jsonl_path_from_fields(job_dir, mode, issue_id)
-    try:
-        if jsonl_path.exists() and jsonl_path.is_file() and jsonl_path.stat().st_size > 0:
-            return
-    except Exception:
-        return
-
     line = json.dumps(
         {"type": "log", "ch": "CORE", "sev": "INFO", "msg": "queued", "summary": True},
         ensure_ascii=True,
     )
-    with jsonl_path.open("a", encoding="utf-8") as f:
-        f.write(line)
-        f.write("\n")
+    jsonl_path.write_text(line + "\n", encoding="utf-8")
 
 
 @dataclass
@@ -129,6 +151,8 @@ class AsyncJobQueue:
         ipc_handshake_wait_s: int = 1,
         post_exit_grace_s: int = 5,
         terminate_grace_s: int = 3,
+        job_db: WebJobsDatabase | None = None,
+        patches_root: Path | None = None,
     ) -> None:
         self._repo_root = repo_root
         self._lock_path = lock_path
@@ -137,6 +161,8 @@ class AsyncJobQueue:
         self._ipc_handshake_wait_s = int(ipc_handshake_wait_s)
         self._post_exit_grace_s = max(1, int(post_exit_grace_s))
         self._terminate_grace_s = max(1, int(terminate_grace_s))
+        self._job_db = job_db
+        self._patches_root = patches_root or jobs_root.parent.parent
 
         self._mu = asyncio.Lock()
         self._stop = asyncio.Event()
@@ -156,6 +182,20 @@ class AsyncJobQueue:
         if broker is not None:
             broker.close()
 
+    async def _materialize_applied_files(self, job: JobRecord) -> None:
+        if self._job_db is None:
+            return
+        files, source = collect_job_applied_files(
+            patches_root=self._patches_root,
+            jobs_root=self._jobs_root,
+            job=job,
+            job_db=self._job_db,
+        )
+        if files or source != "unavailable":
+            job.applied_files = files
+            job.applied_files_source = source
+            await self._persist(job, count_as_job_change=False)
+
     async def _finalize_running_job(
         self,
         job_id: str,
@@ -163,6 +203,7 @@ class AsyncJobQueue:
         return_code: int,
         error: str | None,
     ) -> bool:
+        finalized: JobRecord | None = None
         async with self._mu:
             job = self._jobs.get(job_id)
             if job is None or job.status != "running":
@@ -185,7 +226,10 @@ class AsyncJobQueue:
             else:
                 job.status = "fail"
             job.ended_utc = utc_now()
+            finalized = job
             await self._persist(job)
+        if finalized is not None and finalized.status == "success":
+            await self._materialize_applied_files(finalized)
         return True
 
     async def _reconcile_active_job(
@@ -206,9 +250,7 @@ class AsyncJobQueue:
         fallback_error = error or "runner_completion_reconciliation_without_return_code"
         fallback_rc = -1 if return_code is None else int(return_code)
         return await self._finalize_running_job(
-            job_id,
-            return_code=fallback_rc,
-            error=fallback_error,
+            job_id, return_code=fallback_rc, error=fallback_error
         )
 
     async def start(self) -> None:
@@ -247,13 +289,28 @@ class AsyncJobQueue:
         async with self._mu:
             self._jobs[job.job_id] = job
             await self._persist(job)
-            job_dir = self._job_dir(job.job_id)
-            await asyncio.to_thread(
-                _ensure_job_jsonl_exists_sync,
-                job_dir,
-                str(job.mode),
-                str(job.issue_id),
-            )
+            if self._job_db is not None:
+                self._job_db.append_event_line(
+                    job.job_id,
+                    json.dumps(
+                        {
+                            "type": "log",
+                            "ch": "CORE",
+                            "sev": "INFO",
+                            "msg": "queued",
+                            "summary": True,
+                        },
+                        ensure_ascii=True,
+                    ),
+                )
+            else:
+                job_dir = self._job_dir(job.job_id)
+                await asyncio.to_thread(
+                    _ensure_job_jsonl_exists_sync,
+                    job_dir,
+                    str(job.mode),
+                    str(job.issue_id),
+                )
         await self._q.put(job.job_id)
 
     async def cancel(self, job_id: str) -> bool:
@@ -333,7 +390,12 @@ class AsyncJobQueue:
     def _job_dir(self, job_id: str) -> Path:
         return self._jobs_root / job_id
 
-    async def _persist(self, job: JobRecord) -> None:
+    async def _persist(self, job: JobRecord, *, count_as_job_change: bool = True) -> None:
+        if self._job_db is not None:
+            await asyncio.to_thread(
+                self._job_db.upsert_job, job, count_as_job_change=count_as_job_change
+            )
+            return
         job_dir = self._job_dir(job.job_id)
         await asyncio.to_thread(_persist_job_sync, job_dir, job)
 
@@ -395,12 +457,14 @@ class AsyncJobQueue:
 
             job_dir = self._job_dir(job_id)
             runner_log = job_dir / "runner.log"
+            jsonl_path = _job_jsonl_path_from_fields(job_dir, str(job.mode), str(job.issue_id))
 
             try:
                 effective_cmd = _inject_web_overrides(
                     job.canonical_command,
                     job_id,
                     ipc_handshake_wait_s=self._ipc_handshake_wait_s,
+                    db_primary=self._job_db is not None,
                 )
 
                 sock_path = Path(job_socket_path(job_id))
@@ -409,33 +473,47 @@ class AsyncJobQueue:
                     with contextlib.suppress(Exception):
                         sock_path.unlink()
 
-                jsonl_path = _job_jsonl_path_from_fields(
-                    job_dir,
-                    str(job.mode),
-                    str(job.issue_id),
-                )
                 broker = JobEventBroker()
                 async with self._mu:
                     self._brokers[job_id] = broker
-                pump_task = asyncio.create_task(
-                    start_event_pump(
+                if self._job_db is not None:
+                    pump_coro = start_event_pump(
+                        socket_path=str(sock_path),
+                        jsonl_path=None,
+                        publish=broker.publish,
+                        job_db=self._job_db,
+                        job_id=job_id,
+                    )
+                else:
+                    pump_coro = start_event_pump(
                         socket_path=str(sock_path),
                         jsonl_path=jsonl_path,
                         publish=broker.publish,
-                    ),
+                    )
+                pump_task = asyncio.create_task(
+                    pump_coro,
                     name=f"patchhub_event_pump_{job_id}",
                 )
 
-                result = await self._executor.run(
-                    effective_cmd,
-                    cwd=self._repo_root,
-                    log_path=runner_log,
-                    post_exit_grace_s=self._post_exit_grace_s,
-                )
+                if self._job_db is not None:
+                    result = await self._executor.run(
+                        effective_cmd,
+                        cwd=self._repo_root,
+                        log_path=None,
+                        job_db=self._job_db,
+                        job_id=job_id,
+                        post_exit_grace_s=self._post_exit_grace_s,
+                    )
+                else:
+                    result = await self._executor.run(
+                        effective_cmd,
+                        cwd=self._repo_root,
+                        log_path=runner_log,
+                        post_exit_grace_s=self._post_exit_grace_s,
+                    )
 
                 pump_tail_timed_out = await wait_with_grace(
-                    pump_task,
-                    grace_s=self._post_exit_grace_s,
+                    pump_task, grace_s=self._post_exit_grace_s
                 )
 
                 async with self._mu:
@@ -449,9 +527,7 @@ class AsyncJobQueue:
                     )
 
                 await self._finalize_running_job(
-                    job_id,
-                    return_code=result.return_code,
-                    error=error,
+                    job_id, return_code=result.return_code, error=error
                 )
             except Exception as e:
                 if result is not None:
@@ -492,3 +568,5 @@ class AsyncJobQueue:
                     error=reconcile_error,
                 )
                 await self._close_broker(job_id)
+                with contextlib.suppress(Exception):
+                    Path(job_socket_path(job_id)).unlink()

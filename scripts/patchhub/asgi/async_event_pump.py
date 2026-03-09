@@ -7,6 +7,8 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
+from patchhub.web_jobs_db import WebJobsDatabase
+
 _CHUNK_BYTES = 8192
 _MAX_LINE_BYTES = 64 * 1024 * 1024
 _PROTOCOL = "am_patch_ipc/1"
@@ -27,17 +29,21 @@ def _write_line(
     f,
     line: str,
     publish: Callable[[str, int], None] | None,
+    job_db: WebJobsDatabase | None,
+    job_id: str,
 ) -> int:
     line = line.rstrip("\n")
     if not line.strip():
-        return f.tell()
+        return 0
 
-    f.write(line + "\n")
-    end_offset = f.tell()
-
+    if job_db is not None and job_id:
+        seq = job_db.append_event_line(job_id, line)
+    else:
+        f.write(line + "\n")
+        seq = f.tell()
     if publish is not None:
-        publish(line, end_offset)
-    return end_offset
+        publish(line, seq)
+    return seq
 
 
 def _parse_line_obj(line: str) -> dict[str, Any] | None:
@@ -85,13 +91,18 @@ async def _send_command(
 
 async def _connect_and_stream(
     socket_path: str,
-    jsonl_path: Path,
+    jsonl_path: Path | None,
     publish: Callable[[str, int], None] | None,
+    *,
+    job_db: WebJobsDatabase | None,
+    job_id: str,
 ) -> None:
     reader, writer = await asyncio.open_unix_connection(socket_path)
-    jsonl_path.parent.mkdir(parents=True, exist_ok=True)
-
-    f = jsonl_path.open("a", encoding="utf-8")
+    if jsonl_path is not None:
+        jsonl_path.parent.mkdir(parents=True, exist_ok=True)
+        f = jsonl_path.open("a", encoding="utf-8")
+    else:
+        f = None
     try:
         flush_every = 20
         n = 0
@@ -103,7 +114,7 @@ async def _connect_and_stream(
             if not chunk:
                 if buf.strip():
                     line = buf.decode("utf-8", errors="replace")
-                    _write_line(f=f, line=line, publish=publish)
+                    _write_line(f=f, line=line, publish=publish, job_db=job_db, job_id=job_id)
                 return
 
             buf += chunk
@@ -119,7 +130,7 @@ async def _connect_and_stream(
                     continue
 
                 line = line_bytes.decode("utf-8", errors="replace")
-                _write_line(f=f, line=line, publish=publish)
+                _write_line(f=f, line=line, publish=publish, job_db=job_db, job_id=job_id)
                 n += 1
                 obj = _parse_line_obj(line)
 
@@ -131,10 +142,7 @@ async def _connect_and_stream(
                 ):
                     try:
                         await _send_command(
-                            writer=writer,
-                            cmd_id=_READY_CMD_ID,
-                            cmd="ready",
-                            args={},
+                            writer=writer, cmd_id=_READY_CMD_ID, cmd="ready", args={}
                         )
                         ready_sent = True
                     except Exception:
@@ -149,7 +157,8 @@ async def _connect_and_stream(
                     seq = _event_seq(obj.get("seq"))
                     if seq is not None:
                         try:
-                            f.flush()
+                            if f is not None:
+                                f.flush()
                             await _send_command(
                                 writer=writer,
                                 cmd_id=f"patchhub_drain_ack_{seq}",
@@ -161,19 +170,21 @@ async def _connect_and_stream(
                             pass
 
                 if n >= flush_every:
-                    f.flush()
+                    if f is not None:
+                        f.flush()
                     n = 0
 
             if len(buf) > _MAX_LINE_BYTES:
                 dropped = len(buf)
                 buf = b""
                 notice = _oversize_notice(dropped_bytes=dropped)
-                _write_line(f=f, line=notice, publish=publish)
+                _write_line(f=f, line=notice, publish=publish, job_db=job_db, job_id=job_id)
     finally:
-        with contextlib.suppress(Exception):
-            f.flush()
-        with contextlib.suppress(Exception):
-            f.close()
+        if f is not None:
+            with contextlib.suppress(Exception):
+                f.flush()
+            with contextlib.suppress(Exception):
+                f.close()
         with contextlib.suppress(Exception):
             writer.close()
         with contextlib.suppress(Exception):
@@ -183,21 +194,23 @@ async def _connect_and_stream(
 async def start_event_pump(
     *,
     socket_path: str,
-    jsonl_path: Path,
+    jsonl_path: Path | None = None,
     publish: Callable[[str, int], None] | None = None,
+    job_db: WebJobsDatabase | None = None,
+    job_id: str = "",
     connect_timeout_s: float = 10.0,
     retry_sleep_s: float = 0.25,
 ) -> None:
-    """Start an async event pump that persists runner IPC events to a JSONL file.
-
-    If publish is provided, each non-empty line is also forwarded immediately.
-    The function returns when the stream ends or when connect timeout elapses.
-    """
-
     deadline = asyncio.get_running_loop().time() + max(connect_timeout_s, 0.0)
     while True:
         try:
-            await _connect_and_stream(socket_path, jsonl_path, publish)
+            await _connect_and_stream(
+                socket_path,
+                jsonl_path,
+                publish,
+                job_db=job_db,
+                job_id=str(job_id),
+            )
             return
         except FileNotFoundError:
             pass

@@ -7,7 +7,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
+from .job_store import list_job_jsons
 from .models import RunEntry
+from .web_jobs_db import WebJobsDatabase
 
 
 def _json_bytes(obj: Any, status: int = 200) -> tuple[int, bytes]:
@@ -330,57 +332,28 @@ def _decorate_run(
     return run
 
 
-def canceled_runs_signature(patches_root: Path) -> tuple[int, int]:
-    jobs_root = patches_root / "artifacts" / "web_jobs"
-    if not jobs_root.exists() or not jobs_root.is_dir():
-        return (0, 0)
-
-    count = 0
-    max_mtime_ns = 0
-    for d in jobs_root.iterdir():
-        if not d.is_dir():
-            continue
-        job_json = d / "job.json"
-        if not job_json.exists() or not job_json.is_file():
-            continue
-        try:
-            raw = json.loads(job_json.read_text(encoding="utf-8", errors="replace"))
-        except Exception:
-            continue
-        if not isinstance(raw, dict):
-            continue
-        if str(raw.get("status", "")) != "canceled":
-            continue
-        log_path = d / "runner.log"
-        fp = log_path if log_path.exists() else job_json
-        try:
-            st = fp.stat()
-        except Exception:
-            continue
-        count += 1
-        if st.st_mtime_ns > max_mtime_ns:
-            max_mtime_ns = st.st_mtime_ns
-    return (count, max_mtime_ns)
+def _jobs_source_path(source: WebJobsDatabase | Path) -> WebJobsDatabase | Path:
+    if isinstance(source, Path) and source.name != "web_jobs":
+        return source / "artifacts" / "web_jobs"
+    return source
 
 
-def _iter_canceled_runs(patches_root: Path) -> list[RunEntry]:
-    jobs_root = patches_root / "artifacts" / "web_jobs"
-    if not jobs_root.exists() or not jobs_root.is_dir():
-        return []
+def canceled_runs_signature(source: WebJobsDatabase | Path) -> tuple[int, int]:
+    rows = list_job_jsons(_jobs_source_path(source), limit=1000000)
+    canceled = [row for row in rows if str(row.get("status", "")) == "canceled"]
+    max_rev = 0
+    for row in canceled:
+        max_rev = max(max_rev, int(row.get("row_rev", 0) or 0))
+    return len(canceled), max_rev
 
+
+def _iter_canceled_runs(source: WebJobsDatabase | Path) -> list[RunEntry]:
     out: list[RunEntry] = []
-    for d in jobs_root.iterdir():
-        if not d.is_dir():
-            continue
-        job_json = d / "job.json"
-        if not job_json.exists() or not job_json.is_file():
-            continue
-        try:
-            raw = json.loads(job_json.read_text(encoding="utf-8", errors="replace"))
-        except Exception:
-            continue
-        if not isinstance(raw, dict):
-            continue
+    event_name_fn = None
+    source = _jobs_source_path(source)
+    if isinstance(source, WebJobsDatabase):
+        event_name_fn = source.legacy_event_filename
+    for raw in list_job_jsons(source, limit=1000000):
         if str(raw.get("status", "")) != "canceled":
             continue
         issue_s = str(raw.get("issue_id", ""))
@@ -388,27 +361,30 @@ def _iter_canceled_runs(patches_root: Path) -> list[RunEntry]:
             issue_id = int(issue_s)
         except Exception:
             continue
-
-        log_path = d / "runner.log"
-        rel = str(
-            Path("artifacts")
-            / "web_jobs"
-            / d.name
-            / ("runner.log" if log_path.exists() else "job.json")
-        )
-        try:
-            st = (log_path if log_path.exists() else job_json).stat()
-        except Exception:
-            continue
+        if event_name_fn is not None:
+            event_name = event_name_fn(str(raw.get("job_id", "")))
+        elif issue_s.isdigit():
+            event_name = f"am_patch_issue_{issue_s}.jsonl"
+        else:
+            event_name = "am_patch_finalize.jsonl"
+        rel = str(Path("artifacts") / "web_jobs" / str(raw.get("job_id", "")) / event_name)
+        mtime_src = str(raw.get("ended_utc") or raw.get("created_utc") or "")
+        if mtime_src:
+            try:
+                mtime = datetime.strptime(mtime_src, "%Y-%m-%dT%H:%M:%SZ").replace(tzinfo=UTC)
+                mtime_utc = _utc_iso(mtime.timestamp())
+            except ValueError:
+                mtime_utc = mtime_src
+        else:
+            mtime_utc = ""
         out.append(
             RunEntry(
                 issue_id=issue_id,
                 log_rel_path=rel,
                 result="canceled",
                 result_line="RESULT: CANCELED",
-                mtime_utc=_utc_iso(st.st_mtime),
+                mtime_utc=mtime_utc,
             )
         )
-
     out.sort(key=lambda r: (r.mtime_utc, r.issue_id), reverse=True)
     return out

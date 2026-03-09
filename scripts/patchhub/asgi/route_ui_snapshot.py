@@ -58,13 +58,14 @@ async def _legacy_snapshot_payload(core: AsyncAppCore) -> dict[str, Any]:
     queued = int(getattr(qstate, "queued", 0) or 0) if qstate is not None else 0
     running = int(getattr(qstate, "running", 0) or 0) if qstate is not None else 0
 
-    disk_sig = await to_thread(job_json_signature, core.jobs_root)
+    job_source = getattr(core, "web_jobs_db", getattr(core, "jobs_root", None))
+    disk_sig = await to_thread(job_json_signature, job_source)
     mem = await core.queue.list_jobs()
     mem_by_id = {str(j.job_id): j for j in mem}
     jobs_sig = _jobs_sig(disk_sig=disk_sig, mem=mem)
 
     def _load_disk_jobs_sync() -> list[Any]:
-        disk_raw = list_job_jsons(core.jobs_root, limit=200)
+        disk_raw = list_job_jsons(job_source, limit=200)
         disk_jobs: list[Any] = []
         for item in disk_raw:
             jid = str(item.get("job_id", ""))
@@ -86,7 +87,8 @@ async def _legacy_snapshot_payload(core: AsyncAppCore) -> dict[str, Any]:
         core.patches_root,
         core.cfg.indexing.log_filename_regex,
     )
-    canceled_sig = await to_thread(canceled_runs_signature, core.patches_root)
+    canceled_source = getattr(core, "web_jobs_db", getattr(core, "jobs_root", None))
+    canceled_sig = await to_thread(canceled_runs_signature, canceled_source)
     runs_sig = (
         f"runs:r={base_sig[0]}:{base_sig[1]}:{base_sig[2]}:c={canceled_sig[0]}:{canceled_sig[1]}"
     )

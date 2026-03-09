@@ -3,32 +3,24 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from patchhub import (
-    app_api_amp as _amp,
-)
-from patchhub import (
-    app_api_core as _core,
-)
-from patchhub import (
-    app_api_fs as _fs,
-)
-from patchhub import (
-    app_api_jobs as _jobs,
-)
-from patchhub import (
-    app_api_upload as _upload,
-)
-from patchhub import (
-    app_api_workspaces as _workspaces,
-)
-from patchhub import (
-    app_ui as _ui,
-)
-from patchhub import (
-    proc_resources,
-)
+from patchhub import app_api_amp as _amp
+from patchhub import app_api_core as _core
+from patchhub import app_api_fs as _fs
+from patchhub import app_api_jobs as _jobs
+from patchhub import app_api_upload as _upload
+from patchhub import app_api_workspaces as _workspaces
+from patchhub import app_ui as _ui
+from patchhub import proc_resources
 from patchhub.config import AppConfig
 from patchhub.fs_jail import FsJail
+from patchhub.web_jobs_db import WebJobsDatabase, load_web_jobs_db_config
+from patchhub.web_jobs_migration import (
+    _migrate as migrate_legacy_jobs,
+)
+from patchhub.web_jobs_migration import (
+    _verify as verify_legacy_jobs,
+)
+from patchhub.web_jobs_virtual_fs import WebJobsVirtualFs
 
 from .async_jobs_runs_indexer import AsyncJobsRunsIndexer
 from .async_offload import to_thread
@@ -51,6 +43,12 @@ class AsyncAppCore:
         self.patches_root = self.jail.patches_root()
         self.jobs_root = self.patches_root / "artifacts" / "web_jobs"
         self.jobs_root.mkdir(parents=True, exist_ok=True)
+        self.web_jobs_db_cfg = load_web_jobs_db_config(repo_root, self.patches_root)
+        self.web_jobs_db = WebJobsDatabase(self.web_jobs_db_cfg)
+        self.virtual_jobs_fs = WebJobsVirtualFs(
+            db=self.web_jobs_db,
+            enabled=self.web_jobs_db_cfg.compatibility_enabled,
+        )
 
         self.queue = AsyncJobQueue(
             repo_root=repo_root,
@@ -60,11 +58,17 @@ class AsyncAppCore:
             ipc_handshake_wait_s=cfg.runner.ipc_handshake_wait_s,
             post_exit_grace_s=cfg.runner.post_exit_grace_s,
             terminate_grace_s=cfg.runner.terminate_grace_s,
+            job_db=self.web_jobs_db,
+            patches_root=self.patches_root,
         )
 
         self.indexer = AsyncJobsRunsIndexer(core=self)
 
     async def startup(self) -> None:
+        if self.web_jobs_db_cfg.startup_migration_enabled:
+            await to_thread(migrate_legacy_jobs, self.repo_root)
+        if self.web_jobs_db_cfg.startup_verify_enabled:
+            await to_thread(verify_legacy_jobs, self.repo_root)
         await self.queue.start()
         await self.indexer.start()
 
