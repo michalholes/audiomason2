@@ -26,15 +26,13 @@ from .engine_util import (
 )
 from .errors import FinalizeError
 from .fingerprints import fingerprint_json, sha256_hex
-from .flow_runtime import build_flow_model
-from .models import CatalogModel, FlowModel, validate_models
 from .storage import (
     atomic_write_json,
     atomic_write_text,
     read_json,
 )
 from .wizard_definition_model import (
-    build_effective_workflow_snapshot,
+    build_legacy_runtime_flow_model_from_definition,
     load_or_bootstrap_wizard_definition,
 )
 
@@ -72,18 +70,12 @@ def create_session_impl(
 
     # 1) Load models
     ensure_default_models(engine._fs)
-    catalog_dict = read_json(engine._fs, RootName.WIZARDS, "import/catalog/catalog.json")
-    flow_dict = read_json(engine._fs, RootName.WIZARDS, "import/flow/current.json")
     flow_cfg = read_json(engine._fs, RootName.WIZARDS, "import/config/flow_config.json")
 
     flow_cfg_norm = engine._normalize_flow_config(flow_cfg)
     if flow_overrides is not None:
         # Legacy testing hook only. Overrides may only toggle optional steps.
         flow_cfg_norm = engine._merge_flow_config_overrides(flow_cfg_norm, flow_overrides)
-
-    catalog = CatalogModel.from_dict(catalog_dict)
-    flow = FlowModel.from_dict(flow_dict)
-    validate_models(catalog, flow)
 
     wizard_definition = load_or_bootstrap_wizard_definition(
         engine._fs,
@@ -92,14 +84,9 @@ def create_session_impl(
     if int(wizard_definition.get("version") or 0) == 3:
         effective_model = build_runtime_flow_model(wizard_definition=wizard_definition)
     else:
-        step_order = build_effective_workflow_snapshot(
+        effective_model = build_legacy_runtime_flow_model_from_definition(
             wizard_definition=wizard_definition,
             flow_config=flow_cfg_norm,
-        )
-        effective_model = build_flow_model(
-            catalog=catalog,
-            flow_config=flow_cfg_norm,
-            step_order=step_order,
         )
     # 2) Discovery
     discovery = discovery_mod.run_discovery(engine._fs, root=root, relative_path=relative_path)

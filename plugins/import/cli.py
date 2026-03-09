@@ -525,13 +525,13 @@ def _run_legacy(argv: list[str], *, engine: ImportWizardEngine) -> int:
                 message_id="cli.import.missing_wizard_model",
                 default_message=(
                     "Missing Import Wizard model files under the wizards root. "
-                    "Create catalog/catalog.json and flow/current.json."
+                    "Create wizard_definition.json and flow_config.json."
                 ),
                 details={
                     "missing_path": missing_path,
                     "expected_rel_paths": [
-                        "import/catalog/catalog.json",
-                        "import/flow/current.json",
+                        "import/definitions/wizard_definition.json",
+                        "import/config/flow_config.json",
                     ],
                 },
             )

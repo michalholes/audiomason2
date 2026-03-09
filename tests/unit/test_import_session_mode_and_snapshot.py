@@ -83,13 +83,13 @@ def test_snapshot_isolation_for_effective_files(tmp_path: Path) -> None:
     eff_model_before = eff_model_path.read_text(encoding="utf-8")
     eff_cfg_before = eff_cfg_path.read_text(encoding="utf-8")
 
-    # Mutate current model/config after the session was created.
-    flow_path = roots["wizards"] / "import" / "flow" / "current.json"
+    # Mutate active wizard definition/config after the session was created.
+    wizard_path = roots["wizards"] / "import" / "definitions" / "wizard_definition.json"
     cfg_path = roots["wizards"] / "import" / "config" / "flow_config.json"
 
-    flow_any = json.loads(flow_path.read_text(encoding="utf-8"))
-    flow_any["_test_mutation"] = 1
-    flow_path.write_text(json.dumps(flow_any), encoding="utf-8")
+    wizard_any = json.loads(wizard_path.read_text(encoding="utf-8"))
+    wizard_any["graph"]["edges"][0]["priority"] = 1
+    wizard_path.write_text(json.dumps(wizard_any), encoding="utf-8")
 
     cfg_any = json.loads(cfg_path.read_text(encoding="utf-8"))
     cfg_any["ui"] = {"_test_mutation": True}

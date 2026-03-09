@@ -11,8 +11,8 @@ from typing import TYPE_CHECKING, Any, cast
 
 from plugins.file_io.service.types import RootName
 
-from .defaults import ensure_default_models
 from .errors import FinalizeError
+from .flow_config_defaults import DEFAULT_FLOW_CONFIG, ensure_flow_config_exists
 from .flow_config_patch import apply_patch_request
 from .flow_config_validation import normalize_flow_config
 from .models import BASE_REQUIRED_STEP_IDS
@@ -55,7 +55,7 @@ def merge_flow_config_overrides(
 def get_flow_config(self: ImportWizardEngine) -> dict[str, Any]:
     """Return the current normalized FlowConfig JSON."""
 
-    ensure_default_models(self._fs)
+    ensure_flow_config_exists(self._fs)
     flow_cfg = read_json(
         self._fs,
         RootName.WIZARDS,
@@ -75,7 +75,7 @@ def set_flow_config(self: ImportWizardEngine, flow_config_json: Any) -> dict[str
     if validated.get("ok") is not True:
         return validated
 
-    ensure_default_models(self._fs)
+    ensure_flow_config_exists(self._fs)
 
     normalized = normalize_flow_config(flow_config_json)
     atomic_write_json(
@@ -90,13 +90,11 @@ def set_flow_config(self: ImportWizardEngine, flow_config_json: Any) -> dict[str
 def reset_flow_config(self: ImportWizardEngine) -> dict[str, Any]:
     """Reset FlowConfig to DEFAULT_FLOW_CONFIG and return the normalized config."""
 
-    from .defaults import DEFAULT_FLOW_CONFIG
-
     validated = self.validate_flow_config(DEFAULT_FLOW_CONFIG)
     if validated.get("ok") is not True:
         return validated
 
-    ensure_default_models(self._fs)
+    ensure_flow_config_exists(self._fs)
 
     normalized = normalize_flow_config(DEFAULT_FLOW_CONFIG)
     atomic_write_json(

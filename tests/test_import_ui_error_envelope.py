@@ -15,6 +15,7 @@ ensure_default_models = import_module("plugins.import.defaults").ensure_default_
 atomic_write_json = import_module("plugins.import.storage").atomic_write_json
 read_json = import_module("plugins.import.storage").read_json
 build_router = import_module("plugins.import.ui_api").build_router
+import_cli_main = import_module("plugins.import.cli").import_cli_main
 
 _HAS_FASTAPI = True
 try:
@@ -79,11 +80,11 @@ def test_session_start_returns_invariant_violation_envelope(tmp_path: Path) -> N
     _write_inbox_source_dir(roots, "src")
 
     ensure_default_models(fs)
-    flow = read_json(fs, RootName.WIZARDS, "import/flow/current.json")
-    assert isinstance(flow, dict)
+    flow_config = read_json(fs, RootName.WIZARDS, "import/config/flow_config.json")
+    assert isinstance(flow_config, dict)
 
-    flow["entry_step_id"] = "select_books"
-    atomic_write_json(fs, RootName.WIZARDS, "import/flow/current.json", flow)
+    flow_config["steps"] = {"select_authors": {"enabled": False}}
+    atomic_write_json(fs, RootName.WIZARDS, "import/config/flow_config.json", flow_config)
 
     app = FastAPI()
     app.include_router(build_router(engine=engine))
@@ -97,3 +98,32 @@ def test_session_start_returns_invariant_violation_envelope(tmp_path: Path) -> N
     assert resp.status_code == 400
     data = resp.json()
     assert data["error"]["code"] == "INVARIANT_VIOLATION"
+
+
+def test_cli_missing_model_envelope_references_wizard_definition_and_flow_config(
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    engine, _ = _make_engine(tmp_path)
+    resolver = engine._resolver
+
+    def _boom(*args: object, **kwargs: object) -> object:
+        raise FileNotFoundError("import/definitions/wizard_definition.json")
+
+    engine.create_session = _boom  # type: ignore[method-assign]
+
+    with pytest.raises(SystemExit) as exc:
+        import_cli_main(
+            ["wizard", "start", "--root", "inbox", "--path", "src"],
+            engine=engine,
+            resolver=resolver,
+        )
+
+    assert exc.value.code == 1
+    out = capsys.readouterr().out
+    data = __import__("json").loads(out)
+    assert data["code"] == "missing_wizard_model"
+    assert data["details"]["expected_rel_paths"] == [
+        "import/definitions/wizard_definition.json",
+        "import/config/flow_config.json",
+    ]

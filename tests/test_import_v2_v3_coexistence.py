@@ -9,6 +9,7 @@ from audiomason.core.config import ConfigResolver
 
 ImportWizardEngine = import_module("plugins.import.engine").ImportWizardEngine
 atomic_write_json = import_module("plugins.import.storage").atomic_write_json
+read_json = import_module("plugins.import.storage").read_json
 CANONICAL_STEP_ORDER = import_module("plugins.import.flow_runtime").CANONICAL_STEP_ORDER
 RootName = import_module("plugins.file_io.service.types").RootName
 WIZARD_DEFINITION_REL_PATH = import_module(
@@ -146,3 +147,29 @@ def test_default_selection_policy_is_missing_means_v3_and_explicit_v2_wins(
     state_default_v3_again = engine.create_session("inbox", "v3_default_again")
     loaded_default_v3_again = engine.get_state(str(state_default_v3_again["session_id"]))
     assert loaded_default_v3_again["effective_model"]["flowmodel_kind"] == "dsl_step_graph_v3"
+
+
+def test_session_snapshot_stays_frozen_without_legacy_json(tmp_path: Path) -> None:
+    engine, roots = _make_engine(
+        tmp_path,
+        launcher_mode="disabled",
+        noninteractive=True,
+        nav_ui="both",
+    )
+    _write_source_tree(roots, relative_path="snapshot_case")
+
+    state = engine.create_session("inbox", "snapshot_case")
+    session_id = str(state["session_id"])
+    fs = engine.get_file_service()
+    session_dir = f"import/sessions/{session_id}"
+
+    assert not fs.exists(RootName.WIZARDS, "import/catalog/catalog.json")
+    assert not fs.exists(RootName.WIZARDS, "import/flow/current.json")
+
+    snapshot_before = read_json(fs, RootName.WIZARDS, f"{session_dir}/effective_model.json")
+    flow_cfg = read_json(fs, RootName.WIZARDS, "import/config/flow_config.json")
+    flow_cfg["steps"] = {"filename_policy": {"enabled": False}}
+    atomic_write_json(fs, RootName.WIZARDS, "import/config/flow_config.json", flow_cfg)
+    snapshot_after = read_json(fs, RootName.WIZARDS, f"{session_dir}/effective_model.json")
+
+    assert snapshot_after == snapshot_before

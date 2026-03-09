@@ -65,6 +65,7 @@ from .storage import (
 )
 from .wizard_definition_model import (
     build_effective_workflow_snapshot,
+    build_legacy_runtime_flow_model_from_definition,
     load_or_bootstrap_wizard_definition,
     validate_wizard_definition_structure,
 )
@@ -96,27 +97,13 @@ class ImportWizardEngine:
         """Return FlowModel JSON for the current configuration (spec 10.5)."""
         ensure_default_models(self._fs)
         wizard_definition = load_or_bootstrap_wizard_definition(self._fs)
+        flow_cfg = read_json(self._fs, RootName.WIZARDS, "import/config/flow_config.json")
+        flow_cfg_norm = self._normalize_flow_config(flow_cfg)
         if int(wizard_definition.get("version") or 0) == 3:
             return build_runtime_flow_model(wizard_definition=wizard_definition)
-
-        catalog_dict = read_json(self._fs, RootName.WIZARDS, "import/catalog/catalog.json")
-        flow_dict = read_json(self._fs, RootName.WIZARDS, "import/flow/current.json")
-        flow_cfg = read_json(self._fs, RootName.WIZARDS, "import/config/flow_config.json")
-
-        flow_cfg_norm = self._normalize_flow_config(flow_cfg)
-
-        catalog = CatalogModel.from_dict(catalog_dict)
-        flow = FlowModel.from_dict(flow_dict)
-        validate_models(catalog, flow)
-
-        step_order = build_effective_workflow_snapshot(
+        return build_legacy_runtime_flow_model_from_definition(
             wizard_definition=wizard_definition,
             flow_config=flow_cfg_norm,
-        )
-        return build_flow_model(
-            catalog=catalog,
-            flow_config=flow_cfg_norm,
-            step_order=step_order,
         )
 
     def create_session(

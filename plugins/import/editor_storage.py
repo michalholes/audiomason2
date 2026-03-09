@@ -19,8 +19,8 @@ from typing import Any
 
 from plugins.file_io.service import FileService, RootName
 
-from .defaults import DEFAULT_FLOW_CONFIG
 from .fingerprints import fingerprint_json
+from .flow_config_defaults import DEFAULT_FLOW_CONFIG
 from .flow_config_validation import normalize_flow_config
 
 CATALOG_REL_PATH = "import/catalog/catalog.json"

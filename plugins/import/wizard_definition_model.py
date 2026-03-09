@@ -17,6 +17,7 @@ from plugins.file_io.service import FileService
 from plugins.file_io.service.types import RootName
 
 from .conditions import find_invalid_condition_path
+from .defaults import DEFAULT_CATALOG
 from .dsl.default_wizard_v3 import build_default_wizard_definition_v3
 from .dsl.wizard_definition_v3_model import (
     canonicalize_wizard_definition_v3,
@@ -24,7 +25,13 @@ from .dsl.wizard_definition_v3_model import (
 )
 from .errors import FinalizeError
 from .field_schema_validation import FieldSchemaValidationError
-from .flow_runtime import CANONICAL_STEP_ORDER, MANDATORY_STEP_IDS, OPTIONAL_STEP_IDS
+from .flow_runtime import (
+    CANONICAL_STEP_ORDER,
+    MANDATORY_STEP_IDS,
+    OPTIONAL_STEP_IDS,
+    build_flow_model,
+)
+from .models import CatalogModel, FlowModel, validate_models
 from .step_catalog import STEP_CATALOG
 from .storage import atomic_write_json, atomic_write_json_if_missing, read_json
 
@@ -294,6 +301,40 @@ def build_effective_workflow_snapshot(
         return ordered
 
     raise FinalizeError("wizard_definition version must be 1 or 2")
+
+
+def build_legacy_runtime_flow_model_from_definition(
+    *,
+    wizard_definition: dict[str, Any],
+    flow_config: dict[str, Any],
+) -> dict[str, Any]:
+    """Build a legacy runtime FlowModel without persisted legacy JSON authority."""
+
+    step_order = build_effective_workflow_snapshot(
+        wizard_definition=wizard_definition,
+        flow_config=flow_config,
+    )
+    catalog = CatalogModel.from_dict(DEFAULT_CATALOG)
+    flow = FlowModel.from_dict(
+        {
+            "version": 1,
+            "entry_step_id": step_order[0],
+            "nodes": [
+                {
+                    "step_id": sid,
+                    "next_step_id": step_order[index + 1] if index + 1 < len(step_order) else None,
+                    "prev_step_id": step_order[index - 1] if index > 0 else None,
+                }
+                for index, sid in enumerate(step_order)
+            ],
+        }
+    )
+    validate_models(catalog, flow)
+    return build_flow_model(
+        catalog=catalog,
+        flow_config=flow_config,
+        step_order=step_order,
+    )
 
 
 def validate_wizard_definition_constraints_v2(wd: dict[str, Any]) -> None:

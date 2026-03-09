@@ -9,8 +9,8 @@ from audiomason.core.config import ConfigResolver
 
 ImportWizardEngine = import_module("plugins.import.engine").ImportWizardEngine
 RootName = import_module("plugins.file_io.service").RootName
+DEFAULT_CATALOG = import_module("plugins.import.defaults").DEFAULT_CATALOG
 ensure_default_models = import_module("plugins.import.defaults").ensure_default_models
-read_json = import_module("plugins.import.storage").read_json
 
 
 def _make_engine(tmp_path: Path) -> ImportWizardEngine:
@@ -50,9 +50,10 @@ def test_default_catalog_step_ids_and_order(tmp_path: Path) -> None:
     fs = engine.get_file_service()
     ensure_default_models(fs)
 
-    catalog = read_json(fs, RootName.WIZARDS, "import/catalog/catalog.json")
-    assert isinstance(catalog, dict)
-    steps_any = catalog.get("steps")
+    assert not fs.exists(RootName.WIZARDS, "import/catalog/catalog.json")
+    assert not fs.exists(RootName.WIZARDS, "import/flow/current.json")
+
+    steps_any = DEFAULT_CATALOG.get("steps")
     assert isinstance(steps_any, list)
     steps = [s for s in steps_any if isinstance(s, dict)]
 
@@ -80,6 +81,21 @@ def test_default_catalog_step_ids_and_order(tmp_path: Path) -> None:
     computed = {str(s.get("step_id")): bool(s.get("computed_only")) for s in steps}
     assert computed["plan_preview_batch"] is True
     assert computed["processing"] is True
+
+
+def test_get_flow_model_bootstraps_without_legacy_json(tmp_path: Path) -> None:
+    engine = _make_engine(tmp_path)
+    fs = engine.get_file_service()
+
+    model = engine.get_flow_model()
+
+    assert not fs.exists(RootName.WIZARDS, "import/catalog/catalog.json")
+    assert not fs.exists(RootName.WIZARDS, "import/flow/current.json")
+    assert fs.exists(RootName.WIZARDS, "import/definitions/wizard_definition.json")
+    assert fs.exists(RootName.WIZARDS, "import/config/flow_config.json")
+    steps = model.get("steps")
+    assert isinstance(steps, list)
+    assert steps
 
 
 def test_renderer_neutrality_no_step_id_branching() -> None:

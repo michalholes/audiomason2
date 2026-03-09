@@ -1,12 +1,9 @@
-## 2026-03-09T00:00:02+01:00
-
-- Sync the AMP runner docs with the implemented failure-detail contract and
-  current RUNNER_VERSION example.
-
 ## 2026-03-09T00:00:01+01:00
 
-- Emit runner-owned ERROR DETAIL records for RunnerError failures, keep the
-  FAIL summary fixed, and guarantee failure fingerprints in the file log.
+-   Issue 120: remove runtime authority reads of persisted legacy import
+    catalog/flow JSON, re-export FlowConfig defaults through the
+    compatibility module, and keep flow-config bootstrap isolated from
+    structural authority.
 
 ## 2026-03-09T00:00:00+01:00
 
