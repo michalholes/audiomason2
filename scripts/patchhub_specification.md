@@ -3,7 +3,7 @@ Status: AUTHORITATIVE SPECIFICATION
 Applies to: scripts/patchhub/*
 Language: ENGLISH (ASCII ONLY)
 
-Specification Version: 1.10.1-spec
+Specification Version: 1.11.1-spec
 Code Baseline: audiomason2-main.zip (as provided in this chat)
 
 -------------------------------------------------------------------------------
@@ -1580,6 +1580,18 @@ UI contract for zip subset controls:
 - The Start run card MAY render an inline zip subset strip directly below patchPath.
 - The strip is the pre-modal first-glance surface for zip subset state.
 - The subset chooser MAY use a modal dialog.
+- The modal MUST use draft/apply semantics:
+  - checkbox changes inside the modal update draft state only
+  - Apply commits the draft to the effective selected_patch_entries state
+  - Cancel, Close, and backdrop close MUST discard the draft
+  - the inline strip reflects committed state only
+- The modal contract is:
+  - title: Select target files (N)
+  - subtitle: Contents of <zip basename>
+  - columns: patch | Repo path
+  - footer: selection count, Cancel, Apply
+- The modal card and list surfaces MUST use the PatchHub blue card theme; black-only
+  modal surfaces are forbidden.
 - Preview remains collapsed-by-default; zip subset selection MUST NOT require Preview
   to be opened.
 
