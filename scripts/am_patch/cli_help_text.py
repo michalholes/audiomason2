@@ -196,8 +196,11 @@ WORKSPACE
   --rollback-workspace-on-fail {{none-applied, never, always}}
       Whether to rollback workspace to pre-apply state on patch failure.
 
-  --no-rollback
-      Disable rollback on failure.
+  --no-rollback-workspace-on-fail
+      Shortcut for --rollback-workspace-on-fail never.
+
+  --no-rollback-on-commit-push-failure
+      Disable rollback on commit/push failure.
 
 SECURITY / GUARDS
   --live-repo-guard

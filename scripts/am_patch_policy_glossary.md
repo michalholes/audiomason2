@@ -341,9 +341,10 @@ Related: allow_no_op
 Key: no_rollback
 Type: bool
 Default: false
-Meaning: If true, disable automatic rollback behavior on failure.
+Meaning: If true, disable rollback on commit/push failure.
 Notes:
-- This changes failure recovery semantics.
+- This does not change workspace rollback after patch failure.
+- Legacy config alias rollback_on_failure maps into this key by inversion.
 Related: rollback_workspace_on_fail
 
 ## Key: rollback_workspace_on_fail
@@ -356,7 +357,8 @@ Allowed values:
 - always: rollback on any patch failure, including partial apply
 - never: never rollback automatically
 Notes:
-- Gate failures do not trigger rollback.
+- Gate, finalize-live/live-repo, audit, and promotion failures do not
+  trigger rollback.
 - The failed workspace state is preserved for repair after non-patch failures.
 Related: no_rollback
 

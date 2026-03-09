@@ -333,6 +333,60 @@ def test_patch_failure_rolls_back_workspace_when_mode_is_always(tmp_path: Path) 
     assert logger.lines.count("ROLLBACK: executed (mode=always applied_ok=0)") == 1
 
 
+def test_patch_failure_rolls_back_for_none_applied_when_zero_patches_applied(
+    tmp_path: Path,
+) -> None:
+    _, build_run_result, post_run_pipeline = _import_am_patch()
+    logger = _FakeLogger()
+    ctx = _ctx(tmp_path, mode="workspace", logger=logger)
+    ctx.repo_root.mkdir(parents=True, exist_ok=True)
+    ctx.policy.rollback_workspace_on_fail = "none-applied"
+
+    ws_root = tmp_path / "patches" / "workspaces" / "issue_999"
+    ws_repo = ws_root / "repo"
+    ws_repo.mkdir(parents=True, exist_ok=True)
+    ws = SimpleNamespace(root=ws_root, repo=ws_repo, attempt=1)
+    ckpt = object()
+    result = build_run_result(
+        lock=None,
+        exit_code=1,
+        unified_mode=False,
+        patch_script=None,
+        used_patch_for_zip=None,
+        files_for_fail_zip=["alpha.py"],
+        failed_patch_blobs_for_zip=[],
+        patch_applied_successfully=False,
+        applied_ok_count=0,
+        rollback_ckpt_for_posthook=ckpt,
+        rollback_ws_for_posthook=ws,
+        issue_diff_base_sha="abc123",
+        issue_diff_paths=["alpha.py"],
+        delete_workspace_after_archive=False,
+        ws_for_posthook=ws,
+        push_ok_for_posthook=False,
+        final_commit_sha=None,
+        final_pushed_files=None,
+        final_fail_stage="PATCH_APPLY",
+        final_fail_reason="patch apply failed",
+        primary_fail_stage="PATCH",
+        primary_fail_reason="patch apply failed",
+        secondary_failures=[],
+    )
+
+    post_run_mod = sys.modules[post_run_pipeline.__module__]
+    rollback_calls: list[tuple[Path, object]] = []
+    post_run_mod.build_artifacts = lambda **kwargs: None
+    post_run_mod.rollback_to_checkpoint = lambda logger, repo, checkpoint: rollback_calls.append(
+        (repo, checkpoint)
+    )
+
+    exit_code = post_run_pipeline(ctx=ctx, result=result)
+
+    assert exit_code == 1
+    assert rollback_calls == [(ws_repo, ckpt)]
+    assert logger.lines.count("ROLLBACK: executed (mode=none-applied applied_ok=0)") == 1
+
+
 def test_patch_failure_skips_rollback_for_none_applied_when_apply_succeeded(
     tmp_path: Path,
 ) -> None:

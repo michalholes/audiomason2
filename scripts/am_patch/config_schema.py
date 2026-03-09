@@ -239,7 +239,7 @@ _LABEL_BY_KEY: dict[str, str] = {
     "declared_untouched_fail": "Scope: declared untouched fail",
     "enforce_allowed_files": "Scope: enforce allowed files",
     "no_op_fail": "Scope: no-op fail",
-    "no_rollback": "Rollback: disable rollback",
+    "no_rollback": "Commit/push: disable rollback",
     "post_success_audit": "Workflow: post-success audit",
     "soft_reset_workspace": "Workflow: soft reset workspace",
     "test_mode": "Workflow: test mode",
@@ -408,7 +408,7 @@ _HELP_BY_KEY: dict[str, str] = {
         "See: scripts/am_patch_policy_glossary.md## Key: no_op_fail"
     ),
     "no_rollback": (
-        "Disable automatic rollback behavior on failure. "
+        "Disable rollback on commit/push failure. "
         "See: scripts/am_patch_policy_glossary.md## Key: no_rollback"
     ),
     "post_success_audit": (
