@@ -397,6 +397,9 @@
 			if (liveES === es) {
 				liveES = null;
 			}
+			if (ui.updateProgressPanelFromEvents) {
+				ui.updateProgressPanelFromEvents({ forceAppliedFilesRetry: true });
+			}
 		});
 
 		es.onerror = () => {

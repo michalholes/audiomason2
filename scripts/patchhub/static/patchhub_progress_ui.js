@@ -315,8 +315,9 @@
 		return jobId;
 	}
 
-	function refreshAppliedFilesForCurrentJob(summary) {
+	function refreshAppliedFilesForCurrentJob(summary, opts) {
 		var status = summary && summary.status ? String(summary.status) : "idle";
+		var force = !!(opts && opts.forceAppliedFilesRetry);
 		var jobId = getCurrentLiveJobId();
 		if (!jobId || status === "idle" || status === "running") {
 			appliedJobKey = "";
@@ -324,7 +325,7 @@
 			return Promise.resolve();
 		}
 		var key = `${jobId}:${status}`;
-		if (appliedJobKey === key) return Promise.resolve();
+		if (!force && appliedJobKey === key) return Promise.resolve();
 		appliedJobKey = key;
 		if (status !== "success") {
 			renderAppliedFilesUnavailable(`result=${status}`);
@@ -339,14 +340,14 @@
 		});
 	}
 
-	function updateProgressPanelFromEvents() {
+	function updateProgressPanelFromEvents(opts) {
 		var events = ui.liveEvents || [];
 		var progress = deriveProgressFromEvents(events);
 		renderProgressSteps(progress);
 		var summary = deriveProgressSummaryFromEvents(events, progress);
 		renderProgressSummary(summary.text);
 		setProgressSummaryState(summary);
-		return refreshAppliedFilesForCurrentJob(summary);
+		return refreshAppliedFilesForCurrentJob(summary, opts);
 	}
 
 	function refreshStats() {
