@@ -398,8 +398,26 @@ class SqliteWebJobsStore:
     def upsert_job(self, job: JobRecord, *, count_as_job_change: bool = True) -> None:
         with self._connect() as conn:
             conn.execute("BEGIN IMMEDIATE")
-            row_rev = self._current_row_rev(conn, job.job_id) + 1
-            self._upsert_job_row(conn, job, row_rev=row_rev)
+            row = conn.execute(
+                "SELECT row_rev, last_log_seq, last_event_seq FROM web_jobs WHERE job_id = ?",
+                (str(job.job_id),),
+            ).fetchone()
+            row_rev = (int(row["row_rev"]) if row is not None else 0) + 1
+            log_count = max(
+                int(getattr(job, "last_log_seq", 0) or 0),
+                int(row["last_log_seq"]) if row is not None else 0,
+            )
+            event_count = max(
+                int(getattr(job, "last_event_seq", 0) or 0),
+                int(row["last_event_seq"]) if row is not None else 0,
+            )
+            self._upsert_job_row(
+                conn,
+                job,
+                log_count=log_count,
+                event_count=event_count,
+                row_rev=row_rev,
+            )
             self._touch_meta(conn, jobs_delta=1 if count_as_job_change else 0)
             conn.commit()
 

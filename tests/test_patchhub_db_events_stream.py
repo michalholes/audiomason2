@@ -44,6 +44,38 @@ def seeded_db(tmp_path: Path) -> WebJobsDatabase:
     return db
 
 
+def test_upsert_job_preserves_db_history_counters(seeded_db: WebJobsDatabase) -> None:
+    job = seeded_db.load_job_record("job-514-events")
+    assert job is not None
+
+    stale = JobRecord(
+        job_id=job.job_id,
+        created_utc=job.created_utc,
+        mode=job.mode,
+        issue_id=job.issue_id,
+        commit_summary=job.commit_summary,
+        patch_basename=job.patch_basename,
+        raw_command=job.raw_command,
+        canonical_command=list(job.canonical_command),
+        status="running",
+    )
+    seeded_db.upsert_job(stale)
+
+    payload = seeded_db.load_job_json("job-514-events")
+    assert payload is not None
+    assert payload["last_event_seq"] == 2
+    assert payload["last_log_seq"] == 0
+
+    next_event_seq = seeded_db.append_event_line(
+        "job-514-events",
+        '{"type":"log","msg":"after_status_upsert"}',
+    )
+    next_log_seq = seeded_db.append_log_line("job-514-events", "after status upsert")
+
+    assert next_event_seq == 3
+    assert next_log_seq == 1
+
+
 @pytest.mark.asyncio
 async def test_db_history_stream_replays_raw_ndjson_and_end_event(
     seeded_db: WebJobsDatabase,
