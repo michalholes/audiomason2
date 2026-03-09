@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import socket
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -176,6 +177,77 @@ def test_drain_ack_survives_idle_connection_on_same_socket(tmp_path: Path) -> No
             conn.close()
     finally:
         ipc.stop()
+
+
+class _BlockingConn:
+    def __init__(self, started: threading.Event, release: threading.Event) -> None:
+        self.started = started
+        self.release = release
+        self.closed = False
+
+    def sendall(self, _data: bytes) -> None:
+        self.started.set()
+        if not self.release.wait(timeout=1.0):
+            raise AssertionError("timed out waiting for release")
+
+    def close(self) -> None:
+        self.closed = True
+
+
+class _PassiveConn:
+    def __init__(self) -> None:
+        self.closed = False
+        self.sent: list[bytes] = []
+
+    def sendall(self, data: bytes) -> None:
+        self.sent.append(data)
+
+    def close(self) -> None:
+        self.closed = True
+
+
+def test_broadcast_keeps_client_added_during_snapshot_race(tmp_path: Path) -> None:
+    ipc_controller_cls = _import_ipc_controller()
+    socket_path = tmp_path / "am_patch_race.sock"
+    ipc = ipc_controller_cls(
+        socket_path=socket_path,
+        issue_id="1000",
+        mode="workspace",
+        status_provider=_FakeStatus(),
+        logger=_FakeLogger(),
+        handshake_enabled=True,
+        handshake_wait_s=1,
+    )
+
+    started = threading.Event()
+    release = threading.Event()
+    first = type("Client", (), {})()
+    first.conn = _BlockingConn(started, release)
+    first.write_lock = threading.Lock()
+
+    second = type("Client", (), {})()
+    second.conn = _PassiveConn()
+    second.write_lock = threading.Lock()
+
+    with ipc._clients_lock:
+        ipc._clients = [first]
+
+    worker = threading.Thread(
+        target=ipc._on_log_event,
+        args=({"type": "control", "event": "tick"},),
+    )
+    worker.start()
+    assert started.wait(timeout=1.0) is True
+
+    with ipc._clients_lock:
+        ipc._clients.append(second)
+
+    release.set()
+    worker.join(timeout=1.0)
+    assert worker.is_alive() is False
+
+    with ipc._clients_lock:
+        assert ipc._clients == [first, second]
 
 
 def test_eof_removes_client_from_broadcast_list(tmp_path: Path) -> None:

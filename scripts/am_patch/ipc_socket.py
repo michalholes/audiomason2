@@ -354,15 +354,14 @@ class IpcController:
         line = _json_line(evt)
         with self._clients_lock:
             clients = list(self._clients)
-        keep: list[_IpcClient] = []
+        failed: list[_IpcClient] = []
         for client in clients:
             try:
                 self._write_client_line(client, line)
-                keep.append(client)
             except Exception:
-                self._drop_client(client)
-        with self._clients_lock:
-            self._clients = keep
+                failed.append(client)
+        for client in failed:
+            self._drop_client(client)
 
     def _reply_ok(self, *, cmd_id: str, data: dict[str, Any] | None = None) -> dict[str, Any]:
         return {
