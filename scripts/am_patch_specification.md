@@ -950,9 +950,10 @@ CLI: - `--rollback-workspace-on-fail {none-applied,always,never}`
 Config: - `rollback_workspace_on_fail = "none-applied"|"always"|"never"`
 
 Evaluation scope: - This policy is evaluated only when patch apply
-fails. - Non-patch failures after apply, including gates, audit, and
-promotion, MUST NOT trigger rollback automatically. - Such failures
-MUST preserve the failed workspace state for repair.
+fails. - Non-patch failures after apply, including gates,
+finalize-live/live-repo failures, audit, and promotion, MUST NOT
+trigger rollback automatically. - Such failures MUST preserve the
+failed workspace state for repair.
 
 Semantics on patch failure: - `none-applied`: rollback workspace only
 if 0 patches were applied successfully (`applied_ok == 0`) - `always`:
