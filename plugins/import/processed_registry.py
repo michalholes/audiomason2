@@ -55,6 +55,70 @@ def _ensure_registry_shape(reg: Any) -> dict[str, Any]:
     return {"schema_version": sv, "books": dict(books)}
 
 
+def iter_import_book_records(job_requests: dict[str, Any]) -> list[dict[str, Any]]:
+    """Return deterministic per-book records derived from job_requests."""
+
+    if not isinstance(job_requests, dict):
+        return []
+
+    actions_any = job_requests.get("actions")
+    actions = actions_any if isinstance(actions_any, list) else []
+    records: list[dict[str, Any]] = []
+    for action_any in actions:
+        if not isinstance(action_any, dict):
+            continue
+        if action_any.get("type") != "import.book":
+            continue
+        book_id = action_any.get("book_id")
+        source_any = action_any.get("source")
+        target_any = action_any.get("target")
+        if not isinstance(book_id, str) or not book_id:
+            continue
+        if not isinstance(source_any, dict) or not isinstance(target_any, dict):
+            continue
+
+        source_root = source_any.get("root")
+        source_rel = source_any.get("relative_path")
+        target_root = target_any.get("root")
+        target_rel = target_any.get("relative_path")
+        if not isinstance(source_root, str) or not source_root:
+            continue
+        if not isinstance(source_rel, str) or not source_rel:
+            continue
+        if not isinstance(target_root, str) or target_root not in {"stage", "outbox"}:
+            continue
+        if not isinstance(target_rel, str) or not target_rel:
+            continue
+
+        caps_any = action_any.get("capabilities")
+        caps = caps_any if isinstance(caps_any, list) else []
+        cap_summary: list[dict[str, Any]] = []
+        for cap_any in caps:
+            if not isinstance(cap_any, dict):
+                continue
+            kind = cap_any.get("kind")
+            if not isinstance(kind, str) or not kind:
+                continue
+            cap_summary.append(
+                {
+                    "kind": kind,
+                    "order": int(cap_any.get("order") or 0),
+                }
+            )
+
+        records.append(
+            {
+                "book_id": book_id,
+                "source_root": source_root,
+                "source_relative_path": source_rel,
+                "target_root": target_root,
+                "target_relative_path": target_rel,
+                "capabilities": cap_summary,
+            }
+        )
+    return records
+
+
 def apply_successful_job_requests(fs: FileService, job_requests: dict[str, Any]) -> bool:
     """Update the processed registry from job_requests.
 
@@ -66,15 +130,15 @@ def apply_successful_job_requests(fs: FileService, job_requests: dict[str, Any])
     if not isinstance(job_requests, dict):
         return False
 
-    actions_any = job_requests.get("actions")
-    if not isinstance(actions_any, list) or not actions_any:
-        return False
-
     idem_key = job_requests.get("idempotency_key")
     config_fp = job_requests.get("config_fingerprint")
     if not isinstance(idem_key, str) or not idem_key:
         return False
     if not isinstance(config_fp, str) or not config_fp:
+        return False
+
+    records = iter_import_book_records(job_requests)
+    if not records:
         return False
 
     plan_fp_any = job_requests.get("plan_fingerprint")
@@ -84,32 +148,12 @@ def apply_successful_job_requests(fs: FileService, job_requests: dict[str, Any])
     books: dict[str, Any] = reg["books"]
 
     changed = False
-    for act in actions_any:
-        if not isinstance(act, dict):
-            continue
-        if act.get("type") != "import.book":
-            continue
-        book_id = act.get("book_id")
-        src_any = act.get("source")
-        tgt_any = act.get("target")
-        if not isinstance(book_id, str) or not book_id:
-            continue
-        if not isinstance(src_any, dict) or not isinstance(tgt_any, dict):
-            continue
-        src_rel = src_any.get("relative_path")
-        tgt_root = tgt_any.get("root")
-        tgt_rel = tgt_any.get("relative_path")
-        if not isinstance(src_rel, str) or not src_rel:
-            continue
-        if not isinstance(tgt_root, str) or tgt_root not in {"stage", "outbox"}:
-            continue
-        if not isinstance(tgt_rel, str) or not tgt_rel:
-            continue
-
+    for record in records:
+        book_id = str(record["book_id"])
         entry: dict[str, Any] = {
-            "source_relative_path": src_rel,
-            "target_root": tgt_root,
-            "target_relative_path": tgt_rel,
+            "source_relative_path": str(record["source_relative_path"]),
+            "target_root": str(record["target_root"]),
+            "target_relative_path": str(record["target_relative_path"]),
             "idempotency_key": idem_key,
             "config_fingerprint": config_fp,
         }

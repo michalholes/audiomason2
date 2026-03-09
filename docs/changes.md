@@ -1,3 +1,13 @@
+## 2026-03-09T00:00:18+01:00
+
+-   Issue 130: import finalize now persists deterministic success-only
+    dry-run summary, per-source processing log, end-of-run JSON report,
+    and session-local finalize pointers for rerun/resume.
+
+-   Issue 130: import finalize now updates a success-only ignore registry
+    from canonical PHASE 2 job_requests actions without adding a second
+    source of truth.
+
 ## 2026-03-09T00:00:17+01:00
 
 -   Issue 127: project deterministic PHASE 0/1 session authority into

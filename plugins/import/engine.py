@@ -597,7 +597,11 @@ class ImportWizardEngine:
         )
         plan = plan if isinstance(plan, dict) else {}
 
-        return {"job_ids": [job_id], "batch_size": planned_units_count(plan)}
+        result = {"job_ids": [job_id], "batch_size": planned_units_count(plan)}
+        finalize_any = (state.get("computed") or {}).get("finalize")
+        if isinstance(finalize_any, dict):
+            result["finalize"] = dict(finalize_any)
+        return result
 
     def _resolve_flag_for_scan(
         self,

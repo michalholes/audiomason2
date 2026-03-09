@@ -14,6 +14,8 @@ import contextlib
 from typing import Any
 
 from . import core_facade, file_io_facade
+from .finalize_reports import write_success_finalize_artifacts
+from .ignore_registry import apply_successful_job_requests as apply_ignore_registry
 from .processed_registry import apply_successful_job_requests
 from .storage import read_json
 
@@ -73,7 +75,13 @@ def install_processed_registry_subscriber(*, resolver: Any) -> None:
             if not isinstance(job_requests_any, dict):
                 return
 
+            write_success_finalize_artifacts(
+                fs=fs,
+                job_id=job_id,
+                job_requests=job_requests_any,
+            )
             apply_successful_job_requests(fs, job_requests_any)
+            apply_ignore_registry(fs, job_requests_any)
 
     core_facade.get_bus().subscribe_all(_on_any)
     _INSTALLED = True
