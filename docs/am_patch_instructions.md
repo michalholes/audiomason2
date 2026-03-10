@@ -101,8 +101,12 @@ Rules:
 4.  The set of patch files must be non-empty.
 5.  Each patch file MUST pass: `git apply --check <that_file.patch>`.
 6.  The zip MUST NOT contain any additional files except:
-    - per-file patch files under patches/per_file/ as defined above, and
-    - the required COMMIT_MESSAGE.txt at the zip root.
+    - per-file patch files under patches/per_file/ as defined above,
+    - the required COMMIT_MESSAGE.txt at the zip root, and
+    - the required ISSUE_NUMBER.txt at the zip root.
+7.  The patch zip basename MUST be exactly `issue_<ISSUE>_v<N>.zip`, where:
+    - `<ISSUE>` exactly matches `ISSUE_NUMBER.txt`, and
+    - `<N>` is a positive integer written in ASCII digits.
 ------------------------------------------------------------------------
 
 ## Commit message file (HARD)
@@ -157,6 +161,8 @@ These rules apply when generating the first patch for an issue.
 The chat MUST provide:
 
 1.  A downloadable `.zip` patch under `patches/`.
+1a. The downloadable `.zip` patch basename MUST follow the same `issue_<ISSUE>_v<N>.zip`
+    contract defined in Per-file patch zip format (HARD).
 1b. The downloadable .zip patch MUST include COMMIT_MESSAGE.txt at the zip root (see Commit message file).
 2.  A canonical invocation command in a code block.
 3.  The exact PATCH argument used in invocation.
