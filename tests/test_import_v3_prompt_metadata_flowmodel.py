@@ -220,6 +220,17 @@ def test_step_routes_project_active_v3_metadata(tmp_path: Path) -> None:
     assert payload["defaults_template"]["default_value"] == "fallback"
 
 
+def test_build_step_catalog_projection_uses_only_active_authority() -> None:
+    projection = build_step_catalog_projection(
+        wizard_definition=PROMPT_METADATA_FLOW,
+        flow_config={"version": 1, "steps": {}, "defaults": {}},
+    )
+
+    assert set(projection) == {"seed_name", "seed_flag", "ask_name", "stop"}
+    assert "parallelism" not in projection
+    assert projection["ask_name"]["displayName"] == "Name"
+
+
 def test_build_step_catalog_projection_rejects_underivable_inputs() -> None:
     with pytest.raises(FinalizeError, match="wizard_definition must be version 2 or 3"):
         build_step_catalog_projection(

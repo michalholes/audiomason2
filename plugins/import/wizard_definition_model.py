@@ -32,7 +32,7 @@ from .flow_runtime import (
     build_flow_model,
 )
 from .models import CatalogModel, FlowModel, validate_models
-from .step_catalog import STEP_CATALOG
+from .step_catalog import build_authority_known_step_ids, build_default_step_catalog_projection
 from .storage import atomic_write_json, atomic_write_json_if_missing, read_json
 
 WIZARD_DEFINITION_REL_PATH = "import/definitions/wizard_definition.json"
@@ -607,11 +607,11 @@ def _reachable_from(start: str, adj: dict[str, set[str]]) -> set[str]:
 
 def _known_step_ids() -> set[str]:
     # UI catalog step ids plus canonical defaults.
-    return set(STEP_CATALOG.keys()) | set(CANONICAL_STEP_ORDER)
+    return build_authority_known_step_ids()
 
 
 def _validate_step_catalog_behavioral_fields() -> None:
-    for sid, details in STEP_CATALOG.items():
+    for sid, details in build_default_step_catalog_projection().items():
         if not isinstance(details, dict):
             raise FinalizeError("MISSING_BEHAVIORAL_FIELDS: " + str(sid))
         missing = [k for k in _REQUIRED_BEHAVIORAL_FIELDS if k not in details]
@@ -624,7 +624,7 @@ def _validate_step_catalog_behavioral_fields() -> None:
 
 
 def _validate_behavioral_fields_for_step_id(step_id: str) -> None:
-    details = STEP_CATALOG.get(step_id)
+    details = build_default_step_catalog_projection().get(step_id)
     if not isinstance(details, dict):
         raise FinalizeError("MISSING_BEHAVIORAL_FIELDS: " + str(step_id))
     for k in _REQUIRED_BEHAVIORAL_FIELDS:

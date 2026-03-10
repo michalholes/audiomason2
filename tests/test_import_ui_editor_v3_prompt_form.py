@@ -295,6 +295,7 @@ def test_prompt_primitives_render_first_class_metadata_controls() -> None:
     )
     advanced_text = _find_text_for_attr(tree, "data-am2-note", "advanced-keys")
     assert advanced_text == "Advanced op.inputs keys are preserved in Raw JSON: raw_only"
+    assert "parallelism" not in control_keys
 
 
 def test_prompt_form_keeps_expr_shape_and_ui_message_stays_non_interactive() -> None:

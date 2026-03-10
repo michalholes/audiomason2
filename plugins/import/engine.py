@@ -48,7 +48,6 @@ from .field_schema_validation import validate_step_fields
 from .fingerprints import fingerprint_json
 from .flow_graph import MAX_TRANSITION_HOPS, normalize_to_graph, select_next_step
 from .flow_runtime import (
-    CANONICAL_STEP_ORDER,
     build_flow_model,
 )
 from .job_requests import planned_units_count
@@ -57,7 +56,7 @@ from .phase1_source_intake import build_phase1_projection, phase1_session_author
 from .plan import PlanSelectionError, compute_plan
 from .preview import preview_action_impl
 from .session_effective_model import load_effective_model_json
-from .step_catalog import STEP_CATALOG
+from .step_catalog import build_authority_known_step_ids
 from .storage import (
     append_jsonl,
     atomic_write_json,
@@ -747,7 +746,7 @@ class ImportWizardEngine:
                     self._update_conflicts(session_id, state)
 
         wd = self._load_session_wizard_definition_snapshot(session_id, state)
-        known_step_ids = set(STEP_CATALOG.keys()) | set(CANONICAL_STEP_ORDER)
+        known_step_ids = build_authority_known_step_ids()
         graph = normalize_to_graph(wd, known_step_ids=known_step_ids)
 
         inputs_view = state.get("inputs") if isinstance(state.get("inputs"), dict) else {}
@@ -881,7 +880,7 @@ class ImportWizardEngine:
     def _get_or_create_job(self, session_id: str, state: dict[str, Any], idem_key: str) -> str:
         # Invariants must be validated before job creation.
         wd = self._load_session_wizard_definition_snapshot(session_id, state)
-        known_step_ids = set(STEP_CATALOG.keys()) | set(CANONICAL_STEP_ORDER)
+        known_step_ids = build_authority_known_step_ids()
         _ = normalize_to_graph(wd, known_step_ids=known_step_ids)
         _ = self._normalize_flow_config(self._load_effective_flow_config(session_id))
 

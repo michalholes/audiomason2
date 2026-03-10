@@ -90,6 +90,7 @@ def test_get_flow_model_v3_declares_kind_and_primitive_metadata(tmp_path: Path) 
 
     assert flow_model["flowmodel_kind"] == "dsl_step_graph_v3"
     steps = {step["step_id"]: step for step in flow_model["steps"]}
+    assert set(steps) == {"ask_name", "stop"}
     assert steps["ask_name"]["primitive_id"] == "ui.prompt_text"
     assert steps["ask_name"]["primitive_version"] == 1
     assert steps["ask_name"]["kind"] == "prompt"

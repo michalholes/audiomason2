@@ -8,7 +8,9 @@ from __future__ import annotations
 
 from typing import Any
 
+from .defaults import DEFAULT_CATALOG, DEFAULT_FLOW_CONFIG
 from .errors import FinalizeError
+from .flow_runtime import CANONICAL_STEP_ORDER
 
 
 def _field(
@@ -33,11 +35,12 @@ def _schema(fields: list[dict[str, Any]]) -> dict[str, Any]:
     }
 
 
-# Single source of truth for UI-facing step metadata.
+# Legacy UI fallback metadata.
 #
 # Notes:
-# - settings_schema + defaults_template are UI-only and do not affect runtime.
-# - Keep descriptions short and deterministic.
+# - active projection authority comes from WizardDefinition plus FlowConfig
+# - settings_schema + defaults_template are UI-only and do not affect runtime
+# - keep descriptions short and deterministic
 STEP_CATALOG: dict[str, dict[str, Any]] = {
     "select_authors": {
         "id": "select_authors",
@@ -264,6 +267,37 @@ def get_step_details(step_id: str) -> dict[str, Any] | None:
     """Return UI-only step details or None if unknown."""
 
     return STEP_CATALOG.get(step_id)
+
+
+def _legacy_catalog_step_ids() -> tuple[str, ...]:
+    steps_any = DEFAULT_CATALOG.get("steps")
+    if not isinstance(steps_any, list):
+        raise FinalizeError("default catalog steps must be a list")
+
+    step_ids: list[str] = []
+    for step in steps_any:
+        if not isinstance(step, dict):
+            raise FinalizeError("default catalog step must be an object")
+        step_id = step.get("step_id")
+        if not isinstance(step_id, str) or not step_id:
+            raise FinalizeError("default catalog step_id must be a non-empty string")
+        step_ids.append(step_id)
+    return tuple(step_ids)
+
+
+def build_default_step_catalog_projection() -> dict[str, dict[str, Any]]:
+    defaults_any = DEFAULT_FLOW_CONFIG.get("defaults")
+    step_defaults_map = defaults_any if isinstance(defaults_any, dict) else {}
+    projection: dict[str, dict[str, Any]] = {}
+    for step_id in _legacy_catalog_step_ids():
+        defaults_obj = step_defaults_map.get(step_id)
+        step_defaults = defaults_obj if isinstance(defaults_obj, dict) else {}
+        projection[step_id] = _project_v2_step(step_id, step_defaults)
+    return projection
+
+
+def build_authority_known_step_ids() -> set[str]:
+    return set(_legacy_catalog_step_ids()) | set(CANONICAL_STEP_ORDER)
 
 
 _PROMPT_FIELD_ORDER: tuple[str, ...] = (
