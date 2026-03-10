@@ -161,7 +161,7 @@ dont_touch_paths = [
   "tsconfig.json",
   "biome.json",
   "pyproject.toml",
-  "am_patch.toml",
+  "scripts/am_patch/am_patch.toml",
   ".github/workflows/ci.yml"
 ]
 apply_failure_partial_gates_policy = "repair_only"
