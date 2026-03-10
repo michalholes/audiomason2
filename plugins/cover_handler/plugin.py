@@ -11,6 +11,8 @@ Handles all cover operations:
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import mimetypes
 import shutil
 from pathlib import Path
 from typing import Any
@@ -36,6 +38,10 @@ _FILE_COVER_NAMES = (
 
 _GENERIC_COVER_SUFFIXES = (".jpg", ".jpeg", ".png", ".webp")
 _EMBEDDED_SUFFIXES = {".mp3", ".m4a", ".m4b"}
+
+
+def _cache_token(value: str) -> str:
+    return hashlib.sha1(value.encode("utf-8")).hexdigest()[:12]
 
 
 class CoverHandlerPlugin:
@@ -92,7 +98,14 @@ class CoverHandlerPlugin:
                     )
 
             elif context.cover_choice == CoverChoice.URL and context.cover_url:
-                cover_path = await self.download_cover(context.cover_url, context.stage_dir)
+                candidate = self.build_url_candidate(
+                    context.cover_url,
+                    stage_root="stage" if context.stage_dir is not None else None,
+                )
+                cover_path = await self.apply_cover_candidate(
+                    candidate,
+                    output_dir=context.stage_dir,
+                )
 
             if cover_path and cover_path.exists():
                 cover_path = await self.convert_to_jpeg(cover_path)
@@ -106,11 +119,75 @@ class CoverHandlerPlugin:
 
         return context
 
+    @staticmethod
+    def _resolve_root_name(*, group_root: str | None, stage_root: str | None) -> str:
+        root_name = str(group_root or "").strip()
+        if root_name:
+            return root_name
+        return str(stage_root or "").strip()
+
+    @staticmethod
+    def _normalize_mime_type(mime_type: str | None) -> str:
+        value = str(mime_type or "").split(";", 1)[0].strip().lower()
+        return value
+
+    def resolve_cover_mime(
+        self,
+        *,
+        path: Path | None = None,
+        url: str | None = None,
+        mime_type: str | None = None,
+    ) -> str:
+        """Resolve a deterministic MIME type for a cover source."""
+        normalized = self._normalize_mime_type(mime_type)
+        if normalized.startswith("image/"):
+            return normalized
+
+        if path is not None:
+            guessed, _encoding = mimetypes.guess_type(str(path), strict=False)
+            normalized = self._normalize_mime_type(guessed)
+            if normalized.startswith("image/"):
+                return normalized
+
+        if url:
+            guessed, _encoding = mimetypes.guess_type(urlparse(url).path, strict=False)
+            normalized = self._normalize_mime_type(guessed)
+            if normalized.startswith("image/"):
+                return normalized
+
+        return "image/jpeg"
+
+    def build_url_candidate(
+        self,
+        url: str,
+        *,
+        mime_type: str | None = None,
+        cache_key: str | None = None,
+        group_root: str | None = None,
+        stage_root: str | None = None,
+    ) -> dict[str, str]:
+        """Build a deterministic URL-backed cover candidate."""
+        resolved_root = self._resolve_root_name(group_root=group_root, stage_root=stage_root)
+        normalized_url = str(url).strip()
+        resolved_mime = self.resolve_cover_mime(url=normalized_url, mime_type=mime_type)
+        resolved_cache_key = str(cache_key or f"url:{_cache_token(normalized_url)}")
+        return {
+            "kind": "url",
+            "candidate_id": f"url:{_cache_token(normalized_url)}",
+            "apply_mode": "download",
+            "url": normalized_url,
+            "mime_type": resolved_mime,
+            "cache_key": resolved_cache_key,
+            "root_name": resolved_root,
+        }
+
     def discover_cover_candidates(
         self,
         directory: Path,
         *,
         audio_file: Path | None = None,
+        group_root: str | None = None,
+        stage_root: str | None = None,
     ) -> list[dict[str, str]]:
         """Return canonical cover candidates for a source directory."""
         if not directory.exists() or not directory.is_dir():
@@ -118,6 +195,7 @@ class CoverHandlerPlugin:
 
         candidates: list[dict[str, str]] = []
         seen: set[str] = set()
+        resolved_root = self._resolve_root_name(group_root=group_root, stage_root=stage_root)
 
         for name in _FILE_COVER_NAMES:
             candidate = directory / name
@@ -130,6 +208,9 @@ class CoverHandlerPlugin:
                         "candidate_id": f"file:{candidate.name.lower()}",
                         "apply_mode": "copy",
                         "path": path_text,
+                        "mime_type": self.resolve_cover_mime(path=candidate),
+                        "cache_key": f"file:{candidate.name.lower()}",
+                        "root_name": resolved_root,
                     }
                 )
 
@@ -147,6 +228,9 @@ class CoverHandlerPlugin:
                     "candidate_id": f"file:{candidate.name.lower()}",
                     "apply_mode": "copy",
                     "path": str(candidate),
+                    "mime_type": self.resolve_cover_mime(path=candidate),
+                    "cache_key": f"file:{candidate.name.lower()}",
+                    "root_name": resolved_root,
                 }
             )
 
@@ -157,6 +241,9 @@ class CoverHandlerPlugin:
                     "candidate_id": f"embedded:{audio_file.name}",
                     "apply_mode": "extract_embedded",
                     "path": str(audio_file),
+                    "mime_type": "image/jpeg",
+                    "cache_key": f"embedded:{audio_file.name.lower()}",
+                    "root_name": resolved_root,
                 }
             )
 
@@ -186,6 +273,19 @@ class CoverHandlerPlugin:
 
         if mode == "extract_embedded":
             return await self.extract_embedded_cover(source_path)
+
+        if mode == "download":
+            url = str(candidate.get("url") or "").strip()
+            if not url:
+                return None
+            mime_type = str(candidate.get("mime_type") or "")
+            cache_key = str(candidate.get("cache_key") or "")
+            return await self.download_cover(
+                url,
+                output_dir=output_dir,
+                mime_type=mime_type,
+                cache_key=cache_key,
+            )
 
         raise CoverError(f"Unsupported apply_mode: {mode}")
 
@@ -252,12 +352,41 @@ class CoverHandlerPlugin:
                 return Path(str(candidate.get("path") or ""))
         return None
 
-    async def download_cover(self, url: str, output_dir: Path | None = None) -> Path | None:
+    def _download_output_path(
+        self,
+        output_dir: Path,
+        *,
+        url: str,
+        mime_type: str | None = None,
+        cache_key: str | None = None,
+    ) -> Path:
+        resolved_mime = self.resolve_cover_mime(url=url, mime_type=mime_type)
+        ext = mimetypes.guess_extension(resolved_mime, strict=False) or ""
+        if ext == ".jpe":
+            ext = ".jpg"
+        if not ext:
+            parsed = urlparse(url)
+            ext = Path(parsed.path).suffix.lower() or ".jpg"
+        stem = "cover_downloaded"
+        if cache_key:
+            stem = f"cover_cache_{_cache_token(str(cache_key))}"
+        return output_dir / f"{stem}{ext}"
+
+    async def download_cover(
+        self,
+        url: str,
+        output_dir: Path | None = None,
+        *,
+        mime_type: str | None = None,
+        cache_key: str | None = None,
+    ) -> Path | None:
         """Download cover from URL.
 
         Args:
             url: Cover image URL
             output_dir: Output directory
+            mime_type: Optional MIME hint for output extension resolution
+            cache_key: Optional deterministic cache key for output naming
 
         Returns:
             Path to downloaded cover or None
@@ -266,14 +395,12 @@ class CoverHandlerPlugin:
             output_dir = Path("/tmp")
 
         output_dir.mkdir(parents=True, exist_ok=True)
-
-        # Determine extension from URL
-        parsed = urlparse(url)
-        ext = Path(parsed.path).suffix
-        if not ext:
-            ext = ".jpg"
-
-        output = output_dir / f"cover_downloaded{ext}"
+        output = self._download_output_path(
+            output_dir,
+            url=url,
+            mime_type=mime_type,
+            cache_key=cache_key,
+        )
 
         # Use curl for downloading (more reliable than Python requests)
         cmd = [
