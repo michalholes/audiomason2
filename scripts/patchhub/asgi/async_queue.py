@@ -4,9 +4,12 @@ import asyncio
 import contextlib
 import fcntl
 import json
+from collections.abc import Callable, Coroutine
+from concurrent.futures import Future
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import TypeVar
 
 from patchhub.models import JobRecord
 from patchhub.run_applied_files import collect_job_applied_files
@@ -134,6 +137,9 @@ def _ensure_job_jsonl_exists_sync(job_dir: Path, mode: str, issue_id: str) -> No
     jsonl_path.write_text(line + "\n", encoding="utf-8")
 
 
+_T = TypeVar("_T")
+
+
 @dataclass
 class QueueState:
     queued: int
@@ -164,12 +170,39 @@ class AsyncJobQueue:
         self._job_db = job_db
         self._patches_root = patches_root or jobs_root.parent.parent
 
+        self._owner_loop: asyncio.AbstractEventLoop | None = None
         self._mu = asyncio.Lock()
         self._stop = asyncio.Event()
         self._q: asyncio.Queue[str] = asyncio.Queue()
         self._jobs: dict[str, JobRecord] = {}
         self._task: asyncio.Task[None] | None = None
         self._brokers: dict[str, JobEventBroker] = {}
+
+    def _reset_loop_affine_state(self) -> None:
+        self._mu = asyncio.Lock()
+        self._stop = asyncio.Event()
+        self._q = asyncio.Queue()
+
+    def _set_owner_loop(self, loop: asyncio.AbstractEventLoop) -> None:
+        prev = self._owner_loop
+        if prev is loop:
+            return
+        if prev is not None and not prev.is_closed() and self._task is not None:
+            raise RuntimeError("AsyncJobQueue owner loop cannot change while running")
+        self._owner_loop = loop
+        if prev is None or prev.is_closed():
+            self._reset_loop_affine_state()
+
+    async def _call_on_owner_loop(self, op: Callable[[], Coroutine[object, object, _T]]) -> _T:
+        current = asyncio.get_running_loop()
+        owner = self._owner_loop
+        if owner is None or owner.is_closed():
+            self._set_owner_loop(current)
+            return await op()
+        if owner is current:
+            return await op()
+        future: Future[_T] = asyncio.run_coroutine_threadsafe(op(), owner)
+        return await asyncio.wrap_future(future)
 
     async def _pop_broker(self, job_id: str) -> JobEventBroker | None:
         async with self._mu:
@@ -256,6 +289,7 @@ class AsyncJobQueue:
     async def start(self) -> None:
         if self._task is not None:
             return
+        self._set_owner_loop(asyncio.get_running_loop())
         self._task = asyncio.create_task(self._run_loop(), name="patchhub_async_queue")
 
     async def stop(self) -> None:
@@ -265,27 +299,39 @@ class AsyncJobQueue:
             with contextlib.suppress(Exception):
                 await self._task
 
-    async def state(self) -> QueueState:
+    async def _state_local(self) -> QueueState:
         async with self._mu:
             running = sum(1 for j in self._jobs.values() if j.status == "running")
             queued = sum(1 for j in self._jobs.values() if j.status == "queued")
         return QueueState(queued=queued, running=running)
 
-    async def list_jobs(self) -> list[JobRecord]:
+    async def state(self) -> QueueState:
+        return await self._call_on_owner_loop(self._state_local)
+
+    async def _list_jobs_local(self) -> list[JobRecord]:
         async with self._mu:
             jobs = list(self._jobs.values())
         jobs.sort(key=lambda j: j.created_utc, reverse=True)
         return jobs
 
-    async def get_job(self, job_id: str) -> JobRecord | None:
+    async def list_jobs(self) -> list[JobRecord]:
+        return await self._call_on_owner_loop(self._list_jobs_local)
+
+    async def _get_job_local(self, job_id: str) -> JobRecord | None:
         async with self._mu:
             return self._jobs.get(job_id)
 
-    async def get_broker(self, job_id: str) -> JobEventBroker | None:
+    async def get_job(self, job_id: str) -> JobRecord | None:
+        return await self._call_on_owner_loop(lambda: self._get_job_local(job_id))
+
+    async def _get_broker_local(self, job_id: str) -> JobEventBroker | None:
         async with self._mu:
             return self._brokers.get(job_id)
 
-    async def enqueue(self, job: JobRecord) -> None:
+    async def get_broker(self, job_id: str) -> JobEventBroker | None:
+        return await self._call_on_owner_loop(lambda: self._get_broker_local(job_id))
+
+    async def _enqueue_local(self, job: JobRecord) -> None:
         async with self._mu:
             self._jobs[job.job_id] = job
             await self._persist(job)
@@ -313,7 +359,10 @@ class AsyncJobQueue:
                 )
         await self._q.put(job.job_id)
 
-    async def cancel(self, job_id: str) -> bool:
+    async def enqueue(self, job: JobRecord) -> None:
+        await self._call_on_owner_loop(lambda: self._enqueue_local(job))
+
+    async def _cancel_local(self, job_id: str) -> bool:
         async with self._mu:
             job = self._jobs.get(job_id)
             if job is None:
@@ -362,7 +411,10 @@ class AsyncJobQueue:
 
         return False
 
-    async def hard_stop(self, job_id: str) -> bool:
+    async def cancel(self, job_id: str) -> bool:
+        return await self._call_on_owner_loop(lambda: self._cancel_local(job_id))
+
+    async def _hard_stop_local(self, job_id: str) -> bool:
         async with self._mu:
             job = self._jobs.get(job_id)
             if job is None or str(job.status) != "running":
@@ -383,6 +435,9 @@ class AsyncJobQueue:
             job.cancel_source = "hard_stop"
             await self._persist(job)
         return True
+
+    async def hard_stop(self, job_id: str) -> bool:
+        return await self._call_on_owner_loop(lambda: self._hard_stop_local(job_id))
 
     def jobs_root(self) -> Path:
         return self._jobs_root
