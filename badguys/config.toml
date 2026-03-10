@@ -110,7 +110,7 @@ list_eq = [
   "test_074_js_gate_runs_on_js_change",
   "test_075_biome_gate_runs_on_biome_target",
   "test_076_typescript_gate_runs_on_targeted_change",
-  "test_077_docs_gate_requires_changes_md",
+  "test_077_docs_gate_requires_change_fragment",
   "test_078_monolith_gate_reports_violation",
   "test_079_skip_flags_short_circuit_selected_gates",
   "test_080_json_out_writes_ndjson_log",
@@ -304,11 +304,11 @@ value_contains = [
   "STAGE: GATE_TYPESCRIPT",
 ]
 
-[evaluation.tests.test_077_docs_gate_requires_changes_md.steps.0]
+[evaluation.tests.test_077_docs_gate_requires_change_fragment.steps.0]
 rc_eq = 1
 value_contains = [
   "gate_docs=FAIL",
-  "gate_docs_missing=docs/changes.md",
+  "gate_docs_missing=docs/change_fragments/",
   "STAGE: GATE_DOCS",
 ]
 
@@ -415,7 +415,7 @@ relpath = "docs/badguys_batch2/biome_gate_invalid.ts"
 [subjects.tests.test_076_typescript_gate_runs_on_targeted_change.typescript_invalid]
 relpath = "types/badguys_typescript_invalid.ts"
 
-[subjects.tests.test_077_docs_gate_requires_changes_md.docs_marker]
+[subjects.tests.test_077_docs_gate_requires_change_fragment.docs_marker]
 relpath = "plugins/import/badguys_batch2/docs_gate_marker.txt"
 
 [subjects.tests.test_078_monolith_gate_reports_violation.monolith_helper]
@@ -584,11 +584,11 @@ args = [
   "badguys: typescript gate runs on targeted change",
 ]
 
-[recipes.tests.test_077_docs_gate_requires_changes_md.assets.patch]
+[recipes.tests.test_077_docs_gate_requires_change_fragment.assets.patch]
 subject = "docs_marker"
 
-[recipes.tests.test_077_docs_gate_requires_changes_md.steps.0]
-args = ["${issue_id}", "badguys: docs gate requires changes dot md"]
+[recipes.tests.test_077_docs_gate_requires_change_fragment.steps.0]
+args = ["${issue_id}", "badguys: docs gate requires change fragment"]
 
 [recipes.tests.test_078_monolith_gate_reports_violation.assets.patch]
 subject = "monolith_helper"
