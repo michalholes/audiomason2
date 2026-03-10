@@ -192,16 +192,22 @@ class Orchestrator:
         if job.type == JobType.PROCESS:
             contract = resolve_process_job_contract(job.meta)
             if contract is not None:
+                job.meta["verbosity_override"] = str(int(verbosity))
+                try:
+                    contract_job_meta = contract.bind_job_meta(job.meta)
+                except ValueError as e:
+                    job.meta.pop("verbosity_override", None)
+                    raise RuntimeError("unsupported or incomplete process contract") from e
+
                 job.transition(JobState.RUNNING)
                 job.started_at = _utcnow_iso()
-                job.meta["verbosity_override"] = str(int(verbosity))
                 self._jobs.store.save_job(job)
                 request = ProcessContractRequest(
                     contract_id=contract.contract_id,
                     plugin_name=contract.plugin_name,
                     entrypoint_name=contract.entrypoint_name,
                     plugin_loader=plugin_loader,
-                    job_meta=dict(job.meta),
+                    job_meta=contract_job_meta,
                 )
 
                 prev_sink = get_log_sink()

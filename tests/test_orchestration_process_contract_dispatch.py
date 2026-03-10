@@ -57,6 +57,8 @@ def test_run_job_dispatches_contract_process_to_plugin_entrypoint(
         meta={
             "contract_id": IMPORT_PROCESS_CONTRACT_ID,
             "job_requests_path": "wizards:import/sessions/s1/job_requests.json",
+            "session_id": "s1",
+            "cover_policy": "embedded",
         },
     )
 
@@ -75,6 +77,27 @@ def test_run_job_dispatches_contract_process_to_plugin_entrypoint(
             "plugin_loader": loader,
         }
     ]
+
+
+def test_run_job_rejects_incomplete_process_contract_binding(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+    orchestrator = Orchestrator()
+    plugin = _FakeImportPlugin()
+    loader = _FakeLoader(plugin)
+
+    job = orchestrator.jobs.create_job(
+        JobType.PROCESS,
+        meta={"contract_id": IMPORT_PROCESS_CONTRACT_ID},
+    )
+
+    with pytest.raises(RuntimeError, match="unsupported or incomplete process contract"):
+        orchestrator.run_job(job.job_id, plugin_loader=loader)
+
+    stored = orchestrator.get_job(job.job_id)
+    assert stored.state == JobState.PENDING
+    assert plugin.calls == []
 
 
 def test_run_job_preserves_legacy_pipeline_dispatch_without_contract_id(
