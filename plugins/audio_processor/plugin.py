@@ -173,8 +173,8 @@ class AudioProcessorPlugin:
         if not self.split_chapters or len(chapters) < 2:
             return []
 
-        plan: list[dict[str, Any]] = []
-        for chapter_index, chapter in enumerate(chapters, 1):
+        normalized_chapters: list[tuple[float, float, int]] = []
+        for original_index, chapter in enumerate(chapters):
             try:
                 start = float(chapter["start_time"])
                 end = float(chapter["end_time"])
@@ -182,6 +182,13 @@ class AudioProcessorPlugin:
                 return []
             if end <= start:
                 return []
+            normalized_chapters.append((start, end, original_index))
+
+        normalized_chapters.sort(key=lambda item: (item[0], item[1], item[2]))
+
+        source_format = self.source_format(source)
+        plan: list[dict[str, Any]] = []
+        for chapter_index, (start, end, _original_index) in enumerate(normalized_chapters, 1):
             plan.append(
                 {
                     "operation": "split_chapter",
@@ -189,7 +196,7 @@ class AudioProcessorPlugin:
                     "chapter_index": chapter_index,
                     "source": source,
                     "output": output_dir / f"{chapter_index:02d}.mp3",
-                    "source_format": self.source_format(source),
+                    "source_format": source_format,
                     "target_format": ".mp3",
                     "start_time": start,
                     "end_time": end,
