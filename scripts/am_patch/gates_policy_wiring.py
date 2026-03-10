@@ -23,7 +23,7 @@ def run_policy_gates(
     All runner modes MUST call this entry point to avoid divergent gate wiring.
     """
 
-    docs_status_entries = changed_path_entries(logger, repo_root)
+    docs_status_entries = changed_path_entries(logger, cwd)
 
     gates_mod.run_gates(
         logger,
