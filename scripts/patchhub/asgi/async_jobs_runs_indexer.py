@@ -278,8 +278,8 @@ class AsyncJobsRunsIndexer:
         running = int(getattr(qstate, "running", 0) or 0) if qstate is not None else 0
 
         def _sync_build() -> IndexerSnapshot:
-            disk_sig = self._core.web_jobs_db.jobs_signature()
-            disk_raw = self._core.web_jobs_db.list_job_jsons(limit=200)
+            disk_sig = self._core.jobs_signature_sync()
+            disk_raw = self._core.list_job_jsons_sync(limit=200)
             jobs_sig = _etag_sig_jobs(disk_sig=disk_sig, mem=mem)
 
             mem_by_id = {str(getattr(j, "job_id", "")) for j in mem}
@@ -298,7 +298,7 @@ class AsyncJobsRunsIndexer:
                     j.status = "fail"
                     j.ended_utc = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
                     j.error = "orphaned: not in memory queue"
-                    self._core.web_jobs_db.mark_orphaned(jid)
+                    self._core.mark_orphaned_sync(jid)
 
                 disk_jobs.append(j)
 
@@ -386,7 +386,7 @@ class AsyncJobsRunsIndexer:
             self._last_err = f"indexer_failed:{reason}:{type(e).__name__}:{e}"
 
     def _build_canceled_runs_sync(self) -> tuple[list[RunEntry], tuple[int, int]]:
-        rows = self._core.web_jobs_db.list_job_jsons(limit=1000000)
+        rows = self._core.list_job_jsons_sync(limit=1000000)
         out: list[RunEntry] = []
         count = 0
         max_rev = 0
@@ -398,7 +398,14 @@ class AsyncJobsRunsIndexer:
             except Exception:
                 continue
             job_id = str(raw.get("job_id", ""))
-            event_name = self._core.web_jobs_db.legacy_event_filename(job_id)
+            if self._core.web_jobs_db is not None:
+                event_name = self._core.web_jobs_db.legacy_event_filename(job_id)
+            elif str(raw.get("mode", "")) in {"finalize_live", "finalize_workspace"}:
+                event_name = "am_patch_finalize.jsonl"
+            elif str(raw.get("issue_id", "")).isdigit():
+                event_name = f"am_patch_issue_{str(raw.get('issue_id', ''))}.jsonl"
+            else:
+                event_name = "am_patch_finalize.jsonl"
             ended_utc = str(raw.get("ended_utc") or raw.get("created_utc") or "")
             out.append(
                 RunEntry(

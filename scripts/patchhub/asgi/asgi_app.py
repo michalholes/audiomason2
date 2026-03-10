@@ -288,7 +288,8 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
             base_sig = await to_thread(
                 runs_signature, core.patches_root, core.cfg.indexing.log_filename_regex
             )
-            canceled_sig = await to_thread(canceled_runs_signature, core.patches_root)
+            canceled_source = core.web_jobs_db if core.web_jobs_db is not None else core.jobs_root
+            canceled_sig = await to_thread(canceled_runs_signature, canceled_source)
             sig = (
                 f"runs:r={base_sig[0]}:{base_sig[1]}:{base_sig[2]}"
                 f":c={canceled_sig[0]}:{canceled_sig[1]}"
@@ -350,7 +351,8 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
             core.patches_root,
             core.cfg.indexing.log_filename_regex,
         )
-        canceled_sig = await to_thread(canceled_runs_signature, core.patches_root)
+        canceled_source = core.web_jobs_db if core.web_jobs_db is not None else core.jobs_root
+        canceled_sig = await to_thread(canceled_runs_signature, canceled_source)
         sig = (
             f"runs:r={base_sig[0]}:{base_sig[1]}:{base_sig[2]}"
             f":c={canceled_sig[0]}:{canceled_sig[1]}"
@@ -409,7 +411,7 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
 
         from hashlib import sha1
 
-        disk_sig = await to_thread(core.web_jobs_db.jobs_signature)
+        disk_sig = await to_thread(core.jobs_signature_sync)
         mem_parts: list[str] = []
         for j in sorted(mem, key=lambda x: str(getattr(x, "job_id", ""))):
             jid = str(getattr(j, "job_id", ""))
@@ -435,7 +437,7 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
         def _load_disk_jobs_sync(mem_by_id: dict[str, object]) -> list[Any]:
             from datetime import UTC, datetime
 
-            disk_raw = core.web_jobs_db.list_job_jsons(limit=200)
+            disk_raw = core.list_job_jsons_sync(limit=200)
             disk: list[Any] = []
             for r in disk_raw:
                 jid = str(r.get("job_id", ""))
@@ -450,7 +452,7 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
                     j.status = "fail"
                     j.ended_utc = datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
                     j.error = "orphaned: not in memory queue"
-                    core.web_jobs_db.mark_orphaned(jid)
+                    core.mark_orphaned_sync(jid)
 
                 disk.append(j)
             return disk
@@ -484,7 +486,7 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
         from hashlib import sha1
 
         mem = await core.queue.list_jobs()
-        disk_sig = await to_thread(core.web_jobs_db.jobs_signature)
+        disk_sig = await to_thread(core.jobs_signature_sync)
 
         mem_parts: list[str] = []
         for j in sorted(mem, key=lambda x: str(getattr(x, "job_id", ""))):
@@ -523,7 +525,7 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
             job = await to_thread(core._load_job_from_disk, job_id)
         if job is None:
             return JSONResponse({"ok": False, "error": "Not found"}, status_code=404)
-        tail = await to_thread(core.web_jobs_db.read_log_tail, job_id, lines=lines)
+        tail = await to_thread(core.read_log_tail_sync, job_id, lines=lines)
         return JSONResponse({"ok": True, "job_id": job_id, "tail": tail})
 
     @app.post("/api/jobs/{job_id}/cancel")
@@ -560,6 +562,9 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
 
             def _load_job_from_disk(self, job_id: str):
                 return core._load_job_from_disk(job_id)
+
+            def queue_block_reason(self) -> str | None:
+                return core.queue_block_reason()
 
             async def _enqueue_async(self, job: Any) -> None:
                 await core.queue.enqueue(job)
@@ -731,12 +736,29 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
                     return None
                 return await core.queue.get_broker(job_id)
 
-            async for chunk in stream_job_events_db_live(
+            if core.web_jobs_db is not None:
+                async for chunk in stream_job_events_db_live(
+                    job_id=str(job_id),
+                    db=core.web_jobs_db,
+                    in_memory_job=job is not None,
+                    job_status=job_status,
+                    get_broker=get_broker,
+                ):
+                    yield chunk
+                return
+
+            current = job if job is not None else disk_job
+            if current is None:
+                data = json.dumps({"reason": "job_not_found"}, ensure_ascii=True)
+                yield f"event: end\ndata: {data}\n\n".encode()
+                return
+            from .sse_jsonl_stream import stream_job_events_sse
+
+            jsonl_path = core._job_jsonl_path(current)
+            async for chunk in stream_job_events_sse(
                 job_id=str(job_id),
-                db=core.web_jobs_db,
-                in_memory_job=job is not None,
+                jsonl_path=jsonl_path,
                 job_status=job_status,
-                get_broker=get_broker,
             ):
                 yield chunk
 

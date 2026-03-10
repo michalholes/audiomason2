@@ -205,7 +205,22 @@ def api_patch_zip_manifest(self, qs: dict[str, str]) -> tuple[int, bytes]:
     return _ok({"manifest": manifest})
 
 
+def _queue_block_reason(self) -> str | None:
+    source = getattr(self, "queue_block_reason", None)
+    if callable(source):
+        try:
+            reason = source()
+        except Exception:
+            return "Backend mode selection is not finished"
+        if reason:
+            return str(reason)
+    return None
+
+
 def api_jobs_enqueue(self, body: dict[str, Any]) -> tuple[int, bytes]:
+    blocked = _queue_block_reason(self)
+    if blocked is not None:
+        return _err(blocked, status=409)
     mode_s = str(body.get("mode", "patch"))
     if mode_s not in ("patch", "repair", "finalize_live", "finalize_workspace", "rerun_latest"):
         return _err("Invalid mode", status=400)

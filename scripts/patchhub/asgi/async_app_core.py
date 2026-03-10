@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+from contextlib import suppress
 from pathlib import Path
 from typing import Any
 
@@ -11,15 +13,20 @@ from patchhub import app_api_upload as _upload
 from patchhub import app_api_workspaces as _workspaces
 from patchhub import app_ui as _ui
 from patchhub import proc_resources
+from patchhub.app_support import read_tail
 from patchhub.config import AppConfig
 from patchhub.fs_jail import FsJail
+from patchhub.models import JobRecord
+from patchhub.web_jobs_backend_mode import WebJobsBackendModeState
 from patchhub.web_jobs_db import WebJobsDatabase, load_web_jobs_db_config
+from patchhub.web_jobs_legacy_fs import legacy_jobs_signature, list_legacy_job_jsons
 from patchhub.web_jobs_migration import (
     _migrate as migrate_legacy_jobs,
 )
 from patchhub.web_jobs_migration import (
     _verify as verify_legacy_jobs,
 )
+from patchhub.web_jobs_recovery import mark_shutdown_clean, resolve_web_jobs_backend
 from patchhub.web_jobs_virtual_fs import WebJobsVirtualFs
 
 from .async_jobs_runs_indexer import AsyncJobsRunsIndexer
@@ -44,37 +51,128 @@ class AsyncAppCore:
         self.jobs_root = self.patches_root / "artifacts" / "web_jobs"
         self.jobs_root.mkdir(parents=True, exist_ok=True)
         self.web_jobs_db_cfg = load_web_jobs_db_config(repo_root, self.patches_root)
-        self.web_jobs_db = WebJobsDatabase(self.web_jobs_db_cfg)
-        self.virtual_jobs_fs = WebJobsVirtualFs(
+        self.backend_mode_state = WebJobsBackendModeState(
+            jobs_root=self.jobs_root,
+            db_path=self.web_jobs_db_cfg.db_path,
+        )
+        self._backend_session_id = ""
+        self.web_jobs_db: WebJobsDatabase | None = WebJobsDatabase(self.web_jobs_db_cfg)
+        self.virtual_jobs_fs: WebJobsVirtualFs | None = WebJobsVirtualFs(
             db=self.web_jobs_db,
             enabled=self.web_jobs_db_cfg.compatibility_enabled,
         )
+        self.queue = self._build_queue(job_db=self.web_jobs_db)
+        self.indexer = AsyncJobsRunsIndexer(core=self)
 
-        self.queue = AsyncJobQueue(
-            repo_root=repo_root,
+    def _build_queue(self, *, job_db: WebJobsDatabase | None) -> AsyncJobQueue:
+        return AsyncJobQueue(
+            repo_root=self.repo_root,
             lock_path=self.jail.lock_path(),
             jobs_root=self.jobs_root,
             executor=AsyncRunnerExecutor(),
-            ipc_handshake_wait_s=cfg.runner.ipc_handshake_wait_s,
-            post_exit_grace_s=cfg.runner.post_exit_grace_s,
-            terminate_grace_s=cfg.runner.terminate_grace_s,
-            job_db=self.web_jobs_db,
+            ipc_handshake_wait_s=self.cfg.runner.ipc_handshake_wait_s,
+            post_exit_grace_s=self.cfg.runner.post_exit_grace_s,
+            terminate_grace_s=self.cfg.runner.terminate_grace_s,
+            job_db=job_db,
             patches_root=self.patches_root,
         )
 
-        self.indexer = AsyncJobsRunsIndexer(core=self)
+    def queue_block_reason(self) -> str | None:
+        return self.backend_mode_state.queue_block_reason()
+
+    def backend_debug_state(self) -> dict[str, Any]:
+        return self.backend_mode_state.debug_payload()
+
+    def _enable_db_primary(self, job_db: WebJobsDatabase, recovery: dict[str, Any]) -> None:
+        self.web_jobs_db = job_db
+        self.virtual_jobs_fs = WebJobsVirtualFs(
+            db=job_db,
+            enabled=self.web_jobs_db_cfg.compatibility_enabled,
+        )
+        self.queue = self._build_queue(job_db=job_db)
+        self.backend_mode_state.activate_db_primary(recovery)
+
+    def _enable_file_emergency(self, recovery: dict[str, Any]) -> None:
+        self.web_jobs_db = None
+        self.virtual_jobs_fs = None
+        self.queue = self._build_queue(job_db=None)
+        self.backend_mode_state.activate_file_emergency(recovery)
 
     async def startup(self) -> None:
-        if self.web_jobs_db_cfg.startup_migration_enabled:
-            await to_thread(migrate_legacy_jobs, self.repo_root)
-        if self.web_jobs_db_cfg.startup_verify_enabled:
-            await to_thread(verify_legacy_jobs, self.repo_root)
+        self.backend_mode_state.begin_resolution()
+        resolution = await to_thread(
+            resolve_web_jobs_backend,
+            repo_root=self.repo_root,
+            patches_root=self.patches_root,
+            jobs_root=self.jobs_root,
+            db_cfg=self.web_jobs_db_cfg,
+        )
+        self._backend_session_id = str(resolution.session_id)
+        if resolution.mode == "db_primary" and resolution.job_db is not None:
+            self._enable_db_primary(resolution.job_db, resolution.recovery)
+        else:
+            self._enable_file_emergency(resolution.recovery)
+        if self.backend_mode_state.mode == "db_primary":
+            if self.web_jobs_db_cfg.startup_migration_enabled:
+                await to_thread(migrate_legacy_jobs, self.repo_root)
+            if self.web_jobs_db_cfg.startup_verify_enabled:
+                await to_thread(verify_legacy_jobs, self.repo_root)
         await self.queue.start()
         await self.indexer.start()
 
     async def shutdown(self) -> None:
-        await self.indexer.stop()
-        await self.queue.stop()
+        with suppress(BaseException):
+            await self.indexer.stop()
+        with suppress(BaseException):
+            await self.queue.stop()
+        if self.backend_mode_state.resolution_done and self._backend_session_id:
+            await to_thread(
+                mark_shutdown_clean,
+                self.patches_root,
+                self._backend_session_id,
+                self.backend_mode_state.last_recovery,
+            )
+
+    def jobs_signature_sync(self) -> tuple[int, int]:
+        if self.web_jobs_db is not None:
+            return self.web_jobs_db.jobs_signature()
+        return legacy_jobs_signature(self.jobs_root)
+
+    def list_job_jsons_sync(self, *, limit: int = 200) -> list[dict[str, Any]]:
+        if self.web_jobs_db is not None:
+            return self.web_jobs_db.list_job_jsons(limit=limit)
+        return list_legacy_job_jsons(self.jobs_root, limit=limit)
+
+    def read_log_tail_sync(self, job_id: str, *, lines: int = 200) -> str:
+        if self.web_jobs_db is not None:
+            return self.web_jobs_db.read_log_tail(job_id, lines=lines)
+        log_path = self.jobs_root / str(job_id) / "runner.log"
+        return read_tail(
+            log_path,
+            lines,
+            max_bytes=self.cfg.server.tail_max_bytes,
+            cache_max_entries=self.cfg.server.tail_cache_max_entries,
+        )
+
+    def mark_orphaned_sync(self, job_id: str) -> JobRecord | None:
+        if self.web_jobs_db is not None:
+            return self.web_jobs_db.mark_orphaned(job_id)
+        job = self._load_job_from_disk(job_id)
+        if job is None:
+            return None
+        if job.status not in {"queued", "running"}:
+            return job
+        job.status = "fail"
+        if not job.ended_utc:
+            job.ended_utc = _jobs._utc_now()
+        job.error = "orphaned: not in memory queue"
+        job_dir = self.jobs_root / str(job_id)
+        job_dir.mkdir(parents=True, exist_ok=True)
+        (job_dir / "job.json").write_text(
+            json.dumps(job.to_json(), ensure_ascii=True, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        return job
 
     _autofill_scan_dir_rel = _core._autofill_scan_dir_rel
     _derive_from_filename = _core._derive_from_filename
@@ -129,7 +227,6 @@ class AsyncAppCore:
                 },
             }
 
-        sync_part: dict[str, object]
         try:
             sync_part = await to_thread(_sync_part)
         except Exception:
@@ -141,7 +238,11 @@ class AsyncAppCore:
                 "resources": {},
             }
 
-        return {"queue": {"queued": queued, "running": running}, **sync_part}
+        return {
+            "queue": {"queued": queued, "running": running},
+            "backend": self.backend_debug_state(),
+            **sync_part,
+        }
 
     api_fs_list = _fs.api_fs_list
     api_fs_read_text = _fs.api_fs_read_text
