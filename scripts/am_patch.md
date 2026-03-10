@@ -83,6 +83,13 @@ The runner supports an independent file log filter:
 
 Both `--verbosity` and `--log-level` use the same level names and meanings, but may be set to different values.
 
+Autofix-aware failed-step rule:
+
+- When Ruff or Biome autofix is enabled, the pre-autofix check is diagnostic only.
+- The pre-autofix check must not emit `FAILED STEP OUTPUT`.
+- It may emit filtered warning/detail diagnostics.
+- The authoritative fail dump, if any, comes only from the post-autofix final check.
+
 On FAIL, the runner emits a runner-owned error detail line in the form
 `ERROR DETAIL: <stage>:<category>: <single-line-message>` when a `RunnerError`
 produces no failed-step stdout/stderr dump. This line is error detail, not part

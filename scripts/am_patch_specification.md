@@ -212,6 +212,11 @@ Full error detail bypass (non-filterable):
 - Exception (autofix/autoformat failure dump): for Ruff/Biome autoformat/autofix steps,
   failed-step stdout/stderr MUST NOT bypass filtering. It MUST be emitted as
   DETAIL+WARNING so it is visible only at warning/verbose/debug.
+- When Ruff/Biome autofix is enabled, the pre-autofix check phase is diagnostic only.
+  A non-zero result in that phase MUST NOT be treated as an authoritative failed step and
+  MUST NOT emit `FAILED STEP OUTPUT`. The runner MAY emit filtered warning/detail output
+  for that phase. If autofix runs, the authoritative failed-step dump, if any, MUST come
+  only from the post-autofix final check.
 
 Monolith gate failures (normative):
 
@@ -1344,6 +1349,9 @@ Behavior:
 - By default it must bypass filtering.
 - Exception: for Ruff/Biome autoformat/autofix steps, the failed-step dump must be
   emitted without bypass, using DETAIL+WARNING.
+- When Ruff/Biome autofix is enabled, the pre-autofix check is diagnostic only and must
+  not emit `FAILED STEP OUTPUT`. If autofix runs, any failed-step dump for the gate must
+  come only from the post-autofix final check.
 - The JSON sink is best-effort; failures to write NDJSON must not change runner
   behavior.
 
