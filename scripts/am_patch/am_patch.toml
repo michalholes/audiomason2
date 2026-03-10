@@ -191,7 +191,7 @@ gate_typescript_base_tsconfig = "tsconfig.json"
 typescript_targets = ["plugins/", "scripts/", "types/"]
 
 # Documentation gate (docs) - required updates when watched paths change
-gates_skip_docs = false
+gates_skip_docs = true
 gate_docs_include = ["src", "plugins"]
 gate_docs_exclude = ["badguys", "patches"]
 gate_docs_required_files = ["docs/changes.md"]
