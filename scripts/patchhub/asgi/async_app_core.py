@@ -18,6 +18,11 @@ from patchhub.config import AppConfig
 from patchhub.fs_jail import FsJail
 from patchhub.models import JobRecord
 from patchhub.web_jobs_backend_mode import WebJobsBackendModeState
+from patchhub.web_jobs_backup import (
+    create_verified_backup,
+    load_web_jobs_backup_settings,
+    startup_backup_required,
+)
 from patchhub.web_jobs_db import WebJobsDatabase, load_web_jobs_db_config
 from patchhub.web_jobs_legacy_fs import legacy_jobs_signature, list_legacy_job_jsons
 from patchhub.web_jobs_migration import (
@@ -56,12 +61,9 @@ class AsyncAppCore:
             db_path=self.web_jobs_db_cfg.db_path,
         )
         self._backend_session_id = ""
-        self.web_jobs_db: WebJobsDatabase | None = WebJobsDatabase(self.web_jobs_db_cfg)
-        self.virtual_jobs_fs: WebJobsVirtualFs | None = WebJobsVirtualFs(
-            db=self.web_jobs_db,
-            enabled=self.web_jobs_db_cfg.compatibility_enabled,
-        )
-        self.queue = self._build_queue(job_db=self.web_jobs_db)
+        self.web_jobs_db: WebJobsDatabase | None = None
+        self.virtual_jobs_fs: WebJobsVirtualFs | None = None
+        self.queue = self._build_queue(job_db=None)
         self.indexer = AsyncJobsRunsIndexer(core=self)
 
     def _build_queue(self, *, job_db: WebJobsDatabase | None) -> AsyncJobQueue:
@@ -98,6 +100,36 @@ class AsyncAppCore:
         self.queue = self._build_queue(job_db=None)
         self.backend_mode_state.activate_file_emergency(recovery)
 
+    def _maybe_create_startup_backup(self) -> None:
+        if self.web_jobs_db is None:
+            return
+        settings = load_web_jobs_backup_settings(
+            self.repo_root,
+            self.patches_root,
+            self.web_jobs_db_cfg,
+        )
+        recovery = dict(self.backend_mode_state.last_recovery)
+        recovery["backup_trigger_policy"] = settings.trigger_policy
+        recovery["startup_backup_created"] = False
+        recovery["startup_backup_path"] = None
+        recovery["startup_backup_error"] = None
+        self.backend_mode_state.last_recovery = recovery
+        if not startup_backup_required(settings, recovery):
+            return
+        try:
+            result = create_verified_backup(
+                db_path=self.web_jobs_db.cfg.db_path,
+                patches_root=self.patches_root,
+                settings=settings,
+            )
+        except Exception as exc:
+            recovery["startup_backup_error"] = f"{type(exc).__name__}:{exc}"
+            self.backend_mode_state.last_recovery = recovery
+            return
+        recovery["startup_backup_created"] = bool(result.verified)
+        recovery["startup_backup_path"] = str(result.path)
+        self.backend_mode_state.last_recovery = recovery
+
     async def startup(self) -> None:
         self.backend_mode_state.begin_resolution()
         resolution = await to_thread(
@@ -117,6 +149,7 @@ class AsyncAppCore:
                 await to_thread(migrate_legacy_jobs, self.repo_root)
             if self.web_jobs_db_cfg.startup_verify_enabled:
                 await to_thread(verify_legacy_jobs, self.repo_root)
+            await to_thread(self._maybe_create_startup_backup)
         await self.queue.start()
         await self.indexer.start()
 

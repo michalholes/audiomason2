@@ -4,15 +4,14 @@ from __future__ import annotations
 import asyncio
 import sys
 import threading
+import time
 from contextlib import contextmanager
 from pathlib import Path
-from unittest.mock import patch
 
 _SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(_SCRIPTS))
 
 from patchhub.asgi.asgi_app import create_app
-from patchhub.asgi.async_app_core import AsyncAppCore
 from patchhub.config import load_config
 from patchhub.models import JobRecord
 
@@ -45,10 +44,6 @@ def _background_loop() -> object:
             raise AssertionError("background loop did not stop")
 
 
-async def _noop_async(self) -> None:
-    return None
-
-
 def test_db_primary_log_tail_endpoint_reads_from_sqlite_without_runner_log_file(
     tmp_path: Path,
 ) -> None:
@@ -60,12 +55,10 @@ def test_db_primary_log_tail_endpoint_reads_from_sqlite_without_runner_log_file(
     cfg = load_config(
         Path(__file__).resolve().parents[1] / "scripts" / "patchhub" / "patchhub.toml"
     )
-    with (
-        patch.object(AsyncAppCore, "startup", _noop_async),
-        patch.object(AsyncAppCore, "shutdown", _noop_async),
-    ):
-        app = create_app(repo_root=tmp_path, cfg=cfg)
+    app = create_app(repo_root=tmp_path, cfg=cfg)
+    with TestClient(app) as client:
         db = app.state.core.web_jobs_db
+        assert db is not None
         db.upsert_job(
             JobRecord(
                 job_id="job-514-log",
@@ -81,8 +74,7 @@ def test_db_primary_log_tail_endpoint_reads_from_sqlite_without_runner_log_file(
         )
         db.append_log_line("job-514-log", "alpha")
         db.append_log_line("job-514-log", "beta")
-        with TestClient(app) as client:
-            resp = client.get("/api/jobs/job-514-log/log_tail", params={"lines": 1})
+        resp = client.get("/api/jobs/job-514-log/log_tail", params={"lines": 1})
     assert resp.status_code == 200
     assert resp.json() == {"ok": True, "job_id": "job-514-log", "tail": "beta"}
 
@@ -98,12 +90,10 @@ def test_db_primary_jobs_routes_survive_queue_bound_to_foreign_running_loop(
     cfg = load_config(
         Path(__file__).resolve().parents[1] / "scripts" / "patchhub" / "patchhub.toml"
     )
-    with (
-        patch.object(AsyncAppCore, "startup", _noop_async),
-        patch.object(AsyncAppCore, "shutdown", _noop_async),
-    ):
-        app = create_app(repo_root=tmp_path, cfg=cfg)
+    app = create_app(repo_root=tmp_path, cfg=cfg)
+    with TestClient(app) as client:
         db = app.state.core.web_jobs_db
+        assert db is not None
         db.upsert_job(
             JobRecord(
                 job_id="job-514-cross-loop",
@@ -123,12 +113,20 @@ def test_db_primary_jobs_routes_survive_queue_bound_to_foreign_running_loop(
             future = asyncio.run_coroutine_threadsafe(app.state.core.queue.list_jobs(), loop)
             assert future.result(timeout=2.0) == []
 
-            with TestClient(app) as client:
+            rescan_resp = client.post("/api/debug/indexer/force_rescan")
+            assert rescan_resp.status_code == 200
+            deadline = time.monotonic() + 2.0
+            jobs_resp = client.get("/api/jobs")
+            while time.monotonic() < deadline:
+                jobs_body = jobs_resp.json()
+                if [job["job_id"] for job in jobs_body.get("jobs", [])] == ["job-514-cross-loop"]:
+                    break
+                time.sleep(0.05)
                 jobs_resp = client.get("/api/jobs")
-                tail_resp = client.get(
-                    "/api/jobs/job-514-cross-loop/log_tail",
-                    params={"lines": 1},
-                )
+            tail_resp = client.get(
+                "/api/jobs/job-514-cross-loop/log_tail",
+                params={"lines": 1},
+            )
 
     assert jobs_resp.status_code == 200
     jobs_body = jobs_resp.json()

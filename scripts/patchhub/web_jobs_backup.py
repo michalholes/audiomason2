@@ -10,6 +10,12 @@ from typing import Any
 
 from .models import WebJobsDbConfig
 
+_VALID_TRIGGER_POLICIES = (
+    "manual",
+    "startup_always",
+    "startup_after_recovery",
+)
+
 _REQUIRED_TABLES = (
     "web_jobs",
     "web_job_log_lines",
@@ -51,6 +57,31 @@ def _tuple_of_strings(raw: Any, default: tuple[str, ...]) -> tuple[str, ...]:
     return items or default
 
 
+def _normalize_trigger_policy(raw: Any) -> str:
+    policy = str(raw or "manual").strip() or "manual"
+    if policy not in _VALID_TRIGGER_POLICIES:
+        raise ValueError(f"invalid_web_jobs_backup_trigger_policy:{policy}")
+    return policy
+
+
+def startup_backup_required(
+    settings: WebJobsBackupSettings,
+    recovery: dict[str, Any],
+) -> bool:
+    policy = _normalize_trigger_policy(settings.trigger_policy)
+    if policy == "manual":
+        return False
+    if policy == "startup_always":
+        return True
+    action = str(recovery.get("recovery_action", "none") or "none")
+    return action not in {
+        "none",
+        "initialized_new_main_db",
+        "clean_start_db_primary",
+        "validated_after_unclean_shutdown",
+    }
+
+
 def load_web_jobs_backup_settings(
     repo_root: Path,
     patches_root: Path,
@@ -70,7 +101,7 @@ def load_web_jobs_backup_settings(
         verify_after_backup=bool(
             backup_raw.get("verify_after_write", db_cfg.backup_verify_after_write)
         ),
-        trigger_policy=str(backup_raw.get("trigger_policy", "manual")),
+        trigger_policy=_normalize_trigger_policy(backup_raw.get("trigger_policy", "manual")),
         restore_source_preference=_tuple_of_strings(
             backup_raw.get("restore_source_preference"),
             db_cfg.backup_restore_source_preference,
