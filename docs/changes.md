@@ -1,3 +1,10 @@
+## 2026-03-10T00:00:22+01:00
+
+-   Issue 133: import editor validation now keeps FlowConfig draft and
+    active semantics compatible with legacy defaults, validates known
+    step-owned settings keys at the UI editor boundary, and returns
+    stable explicit validation errors without flaky exception handling.
+
 ## 2026-03-10T00:00:21+01:00
 
 -   Issue 132: import authoring bootstrap now validates persisted wizard

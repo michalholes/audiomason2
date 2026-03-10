@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from typing import Any
 
 
-@dataclass(frozen=True)
+@dataclass
 class FieldSchemaValidationError(Exception):
     message: str
     path: str
@@ -32,6 +32,8 @@ _BASELINE_TYPES = {
     "table_edit",
 }
 
+_SETTINGS_FIELD_TYPES = {"string", "bool", "int", "number", "json"}
+
 
 def _ascii_only(*, value: str, path: str, meta: dict[str, Any]) -> None:
     try:
@@ -43,6 +45,154 @@ def _ascii_only(*, value: str, path: str, meta: dict[str, Any]) -> None:
             reason="non_ascii",
             meta=dict(meta),
         ) from e
+
+
+_JSON_PRIMITIVE_TYPES = (str, int, float, bool, type(None))
+
+
+def _validate_choice_values(*, values_any: Any, path: str, meta: dict[str, Any]) -> list[Any]:
+    if not isinstance(values_any, list):
+        raise FieldSchemaValidationError(
+            message="field choices must be a list",
+            path=path,
+            reason="invalid_type",
+            meta=dict(meta),
+        )
+    out: list[Any] = []
+    for index, value in enumerate(values_any):
+        if not isinstance(value, _JSON_PRIMITIVE_TYPES):
+            raise FieldSchemaValidationError(
+                message="field choices must contain JSON primitives",
+                path=f"{path}[{index}]",
+                reason="invalid_type",
+                meta=dict(meta),
+            )
+        out.append(value)
+    return out
+
+
+def validate_settings_schema_fields(*, step_id: str, fields_any: Any) -> list[dict[str, Any]]:
+    if not isinstance(fields_any, list):
+        raise FieldSchemaValidationError(
+            message="settings_schema.fields must be a list",
+            path="$.settings_schema.fields",
+            reason="invalid_type",
+            meta={"step_id": step_id},
+        )
+
+    out: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for idx, field_any in enumerate(fields_any):
+        pfx = f"$.settings_schema.fields[{idx}]"
+        if not isinstance(field_any, dict):
+            raise FieldSchemaValidationError(
+                message="settings field definition must be an object",
+                path=pfx,
+                reason="invalid_type",
+                meta={"step_id": step_id},
+            )
+
+        key = field_any.get("key")
+        type_name = field_any.get("type")
+        required = field_any.get("required")
+        if not isinstance(key, str) or not key:
+            raise FieldSchemaValidationError(
+                message="field.key must be a non-empty string",
+                path=f"{pfx}.key",
+                reason="missing_or_invalid",
+                meta={"step_id": step_id},
+            )
+        _ascii_only(value=key, path=f"{pfx}.key", meta={"step_id": step_id})
+        if key in seen:
+            raise FieldSchemaValidationError(
+                message="field.key must be unique",
+                path=f"{pfx}.key",
+                reason="duplicate_key",
+                meta={"step_id": step_id, "key": key},
+            )
+        seen.add(key)
+
+        if not isinstance(type_name, str) or not type_name:
+            raise FieldSchemaValidationError(
+                message="field.type must be a non-empty string",
+                path=f"{pfx}.type",
+                reason="missing_or_invalid",
+                meta={"step_id": step_id, "key": key},
+            )
+        if type_name not in _SETTINGS_FIELD_TYPES:
+            raise FieldSchemaValidationError(
+                message="unsupported settings field type",
+                path=f"{pfx}.type",
+                reason="unsupported_type",
+                meta={"step_id": step_id, "key": key, "type": type_name},
+            )
+        if not isinstance(required, bool):
+            raise FieldSchemaValidationError(
+                message="field.required must be bool",
+                path=f"{pfx}.required",
+                reason="invalid_type",
+                meta={"step_id": step_id, "key": key, "type": type_name},
+            )
+
+        out_field = {"key": key, "type": type_name, "required": required}
+        if "default" in field_any:
+            out_field["default"] = field_any.get("default")
+
+        for list_key in ("choices", "options"):
+            if list_key in field_any:
+                out_field[list_key] = _validate_choice_values(
+                    values_any=field_any.get(list_key),
+                    path=f"{pfx}.{list_key}",
+                    meta={"step_id": step_id, "key": key, "type": type_name},
+                )
+
+        for num_key in ("min", "max", "step"):
+            if num_key not in field_any:
+                continue
+            value = field_any.get(num_key)
+            if type_name in {"int"}:
+                valid = isinstance(value, int)
+            else:
+                valid = isinstance(value, (int, float)) and not isinstance(value, bool)
+            if not valid:
+                raise FieldSchemaValidationError(
+                    message=f"field.{num_key} has invalid type",
+                    path=f"{pfx}.{num_key}",
+                    reason="invalid_type",
+                    meta={"step_id": step_id, "key": key, "type": type_name},
+                )
+            out_field[num_key] = value
+
+        if "multiline" in field_any:
+            multiline = field_any.get("multiline")
+            if not isinstance(multiline, bool):
+                raise FieldSchemaValidationError(
+                    message="field.multiline must be bool",
+                    path=f"{pfx}.multiline",
+                    reason="invalid_type",
+                    meta={"step_id": step_id, "key": key, "type": type_name},
+                )
+            out_field["multiline"] = multiline
+
+        if "format" in field_any:
+            fmt = field_any.get("format")
+            if not isinstance(fmt, str) or not fmt:
+                raise FieldSchemaValidationError(
+                    message="field.format must be a non-empty string",
+                    path=f"{pfx}.format",
+                    reason="missing_or_invalid",
+                    meta={"step_id": step_id, "key": key, "type": type_name},
+                )
+            _ascii_only(
+                value=fmt,
+                path=f"{pfx}.format",
+                meta={"step_id": step_id, "key": key, "type": type_name},
+            )
+            out_field["format"] = fmt
+
+        out.append(out_field)
+
+    return out
 
 
 def validate_step_fields(*, step_id: str, fields_any: Any) -> list[dict[str, Any]]:

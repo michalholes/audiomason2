@@ -77,7 +77,7 @@ def test_flow_config_history_is_bounded_and_ordered(tmp_path: Path) -> None:
     cfgs: list[dict] = []
     for i in range(6):
         cfg = dict(base)
-        cfg["defaults"] = {"marker": i}
+        cfg["defaults"] = {"parallelism": {"max_jobs": i}}
         cfgs.append(cfg)
         r = client.post("/import/ui/config", json={"config": cfg})
         assert r.status_code == 200
@@ -99,7 +99,7 @@ def test_flow_config_history_is_bounded_and_ordered(tmp_path: Path) -> None:
     rb = client.post("/import/ui/config/rollback", json={"id": expected[2]})
     assert rb.status_code == 200
     out = rb.json()["config"]
-    assert (out.get("defaults") or {}).get("marker") == 2
+    assert ((out.get("defaults") or {}).get("parallelism") or {}).get("max_jobs") == 2
 
     nf = client.post("/import/ui/config/rollback", json={"id": "nope"})
     assert nf.status_code == 404
@@ -170,3 +170,158 @@ def test_wizard_definition_history_is_bounded_and_ordered(tmp_path: Path) -> Non
 
     nf = client.post("/import/ui/wizard-definition/rollback", json={"id": "nope"})
     assert nf.status_code == 404
+
+
+@pytest.mark.skipif((not _HAS_FASTAPI) or (not _HAS_HTTPX), reason="fastapi+httpx required")
+def test_flow_config_validate_rejects_non_runtime_meaningful_default_key(tmp_path: Path) -> None:
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    engine = _make_engine(tmp_path)
+    app = FastAPI()
+    app.include_router(build_router(engine=engine))
+    client = TestClient(app)
+
+    response = client.post(
+        "/import/ui/config/validate",
+        json={
+            "config": {
+                "version": 1,
+                "steps": {},
+                "defaults": {"parallelism": {"bogus": 1}},
+            }
+        },
+    )
+
+    assert response.status_code == 400
+    err = response.json()["error"]
+    assert err["code"] == "VALIDATION_ERROR"
+    assert err["details"][0]["path"] == "$.defaults.parallelism.bogus"
+    assert err["details"][0]["reason"] == "unknown_field"
+
+
+@pytest.mark.skipif((not _HAS_FASTAPI) or (not _HAS_HTTPX), reason="fastapi+httpx required")
+def test_wizard_definition_validate_surfaces_pinned_and_operator_errors_explicitly(
+    tmp_path: Path,
+) -> None:
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    engine = _make_engine(tmp_path)
+    app = FastAPI()
+    app.include_router(build_router(engine=engine))
+    client = TestClient(app)
+
+    pinned = client.post(
+        "/import/ui/wizard-definition/validate",
+        json={
+            "definition": {
+                "version": 2,
+                "graph": {
+                    "entry_step_id": "select_authors",
+                    "nodes": [
+                        {"step_id": "select_books"},
+                        {"step_id": "select_authors"},
+                        {"step_id": "plan_preview_batch"},
+                        {"step_id": "conflict_policy"},
+                        {"step_id": "final_summary_confirm"},
+                        {"step_id": "processing"},
+                    ],
+                    "edges": [
+                        {
+                            "from_step_id": "select_authors",
+                            "to_step_id": "select_books",
+                            "priority": 0,
+                            "when": None,
+                        },
+                        {
+                            "from_step_id": "select_books",
+                            "to_step_id": "plan_preview_batch",
+                            "priority": 0,
+                            "when": None,
+                        },
+                        {
+                            "from_step_id": "plan_preview_batch",
+                            "to_step_id": "conflict_policy",
+                            "priority": 0,
+                            "when": None,
+                        },
+                        {
+                            "from_step_id": "conflict_policy",
+                            "to_step_id": "final_summary_confirm",
+                            "priority": 0,
+                            "when": None,
+                        },
+                        {
+                            "from_step_id": "final_summary_confirm",
+                            "to_step_id": "processing",
+                            "priority": 0,
+                            "when": None,
+                        },
+                    ],
+                },
+            }
+        },
+    )
+
+    assert pinned.status_code == 400
+    pinned_detail = pinned.json()["error"]["details"][0]
+    assert pinned_detail["path"] == "$.definition.graph.nodes[0].step_id"
+    assert pinned_detail["reason"] == "pinned_first"
+
+    invalid_operator = client.post(
+        "/import/ui/wizard-definition/validate",
+        json={
+            "definition": {
+                "version": 2,
+                "graph": {
+                    "entry_step_id": "select_authors",
+                    "nodes": [
+                        {"step_id": "select_authors"},
+                        {"step_id": "select_books"},
+                        {"step_id": "plan_preview_batch"},
+                        {"step_id": "conflict_policy"},
+                        {"step_id": "final_summary_confirm"},
+                        {"step_id": "processing"},
+                    ],
+                    "edges": [
+                        {
+                            "from_step_id": "select_authors",
+                            "to_step_id": "select_books",
+                            "priority": 0,
+                            "when": {"bogus": []},
+                        },
+                        {
+                            "from_step_id": "select_books",
+                            "to_step_id": "plan_preview_batch",
+                            "priority": 0,
+                            "when": None,
+                        },
+                        {
+                            "from_step_id": "plan_preview_batch",
+                            "to_step_id": "conflict_policy",
+                            "priority": 0,
+                            "when": None,
+                        },
+                        {
+                            "from_step_id": "conflict_policy",
+                            "to_step_id": "final_summary_confirm",
+                            "priority": 0,
+                            "when": None,
+                        },
+                        {
+                            "from_step_id": "final_summary_confirm",
+                            "to_step_id": "processing",
+                            "priority": 0,
+                            "when": None,
+                        },
+                    ],
+                },
+            }
+        },
+    )
+
+    assert invalid_operator.status_code == 400
+    invalid_detail = invalid_operator.json()["error"]["details"][0]
+    assert invalid_detail["path"].startswith("$.definition.graph.edges")
+    assert invalid_detail["reason"] == "unsupported_operator"

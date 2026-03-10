@@ -11,9 +11,9 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
-from .errors import error_envelope
+from .errors import FinalizeError, error_envelope
 from .field_schema_validation import FieldSchemaValidationError
-from .flow_config_validation import normalize_flow_config
+from .flow_config_validation import normalize_flow_config, validate_flow_config_editor_boundary
 from .wizard_definition_model import (
     canonicalize_wizard_definition,
     validate_wizard_definition_constraints_v2,
@@ -215,6 +215,131 @@ def _engine_fs(engine: Any):
     return fs
 
 
+def _validate_editor_condition_shape(cond: Any, *, path: str) -> None:
+    if cond is None or isinstance(cond, bool):
+        return
+    if not isinstance(cond, dict):
+        raise FieldSchemaValidationError(
+            message="transition condition must be an object, bool, or null",
+            path=path,
+            reason="invalid_type",
+            meta={},
+        )
+
+    op_any = cond.get("op")
+    if op_any is None:
+        if "path" in cond and ("equals" in cond or "not_equals" in cond):
+            return
+        raise FieldSchemaValidationError(
+            message="unsupported transition operator",
+            path=path,
+            reason="unsupported_operator",
+            meta={},
+        )
+
+    if not isinstance(op_any, str) or not op_any:
+        raise FieldSchemaValidationError(
+            message="transition operator must be a non-empty string",
+            path=f"{path}.op",
+            reason="missing_or_invalid",
+            meta={},
+        )
+
+    if op_any in {"eq", "ne", "exists", "truthy"}:
+        return
+    if op_any in {"and", "or"}:
+        conds = cond.get("conds")
+        if not isinstance(conds, list):
+            raise FieldSchemaValidationError(
+                message="boolean transition operator requires conds[]",
+                path=f"{path}.conds",
+                reason="missing_required",
+                meta={"operator": op_any},
+            )
+        for index, item in enumerate(conds):
+            _validate_editor_condition_shape(item, path=f"{path}.conds[{index}]")
+        return
+    if op_any == "not":
+        _validate_editor_condition_shape(cond.get("cond"), path=f"{path}.cond")
+        return
+
+    raise FieldSchemaValidationError(
+        message="unsupported transition operator",
+        path=f"{path}.op",
+        reason="unsupported_operator",
+        meta={"operator": op_any},
+    )
+
+
+def _validate_v2_editor_only_rules(definition: Any) -> None:
+    if not isinstance(definition, dict) or definition.get("version") != 2:
+        return
+    graph = definition.get("graph")
+    edges = graph.get("edges") if isinstance(graph, dict) else None
+    if not isinstance(edges, list):
+        return
+    for index, edge in enumerate(edges):
+        if not isinstance(edge, dict):
+            continue
+        _validate_editor_condition_shape(
+            edge.get("when"),
+            path=f"$.definition.graph.edges[{index}].when",
+        )
+
+
+def _translate_v2_definition_error(err: FinalizeError) -> FieldSchemaValidationError:
+    message = str(err)
+    if message == "select_authors must be the first step":
+        return FieldSchemaValidationError(
+            message=message,
+            path="$.definition.graph.nodes[0].step_id",
+            reason="pinned_first",
+            meta={"step_id": "select_authors", "position": 0},
+        )
+    if message == "wizard_definition processing must be the terminal step":
+        return FieldSchemaValidationError(
+            message=message,
+            path="$.definition.graph.nodes",
+            reason="pinned_last",
+            meta={"step_id": "processing"},
+        )
+    if message.startswith("INVALID_CONDITION_PATH: "):
+        path_part = message.split(": ", 1)[1].split(" ", 1)[0]
+        return FieldSchemaValidationError(
+            message=message,
+            path="$.definition" + path_part[1:],
+            reason="unsupported_operator",
+            meta={},
+        )
+    if message.startswith("MISSING_PRIORITY: "):
+        return FieldSchemaValidationError(
+            message=message,
+            path="$.definition.graph.edges",
+            reason="missing_required",
+            meta={"field": "priority"},
+        )
+    if message.startswith("AMBIGUOUS_TRANSITION: "):
+        return FieldSchemaValidationError(
+            message=message,
+            path="$.definition.graph.edges",
+            reason="ambiguous_transition",
+            meta={},
+        )
+    if message.startswith("wizard_definition ordering violated: "):
+        return FieldSchemaValidationError(
+            message=message,
+            path="$.definition.graph.nodes",
+            reason="pinned_order",
+            meta={},
+        )
+    return FieldSchemaValidationError(
+        message=message,
+        path="$.definition",
+        reason="invalid_constraints",
+        meta={},
+    )
+
+
 def _get_flow_config(engine: Any) -> dict[str, Any]:
     from .editor_storage import get_flow_config_draft
 
@@ -228,13 +353,14 @@ def _set_flow_config(engine: Any, body: Any) -> dict[str, Any]:
 
     obj = _validate_wrapper(body=body, required_key="config", allowed_keys={"config"})
     cfg_any = obj.get("config")
-    cfg = put_flow_config_draft(_engine_fs(engine), cfg_any)
+    cfg = validate_flow_config_editor_boundary(cfg_any)
+    cfg = put_flow_config_draft(_engine_fs(engine), cfg)
     return {"config": cfg}
 
 
 def _validate_flow_config(engine: Any, body: Any) -> dict[str, Any]:
     obj = _validate_wrapper(body=body, required_key="config", allowed_keys={"config"})
-    cfg = normalize_flow_config(obj.get("config"))
+    cfg = validate_flow_config_editor_boundary(obj.get("config"))
     return {"config": cfg}
 
 
@@ -417,38 +543,45 @@ def _validate_wizard_definition(engine: Any, body: Any) -> dict[str, Any]:
         allowed_keys={"definition"},
     )
     wd_any = obj.get("definition")
-    validate_wizard_definition_structure(wd_any)
-    wd_canon = canonicalize_wizard_definition(wd_any)
-
-    if not isinstance(wd_canon, dict):
-        raise FieldSchemaValidationError(
-            message="definition must be an object",
-            path="$.definition",
-            reason="invalid_type",
-            meta={},
-        )
-
-    ver = wd_canon.get("version")
-    if ver not in {2, 3}:
-        raise FieldSchemaValidationError(
-            message="definition must be WizardDefinition v2 or v3",
-            path="$.definition.version",
-            reason="invalid_enum",
-            meta={"allowed": [2, 3], "value": ver},
-        )
-
-    if ver == 3:
-        from .dsl.primitive_registry_storage import load_or_bootstrap_primitive_registry
-        from .dsl.wizard_definition_v3_model import (
-            validate_wizard_definition_v3_against_registry,
-        )
-
-        registry = load_or_bootstrap_primitive_registry(_engine_fs(engine))
-        validate_wizard_definition_v3_against_registry(wd_canon, registry)
-        return {"definition": wd_canon}
 
     try:
+        _validate_v2_editor_only_rules(wd_any)
+        validate_wizard_definition_structure(wd_any)
+        wd_canon = canonicalize_wizard_definition(wd_any)
+
+        if not isinstance(wd_canon, dict):
+            raise FieldSchemaValidationError(
+                message="definition must be an object",
+                path="$.definition",
+                reason="invalid_type",
+                meta={},
+            )
+
+        ver = wd_canon.get("version")
+        if ver not in {2, 3}:
+            raise FieldSchemaValidationError(
+                message="definition must be WizardDefinition v2 or v3",
+                path="$.definition.version",
+                reason="invalid_enum",
+                meta={"allowed": [2, 3], "value": ver},
+            )
+
+        if ver == 3:
+            from .dsl.primitive_registry_storage import load_or_bootstrap_primitive_registry
+            from .dsl.wizard_definition_v3_model import (
+                validate_wizard_definition_v3_against_registry,
+            )
+
+            registry = load_or_bootstrap_primitive_registry(_engine_fs(engine))
+            validate_wizard_definition_v3_against_registry(wd_canon, registry)
+            return {"definition": wd_canon}
+
         validate_wizard_definition_constraints_v2(wd_canon)
+        return {"definition": wd_canon}
+    except FinalizeError as err:
+        raise _translate_v2_definition_error(err) from err
+    except FieldSchemaValidationError:
+        raise
     except Exception as err:
         raise FieldSchemaValidationError(
             message=str(err),
@@ -456,7 +589,6 @@ def _validate_wizard_definition(engine: Any, body: Any) -> dict[str, Any]:
             reason="invalid_constraints",
             meta={},
         ) from err
-    return {"definition": wd_canon}
 
 
 def _reset_wizard_definition(engine: Any) -> dict[str, Any]:
