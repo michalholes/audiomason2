@@ -3,6 +3,7 @@ from __future__ import annotations
 # ruff: noqa: E402
 import argparse
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -29,6 +30,10 @@ from patchhub.zip_commit_message import (
 from patchhub.zip_patch_subset import build_zip_patch_manifest
 
 PATCH_DIR_NAME = "patches"
+
+PATCH_BASENAME_RE = re.compile(r"^issue_(?P<issue>\d+)_v(?P<version>[1-9]\d*)\.zip$")
+
+
 COMMIT_CFG = ZipCommitConfig(True, "COMMIT_MESSAGE.txt", 4096, 200)
 ISSUE_CFG = ZipIssueConfig(True, "ISSUE_NUMBER.txt", 128, 200)
 MANUAL_ONLY = [
@@ -124,6 +129,19 @@ def _resolve_patch_path(repo_root: Path, patch_arg: str) -> tuple[Path, bool]:
     except Exception as exc:
         raise ValidationError(f"patch_path_resolution_failed:{exc}") from exc
     return resolved, in_patch_dir
+
+
+def _validate_patch_basename(zpath: Path, issue_id: str) -> RuleResult:
+    match = PATCH_BASENAME_RE.fullmatch(zpath.name)
+    if match is None:
+        return RuleResult("PATCH_BASENAME", "FAIL", f"invalid_patch_basename:{zpath.name}")
+    if match.group("issue") != issue_id:
+        return RuleResult(
+            "PATCH_BASENAME",
+            "FAIL",
+            f"issue_mismatch:expected={issue_id}:actual={match.group('issue')}:name={zpath.name}",
+        )
+    return RuleResult("PATCH_BASENAME", "PASS", zpath.name)
 
 
 def _read_zip_non_dirs(zpath: Path) -> tuple[list[str], dict[str, bytes]]:
@@ -366,6 +384,8 @@ def run_validation(args: argparse.Namespace) -> tuple[int, list[RuleResult]]:
     if not zpath.exists() or not zpath.is_file():
         results.append(RuleResult("PATCH_LOCATION", "FAIL", "patch_not_found"))
         return 1, results
+
+    results.append(_validate_patch_basename(zpath, str(args.issue_id)))
 
     member_results, members, decision_paths = _build_members(
         zpath=zpath,

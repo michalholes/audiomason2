@@ -12,7 +12,7 @@ import pytest
 COMMIT_MESSAGE = "Add PM patch validator tool"
 CONFIG_REL = Path("scripts/am_patch/am_patch.toml")
 SCRIPT_REL = Path("scripts/check_patch_pm.py")
-PATCH_REL = Path("patches/test_patch.zip")
+PATCH_REL = Path("patches/issue_223_v1.zip")
 
 
 def _repo_root() -> Path:
@@ -76,8 +76,9 @@ def _write_patch_zip(
     include_commit: bool = True,
     include_issue: bool = True,
     extra_files: dict[str, bytes] | None = None,
+    patch_rel: Path = PATCH_REL,
 ) -> Path:
-    patch_path = repo_root / PATCH_REL
+    patch_path = repo_root / patch_rel
     patch_path.parent.mkdir(parents=True, exist_ok=True)
     with ZipFile(patch_path, "w", compression=ZIP_DEFLATED) as zf:
         if include_commit:
@@ -92,7 +93,10 @@ def _write_patch_zip(
 
 
 def _run_validator(
-    repo_root: Path, issue_id: str, commit_message: str
+    repo_root: Path,
+    issue_id: str,
+    commit_message: str,
+    patch_rel: Path = PATCH_REL,
 ) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [
@@ -100,7 +104,7 @@ def _run_validator(
             str(_script_path()),
             issue_id,
             commit_message,
-            str(PATCH_REL),
+            str(patch_rel),
             "--repo-root",
             str(repo_root),
             "--config",
@@ -129,6 +133,59 @@ def test_valid_patch_passes(tmp_path: Path) -> None:
     assert "RESULT: PASS" in proc.stdout
     assert "RULE PER_FILE_LAYOUT: PASS" in proc.stdout
     assert "RULE GIT_APPLY_CHECK:patches/per_file/docs__readme.txt.patch: PASS" in proc.stdout
+
+
+def test_patch_basename_failure_is_reported(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    _write(repo_root / "docs/readme.txt", "old\n")
+    patch = _git_patch("docs/readme.txt", "old\n", "new\n")
+    _write_patch_zip(
+        repo_root,
+        issue_id="223",
+        commit_message=COMMIT_MESSAGE,
+        members={"patches/per_file/docs__readme.txt.patch": patch},
+        patch_rel=Path("patches/test_patch.zip"),
+    )
+
+    proc = _run_validator(repo_root, "223", COMMIT_MESSAGE, Path("patches/test_patch.zip"))
+    assert proc.returncode == 1
+    assert "RULE PATCH_BASENAME: FAIL" in proc.stdout
+
+
+def test_patch_basename_issue_mismatch_is_reported(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    _write(repo_root / "docs/readme.txt", "old\n")
+    patch = _git_patch("docs/readme.txt", "old\n", "new\n")
+    _write_patch_zip(
+        repo_root,
+        issue_id="223",
+        commit_message=COMMIT_MESSAGE,
+        members={"patches/per_file/docs__readme.txt.patch": patch},
+        patch_rel=Path("patches/issue_999_v1.zip"),
+    )
+
+    proc = _run_validator(repo_root, "223", COMMIT_MESSAGE, Path("patches/issue_999_v1.zip"))
+    assert proc.returncode == 1
+    assert "RULE PATCH_BASENAME: FAIL" in proc.stdout
+    assert "issue_mismatch:expected=223:actual=999:name=issue_999_v1.zip" in proc.stdout
+
+
+def test_patch_basename_version_zero_is_reported(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    _write(repo_root / "docs/readme.txt", "old\n")
+    patch = _git_patch("docs/readme.txt", "old\n", "new\n")
+    _write_patch_zip(
+        repo_root,
+        issue_id="223",
+        commit_message=COMMIT_MESSAGE,
+        members={"patches/per_file/docs__readme.txt.patch": patch},
+        patch_rel=Path("patches/issue_223_v0.zip"),
+    )
+
+    proc = _run_validator(repo_root, "223", COMMIT_MESSAGE, Path("patches/issue_223_v0.zip"))
+    assert proc.returncode == 1
+    assert "RULE PATCH_BASENAME: FAIL" in proc.stdout
+    assert "invalid_patch_basename:issue_223_v0.zip" in proc.stdout
 
 
 def test_missing_commit_message_fails(tmp_path: Path) -> None:

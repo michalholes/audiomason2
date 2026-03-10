@@ -28,6 +28,7 @@ Text mode prints a deterministic rule-by-rule report beginning with
 The validator covers only machine-verifiable PM requirements:
 
 - patch path under `patches/`
+- patch zip basename `issue_<ISSUE>_v<N>.zip`
 - `.zip` artifact shape
 - `COMMIT_MESSAGE.txt`
 - `ISSUE_NUMBER.txt`
