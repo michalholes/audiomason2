@@ -160,6 +160,7 @@ dont_touch_paths = [
   "scripts/patchhub/static/patchhub_bootstrap.js",
   "tsconfig.json",
   "biome.json",
+  "pytest.ini",
   "pyproject.toml",
   "scripts/am_patch/am_patch.toml",
   ".github/workflows/ci.yml"
