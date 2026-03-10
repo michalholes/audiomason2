@@ -181,10 +181,10 @@ class TestPatchhubUiSnapshot(unittest.TestCase):
 
         core = _DummyCore()
         with (
-            patch("patchhub.asgi.route_ui_snapshot.job_json_signature", return_value=(0, 0)),
+            patch("patchhub.asgi.route_ui_snapshot.legacy_jobs_signature", return_value=(0, 0)),
             patch("patchhub.asgi.route_ui_snapshot.runs_signature", return_value=(0, 0, 0)),
             patch("patchhub.asgi.route_ui_snapshot.canceled_runs_signature", return_value=(0, 0)),
-            patch("patchhub.asgi.route_ui_snapshot.list_job_jsons", return_value=[]),
+            patch("patchhub.asgi.route_ui_snapshot.list_legacy_job_jsons", return_value=[]),
             patch(
                 "patchhub.asgi.route_ui_snapshot.list_workspaces",
                 return_value=("workspaces:s0", []),

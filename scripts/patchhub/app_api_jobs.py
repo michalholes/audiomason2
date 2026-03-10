@@ -13,7 +13,6 @@ from .command_parse import (
 )
 from .issue_alloc import allocate_next_issue_id
 from .job_ids import new_job_id
-from .job_store import list_job_jsons, load_job_record
 from .models import (
     JobMode,
     JobRecord,
@@ -22,6 +21,8 @@ from .models import (
     job_to_list_item_json,
 )
 from .run_applied_files import collect_job_applied_files
+from .web_jobs_db import WebJobsDatabase
+from .web_jobs_legacy_fs import list_legacy_job_jsons, load_legacy_job_record
 from .zip_commit_message import (
     ZipCommitConfig,
     ZipIssueConfig,
@@ -123,12 +124,24 @@ def _job_jsonl_path_from_fields(self, job_id: str, mode: str, issue_id: str) -> 
     return d / "am_patch_finalize.jsonl"
 
 
+def _legacy_jobs_root(self) -> Path | None:
+    source = getattr(self, "jobs_root", None)
+    if isinstance(source, Path):
+        return source
+    return None
+
+
 def _load_job_from_disk(self, job_id: str) -> JobRecord | None:
     job_id = str(job_id)
     if not job_id:
         return None
-    source = getattr(self, "web_jobs_db", getattr(self, "jobs_root", None))
-    return load_job_record(source, job_id)
+    source = getattr(self, "web_jobs_db", None)
+    if isinstance(source, WebJobsDatabase):
+        return source.load_job_record(job_id)
+    jobs_root = _legacy_jobs_root(self)
+    if jobs_root is None:
+        return None
+    return load_legacy_job_record(jobs_root, job_id)
 
 
 def _job_jsonl_path(self, job: JobRecord) -> Path:
@@ -365,8 +378,12 @@ def api_jobs_enqueue(self, body: dict[str, Any]) -> tuple[int, bytes]:
 def api_jobs_list(self) -> tuple[int, bytes]:
     mem = self.queue.list_jobs()
     mem_by_id = {j.job_id: j for j in mem}
-    source = getattr(self, "web_jobs_db", getattr(self, "jobs_root", None))
-    disk_raw = list_job_jsons(source, limit=200)
+    source = getattr(self, "web_jobs_db", None)
+    if isinstance(source, WebJobsDatabase):
+        disk_raw = source.list_job_jsons(limit=200)
+    else:
+        jobs_root = _legacy_jobs_root(self)
+        disk_raw = [] if jobs_root is None else list_legacy_job_jsons(jobs_root, limit=200)
     disk: list[JobRecord] = []
     for r in disk_raw:
         jid = str(r.get("job_id", ""))

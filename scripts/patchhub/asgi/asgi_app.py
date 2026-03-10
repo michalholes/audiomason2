@@ -195,34 +195,23 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
 
     @app.get("/api/fs/download")
     async def api_fs_download(path: str = "") -> Response:
-        if core.virtual_jobs_fs.handles(path):
-            download = core.virtual_jobs_fs.download(path)
-            if download is None:
-                data = json.dumps({"ok": False, "error": "Not found"}, ensure_ascii=True).encode(
-                    "utf-8"
-                )
-                return Response(content=data, status_code=404, media_type="application/json")
-            headers = {"Content-Disposition": f'attachment; filename="{download.filename}"'}
-            return Response(content=download.data, media_type=download.media_type, headers=headers)
-
-        def _resolve_download_sync(path: str) -> Path:
-            return core.jail.resolve_rel(path)
-
-        try:
-            p = await to_thread(_resolve_download_sync, path)
-        except Exception as e:
-            data = json.dumps({"ok": False, "error": str(e)}, ensure_ascii=True).encode("utf-8")
-            return Response(content=data, status_code=400, media_type="application/json")
-
-        def _exists_file_sync(p: Path) -> bool:
-            return p.exists() and p.is_file()
-
-        if not await to_thread(_exists_file_sync, p):
-            data = json.dumps({"ok": False, "error": "Not found"}, ensure_ascii=True).encode(
-                "utf-8"
+        result = await to_thread(core.api_fs_download, path)
+        if isinstance(result, tuple):
+            status, data = result
+            return _json_bytes_response(status, data)
+        headers = {"Content-Disposition": f'attachment; filename="{result.filename}"'}
+        if result.path is not None:
+            return FileResponse(
+                result.path,
+                media_type=result.media_type,
+                filename=result.filename,
+                headers=headers,
             )
-            return Response(content=data, status_code=404, media_type="application/json")
-        return FileResponse(p, media_type=_guess_content_type(p), filename=p.name)
+        return Response(
+            content=result.data or b"",
+            media_type=result.media_type,
+            headers=headers,
+        )
 
     @app.get("/api/runs")
     async def api_runs(request: Request) -> Response:
@@ -420,9 +409,7 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
 
         from hashlib import sha1
 
-        from patchhub.job_store import job_json_signature, list_job_jsons
-
-        disk_sig = await to_thread(job_json_signature, core.web_jobs_db)
+        disk_sig = await to_thread(core.web_jobs_db.jobs_signature)
         mem_parts: list[str] = []
         for j in sorted(mem, key=lambda x: str(getattr(x, "job_id", ""))):
             jid = str(getattr(j, "job_id", ""))
@@ -448,7 +435,7 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
         def _load_disk_jobs_sync(mem_by_id: dict[str, object]) -> list[Any]:
             from datetime import UTC, datetime
 
-            disk_raw = list_job_jsons(core.web_jobs_db, limit=200)
+            disk_raw = core.web_jobs_db.list_job_jsons(limit=200)
             disk: list[Any] = []
             for r in disk_raw:
                 jid = str(r.get("job_id", ""))
@@ -496,10 +483,8 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
 
         from hashlib import sha1
 
-        from patchhub.job_store import job_json_signature
-
         mem = await core.queue.list_jobs()
-        disk_sig = await to_thread(job_json_signature, core.web_jobs_db)
+        disk_sig = await to_thread(core.web_jobs_db.jobs_signature)
 
         mem_parts: list[str] = []
         for j in sorted(mem, key=lambda x: str(getattr(x, "job_id", ""))):

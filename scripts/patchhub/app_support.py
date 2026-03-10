@@ -7,9 +7,9 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, cast
 
-from .job_store import list_job_jsons
 from .models import RunEntry
 from .web_jobs_db import WebJobsDatabase
+from .web_jobs_legacy_fs import list_legacy_job_jsons
 
 
 def _json_bytes(obj: Any, status: int = 200) -> tuple[int, bytes]:
@@ -339,7 +339,11 @@ def _jobs_source_path(source: WebJobsDatabase | Path) -> WebJobsDatabase | Path:
 
 
 def canceled_runs_signature(source: WebJobsDatabase | Path) -> tuple[int, int]:
-    rows = list_job_jsons(_jobs_source_path(source), limit=1000000)
+    source = _jobs_source_path(source)
+    if isinstance(source, WebJobsDatabase):
+        rows = source.list_job_jsons(limit=1000000)
+    else:
+        rows = list_legacy_job_jsons(Path(source), limit=1000000)
     canceled = [row for row in rows if str(row.get("status", "")) == "canceled"]
     max_rev = 0
     for row in canceled:
@@ -353,7 +357,11 @@ def _iter_canceled_runs(source: WebJobsDatabase | Path) -> list[RunEntry]:
     source = _jobs_source_path(source)
     if isinstance(source, WebJobsDatabase):
         event_name_fn = source.legacy_event_filename
-    for raw in list_job_jsons(source, limit=1000000):
+    if isinstance(source, WebJobsDatabase):
+        rows = source.list_job_jsons(limit=1000000)
+    else:
+        rows = list_legacy_job_jsons(Path(source), limit=1000000)
+    for raw in rows:
         if str(raw.get("status", "")) != "canceled":
             continue
         issue_s = str(raw.get("issue_id", ""))

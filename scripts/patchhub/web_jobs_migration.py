@@ -7,12 +7,8 @@ from pathlib import Path
 from typing import Any
 
 from .models import JobRecord, coerce_job_mode, coerce_job_status
-from .web_jobs_db import (
-    WebJobsDatabase,
-    iter_legacy_job_dirs,
-    load_web_jobs_db_config,
-    read_legacy_job_snapshot,
-)
+from .web_jobs_db import WebJobsDatabase, load_web_jobs_db_config
+from .web_jobs_legacy_fs import iter_legacy_job_dirs, read_legacy_job_snapshot
 
 
 def _repo_root() -> Path:

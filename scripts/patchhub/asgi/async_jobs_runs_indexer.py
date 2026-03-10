@@ -15,7 +15,6 @@ from typing import Any
 
 from patchhub.app_support import compute_success_archive_rel
 from patchhub.indexing import compute_stats, iter_runs_with_signature
-from patchhub.job_store import list_job_jsons_and_signature
 from patchhub.models import (
     RunEntry,
     job_to_list_item_json,
@@ -279,7 +278,8 @@ class AsyncJobsRunsIndexer:
         running = int(getattr(qstate, "running", 0) or 0) if qstate is not None else 0
 
         def _sync_build() -> IndexerSnapshot:
-            disk_sig, disk_raw = list_job_jsons_and_signature(self._core.web_jobs_db, limit=200)
+            disk_sig = self._core.web_jobs_db.jobs_signature()
+            disk_raw = self._core.web_jobs_db.list_job_jsons(limit=200)
             jobs_sig = _etag_sig_jobs(disk_sig=disk_sig, mem=mem)
 
             mem_by_id = {str(getattr(j, "job_id", "")) for j in mem}

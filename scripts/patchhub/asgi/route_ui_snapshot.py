@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from hashlib import sha1
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from fastapi import Request
@@ -9,8 +10,12 @@ from fastapi.responses import Response
 
 from patchhub.app_support import canceled_runs_signature
 from patchhub.indexing import iter_runs, runs_signature
-from patchhub.job_store import job_json_signature, list_job_jsons
 from patchhub.models import job_to_list_item_json, workspace_to_list_item_json
+from patchhub.web_jobs_db import WebJobsDatabase
+from patchhub.web_jobs_legacy_fs import (
+    legacy_jobs_signature,
+    list_legacy_job_jsons,
+)
 from patchhub.workspace_inventory import list_workspaces
 
 from .async_jobs_runs_indexer import build_header_sig, build_header_summary
@@ -29,6 +34,13 @@ def _etag_matches(if_none_match: str | None, etag_value: str) -> bool:
     if if_none_match is None:
         return False
     return str(if_none_match).strip() == etag_value
+
+
+def _legacy_jobs_root(core: AsyncAppCore) -> Path | None:
+    source = getattr(core, "jobs_root", None)
+    if isinstance(source, Path):
+        return source
+    return None
 
 
 def _jobs_sig(*, disk_sig: tuple[int, int], mem: list[Any]) -> str:
@@ -58,14 +70,24 @@ async def _legacy_snapshot_payload(core: AsyncAppCore) -> dict[str, Any]:
     queued = int(getattr(qstate, "queued", 0) or 0) if qstate is not None else 0
     running = int(getattr(qstate, "running", 0) or 0) if qstate is not None else 0
 
-    job_source = getattr(core, "web_jobs_db", getattr(core, "jobs_root", None))
-    disk_sig = await to_thread(job_json_signature, job_source)
+    job_source = getattr(core, "web_jobs_db", None)
+    if isinstance(job_source, WebJobsDatabase):
+        disk_sig = await to_thread(job_source.jobs_signature)
+    else:
+        jobs_root = _legacy_jobs_root(core)
+        disk_sig = (
+            (0, 0) if jobs_root is None else await to_thread(legacy_jobs_signature, jobs_root)
+        )
     mem = await core.queue.list_jobs()
     mem_by_id = {str(j.job_id): j for j in mem}
     jobs_sig = _jobs_sig(disk_sig=disk_sig, mem=mem)
 
     def _load_disk_jobs_sync() -> list[Any]:
-        disk_raw = list_job_jsons(job_source, limit=200)
+        if isinstance(job_source, WebJobsDatabase):
+            disk_raw = job_source.list_job_jsons(limit=200)
+        else:
+            jobs_root = _legacy_jobs_root(core)
+            disk_raw = [] if jobs_root is None else list_legacy_job_jsons(jobs_root, limit=200)
         disk_jobs: list[Any] = []
         for item in disk_raw:
             jid = str(item.get("job_id", ""))
