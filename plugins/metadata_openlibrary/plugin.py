@@ -20,6 +20,7 @@ class OpenLibraryPlugin:
 
     SEARCH_URL = "https://openlibrary.org/search.json"
     COVERS_URL = "https://covers.openlibrary.org/b/id"
+    GOOGLE_BOOKS_API_URL = "https://www.googleapis.com/books/v1/volumes"
 
     DEFAULT_TIMEOUT_SECONDS = 10.0
     DEFAULT_MAX_RESPONSE_BYTES = 2 * 1024 * 1024
@@ -70,15 +71,33 @@ class OpenLibraryPlugin:
             raise MetadataError("Need author or title")
         docs = await self._search_docs(author=author, title=title, limit=20)
         match = self._best_book_match(author=author, title=title, docs=docs)
-        if match is None:
-            return {"valid": False, "canonical": None, "suggestion": None}
-        doc, author_name = match
-        canonical = {"author": author_name, "title": str(doc.get("title") or "")}
-        if self._same_text(author, canonical["author"]) and self._same_text(
-            title, canonical["title"]
-        ):
-            return {"valid": True, "canonical": canonical, "suggestion": None}
-        return {"valid": False, "canonical": None, "suggestion": canonical}
+
+        author_candidate = author.strip()
+        title_candidate = title.strip()
+        if match is not None:
+            doc, author_name = match
+            author_candidate = author_name
+            title_candidate = str(doc.get("title") or "").strip()
+            canonical = {"author": author_candidate, "title": title_candidate}
+            if self._same_text(author, canonical["author"]) and self._same_text(
+                title, canonical["title"]
+            ):
+                return {"valid": True, "canonical": canonical, "suggestion": None}
+
+        googlebooks_title = await self._best_googlebooks_title(
+            author=author_candidate or author,
+            title=title,
+        )
+        if googlebooks_title and not self._same_text(title, googlebooks_title):
+            title_candidate = googlebooks_title
+
+        suggestion = self._build_book_suggestion(
+            author=author,
+            title=title,
+            author_candidate=author_candidate,
+            title_candidate=title_candidate,
+        )
+        return {"valid": False, "canonical": None, "suggestion": suggestion}
 
     async def lookup_book(self, author: str, title: str) -> dict[str, Any]:
         if not self._normalize_text(author) and not self._normalize_text(title):
@@ -190,6 +209,119 @@ class OpenLibraryPlugin:
         if query_norm in candidate_norm or candidate_norm in query_norm:
             return 2
         return 3
+
+    def _build_book_suggestion(
+        self,
+        *,
+        author: str,
+        title: str,
+        author_candidate: str,
+        title_candidate: str,
+    ) -> dict[str, str] | None:
+        author_value = author.strip()
+        title_value = title.strip()
+        author_changed = self._normalize_text(author_candidate) and not self._same_text(
+            author_value,
+            author_candidate,
+        )
+        title_changed = self._normalize_text(title_candidate) and not self._same_text(
+            title_value,
+            title_candidate,
+        )
+        if not author_changed and not title_changed:
+            return None
+        return {
+            "author": author_candidate if author_changed else author_value,
+            "title": title_candidate if title_changed else title_value,
+        }
+
+    async def _best_googlebooks_title(self, *, author: str, title: str) -> str | None:
+        if not self._normalize_text(title):
+            return None
+        items = await self._search_googlebooks_items(author=author, title=title, limit=20)
+        if not items:
+            return None
+        match = self._best_googlebooks_match(author=author, title=title, items=items)
+        return None if match is None else match[1]
+
+    async def _search_googlebooks_items(
+        self,
+        *,
+        author: str = "",
+        title: str = "",
+        limit: int = 1,
+    ) -> list[dict[str, Any]]:
+        query_parts: list[str] = []
+        if author:
+            query_parts.append(f"inauthor:{author}")
+        if title:
+            query_parts.append(f"intitle:{title}")
+        if not query_parts:
+            return []
+        data = await self._googlebooks_request(
+            query="+".join(query_parts),
+            limit=limit,
+        )
+        items = data.get("items")
+        return [item for item in items if isinstance(item, dict)] if isinstance(items, list) else []
+
+    async def _googlebooks_request(self, *, query: str, limit: int) -> dict[str, Any]:
+        url = f"{self.GOOGLE_BOOKS_API_URL}?q={quote_plus(query)}&maxResults={limit}"
+        return await asyncio.to_thread(
+            partial(
+                self._http_get_json,
+                url=url,
+                timeout_seconds=self.timeout_seconds,
+                max_response_bytes=self.max_response_bytes,
+            )
+        )
+
+    def _best_googlebooks_match(
+        self,
+        *,
+        author: str,
+        title: str,
+        items: list[dict[str, Any]],
+    ) -> tuple[str | None, str] | None:
+        author_norm = self._normalize_text(author)
+        title_norm = self._normalize_text(title)
+        best: tuple[tuple[Any, ...], str | None, str] | None = None
+        for item in items:
+            volume_info = item.get("volumeInfo")
+            if not isinstance(volume_info, dict):
+                continue
+            title_value = str(volume_info.get("title") or "").strip()
+            if not self._normalize_text(title_value):
+                continue
+            raw_authors = volume_info.get("authors")
+            authors = [str(raw_name or "").strip() for raw_name in raw_authors or []]
+            authors = [candidate for candidate in authors if self._normalize_text(candidate)]
+            author_name = (
+                min(
+                    authors,
+                    key=lambda candidate: self._candidate_rank(author_norm, candidate),
+                )
+                if authors
+                else None
+            )
+            title_rank = self._candidate_rank(title_norm, title_value)
+            author_rank = (
+                self._candidate_rank(author_norm, author_name)
+                if author_name is not None
+                else (4, 0, "", "")
+            )
+            rank = (
+                title_rank[0],
+                title_rank[1],
+                author_rank[0],
+                author_rank[1],
+                title_rank[2],
+                author_rank[2],
+                str(item.get("id") or ""),
+            )
+            if best is None or rank < best[0]:
+                best = (rank, author_name, title_value)
+        return None if best is None else (best[1], best[2])
 
     @classmethod
     def _extract_metadata(cls, doc: dict[str, Any]) -> dict[str, Any]:

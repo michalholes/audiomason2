@@ -9,14 +9,24 @@ from plugins.metadata_openlibrary.plugin import OpenLibraryPlugin
 
 
 class _FakeOpenLibrary(OpenLibraryPlugin):
-    def __init__(self, docs: list[dict[str, Any]]) -> None:
+    def __init__(
+        self,
+        docs: list[dict[str, Any]],
+        googlebooks_items: list[dict[str, Any]] | None = None,
+    ) -> None:
         super().__init__()
         self.docs = docs
+        self.googlebooks_items = googlebooks_items or []
         self.urls: list[str] = []
+        self.googlebooks_queries: list[tuple[str, int]] = []
 
     async def _api_request(self, url: str) -> dict[str, Any]:
         self.urls.append(url)
         return {"docs": self.docs}
+
+    async def _googlebooks_request(self, *, query: str, limit: int) -> dict[str, Any]:
+        self.googlebooks_queries.append((query, limit))
+        return {"items": self.googlebooks_items}
 
 
 def test_validate_author_is_diacritics_safe_and_suppresses_noop_suggestion() -> None:
@@ -119,3 +129,44 @@ def test_validate_book_returns_deterministic_suggestion() -> None:
             "title": "Harry Potter and the Philosopher's Stone",
         },
     }
+
+
+def test_validate_book_uses_googlebooks_title_fallback_when_openlibrary_misses() -> None:
+    plugin = _FakeOpenLibrary(
+        docs=[],
+        googlebooks_items=[
+            {
+                "id": "gb2",
+                "volumeInfo": {
+                    "title": "Harry Potter and the Chamber of Secrets",
+                    "authors": ["J. K. Rowling"],
+                },
+            },
+            {
+                "id": "gb1",
+                "volumeInfo": {
+                    "title": "Harry Potter and the Philosopher's Stone",
+                    "authors": ["J. K. Rowling"],
+                },
+            },
+        ],
+    )
+
+    result = asyncio.run(
+        plugin.validate_book("J. K. Rowling", "Harry Potter and the Philosopher Stone")
+    )
+
+    assert result == {
+        "valid": False,
+        "canonical": None,
+        "suggestion": {
+            "author": "J. K. Rowling",
+            "title": "Harry Potter and the Philosopher's Stone",
+        },
+    }
+    assert plugin.googlebooks_queries == [
+        (
+            "inauthor:J. K. Rowling+intitle:Harry Potter and the Philosopher Stone",
+            20,
+        )
+    ]
