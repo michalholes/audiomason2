@@ -28,6 +28,17 @@ def test_build_job_requests_adds_explicit_phase2_capabilities() -> None:
             "conflict_policy": {"mode": "overwrite"},
             "delete_source_policy": {"enabled": True},
         },
+        session_authority={
+            "book_meta": {
+                "book:1": {
+                    "author_label": "Canonical Author",
+                    "book_label": "Canonical Book",
+                }
+            },
+            "phase2_inputs": {
+                "publish_policy": {"target_root": "outbox"},
+            },
+        },
     )
 
     action = doc["actions"][0]
@@ -48,10 +59,11 @@ def test_build_job_requests_adds_explicit_phase2_capabilities() -> None:
         "album_artist": "author",
     }
     assert capabilities[2]["values"] == {
-        "title": "Book",
-        "artist": "Author",
-        "album": "Book",
-        "album_artist": "Author",
+        "title": "Canonical Book",
+        "artist": "Canonical Author",
+        "album": "Canonical Book",
+        "album_artist": "Canonical Author",
     }
+    assert capabilities[3]["root"] == "outbox"
     assert capabilities[3]["overwrite"] is True
     assert doc["plan_fingerprint"]

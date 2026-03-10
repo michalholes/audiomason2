@@ -27,8 +27,17 @@ def _split_source_relative_path(source_relative_path: str) -> tuple[str, str]:
     return parts[0], parts[-1]
 
 
-def _tag_values_for_action(*, source_relative_path: str, inputs: dict[str, Any]) -> dict[str, str]:
-    author_name, book_title = _split_source_relative_path(source_relative_path)
+def _tag_values_for_action(
+    *,
+    source_relative_path: str,
+    inputs: dict[str, Any],
+    authority_meta: dict[str, Any] | None = None,
+) -> dict[str, str]:
+    authority = dict(authority_meta) if isinstance(authority_meta, dict) else {}
+    author_name = str(authority.get("author_label") or "")
+    book_title = str(authority.get("book_label") or "")
+    if not author_name or not book_title:
+        author_name, book_title = _split_source_relative_path(source_relative_path)
     values = {
         "title": book_title,
         "artist": author_name,
@@ -52,6 +61,7 @@ def _build_capabilities(
     target_root: str,
     target_relative_path: str,
     inputs: dict[str, Any],
+    authority_meta: dict[str, Any] | None = None,
 ) -> list[dict[str, Any]]:
     audio_processing = _policy_dict(inputs, "audio_processing")
     covers_policy = _policy_dict(inputs, "covers_policy")
@@ -63,6 +73,7 @@ def _build_capabilities(
     tag_values = _tag_values_for_action(
         source_relative_path=source_relative_path,
         inputs=inputs,
+        authority_meta=authority_meta,
     )
 
     capabilities: list[dict[str, Any]] = [
@@ -144,6 +155,7 @@ def build_job_requests(
     config_fingerprint: str,
     plan: dict[str, Any],
     inputs: dict[str, Any],
+    session_authority: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     mode = str(mode)
     if mode not in {"stage", "inplace"}:
@@ -167,7 +179,16 @@ def build_job_requests(
                 ]
 
     actions: list[dict[str, Any]] = []
-    target_root = "stage" if mode == "stage" else "outbox"
+    authority = dict(session_authority) if isinstance(session_authority, dict) else {}
+    phase2_inputs_any = authority.get("phase2_inputs")
+    phase2_inputs = dict(phase2_inputs_any) if isinstance(phase2_inputs_any, dict) else {}
+    merged_inputs = {**phase2_inputs, **inputs}
+    publish_policy = _policy_dict(merged_inputs, "publish_policy")
+    target_root = str(publish_policy.get("target_root") or "")
+    if target_root not in {"stage", "outbox"}:
+        target_root = "stage" if mode == "stage" else "outbox"
+    book_meta_any = authority.get("book_meta")
+    book_meta = dict(book_meta_any) if isinstance(book_meta_any, dict) else {}
     for it in selected_any:
         if not isinstance(it, dict):
             continue
@@ -189,7 +210,8 @@ def build_job_requests(
                     source_relative_path=src_rel,
                     target_root=target_root,
                     target_relative_path=tgt_rel,
-                    inputs=inputs,
+                    inputs=merged_inputs,
+                    authority_meta=book_meta.get(book_id),
                 ),
             }
         )
@@ -203,7 +225,7 @@ def build_job_requests(
         "mode": mode,
         "config_fingerprint": config_fingerprint,
         "plan_summary": plan.get("summary", {}),
-        "policies": dict(inputs),
+        "policies": dict(merged_inputs),
         "actions": actions,
         "diagnostics_context": dict(diagnostics_context),
         "plan_fingerprint": plan_fingerprint,
@@ -213,7 +235,7 @@ def build_job_requests(
         "mode": mode,
         "config_fingerprint": config_fingerprint,
         "plan_fingerprint": plan_fingerprint,
-        "policies_fingerprint": fingerprint_json(inputs),
+        "policies_fingerprint": fingerprint_json(merged_inputs),
     }
     doc["idempotency_key"] = fingerprint_json(idem_payload)
     return doc

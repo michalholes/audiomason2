@@ -162,6 +162,8 @@ def start_processing_impl(
         }
 
         policy_inputs = dict(state.get("answers") or {})
+        phase1_any = state.get("vars", {}).get("phase1")
+        phase1 = dict(phase1_any) if isinstance(phase1_any, dict) else {}
         job_requests = build_job_requests(
             session_id=session_id,
             root=src_root,
@@ -173,6 +175,7 @@ def start_processing_impl(
             ),
             plan=plan,
             inputs=policy_inputs,
+            session_authority=phase1,
         )
 
         job_path = f"{session_dir}/job_requests.json"
