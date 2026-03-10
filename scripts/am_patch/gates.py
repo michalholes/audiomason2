@@ -334,7 +334,11 @@ def run_ruff(
             return False
 
     logger.section("GATE: RUFF (initial)")
-    r = logger.run_logged(_cmd_py("ruff", python=py) + ["check", *targets], cwd=cwd)
+    r = logger.run_logged(
+        _cmd_py("ruff", python=py) + ["check", *targets],
+        cwd=cwd,
+        failure_dump_mode="diagnostic_detail",
+    )
     if r.returncode == 0:
         return True
     if not autofix:
@@ -400,7 +404,11 @@ def run_biome(
     for rel in existing:
         logger.line("gate_biome_file=" + rel)
 
-    r = logger.run_logged([*cmd0, *existing], cwd=cwd)
+    r = logger.run_logged(
+        [*cmd0, *existing],
+        cwd=cwd,
+        failure_dump_mode="diagnostic_detail",
+    )
     if r.returncode == 0:
         return True
     if not autofix:

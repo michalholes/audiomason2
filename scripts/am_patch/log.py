@@ -593,8 +593,26 @@ class Logger:
                 )
 
         if result.returncode != 0:
-            if failure_dump_mode not in ("bypass", "warn_detail"):
+            allowed_failure_dump_modes = (
+                "bypass",
+                "warn_detail",
+                "diagnostic_detail",
+            )
+            if failure_dump_mode not in allowed_failure_dump_modes:
                 raise ValueError(f"unknown failure_dump_mode: {failure_dump_mode}")
+
+            if failure_dump_mode == "diagnostic_detail":
+                if result.stdout:
+                    self.emit_warning_detail("[stdout]\n")
+                    self.emit_warning_detail(result.stdout)
+                    if not result.stdout.endswith("\n"):
+                        self.emit_warning_detail("\n")
+                if result.stderr:
+                    self.emit_warning_detail("[stderr]\n")
+                    self.emit_warning_detail(result.stderr)
+                    if not result.stderr.endswith("\n"):
+                        self.emit_warning_detail("\n")
+                return result
 
             bypass = failure_dump_mode == "bypass"
             sev: Severity = "ERROR" if bypass else "WARNING"
