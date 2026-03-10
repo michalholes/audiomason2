@@ -54,11 +54,34 @@ def _iter_mp3_outputs(work_path: Path) -> list[Path]:
     return [path for path in sorted(work_path.rglob("*.mp3")) if path.is_file()]
 
 
+def _metadata_authority_values(action: dict[str, Any]) -> dict[str, str]:
+    authority_any = action.get("authority")
+    authority = dict(authority_any) if isinstance(authority_any, dict) else {}
+    meta_any = authority.get("metadata_tags")
+    meta = dict(meta_any) if isinstance(meta_any, dict) else {}
+    values_any = meta.get("values")
+    values = dict(values_any) if isinstance(values_any, dict) else {}
+    return {
+        str(key): str(value)
+        for key, value in values.items()
+        if str(key) and isinstance(value, str) and value
+    }
+
+
 def _ordered_capabilities(action: dict[str, Any]) -> list[dict[str, Any]]:
     caps_any = action.get("capabilities")
     if not isinstance(caps_any, list):
         return []
-    caps = [cap for cap in caps_any if isinstance(cap, dict)]
+    caps = [dict(cap) for cap in caps_any if isinstance(cap, dict)]
+    authority_values = _metadata_authority_values(action)
+    for cap in caps:
+        if str(cap.get("kind") or "") != "metadata.tags":
+            continue
+        values_any = cap.get("values")
+        values = dict(values_any) if isinstance(values_any, dict) else {}
+        if values or not authority_values:
+            continue
+        cap["values"] = dict(authority_values)
     return sorted(caps, key=lambda item: (int(item.get("order") or 0), str(item.get("kind") or "")))
 
 

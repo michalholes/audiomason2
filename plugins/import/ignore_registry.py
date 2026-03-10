@@ -53,6 +53,13 @@ def _ensure_registry_shape(reg: Any) -> dict[str, Any]:
     }
 
 
+def _source_ref(record: dict[str, Any]) -> dict[str, str]:
+    return {
+        "root": str(record["source_root"]),
+        "relative_path": str(record["source_relative_path"]),
+    }
+
+
 def apply_successful_job_requests(fs: FileService, job_requests: dict[str, Any]) -> bool:
     """Update the ignore registry from successful import job_requests."""
 
@@ -62,15 +69,7 @@ def apply_successful_job_requests(fs: FileService, job_requests: dict[str, Any])
 
     reg = _ensure_registry_shape(load_registry(fs))
     merged = _normalize_sources(reg.get("sources"))
-    merged.extend(
-        [
-            {
-                "root": str(record["source_root"]),
-                "relative_path": str(record["source_relative_path"]),
-            }
-            for record in records
-        ]
-    )
+    merged.extend([_source_ref(record) for record in records])
     normalized = _normalize_sources(merged)
     if normalized == reg["sources"]:
         return False

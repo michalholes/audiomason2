@@ -94,7 +94,9 @@ class _FakeID3Tagger:
         wipe_before_write: bool = True,
         preserve_cover: bool = True,
     ) -> None:
-        self.calls.append(f"tags.write:{mp3_file.name}")
+        self.calls.append(
+            f"tags.write:{mp3_file.name}:{tags.get('title', '')}:{tags.get('artist', '')}"
+        )
         mp3_file.write_bytes(mp3_file.read_bytes() + b"|tags")
 
 
@@ -144,7 +146,7 @@ async def test_import_plugin_runs_phase2_process_contract_from_job_requests(tmp_
     calls: list[str] = []
     loader = _FakeLoader(calls)
 
-    source_dir = roots["inbox"] / "Author" / "Book"
+    source_dir = roots["inbox"] / "Shelf" / "RawBook"
     source_dir.mkdir(parents=True, exist_ok=True)
     (source_dir / "track01.m4a").write_bytes(b"audio")
     (source_dir / "cover.jpg").write_bytes(b"cover")
@@ -162,21 +164,41 @@ async def test_import_plugin_runs_phase2_process_contract_from_job_requests(tmp_
             {
                 "type": "import.book",
                 "book_id": "book:1",
-                "source": {"root": "inbox", "relative_path": "Author/Book"},
-                "target": {"root": "stage", "relative_path": "Author/Book"},
+                "source": {"root": "inbox", "relative_path": "Shelf/RawBook"},
+                "target": {"root": "stage", "relative_path": "Published/Canonical"},
+                "authority": {
+                    "book": {
+                        "author_label": "Canonical Author",
+                        "book_label": "Canonical Book",
+                    },
+                    "metadata_tags": {
+                        "field_map": {
+                            "title": "book_title",
+                            "artist": "author",
+                        },
+                        "values": {
+                            "title": "Canonical Book",
+                            "artist": "Canonical Author",
+                        },
+                    },
+                    "publish": {
+                        "root": "stage",
+                        "relative_path": "Published/Canonical",
+                    },
+                },
                 "capabilities": [
                     {"kind": "audio.import", "order": 10, "options": {}},
                     {"kind": "cover.embed", "order": 20, "mode": "file"},
                     {
                         "kind": "metadata.tags",
                         "order": 30,
-                        "values": {"title": "Book", "artist": "Author"},
+                        "values": {},
                     },
                     {
                         "kind": "publish.write",
                         "order": 40,
                         "root": "stage",
-                        "relative_path": "Author/Book",
+                        "relative_path": "Published/Canonical",
                         "overwrite": True,
                     },
                 ],
@@ -191,7 +213,7 @@ async def test_import_plugin_runs_phase2_process_contract_from_job_requests(tmp_
         plugin_loader=loader,
     )
 
-    output_file = roots["stage"] / "Author" / "Book" / "track01.mp3"
+    output_file = roots["stage"] / "Published" / "Canonical" / "track01.mp3"
     assert output_file.exists()
     assert output_file.read_bytes().endswith(b"|cover|tags")
     assert calls == [
@@ -201,5 +223,5 @@ async def test_import_plugin_runs_phase2_process_contract_from_job_requests(tmp_
         "cover.apply",
         "cover.convert",
         "cover.embed",
-        "tags.write:track01.mp3",
+        "tags.write:track01.mp3:Canonical Book:Canonical Author",
     ]

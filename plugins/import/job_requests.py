@@ -11,33 +11,27 @@ from typing import Any
 
 from .fingerprints import fingerprint_json
 
+_METADATA_FIELD_MAP = {
+    "title": "book_title",
+    "artist": "author",
+    "album": "book_title",
+    "album_artist": "author",
+}
+
 
 def _policy_dict(inputs: dict[str, Any], key: str) -> dict[str, Any]:
     value = inputs.get(key)
     return dict(value) if isinstance(value, dict) else {}
 
 
-def _split_source_relative_path(source_relative_path: str) -> tuple[str, str]:
-    rel = str(source_relative_path).replace("\\", "/").strip("/")
-    if not rel:
-        return "", ""
-    parts = [part for part in rel.split("/") if part]
-    if len(parts) == 1:
-        return parts[0], parts[0]
-    return parts[0], parts[-1]
-
-
 def _tag_values_for_action(
     *,
-    source_relative_path: str,
     inputs: dict[str, Any],
     authority_meta: dict[str, Any] | None = None,
 ) -> dict[str, str]:
     authority = dict(authority_meta) if isinstance(authority_meta, dict) else {}
     author_name = str(authority.get("author_label") or "")
     book_title = str(authority.get("book_label") or "")
-    if not author_name or not book_title:
-        author_name, book_title = _split_source_relative_path(source_relative_path)
     values = {
         "title": book_title,
         "artist": author_name,
@@ -54,6 +48,27 @@ def _tag_values_for_action(
     return {key: value for key, value in values.items() if value}
 
 
+def _action_authority(
+    *,
+    book_meta: dict[str, Any] | None,
+    tag_values: dict[str, str],
+    target_root: str,
+    target_relative_path: str,
+) -> dict[str, Any]:
+    book = dict(book_meta) if isinstance(book_meta, dict) else {}
+    return {
+        "book": book,
+        "metadata_tags": {
+            "field_map": dict(_METADATA_FIELD_MAP),
+            "values": dict(tag_values),
+        },
+        "publish": {
+            "root": target_root,
+            "relative_path": target_relative_path,
+        },
+    }
+
+
 def _build_capabilities(
     *,
     root: str,
@@ -61,7 +76,7 @@ def _build_capabilities(
     target_root: str,
     target_relative_path: str,
     inputs: dict[str, Any],
-    authority_meta: dict[str, Any] | None = None,
+    tag_values: dict[str, str],
 ) -> list[dict[str, Any]]:
     audio_processing = _policy_dict(inputs, "audio_processing")
     covers_policy = _policy_dict(inputs, "covers_policy")
@@ -70,11 +85,6 @@ def _build_capabilities(
 
     cover_mode = str(covers_policy.get("mode") or "skip")
     conflict_mode = str(conflict_policy.get("mode") or "ask")
-    tag_values = _tag_values_for_action(
-        source_relative_path=source_relative_path,
-        inputs=inputs,
-        authority_meta=authority_meta,
-    )
 
     capabilities: list[dict[str, Any]] = [
         {
@@ -105,12 +115,7 @@ def _build_capabilities(
             "kind": "metadata.tags",
             "order": 30,
             "plugin": "id3_tagger",
-            "field_map": {
-                "title": "book_title",
-                "artist": "author",
-                "album": "book_title",
-                "album_artist": "author",
-            },
+            "field_map": dict(_METADATA_FIELD_MAP),
             "values": tag_values,
             "wipe_before_write": True,
             "preserve_cover": True,
@@ -180,6 +185,8 @@ def build_job_requests(
 
     actions: list[dict[str, Any]] = []
     authority = dict(session_authority) if isinstance(session_authority, dict) else {}
+    phase1_runtime_any = authority.get("runtime")
+    phase1_runtime = dict(phase1_runtime_any) if isinstance(phase1_runtime_any, dict) else {}
     phase2_inputs_any = authority.get("phase2_inputs")
     phase2_inputs = dict(phase2_inputs_any) if isinstance(phase2_inputs_any, dict) else {}
     merged_inputs = {**phase2_inputs, **inputs}
@@ -189,6 +196,7 @@ def build_job_requests(
         target_root = "stage" if mode == "stage" else "outbox"
     book_meta_any = authority.get("book_meta")
     book_meta = dict(book_meta_any) if isinstance(book_meta_any, dict) else {}
+    selected_book_meta: dict[str, dict[str, Any]] = {}
     for it in selected_any:
         if not isinstance(it, dict):
             continue
@@ -199,19 +207,30 @@ def build_job_requests(
             continue
         if not isinstance(src_rel, str) or not isinstance(tgt_rel, str):
             continue
+        authority_meta_any = book_meta.get(book_id)
+        authority_meta = dict(authority_meta_any) if isinstance(authority_meta_any, dict) else {}
+        if authority_meta:
+            selected_book_meta[book_id] = dict(authority_meta)
+        tag_values = _tag_values_for_action(inputs=merged_inputs, authority_meta=authority_meta)
         actions.append(
             {
                 "type": "import.book",
                 "book_id": book_id,
                 "source": {"root": root, "relative_path": src_rel},
                 "target": {"root": target_root, "relative_path": tgt_rel},
+                "authority": _action_authority(
+                    book_meta=authority_meta,
+                    tag_values=tag_values,
+                    target_root=target_root,
+                    target_relative_path=tgt_rel,
+                ),
                 "capabilities": _build_capabilities(
                     root=root,
                     source_relative_path=src_rel,
                     target_root=target_root,
                     target_relative_path=tgt_rel,
                     inputs=merged_inputs,
-                    authority_meta=book_meta.get(book_id),
+                    tag_values=tag_values,
                 ),
             }
         )
@@ -227,6 +246,12 @@ def build_job_requests(
         "plan_summary": plan.get("summary", {}),
         "policies": dict(merged_inputs),
         "actions": actions,
+        "authority": {
+            "phase1": {
+                "runtime": dict(phase1_runtime),
+                "selected_books": selected_book_meta,
+            }
+        },
         "diagnostics_context": dict(diagnostics_context),
         "plan_fingerprint": plan_fingerprint,
     }

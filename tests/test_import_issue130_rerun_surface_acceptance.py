@@ -10,6 +10,8 @@ from audiomason.core.events import get_event_bus
 
 ImportPlugin = import_module("plugins.import.plugin").ImportPlugin
 processed_required = import_module("plugins.import.processed_registry_required")
+read_json = import_module("plugins.import.storage").read_json
+RootName = import_module("plugins.file_io.service").RootName
 
 
 def _make_plugin(tmp_path: Path):
@@ -83,6 +85,14 @@ def test_rerun_and_resume_read_session_finalize_surface_only(tmp_path: Path) -> 
 
     state_path = roots["wizards"] / "import" / "sessions" / session_id / "state.json"
     state_doc = json.loads(state_path.read_text(encoding="utf-8"))
+    state_doc.setdefault("answers", {})["id3_policy"] = {
+        "values": {
+            "title": "Canonical Edition",
+            "artist": "Canonical Author",
+            "album": "Canonical Edition",
+            "album_artist": "Canonical Author",
+        }
+    }
     state_doc.setdefault("inputs", {})["final_summary_confirm"] = {"confirm_start": True}
     state_doc.setdefault("conflicts", {})["policy"] = "auto"
     state_doc["status"] = "in_progress"
@@ -115,7 +125,33 @@ def test_rerun_and_resume_read_session_finalize_surface_only(tmp_path: Path) -> 
     )
     assert resumed["session_id"] == session_id
     assert resumed["status"] == "succeeded"
-    assert resumed["computed"]["finalize"]["status"] == "succeeded"
+    assert resumed["computed"]["finalize"] == {
+        "dry_run_summary_path": (
+            f"wizards:import/sessions/{session_id}/finalize/dry_run_summary.json"
+        ),
+        "job_id": job_id,
+        "processing_log_path": (
+            f"wizards:import/sessions/{session_id}/finalize/processing_log.jsonl"
+        ),
+        "report_path": f"wizards:import/sessions/{session_id}/finalize/report.json",
+        "artifacts": {
+            "dry_run_summary": (
+                f"wizards:import/sessions/{session_id}/finalize/dry_run_summary.json"
+            ),
+            "processing_log": f"wizards:import/sessions/{session_id}/finalize/processing_log.jsonl",
+        },
+        "counts": {"books": 1, "capabilities": 4},
+        "status": "succeeded",
+    }
+
+    summary = read_json(
+        engine.get_file_service(),
+        RootName.WIZARDS,
+        f"import/sessions/{session_id}/finalize/dry_run_summary.json",
+    )
+    assert summary["books"][0]["authority"]["metadata_tags"]["values"]["title"] == (
+        "Canonical Edition"
+    )
 
     rerun = engine.start_processing(session_id, {"confirm": True})
     assert rerun["job_ids"] == [job_id]

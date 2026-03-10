@@ -15,7 +15,8 @@ Schema v1:
         "target_relative_path": "...",
         "idempotency_key": "...",
         "config_fingerprint": "...",
-        "plan_fingerprint": "..."   # optional
+        "plan_fingerprint": "...",  # optional
+        "authority": { ... }          # optional
       }
     }
   }
@@ -53,6 +54,55 @@ def _ensure_registry_shape(reg: Any) -> dict[str, Any]:
     if sv != _SCHEMA_VERSION:
         sv = _SCHEMA_VERSION
     return {"schema_version": sv, "books": dict(books)}
+
+
+def _normalize_authority(action_any: dict[str, Any]) -> dict[str, Any]:
+    authority_any = action_any.get("authority")
+    authority = dict(authority_any) if isinstance(authority_any, dict) else {}
+
+    book_any = authority.get("book")
+    book = dict(book_any) if isinstance(book_any, dict) else {}
+    normalized_book = {
+        key: str(value)
+        for key, value in book.items()
+        if isinstance(key, str) and isinstance(value, str) and value
+    }
+
+    meta_any = authority.get("metadata_tags")
+    meta = dict(meta_any) if isinstance(meta_any, dict) else {}
+    field_map_any = meta.get("field_map")
+    field_map = dict(field_map_any) if isinstance(field_map_any, dict) else {}
+    values_any = meta.get("values")
+    values = dict(values_any) if isinstance(values_any, dict) else {}
+    normalized_meta = {
+        "field_map": {
+            str(key): str(value)
+            for key, value in field_map.items()
+            if isinstance(key, str) and isinstance(value, str) and value
+        },
+        "values": {
+            str(key): str(value)
+            for key, value in values.items()
+            if isinstance(key, str) and isinstance(value, str) and value
+        },
+    }
+
+    publish_any = authority.get("publish")
+    publish = dict(publish_any) if isinstance(publish_any, dict) else {}
+    normalized_publish = {
+        key: str(value)
+        for key, value in publish.items()
+        if isinstance(key, str) and isinstance(value, str) and value
+    }
+
+    out: dict[str, Any] = {}
+    if normalized_book:
+        out["book"] = normalized_book
+    if normalized_meta["field_map"] or normalized_meta["values"]:
+        out["metadata_tags"] = normalized_meta
+    if normalized_publish:
+        out["publish"] = normalized_publish
+    return out
 
 
 def iter_import_book_records(job_requests: dict[str, Any]) -> list[dict[str, Any]]:
@@ -113,6 +163,7 @@ def iter_import_book_records(job_requests: dict[str, Any]) -> list[dict[str, Any
                 "source_relative_path": source_rel,
                 "target_root": target_root,
                 "target_relative_path": target_rel,
+                "authority": _normalize_authority(action_any),
                 "capabilities": cap_summary,
             }
         )
@@ -159,6 +210,10 @@ def apply_successful_job_requests(fs: FileService, job_requests: dict[str, Any])
         }
         if plan_fp is not None:
             entry["plan_fingerprint"] = plan_fp
+        authority_any = record.get("authority")
+        authority = dict(authority_any) if isinstance(authority_any, dict) else {}
+        if authority:
+            entry["authority"] = authority
 
         prev = books.get(book_id)
         if prev != entry:

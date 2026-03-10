@@ -5,11 +5,11 @@ from importlib import import_module
 build_job_requests = import_module("plugins.import.job_requests").build_job_requests
 
 
-def test_build_job_requests_adds_explicit_phase2_capabilities() -> None:
+def test_build_job_requests_uses_phase1_authority_without_path_fallback() -> None:
     doc = build_job_requests(
         session_id="s1",
         root="inbox",
-        relative_path="Author/Book",
+        relative_path="Raw/Source",
         mode="stage",
         diagnostics_context={"model_fingerprint": "m1"},
         config_fingerprint="cfg1",
@@ -17,8 +17,8 @@ def test_build_job_requests_adds_explicit_phase2_capabilities() -> None:
             "selected_books": [
                 {
                     "book_id": "book:1",
-                    "source_relative_path": "Author/Book",
-                    "proposed_target_relative_path": "Author/Book",
+                    "source_relative_path": "Shelf/Disc-01",
+                    "proposed_target_relative_path": "Stage/Disc-01",
                 }
             ],
             "summary": {"selected_books": 1},
@@ -33,10 +33,17 @@ def test_build_job_requests_adds_explicit_phase2_capabilities() -> None:
                 "book:1": {
                     "author_label": "Canonical Author",
                     "book_label": "Canonical Book",
+                    "display_label": "Canonical Author / Canonical Book",
                 }
             },
             "phase2_inputs": {
                 "publish_policy": {"target_root": "outbox"},
+            },
+            "runtime": {
+                "effective_author_title": {
+                    "author": "Canonical Author",
+                    "title": "Canonical Book",
+                }
             },
         },
     )
@@ -64,6 +71,35 @@ def test_build_job_requests_adds_explicit_phase2_capabilities() -> None:
         "album": "Canonical Book",
         "album_artist": "Canonical Author",
     }
+    assert "Shelf" not in capabilities[2]["values"].values()
+    assert "Disc-01" not in capabilities[2]["values"].values()
     assert capabilities[3]["root"] == "outbox"
     assert capabilities[3]["overwrite"] is True
+    assert action["authority"] == {
+        "book": {
+            "author_label": "Canonical Author",
+            "book_label": "Canonical Book",
+            "display_label": "Canonical Author / Canonical Book",
+        },
+        "metadata_tags": {
+            "field_map": {
+                "title": "book_title",
+                "artist": "author",
+                "album": "book_title",
+                "album_artist": "author",
+            },
+            "values": {
+                "title": "Canonical Book",
+                "artist": "Canonical Author",
+                "album": "Canonical Book",
+                "album_artist": "Canonical Author",
+            },
+        },
+        "publish": {"root": "outbox", "relative_path": "Stage/Disc-01"},
+    }
+    assert doc["authority"]["phase1"]["selected_books"]["book:1"]["book_label"] == "Canonical Book"
+    assert doc["authority"]["phase1"]["runtime"]["effective_author_title"] == {
+        "author": "Canonical Author",
+        "title": "Canonical Book",
+    }
     assert doc["plan_fingerprint"]

@@ -43,6 +43,7 @@ def build_dry_run_summary(job_requests: dict[str, Any]) -> dict[str, Any]:
                 "root": str(record["target_root"]),
                 "relative_path": str(record["target_relative_path"]),
             },
+            "authority": dict(record.get("authority") or {}),
             "capabilities": list(record.get("capabilities") or []),
         }
         for record in records
@@ -69,6 +70,7 @@ def _processing_log_entries(*, job_id: str, job_requests: dict[str, Any]) -> lis
                 "root": str(record["source_root"]),
                 "relative_path": str(record["source_relative_path"]),
             },
+            "authority": dict(record.get("authority") or {}),
             "status": "succeeded",
             "target": {
                 "root": str(record["target_root"]),
@@ -126,6 +128,7 @@ def _update_session_state(
     report_path: str,
     dry_run_path: str,
     processing_log_path: str,
+    report: dict[str, Any],
 ) -> None:
     state_path = f"{_session_dir(session_id)}/state.json"
     if not fs.exists(RootName.WIZARDS, state_path):
@@ -141,6 +144,8 @@ def _update_session_state(
         "job_id": job_id,
         "processing_log_path": _artifact_ref(processing_log_path),
         "report_path": _artifact_ref(report_path),
+        "artifacts": dict(report.get("artifacts") or {}),
+        "counts": dict(report.get("counts") or {}),
         "status": "succeeded",
     }
     state_any["computed"] = computed
@@ -184,5 +189,6 @@ def write_success_finalize_artifacts(
         report_path=report_path,
         dry_run_path=dry_run_path,
         processing_log_path=processing_log_path,
+        report=report,
     )
     return report

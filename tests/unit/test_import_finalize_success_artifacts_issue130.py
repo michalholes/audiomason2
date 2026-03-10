@@ -67,6 +67,14 @@ def _write_inbox_books(roots: dict[str, Path]) -> None:
 def _mutate_state_for_finalize(roots: dict[str, Path], session_id: str, *, policy: str) -> None:
     state_path = roots["wizards"] / "import" / "sessions" / session_id / "state.json"
     state = json.loads(state_path.read_text(encoding="utf-8"))
+    state.setdefault("answers", {})["id3_policy"] = {
+        "values": {
+            "title": "Canonical Edition",
+            "artist": "Canonical Author",
+            "album": "Canonical Edition",
+            "album_artist": "Canonical Author",
+        }
+    }
     state.setdefault("inputs", {})["final_summary_confirm"] = {"confirm_start": True}
     state.setdefault("conflicts", {})["policy"] = policy
     state["status"] = "in_progress"
@@ -159,6 +167,12 @@ def test_finalize_success_artifacts_and_ignore_registry_are_success_only(tmp_pat
         "AuthorA/Book1",
         "AuthorA/Book2",
     ]
+    assert summary["books"][0]["authority"]["metadata_tags"]["values"] == {
+        "title": "Canonical Edition",
+        "artist": "Canonical Author",
+        "album": "Canonical Edition",
+        "album_artist": "Canonical Author",
+    }
     assert [cap["kind"] for cap in summary["books"][0]["capabilities"]] == [
         "audio.import",
         "metadata.tags",
@@ -170,6 +184,7 @@ def test_finalize_success_artifacts_and_ignore_registry_are_success_only(tmp_pat
     line0 = json.loads(log_lines[0])
     assert line0["status"] == "succeeded"
     assert line0["source"] == {"root": "inbox", "relative_path": "AuthorA/Book1"}
+    assert line0["authority"]["metadata_tags"]["values"]["title"] == "Canonical Edition"
 
     assert ignore_registry == {
         "schema_version": 1,
@@ -185,6 +200,11 @@ def test_finalize_success_artifacts_and_ignore_registry_are_success_only(tmp_pat
         "job_id": job_id,
         "processing_log_path": f"wizards:{log_rel}",
         "report_path": f"wizards:{report_rel}",
+        "artifacts": {
+            "dry_run_summary": f"wizards:{summary_rel}",
+            "processing_log": f"wizards:{log_rel}",
+        },
+        "counts": {"books": 2, "capabilities": 6},
         "status": "succeeded",
     }
     assert state["status"] == "succeeded"
