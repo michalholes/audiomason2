@@ -525,3 +525,13 @@
 {"type": "rule", "id": "RULE.WIRE.IMPORT_PHASE2_REQUESTS_MUST_USE_SESSION_AUTHORITY", "layer_prefix": "WIRE", "rule_layer": "WIRE_RULE", "normativity": "MUST", "scope": "ENDPOINT | ARTIFACT", "statement": "Import Phase 2 request assembly MUST derive canonical metadata, cover decisions, track_start, rename semantics, and policy flags from persisted session authority. Derivation from source_relative_path or ad hoc path parsing is forbidden.", "heading_path": "AudioMason2 - Wire Contracts Specification (Authoritative) > 10.11 Job Request Contract (PHASE 2)"}
 {"type": "rule", "id": "RULE.LAYOUT.IMPORT_FINALIZE_ARTIFACTS_AND_RERUN_AUTHORITY", "layer_prefix": "LAYOUT", "rule_layer": "LAYOUT_RULE", "normativity": "MUST", "scope": "LAYOUT | ARTIFACT", "statement": "Successful import finalize MUST persist authoritative rerun artifacts only after success: per-source processing.log, end-of-run report.json, dry-run text artifacts named \"<Author> - <Title>.dryrun.txt\", and resolver-friendly pointers used by rerun/resume. Failed or cancelled runs MUST NOT write success-only artifacts.", "heading_path": "AudioMason2 - Implementation Bindings Specification (Authoritative) > 10.7 Storage Model (File IO Root) and Artifacts"}
 {"type": "rule", "id": "RULE.ARCH.IMPORT_RUNTIME_AND_UI_MUST_USE_RESOLVER_AND_STORAGE_BOUNDARIES", "layer_prefix": "ARCH", "rule_layer": "ARCH_RULE", "normativity": "MUST", "scope": "ARCH | UI | CONFIG", "statement": "Import runtime and UI/editor layers MUST access config and artifacts only through plugin-owned storage and resolver APIs. Direct config-file reads, filesystem-layout assumptions, and UI-owned business logic or authority mutation are forbidden.", "heading_path": "AudioMason2 - Project Specification (Authoritative) > 10.12 Config Governance (Editors and Storage)"}
+{"type":"meta","id":"META.MASTER_SPEC_V2_0_0","version":"2.0.14-normalized-m1","authoritative":true}
+{"type":"rule","id":"RULE.CL.0","statement":"RULE.CL.1-8 supersede old docs/changes.md-only rules."}
+{"type":"rule","id":"RULE.CL.1","statement":"Use one docs/change_fragments/ file per patch."}
+{"type":"rule","id":"RULE.CL.2","statement":"docs/changes.md is generated only."}
+{"type":"rule","id":"RULE.CL.3","statement":"Regular patches must not edit docs/changes.md."}
+{"type":"rule","id":"RULE.CL.4","statement":"Fragment text starts with ISO 8601 UTC timestamp."}
+{"type":"rule","id":"RULE.CL.5","statement":"Fragment text includes human-readable change text."}
+{"type":"rule","id":"RULE.CL.6","statement":"No issue refs or patch names in fragment text."}
+{"type":"rule","id":"RULE.CL.7","statement":"Names use ISO 8601 UTC prefix and ASCII slug."}
+{"type":"rule","id":"RULE.CL.8","statement":"Only docs patches may regenerate docs/changes.md."}
