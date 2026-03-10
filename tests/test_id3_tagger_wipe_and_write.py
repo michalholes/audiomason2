@@ -74,3 +74,40 @@ def test_build_write_tags_command_wipes_before_write_and_preserves_cover(
         "genre=Fiction",
     ]
     assert cmd[-1] == str(output)
+
+
+def test_build_write_tags_command_resolves_capability_field_map_and_track_start(
+    tmp_path: Path,
+) -> None:
+    plugin = ID3TaggerPlugin()
+    source = tmp_path / "chapter.mp3"
+    output = tmp_path / "chapter.tagged.mp3"
+
+    cmd = plugin.build_write_tags_command(
+        source,
+        output,
+        {
+            "field_map": {
+                "title": "book_title",
+                "artist": "author",
+                "album": "book_title",
+                "album_artist": "author",
+            },
+            "values": {
+                "book_title": "Book Title",
+                "author": "Author Name",
+                "genre": "Fiction",
+            },
+            "track_start": 7,
+        },
+        file_index=2,
+    )
+
+    assert [cmd[i + 1] for i, value in enumerate(cmd) if value == "-metadata"] == [
+        "title=Book Title",
+        "artist=Author Name",
+        "album=Book Title",
+        "album_artist=Author Name",
+        "genre=Fiction",
+        "track=9",
+    ]

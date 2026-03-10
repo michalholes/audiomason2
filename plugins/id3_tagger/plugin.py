@@ -27,6 +27,14 @@ _TAG_ORDER = (
     "comment",
     "track",
 )
+_CANONICAL_FIELD_KEYS = ("title", "artist", "album", "album_artist")
+_RESERVED_TAG_KEYS = {
+    "field_map",
+    "preserve_cover",
+    "track_start",
+    "values",
+    "wipe_before_write",
+}
 
 
 class ID3TaggerPlugin:
@@ -61,11 +69,16 @@ class ID3TaggerPlugin:
         if not tags:
             return context
 
+        tag_payload: dict[str, Any] = dict(tags)
+        track_start = getattr(context, "track_start", None)
+        if track_start is not None:
+            tag_payload["track_start"] = track_start
+
         tagged_count = 0
-        for mp3_file in context.converted_files:
+        for file_index, mp3_file in enumerate(context.converted_files):
             if mp3_file.suffix.lower() != ".mp3":
                 continue
-            await self.write_tags(mp3_file, tags)
+            await self.write_tags(mp3_file, tag_payload, file_index=file_index)
             tagged_count += 1
 
         context.add_warning(f"Tagged {tagged_count} file(s)")
@@ -98,13 +111,14 @@ class ID3TaggerPlugin:
         self,
         mp3_file: Path,
         output_file: Path,
-        tags: dict[str, str],
+        tags: dict[str, Any],
         *,
         wipe_before_write: bool = True,
         preserve_cover: bool = True,
+        file_index: int = 0,
     ) -> list[str]:
         """Build deterministic FFmpeg command for wipe-before-write tagging."""
-        ordered_tags = self._ordered_tags(tags)
+        ordered_tags = self._normalize_tag_payload(tags, file_index=file_index)
         cmd = [
             "ffmpeg",
             "-hide_banner",
@@ -128,13 +142,14 @@ class ID3TaggerPlugin:
     async def write_tags(
         self,
         mp3_file: Path,
-        tags: dict[str, str],
+        tags: dict[str, Any],
         *,
         wipe_before_write: bool = True,
         preserve_cover: bool = True,
+        file_index: int = 0,
     ) -> None:
         """Write canonical tags to a single MP3 file."""
-        ordered_tags = self._ordered_tags(tags)
+        ordered_tags = self._normalize_tag_payload(tags, file_index=file_index)
         if not ordered_tags:
             return
 
@@ -145,6 +160,7 @@ class ID3TaggerPlugin:
             ordered_tags,
             wipe_before_write=wipe_before_write,
             preserve_cover=preserve_cover,
+            file_index=file_index,
         )
 
         try:
@@ -176,6 +192,86 @@ class ID3TaggerPlugin:
             if value:
                 ordered[key] = value
         return ordered
+
+    def build_capability_tags(
+        self,
+        capability: dict[str, Any],
+        *,
+        file_index: int = 0,
+    ) -> dict[str, str]:
+        """Resolve a metadata.tags capability into canonical ID3 tags."""
+        values_any = capability.get("values")
+        values = dict(values_any) if isinstance(values_any, dict) else {}
+        if "track_start" in capability and "track_start" not in values:
+            values["track_start"] = capability.get("track_start")
+        field_map_any = capability.get("field_map")
+        field_map = dict(field_map_any) if isinstance(field_map_any, dict) else {}
+        return self._build_mapped_tags(values, field_map=field_map, file_index=file_index)
+
+    def _normalize_tag_payload(
+        self,
+        payload: dict[str, Any],
+        *,
+        file_index: int = 0,
+    ) -> dict[str, str]:
+        if any(key in payload for key in ("field_map", "values", "track_start")):
+            return self.build_capability_tags(payload, file_index=file_index)
+        return self._build_mapped_tags(payload, file_index=file_index)
+
+    def _build_mapped_tags(
+        self,
+        values: dict[str, Any],
+        *,
+        field_map: dict[str, Any] | None = None,
+        file_index: int = 0,
+    ) -> dict[str, str]:
+        cleaned: dict[str, str] = {}
+        for key, value in values.items():
+            text = str(value).strip() if value is not None else ""
+            if text:
+                cleaned[str(key)] = text
+
+        raw_field_map = field_map or {}
+        mapped_sources = {
+            str(source).strip() for source in raw_field_map.values() if str(source).strip()
+        }
+        tags: dict[str, str] = {}
+        for target in _CANONICAL_FIELD_KEYS:
+            mapped_source = str(raw_field_map.get(target) or "").strip()
+            value = ""
+            if mapped_source:
+                value = cleaned.get(mapped_source, "")
+            if not value:
+                value = cleaned.get(target, "")
+            if value:
+                tags[target] = value
+
+        track_value = cleaned.get("track", "")
+        if not track_value:
+            track_start = self._parse_track_start(cleaned.get("track_start"))
+            if track_start is not None:
+                track_value = str(track_start + file_index)
+        if track_value:
+            tags["track"] = track_value
+
+        for key, value in cleaned.items():
+            if (
+                key in _CANONICAL_FIELD_KEYS
+                or key == "track"
+                or key in _RESERVED_TAG_KEYS
+                or key in mapped_sources
+            ):
+                continue
+            tags[key] = value
+        return self._ordered_tags(tags)
+
+    def _parse_track_start(self, value: Any) -> int | None:
+        if value is None:
+            return None
+        try:
+            return int(str(value).strip())
+        except (TypeError, ValueError):
+            return None
 
     async def _tag_file(self, mp3_file: Path, context: ProcessingContext) -> None:
         """Backward-compatible wrapper for context-based tagging."""
