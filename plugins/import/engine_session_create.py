@@ -198,6 +198,12 @@ def create_session_impl(
         engine._fs, RootName.WIZARDS, f"{session_dir}/effective_model.json", effective_model
     )
     atomic_write_json(
+        engine._fs,
+        RootName.WIZARDS,
+        f"{session_dir}/effective_workflow.json",
+        wizard_definition,
+    )
+    atomic_write_json(
         engine._fs, RootName.WIZARDS, f"{session_dir}/effective_config.json", effective_config
     )
     atomic_write_json(engine._fs, RootName.WIZARDS, f"{session_dir}/discovery.json", discovery)

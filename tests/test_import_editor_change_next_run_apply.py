@@ -10,6 +10,8 @@ from audiomason.core.config import ConfigResolver
 
 ImportWizardEngine = import_module("plugins.import.engine").ImportWizardEngine
 wizard_storage = import_module("plugins.import.wizard_editor_storage")
+read_json = import_module("plugins.import.storage").read_json
+RootName = import_module("plugins.file_io.service.types").RootName
 
 
 def _make_engine(tmp_path: Path) -> tuple[ImportWizardEngine, dict[str, Path]]:
@@ -58,6 +60,15 @@ def _write_source_tree(roots: dict[str, Path]) -> None:
     (book_dir / "track01.mp3").write_text("x", encoding="utf-8")
 
 
+def _workflow_node(workflow: dict[str, object], step_id: str) -> dict[str, object]:
+    nodes = workflow.get("nodes")
+    assert isinstance(nodes, list)
+    for node in nodes:
+        if isinstance(node, dict) and node.get("step_id") == step_id:
+            return node
+    raise AssertionError(f"missing workflow step: {step_id}")
+
+
 def test_v3_editor_activation_affects_only_the_next_import_run(tmp_path: Path) -> None:
     engine, roots = _make_engine(tmp_path)
     _write_source_tree(roots)
@@ -87,6 +98,19 @@ def test_v3_editor_activation_affects_only_the_next_import_run(tmp_path: Path) -
     state2 = engine.create_session("inbox", "src")
     session_id_2 = str(state2["session_id"])
     assert session_id_2 != session_id_1
+
+    workflow1 = read_json(
+        fs,
+        RootName.WIZARDS,
+        f"import/sessions/{session_id_1}/effective_workflow.json",
+    )
+    workflow2 = read_json(
+        fs,
+        RootName.WIZARDS,
+        f"import/sessions/{session_id_2}/effective_workflow.json",
+    )
+    assert _workflow_node(workflow1, "select_books")["op"]["inputs"]["label"] == "Books"
+    assert _workflow_node(workflow2, "select_books")["op"]["inputs"]["label"] == "Edited Books"
 
     engine.submit_step(session_id_2, "select_authors", {"selection": "all"})
     step2 = engine.get_step_definition(session_id_2, "select_books")

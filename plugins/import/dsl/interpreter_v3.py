@@ -7,10 +7,11 @@ from __future__ import annotations
 
 from typing import Any
 
-from ..engine_util import append_trace_event, sync_session_cursor
+from ..engine_util import _emit_required, append_trace_event, sync_session_cursor
 from ..errors import FinalizeError, StepSubmissionError
 from ..primitives import (
     CTRL_STOP_ID,
+    baseline_registry_entries,
     execute_non_prompt,
     is_non_interactive,
     is_prompt_primitive,
@@ -296,8 +297,53 @@ def _advance_prompt_step(
     return state, next_step
 
 
+def _runtime_diag_context(state: dict[str, Any], session_id: str) -> dict[str, Any]:
+    derived_any = state.get("derived")
+    derived = dict(derived_any) if isinstance(derived_any, dict) else {}
+    return {
+        "session_id": session_id,
+        "model_fingerprint": str(state.get("model_fingerprint") or ""),
+        "discovery_fingerprint": str(derived.get("discovery_fingerprint") or ""),
+        "effective_config_fingerprint": str(derived.get("effective_config_fingerprint") or ""),
+    }
+
+
+def _emit_runtime_boundary(
+    *,
+    event: str,
+    state: dict[str, Any],
+    session_id: str,
+    step_id: str,
+    primitive_id: str,
+    primitive_version: int,
+    error: Exception | None = None,
+) -> None:
+    data: dict[str, Any] = {
+        "session_id": session_id,
+        "step_id": step_id,
+        "primitive_id": primitive_id,
+        "primitive_version": primitive_version,
+    }
+    if error is not None:
+        data["error_type"] = error.__class__.__name__
+        data["error_message"] = str(error) or error.__class__.__name__
+    _emit_required(
+        event=event,
+        operation="runtime.boundary",
+        data={**_runtime_diag_context(state, session_id), **data},
+    )
+
+
 def prompt_ui_from_resolved_inputs(inputs: dict[str, Any]) -> dict[str, Any]:
     return {key: inputs[key] for key in PROMPT_METADATA_KEYS if key in inputs}
+
+
+def _registry_declares_primitive(primitive_id: str, primitive_version: int) -> bool:
+    return any(
+        str(entry.get("primitive_id") or "") == primitive_id
+        and int(entry.get("version") or 0) == primitive_version
+        for entry in baseline_registry_entries()
+    )
 
 
 def run_automatic_steps(
@@ -330,37 +376,67 @@ def run_automatic_steps(
             continue
         if not is_non_interactive(primitive_id, primitive_version):
             raise FinalizeError("non_prompt_submit_payload_forbidden")
+        if not _registry_declares_primitive(primitive_id, primitive_version):
+            raise FinalizeError("unknown primitive")
         inputs = resolve_inputs(step, state)
         guard_parallel_map_write_conflicts(step, inputs)
         writes_applied = False
-        phase2 = execute_phase2_step(
-            effective_model=effective_model,
+        _emit_runtime_boundary(
+            event="diag.boundary.start",
             state=state,
             session_id=session_id,
             step_id=current,
-            step=step,
-            inputs=inputs,
-            run_graph=(
-                lambda model, graph_state, graph_session_id: run_automatic_steps(
-                    effective_model=model,
-                    state=graph_state,
-                    session_id=graph_session_id,
-                )
-            ),
-            apply_writes=apply_writes,
-            append_trace=append_trace_event,
+            primitive_id=primitive_id,
+            primitive_version=primitive_version,
         )
-        if phase2 is None:
-            outputs, jobs = execute_non_prompt(
+        try:
+            phase2 = execute_phase2_step(
+                effective_model=effective_model,
+                state=state,
+                session_id=session_id,
+                step_id=current,
+                step=step,
+                inputs=inputs,
+                run_graph=(
+                    lambda model, graph_state, graph_session_id: run_automatic_steps(
+                        effective_model=model,
+                        state=graph_state,
+                        session_id=graph_session_id,
+                    )
+                ),
+                apply_writes=apply_writes,
+                append_trace=append_trace_event,
+            )
+            if phase2 is None:
+                outputs, jobs = execute_non_prompt(
+                    session_id=session_id,
+                    step_id=current,
+                    primitive_id=primitive_id,
+                    primitive_version=primitive_version,
+                    inputs=inputs,
+                    state=state,
+                )
+            else:
+                state, outputs, jobs, writes_applied = phase2
+        except Exception as exc:
+            _emit_runtime_boundary(
+                event="diag.boundary.fail",
+                state=state,
                 session_id=session_id,
                 step_id=current,
                 primitive_id=primitive_id,
                 primitive_version=primitive_version,
-                inputs=inputs,
-                state=state,
+                error=exc,
             )
-        else:
-            state, outputs, jobs, writes_applied = phase2
+            raise
+        _emit_runtime_boundary(
+            event="diag.boundary.end",
+            state=state,
+            session_id=session_id,
+            step_id=current,
+            primitive_id=primitive_id,
+            primitive_version=primitive_version,
+        )
         state["jobs"] = jobs
         if not writes_applied:
             state = apply_writes(state=state, step=step, inputs=inputs, op_outputs=outputs)

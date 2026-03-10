@@ -1,3 +1,10 @@
+## 2026-03-10T00:00:24+01:00
+
+-   Issue 135: freeze an active `effective_workflow` snapshot per session,
+    route v3 non-prompt execution through exact registry-declared
+    primitives only, and emit runtime boundary diagnostics for automatic
+    primitive execution.
+
 ## 2026-03-10T00:00:23+01:00
 
 -   Issue 134: import step projection now fails explicitly when active
@@ -1145,3 +1152,7 @@
 -   Issue 122: metadata_openlibrary now provides deterministic author/title validation and lookup helpers for import Phase 1.
 
 -   Issue 123: cover_handler now exposes deterministic cover candidate discovery and apply surfaces for import Phase 1.
+
+- Import v3 runtime now persists frozen effective_workflow snapshots per session,
+  enforces registry-declared non-prompt dispatch, and emits runtime boundary
+  lifecycle diagnostics for automatic steps.

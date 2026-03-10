@@ -10,6 +10,7 @@ from audiomason.core.config import ConfigResolver
 
 ImportWizardEngine = import_module("plugins.import.engine").ImportWizardEngine
 atomic_write_json = import_module("plugins.import.storage").atomic_write_json
+read_json = import_module("plugins.import.storage").read_json
 wizard_storage = import_module("plugins.import.wizard_editor_storage")
 RootName = import_module("plugins.file_io.service.types").RootName
 WIZARD_DEFINITION_REL_PATH = import_module(
@@ -268,6 +269,15 @@ def _flow_step(state: dict[str, object], step_id: str) -> dict[str, object]:
     raise AssertionError(f"step not found: {step_id}")
 
 
+def _workflow_node(workflow: dict[str, object], step_id: str) -> dict[str, object]:
+    nodes = workflow.get("nodes")
+    assert isinstance(nodes, list)
+    for node in nodes:
+        if isinstance(node, dict) and node.get("step_id") == step_id:
+            return node
+    raise AssertionError(f"missing workflow step: {step_id}")
+
+
 def test_phase2_editor_activation_affects_only_the_next_import_run(tmp_path: Path) -> None:
     engine, roots = _make_engine(tmp_path)
     _write_source_tree(roots)
@@ -305,7 +315,24 @@ def test_phase2_editor_activation_affects_only_the_next_import_run(tmp_path: Pat
     session_id_2 = str(state2["session_id"])
     loaded2 = engine.get_state(session_id_2)
 
+    workflow1 = read_json(
+        fs,
+        RootName.WIZARDS,
+        f"import/sessions/{session_id_1}/effective_workflow.json",
+    )
+    workflow2 = read_json(
+        fs,
+        RootName.WIZARDS,
+        f"import/sessions/{session_id_2}/effective_workflow.json",
+    )
+
     assert session_id_2 != session_id_1
+    assert _workflow_node(workflow1, "invoke")["op"]["inputs"]["param_bindings"] == [
+        {"name": "name", "value": "Ada"}
+    ]
+    assert _workflow_node(workflow2, "invoke")["op"]["inputs"]["param_bindings"] == [
+        {"name": "name", "value": "Grace"}
+    ]
     assert loaded2["vars"]["called"]["name"] == "Grace"
     assert loaded2["vars"]["fork"]["order"] == ["right", "left"]
     assert _flow_step(loaded2, "loop")["inputs"]["max_iterations"] == 5
