@@ -94,3 +94,32 @@ def test_existing_v2_artifact_keeps_v2_dispatch_while_v3_bootstrap_stays_availab
 
     state = engine.create_session("inbox", "")
     assert state.get("current_step_id") == "select_authors"
+
+
+def test_existing_v3_artifact_stays_authoritative_over_bootstrap_seed(tmp_path: Path) -> None:
+    engine = _make_engine(tmp_path)
+    fs = engine.get_file_service()
+
+    authored = {
+        "version": 3,
+        "entry_step_id": "pick_author",
+        "nodes": [
+            {
+                "step_id": "pick_author",
+                "op": {
+                    "primitive_id": "ui.prompt_text",
+                    "primitive_version": 1,
+                    "inputs": {"label": "Authored label"},
+                    "writes": [],
+                },
+            }
+        ],
+        "edges": [],
+    }
+    atomic_write_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_REL_PATH, authored)
+
+    loaded = load_or_bootstrap_wizard_definition(fs, bootstrap_default_version=3)
+
+    assert loaded["version"] == 3
+    assert loaded["entry_step_id"] == "pick_author"
+    assert loaded["nodes"][0]["op"]["inputs"]["label"] == "Authored label"

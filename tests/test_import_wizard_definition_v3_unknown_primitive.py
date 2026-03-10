@@ -11,6 +11,14 @@ from audiomason.core.config import ConfigResolver
 
 ImportWizardEngine = import_module("plugins.import.engine").ImportWizardEngine
 build_router = import_module("plugins.import.ui_api").build_router
+atomic_write_json = import_module("plugins.import.storage").atomic_write_json
+load_or_bootstrap_wizard_definition = import_module(
+    "plugins.import.wizard_definition_model"
+).load_or_bootstrap_wizard_definition
+RootName = import_module("plugins.file_io.service.types").RootName
+WIZARD_DEFINITION_REL_PATH = import_module(
+    "plugins.import.wizard_definition_model"
+).WIZARD_DEFINITION_REL_PATH
 
 _HAS_FASTAPI = True
 try:
@@ -91,3 +99,38 @@ def test_post_wizard_definition_rejects_unknown_primitive(tmp_path: Path) -> Non
     payload = response.json()
     assert payload["error"]["code"] == "VALIDATION_ERROR"
     assert payload["error"]["details"][0]["reason"] == "unknown_primitive"
+
+
+def test_load_or_bootstrap_replaces_unknown_v3_primitive_with_bootstrap_default(
+    tmp_path: Path,
+) -> None:
+    engine = _make_engine(tmp_path)
+    fs = engine.get_file_service()
+
+    atomic_write_json(
+        fs,
+        RootName.WIZARDS,
+        WIZARD_DEFINITION_REL_PATH,
+        {
+            "version": 3,
+            "entry_step_id": "bad_step",
+            "nodes": [
+                {
+                    "step_id": "bad_step",
+                    "op": {
+                        "primitive_id": "ui.prompt_missing",
+                        "primitive_version": 1,
+                        "inputs": {},
+                        "writes": [],
+                    },
+                }
+            ],
+            "edges": [],
+        },
+    )
+
+    loaded = load_or_bootstrap_wizard_definition(fs, bootstrap_default_version=3)
+
+    assert loaded["version"] == 3
+    assert loaded["entry_step_id"] == "select_authors"
+    assert loaded["nodes"][0]["op"]["primitive_id"] != "ui.prompt_missing"

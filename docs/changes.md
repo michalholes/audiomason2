@@ -1,3 +1,10 @@
+## 2026-03-10T00:00:21+01:00
+
+-   Issue 132: import authoring bootstrap now validates persisted wizard
+    and primitive artifacts through storage/model boundaries, keeps
+    active artifacts authoritative after creation, and limits Python
+    defaults to seed-only bootstrap.
+
 ## 2026-03-09T00:00:20+01:00
 
 -   Bump specification version to 2.0.13-normalized-m1.
@@ -1124,9 +1131,3 @@
 -   Issue 122: metadata_openlibrary now provides deterministic author/title validation and lookup helpers for import Phase 1.
 
 -   Issue 123: cover_handler now exposes deterministic cover candidate discovery and apply surfaces for import Phase 1.
-
-## 2026-03-10T00:00:00+01:00
-
--   Issue 455: PM patch documentation now requires initial patch zip basenames
-    to use the canonical `issue_<ISSUE>_v<N>.zip` form and match
-    `ISSUE_NUMBER.txt`.

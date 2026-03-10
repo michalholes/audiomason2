@@ -8,7 +8,7 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import Any
 
-DEFAULT_WIZARD_DEFINITION_V3: dict[str, Any] = {
+_DEFAULT_WIZARD_DEFINITION_V3: dict[str, Any] = {
     "version": 3,
     "entry_step_id": "select_authors",
     "nodes": [
@@ -138,7 +138,7 @@ DEFAULT_WIZARD_DEFINITION_V3: dict[str, Any] = {
 
 
 def build_default_wizard_definition_v3() -> dict[str, Any]:
-    return deepcopy(DEFAULT_WIZARD_DEFINITION_V3)
+    return deepcopy(_DEFAULT_WIZARD_DEFINITION_V3)
 
 
-__all__ = ["DEFAULT_WIZARD_DEFINITION_V3", "build_default_wizard_definition_v3"]
+__all__ = ["build_default_wizard_definition_v3"]

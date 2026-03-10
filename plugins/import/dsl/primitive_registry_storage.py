@@ -48,22 +48,26 @@ DEFAULT_REGISTRY: dict[str, Any] = {
 }
 
 
+def _canonicalize_validated_registry(obj: Any) -> dict[str, Any]:
+    reg = validate_primitive_registry(obj)
+    canon_any = canonicalize_primitive_registry(reg)
+    if not isinstance(canon_any, dict):
+        raise ValueError("primitive registry must be an object")
+    return canon_any
+
+
 def bootstrap_primitive_registry_if_missing(fs: FileService) -> bool:
     return atomic_write_json_if_missing(
         fs,
         RootName.WIZARDS,
         REL_PATH,
-        DEFAULT_REGISTRY,
+        _canonicalize_validated_registry(DEFAULT_REGISTRY),
     )
 
 
 def load_primitive_registry(fs: FileService) -> dict[str, Any]:
     reg_any = read_json(fs, RootName.WIZARDS, REL_PATH)
-    reg = validate_primitive_registry(reg_any)
-    canon_any = canonicalize_primitive_registry(reg)
-    if not isinstance(canon_any, dict):
-        return reg
-    return canon_any
+    return _canonicalize_validated_registry(reg_any)
 
 
 def load_or_bootstrap_primitive_registry(fs: FileService) -> dict[str, Any]:
@@ -76,9 +80,6 @@ def load_or_bootstrap_primitive_registry(fs: FileService) -> dict[str, Any]:
 
 
 def save_primitive_registry(fs: FileService, obj: Any) -> dict[str, Any]:
-    reg = validate_primitive_registry(obj)
-    canon_any = canonicalize_primitive_registry(reg)
-    if not isinstance(canon_any, dict):
-        raise ValueError("primitive registry must be an object")
-    atomic_write_json(fs, RootName.WIZARDS, REL_PATH, canon_any)
-    return canon_any
+    canon = _canonicalize_validated_registry(obj)
+    atomic_write_json(fs, RootName.WIZARDS, REL_PATH, canon)
+    return canon

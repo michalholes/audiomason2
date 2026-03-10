@@ -11,6 +11,9 @@ ImportWizardEngine = import_module("plugins.import.engine").ImportWizardEngine
 load_or_bootstrap_primitive_registry = import_module(
     "plugins.import.dsl.primitive_registry_storage"
 ).load_or_bootstrap_primitive_registry
+save_primitive_registry = import_module(
+    "plugins.import.dsl.primitive_registry_storage"
+).save_primitive_registry
 
 
 BASELINE_IDS = {
@@ -90,3 +93,38 @@ def test_load_or_bootstrap_primitive_registry_uses_baseline_ids(tmp_path: Path) 
     }
     assert BASELINE_IDS.issubset(got)
     assert ("select_books", 1) not in got
+
+
+def test_existing_registry_artifact_stays_authoritative_after_bootstrap(tmp_path: Path) -> None:
+    engine = _make_engine(tmp_path)
+    fs = engine.get_file_service()
+
+    saved = save_primitive_registry(
+        fs,
+        {
+            "registry_version": 1,
+            "primitives": [
+                {
+                    "primitive_id": "custom.prompt",
+                    "version": 1,
+                    "phase": 1,
+                    "inputs_schema": {
+                        "type": "object",
+                        "properties": {},
+                        "required": [],
+                    },
+                    "outputs_schema": {
+                        "type": "object",
+                        "properties": {},
+                        "required": [],
+                    },
+                    "allowed_errors": [],
+                }
+            ],
+        },
+    )
+
+    loaded = load_or_bootstrap_primitive_registry(fs)
+
+    assert loaded == saved
+    assert loaded["primitives"][0]["primitive_id"] == "custom.prompt"

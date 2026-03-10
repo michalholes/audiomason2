@@ -85,6 +85,29 @@ def _bootstrap_default_definition(version: int) -> dict[str, Any]:
     raise ValueError("bootstrap_default_version must be 2 or 3")
 
 
+def _validated_bootstrap_definition(
+    fs: FileService,
+    *,
+    bootstrap_default_version: int,
+) -> dict[str, Any]:
+    default_definition = _bootstrap_default_definition(bootstrap_default_version)
+    default_any = canonicalize_wizard_definition(default_definition)
+    if not isinstance(default_any, dict):
+        raise RuntimeError("default WizardDefinition must be an object")
+    if default_any.get("version") != bootstrap_default_version:
+        raise RuntimeError("default WizardDefinition version mismatch")
+    if bootstrap_default_version == 2:
+        validate_wizard_definition_constraints_v2(default_any)
+        return default_any
+
+    from .dsl.primitive_registry_storage import load_or_bootstrap_primitive_registry
+    from .dsl.wizard_definition_v3_model import validate_wizard_definition_v3_against_registry
+
+    registry = load_or_bootstrap_primitive_registry(fs)
+    validate_wizard_definition_v3_against_registry(default_any, registry)
+    return default_any
+
+
 def load_or_bootstrap_wizard_definition(
     fs: FileService,
     *,
@@ -97,7 +120,10 @@ def load_or_bootstrap_wizard_definition(
 
     from .wizard_editor_storage import save_wizard_definition_with_history
 
-    default_definition = _bootstrap_default_definition(bootstrap_default_version)
+    default_definition = _validated_bootstrap_definition(
+        fs,
+        bootstrap_default_version=bootstrap_default_version,
+    )
 
     atomic_write_json_if_missing(
         fs,
@@ -123,20 +149,19 @@ def load_or_bootstrap_wizard_definition(
             validate_wizard_definition_constraints_v2(wd)
             return wd
         if ver == 3:
+            from .dsl.primitive_registry_storage import load_or_bootstrap_primitive_registry
+            from .dsl.wizard_definition_v3_model import (
+                validate_wizard_definition_v3_against_registry,
+            )
+
+            registry = load_or_bootstrap_primitive_registry(fs)
+            validate_wizard_definition_v3_against_registry(wd, registry)
             return wd
 
         raise ValueError("WizardDefinition must be version 2 or 3")
-    except (FieldSchemaValidationError, FinalizeError, ValueError, TypeError) as err:
-        default_any = canonicalize_wizard_definition(default_definition)
-        if not isinstance(default_any, dict):
-            raise RuntimeError("default WizardDefinition must be an object") from err
-        if default_any.get("version") != bootstrap_default_version:
-            raise RuntimeError("default WizardDefinition version mismatch") from err
-        if bootstrap_default_version == 2:
-            validate_wizard_definition_constraints_v2(default_any)
-
-        atomic_write_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_REL_PATH, default_any)
-        return default_any
+    except (FieldSchemaValidationError, FinalizeError, ValueError, TypeError):
+        atomic_write_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_REL_PATH, default_definition)
+        return default_definition
 
 
 def _assert_exact_keys(

@@ -25,8 +25,11 @@ from .dsl.wizard_definition_v3_model import validate_wizard_definition_v3_agains
 from .fingerprints import fingerprint_json
 from .storage import atomic_write_json, atomic_write_json_if_missing, read_json
 from .wizard_definition_model import (
-    DEFAULT_WIZARD_DEFINITION,
+    DEFAULT_WIZARD_DEFINITION as _DEFAULT_WIZARD_DEFINITION,
+)
+from .wizard_definition_model import (
     WIZARD_DEFINITION_REL_PATH,
+    _validated_bootstrap_definition,
     canonicalize_wizard_definition,
     migrate_v1_to_v2,
     validate_wizard_definition_constraints_v2,
@@ -39,6 +42,8 @@ WIZARD_DEFINITION_DRAFT_QUARANTINE_DIR = "import/definitions/quarantine"
 
 HISTORY_DIR = "import/editor_history"
 HISTORY_LIMIT = 5
+
+DEFAULT_WIZARD_DEFINITION = _DEFAULT_WIZARD_DEFINITION
 
 
 def canonicalize_to_supported(fs: FileService, obj: Any) -> dict[str, Any]:
@@ -77,13 +82,13 @@ def ensure_wizard_definition_active_exists(fs: FileService) -> dict[str, Any]:
         fs,
         RootName.WIZARDS,
         WIZARD_DEFINITION_REL_PATH,
-        DEFAULT_WIZARD_DEFINITION,
+        _validated_bootstrap_definition(fs, bootstrap_default_version=2),
     )
     active = read_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_REL_PATH)
     try:
         return canonicalize_to_supported(fs, active)
     except Exception:
-        canon_default = canonicalize_to_supported(fs, DEFAULT_WIZARD_DEFINITION)
+        canon_default = _validated_bootstrap_definition(fs, bootstrap_default_version=2)
         atomic_write_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_REL_PATH, canon_default)
         return canon_default
 
@@ -291,7 +296,7 @@ def save_wizard_definition_with_history(fs: FileService, obj: Any) -> None:
 
 def reset_wizard_definition(fs: FileService, obj: Any | None = None) -> None:
     if obj is None:
-        obj = DEFAULT_WIZARD_DEFINITION
+        obj = _validated_bootstrap_definition(fs, bootstrap_default_version=2)
     save_wizard_definition_with_history(fs, obj)
 
 
