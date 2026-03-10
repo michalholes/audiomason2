@@ -96,6 +96,7 @@ def test_am_patch_smoke_issue_666() -> None:
         "--verbosity=quiet",
         "--no-patch-jail",
         "--skip-up-to-date",
+        "--allow-non-main",
         # "--test-mode",
         # "-g",
         # "--skip-pytest",
