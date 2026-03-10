@@ -60,6 +60,31 @@ CREATE TABLE IF NOT EXISTS web_jobs_meta (
     events_rev INTEGER NOT NULL,
     updated_unix_ms INTEGER NOT NULL
 );
+CREATE TABLE IF NOT EXISTS web_job_derived (
+    job_id TEXT PRIMARY KEY,
+    applied_files_json TEXT NOT NULL,
+    applied_files_source TEXT NOT NULL,
+    compact_log_tail_text TEXT NOT NULL,
+    compact_event_tail_text TEXT NOT NULL,
+    derived_rev INTEGER NOT NULL DEFAULT 0,
+    created_utc TEXT NOT NULL,
+    created_unix_ms INTEGER NOT NULL,
+    updated_utc TEXT NOT NULL,
+    updated_unix_ms INTEGER NOT NULL,
+    source_row_rev INTEGER NOT NULL DEFAULT 0,
+    raw_log_lines_compacted INTEGER NOT NULL DEFAULT 0,
+    raw_event_lines_compacted INTEGER NOT NULL DEFAULT 0,
+    terminal_status TEXT NOT NULL DEFAULT '',
+    terminal_utc TEXT NOT NULL DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS web_jobs_housekeeping (
+    singleton INTEGER PRIMARY KEY CHECK (singleton = 1),
+    last_reclaim_unix_ms INTEGER NOT NULL DEFAULT 0,
+    prune_ops INTEGER NOT NULL DEFAULT 0,
+    pruned_log_rows INTEGER NOT NULL DEFAULT 0,
+    pruned_event_rows INTEGER NOT NULL DEFAULT 0,
+    updated_unix_ms INTEGER NOT NULL DEFAULT 0
+);
 CREATE INDEX IF NOT EXISTS idx_web_jobs_created_desc
     ON web_jobs(created_unix_ms DESC, job_id DESC);
 CREATE INDEX IF NOT EXISTS idx_web_jobs_status_created
@@ -148,7 +173,9 @@ class SqliteWebJobsStore:
 
     def _init_db(self) -> None:
         with self._connect() as conn:
+            conn.execute("PRAGMA auto_vacuum=INCREMENTAL")
             conn.executescript(_SCHEMA)
+            now_ms = _utc_now_ms()
             conn.execute(
                 """
                 INSERT INTO web_jobs_meta(
@@ -156,7 +183,17 @@ class SqliteWebJobsStore:
                 ) VALUES(1, 0, 0, 0, ?)
                 ON CONFLICT(singleton) DO NOTHING
                 """,
-                (_utc_now_ms(),),
+                (now_ms,),
+            )
+            conn.execute(
+                """
+                INSERT INTO web_jobs_housekeeping(
+                    singleton, last_reclaim_unix_ms, prune_ops,
+                    pruned_log_rows, pruned_event_rows, updated_unix_ms
+                ) VALUES(1, 0, 0, 0, 0, ?)
+                ON CONFLICT(singleton) DO NOTHING
+                """,
+                (now_ms,),
             )
 
     def _touch_meta(
@@ -318,3 +355,27 @@ class SqliteWebJobsStore:
                 row_rev=row_rev,
             ),
         )
+        if str(job.status) in {"success", "fail", "canceled"}:
+            from .web_jobs_derived import ensure_job_derived_row
+            from .web_jobs_retention import load_retention_settings, maybe_compact_terminal_job
+
+            settings = load_retention_settings(self.cfg)
+            expected_log_count = int(log_count if log_count is not None else job.last_log_seq)
+            expected_event_count = int(
+                event_count if event_count is not None else job.last_event_seq
+            )
+            ensure_job_derived_row(
+                conn,
+                cfg=self.cfg,
+                job=job,
+                log_count=expected_log_count,
+                event_count=expected_event_count,
+                keep_tail_lines=settings.compact_tail_lines,
+            )
+            maybe_compact_terminal_job(
+                conn,
+                cfg=self.cfg,
+                job=job,
+                expected_log_count=expected_log_count,
+                expected_event_count=expected_event_count,
+            )

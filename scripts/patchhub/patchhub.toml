@@ -121,6 +121,14 @@ events_keep_days = 30
 compact_after_jobs = 10000
 compact_after_log_lines = 100000
 compact_after_event_lines = 100000
+max_completed_job_raw_log_lines = 100000
+max_completed_job_raw_event_lines = 100000
+max_completed_job_raw_age_days = 30
+keep_recent_terminal_jobs_per_mode = 5
+compact_tail_lines = 200
+reclaim_trigger_policy = "after_compaction"
+reclaim_interval_seconds = 60
+reclaim_min_pruned_rows = 1
 
 [web_jobs_derived]
 # Derived default kept for config parity; fallback remains the runtime authority.

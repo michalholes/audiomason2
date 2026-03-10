@@ -5,6 +5,8 @@ import zipfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from .web_jobs_derived import read_effective_applied_files
+
 if TYPE_CHECKING:
     from .web_jobs_db import WebJobsDatabase
 
@@ -133,12 +135,7 @@ def collect_job_applied_files(
         return [], "non_success"
 
     if job_db is not None:
-        raw = job_db.load_job_json(str(getattr(job, "job_id", "")))
-        if raw is None:
-            return [], "unavailable"
-        files = [str(item) for item in list(raw.get("applied_files") or [])]
-        source = str(raw.get("applied_files_source", "unavailable"))
-        return files, source
+        return read_effective_applied_files(job_db, str(getattr(job, "job_id", "")))
 
     log_path = Path(jobs_root) / str(getattr(job, "job_id", "")) / "runner.log"
     try:

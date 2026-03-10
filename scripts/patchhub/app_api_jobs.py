@@ -22,6 +22,7 @@ from .models import (
 )
 from .run_applied_files import collect_job_applied_files
 from .web_jobs_db import WebJobsDatabase
+from .web_jobs_derived import read_effective_log_tail
 from .web_jobs_legacy_fs import list_legacy_job_jsons, load_legacy_job_record
 from .zip_commit_message import (
     ZipCommitConfig,
@@ -434,7 +435,7 @@ def api_jobs_log_tail(self, job_id: str, qs: dict[str, str]) -> tuple[int, bytes
     lines = int(qs.get("lines", "200"))
     log_path = self.jobs_root / str(job_id) / "runner.log"
     if getattr(self, "web_jobs_db", None) is not None:
-        tail = self.web_jobs_db.read_log_tail(job_id, lines=lines)
+        tail = read_effective_log_tail(self.web_jobs_db, job_id, lines=lines)
     else:
         tail = read_tail(
             log_path,
