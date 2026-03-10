@@ -156,3 +156,29 @@ def test_file_service_open_append_via_root_and_rel_path(service: FileService) ->
 
     abs_path = service.resolve_abs_path(RootName.STAGE, "logs/system.log")
     assert abs_path.read_bytes() == b"x"
+
+
+def test_copy_path_copies_directory_across_roots(service: FileService) -> None:
+    service.mkdir(RootName.INBOX, "Author/Book")
+    with service.open_write(RootName.INBOX, "Author/Book/track01.mp3") as f:
+        f.write(b"one")
+
+    service.copy_path(RootName.INBOX, "Author/Book", RootName.STAGE, "work/Book", overwrite=True)
+
+    with service.open_read(RootName.STAGE, "work/Book/track01.mp3") as f:
+        assert f.read() == b"one"
+
+
+def test_path_kind_and_delete_path_handle_missing_and_directories(service: FileService) -> None:
+    assert service.path_kind(RootName.STAGE, "missing") == "missing"
+
+    service.mkdir(RootName.STAGE, "tree/sub")
+    with service.open_write(RootName.STAGE, "tree/sub/file.bin") as f:
+        f.write(b"x")
+
+    assert service.path_kind(RootName.STAGE, "tree") == "dir"
+    assert service.path_kind(RootName.STAGE, "tree/sub/file.bin") == "file"
+
+    service.delete_path(RootName.STAGE, "tree", missing_ok=False)
+    assert service.path_kind(RootName.STAGE, "tree") == "missing"
+    service.delete_path(RootName.STAGE, "tree", missing_ok=True)

@@ -100,3 +100,31 @@ def test_unpack_flatten_collision_rename(service: FileService) -> None:
     dst = service.resolve_abs_path(RootName.STAGE, "dst")
     files = sorted([p.name for p in dst.iterdir() if p.is_file()])
     assert files == ["x.txt", "x__1.txt"]
+
+
+def test_detect_format_uses_magic_when_suffix_missing(service: FileService) -> None:
+    svc = ArchiveService(service)
+
+    service.mkdir(RootName.INBOX, "src")
+    with service.open_write(RootName.INBOX, "src/a.txt") as f:
+        f.write(b"a")
+
+    svc.pack(
+        RootName.INBOX,
+        "src",
+        RootName.OUTBOX,
+        "bundle.zip",
+        fmt=ArchiveFormat.ZIP,
+        preserve_tree=True,
+    )
+
+    original = service.resolve_abs_path(RootName.OUTBOX, "bundle.zip")
+    with service.open_read(RootName.OUTBOX, "bundle.zip") as f:
+        data = f.read()
+    with service.open_write(RootName.OUTBOX, "bundle.bin", overwrite=True) as f:
+        f.write(data)
+
+    detected = svc.detect_format(RootName.OUTBOX, "bundle.bin")
+
+    assert detected.format == ArchiveFormat.ZIP
+    assert original.exists()

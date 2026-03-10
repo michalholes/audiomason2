@@ -6,6 +6,7 @@ pipeline steps. It is UI-agnostic.
 
 from __future__ import annotations
 
+import shutil
 import time
 import traceback
 from collections.abc import Iterable, Iterator
@@ -19,6 +20,7 @@ from audiomason.core.events import get_event_bus
 from audiomason.core.logging import get_logger
 
 from . import checksums
+from .ops import AlreadyExistsError, NotFoundError
 from .ops import copy as op_copy
 from .ops import delete_file as op_delete_file
 from .ops import exists as op_exists
@@ -375,6 +377,81 @@ class FileService:
                 overwrite=overwrite,
                 mkdir_parents=mkdir_parents,
             )
+
+    def path_kind(self, root: RootName, rel_path: str) -> str:
+        """Return the deterministic kind of a path within a root."""
+        abs_path = resolve_path(self._root(root).dir_path, rel_path, root_name=root)
+        base = {"root": root.value, "rel_path": rel_path, "resolved_path": str(abs_path)}
+        with _observe_operation(operation="file_io.kind", base=base) as summary:
+            if not abs_path.exists():
+                summary["kind"] = "missing"
+                return "missing"
+            kind = "dir" if abs_path.is_dir() else "file"
+            summary["kind"] = kind
+            return kind
+
+    def delete_path(self, root: RootName, rel_path: str, *, missing_ok: bool = False) -> None:
+        """Delete a file or directory tree within a root."""
+        abs_path = resolve_path(self._root(root).dir_path, rel_path, root_name=root)
+        base = {
+            "root": root.value,
+            "rel_path": rel_path,
+            "resolved_path": str(abs_path),
+            "missing_ok": bool(missing_ok),
+        }
+        with _observe_operation(operation="file_io.delete_path", base=base) as summary:
+            if not abs_path.exists():
+                if missing_ok:
+                    summary["deleted"] = False
+                    return
+                raise NotFoundError(f"Not found: {rel_path}")
+            if abs_path.is_dir():
+                shutil.rmtree(abs_path)
+            else:
+                abs_path.unlink()
+            summary["deleted"] = True
+
+    def copy_path(
+        self,
+        src_root: RootName,
+        src_rel_path: str,
+        dst_root: RootName,
+        dst_rel_path: str,
+        *,
+        overwrite: bool = False,
+        mkdir_parents: bool = True,
+    ) -> None:
+        """Copy a file or directory tree between roots."""
+        src_abs = resolve_path(self._root(src_root).dir_path, src_rel_path, root_name=src_root)
+        dst_abs = resolve_path(self._root(dst_root).dir_path, dst_rel_path, root_name=dst_root)
+        base = {
+            "root": src_root.value,
+            "rel_path": src_rel_path,
+            "src_root": src_root.value,
+            "src": src_rel_path,
+            "dst_root": dst_root.value,
+            "dst": dst_rel_path,
+            "resolved_path": str(src_abs),
+            "resolved_dst_path": str(dst_abs),
+            "overwrite": bool(overwrite),
+            "mkdir_parents": bool(mkdir_parents),
+        }
+        with _observe_operation(operation="file_io.copy_path", base=base):
+            if not src_abs.exists():
+                raise NotFoundError(f"Not found: {src_rel_path}")
+            if dst_abs.exists():
+                if not overwrite:
+                    raise AlreadyExistsError(f"Destination exists: {dst_rel_path}")
+                if dst_abs.is_dir():
+                    shutil.rmtree(dst_abs)
+                else:
+                    dst_abs.unlink()
+            if mkdir_parents:
+                dst_abs.parent.mkdir(parents=True, exist_ok=True)
+            if src_abs.is_dir():
+                shutil.copytree(src_abs, dst_abs)
+            else:
+                shutil.copy2(src_abs, dst_abs)
 
     def checksum(self, root: RootName, rel_path: str, *, algo: str = "sha256") -> str:
         abs_path = resolve_path(self._root(root).dir_path, rel_path, root_name=root)

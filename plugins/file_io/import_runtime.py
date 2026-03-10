@@ -8,9 +8,19 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from .service import FileService, RootName
+from audiomason.core.errors import FileError
+
+from .service import ArchiveFormat, ArchiveService, FileService, RootName
 
 _WORK_PREFIX = "import_runtime/work"
+_ARCHIVE_SUFFIXES: dict[ArchiveFormat, tuple[str, ...]] = {
+    ArchiveFormat.TAR_GZ: (".tar.gz", ".tgz"),
+    ArchiveFormat.TAR_XZ: (".tar.xz", ".txz"),
+    ArchiveFormat.TAR: (".tar",),
+    ArchiveFormat.ZIP: (".zip",),
+    ArchiveFormat.RAR: (".rar",),
+    ArchiveFormat.SEVEN_Z: (".7z",),
+}
 
 
 def normalize_relative_path(rel_path: str) -> str:
@@ -42,11 +52,69 @@ def target_root_for_mode(mode: str) -> RootName:
     raise ValueError("mode must be 'stage' or 'inplace'")
 
 
-def default_work_relative_path(source_relative_path: str) -> str:
+def _strip_archive_suffix(source_relative_path: str, archive_format: ArchiveFormat | None) -> str:
     rel = normalize_relative_path(source_relative_path)
+    if archive_format is None or not rel:
+        return rel
+    lower_rel = rel.lower()
+    for suffix in _ARCHIVE_SUFFIXES.get(archive_format, ()):
+        if lower_rel.endswith(suffix):
+            return rel[: -len(suffix)]
+    return rel
+
+
+def default_work_relative_path(
+    source_relative_path: str,
+    *,
+    source_kind: str = "path",
+    archive_format: ArchiveFormat | None = None,
+) -> str:
+    rel = normalize_relative_path(source_relative_path)
+    if source_kind == "archive":
+        rel = _strip_archive_suffix(rel, archive_format)
     if not rel:
         return f"{_WORK_PREFIX}/root"
     return f"{_WORK_PREFIX}/{rel}"
+
+
+def inspect_source(
+    fs: FileService,
+    *,
+    source_root: RootName | str,
+    source_relative_path: str,
+    archive_service: ArchiveService | None = None,
+) -> dict[str, str]:
+    src_root = parse_root(source_root)
+    src_rel = normalize_relative_path(source_relative_path)
+    src_abs = fs.resolve_abs_path(src_root, src_rel)
+    if not src_abs.exists():
+        raise FileNotFoundError(f"Source not found: {src_root.value}:{src_rel}")
+
+    if src_abs.is_dir():
+        return {
+            "root": src_root.value,
+            "relative_path": src_rel,
+            "kind": "dir",
+            "archive_format": "",
+        }
+
+    archive_format = ""
+    source_kind = "file"
+    archive_service = archive_service or ArchiveService(fs)
+    try:
+        detected = archive_service.detect_format(src_root, src_rel)
+    except FileError:
+        detected = None
+    if detected is not None:
+        source_kind = "archive"
+        archive_format = detected.format.value
+
+    return {
+        "root": src_root.value,
+        "relative_path": src_rel,
+        "kind": source_kind,
+        "archive_format": archive_format,
+    }
 
 
 def _remove_path(path: Path) -> None:
@@ -87,27 +155,46 @@ def stage_source(
     source_root: RootName | str,
     source_relative_path: str,
     work_relative_path: str | None = None,
+    archive_service: ArchiveService | None = None,
 ) -> dict[str, dict[str, str]]:
     src_root = parse_root(source_root)
     src_rel = normalize_relative_path(source_relative_path)
+    intake = inspect_source(
+        fs,
+        source_root=src_root,
+        source_relative_path=src_rel,
+        archive_service=archive_service,
+    )
+    archive_service = archive_service or ArchiveService(fs)
+    detected_format = ArchiveFormat(intake["archive_format"]) if intake["archive_format"] else None
     work_rel = (
-        default_work_relative_path(src_rel)
+        default_work_relative_path(
+            src_rel,
+            source_kind=intake["kind"],
+            archive_format=detected_format,
+        )
         if work_relative_path is None
         else normalize_relative_path(work_relative_path)
     )
 
-    src_abs = fs.resolve_abs_path(src_root, src_rel)
-    work_abs = fs.resolve_abs_path(RootName.STAGE, work_rel)
-    if not src_abs.exists():
-        raise FileNotFoundError(f"Source not found: {src_root.value}:{src_rel}")
-
-    _remove_path(work_abs)
-    work_abs.parent.mkdir(parents=True, exist_ok=True)
-    _copy_path(src_abs, work_abs)
+    fs.delete_path(RootName.STAGE, work_rel, missing_ok=True)
+    if intake["kind"] == "archive":
+        archive_service.unpack(
+            src_root,
+            src_rel,
+            RootName.STAGE,
+            work_rel,
+            autodetect=True,
+            preserve_tree=True,
+            flatten=False,
+        )
+    else:
+        fs.copy_path(src_root, src_rel, RootName.STAGE, work_rel, overwrite=True)
 
     return {
         "source": {"root": src_root.value, "relative_path": src_rel},
         "work": {"root": RootName.STAGE.value, "relative_path": work_rel},
+        "intake": {"kind": intake["kind"], "archive_format": intake["archive_format"]},
     }
 
 
@@ -130,18 +217,15 @@ def publish_staged(
     actual_dst_rel = dst_rel
     if fs.exists(dst_root, dst_rel):
         if overwrite:
-            _remove_path(fs.resolve_abs_path(dst_root, dst_rel))
+            fs.delete_path(dst_root, dst_rel, missing_ok=True)
         else:
             actual_dst_rel = _fallback_relative_path(fs, dst_root, dst_rel)
 
-    dst_abs = fs.resolve_abs_path(dst_root, actual_dst_rel)
-    _remove_path(dst_abs)
-    dst_abs.parent.mkdir(parents=True, exist_ok=True)
-    _copy_path(work_abs, dst_abs)
+    fs.copy_path(RootName.STAGE, work_rel, dst_root, actual_dst_rel, overwrite=True)
 
     cleanup_performed = False
     if cleanup:
-        _remove_path(work_abs)
+        fs.delete_path(RootName.STAGE, work_rel, missing_ok=True)
         cleanup_performed = True
 
     return {
@@ -172,4 +256,4 @@ def publish_for_mode(
 
 def cleanup_stage(fs: FileService, *, work_relative_path: str) -> None:
     work_rel = normalize_relative_path(work_relative_path)
-    _remove_path(fs.resolve_abs_path(RootName.STAGE, work_rel))
+    fs.delete_path(RootName.STAGE, work_rel, missing_ok=True)

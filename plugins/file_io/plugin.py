@@ -23,7 +23,7 @@ from audiomason.core.detection import (
 from audiomason.core.errors import FileError
 
 from . import import_runtime
-from .service import FileService, RootName
+from .service import ArchiveService, FileService, RootName
 
 
 class FileIOPlugin:
@@ -80,6 +80,8 @@ class FileIOPlugin:
         else:
             self.file_service = FileService.from_resolver(resolver)
 
+        self.archive_service = ArchiveService(self.file_service, resolver)
+
     def stage_import_path(
         self,
         root: RootName | str,
@@ -93,6 +95,7 @@ class FileIOPlugin:
             source_root=root,
             source_relative_path=relative_path,
             work_relative_path=work_relative_path,
+            archive_service=self.archive_service,
         )
 
     def publish_import_path(
