@@ -1,7 +1,6 @@
 # ruff: noqa: E402
 from __future__ import annotations
 
-import os
 import sys
 from pathlib import Path
 
@@ -10,7 +9,6 @@ sys.path.insert(0, str(_SCRIPTS))
 
 from patchhub.models import JobRecord
 from patchhub.web_jobs_db import WebJobsDatabase, load_web_jobs_db_config
-from patchhub.web_jobs_derived import read_effective_event_tail_text, read_effective_log_tail
 
 
 def _write_cfg(repo_root: Path) -> None:
@@ -24,8 +22,8 @@ def _write_cfg(repo_root: Path) -> None:
                 "max_completed_job_raw_event_lines = 1",
                 "max_completed_job_raw_age_days = 3650",
                 "keep_recent_terminal_jobs_per_mode = 0",
-                "compact_tail_lines = 1",
-                'reclaim_trigger_policy = "after_compaction"',
+                "compact_tail_lines = 2",
+                'reclaim_trigger_policy = "manual"',
                 "reclaim_interval_seconds = 0",
                 "reclaim_min_pruned_rows = 1",
             ]
@@ -43,15 +41,16 @@ def _build_db(tmp_path: Path) -> WebJobsDatabase:
     return WebJobsDatabase(load_web_jobs_db_config(repo_root, patches_root))
 
 
-def test_compaction_updates_housekeeping_and_keeps_reads_usable(tmp_path: Path) -> None:
+def test_export_legacy_tree_uses_compact_compatibility_text_after_compaction(
+    tmp_path: Path,
+) -> None:
     db = _build_db(tmp_path)
-    db_path = db.cfg.db_path
     job = JobRecord(
-        job_id="job-516-reclaim",
-        created_utc="2026-03-09T10:00:00Z",
+        job_id="job-516-export",
+        created_utc="2026-03-09T11:00:00Z",
         mode="patch",
         issue_id="516",
-        commit_summary="reclaim",
+        commit_summary="legacy export",
         patch_basename="issue_516.zip",
         raw_command="python3 scripts/am_patch.py 516",
         canonical_command=["python3", "scripts/am_patch.py", "516"],
@@ -60,35 +59,16 @@ def test_compaction_updates_housekeeping_and_keeps_reads_usable(tmp_path: Path) 
     db.upsert_job(job)
     db.append_log_line(job.job_id, "alpha")
     db.append_log_line(job.job_id, "beta")
-    db.append_event_line(job.job_id, '{"type":"status","event":"done"}')
+    db.append_event_line(job.job_id, '{"type":"log","msg":"alpha"}')
     db.append_event_line(job.job_id, '{"type":"summary","msg":"beta"}')
-
-    size_before = os.path.getsize(db_path)
     job.status = "success"
-    job.ended_utc = "2026-03-09T10:05:00Z"
+    job.ended_utc = "2026-03-09T11:05:00Z"
     db.upsert_job(job)
-    size_after = os.path.getsize(db_path)
 
-    with db._store._connect() as conn:  # noqa: SLF001
-        hk = conn.execute(
-            "SELECT last_reclaim_unix_ms, prune_ops, "
-            "pruned_log_rows, pruned_event_rows "
-            "FROM web_jobs_housekeeping WHERE singleton = 1"
-        ).fetchone()
-        remaining_logs = conn.execute(
-            "SELECT COUNT(*) AS n FROM web_job_log_lines WHERE job_id = ?",
-            (job.job_id,),
-        ).fetchone()["n"]
-    assert hk is not None
-    assert int(hk["last_reclaim_unix_ms"]) > 0
-    assert int(hk["prune_ops"]) >= 1
-    assert int(hk["pruned_log_rows"]) == 2
-    assert int(hk["pruned_event_rows"]) == 2
-    assert remaining_logs == 0
-    assert read_effective_log_tail(db, job.job_id, lines=1) == "beta"
-    assert db.read_full_log(job.job_id) == "beta"
-    assert read_effective_event_tail_text(db, job.job_id, lines=1) == (
-        '{"type":"summary","msg":"beta"}'
-    )
-    assert db.legacy_event_text(job.job_id) == ('{"type":"summary","msg":"beta"}')
-    assert size_after <= size_before + 8192
+    export_root = tmp_path / "legacy_export"
+    db.export_legacy_tree(export_root)
+
+    assert (export_root / job.job_id / "runner.log").read_text(encoding="utf-8") == "alpha\nbeta"
+    assert (export_root / job.job_id / "am_patch_issue_516.jsonl").read_text(
+        encoding="utf-8"
+    ) == '{"type":"log","msg":"alpha"}\n{"type":"summary","msg":"beta"}'

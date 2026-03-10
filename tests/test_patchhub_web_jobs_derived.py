@@ -10,7 +10,12 @@ sys.path.insert(0, str(_SCRIPTS))
 from patchhub.models import JobRecord
 from patchhub.run_applied_files import collect_job_applied_files
 from patchhub.web_jobs_db import WebJobsDatabase, load_web_jobs_db_config
-from patchhub.web_jobs_derived import load_derived_payload, read_effective_log_tail
+from patchhub.web_jobs_derived import (
+    load_derived_payload,
+    read_effective_full_event_text,
+    read_effective_full_log,
+    read_effective_log_tail,
+)
 
 
 def _write_cfg(repo_root: Path, body: str) -> None:
@@ -70,6 +75,7 @@ def test_terminal_success_materializes_low_churn_derived_payload(tmp_path: Path)
     assert derived["applied_files"] == ["scripts/patchhub/app_api_jobs.py"]
     assert derived["applied_files_source"] == "final_summary"
     assert derived["compact_log_tail_text"] == "FILES:\nscripts/patchhub/app_api_jobs.py"
+    assert derived["compact_event_tail_text"] == '{"type":"status","event":"done"}'
 
     with db._store._connect() as conn:  # noqa: SLF001
         conn.execute(
@@ -95,4 +101,10 @@ def test_terminal_success_materializes_low_churn_derived_payload(tmp_path: Path)
             lines=1,
         )
         == "scripts/patchhub/app_api_jobs.py"
+    )
+    assert read_effective_full_log(db, "job-516-derived") == (
+        "FILES:\nscripts/patchhub/app_api_jobs.py"
+    )
+    assert read_effective_full_event_text(db, "job-516-derived") == (
+        '{"type":"status","event":"done"}'
     )

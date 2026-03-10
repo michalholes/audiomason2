@@ -115,10 +115,9 @@ class WebJobsVirtualFs:
             text = self._db.read_full_log(job_id)
             return text[:max_bytes]
         if name == self._db.legacy_event_filename(job_id):
-            text = self._db.legacy_event_text(job_id)
             if tail_lines is not None:
-                parts_text = text.splitlines()
-                return "\n".join(parts_text[-max(1, int(tail_lines)) :])
+                return self._db.read_effective_event_tail_text(job_id, lines=tail_lines)
+            text = self._db.read_effective_event_text(job_id)
             return text[:max_bytes]
         return None
 

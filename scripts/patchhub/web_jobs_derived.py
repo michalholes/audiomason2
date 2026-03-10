@@ -15,6 +15,9 @@ __all__ = [
     "ensure_job_derived_row",
     "load_derived_payload",
     "read_effective_applied_files",
+    "read_effective_full_event_text",
+    "read_effective_full_log",
+    "read_effective_event_tail_text",
     "read_effective_log_tail",
 ]
 
@@ -215,6 +218,50 @@ def load_derived_payload(
     }
 
 
+def _tail_slice(text: str, *, lines: int) -> str:
+    if not text:
+        return ""
+    parts = str(text).splitlines()
+    return "\n".join(parts[-max(1, int(lines)) :])
+
+
+def _derived_text(job_db: WebJobsDatabase, job_id: str, field: str) -> str:
+    derived = load_derived_payload(job_db, job_id)
+    if derived is None:
+        return ""
+    return str(derived.get(field) or "")
+
+
+def read_effective_full_log(job_db: WebJobsDatabase, job_id: str) -> str:
+    raw_text = job_db._read_raw_full_log(job_id)
+    if raw_text:
+        return raw_text
+    return _derived_text(job_db, job_id, "compact_log_tail_text")
+
+
+def read_effective_full_event_text(job_db: WebJobsDatabase, job_id: str) -> str:
+    rows = job_db.read_event_rows(job_id, after_seq=0, limit=1_000_000)
+    if rows:
+        return "\n".join(row.raw_line for row in rows)
+    return _derived_text(job_db, job_id, "compact_event_tail_text")
+
+
+def read_effective_event_tail_text(
+    job_db: WebJobsDatabase,
+    job_id: str,
+    *,
+    lines: int = 500,
+) -> str:
+    limit = max(1, min(int(lines), 5000))
+    rows, _last_seq = job_db.read_event_tail(job_id, lines=limit)
+    if rows:
+        return "\n".join(row.raw_line for row in rows)
+    return _tail_slice(
+        _derived_text(job_db, job_id, "compact_event_tail_text"),
+        lines=limit,
+    )
+
+
 def read_effective_applied_files(job_db: WebJobsDatabase, job_id: str) -> tuple[list[str], str]:
     derived = load_derived_payload(job_db, job_id)
     if derived is not None:
@@ -233,14 +280,7 @@ def read_effective_applied_files(job_db: WebJobsDatabase, job_id: str) -> tuple[
 
 def read_effective_log_tail(job_db: WebJobsDatabase, job_id: str, *, lines: int = 200) -> str:
     limit = max(1, min(int(lines), 5000))
-    raw_tail = job_db.read_log_tail(job_id, lines=limit)
+    raw_tail = job_db._read_raw_log_tail(job_id, lines=limit)
     if raw_tail:
         return raw_tail
-    derived = load_derived_payload(job_db, job_id)
-    if derived is None:
-        return ""
-    tail_text = str(derived.get("compact_log_tail_text") or "")
-    if not tail_text:
-        return ""
-    parts = tail_text.splitlines()
-    return "\n".join(parts[-limit:])
+    return _tail_slice(_derived_text(job_db, job_id, "compact_log_tail_text"), lines=limit)

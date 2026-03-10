@@ -342,7 +342,7 @@ class WebJobsDatabase:
             conn.commit()
         return seq
 
-    def read_log_tail(self, job_id: str, *, lines: int = 200) -> str:
+    def _read_raw_log_tail(self, job_id: str, *, lines: int = 200) -> str:
         limit = max(1, min(int(lines), 5000))
         with self._store._connect() as conn:
             rows = conn.execute(
@@ -356,13 +356,23 @@ class WebJobsDatabase:
             ).fetchall()
         return "\n".join(str(row["line"]) for row in reversed(rows))
 
-    def read_full_log(self, job_id: str) -> str:
+    def read_log_tail(self, job_id: str, *, lines: int = 200) -> str:
+        from .web_jobs_derived import read_effective_log_tail
+
+        return read_effective_log_tail(self, job_id, lines=lines)
+
+    def _read_raw_full_log(self, job_id: str) -> str:
         with self._store._connect() as conn:
             rows = conn.execute(
                 "SELECT line FROM web_job_log_lines WHERE job_id = ? ORDER BY seq ASC",
                 (str(job_id),),
             ).fetchall()
         return "\n".join(str(row["line"]) for row in rows)
+
+    def read_full_log(self, job_id: str) -> str:
+        from .web_jobs_derived import read_effective_full_log
+
+        return read_effective_full_log(self, job_id)
 
     def read_event_rows(
         self,
@@ -424,9 +434,18 @@ class WebJobsDatabase:
             return f"am_patch_issue_{issue_id}.jsonl"
         return "am_patch_finalize.jsonl"
 
+    def read_effective_event_tail_text(self, job_id: str, *, lines: int = 500) -> str:
+        from .web_jobs_derived import read_effective_event_tail_text
+
+        return read_effective_event_tail_text(self, job_id, lines=lines)
+
+    def read_effective_event_text(self, job_id: str) -> str:
+        from .web_jobs_derived import read_effective_full_event_text
+
+        return read_effective_full_event_text(self, job_id)
+
     def legacy_event_text(self, job_id: str) -> str:
-        rows = self.read_event_rows(job_id, after_seq=0, limit=1_000_000)
-        return "\n".join(row.raw_line for row in rows)
+        return self.read_effective_event_text(job_id)
 
     def list_job_ids(self, *, limit: int = 2000) -> list[str]:
         with self._store._connect() as conn:

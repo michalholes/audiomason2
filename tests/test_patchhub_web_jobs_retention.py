@@ -9,7 +9,11 @@ sys.path.insert(0, str(_SCRIPTS))
 
 from patchhub.models import JobRecord
 from patchhub.web_jobs_db import WebJobsDatabase, load_web_jobs_db_config
-from patchhub.web_jobs_derived import load_derived_payload, read_effective_log_tail
+from patchhub.web_jobs_derived import (
+    load_derived_payload,
+    read_effective_event_tail_text,
+    read_effective_log_tail,
+)
 
 
 def _write_cfg(repo_root: Path) -> None:
@@ -102,3 +106,9 @@ def test_retention_compacts_old_terminal_jobs_but_keeps_recent_mode_exemption(
     )
     assert read_effective_log_tail(db, "job-516-old", lines=2) == "l2\nl3"
     assert read_effective_log_tail(db, "job-516-new", lines=2) == "l2\nl3"
+    assert read_effective_event_tail_text(db, "job-516-old", lines=2) == (
+        '{"type":"log","msg":"e1"}\n{"type":"status","event":"done"}'
+    )
+    assert db.legacy_event_text("job-516-old") == (
+        '{"type":"log","msg":"e1"}\n{"type":"status","event":"done"}'
+    )
