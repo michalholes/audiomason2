@@ -34,7 +34,7 @@ The validator covers only machine-verifiable PM requirements:
 - `ISSUE_NUMBER.txt`
 - PM per-file patch layout
 - patch-member path/header consistency
-- added-line length limit
+- added-line length limit for `.py` and `.js` patch members only
 - `git apply --check`
 - `python -m compileall -q` for modified Python files
 - `node --check` for modified `.js`, `.mjs`, and `.cjs` files

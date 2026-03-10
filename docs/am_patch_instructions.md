@@ -138,18 +138,22 @@ Rules:
 
 ## Line Length and Style Safety (HARD)
 
-1. Any added or modified line MUST respect the repository line-length policy - 100 chars per line.
-2. Long lines MUST be wrapped deterministically at authoring time.
-3. Long string literals and f-strings MUST be split using parentheses and
-   implicit concatenation, or equivalent deterministic wrapping.
-4. Long function calls MUST use parenthesized multi-line argument formatting.
-5. Long collection literals (dict, list, tuple, set) MUST use one element per
-   line when exceeding the line-length policy.
-6. Long import statements MUST use parenthesized multi-line imports or
-   multiple explicit imports, consistent with existing repository style.
+1. Any added or modified line in `.py` and `.js` files MUST respect the
+   repository line-length policy - 100 chars per line.
+2. Long lines in `.py` and `.js` files MUST be wrapped deterministically at
+   authoring time.
+3. Long string literals and f-strings in `.py` files MUST be split using
+   parentheses and implicit concatenation, or equivalent deterministic
+   wrapping.
+4. Long function calls in `.py` and `.js` files MUST use parenthesized
+   multi-line argument formatting.
+5. Long collection literals in `.py` and `.js` files MUST use one element
+   per line when exceeding the line-length policy.
+6. Long import statements in `.py` and `.js` files MUST use parenthesized
+   multi-line imports or multiple explicit imports, consistent with
+   existing repository style.
 7. The patch MUST NOT rely on post-processing formatters to correct
-   line-length violations.
-
+   line-length violations in `.py` and `.js` files.
 ------------------------------------------------------------------------
 
 

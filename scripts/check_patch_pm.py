@@ -183,6 +183,10 @@ def _check_line_lengths(text: str) -> str | None:
     return None
 
 
+def _line_length_scope_for_repo_path(repo_path: str) -> bool:
+    return Path(repo_path).suffix.lower() in {".py", ".js"}
+
+
 def _build_members(
     *,
     zpath: Path,
@@ -258,15 +262,16 @@ def _build_members(
         if header_err is not None:
             results.append(RuleResult("PATCH_MEMBER_PATHS", "FAIL", f"{member}:{header_err}"))
             return results, members, decision_paths
-        length_err = _check_line_lengths(text)
-        if length_err is not None:
-            results.append(RuleResult("LINE_LENGTH", "FAIL", f"{member}:{length_err}"))
-            return results, members, decision_paths
+        if _line_length_scope_for_repo_path(repo_path):
+            length_err = _check_line_lengths(text)
+            if length_err is not None:
+                results.append(RuleResult("LINE_LENGTH", "FAIL", f"{member}:{length_err}"))
+                return results, members, decision_paths
         members.append((member, data))
         decision_paths.append(repo_path)
 
     results.append(RuleResult("PATCH_MEMBER_PATHS", "PASS", f"paths={len(decision_paths)}"))
-    results.append(RuleResult("LINE_LENGTH", "PASS", "added_lines<=100"))
+    results.append(RuleResult("LINE_LENGTH", "PASS", "py_js_added_lines<=100"))
     return results, members, decision_paths
 
 

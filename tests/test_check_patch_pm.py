@@ -254,7 +254,7 @@ def test_git_apply_failure_is_reported(tmp_path: Path) -> None:
     assert "RULE GIT_APPLY_CHECK:patches/per_file/docs__readme.txt.patch: FAIL" in proc.stdout
 
 
-def test_line_length_failure_is_reported(tmp_path: Path) -> None:
+def test_line_length_rule_skips_non_python_and_non_js_files(tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     _write(repo_root / "docs/readme.txt", "old\n")
     long_line = "x" * 101
@@ -264,6 +264,44 @@ def test_line_length_failure_is_reported(tmp_path: Path) -> None:
         issue_id="223",
         commit_message=COMMIT_MESSAGE,
         members={"patches/per_file/docs__readme.txt.patch": patch},
+    )
+
+    proc = _run_validator(repo_root, "223", COMMIT_MESSAGE)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "RULE LINE_LENGTH: PASS" in proc.stdout
+
+
+def test_line_length_failure_is_reported_for_python(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    _write(repo_root / "scripts/example.py", "x = 1\n")
+    long_line = "x" * 101
+    patch = _git_patch("scripts/example.py", "x = 1\n", long_line + "\n")
+    _write_patch_zip(
+        repo_root,
+        issue_id="223",
+        commit_message=COMMIT_MESSAGE,
+        members={"patches/per_file/scripts__example.py.patch": patch},
+    )
+
+    proc = _run_validator(repo_root, "223", COMMIT_MESSAGE)
+    assert proc.returncode == 1
+    assert "RULE LINE_LENGTH: FAIL" in proc.stdout
+
+
+def test_line_length_failure_is_reported_for_js(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    _write(repo_root / "scripts/example.js", "const value = 1;\n")
+    long_line = "x" * 101
+    patch = _git_patch(
+        "scripts/example.js",
+        "const value = 1;\n",
+        f"const value = '{long_line}';\n",
+    )
+    _write_patch_zip(
+        repo_root,
+        issue_id="223",
+        commit_message=COMMIT_MESSAGE,
+        members={"patches/per_file/scripts__example.js.patch": patch},
     )
 
     proc = _run_validator(repo_root, "223", COMMIT_MESSAGE)
