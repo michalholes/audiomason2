@@ -195,7 +195,7 @@ typescript_targets = ["plugins/", "scripts/", "types/"]
 gates_skip_docs = true
 gate_docs_include = ["src", "plugins"]
 gate_docs_exclude = ["badguys", "patches"]
-gate_docs_required_files = ["docs/changes.md"]
+gate_docs_required_files = ["docs/change_fragments/"]
 
 gate_badguys_runner = "off"
 gate_badguys_command = ["badguys/badguys.py", "-q", "--exclude=test_900_commit_push_timestamp"]

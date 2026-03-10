@@ -6,6 +6,7 @@ from pathlib import Path
 from . import gates as gates_mod
 from .config import Policy
 from .log import Logger
+from .scope import changed_path_entries
 
 
 def run_policy_gates(
@@ -21,6 +22,8 @@ def run_policy_gates(
 
     All runner modes MUST call this entry point to avoid divergent gate wiring.
     """
+
+    docs_status_entries = changed_path_entries(logger, repo_root)
 
     gates_mod.run_gates(
         logger,
@@ -74,6 +77,7 @@ def run_policy_gates(
         docs_include=policy.gate_docs_include,
         docs_exclude=policy.gate_docs_exclude,
         docs_required_files=policy.gate_docs_required_files,
+        docs_status_entries=docs_status_entries,
         js_extensions=policy.gate_js_extensions,
         js_command=policy.gate_js_command,
         biome_extensions=policy.gate_biome_extensions,

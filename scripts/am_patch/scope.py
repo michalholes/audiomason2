@@ -86,7 +86,42 @@ def _normalize_path(p: str) -> str:
     return p
 
 
-def changed_paths(logger: Logger, repo: Path) -> list[str]:
+ChangedPathEntry = tuple[str, str]
+
+
+def _status_code(line: str) -> str:
+    if line.startswith("??"):
+        return "??"
+    return line[:2]
+
+
+def _parse_changed_path_entries(stdout: str) -> list[ChangedPathEntry]:
+    entries: list[ChangedPathEntry] = []
+    for raw in stdout.splitlines():
+        line = raw.rstrip("\n")
+        if not line or len(line) < 4:
+            continue
+        status = _status_code(line)
+        payload = line[3:].strip()
+        if " -> " in payload:
+            old, new = payload.split(" -> ", 1)
+            entries.append((status, _normalize_path(old)))
+            entries.append((status, _normalize_path(new)))
+        else:
+            entries.append((status, _normalize_path(payload)))
+
+    seen: set[ChangedPathEntry] = set()
+    out: list[ChangedPathEntry] = []
+    for status, path in entries:
+        item = (status, path)
+        if not path or item in seen:
+            continue
+        seen.add(item)
+        out.append(item)
+    return out
+
+
+def changed_path_entries(logger: Logger, repo: Path) -> list[ChangedPathEntry]:
     r = logger.run_logged(
         ["git", "status", "--porcelain", "--untracked-files=all"],
         cwd=repo,
@@ -94,27 +129,17 @@ def changed_paths(logger: Logger, repo: Path) -> list[str]:
     )
     if r.returncode != 0:
         raise RunnerError("SCOPE", "GIT", "git status failed in workspace")
+    return _parse_changed_path_entries(r.stdout or "")
 
-    paths: list[str] = []
-    for raw in (r.stdout or "").splitlines():
-        line = raw.rstrip("\n")
-        if not line or len(line) < 4:
-            continue
-        payload = line[3:].strip()
-        if " -> " in payload:
-            old, new = payload.split(" -> ", 1)
-            paths.append(_normalize_path(old))
-            paths.append(_normalize_path(new))
-        else:
-            paths.append(_normalize_path(payload))
 
+def changed_paths(logger: Logger, repo: Path) -> list[str]:
     seen: set[str] = set()
     out: list[str] = []
-    for p in paths:
-        if not p or p in seen:
+    for _status, path in changed_path_entries(logger, repo):
+        if not path or path in seen:
             continue
-        seen.add(p)
-        out.append(p)
+        seen.add(path)
+        out.append(path)
     return out
 
 

@@ -8,14 +8,14 @@ def _import_runner_modules():
     scripts_dir = Path(__file__).parent.parent / "scripts"
     sys.path.insert(0, str(scripts_dir))
 
+    from am_patch import gates_policy_wiring as wiring_mod
     from am_patch.config import Policy
-    from am_patch.gates_policy_wiring import run_policy_gates
 
-    return Policy, run_policy_gates
+    return Policy, wiring_mod
 
 
 def test_biome_controls_propagated(monkeypatch, tmp_path: Path) -> None:
-    policy_cls, run_policy_gates = _import_runner_modules()
+    policy_cls, wiring_mod = _import_runner_modules()
 
     captured: dict[str, object] = {}
 
@@ -26,11 +26,12 @@ def test_biome_controls_propagated(monkeypatch, tmp_path: Path) -> None:
     import am_patch.gates as gates_mod
 
     monkeypatch.setattr(gates_mod, "run_gates", fake_run_gates)
+    monkeypatch.setattr(wiring_mod, "changed_path_entries", lambda *_a, **_k: [])
     policy = policy_cls()
     policy.biome_format = False
     policy.gate_biome_format_command = ["biome", "format", "--write"]
 
-    run_policy_gates(
+    wiring_mod.run_policy_gates(
         logger=None,  # type: ignore[arg-type]
         cwd=tmp_path,
         repo_root=tmp_path,

@@ -18,33 +18,56 @@ def test_docs_gate_not_triggered_when_no_watched_changes() -> None:
         ["patches/x.txt", "badguys/y.txt"],
         include=["src", "plugins"],
         exclude=["badguys", "patches"],
-        required_files=["docs/changes.md", "docs/specification.md"],
+        required_files=["docs/change_fragments/"],
+        changed_entries=[("M ", "patches/x.txt")],
     )
     assert ok is True
     assert missing == []
     assert trigger is None
 
 
-def test_docs_gate_fails_when_triggered_and_docs_missing() -> None:
+def test_docs_gate_fails_when_triggered_and_fragment_missing() -> None:
     check_docs_gate = _import_gate()
     ok, missing, trigger = check_docs_gate(
         ["src/a.py"],
         include=["src", "plugins"],
         exclude=["badguys", "patches"],
-        required_files=["docs/changes.md", "docs/specification.md"],
+        required_files=["docs/change_fragments/"],
+        changed_entries=[("M ", "src/a.py")],
     )
     assert ok is False
     assert trigger == "src/a.py"
-    assert missing == ["docs/changes.md", "docs/specification.md"]
+    assert missing == ["docs/change_fragments/"]
 
 
-def test_docs_gate_passes_when_triggered_and_docs_present() -> None:
+def test_docs_gate_fails_when_only_modified_fragment_exists() -> None:
     check_docs_gate = _import_gate()
     ok, missing, trigger = check_docs_gate(
-        ["plugins/p.py", "docs/changes.md", "docs/specification.md"],
+        ["plugins/p.py", "docs/change_fragments/existing.md"],
         include=["src", "plugins"],
         exclude=["badguys", "patches"],
-        required_files=["docs/changes.md", "docs/specification.md"],
+        required_files=["docs/change_fragments/"],
+        changed_entries=[
+            ("M ", "plugins/p.py"),
+            ("M ", "docs/change_fragments/existing.md"),
+        ],
+    )
+    assert ok is False
+    assert trigger == "plugins/p.py"
+    assert missing == ["docs/change_fragments/"]
+
+
+def test_docs_gate_passes_when_added_fragment_exists() -> None:
+    check_docs_gate = _import_gate()
+    ok, missing, trigger = check_docs_gate(
+        ["plugins/p.py", "docs/change_fragments/new_fragment.md"],
+        include=["src", "plugins"],
+        exclude=["badguys", "patches"],
+        required_files=["docs/change_fragments/"],
+        changed_entries=[
+            ("M ", "plugins/p.py"),
+            ("A ", "docs/change_fragments/new_fragment.md"),
+        ],
     )
     assert ok is True
     assert missing == []
@@ -54,10 +77,14 @@ def test_docs_gate_passes_when_triggered_and_docs_present() -> None:
 def test_docs_gate_respects_required_files_override() -> None:
     check_docs_gate = _import_gate()
     ok, missing, trigger = check_docs_gate(
-        ["src/a.py", "docs/changes.md"],
+        ["src/a.py", "docs/change_fragments/override.md"],
         include=["src"],
         exclude=["badguys", "patches"],
-        required_files=["docs/changes.md"],
+        required_files=["docs/change_fragments/"],
+        changed_entries=[
+            ("M ", "src/a.py"),
+            ("??", "docs/change_fragments/override.md"),
+        ],
     )
     assert ok is True
     assert missing == []

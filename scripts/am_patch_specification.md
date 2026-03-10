@@ -755,19 +755,24 @@ finalizeworkspace
 
 ### 6.1.6 Docs gate (documentation obligation)
 
--   Purpose: enforce that documentation is updated when watched code
-    areas change.
+-   Purpose: enforce that documentation fragments are added when watched
+    code areas change.
 -   Trigger: the gate is evaluated only if at least one changed path
     matches `gate_docs_include` and does not match `gate_docs_exclude`
     (directory-prefix match with boundary).
--   If triggered, the gate requires that all files listed in
-    `gate_docs_required_files` are also present in the changed paths set
-    for this run.
+-   If triggered, the gate requires that each prefix listed in
+    `gate_docs_required_files` has at least one newly added changed path
+    beneath that prefix for this run.
+-   For this gate, `gate_docs_required_files` is interpreted as a list
+    of documentation fragment prefixes, not exact file paths.
+-   A path counts as newly added only when `git status --porcelain`
+    reports add or untracked status (`A*` or `??`). Modified paths do
+    not satisfy the requirement.
 -   Controls (precedence: CLI \> config \> defaults):
     -   `gates_skip_docs = true|false` (default: false)
     -   `gate_docs_include = ["src", "plugins"]` (default)
     -   `gate_docs_exclude = ["badguys", "patches"]` (default)
-    -   `gate_docs_required_files = ["docs/changes.md", "docs/specification.md"]`
+    -   `gate_docs_required_files = ["docs/change_fragments/"]`
 
         (default)
 -   CLI (optional convenience flags; equivalent overrides are also
