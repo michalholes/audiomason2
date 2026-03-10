@@ -14,6 +14,22 @@ FLOWMODEL_KIND = "dsl_step_graph_v3"
 FLOW_ID = "import_v3"
 
 
+def _step_projection_kind(primitive_id: str, primitive_version: int) -> str:
+    if primitive_version != 1:
+        return "step"
+    if primitive_id.startswith("ui.prompt_"):
+        return "prompt"
+    if primitive_id == "ui.message":
+        return "message"
+    return "step"
+
+
+def _step_projection_title(step_id: str, primitive_id: str, ui: dict[str, Any] | None) -> str:
+    del primitive_id
+    del ui
+    return step_id
+
+
 def _project_phase2_fields(step: dict[str, Any], inputs: dict[str, Any]) -> None:
     primitive_id = str(step.get("primitive_id") or "")
     primitive_version = int(step.get("primitive_version") or 0)
@@ -54,19 +70,21 @@ def _project_step(node_any: Any) -> dict[str, Any]:
     inputs_any = op_any.get("inputs")
     writes_any = op_any.get("writes")
     inputs = dict(inputs_any) if isinstance(inputs_any, dict) else {}
+    try:
+        ui = project_prompt_ui(primitive_id, primitive_version, inputs)
+    except ValueError as exc:
+        raise FinalizeError(str(exc)) from exc
+
     step: dict[str, Any] = {
         "step_id": step_id,
         "phase": 1,
-        "title": step_id,
+        "title": _step_projection_title(step_id, primitive_id, ui),
+        "kind": _step_projection_kind(primitive_id, primitive_version),
         "primitive_id": primitive_id,
         "primitive_version": primitive_version,
         "inputs": inputs,
         "writes": list(writes_any) if isinstance(writes_any, list) else [],
     }
-    try:
-        ui = project_prompt_ui(primitive_id, primitive_version, step["inputs"])
-    except ValueError as exc:
-        raise FinalizeError(str(exc)) from exc
     if ui:
         step["ui"] = ui
     _project_phase2_fields(step, inputs)

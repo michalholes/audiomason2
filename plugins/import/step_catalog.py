@@ -262,3 +262,127 @@ def get_step_details(step_id: str) -> dict[str, Any] | None:
     """Return UI-only step details or None if unknown."""
 
     return STEP_CATALOG.get(step_id)
+
+
+_PROMPT_FIELD_ORDER: tuple[str, ...] = (
+    "label",
+    "prompt",
+    "help",
+    "hint",
+    "examples",
+    "default_value",
+    "prefill",
+    "default_expr",
+    "prefill_expr",
+    "autofill_if",
+)
+
+
+def _humanize_step_id(step_id: str) -> str:
+    return " ".join(part.capitalize() for part in step_id.split("_") if part) or step_id
+
+
+def _field_type(value: Any) -> str:
+    if isinstance(value, bool):
+        return "bool"
+    if isinstance(value, int) and not isinstance(value, bool):
+        return "int"
+    if isinstance(value, float):
+        return "number"
+    if isinstance(value, str):
+        return "string"
+    return "json"
+
+
+def _schema_from_mapping(data: dict[str, Any]) -> dict[str, Any]:
+    fields = [
+        {"key": key, "type": _field_type(value), "required": False, "default": value}
+        for key, value in sorted(data.items())
+    ]
+    return _schema(fields)
+
+
+def _project_v2_step(step_id: str, step_defaults: dict[str, Any]) -> dict[str, Any]:
+    title = _humanize_step_id(step_id)
+    defaults_template = dict(step_defaults)
+    return {
+        "id": step_id,
+        "step_id": step_id,
+        "title": title,
+        "displayName": title,
+        "description": "Derived from the active WizardDefinition v2 graph.",
+        "behavioralSummary": "Read-only projection from the active import authority.",
+        "inputContract": "Derived from active WizardDefinition and FlowConfig.",
+        "outputContract": "Projection-only step metadata for editor surfaces.",
+        "sideEffectsDescription": "No side effects. Projection only.",
+        "settings_schema": _schema_from_mapping(defaults_template),
+        "defaults_template": defaults_template,
+    }
+
+
+def _project_v3_step(step: dict[str, Any], step_defaults: dict[str, Any]) -> dict[str, Any]:
+    step_id = str(step.get("step_id") or "")
+    ui_any = step.get("ui")
+    ui: dict[str, Any] = dict(ui_any) if isinstance(ui_any, dict) else {}
+    display_name = str(ui.get("label") or step_id or _humanize_step_id(step_id))
+    defaults_template = {key: ui[key] for key in _PROMPT_FIELD_ORDER if key in ui}
+    fields_data = dict(defaults_template)
+    fields_data.update(step_defaults)
+    primitive_id = str(step.get("primitive_id") or "")
+    description = str(ui.get("prompt") or primitive_id or "")
+    return {
+        "id": step_id,
+        "step_id": step_id,
+        "title": display_name,
+        "displayName": display_name,
+        "description": description or "Derived from the active WizardDefinition v3 graph.",
+        "behavioralSummary": "Read-only projection from the active import authority.",
+        "inputContract": "Derived from active WizardDefinition and FlowConfig.",
+        "outputContract": "Projection-only step metadata for editor surfaces.",
+        "sideEffectsDescription": "No side effects. Projection only.",
+        "settings_schema": _schema_from_mapping(fields_data),
+        "defaults_template": defaults_template,
+    }
+
+
+def build_step_catalog_projection(
+    *, wizard_definition: dict[str, Any], flow_config: dict[str, Any]
+) -> dict[str, dict[str, Any]]:
+    defaults_any = flow_config.get("defaults") if isinstance(flow_config, dict) else None
+    step_defaults_map = defaults_any if isinstance(defaults_any, dict) else {}
+    version = wizard_definition.get("version")
+
+    if version == 3:
+        from .dsl.flowmodel_v3 import build_flow_model_v3
+
+        flow_model = build_flow_model_v3(wizard_definition=wizard_definition)
+        out_v3: dict[str, dict[str, Any]] = {}
+        steps_any = flow_model.get("steps")
+        if not isinstance(steps_any, list):
+            return out_v3
+        for step_any in steps_any:
+            if not isinstance(step_any, dict):
+                continue
+            step_id = str(step_any.get("step_id") or "")
+            if not step_id:
+                continue
+            defaults_any = step_defaults_map.get(step_id)
+            step_defaults = defaults_any if isinstance(defaults_any, dict) else {}
+            out_v3[step_id] = _project_v3_step(step_any, step_defaults)
+        return out_v3
+
+    graph = wizard_definition.get("graph") if isinstance(wizard_definition, dict) else None
+    nodes = graph.get("nodes") if isinstance(graph, dict) else None
+    out: dict[str, dict[str, Any]] = {}
+    if not isinstance(nodes, list):
+        return out
+    for node in nodes:
+        if not isinstance(node, dict):
+            continue
+        step_id_any = node.get("step_id")
+        if not isinstance(step_id_any, str) or not step_id_any:
+            continue
+        defaults_any = step_defaults_map.get(step_id_any)
+        step_defaults = defaults_any if isinstance(defaults_any, dict) else {}
+        out[step_id_any] = _project_v2_step(step_id_any, step_defaults)
+    return out

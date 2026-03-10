@@ -5,9 +5,12 @@ from __future__ import annotations
 from importlib import import_module
 from pathlib import Path
 
+import pytest
+
 from audiomason.core.config import ConfigResolver
 
 ImportWizardEngine = import_module("plugins.import.engine").ImportWizardEngine
+build_router = import_module("plugins.import.ui_api").build_router
 atomic_write_json = import_module("plugins.import.storage").atomic_write_json
 RootName = import_module("plugins.file_io.service.types").RootName
 WIZARD_DEFINITION_REL_PATH = import_module(
@@ -159,3 +162,49 @@ def test_flow_model_projects_prompt_ui_and_step_api_normalizes_current_step(
         "prefill": "Ada",
         "autofill_if": False,
     }
+
+
+_HAS_FASTAPI = True
+try:
+    import fastapi  # noqa: F401
+except Exception:
+    _HAS_FASTAPI = False
+
+try:
+    import httpx  # noqa: F401
+
+    _HAS_HTTPX = True
+except Exception:
+    _HAS_HTTPX = False
+
+
+@pytest.mark.skipif((not _HAS_FASTAPI) or (not _HAS_HTTPX), reason="fastapi+httpx required")
+def test_step_routes_project_active_v3_metadata(tmp_path: Path) -> None:
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    engine = _make_engine(tmp_path)
+    fs = engine.get_file_service()
+    atomic_write_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_REL_PATH, PROMPT_METADATA_FLOW)
+
+    app = FastAPI()
+    app.include_router(build_router(engine=engine))
+    client = TestClient(app)
+
+    index = client.get("/import/ui/steps-index")
+    assert index.status_code == 200
+    items = {item["step_id"]: item for item in index.json()["items"]}
+    assert items["ask_name"]["displayName"] == "Name"
+
+    detail = client.get("/import/ui/steps/ask_name")
+    assert detail.status_code == 200
+    payload = detail.json()
+    assert payload["title"] == "Name"
+    assert payload["displayName"] == "Name"
+    assert payload["description"] == "Enter the normalized name"
+    assert payload["kind"] == "optional"
+    assert payload["pinned"] is False
+    field_keys = [field["key"] for field in payload["settings_schema"]["fields"]]
+    assert "label" in field_keys
+    assert "default_expr" in field_keys
+    assert payload["defaults_template"]["default_value"] == "fallback"

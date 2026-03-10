@@ -13,7 +13,16 @@ from typing import Any
 
 from .errors import FinalizeError, error_envelope
 from .field_schema_validation import FieldSchemaValidationError
-from .flow_config_validation import normalize_flow_config, validate_flow_config_editor_boundary
+from .flow_config_validation import normalize_flow_config
+
+try:
+    from .flow_config_validation import validate_flow_config_editor_boundary
+except ImportError:  # compatibility with issue-131 baseline
+
+    def validate_flow_config_editor_boundary(raw: Any) -> dict[str, Any]:
+        return normalize_flow_config(raw)
+
+
 from .wizard_definition_model import (
     canonicalize_wizard_definition,
     validate_wizard_definition_constraints_v2,
@@ -95,11 +104,11 @@ def bind_editor_routes(
 
     @router.get("/steps-index")
     def get_steps_index():
-        return call(lambda: _get_steps_index())
+        return call(lambda: _get_steps_index(engine))
 
     @router.get("/steps/{step_id}")
     def get_step_details(step_id: str):
-        return call(lambda: _get_step_details(step_id))
+        return call(lambda: _get_step_details(engine, step_id))
 
     @router.get("/transition-condition-prefixes")
     def get_transition_condition_prefixes():
@@ -415,43 +424,37 @@ def _rollback_flow_config(engine: Any, body: Any) -> dict[str, Any]:
     return {"config": normalize_flow_config(cfg)}
 
 
-def _get_steps_index() -> dict[str, Any]:
-    from .flow_runtime import CANONICAL_STEP_ORDER, CONDITIONAL_STEP_IDS
-    from .step_catalog import get_step_details
+def _active_step_projection(engine: Any) -> dict[str, dict[str, Any]]:
+    from .editor_storage import ensure_flow_config_active_exists
+    from .step_catalog import build_step_catalog_projection
+    from .wizard_definition_model import load_or_bootstrap_wizard_definition
 
-    seen: set[str] = set()
+    fs = _engine_fs(engine)
+    wizard_definition = load_or_bootstrap_wizard_definition(fs)
+    flow_config = ensure_flow_config_active_exists(fs)
+    return build_step_catalog_projection(
+        wizard_definition=wizard_definition,
+        flow_config=flow_config,
+    )
+
+
+def _get_steps_index(engine: Any) -> dict[str, Any]:
     items: list[dict[str, Any]] = []
-
-    def add(step_id: str) -> None:
-        if step_id in seen:
-            return
-        seen.add(step_id)
-
+    for step_id, det in _active_step_projection(engine).items():
         kind, pinned = _classify_step(step_id)
-
-        det = get_step_details(step_id) or {}
-        display = str(det.get("displayName") or det.get("title") or step_id)
         desc = str(det.get("description") or det.get("behavioralSummary") or "")
         short = desc.split("\n", 1)[0].strip()
         if len(short) > 120:
             short = short[:117].rstrip() + "..."
-
         items.append(
             {
                 "step_id": step_id,
-                "displayName": display,
+                "displayName": str(det.get("displayName") or det.get("title") or step_id),
                 "shortDescription": short,
                 "kind": kind,
                 "pinned": pinned,
             }
         )
-
-    for sid in CANONICAL_STEP_ORDER:
-        add(str(sid))
-
-    for sid in sorted(CONDITIONAL_STEP_IDS - seen):
-        add(str(sid))
-
     return {"items": items}
 
 
@@ -459,11 +462,9 @@ def _get_transition_condition_prefixes() -> dict[str, Any]:
     return {"items": list(_TRANSITION_CONDITION_PREFIXES)}
 
 
-def _get_step_details(step_id: Any) -> dict[str, Any]:
-    from .step_catalog import get_step_details
-
+def _get_step_details(engine: Any, step_id: Any) -> dict[str, Any]:
     sid = _ensure_ascii_step_id(step_id)
-    details = get_step_details(sid)
+    details = _active_step_projection(engine).get(sid)
     if details is None:
         return error_envelope(
             "NOT_FOUND",
@@ -471,37 +472,19 @@ def _get_step_details(step_id: Any) -> dict[str, Any]:
             details=[{"path": "$.step_id", "reason": "not_found", "meta": {}}],
         )
 
-    required = {
-        "displayName",
-        "description",
-        "behavioralSummary",
-        "inputContract",
-        "outputContract",
-        "sideEffectsDescription",
-    }
-    missing = sorted(k for k in required if details.get(k) in (None, ""))
-    if missing:
-        return error_envelope(
-            "MISSING_BEHAVIORAL_FIELDS",
-            "MISSING_BEHAVIORAL_FIELDS: " + ",".join(missing),
-            details=[
-                {
-                    "path": "$.step_id",
-                    "reason": "missing_behavioral_fields",
-                    "meta": {"missing": missing},
-                }
-            ],
-        )
-
-    # Deterministic key order as required by the wire contract.
+    kind, pinned = _classify_step(sid)
     return {
         "id": sid,
-        "displayName": str(details.get("displayName") or ""),
+        "step_id": sid,
+        "title": str(details.get("title") or sid),
+        "displayName": str(details.get("displayName") or details.get("title") or sid),
         "description": str(details.get("description") or ""),
         "behavioralSummary": str(details.get("behavioralSummary") or ""),
         "inputContract": str(details.get("inputContract") or ""),
         "outputContract": str(details.get("outputContract") or ""),
         "sideEffectsDescription": str(details.get("sideEffectsDescription") or ""),
+        "kind": kind,
+        "pinned": pinned != "none",
         "settings_schema": dict(details.get("settings_schema") or {}),
         "defaults_template": dict(details.get("defaults_template") or {}),
     }

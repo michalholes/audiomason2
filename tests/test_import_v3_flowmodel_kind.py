@@ -92,7 +92,10 @@ def test_get_flow_model_v3_declares_kind_and_primitive_metadata(tmp_path: Path) 
     steps = {step["step_id"]: step for step in flow_model["steps"]}
     assert steps["ask_name"]["primitive_id"] == "ui.prompt_text"
     assert steps["ask_name"]["primitive_version"] == 1
+    assert steps["ask_name"]["kind"] == "prompt"
+    assert steps["ask_name"]["title"] == "ask_name"
     assert steps["stop"]["primitive_id"] == "ctrl.stop"
+    assert steps["stop"]["kind"] == "step"
 
     state = engine.create_session("inbox", "")
     assert state["status"] == "in_progress"
