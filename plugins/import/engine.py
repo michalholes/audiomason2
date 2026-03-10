@@ -859,7 +859,11 @@ class ImportWizardEngine:
     def _update_conflicts(self, session_id: str, state: dict[str, Any]) -> None:
         items = self._scan_conflicts(session_id, state)
         fp = fingerprint_json(items)
-        policy = str((state.get("conflicts") or {}).get("policy") or "ask")
+        policy = str(
+            (state.get("answers") or {}).get("conflict_policy", {}).get("mode")
+            or (state.get("conflicts") or {}).get("policy")
+            or "ask"
+        )
         resolved = self._resolve_flag_for_scan(
             state=state,
             policy=policy,
@@ -935,6 +939,11 @@ class ImportWizardEngine:
                         discovery=discovery_any,
                         state=state,
                     )
+            state.setdefault("conflicts", {})["policy"] = str(
+                (state.get("answers") or {}).get("conflict_policy", {}).get("mode")
+                or (state.get("conflicts") or {}).get("policy")
+                or "ask"
+            )
             self._persist_state(session_id, state)
         return state
 

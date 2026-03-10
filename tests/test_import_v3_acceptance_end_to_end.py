@@ -63,12 +63,15 @@ def test_default_v3_cli_acceptance_keeps_selection_and_plan_state(tmp_path: Path
     engine, resolver, wizards_root = _make_engine(tmp_path)
 
     printed: list[str] = []
-    inputs = iter(["", "", "", "y"])
+
+    def _input_fn(prompt: str) -> str:
+        return "y" if "Start processing" in prompt else ""
+
     rc = run_launcher(
         engine=engine,
         resolver=resolver,
         cli_overrides={},
-        input_fn=lambda _prompt: next(inputs),
+        input_fn=_input_fn,
         print_fn=printed.append,
     )
 
@@ -86,14 +89,24 @@ def test_default_v3_cli_acceptance_keeps_selection_and_plan_state(tmp_path: Path
     assert state["status"] == "completed"
     assert state["selected_author_ids"]
     assert state["selected_book_ids"]
-    assert state["inputs"]["final_summary_confirm"]["confirm_start"] is True
+    assert state["answers"]["final_summary_confirm"]["confirm_start"] is True
     assert state["computed"]["plan_summary"]["files"] == 1
     assert plan["summary"]["selected_books"] == 1
+    assert state["vars"]["phase1"]["runtime"]["covers_policy"]["mode"] == "embedded"
     assert [entry["step_id"] for entry in state["trace"]] == [
         "select_authors",
         "select_books",
         "plan_preview_batch",
+        "phase1_runtime_defaults",
+        "effective_author_title",
+        "filename_policy",
+        "covers_policy",
+        "id3_policy",
+        "audio_processing",
+        "publish_policy",
+        "delete_source_policy",
         "conflict_policy",
+        "parallelism",
         "final_summary_confirm",
         "processing",
     ]
@@ -101,5 +114,6 @@ def test_default_v3_cli_acceptance_keeps_selection_and_plan_state(tmp_path: Path
     joined = "\n".join(printed)
     assert "Step: select_authors" in joined
     assert "Step: select_books" in joined
-    assert "Step: conflict_policy" in joined
+    assert "Step: effective_author_title" in joined
+    assert "Step: final_summary_confirm" in joined
     assert '"status": "completed"' in joined

@@ -64,13 +64,15 @@ def test_cli_import_uses_bootstrapped_v3_default_program(tmp_path: Path) -> None
     assert not fs.exists(RootName.WIZARDS, WIZARD_DEFINITION_REL_PATH)
 
     printed: list[str] = []
-    inputs = iter(["", "", "", "y"])
+
+    def _input_fn(prompt: str) -> str:
+        return "y" if "Start processing" in prompt else ""
 
     rc = run_launcher(
         engine=engine,
         resolver=resolver,
         cli_overrides={},
-        input_fn=lambda _prompt: next(inputs),
+        input_fn=_input_fn,
         print_fn=printed.append,
     )
 
@@ -88,5 +90,6 @@ def test_cli_import_uses_bootstrapped_v3_default_program(tmp_path: Path) -> None
     assert "Step: select_authors" in joined
     assert "Label: Authors" in joined
     assert "Step: select_books" in joined
+    assert "Step: effective_author_title" in joined
     assert "Step: final_summary_confirm" in joined
     assert '"status": "completed"' in joined

@@ -5,10 +5,30 @@ ASCII-only.
 
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any
 
+DEFAULT_FILENAME_POLICY = {"mode": "keep", "template": "{author}/{title}"}
+DEFAULT_FIELD_MAP = {
+    "title": "title",
+    "artist": "artist",
+    "album": "album",
+    "album_artist": "album_artist",
+}
 
-def build_phase1_metadata_projection(*, source_projection: dict[str, Any]) -> dict[str, Any]:
+
+def _answer_dict(state: dict[str, Any], key: str) -> dict[str, Any]:
+    answers_any = state.get("answers")
+    answers = dict(answers_any) if isinstance(answers_any, dict) else {}
+    value = answers.get(key)
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def build_phase1_metadata_projection(
+    *,
+    source_projection: dict[str, Any],
+    state: dict[str, Any],
+) -> dict[str, Any]:
     book_meta_any = source_projection.get("book_meta")
     book_meta = dict(book_meta_any) if isinstance(book_meta_any, dict) else {}
     selected_any = source_projection.get("select_books")
@@ -19,28 +39,59 @@ def build_phase1_metadata_projection(*, source_projection: dict[str, Any]) -> di
         if isinstance(selected_ids_any, list)
         else []
     )
+    selected_paths_any = selected.get("selected_source_relative_paths")
+    selected_paths = (
+        [item for item in selected_paths_any if isinstance(item, str)]
+        if isinstance(selected_paths_any, list)
+        else []
+    )
 
     first_book = book_meta.get(selected_ids[0], {}) if selected_ids else {}
     author_name = str(first_book.get("author_label") or "")
     book_title = str(first_book.get("book_label") or "")
 
-    values = {
-        "title": book_title,
-        "artist": author_name,
-        "album": book_title,
-        "album_artist": author_name,
-    }
-    values = {key: value for key, value in values.items() if value}
-    return {
+    effective_author_title = {
         "author": author_name,
-        "book": book_title,
-        "normalize_author": author_name,
-        "normalize_book_title": book_title,
-        "field_map": {
-            "title": "book_title",
-            "artist": "author",
-            "album": "book_title",
-            "album_artist": "author",
-        },
+        "title": book_title,
+    }
+    effective_author_title.update(_answer_dict(state, "effective_author_title"))
+    normalized_author = str(effective_author_title.get("author") or author_name)
+    normalized_book_title = str(effective_author_title.get("title") or book_title)
+    effective_author_title = {
+        "author": normalized_author,
+        "title": normalized_book_title,
+    }
+
+    filename_policy = deepcopy(DEFAULT_FILENAME_POLICY)
+    filename_policy.update(
+        {
+            "author": normalized_author,
+            "title": normalized_book_title,
+        }
+    )
+    filename_policy.update(_answer_dict(state, "filename_policy"))
+
+    default_values = {
+        "title": normalized_book_title,
+        "artist": normalized_author,
+        "album": normalized_book_title,
+        "album_artist": normalized_author,
+    }
+    id3_policy = {
+        "field_map": deepcopy(DEFAULT_FIELD_MAP),
+        "values": default_values,
+    }
+    id3_policy.update(_answer_dict(state, "id3_policy"))
+    field_map = dict(id3_policy.get("field_map") or {})
+    values = dict(id3_policy.get("values") or {})
+
+    return {
+        "effective_author_title": effective_author_title,
+        "filename_policy": filename_policy,
+        "field_map": field_map,
         "values": values,
+        "normalize_author": normalized_author,
+        "normalize_book_title": normalized_book_title,
+        "selected_book_ids": selected_ids,
+        "selected_source_relative_paths": selected_paths,
     }

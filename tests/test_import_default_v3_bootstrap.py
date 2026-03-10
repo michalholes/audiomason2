@@ -15,6 +15,9 @@ canonicalize_wizard_definition = import_module(
 load_or_bootstrap_wizard_definition = import_module(
     "plugins.import.wizard_definition_model"
 ).load_or_bootstrap_wizard_definition
+build_default_wizard_definition_v3 = import_module(
+    "plugins.import.dsl.default_wizard_v3"
+).build_default_wizard_definition_v3
 RootName = import_module("plugins.file_io.service.types").RootName
 WIZARD_DEFINITION_REL_PATH = import_module(
     "plugins.import.wizard_definition_model"
@@ -76,18 +79,12 @@ def test_load_or_bootstrap_can_create_python_defined_v3_default(tmp_path: Path) 
     fs = engine.get_file_service()
 
     out = load_or_bootstrap_wizard_definition(fs, bootstrap_default_version=3)
+    expected = canonicalize_wizard_definition(build_default_wizard_definition_v3())
 
     assert out == canonicalize_wizard_definition(out)
     assert out["version"] == 3
     assert out["entry_step_id"] == "select_authors"
-    assert [node["step_id"] for node in out["nodes"]] == [
-        "conflict_policy",
-        "final_summary_confirm",
-        "plan_preview_batch",
-        "processing",
-        "select_authors",
-        "select_books",
-    ]
+    assert out == expected
 
 
 def test_load_or_bootstrap_replaces_invalid_artifact_with_v3_default(tmp_path: Path) -> None:

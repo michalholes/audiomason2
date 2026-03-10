@@ -11,6 +11,7 @@ from .fingerprints import sha256_hex
 from .phase1_cover_flow import build_phase1_cover_projection
 from .phase1_metadata_flow import build_phase1_metadata_projection
 from .phase1_policy_flow import build_phase1_policy_projection
+from .primitives.import_phase1_v1 import execute as execute_phase1_runtime
 
 
 def _selection_expr(*, ordered_ids: list[str], selected_ids: list[str]) -> str:
@@ -236,9 +237,18 @@ def build_phase1_projection(
     state: dict[str, Any],
 ) -> dict[str, Any]:
     source_projection = build_phase1_source_projection(discovery=discovery, state=state)
-    metadata_projection = build_phase1_metadata_projection(source_projection=source_projection)
-    cover_projection = build_phase1_cover_projection(source_projection=source_projection)
-    policy_projection = build_phase1_policy_projection(state=state)
+    metadata_projection = build_phase1_metadata_projection(
+        source_projection=source_projection,
+        state=state,
+    )
+    cover_projection = build_phase1_cover_projection(
+        source_projection=source_projection,
+        state=state,
+    )
+    policy_projection = build_phase1_policy_projection(
+        state=state,
+        source_projection=source_projection,
+    )
     phase2_inputs = {
         "covers_policy": {
             "mode": str(cover_projection.get("mode") or "skip"),
@@ -253,11 +263,14 @@ def build_phase1_projection(
         "delete_source_policy": dict(policy_projection.get("delete_source_policy") or {}),
         "conflict_policy": dict(policy_projection.get("conflict_policy") or {}),
     }
-    return {
+    phase1_projection = {
         **source_projection,
         "metadata": metadata_projection,
         "cover": cover_projection,
         "policy": policy_projection,
+        "effective_author_title": dict(metadata_projection.get("effective_author_title") or {}),
+        "filename_policy": dict(metadata_projection.get("filename_policy") or {}),
+        "parallelism": dict(policy_projection.get("parallelism") or {}),
         "normalized_author": str(metadata_projection.get("normalize_author") or ""),
         "normalized_book_title": str(metadata_projection.get("normalize_book_title") or ""),
         "clean_inbox": bool(policy_projection.get("clean_inbox", False)),
@@ -266,6 +279,19 @@ def build_phase1_projection(
         "two_pass_order": list(policy_projection.get("two_pass_order") or []),
         "phase2_inputs": phase2_inputs,
     }
+    runtime_state = {
+        **state,
+        "vars": {**dict(state.get("vars") or {}), "phase1": phase1_projection},
+    }
+    runtime_snapshot = execute_phase1_runtime(
+        "import.phase1_runtime",
+        1,
+        {},
+        runtime_state,
+    ).get("snapshot")
+    if isinstance(runtime_snapshot, dict):
+        phase1_projection["runtime"] = runtime_snapshot
+    return phase1_projection
 
 
 __all__ = ["build_phase1_projection", "phase1_session_authority_applies"]
