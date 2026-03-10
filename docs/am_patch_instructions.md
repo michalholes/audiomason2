@@ -152,6 +152,43 @@ Rules:
 
 ------------------------------------------------------------------------
 
+
+## Change log concurrency discipline (HARD)
+
+1. Regular implementation patches MUST NOT modify docs/changes.md directly.
+
+2. Every patch that changes src/, plugins/, or docs/ MUST create exactly one
+   new change fragment under docs/change_fragments/.
+
+3. The fragment filename MUST be unique and deterministic, using an ISO 8601
+   UTC timestamp plus a short ASCII slug:
+   YYYY-MM-DDTHH-MM-SSZ__<slug>.md
+
+4. The fragment content MUST contain:
+   - one ISO 8601 timestamp
+   - human-readable description of the delivered change
+
+5. Change log text MUST NOT contain:
+   - issue numbers
+   - issue references
+   - patch filenames
+   - chat/session metadata
+
+6. docs/changes.md is a generated rollup artifact only.
+   Direct manual editing of docs/changes.md in regular feature patches is forbidden.
+
+7. If docs/changes.md is regenerated, that regeneration MUST be done only in a
+   dedicated docs-only integration patch authored against the latest authoritative main.
+
+8. PM validator MUST fail if:
+   - a regular patch modifies docs/changes.md directly, or
+   - any added change-log text contains issue references.
+
+
+------------------------------------------------------------------------
+
+
+
 # INITIAL PATCH RULES (HARD)
 
 These rules apply when generating the first patch for an issue.
