@@ -45,3 +45,6 @@ The validator covers only machine-verifiable PM requirements:
 PASS does not prove manual-only PM requirements such as English-only
 review, inspection-proof blocks, INPUTS USED blocks, or chat-output
 format obligations.
+
+
+Docs gate is enforced: changes to src/, plugins/, or docs/ require a new file under docs/change_fragments/.

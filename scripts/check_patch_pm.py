@@ -36,13 +36,6 @@ PATCH_BASENAME_RE = re.compile(r"^issue_(?P<issue>\d+)_v(?P<version>[1-9]\d*)\.z
 
 COMMIT_CFG = ZipCommitConfig(True, "COMMIT_MESSAGE.txt", 4096, 200)
 ISSUE_CFG = ZipIssueConfig(True, "ISSUE_NUMBER.txt", 128, 200)
-MANUAL_ONLY = [
-    "commit_message_english",
-    "no_new_dependencies_without_approval",
-    "inspection_proof_block",
-    "inputs_used_block",
-    "downloadable_artifact_and_chat_output_contract",
-]
 MONOLITH_KEYS = [
     "gate_monolith_mode",
     "gate_monolith_scan_scope",
@@ -104,12 +97,6 @@ class MonolithLogger:
 
 def _run(cmd: list[str], *, cwd: Path) -> subprocess.CompletedProcess[str]:
     return subprocess.run(cmd, cwd=str(cwd), capture_output=True, text=True, check=False)
-
-
-def _manual_only() -> list[RuleResult]:
-    return [
-        RuleResult(f"MANUAL_ONLY:{name}", "SKIP", "not_machine_verifiable") for name in MANUAL_ONLY
-    ]
 
 
 def _resolve_patch_path(repo_root: Path, patch_arg: str) -> tuple[Path, bool]:
@@ -375,6 +362,19 @@ def _format_text(results: list[RuleResult]) -> str:
     return "\n".join(lines) + "\n"
 
 
+def _docs_gate(decision_paths: list[str]) -> RuleResult:
+    trigger_prefixes = ("src/", "plugins/", "docs/")
+    triggered = any(p.startswith(trigger_prefixes) for p in decision_paths)
+    if not triggered:
+        return RuleResult("DOCS_GATE", "PASS", "not_triggered")
+    has_fragment = any(p.startswith("docs/change_fragments/") for p in decision_paths)
+    if not has_fragment:
+        return RuleResult("DOCS_GATE", "FAIL", "missing_change_fragment")
+    if any(p == "docs/changes.md" for p in decision_paths):
+        return RuleResult("DOCS_GATE", "FAIL", "direct_changes_md_edit")
+    return RuleResult("DOCS_GATE", "PASS", "fragment_present")
+
+
 def run_validation(args: argparse.Namespace) -> tuple[int, list[RuleResult]]:
     repo_root = Path(args.repo_root).resolve()
     config_path = Path(args.config).resolve()
@@ -399,13 +399,12 @@ def run_validation(args: argparse.Namespace) -> tuple[int, list[RuleResult]]:
         commit_message=str(args.commit_message),
     )
     results.extend(member_results)
+    results.append(_docs_gate(decision_paths))
     if any(r.status == "FAIL" for r in results):
-        results.extend(_manual_only())
         return 1, results
 
     results.extend(_git_apply_check(repo_root, members))
     if any(r.status == "FAIL" for r in results):
-        results.extend(_manual_only())
         return 1, results
 
     with tempfile.TemporaryDirectory() as td:
@@ -414,7 +413,7 @@ def run_validation(args: argparse.Namespace) -> tuple[int, list[RuleResult]]:
         results.append(_compile_python(root, decision_paths))
         results.append(_check_js(root, decision_paths))
         results.append(_run_monolith(root, repo_root, config_path, decision_paths))
-    results.extend(_manual_only())
+
     return (1 if any(r.status == "FAIL" for r in results) else 0), results
 
 

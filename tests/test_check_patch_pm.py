@@ -117,15 +117,37 @@ def _run_validator(
     )
 
 
+def _fragment_member(
+    relpath: str = "docs/change_fragments/validator.md", text: str = "added\n"
+) -> tuple[str, bytes]:
+    member = "patches/per_file/" + relpath.replace("/", "__") + ".patch"
+    added_lines = text.splitlines()
+    hunk = "".join(f"+{line}\n" for line in added_lines)
+    patch = (
+        f"diff --git a/{relpath} b/{relpath}\n"
+        "new file mode 100644\n"
+        "index 0000000..1111111\n"
+        "--- /dev/null\n"
+        f"+++ b/{relpath}\n"
+        f"@@ -0,0 +1,{len(added_lines)} @@\n"
+        f"{hunk}"
+    ).encode()
+    return member, patch
+
+
 def test_valid_patch_passes(tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     _write(repo_root / "docs/readme.txt", "old\n")
     patch = _git_patch("docs/readme.txt", "old\n", "new\n")
+    fragment_member, fragment_patch = _fragment_member()
     _write_patch_zip(
         repo_root,
         issue_id="223",
         commit_message=COMMIT_MESSAGE,
-        members={"patches/per_file/docs__readme.txt.patch": patch},
+        members={
+            "patches/per_file/docs__readme.txt.patch": patch,
+            fragment_member: fragment_patch,
+        },
     )
 
     proc = _run_validator(repo_root, "223", COMMIT_MESSAGE)
@@ -242,11 +264,15 @@ def test_git_apply_failure_is_reported(tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     _write(repo_root / "docs/readme.txt", "current\n")
     patch = _git_patch("docs/readme.txt", "old\n", "new\n")
+    fragment_member, fragment_patch = _fragment_member()
     _write_patch_zip(
         repo_root,
         issue_id="223",
         commit_message=COMMIT_MESSAGE,
-        members={"patches/per_file/docs__readme.txt.patch": patch},
+        members={
+            "patches/per_file/docs__readme.txt.patch": patch,
+            fragment_member: fragment_patch,
+        },
     )
 
     proc = _run_validator(repo_root, "223", COMMIT_MESSAGE)
@@ -259,11 +285,15 @@ def test_line_length_rule_skips_non_python_and_non_js_files(tmp_path: Path) -> N
     _write(repo_root / "docs/readme.txt", "old\n")
     long_line = "x" * 101
     patch = _git_patch("docs/readme.txt", "old\n", long_line + "\n")
+    fragment_member, fragment_patch = _fragment_member()
     _write_patch_zip(
         repo_root,
         issue_id="223",
         commit_message=COMMIT_MESSAGE,
-        members={"patches/per_file/docs__readme.txt.patch": patch},
+        members={
+            "patches/per_file/docs__readme.txt.patch": patch,
+            fragment_member: fragment_patch,
+        },
     )
 
     proc = _run_validator(repo_root, "223", COMMIT_MESSAGE)
@@ -349,3 +379,58 @@ def test_js_syntax_failure_is_reported(tmp_path: Path) -> None:
     proc = _run_validator(repo_root, "223", COMMIT_MESSAGE)
     assert proc.returncode == 1
     assert "RULE JS_SYNTAX: FAIL" in proc.stdout
+
+
+def test_docs_gate_failure_is_reported_without_fragment(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    _write(repo_root / "docs/readme.txt", "old\n")
+    patch = _git_patch("docs/readme.txt", "old\n", "new\n")
+    _write_patch_zip(
+        repo_root,
+        issue_id="223",
+        commit_message=COMMIT_MESSAGE,
+        members={"patches/per_file/docs__readme.txt.patch": patch},
+    )
+
+    proc = _run_validator(repo_root, "223", COMMIT_MESSAGE)
+    assert proc.returncode == 1
+    assert "RULE DOCS_GATE: FAIL - missing_change_fragment" in proc.stdout
+
+
+def test_docs_gate_failure_is_reported_for_direct_changes_md_edit(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    _write(repo_root / "docs/changes.md", "old\n")
+    patch = _git_patch("docs/changes.md", "old\n", "new\n")
+    fragment_member, fragment_patch = _fragment_member()
+    _write_patch_zip(
+        repo_root,
+        issue_id="223",
+        commit_message=COMMIT_MESSAGE,
+        members={
+            "patches/per_file/docs__changes.md.patch": patch,
+            fragment_member: fragment_patch,
+        },
+    )
+
+    proc = _run_validator(repo_root, "223", COMMIT_MESSAGE)
+    assert proc.returncode == 1
+    assert "RULE DOCS_GATE: FAIL - direct_changes_md_edit" in proc.stdout
+
+
+def test_no_manual_only_output(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    _write(repo_root / "docs/readme.txt", "old\n")
+    patch = _git_patch("docs/readme.txt", "old\n", "new\n")
+    fragment_member, fragment_patch = _fragment_member()
+    _write_patch_zip(
+        repo_root,
+        issue_id="223",
+        commit_message=COMMIT_MESSAGE,
+        members={
+            "patches/per_file/docs__readme.txt.patch": patch,
+            fragment_member: fragment_patch,
+        },
+    )
+    proc = _run_validator(repo_root, "223", COMMIT_MESSAGE)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "MANUAL_ONLY" not in proc.stdout
