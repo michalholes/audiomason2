@@ -1,3 +1,10 @@
+## 2026-03-10T00:00:23+01:00
+
+-   Issue 134: import step projection now fails explicitly when active
+    authority artifacts cannot be projected, and the route/test coverage
+    keeps steps-index bound to active wizard steps instead of the legacy
+    static catalog.
+
 ## 2026-03-10T00:00:22+01:00
 
 -   Issue 133: import editor validation now keeps FlowConfig draft and

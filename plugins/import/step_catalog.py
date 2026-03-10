@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from .errors import FinalizeError
+
 
 def _field(
     *,
@@ -348,7 +350,12 @@ def _project_v3_step(step: dict[str, Any], step_defaults: dict[str, Any]) -> dic
 def build_step_catalog_projection(
     *, wizard_definition: dict[str, Any], flow_config: dict[str, Any]
 ) -> dict[str, dict[str, Any]]:
-    defaults_any = flow_config.get("defaults") if isinstance(flow_config, dict) else None
+    if not isinstance(wizard_definition, dict):
+        raise FinalizeError("wizard_definition must be an object")
+    if not isinstance(flow_config, dict):
+        raise FinalizeError("flow_config must be an object")
+
+    defaults_any = flow_config.get("defaults")
     step_defaults_map = defaults_any if isinstance(defaults_any, dict) else {}
     version = wizard_definition.get("version")
 
@@ -359,29 +366,35 @@ def build_step_catalog_projection(
         out_v3: dict[str, dict[str, Any]] = {}
         steps_any = flow_model.get("steps")
         if not isinstance(steps_any, list):
-            return out_v3
+            raise FinalizeError("flow_model steps must be a list")
         for step_any in steps_any:
             if not isinstance(step_any, dict):
-                continue
+                raise FinalizeError("flow_model step must be an object")
             step_id = str(step_any.get("step_id") or "")
             if not step_id:
-                continue
+                raise FinalizeError("flow_model step_id must be a non-empty string")
             defaults_any = step_defaults_map.get(step_id)
             step_defaults = defaults_any if isinstance(defaults_any, dict) else {}
             out_v3[step_id] = _project_v3_step(step_any, step_defaults)
         return out_v3
 
-    graph = wizard_definition.get("graph") if isinstance(wizard_definition, dict) else None
-    nodes = graph.get("nodes") if isinstance(graph, dict) else None
-    out: dict[str, dict[str, Any]] = {}
+    if version != 2:
+        raise FinalizeError("wizard_definition must be version 2 or 3")
+
+    graph = wizard_definition.get("graph")
+    if not isinstance(graph, dict):
+        raise FinalizeError("wizard_definition graph must be an object")
+    nodes = graph.get("nodes")
     if not isinstance(nodes, list):
-        return out
+        raise FinalizeError("wizard_definition graph.nodes must be a list")
+
+    out: dict[str, dict[str, Any]] = {}
     for node in nodes:
         if not isinstance(node, dict):
-            continue
+            raise FinalizeError("wizard_definition graph node must be an object")
         step_id_any = node.get("step_id")
         if not isinstance(step_id_any, str) or not step_id_any:
-            continue
+            raise FinalizeError("wizard_definition graph node step_id must be a string")
         defaults_any = step_defaults_map.get(step_id_any)
         step_defaults = defaults_any if isinstance(defaults_any, dict) else {}
         out[step_id_any] = _project_v2_step(step_id_any, step_defaults)

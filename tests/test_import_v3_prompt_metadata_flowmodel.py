@@ -9,6 +9,11 @@ import pytest
 
 from audiomason.core.config import ConfigResolver
 
+FinalizeError = import_module("plugins.import.errors").FinalizeError
+build_step_catalog_projection = import_module(
+    "plugins.import.step_catalog"
+).build_step_catalog_projection
+
 ImportWizardEngine = import_module("plugins.import.engine").ImportWizardEngine
 build_router = import_module("plugins.import.ui_api").build_router
 atomic_write_json = import_module("plugins.import.storage").atomic_write_json
@@ -194,7 +199,12 @@ def test_step_routes_project_active_v3_metadata(tmp_path: Path) -> None:
     index = client.get("/import/ui/steps-index")
     assert index.status_code == 200
     items = {item["step_id"]: item for item in index.json()["items"]}
+    assert "ask_name" in items
+    assert "parallelism" not in items
     assert items["ask_name"]["displayName"] == "Name"
+
+    missing = client.get("/import/ui/steps/parallelism")
+    assert missing.status_code == 404
 
     detail = client.get("/import/ui/steps/ask_name")
     assert detail.status_code == 200
@@ -208,3 +218,17 @@ def test_step_routes_project_active_v3_metadata(tmp_path: Path) -> None:
     assert "label" in field_keys
     assert "default_expr" in field_keys
     assert payload["defaults_template"]["default_value"] == "fallback"
+
+
+def test_build_step_catalog_projection_rejects_underivable_inputs() -> None:
+    with pytest.raises(FinalizeError, match="wizard_definition must be version 2 or 3"):
+        build_step_catalog_projection(
+            wizard_definition={"version": 99},
+            flow_config={"version": 1, "steps": {}, "defaults": {}},
+        )
+
+    with pytest.raises(FinalizeError, match="wizard_definition graph.nodes must be a list"):
+        build_step_catalog_projection(
+            wizard_definition={"version": 2, "graph": {}},
+            flow_config={"version": 1, "steps": {}, "defaults": {}},
+        )
