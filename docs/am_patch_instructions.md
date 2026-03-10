@@ -162,7 +162,7 @@ Rules:
 
 3. The fragment filename MUST be unique and deterministic, using an ISO 8601
    UTC timestamp plus a short ASCII slug:
-   YYYY-MM-DDTHH-MM-SSZ__<slug>.md
+   YYYY-MM-DDTHH-MM-SSZ_<slug>.md
 
 4. The fragment content MUST contain:
    - one ISO 8601 timestamp
