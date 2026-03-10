@@ -34,6 +34,8 @@ def build_phase1_metadata_projection(*, source_projection: dict[str, Any]) -> di
     return {
         "author": author_name,
         "book": book_title,
+        "normalize_author": author_name,
+        "normalize_book_title": book_title,
         "field_map": {
             "title": "book_title",
             "artist": "author",

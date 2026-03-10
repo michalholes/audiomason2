@@ -258,6 +258,12 @@ def build_phase1_projection(
         "metadata": metadata_projection,
         "cover": cover_projection,
         "policy": policy_projection,
+        "normalized_author": str(metadata_projection.get("normalize_author") or ""),
+        "normalized_book_title": str(metadata_projection.get("normalize_book_title") or ""),
+        "clean_inbox": bool(policy_projection.get("clean_inbox", False)),
+        "skip_processed_books": bool(policy_projection.get("skip_processed_books", True)),
+        "root_audio_baseline": dict(policy_projection.get("root_audio_baseline") or {}),
+        "two_pass_order": list(policy_projection.get("two_pass_order") or []),
         "phase2_inputs": phase2_inputs,
     }
 

@@ -21,4 +21,5 @@ def build_phase1_cover_projection(*, source_projection: dict[str, Any]) -> dict[
         "mode": "skip",
         "url": "",
         "selected_source_relative_paths": selected_paths,
+        "choice": "skip",
     }

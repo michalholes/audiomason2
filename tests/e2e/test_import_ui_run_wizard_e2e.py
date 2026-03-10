@@ -3,6 +3,9 @@ from __future__ import annotations
 import re
 
 import pytest
+
+pytest.importorskip("pytest_playwright")
+
 from _asset_inventory import active_import_ui_paths
 from _browser_probe import BrowserProbe
 from playwright.async_api import Page, expect

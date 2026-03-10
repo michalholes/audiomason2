@@ -22,4 +22,8 @@ def build_phase1_policy_projection(*, state: dict[str, Any]) -> dict[str, Any]:
         "audio_processing": dict(DEFAULT_AUDIO_POLICY),
         "publish_policy": {"target_root": target_root},
         "delete_source_policy": {"enabled": False},
+        "clean_inbox": False,
+        "skip_processed_books": True,
+        "root_audio_baseline": {"target_root": target_root},
+        "two_pass_order": ["select_authors", "select_books"],
     }
