@@ -14,10 +14,10 @@ def _import_am_patch():
     scripts_dir = Path(__file__).parent.parent / "scripts"
     sys.path.insert(0, str(scripts_dir))
     from am_patch.config import Policy, build_policy
-    from am_patch.engine import finalize_and_report
+    from am_patch.engine import build_paths_and_logger, finalize_and_report
     from am_patch.errors import CANCEL_EXIT_CODE, RunnerCancelledError, RunnerError
     from am_patch.log import Logger
-    from am_patch.repo_root import resolve_repo_root
+    from am_patch.repo_root import consume_resolve_repo_root_diagnostic, resolve_repo_root
     from am_patch.run_result import RunResult
 
     return (
@@ -29,6 +29,8 @@ def _import_am_patch():
         build_policy,
         finalize_and_report,
         resolve_repo_root,
+        build_paths_and_logger,
+        consume_resolve_repo_root_diagnostic,
         CANCEL_EXIT_CODE,
     )
 
@@ -177,6 +179,21 @@ class _FakeNonTtyStderr:
         return None
 
 
+class _FakeTtyStderr:
+    def __init__(self, events: list[tuple[str, str]]) -> None:
+        self.events = events
+
+    def isatty(self) -> bool:
+        return True
+
+    def write(self, s: str) -> int:
+        self.events.append(("stderr", s))
+        return len(s)
+
+    def flush(self) -> None:
+        return None
+
+
 def test_status_heartbeat_reaches_json_only_during_long_subprocess(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -265,7 +282,7 @@ def test_disabled_status_does_not_emit_json_heartbeat(tmp_path: Path) -> None:
 def test_resolve_repo_root_timeout_falls_back_to_cwd(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
-    *_, resolve_repo_root, _ = _import_am_patch()
+    *_, resolve_repo_root, _, consume_resolve_repo_root_diagnostic, _ = _import_am_patch()
 
     import subprocess
 
@@ -276,6 +293,183 @@ def test_resolve_repo_root_timeout_falls_back_to_cwd(
     monkeypatch.chdir(tmp_path)
 
     assert resolve_repo_root(timeout_s=3) == tmp_path
+    diagnostic = consume_resolve_repo_root_diagnostic()
+    assert diagnostic is not None
+    assert "repo-root fallback to Path.cwd()" in diagnostic
+    assert "TimeoutExpired" in diagnostic
+
+
+def test_build_paths_and_logger_surfaces_repo_root_fallback_stderr(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    (
+        _,
+        policy_cls,
+        _,
+        _,
+        _,
+        _,
+        _,
+        _,
+        build_paths_and_logger,
+        consume_resolve_repo_root_diagnostic,
+        _,
+    ) = _import_am_patch()
+
+    scripts_dir = Path(__file__).parent.parent / "scripts"
+    sys.path.insert(0, str(scripts_dir))
+    import subprocess
+
+    import am_patch.runtime as runtime_mod
+
+    old = {
+        "status": runtime_mod.status,
+        "logger": runtime_mod.logger,
+        "policy": runtime_mod.policy,
+        "repo_root": runtime_mod.repo_root,
+        "paths": runtime_mod.paths,
+        "cli": runtime_mod.cli,
+        "run_badguys": runtime_mod.run_badguys,
+        "RunnerError": runtime_mod.RunnerError,
+    }
+
+    ctx = None
+    try:
+        consume_resolve_repo_root_diagnostic()
+
+        def _boom(*args, **kwargs):
+            raise subprocess.CalledProcessError(
+                returncode=128,
+                cmd=["git", "rev-parse", "--show-toplevel"],
+                stderr="fatal: not a git repository\n",
+            )
+
+        monkeypatch.setattr("am_patch.repo_root.subprocess.run", _boom)
+        monkeypatch.chdir(tmp_path)
+
+        policy = policy_cls()
+        policy.repo_root = None
+        policy.current_log_symlink_enabled = False
+        policy.verbosity = "quiet"
+        policy.log_level = "warning"
+        policy.json_out = False
+
+        cli = SimpleNamespace(issue_id="1000", mode="workspace")
+        cfg = tmp_path / "am_patch_test.toml"
+        cfg.write_text("", encoding="utf-8")
+
+        ctx = build_paths_and_logger(cli, policy, cfg, "test")
+        assert ctx.repo_root == tmp_path
+        log_data = ctx.log_path.read_text(encoding="utf-8")
+        assert "repo-root fallback to Path.cwd()" in log_data
+        assert "fatal: not a git repository" in log_data
+        assert "using Path.cwd() fallback" in log_data
+        assert consume_resolve_repo_root_diagnostic() is None
+    finally:
+        if ctx is not None:
+            ctx.status.stop()
+            ctx.logger.close()
+        for key in (
+            "status",
+            "logger",
+            "policy",
+            "repo_root",
+            "paths",
+            "cli",
+            "run_badguys",
+            "RunnerError",
+        ):
+            setattr(runtime_mod, key, old[key])
+
+
+def test_build_paths_and_logger_breaks_active_tty_status_before_failure_dump(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    (
+        _,
+        policy_cls,
+        _,
+        _,
+        _,
+        _,
+        _,
+        _,
+        build_paths_and_logger,
+        _,
+        _,
+    ) = _import_am_patch()
+
+    scripts_dir = Path(__file__).parent.parent / "scripts"
+    sys.path.insert(0, str(scripts_dir))
+    import am_patch.runtime as runtime_mod
+
+    old = {
+        "status": runtime_mod.status,
+        "logger": runtime_mod.logger,
+        "policy": runtime_mod.policy,
+        "repo_root": runtime_mod.repo_root,
+        "paths": runtime_mod.paths,
+        "cli": runtime_mod.cli,
+        "run_badguys": runtime_mod.run_badguys,
+        "RunnerError": runtime_mod.RunnerError,
+    }
+
+    events: list[tuple[str, str]] = []
+    fake_stderr = _FakeTtyStderr(events)
+    monkeypatch.setattr("am_patch.status.sys.stderr", fake_stderr)
+
+    ctx = None
+    try:
+        policy = policy_cls()
+        policy.repo_root = str(tmp_path)
+        policy.current_log_symlink_enabled = False
+        policy.verbosity = "normal"
+        policy.log_level = "quiet"
+        policy.json_out = False
+
+        cli = SimpleNamespace(issue_id="1000", mode="workspace")
+        cfg = tmp_path / "am_patch_test.toml"
+        cfg.write_text("", encoding="utf-8")
+
+        ctx = build_paths_and_logger(cli, policy, cfg, "test")
+        ctx.status.set_stage("GATE_PYTEST")
+        time.sleep(0.05)
+
+        def _write_screen(s: str) -> None:
+            events.append(("screen", s))
+
+        ctx.logger._write_screen = _write_screen  # type: ignore[method-assign]
+        ctx.logger.run_logged(
+            [
+                sys.executable,
+                "-c",
+                "import sys; sys.stderr.write('boom\n'); sys.stderr.flush(); raise SystemExit(1)",
+            ]
+        )
+
+        first_screen_index = next(i for i, event in enumerate(events) if event[0] == "screen")
+        assert any(
+            kind == "stderr" and payload == "\n" for kind, payload in events[:first_screen_index]
+        )
+        screen_payloads = [payload for kind, payload in events if kind == "screen"]
+        assert screen_payloads[0].startswith("\n" + ("=" * 80))
+        assert any(payload == "[stderr]\n" for payload in screen_payloads)
+        assert any("boom\n" in payload for payload in screen_payloads)
+    finally:
+        if ctx is not None:
+            ctx.status.stop()
+            ctx.logger.close()
+        for key in (
+            "status",
+            "logger",
+            "policy",
+            "repo_root",
+            "paths",
+            "cli",
+            "run_badguys",
+            "RunnerError",
+        ):
+            setattr(runtime_mod, key, old[key])
 
 
 def test_build_policy_validates_runner_subprocess_timeout() -> None:
@@ -297,17 +491,8 @@ def test_build_policy_validates_runner_subprocess_timeout() -> None:
 
 
 def test_ipc_cancel_interrupts_active_subprocess(tmp_path: Path) -> None:
-    (
-        _,
-        _,
-        runner_cancelled_cls,
-        _,
-        _,
-        _,
-        _,
-        _,
-        _,
-    ) = _import_am_patch()
+    imports = _import_am_patch()
+    runner_cancelled_cls = imports[2]
 
     scripts_dir = Path(__file__).parent.parent / "scripts"
     sys.path.insert(0, str(scripts_dir))
@@ -360,17 +545,11 @@ class _FakeStatus:
 
 
 def test_finalize_and_report_emits_canceled_result(tmp_path: Path) -> None:
-    (
-        logger_cls,
-        _,
-        _,
-        _,
-        run_result_cls,
-        _,
-        finalize_and_report,
-        _,
-        cancel_exit_code,
-    ) = _import_am_patch()
+    imports = _import_am_patch()
+    logger_cls = imports[0]
+    run_result_cls = imports[4]
+    finalize_and_report = imports[6]
+    cancel_exit_code = imports[10]
     logger = logger_cls(
         log_path=tmp_path / "am_patch.log",
         symlink_path=tmp_path / "am_patch.symlink",

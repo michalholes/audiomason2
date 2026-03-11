@@ -38,7 +38,7 @@ from am_patch.paths import (
     ensure_dirs,
 )
 from am_patch.post_run_pipeline import run_post_run_pipeline
-from am_patch.repo_root import is_under, resolve_repo_root
+from am_patch.repo_root import consume_resolve_repo_root_diagnostic, is_under, resolve_repo_root
 from am_patch.run_result import RunResult, _normalize_failure_summary, build_run_result
 from am_patch.runner_failure_detail import (
     render_runner_error_detail,
@@ -286,6 +286,10 @@ def build_paths_and_logger(
     )
     logger = startup.logger
     ipc = startup.ipc
+
+    repo_root_diagnostic = consume_resolve_repo_root_diagnostic()
+    if repo_root_diagnostic:
+        logger.emit_warning_detail(repo_root_diagnostic)
 
     status.start()
 
