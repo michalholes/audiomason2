@@ -1944,6 +1944,37 @@ Configurable knobs SHOULD include, where applicable:
 - retention windows, prune limits and compaction thresholds
 - virtual-path compatibility toggles
 
+9.1.1 `[web_jobs_backup]` trigger policy contract (HARD)
+
+`[web_jobs_backup].trigger_policy` MUST accept at least:
+- `manual`
+- `startup_always`
+- `startup_after_recovery`
+- `interval_hours`
+
+If `trigger_policy = "interval_hours"`, PatchHub TOML MUST also expose:
+- `interval_hours` (int >= 1)
+- `check_interval_minutes` (int >= 1)
+
+Semantics:
+- Backup cadence MUST be computed from `last_verified_backup_utc`, not from
+  process start time.
+- `last_verified_backup_utc`, `last_verified_backup_path`, and
+  `last_verified_backup_status` MUST be persisted outside the DB in the
+  PatchHub runtime state file under `patches/artifacts/`.
+- The interval scheduler MUST run only in `db_primary` mode.
+- The interval scheduler MUST NOT run in `file_emergency` mode.
+- After process restart, the scheduler MUST continue from the persisted
+  `last_verified_backup_utc` state and MUST NOT create a new backup solely
+  because the runtime restarted.
+
+Validation:
+- Invalid `trigger_policy`, `interval_hours`, or `check_interval_minutes`
+  values MUST raise a deterministic config error.
+- Startup-only policies (`manual`, `startup_always`,
+  `startup_after_recovery`) MUST keep their startup-only semantics and MUST
+  NOT be reinterpreted as periodic scheduler policies.
+
 The following safety invariants MUST remain non-configurable:
 - single authoritative backend mode
 - no dual-write authority
