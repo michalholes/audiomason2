@@ -1,8 +1,20 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _zip_subset_head_markup(html: str) -> str:
+    match = re.search(
+        r'<div class="zip-subset-list-head">(?P<head>.*?)</div>\s*'
+        r'<div id="zipSubsetModalList"',
+        html,
+        re.DOTALL,
+    )
+    assert match is not None
+    return match.group("head")
 
 
 def test_main_ui_contains_zip_subset_and_progress_applied_hooks() -> None:
@@ -16,8 +28,9 @@ def test_main_ui_contains_zip_subset_and_progress_applied_hooks() -> None:
     assert 'id="zipSubsetModalSubtitle"' in html
     assert 'id="zipSubsetSelectionCount"' in html
     assert 'id="zipSubsetApplyBtn"' in html
-    assert ">patch<" in html
-    assert ">Repo path<" in html
+    head = _zip_subset_head_markup(html)
+    assert ">patch<" not in head
+    assert ">Repo path<" in head
 
 
 def test_app_boot_sequence_loads_zip_subset_modules() -> None:

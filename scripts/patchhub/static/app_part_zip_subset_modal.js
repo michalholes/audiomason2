@@ -54,9 +54,6 @@
 					(checked ? 'checked="checked" ' : "") +
 					(disabled ? 'disabled="disabled" ' : "") +
 					"/>" +
-					'<span class="zip-subset-member">' +
-					escapeHtml(entry) +
-					"</span>" +
 					'<span class="zip-subset-path">' +
 					escapeHtml(repo || entry) +
 					"</span>" +

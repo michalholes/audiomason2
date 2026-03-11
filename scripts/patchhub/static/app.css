@@ -784,7 +784,7 @@ input::placeholder {
 
 .zip-subset-list-head {
 	display: grid;
-	grid-template-columns: 32px minmax(0, 1.5fr) minmax(0, 1fr);
+	grid-template-columns: 32px minmax(0, 1fr);
 	gap: 12px;
 	align-items: center;
 	padding: 10px 12px;
@@ -805,7 +805,7 @@ input::placeholder {
 
 .zip-subset-item {
 	display: grid;
-	grid-template-columns: 32px minmax(0, 1.5fr) minmax(0, 1fr);
+	grid-template-columns: 32px minmax(0, 1fr);
 	gap: 12px;
 	align-items: center;
 	padding: 10px 12px;
@@ -816,22 +816,14 @@ input::placeholder {
 	border-bottom: none;
 }
 
-.zip-subset-path,
-.zip-subset-member {
+.zip-subset-path {
 	min-width: 0;
 	font-family:
 		ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
 		"Courier New", monospace;
 	font-size: 12px;
 	word-break: break-all;
-}
-
-.zip-subset-path {
 	color: #d8dfef;
-}
-
-.zip-subset-member {
-	color: #8ea0c9;
 }
 
 .zip-subset-modal-footer {
