@@ -273,6 +273,16 @@ def get_step_details(step_id: str) -> dict[str, Any] | None:
     return STEP_CATALOG.get(step_id)
 
 
+def build_authority_known_step_ids() -> set[str]:
+    """Return legacy known step ids for compatibility callers.
+
+    Validation and projection authority now lives outside this module. This
+    helper remains only to preserve existing non-validation imports.
+    """
+
+    return set(_legacy_catalog_step_ids()) | set(CANONICAL_STEP_ORDER)
+
+
 def _legacy_catalog_step_ids() -> tuple[str, ...]:
     steps_any = DEFAULT_CATALOG.get("steps")
     if not isinstance(steps_any, list):
@@ -298,10 +308,6 @@ def build_default_step_catalog_projection() -> dict[str, dict[str, Any]]:
         step_defaults = defaults_obj if isinstance(defaults_obj, dict) else {}
         projection[step_id] = _project_v2_step(step_id, step_defaults)
     return projection
-
-
-def build_authority_known_step_ids() -> set[str]:
-    return set(_legacy_catalog_step_ids()) | set(CANONICAL_STEP_ORDER)
 
 
 _PROMPT_FIELD_ORDER: tuple[str, ...] = (

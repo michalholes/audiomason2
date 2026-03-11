@@ -272,9 +272,18 @@ def test_flow_config_editor_boundary_preserves_defaults_without_catalog_authorit
     assert out["defaults"] == {"parallelism": {"workers": 4, "custom": {"mode": "x"}}}
 
 
-def test_validate_wizard_definition_structure_does_not_read_projection_behavioral_fields() -> None:
+def test_validate_wizard_definition_structure_does_not_read_projection_behavioral_fields(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     original = step_catalog_module.STEP_CATALOG.get("select_authors")
     step_catalog_module.STEP_CATALOG["select_authors"] = {"id": "select_authors"}
+
+    def _boom(*args: object, **kwargs: object) -> None:
+        raise AssertionError("projection helper should not be consulted")
+
+    monkeypatch.setattr(step_catalog_module, "get_step_details", _boom)
+    monkeypatch.setattr(step_catalog_module, "build_default_step_catalog_projection", _boom)
+
     try:
         validate_wizard_definition_structure(
             {

@@ -32,7 +32,6 @@ from .flow_runtime import (
     build_flow_model,
 )
 from .models import CatalogModel, FlowModel, validate_models
-from .step_catalog import build_authority_known_step_ids
 from .storage import atomic_write_json, atomic_write_json_if_missing, read_json
 
 WIZARD_DEFINITION_REL_PATH = "import/definitions/wizard_definition.json"
@@ -592,9 +591,24 @@ def _reachable_from(start: str, adj: dict[str, set[str]]) -> set[str]:
     return seen
 
 
+def _default_catalog_step_ids() -> tuple[str, ...]:
+    steps_any = DEFAULT_CATALOG.get("steps")
+    if not isinstance(steps_any, list):
+        raise FinalizeError("default catalog steps must be a list")
+
+    step_ids: list[str] = []
+    for step_any in steps_any:
+        if not isinstance(step_any, dict):
+            raise FinalizeError("default catalog step must be an object")
+        step_id = step_any.get("step_id")
+        if not isinstance(step_id, str) or not step_id:
+            raise FinalizeError("default catalog step_id must be a non-empty string")
+        step_ids.append(step_id)
+    return tuple(step_ids)
+
+
 def _known_step_ids() -> set[str]:
-    # UI catalog step ids plus canonical defaults.
-    return build_authority_known_step_ids()
+    return set(_default_catalog_step_ids()) | set(CANONICAL_STEP_ORDER)
 
 
 def _is_enabled(step_id: str, flow_config: dict[str, Any]) -> bool:

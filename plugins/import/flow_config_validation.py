@@ -18,61 +18,6 @@ _ALLOWED_KEYS = {"version", "steps", "defaults"}
 _ALLOWED_STEP_KEYS = {"enabled"}
 
 
-def _type_matches(type_name: str, value: Any) -> bool:
-    if type_name == "string":
-        return isinstance(value, str)
-    if type_name == "bool":
-        return isinstance(value, bool)
-    if type_name == "int":
-        return isinstance(value, int) and not isinstance(value, bool)
-    if type_name == "number":
-        return isinstance(value, (int, float)) and not isinstance(value, bool)
-    return type_name == "json"
-
-
-def _validate_default_value(*, step_id: str, field: dict[str, Any], value: Any, path: str) -> Any:
-    field_key = str(field.get("key") or "")
-    type_name = str(field.get("type") or "")
-    if not _type_matches(type_name, value):
-        raise FieldSchemaValidationError(
-            message="flow_config default has invalid type",
-            path=path,
-            reason="invalid_type",
-            meta={"step_id": step_id, "key": field_key, "type": type_name},
-        )
-
-    choices = field.get("options")
-    if not isinstance(choices, list):
-        choices = field.get("choices")
-    if isinstance(choices, list) and choices and value not in choices:
-        raise FieldSchemaValidationError(
-            message="flow_config default must match allowed choices",
-            path=path,
-            reason="invalid_enum",
-            meta={"step_id": step_id, "key": field_key, "allowed": choices},
-        )
-
-    if type_name in {"int", "number"}:
-        min_value = field.get("min")
-        max_value = field.get("max")
-        if isinstance(min_value, (int, float)) and value < min_value:
-            raise FieldSchemaValidationError(
-                message="flow_config default is below minimum",
-                path=path,
-                reason="value_too_small",
-                meta={"step_id": step_id, "key": field_key, "min": min_value},
-            )
-        if isinstance(max_value, (int, float)) and value > max_value:
-            raise FieldSchemaValidationError(
-                message="flow_config default exceeds maximum",
-                path=path,
-                reason="value_too_large",
-                meta={"step_id": step_id, "key": field_key, "max": max_value},
-            )
-
-    return deepcopy(value)
-
-
 def normalize_flow_config(raw: Any) -> dict[str, Any]:
     """Validate and normalize FlowConfig v1.
 
