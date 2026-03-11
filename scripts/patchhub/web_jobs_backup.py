@@ -14,6 +14,7 @@ _VALID_TRIGGER_POLICIES = (
     "manual",
     "startup_always",
     "startup_after_recovery",
+    "interval_hours",
 )
 
 _REQUIRED_TABLES = (
@@ -32,6 +33,8 @@ class WebJobsBackupSettings:
     verify_after_backup: bool
     trigger_policy: str
     restore_source_preference: tuple[str, ...]
+    interval_hours: int = 4
+    check_interval_minutes: int = 5
 
 
 @dataclass(frozen=True)
@@ -64,12 +67,19 @@ def _normalize_trigger_policy(raw: Any) -> str:
     return policy
 
 
+def _normalize_positive_int(raw: Any, *, name: str, default: int) -> int:
+    value = default if raw is None else int(raw)
+    if value < 1:
+        raise ValueError(f"invalid_{name}:{value}")
+    return value
+
+
 def startup_backup_required(
     settings: WebJobsBackupSettings,
     recovery: dict[str, Any],
 ) -> bool:
     policy = _normalize_trigger_policy(settings.trigger_policy)
-    if policy == "manual":
+    if policy in {"manual", "interval_hours"}:
         return False
     if policy == "startup_always":
         return True
@@ -105,6 +115,16 @@ def load_web_jobs_backup_settings(
         restore_source_preference=_tuple_of_strings(
             backup_raw.get("restore_source_preference"),
             db_cfg.backup_restore_source_preference,
+        ),
+        interval_hours=_normalize_positive_int(
+            backup_raw.get("interval_hours"),
+            name="web_jobs_backup_interval_hours",
+            default=4,
+        ),
+        check_interval_minutes=_normalize_positive_int(
+            backup_raw.get("check_interval_minutes"),
+            name="web_jobs_backup_check_interval_minutes",
+            default=5,
         ),
     )
 

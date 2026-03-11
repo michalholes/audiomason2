@@ -23,6 +23,7 @@ from patchhub.web_jobs_backup import (
     load_web_jobs_backup_settings,
     startup_backup_required,
 )
+from patchhub.web_jobs_backup_scheduler import WebJobsBackupScheduler
 from patchhub.web_jobs_db import WebJobsDatabase, load_web_jobs_db_config
 from patchhub.web_jobs_legacy_fs import legacy_jobs_signature, list_legacy_job_jsons
 from patchhub.web_jobs_migration import (
@@ -31,7 +32,11 @@ from patchhub.web_jobs_migration import (
 from patchhub.web_jobs_migration import (
     _verify as verify_legacy_jobs,
 )
-from patchhub.web_jobs_recovery import mark_shutdown_clean, resolve_web_jobs_backend
+from patchhub.web_jobs_recovery import (
+    mark_shutdown_clean,
+    record_verified_backup,
+    resolve_web_jobs_backend,
+)
 from patchhub.web_jobs_virtual_fs import WebJobsVirtualFs
 
 from .async_jobs_runs_indexer import AsyncJobsRunsIndexer
@@ -63,6 +68,12 @@ class AsyncAppCore:
         self._backend_session_id = ""
         self.web_jobs_db: WebJobsDatabase | None = None
         self.virtual_jobs_fs: WebJobsVirtualFs | None = None
+        self.backup_scheduler = WebJobsBackupScheduler(
+            repo_root=self.repo_root,
+            patches_root=self.patches_root,
+            db_cfg=self.web_jobs_db_cfg,
+            get_mode=lambda: self.backend_mode_state.mode,
+        )
         self.queue = self._build_queue(job_db=None)
         self.indexer = AsyncJobsRunsIndexer(core=self)
 
@@ -126,6 +137,7 @@ class AsyncAppCore:
             recovery["startup_backup_error"] = f"{type(exc).__name__}:{exc}"
             self.backend_mode_state.last_recovery = recovery
             return
+        record_verified_backup(self.patches_root, backup_path=result.path)
         recovery["startup_backup_created"] = bool(result.verified)
         recovery["startup_backup_path"] = str(result.path)
         self.backend_mode_state.last_recovery = recovery
@@ -150,10 +162,13 @@ class AsyncAppCore:
             if self.web_jobs_db_cfg.startup_verify_enabled:
                 await to_thread(verify_legacy_jobs, self.repo_root)
             await to_thread(self._maybe_create_startup_backup)
+            await self.backup_scheduler.start()
         await self.queue.start()
         await self.indexer.start()
 
     async def shutdown(self) -> None:
+        with suppress(BaseException):
+            await self.backup_scheduler.stop()
         with suppress(BaseException):
             await self.indexer.stop()
         with suppress(BaseException):

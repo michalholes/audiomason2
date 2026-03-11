@@ -9,6 +9,7 @@ from typing import Any
 from .models import JobRecord, coerce_job_mode, coerce_job_status
 from .web_jobs_db import WebJobsDatabase, load_web_jobs_db_config
 from .web_jobs_legacy_fs import iter_legacy_job_dirs, read_legacy_job_snapshot
+from .web_jobs_recovery import record_verified_backup
 
 
 def _repo_root() -> Path:
@@ -186,7 +187,9 @@ def _cleanup(repo_root: Path) -> list[str]:
 
 def _backup(repo_root: Path) -> str:
     db = _build_db(repo_root)
-    return str(db.create_backup())
+    backup_path = db.create_backup()
+    record_verified_backup(_patches_root(repo_root), backup_path=backup_path)
+    return str(backup_path)
 
 
 def _restore(repo_root: Path, source: Path | None = None) -> str:

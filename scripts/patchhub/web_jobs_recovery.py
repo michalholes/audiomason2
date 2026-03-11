@@ -57,7 +57,14 @@ def load_web_jobs_recovery_settings(repo_root: Path) -> WebJobsRecoverySettings:
     return WebJobsRecoverySettings(restore_source_preference=pref or ("latest_backup",))
 
 
-def _marker_path(patches_root: Path) -> Path:
+_BACKUP_STATE_KEYS = (
+    "last_verified_backup_utc",
+    "last_verified_backup_path",
+    "last_verified_backup_status",
+)
+
+
+def runtime_state_path(patches_root: Path) -> Path:
     return patches_root / "artifacts" / "web_jobs_runtime_state.json"
 
 
@@ -65,7 +72,7 @@ def _utc_now() -> str:
     return datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _read_marker(path: Path) -> dict[str, Any]:
+def read_runtime_state_file(path: Path) -> dict[str, Any]:
     if not path.is_file():
         return {}
     try:
@@ -75,37 +82,70 @@ def _read_marker(path: Path) -> dict[str, Any]:
     return payload if isinstance(payload, dict) else {}
 
 
-def _write_marker(path: Path, payload: dict[str, Any]) -> None:
+def write_runtime_state_file(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     text = json.dumps(payload, ensure_ascii=True, indent=2) + "\n"
     path.write_text(text, encoding="utf-8")
 
 
+def read_runtime_state(patches_root: Path) -> dict[str, Any]:
+    return read_runtime_state_file(runtime_state_path(patches_root))
+
+
+def _carry_backup_state(payload: dict[str, Any]) -> dict[str, Any]:
+    kept: dict[str, Any] = {}
+    for key in _BACKUP_STATE_KEYS:
+        if key in payload:
+            kept[key] = payload[key]
+    return kept
+
+
+def record_verified_backup(
+    patches_root: Path,
+    *,
+    backup_path: Path,
+    status: str = "verified",
+) -> dict[str, Any]:
+    path = runtime_state_path(patches_root)
+    payload = read_runtime_state_file(path)
+    payload.update(
+        {
+            "last_verified_backup_utc": _utc_now(),
+            "last_verified_backup_path": str(backup_path),
+            "last_verified_backup_status": str(status),
+        }
+    )
+    write_runtime_state_file(path, payload)
+    return payload
+
+
 def begin_startup_session(patches_root: Path) -> tuple[str, bool, Path, dict[str, Any]]:
-    marker_path = _marker_path(patches_root)
-    previous = _read_marker(marker_path)
+    marker_path = runtime_state_path(patches_root)
+    previous = read_runtime_state_file(marker_path)
     previous_clean = str(previous.get("state", "clean")) == "clean"
     session_id = f"{datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')}-pid{os.getpid()}"
     current = {
+        **_carry_backup_state(previous),
         "state": "dirty",
         "session_id": session_id,
         "started_utc": _utc_now(),
         "previous": previous,
     }
-    _write_marker(marker_path, current)
+    write_runtime_state_file(marker_path, current)
     return session_id, previous_clean, marker_path, previous
 
 
 def mark_shutdown_clean(patches_root: Path, session_id: str, recovery: dict[str, Any]) -> None:
-    _write_marker(
-        _marker_path(patches_root),
-        {
-            "state": "clean",
-            "session_id": str(session_id),
-            "ended_utc": _utc_now(),
-            "last_recovery": dict(recovery),
-        },
-    )
+    path = runtime_state_path(patches_root)
+    previous = read_runtime_state_file(path)
+    payload = {
+        **_carry_backup_state(previous),
+        "state": "clean",
+        "session_id": str(session_id),
+        "ended_utc": _utc_now(),
+        "last_recovery": dict(recovery),
+    }
+    write_runtime_state_file(path, payload)
 
 
 def _validate_db_path(path: Path) -> tuple[bool, str]:

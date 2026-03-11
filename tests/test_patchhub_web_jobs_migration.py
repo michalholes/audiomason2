@@ -123,6 +123,13 @@ def test_web_jobs_backup_and_restore_round_trip(tmp_path: Path) -> None:
 
     backup_path = Path(_backup(repo_root))
     assert backup_path.is_file()
+    state = json.loads(
+        (repo_root / "patches" / "artifacts" / "web_jobs_runtime_state.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert state["last_verified_backup_path"] == str(backup_path)
+    assert state["last_verified_backup_status"] == "verified"
 
     main_db = repo_root / "patches" / "artifacts" / "web_jobs.sqlite3"
     main_db.unlink()
