@@ -6,7 +6,6 @@
 		w.AMP_PATCHHUB_UI = ui;
 	}
 
-	var activeJobId = null;
 	function el(id) {
 		return document.getElementById(id);
 	}
@@ -122,6 +121,76 @@
 		);
 	}
 
+	function getTrackedActiveJob(jobs) {
+		if (!PH || typeof PH.call !== "function") return null;
+		return PH.call("getTrackedActiveJob", jobs || []) || null;
+	}
+
+	function getTrackedActiveJobId(jobs) {
+		if (!PH || typeof PH.call !== "function") return "";
+		return String(PH.call("getTrackedActiveJobId", jobs || []) || "");
+	}
+
+	function summaryFromTerminalStatus(status) {
+		status = String(status || "")
+			.trim()
+			.toLowerCase();
+		if (status === "success") {
+			return { text: "RESULT: SUCCESS", status: "success" };
+		}
+		if (status === "canceled") {
+			return { text: "RESULT: CANCELED", status: "fail" };
+		}
+		if (status) {
+			return { text: `RESULT: ${status.toUpperCase()}`, status: "fail" };
+		}
+		return { text: "RESULT: UNKNOWN", status: "fail" };
+	}
+
+	function pickProgressSummaryLineFromText(text) {
+		var lines = String(text || "").split(/\r?\n/);
+		for (let i = lines.length - 1; i >= 0; i--) {
+			const s = String(lines[i] || "").trim();
+			if (!s) continue;
+			if (s.indexOf("RESULT:") === 0) return s;
+			if (s.indexOf("STATUS:") === 0) return s;
+			if (s.indexOf("FAIL:") === 0) return s;
+			if (s.indexOf("OK:") === 0) return s;
+			if (s.indexOf("DO:") === 0) return s;
+		}
+		return "(idle)";
+	}
+
+	function summaryFromTailText(text) {
+		var line = pickProgressSummaryLineFromText(text);
+		var upper = String(line || "")
+			.trim()
+			.toUpperCase();
+		if (upper === "RESULT: SUCCESS") {
+			return { text: line, status: "success" };
+		}
+		if (upper.indexOf("RESULT:") === 0 || upper.indexOf("FAIL:") === 0) {
+			return { text: line, status: "fail" };
+		}
+		if (
+			upper.indexOf("STATUS:") === 0 ||
+			upper.indexOf("OK:") === 0 ||
+			upper.indexOf("DO:") === 0
+		) {
+			return { text: line, status: "running" };
+		}
+		return { text: line, status: "idle" };
+	}
+
+	function updateProgressPanelFromTailText(text, opts) {
+		if (PH && typeof PH.call === "function") {
+			PH.call("updateShortProgressFromText", text || "");
+		}
+		var summary = summaryFromTailText(text);
+		setProgressSummaryState(summary);
+		return refreshAppliedFilesForCurrentJob(summary, opts);
+	}
+
 	function deriveProgressFromEvents(events) {
 		var order = [];
 		var state = {};
@@ -197,12 +266,17 @@
 	}
 
 	function deriveProgressSummaryFromEvents(events, progress) {
+		var lastTerminal = null;
 		var lastResult = null;
 		var lastLog = null;
 		for (let i = (events || []).length - 1; i >= 0; i--) {
 			const ev = events[i];
 			if (!ev || typeof ev !== "object") continue;
 			const t = String(ev.type || "");
+			if (t === "control" && String(ev.event || "") === "stream_end") {
+				lastTerminal = ev;
+				break;
+			}
 			if (t === "result") {
 				lastResult = ev;
 				break;
@@ -214,6 +288,10 @@
 					break;
 				}
 			}
+		}
+
+		if (lastTerminal) {
+			return summaryFromTerminalStatus(lastTerminal.status);
 		}
 
 		if (lastResult) {
@@ -247,6 +325,7 @@
 		var node = el("progressSummary");
 		if (!node) return;
 		var st = summary && summary.status ? String(summary.status) : "idle";
+		if (st !== "success" && st !== "fail" && st !== "running") st = "idle";
 		node.classList.remove("success", "fail", "running", "idle", "muted");
 		node.classList.add(st);
 		if (st === "idle") node.classList.add("muted");
@@ -385,8 +464,10 @@
 	}
 
 	function renderActiveJob(jobs) {
-		var active = (jobs || []).find((j) => j.status === "running") || null;
-		activeJobId = active ? String(active.job_id || "") : null;
+		var active = getTrackedActiveJob(jobs);
+		var activeStatus = "";
+		activeJobId = getTrackedActiveJobId(jobs) || null;
+		w.activeJobId = activeJobId;
 		var queued = (jobs || []).filter((j) => j.status === "queued");
 		var jidEnc = "";
 
@@ -400,14 +481,20 @@
 
 		var html = "";
 		if (active) {
+			activeStatus = String(active.status || "running").toLowerCase();
 			jidEnc = encodeURIComponent(active.job_id || "");
-			html += `<div><b>running</b> ${escapeHtml(active.job_id || "")}</div>`;
+			html +=
+				`<div><b>${escapeHtml(activeStatus)}</b> ` +
+				`${escapeHtml(active.job_id || "")}</div>`;
 			html +=
 				`<div class="muted">mode=${escapeHtml(active.mode || "")} ` +
 				`issue=${escapeHtml(active.issue_id || "")}</div>`;
 			html +=
-				'<div class="row"><button class="btn btn-small" id="cancelActive">Cancel</button>' +
-				'<button class="btn btn-small" id="hardStopActive">Hard stop AMP</button>';
+				'<div class="row"><button class="btn btn-small" id="cancelActive">Cancel</button>';
+			if (activeStatus === "running") {
+				html +=
+					'<button class="btn btn-small" id="hardStopActive">Hard stop AMP</button>';
+			}
 			html +=
 				'<a class="linklike" href="/api/jobs/' +
 				jidEnc +
@@ -453,6 +540,7 @@
 			deriveProgressSummaryFromEvents,
 			setProgressSummaryState,
 			updateProgressPanelFromEvents,
+			updateProgressPanelFromTailText,
 			refreshStats,
 			renderActiveJob,
 		});
@@ -461,6 +549,7 @@
 	ui.deriveProgressSummaryFromEvents = deriveProgressSummaryFromEvents;
 	ui.setProgressSummaryState = setProgressSummaryState;
 	ui.updateProgressPanelFromEvents = updateProgressPanelFromEvents;
+	ui.updateProgressPanelFromTailText = updateProgressPanelFromTailText;
 	ui.refreshStats = refreshStats;
 	ui.renderActiveJob = renderActiveJob;
 })();

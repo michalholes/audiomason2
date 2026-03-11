@@ -197,7 +197,8 @@ function stopSnapshotEvents() {
 }
 
 function openSnapshotEvents() {
-	if (snapshotEventsSource || activeJobId || document.hidden) return;
+	if (snapshotEventsSource || PH.call("hasTrackedActiveJob") || document.hidden)
+		return;
 	if (typeof EventSource !== "function") {
 		snapshotEventsHealthy = false;
 		return;
@@ -245,7 +246,7 @@ function openSnapshotEvents() {
 }
 
 function ensureSnapshotEvents() {
-	if (activeJobId) {
+	if (PH.call("hasTrackedActiveJob")) {
 		stopSnapshotEvents();
 		return;
 	}

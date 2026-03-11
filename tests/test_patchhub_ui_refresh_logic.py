@@ -26,3 +26,23 @@ def test_wire_init_uses_snapshot_first_idle_flow() -> None:
     assert 'phCall("refreshOverviewSnapshot", { mode: "user" })' in src
     assert 'phCall("refreshRuns", { mode: "user" });' in src
     assert 'phCall("refreshHeader", { mode: "user" });' in src
+
+
+def test_hidden_active_keeps_active_orchestration_paths() -> None:
+    wire_src = _read("scripts/patchhub/static/app_part_wire_init.js")
+    assert "function hasTrackedActiveJob()" in wire_src
+    assert "activeMode = hasTrackedActiveJob();" in wire_src
+    assert "if (document.hidden && !activeMode) {" in wire_src
+    assert "startTimers({ keepLiveStream: keepLiveStream });" in wire_src
+
+    snapshot_src = _read("scripts/patchhub/static/app_part_snapshot_events.js")
+    assert 'PH.call("hasTrackedActiveJob") || document.hidden' in snapshot_src
+
+
+def test_live_progress_prefers_stream_with_tail_fallback() -> None:
+    progress_src = _read("scripts/patchhub/static/patchhub_progress_ui.js")
+    assert 'String(ev.event || "") === "stream_end"' in progress_src
+    assert "function updateProgressPanelFromTailText(text, opts)" in progress_src
+
+    runs_src = _read("scripts/patchhub/static/app_part_runs.js")
+    assert 'phCall("updateProgressPanelFromTailText", t);' in runs_src

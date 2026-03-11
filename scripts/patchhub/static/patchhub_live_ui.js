@@ -13,6 +13,7 @@
 	var MAX_LIVE_EVENTS = 2000;
 	var liveRenderTimer = null;
 	var liveLevel = "normal";
+	var liveTerminalInfo = null;
 	var workspacesVisible = false;
 	var runsVisible = false;
 	var jobsVisible = false;
@@ -179,6 +180,69 @@
 		var v = loadLiveJobId();
 		if (v) return v;
 		return null;
+	}
+
+	function isNonTerminalJobStatus(status) {
+		status = String(status || "")
+			.trim()
+			.toLowerCase();
+		return status === "queued" || status === "running";
+	}
+
+	function getTrackedLiveJobId() {
+		var jobId = getLiveJobId();
+		if (jobId) return String(jobId);
+		if (liveStreamJobId) return String(liveStreamJobId);
+		return "";
+	}
+
+	function getTrackedActiveJob(jobs) {
+		var trackedId = getTrackedLiveJobId();
+		var match = null;
+		if (!trackedId) return null;
+		if (
+			liveTerminalInfo &&
+			String(liveTerminalInfo.jobId || "") === trackedId
+		) {
+			return null;
+		}
+		if (Array.isArray(jobs) && jobs.length) {
+			match = jobs.find((job) => String(job.job_id || "") === trackedId);
+			if (!match) return null;
+			return isNonTerminalJobStatus(match.status) ? match : null;
+		}
+		if (liveStreamJobId && String(liveStreamJobId) === trackedId) {
+			return { job_id: trackedId, status: "queued" };
+		}
+		return null;
+	}
+
+	function getTrackedActiveJobId(jobs) {
+		var tracked = getTrackedActiveJob(jobs);
+		return tracked ? String(tracked.job_id || "") : "";
+	}
+
+	function hasTrackedActiveJob(jobs) {
+		return !!getTrackedActiveJobId(jobs);
+	}
+
+	function rememberTerminalEvent(jobId, status, reason) {
+		liveTerminalInfo = {
+			jobId: String(jobId || ""),
+			status: String(status || ""),
+			reason: String(reason || ""),
+		};
+		liveEvents.push({
+			type: "control",
+			event: "stream_end",
+			job_id: String(jobId || ""),
+			status: String(status || ""),
+			reason: String(reason || ""),
+		});
+		if (liveEvents.length > MAX_LIVE_EVENTS) {
+			liveEvents.splice(0, liveEvents.length - MAX_LIVE_EVENTS);
+		}
+		scheduleLiveRender();
 	}
 
 	function closeLiveStream() {
@@ -348,6 +412,7 @@
 
 		closeLiveStream();
 		liveStreamJobId = jobId;
+		liveTerminalInfo = null;
 		liveEvents = [];
 		ui.liveEvents = liveEvents;
 		renderLiveLog();
@@ -380,13 +445,14 @@
 			var status = "";
 			if (e && e.data) {
 				try {
-					const p = JSON.parse(String(e.data));
+					const p = JSON.parse(String(e.data || "{}"));
 					if (p && typeof p === "object") {
 						reason = String(p.reason || "");
 						status = String(p.status || "");
 					}
 				} catch (err) {}
 			}
+			rememberTerminalEvent(jobId, status, reason);
 			var msg = "ended";
 			if (status) msg += ` (${status})`;
 			if (reason) msg += ` [${reason}]`;
@@ -411,9 +477,13 @@
 				}
 				var j = r.job || {};
 				var st = String(j.status || "");
-				if (st && st !== "running" && st !== "queued") {
+				if (st && !isNonTerminalJobStatus(st)) {
+					rememberTerminalEvent(jobId, st, "job_completed");
 					closeLiveStream();
 					setLiveStreamStatus(`ended (${st}) [job_completed]`);
+					if (ui.updateProgressPanelFromEvents) {
+						ui.updateProgressPanelFromEvents({ forceAppliedFilesRetry: true });
+					}
 					return;
 				}
 				setLiveStreamStatus("reconnecting...");
@@ -467,6 +537,10 @@
 			setJobsVisible,
 			setLiveStreamStatus,
 			getLiveJobId,
+			isNonTerminalJobStatus,
+			getTrackedActiveJob,
+			getTrackedActiveJobId,
+			hasTrackedActiveJob,
 			closeLiveStream,
 			renderLiveLog,
 			filterLiveEvent,
@@ -492,6 +566,10 @@
 	safeExport("setJobsVisible", setJobsVisible);
 	safeExport("setLiveStreamStatus", setLiveStreamStatus);
 	safeExport("getLiveJobId", getLiveJobId);
+	safeExport("isNonTerminalJobStatus", isNonTerminalJobStatus);
+	safeExport("getTrackedActiveJob", getTrackedActiveJob);
+	safeExport("getTrackedActiveJobId", getTrackedActiveJobId);
+	safeExport("hasTrackedActiveJob", hasTrackedActiveJob);
 	safeExport("closeLiveStream", closeLiveStream);
 	ui.filterLiveEvent = filterLiveEvent;
 	ui.formatLiveEvent = formatLiveEvent;

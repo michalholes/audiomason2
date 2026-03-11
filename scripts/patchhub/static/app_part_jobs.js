@@ -238,7 +238,7 @@ function ensureAutoRefresh(jobs) {
 	if (st === "running" || st === "queued") PH.call("openLiveStream", id);
 	else PH.call("closeLiveStream");
 
-	if (activeJobId) {
+	if (PH.call("hasTrackedActiveJob")) {
 		// Do not start a separate polling timer here.
 		// Polling is centralized in app_part_wire_init.js and is stopped when tab is hidden.
 		if (autoRefreshTimer) {

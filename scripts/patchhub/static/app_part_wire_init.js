@@ -5,6 +5,14 @@ function phCall(name, ...args) {
 	if (!PH || typeof PH.call !== "function") return undefined;
 	return PH.call(name, ...args);
 }
+
+function hasTrackedActiveJob() {
+	return !!(
+		PH &&
+		typeof PH.call === "function" &&
+		PH.call("hasTrackedActiveJob")
+	);
+}
 function wireButtons() {
 	el("fsRefresh").addEventListener("click", refreshFs);
 	el("fsUp").addEventListener("click", () => {
@@ -274,7 +282,7 @@ function wireButtons() {
 		el("refreshAll").addEventListener("click", () => {
 			refreshFs();
 			PH.call("refreshStats");
-			if (activeJobId) {
+			if (hasTrackedActiveJob()) {
 				phCall("refreshWorkspaces", { mode: "user" });
 				phCall("refreshRuns", { mode: "user" });
 				phCall("refreshJobs", { mode: "user" });
@@ -334,7 +342,8 @@ function init() {
 			var refreshTimer = null;
 			var headerTimer = null;
 
-			function stopTimers() {
+			function stopTimers(opts) {
+				opts = opts || {};
 				if (refreshTimer) {
 					clearInterval(refreshTimer);
 					refreshTimer = null;
@@ -349,17 +358,26 @@ function init() {
 				}
 				phCall("stopAutofillPolling");
 				phCall("stopSnapshotEvents");
-				PH.call("closeLiveStream");
+				if (!opts.keepLiveStream) {
+					PH.call("closeLiveStream");
+				}
 			}
 
-			function startTimers() {
-				stopTimers();
+			function startTimers(opts) {
+				opts = opts || {};
+				var activeMode = false;
+				stopTimers({ keepLiveStream: !!opts.keepLiveStream });
 
 				patchStatTimer = setInterval(tickMissingPatchClear, 1000);
 
 				refreshTimer = setInterval(() => {
 					try {
-						if (activeJobId) {
+						activeMode = hasTrackedActiveJob();
+						if (document.hidden && !activeMode) {
+							stopTimers();
+							return;
+						}
+						if (activeMode) {
 							phCall("stopSnapshotEvents");
 							phCall("refreshJobs", { mode: "periodic" });
 							if (workspacesVisible) {
@@ -382,14 +400,15 @@ function init() {
 
 				headerTimer = setInterval(() => {
 					try {
-						if (activeJobId) phCall("refreshHeader", { mode: "periodic" });
+						if (hasTrackedActiveJob())
+							phCall("refreshHeader", { mode: "periodic" });
 					} catch (e) {
 						setUiError(e);
 					}
 				}, 5000);
 
 				phCall("startAutofillPolling");
-				if (activeJobId) {
+				if (hasTrackedActiveJob()) {
 					phCall("stopSnapshotEvents");
 				} else phCall("ensureSnapshotEvents");
 			}
@@ -397,7 +416,7 @@ function init() {
 			function resyncVisible() {
 				refreshFs();
 				PH.call("refreshStats");
-				if (activeJobId) {
+				if (hasTrackedActiveJob()) {
 					if (workspacesVisible) {
 						phCall("refreshWorkspaces", { mode: "user" });
 					}
@@ -418,13 +437,21 @@ function init() {
 					});
 			}
 
+			var keepLiveStream = false;
+
 			document.addEventListener("visibilitychange", () => {
 				try {
 					if (document.hidden) {
-						stopTimers();
+						if (PH.call("hasTrackedActiveJob")) {
+							phCall("stopSnapshotEvents");
+							phCall("stopAutofillPolling");
+						} else {
+							stopTimers();
+						}
 					} else {
+						keepLiveStream = !!PH.call("hasTrackedActiveJob");
 						resyncVisible();
-						startTimers();
+						startTimers({ keepLiveStream: keepLiveStream });
 					}
 				} catch (e) {
 					setUiError(e);

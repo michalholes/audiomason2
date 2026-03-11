@@ -141,7 +141,7 @@ function refreshTail(lines) {
 	var jid = PH.call("getLiveJobId");
 	if (!jid && suppressIdleOutput && idleGuardOn) {
 		setPre("tail", "");
-		phCall("updateProgressPanelFromEvents");
+		phCall("updateProgressPanelFromTailText", "");
 		return;
 	}
 
@@ -161,6 +161,17 @@ function refreshTail(lines) {
 		}
 		var t = String(r.tail || "");
 		setPre("tail", t);
+		var hasTracked = !!(
+			PH &&
+			typeof PH.call === "function" &&
+			PH.call("hasTrackedActiveJob")
+		);
+		var patchhubUi =
+			typeof window !== "undefined" ? window["AMP_PATCHHUB_UI"] : null;
+		var events = (patchhubUi && patchhubUi.liveEvents) || [];
+		if (!hasTracked || !Array.isArray(events) || events.length === 0) {
+			phCall("updateProgressPanelFromTailText", t);
+		}
 	});
 }
 

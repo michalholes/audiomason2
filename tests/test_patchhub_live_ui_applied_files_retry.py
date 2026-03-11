@@ -160,3 +160,37 @@ process.stdout.write(
     assert "Applied files (1)" in result["afterEndHtml"]
     assert "patchhub_live_ui.js" in result["afterEndHtml"]
     assert result["liveStatus"] == "ended (success) [job_completed]"
+
+
+def test_end_event_replaces_stale_running_summary() -> None:
+    result = _run_node_scenario(
+        """
+ui.saveLiveJobId("job-720");
+ui.setLiveLevel("debug");
+ui.openLiveStream("job-720");
+__lastEventSource.onmessage({
+  data: JSON.stringify({
+    type: "log",
+    kind: "DO",
+    stage: "GATE_PYTEST",
+    msg: "DO: GATE_PYTEST",
+  }),
+});
+await flush(80);
+const beforeEndSummary = document.getElementById("progressSummary").textContent;
+__lastEventSource.listeners.end({
+  data: JSON.stringify({ status: "success", reason: "job_completed" }),
+});
+await flush(80);
+process.stdout.write(
+  JSON.stringify({
+    beforeEndSummary,
+    afterEndSummary: document.getElementById("progressSummary").textContent,
+    liveLog: document.getElementById("liveLog").textContent,
+  }),
+);
+"""
+    )
+    assert result["beforeEndSummary"] == "DO: GATE_PYTEST"
+    assert result["afterEndSummary"] == "RESULT: SUCCESS"
+    assert "DO: GATE_PYTEST" in result["liveLog"]
