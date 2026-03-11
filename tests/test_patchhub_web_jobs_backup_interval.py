@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import re
 import sys
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -24,8 +25,8 @@ def _write_backup_cfg(
     repo_root: Path,
     *,
     trigger_policy: str = "interval_hours",
-    interval_hours: int = 4,
-    check_interval_minutes: int = 5,
+    interval_hours: object = 4,
+    check_interval_minutes: object = 5,
 ) -> None:
     cfg_path = repo_root / "scripts" / "patchhub" / "patchhub.toml"
     cfg_path.parent.mkdir(parents=True, exist_ok=True)
@@ -36,9 +37,9 @@ def _write_backup_cfg(
                 'destination_template = "artifacts/backups/web_jobs_backup_{timestamp}.sqlite3"',
                 "retain_count = 10",
                 "verify_after_write = true",
-                f'trigger_policy = "{trigger_policy}"',
-                f"interval_hours = {interval_hours}",
-                f"check_interval_minutes = {check_interval_minutes}",
+                f"trigger_policy = {json.dumps(trigger_policy)}",
+                f"interval_hours = {json.dumps(interval_hours)}",
+                f"check_interval_minutes = {json.dumps(check_interval_minutes)}",
             ]
         )
         + "\n",
@@ -151,10 +152,28 @@ async def test_interval_scheduler_stays_idle_in_file_emergency_mode(tmp_path: Pa
 
 
 @pytest.mark.asyncio
-async def test_invalid_interval_backup_config_fails_startup(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("interval_hours", "check_interval_minutes", "expected_error"),
+    [
+        (0, 1, "invalid_web_jobs_backup_interval_hours:0"),
+        (1, 0, "invalid_web_jobs_backup_check_interval_minutes:0"),
+        ("oops", 1, "invalid_web_jobs_backup_interval_hours:oops"),
+        (1, "oops", "invalid_web_jobs_backup_check_interval_minutes:oops"),
+    ],
+)
+async def test_invalid_interval_backup_config_fails_startup(
+    tmp_path: Path,
+    interval_hours: object,
+    check_interval_minutes: object,
+    expected_error: str,
+) -> None:
     repo_root = tmp_path / "repo"
-    _write_backup_cfg(repo_root, interval_hours=0, check_interval_minutes=1)
+    _write_backup_cfg(
+        repo_root,
+        interval_hours=interval_hours,
+        check_interval_minutes=check_interval_minutes,
+    )
     core = AsyncAppCore(repo_root=repo_root, cfg=_load_core_cfg())
 
-    with pytest.raises(ValueError, match="invalid_web_jobs_backup_interval_hours"):
+    with pytest.raises(ValueError, match=re.escape(expected_error)):
         await core.startup()

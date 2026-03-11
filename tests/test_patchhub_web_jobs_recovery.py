@@ -12,7 +12,10 @@ from patchhub.models import JobRecord
 from patchhub.web_jobs_backup import WebJobsBackupSettings, create_verified_backup
 from patchhub.web_jobs_db import WebJobsDatabase, load_web_jobs_db_config
 from patchhub.web_jobs_recovery import (
+    begin_startup_session,
     mark_shutdown_clean,
+    read_runtime_state,
+    record_verified_backup,
     resolve_web_jobs_backend,
 )
 
@@ -101,3 +104,37 @@ def test_recovery_restores_from_latest_verified_backup_after_unclean_shutdown(
     restored = resolution.job_db.load_job_record("job-515-recovery")
     assert restored is not None
     assert restored.status == "success"
+
+
+def test_runtime_state_preserves_last_verified_backup_across_lifecycle(
+    tmp_path: Path,
+) -> None:
+    repo_root = tmp_path / "repo"
+    patches_root = repo_root / "patches"
+    backup_path = patches_root / "artifacts" / "backups" / "verified.sqlite3"
+    backup_path.parent.mkdir(parents=True, exist_ok=True)
+    backup_path.write_text("backup", encoding="utf-8")
+
+    record_verified_backup(patches_root, backup_path=backup_path)
+    initial = read_runtime_state(patches_root)
+    session_id, previous_clean, _, _ = begin_startup_session(patches_root)
+    startup_state = read_runtime_state(patches_root)
+
+    assert previous_clean is True
+    for key in (
+        "last_verified_backup_utc",
+        "last_verified_backup_path",
+        "last_verified_backup_status",
+    ):
+        assert startup_state[key] == initial[key]
+
+    mark_shutdown_clean(patches_root, session_id, {"recovery_action": "none"})
+    shutdown_state = read_runtime_state(patches_root)
+
+    assert shutdown_state["state"] == "clean"
+    for key in (
+        "last_verified_backup_utc",
+        "last_verified_backup_path",
+        "last_verified_backup_status",
+    ):
+        assert shutdown_state[key] == initial[key]

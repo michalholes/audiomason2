@@ -68,7 +68,13 @@ def _normalize_trigger_policy(raw: Any) -> str:
 
 
 def _normalize_positive_int(raw: Any, *, name: str, default: int) -> int:
-    value = default if raw is None else int(raw)
+    if raw is None:
+        value = default
+    else:
+        try:
+            value = int(raw)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f"invalid_{name}:{raw}") from exc
     if value < 1:
         raise ValueError(f"invalid_{name}:{value}")
     return value
