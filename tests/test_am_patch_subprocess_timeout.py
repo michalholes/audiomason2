@@ -106,7 +106,6 @@ def test_run_logged_emits_json_run_event(tmp_path: Path) -> None:
 
 def test_run_logged_streams_live_json_before_process_exit(tmp_path: Path) -> None:
     logger = _mk_logger(tmp_path, stage="GATE_PYTEST", json_enabled=True)
-    logger.screen_level = "debug"
     done = threading.Event()
     errors: list[BaseException] = []
 

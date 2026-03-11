@@ -54,6 +54,7 @@ def build_startup_logger_and_ipc(
         )
 
     status.set_heartbeat_hook(_emit_machine_heartbeat)
+    logger.set_screen_break_hook(status.break_line)
 
     ipc: IpcController | None = None
     startup_handshake_enabled = bool(getattr(policy, "ipc_handshake_enabled", False))

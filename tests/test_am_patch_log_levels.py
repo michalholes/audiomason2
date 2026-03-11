@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sys
+import threading
 from pathlib import Path
 
 import pytest
@@ -76,7 +77,6 @@ def test_error_detail_is_visible_even_in_quiet(capsys: pytest.CaptureFixture[str
 
 
 def test_run_metadata_only_in_debug(capsys: pytest.CaptureFixture[str], tmp_path: Path):
-    # verbose: debug metadata must be hidden
     logger_v = _mk_logger(tmp_path / "v", screen_level="verbose", log_level="verbose")
     try:
         _ = logger_v.run_logged([sys.executable, "-c", "print('ok')"], cwd=None)
@@ -86,7 +86,6 @@ def test_run_metadata_only_in_debug(capsys: pytest.CaptureFixture[str], tmp_path
     out_v = capsys.readouterr().out
     assert "cmd=" not in out_v
 
-    # debug: debug metadata must be visible
     logger_d = _mk_logger(tmp_path / "d", screen_level="debug", log_level="debug")
     try:
         _ = logger_d.run_logged([sys.executable, "-c", "print('ok')"], cwd=None)
@@ -104,7 +103,7 @@ def test_cli_accepts_warning_and_log_level():
     assert ns.log_level == "warning"
 
 
-def test_subprocess_live_json_requires_debug_screen_level(tmp_path: Path):
+def test_subprocess_live_json_ignores_screen_level(tmp_path: Path):
     logger = _mk_logger(tmp_path, screen_level="normal", log_level="debug")
     logger.json_enabled = True
     logger.json_path = tmp_path / "am_patch.jsonl"
@@ -120,7 +119,176 @@ def test_subprocess_live_json_requires_debug_screen_level(tmp_path: Path):
         json.loads(line)
         for line in (tmp_path / "am_patch.jsonl").read_text(encoding="utf-8").splitlines()
     ]
-    assert not any(evt.get("kind") == "SUBPROCESS_STDOUT" for evt in events)
+    assert any(evt.get("kind") == "SUBPROCESS_STDOUT" for evt in events)
+
+
+def test_live_screen_output_arrives_before_process_exit(tmp_path: Path) -> None:
+    logger = _mk_logger(tmp_path, screen_level="verbose", log_level="quiet")
+    done = threading.Event()
+    saw_first = threading.Event()
+    errors: list[BaseException] = []
+    seen: list[str] = []
+
+    original = logger._write_screen
+
+    def _write_screen(s: str) -> None:
+        seen.append(s)
+        if "[stdout] first" in s:
+            assert not done.is_set()
+            saw_first.set()
+        original(s)
+
+    logger._write_screen = _write_screen  # type: ignore[method-assign]
+
+    def _runner() -> None:
+        try:
+            logger.run_logged(
+                [
+                    sys.executable,
+                    "-c",
+                    (
+                        "import sys, time; "
+                        "sys.stdout.write('first\\n'); sys.stdout.flush(); "
+                        "time.sleep(0.5); "
+                        "sys.stdout.write('tail'); sys.stdout.flush()"
+                    ),
+                ]
+            )
+        except BaseException as exc:
+            errors.append(exc)
+        finally:
+            done.set()
+
+    worker = threading.Thread(target=_runner, daemon=True)
+    worker.start()
+    try:
+        assert saw_first.wait(timeout=5.0)
+        worker.join(timeout=5.0)
+        assert not worker.is_alive()
+        assert not errors
+        assert any("[stdout] tail" in part for part in seen)
+    finally:
+        logger.close()
+
+
+def test_live_file_log_output_arrives_before_process_exit(tmp_path: Path) -> None:
+    logger = _mk_logger(tmp_path, screen_level="quiet", log_level="verbose")
+    done = threading.Event()
+    saw_first = threading.Event()
+    errors: list[BaseException] = []
+    seen: list[str] = []
+
+    original = logger._write_file
+
+    def _write_file(s: str) -> None:
+        seen.append(s)
+        if "[stdout] first" in s:
+            assert not done.is_set()
+            saw_first.set()
+        original(s)
+
+    logger._write_file = _write_file  # type: ignore[method-assign]
+
+    def _runner() -> None:
+        try:
+            logger.run_logged(
+                [
+                    sys.executable,
+                    "-c",
+                    (
+                        "import sys, time; "
+                        "sys.stdout.write('first\\n'); sys.stdout.flush(); "
+                        "time.sleep(0.5); "
+                        "sys.stdout.write('tail'); sys.stdout.flush()"
+                    ),
+                ]
+            )
+        except BaseException as exc:
+            errors.append(exc)
+        finally:
+            done.set()
+
+    worker = threading.Thread(target=_runner, daemon=True)
+    worker.start()
+    try:
+        assert saw_first.wait(timeout=5.0)
+        worker.join(timeout=5.0)
+        assert not worker.is_alive()
+        assert not errors
+        assert any("[stdout] tail" in part for part in seen)
+    finally:
+        logger.close()
+
+
+def test_failed_step_screen_fallback_is_skipped_after_live_output(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    logger = _mk_logger(tmp_path, screen_level="verbose", log_level="quiet")
+    try:
+        result = logger.run_logged(
+            [sys.executable, "-c", "import sys; sys.stderr.write('boom\\n'); sys.exit(1)"]
+        )
+    finally:
+        logger.close()
+
+    out = capsys.readouterr().out
+    data = (tmp_path / "am_patch.log").read_text(encoding="utf-8")
+
+    assert result.returncode == 1
+    assert "[stderr] boom" in out
+    assert "FAILED STEP OUTPUT" not in out
+    assert "FAILED STEP OUTPUT" in data
+    assert "boom" in data
+
+
+def test_failed_step_log_fallback_is_skipped_after_live_output(
+    capsys: pytest.CaptureFixture[str], tmp_path: Path
+) -> None:
+    logger = _mk_logger(tmp_path, screen_level="normal", log_level="verbose")
+    try:
+        result = logger.run_logged(
+            [sys.executable, "-c", "import sys; sys.stderr.write('boom\\n'); sys.exit(1)"]
+        )
+    finally:
+        logger.close()
+
+    out = capsys.readouterr().out
+    data = (tmp_path / "am_patch.log").read_text(encoding="utf-8")
+
+    assert result.returncode == 1
+    assert "FAILED STEP OUTPUT" in out
+    assert "boom" in out
+    assert "[stderr] boom" in data
+    assert "FAILED STEP OUTPUT" not in data
+
+
+def test_failed_step_json_payload_is_not_duplicated_after_live_stream(tmp_path: Path) -> None:
+    logger = _mk_logger(tmp_path, screen_level="normal", log_level="quiet")
+    logger.json_enabled = True
+    logger.json_path = tmp_path / "am_patch.jsonl"
+    logger._json_fp = logger._close_stack.enter_context(
+        logger.json_path.open("w", encoding="utf-8")
+    )
+    try:
+        result = logger.run_logged(
+            [sys.executable, "-c", "import sys; sys.stderr.write('boom\\n'); sys.exit(1)"]
+        )
+    finally:
+        logger.close()
+
+    events = [
+        json.loads(line)
+        for line in (tmp_path / "am_patch.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    failed = [evt for evt in events if evt.get("msg") == "FAILED STEP OUTPUT"]
+
+    assert result.returncode == 1
+    assert any(
+        evt.get("kind") == "SUBPROCESS_STDERR" and evt.get("msg") == "boom" for evt in events
+    )
+    assert len(failed) == 1
+    assert "stdout" not in failed[0]
+    assert "stderr" not in failed[0]
 
 
 def test_runner_failure_detail_and_fingerprint_bypass_quiet(

@@ -128,6 +128,7 @@ class Logger:
         self._mono_start = time.monotonic()
 
         self._ipc_hook: Callable[[str, str], None] | None = None
+        self._screen_break_hook: Callable[[], None] | None = None
 
         self._ipc_stream: Callable[[dict[str, Any]], None] | None = None
         self._io_lock = threading.Lock()
@@ -170,6 +171,9 @@ class Logger:
 
     def set_ipc_stream(self, cb: Callable[[dict[str, Any]], None] | None) -> None:
         self._ipc_stream = cb
+
+    def set_screen_break_hook(self, hook: Callable[[], None] | None) -> None:
+        self._screen_break_hook = hook
 
     def close(self) -> None:
         try:
@@ -220,10 +224,13 @@ class Logger:
         kind: str | None = None,
         to_screen: bool = True,
         to_log: bool = True,
+        machine_event: bool = True,
     ) -> None:
         # One-line discipline: caller controls newlines.
         ipc_stream = self._ipc_stream
-        need_evt = (self.json_enabled and self._json_fp is not None) or ipc_stream is not None
+        need_evt = machine_event and (
+            (self.json_enabled and self._json_fp is not None) or ipc_stream is not None
+        )
         if need_evt:
             self._json_seq += 1
             msg = message
@@ -417,6 +424,7 @@ class Logger:
         severity: Severity,
         channel: Channel,
         bypass: bool,
+        include_payload: bool = True,
     ) -> None:
         if not self.json_enabled or self._json_fp is None:
             return
@@ -433,49 +441,83 @@ class Logger:
                 "summary": False,
                 "bypass": bool(bypass),
                 "msg": "FAILED STEP OUTPUT",
-                "stdout": stdout,
-                "stderr": stderr,
             }
+            if include_payload:
+                evt["stdout"] = stdout
+                evt["stderr"] = stderr
             with contextlib.suppress(Exception):
                 self._write_json(evt)
 
-    def emit_json_subprocess_stream(self, *, stream: str, message: str) -> None:
-        if not self.json_enabled or self._json_fp is None:
-            return
+    def _write_json_subprocess_stream_locked(self, *, stream: str, message: str) -> None:
         kind = {
             "stdout": "SUBPROCESS_STDOUT",
             "stderr": "SUBPROCESS_STDERR",
         }.get(str(stream or "").strip().lower())
         if kind is None:
             raise ValueError(f"unknown subprocess stream: {stream!r}")
+        self._json_seq += 1
+        evt = {
+            "type": "log",
+            "seq": self._json_seq,
+            "ts_mono_ms": self._now_mono_ms(),
+            "stage": self._get_stage(),
+            "kind": kind,
+            "sev": "DEBUG",
+            "ch": "DETAIL",
+            "summary": False,
+            "bypass": False,
+            "msg": _normalize_event_message(message),
+        }
+        with contextlib.suppress(Exception):
+            self._write_json(evt)
+
+    def emit_json_subprocess_stream(self, *, stream: str, message: str) -> None:
+        if not self.json_enabled or self._json_fp is None:
+            return
         with self._io_lock:
-            self._json_seq += 1
-            evt = {
-                "type": "log",
-                "seq": self._json_seq,
-                "ts_mono_ms": self._now_mono_ms(),
-                "stage": self._get_stage(),
-                "kind": kind,
-                "sev": "DEBUG",
-                "ch": "DETAIL",
-                "summary": False,
-                "bypass": False,
-                "msg": _normalize_event_message(message),
-            }
-            with contextlib.suppress(Exception):
-                self._write_json(evt)
-
-    def _subprocess_json_callback(self, stream: str) -> Callable[[str], None] | None:
-        if not self._live_subprocess_json_enabled():
-            return None
-
-        def _cb(message: str) -> None:
-            self.emit_json_subprocess_stream(stream=stream, message=message)
-
-        return _cb
+            self._write_json_subprocess_stream_locked(stream=stream, message=message)
 
     def _live_subprocess_json_enabled(self) -> bool:
-        return self.json_enabled and self._json_fp is not None and self.screen_level == "debug"
+        return self.json_enabled and self._json_fp is not None
+
+    def _live_subprocess_screen_enabled(self) -> bool:
+        return _allowed(self.screen_level, "INFO", "DETAIL", summary=False)
+
+    def _live_subprocess_log_enabled(self) -> bool:
+        return _allowed(self.log_level, "INFO", "DETAIL", summary=False)
+
+    def _write_live_subprocess_line(
+        self,
+        *,
+        stream: str,
+        message: str,
+    ) -> tuple[bool, bool, bool]:
+        rendered = self._render_live_subprocess_line(stream=stream, message=message)
+        wrote_json = False
+        wrote_screen = False
+        wrote_log = False
+        with self._io_lock:
+            if self._live_subprocess_json_enabled():
+                self._write_json_subprocess_stream_locked(stream=stream, message=message)
+                wrote_json = True
+            if self._live_subprocess_log_enabled():
+                self._write_file(rendered)
+                wrote_log = True
+            if self._live_subprocess_screen_enabled():
+                hook = self._screen_break_hook
+                if hook is not None:
+                    with contextlib.suppress(Exception):
+                        hook()
+                self._write_screen(rendered)
+                wrote_screen = True
+        return wrote_json, wrote_screen, wrote_log
+
+    def _render_live_subprocess_line(self, *, stream: str, message: str) -> str:
+        payload = _normalize_event_message(message)
+        prefix = f"[{str(stream or '').strip().lower()}]"
+        if payload:
+            return f"{prefix} {payload}\n"
+        return prefix + "\n"
 
     # Convenience methods
     def debug_detail(self, s: str) -> None:
@@ -507,12 +549,41 @@ class Logger:
         self.emit(severity="INFO", channel="DETAIL", message=title + "\n")
         self.emit(severity="INFO", channel="DETAIL", message=("=" * 80) + "\n")
 
-    def emit_error_detail(self, s: str) -> None:
+    def emit_error_detail(
+        self,
+        s: str,
+        *,
+        to_screen: bool = True,
+        to_log: bool = True,
+        machine_event: bool = True,
+    ) -> None:
         # Full error detail must bypass filtering (visible even in quiet).
-        self.emit(severity="ERROR", channel="CORE", message=s, error_detail=True)
+        self.emit(
+            severity="ERROR",
+            channel="CORE",
+            message=s,
+            error_detail=True,
+            to_screen=to_screen,
+            to_log=to_log,
+            machine_event=machine_event,
+        )
 
-    def emit_warning_detail(self, s: str) -> None:
-        self.emit(severity="WARNING", channel="DETAIL", message=s)
+    def emit_warning_detail(
+        self,
+        s: str,
+        *,
+        to_screen: bool = True,
+        to_log: bool = True,
+        machine_event: bool = True,
+    ) -> None:
+        self.emit(
+            severity="WARNING",
+            channel="DETAIL",
+            message=s,
+            to_screen=to_screen,
+            to_log=to_log,
+            machine_event=machine_event,
+        )
 
     def run_logged(
         self,
@@ -536,12 +607,86 @@ class Logger:
         timeout_value = self.run_timeout_s if timeout_s is None else int(timeout_s or 0)
 
         result: RunResult
+        screen_got_live = False
+        log_got_live = False
+        json_got_live = False
+
+        def _on_live(stream: str, message: str) -> None:
+            nonlocal json_got_live, screen_got_live, log_got_live
+            wrote_json, wrote_screen, wrote_log = self._write_live_subprocess_line(
+                stream=stream,
+                message=message,
+            )
+            json_got_live = json_got_live or wrote_json
+            screen_got_live = screen_got_live or wrote_screen
+            log_got_live = log_got_live or wrote_log
+
+        def _emit_failure_dump(
+            emit_line: Callable[..., None],
+            *,
+            stdout: str,
+            stderr: str,
+            to_screen: bool,
+            to_log: bool,
+            machine_event: bool,
+            banner: bool,
+        ) -> None:
+            if not to_screen and not to_log:
+                return
+            if banner:
+                emit_line(
+                    "\n" + ("=" * 80) + "\nFAILED STEP OUTPUT\n" + ("=" * 80) + "\n",
+                    to_screen=to_screen,
+                    to_log=to_log,
+                    machine_event=machine_event,
+                )
+            if stdout:
+                emit_line(
+                    "[stdout]\n",
+                    to_screen=to_screen,
+                    to_log=to_log,
+                    machine_event=machine_event,
+                )
+                emit_line(
+                    stdout,
+                    to_screen=to_screen,
+                    to_log=to_log,
+                    machine_event=machine_event,
+                )
+                if not stdout.endswith("\n"):
+                    emit_line(
+                        "\n",
+                        to_screen=to_screen,
+                        to_log=to_log,
+                        machine_event=machine_event,
+                    )
+            if stderr:
+                emit_line(
+                    "[stderr]\n",
+                    to_screen=to_screen,
+                    to_log=to_log,
+                    machine_event=machine_event,
+                )
+                emit_line(
+                    stderr,
+                    to_screen=to_screen,
+                    to_log=to_log,
+                    machine_event=machine_event,
+                )
+                if not stderr.endswith("\n"):
+                    emit_line(
+                        "\n",
+                        to_screen=to_screen,
+                        to_log=to_log,
+                        machine_event=machine_event,
+                    )
+
         managed = ManagedSubprocess.start(
             argv=argv,
             cwd=str(cwd) if cwd else None,
             env=env,
-            stdout_callback=self._subprocess_json_callback("stdout"),
-            stderr_callback=self._subprocess_json_callback("stderr"),
+            stdout_callback=lambda message: _on_live("stdout", message),
+            stderr_callback=lambda message: _on_live("stderr", message),
         )
         self._set_active_subprocess(managed)
         try:
@@ -559,6 +704,10 @@ class Logger:
             stderr=completed.stderr,
         )
 
+        dump_screen = not screen_got_live
+        dump_log = not log_got_live
+        failure_machine_event = not json_got_live
+
         if completed.timed_out:
             marker = f"subprocess timeout after {timeout_value}s"
             result.stderr = f"{marker}\n{result.stderr}" if result.stderr else marker + "\n"
@@ -570,20 +719,17 @@ class Logger:
                     severity="ERROR",
                     channel="CORE",
                     bypass=True,
+                    include_payload=not json_got_live,
                 )
-                self.emit_error_detail(
-                    "\n" + ("=" * 80) + "\nFAILED STEP OUTPUT\n" + ("=" * 80) + "\n"
+                _emit_failure_dump(
+                    self.emit_error_detail,
+                    stdout=result.stdout,
+                    stderr=result.stderr,
+                    to_screen=dump_screen,
+                    to_log=dump_log,
+                    machine_event=failure_machine_event,
+                    banner=True,
                 )
-                if result.stdout:
-                    self.emit_error_detail("[stdout]\n")
-                    self.emit_error_detail(result.stdout)
-                    if not result.stdout.endswith("\n"):
-                        self.emit_error_detail("\n")
-                if result.stderr:
-                    self.emit_error_detail("[stderr]\n")
-                    self.emit_error_detail(result.stderr)
-                    if not result.stderr.endswith("\n"):
-                        self.emit_error_detail("\n")
                 raise self._timeout_runner_error(
                     timeout_s=timeout_value,
                     timeout_stage=timeout_stage,
@@ -602,16 +748,15 @@ class Logger:
                 raise ValueError(f"unknown failure_dump_mode: {failure_dump_mode}")
 
             if failure_dump_mode == "diagnostic_detail":
-                if result.stdout:
-                    self.emit_warning_detail("[stdout]\n")
-                    self.emit_warning_detail(result.stdout)
-                    if not result.stdout.endswith("\n"):
-                        self.emit_warning_detail("\n")
-                if result.stderr:
-                    self.emit_warning_detail("[stderr]\n")
-                    self.emit_warning_detail(result.stderr)
-                    if not result.stderr.endswith("\n"):
-                        self.emit_warning_detail("\n")
+                _emit_failure_dump(
+                    self.emit_warning_detail,
+                    stdout=result.stdout,
+                    stderr=result.stderr,
+                    to_screen=dump_screen,
+                    to_log=dump_log,
+                    machine_event=failure_machine_event,
+                    banner=False,
+                )
                 return result
 
             bypass = failure_dump_mode == "bypass"
@@ -623,22 +768,19 @@ class Logger:
                 severity=sev,
                 channel=ch,
                 bypass=bypass,
+                include_payload=not json_got_live,
             )
 
-            # Failed-step stdout/stderr dumping is controlled per-call.
             emit = self.emit_error_detail if bypass else self.emit_warning_detail
-
-            emit("\n" + ("=" * 80) + "\nFAILED STEP OUTPUT\n" + ("=" * 80) + "\n")
-            if result.stdout:
-                emit("[stdout]\n")
-                emit(result.stdout)
-                if not result.stdout.endswith("\n"):
-                    emit("\n")
-            if result.stderr:
-                emit("[stderr]\n")
-                emit(result.stderr)
-                if not result.stderr.endswith("\n"):
-                    emit("\n")
+            _emit_failure_dump(
+                emit,
+                stdout=result.stdout,
+                stderr=result.stderr,
+                to_screen=dump_screen,
+                to_log=dump_log,
+                machine_event=failure_machine_event,
+                banner=True,
+            )
 
         return result
 
