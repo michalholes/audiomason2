@@ -3,7 +3,7 @@ Status: AUTHORITATIVE SPECIFICATION
 Applies to: scripts/patchhub/*
 Language: ENGLISH (ASCII ONLY)
 
-Specification Version: 1.12.0-spec
+Specification Version: 1.12.1-spec
 Code Baseline: audiomason2-main.zip (as provided in this chat)
 
 -------------------------------------------------------------------------------
@@ -1654,7 +1654,8 @@ UI contract for zip subset controls:
 - The modal contract is:
   - title: Select target files (N)
   - subtitle: Contents of <zip basename>
-  - columns: patch | Repo path
+  - selection control: a leading checkbox per row keyed by zip_member
+  - columns: Repo path
   - footer: selection count, Cancel, Apply
 - The modal card and list surfaces MUST use the PatchHub blue card theme; black-only
   modal surfaces are forbidden.
