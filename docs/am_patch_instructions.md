@@ -168,7 +168,7 @@ Rules:
    UTC timestamp plus a short ASCII slug:
    YYYY-MM-DDTHH-MM-SSZ_<slug>.md
 
-4. The fragment content MUST contain:
+4. Thedfragment content MUST contain:
    - one ISO 8601 timestamp
    - human-readable description of the delivered change
 
@@ -301,7 +301,7 @@ The runner remains the authority.
 
 ------------------------------------------------------------------------
 
-## PM patch validator (HARD)
+## PM validator (HARD)
 
 Before delivering any initial patch or repair patch, the chat MUST run
 one self-contained PM validator Python file supplied as a project file.
@@ -312,15 +312,15 @@ Canonical invocation formats (NO REPO-BOUND VARIANTS):
 
 Initial patch:
 
-    python3 PM_VALIDATOR.py ISSUE_ID "commit message" PATCH --workspace-snapshot WORKSPACE_SNAPSHOT_ZIP
+    python3 pm_validator.py ISSUE_ID "commit message" PATCH --workspace-snapshot WORKSPACE_SNAPSHOT_ZIP
 
 Repair patch:
 
-    python3 PM_VALIDATOR.py ISSUE_ID "commit message" PATCH --repair-overlay PATCHED_ISSUE_ZIP [--workspace-snapshot WORKSPACE_SNAPSHOT_ZIP --supplemental-file REPO_PATH ...]
+    python3 pm_validator.py ISSUE_ID "commit message" PATCH --repair-overlay PATCHED_ISSUE_ZIP [--workspace-snapshot WORKSPACE_SNAPSHOT_ZIP --supplemental-file REPO_PATH ...]
 
 Where:
 
--   `PM_VALIDATOR.py` means the filesystem path to the single-file PM validator artifact.
+-   `pm_validator.py` means the filesystem path to the single-file PM validator artifact.
 -   `WORKSPACE_SNAPSHOT_ZIP` means the authoritative full workspace snapshot artifact.
 -   `PATCHED_ISSUE_ZIP` means the authoritative latest `patched_issue{ISSUE}_*.zip` overlay artifact.
 -   `--supplemental-file REPO_PATH` is permitted only for explicit per-file supplemental authority outside the overlay as defined in Repair patch rules (HARD).
@@ -348,7 +348,7 @@ Rules:
     requirements are also independently evidenced.
 7.  The validator evidence block is additive. The runner remains the
     authority for apply and runtime results.
-
+8.  pm_validator.py is in project files, or in repo folder scripts/. 
 ------------------------------------------------------------------------
 
 # REPAIR PATCH RULES (HARD)
