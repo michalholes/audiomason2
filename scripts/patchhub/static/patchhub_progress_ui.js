@@ -265,7 +265,7 @@
 		return { order: order, state: state, resultStatus: resultStatus };
 	}
 
-	function deriveProgressSummaryFromEvents(events, progress) {
+	function deriveProgressSummaryFromEvents(events, progress, active) {
 		var lastTerminal = null;
 		var lastResult = null;
 		var lastLog = null;
@@ -313,6 +313,17 @@
 			if (kind === "DO") {
 				return { text: `DO: ${stage}`, status: "running" };
 			}
+		}
+
+		var activeStatus = "";
+		if (active) {
+			activeStatus = String(active.status || "")
+				.trim()
+				.toLowerCase();
+			if (activeStatus === "queued") {
+				return { text: "STATUS: QUEUED", status: "running" };
+			}
+			return { text: "STATUS: RUNNING", status: "running" };
 		}
 
 		if (progress && progress.order && progress.order.length) {
@@ -420,10 +431,13 @@
 	}
 
 	function updateProgressPanelFromEvents(opts) {
+		var jobs = opts && Array.isArray(opts.jobs) ? opts.jobs : [];
 		var events = ui.liveEvents || [];
+		var active = getTrackedActiveJob(jobs);
 		var progress = deriveProgressFromEvents(events);
 		renderProgressSteps(progress);
-		var summary = deriveProgressSummaryFromEvents(events, progress);
+		renderActiveJob(jobs);
+		var summary = deriveProgressSummaryFromEvents(events, progress, active);
 		renderProgressSummary(summary.text);
 		setProgressSummaryState(summary);
 		return refreshAppliedFilesForCurrentJob(summary, opts);
@@ -466,10 +480,19 @@
 	function renderActiveJob(jobs) {
 		var active = getTrackedActiveJob(jobs);
 		var activeStatus = "";
+		var hasSnapshotActive = false;
 		activeJobId = getTrackedActiveJobId(jobs) || null;
 		w.activeJobId = activeJobId;
 		var queued = (jobs || []).filter((j) => j.status === "queued");
 		var jidEnc = "";
+		if (active && Array.isArray(jobs) && jobs.length) {
+			hasSnapshotActive = jobs.some(
+				(j) => String(j.job_id || "") === String(active.job_id || ""),
+			);
+		}
+		if (active && !hasSnapshotActive) {
+			queued = [];
+		}
 
 		var box = el("activeJob");
 		if (!box) return;

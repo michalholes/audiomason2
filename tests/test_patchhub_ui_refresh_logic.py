@@ -46,3 +46,18 @@ def test_live_progress_prefers_stream_with_tail_fallback() -> None:
 
     runs_src = _read("scripts/patchhub/static/app_part_runs.js")
     assert 'phCall("updateProgressPanelFromTailText", t);' in runs_src
+
+
+def test_tracked_active_helper_does_not_depend_on_empty_jobs_only() -> None:
+    src = _read("scripts/patchhub/static/patchhub_live_ui.js")
+    assert "function hasTrackedLiveContext(trackedId)" in src
+    assert "if (match) {" in src
+    assert "if (!hasTrackedLiveContext(trackedId)) {" in src
+    assert "status: deriveTrackedFallbackStatus()," in src
+
+
+def test_progress_panel_replaces_retained_terminal_state_on_new_tracked_job() -> None:
+    src = _read("scripts/patchhub/static/patchhub_progress_ui.js")
+    assert 'return { text: "STATUS: QUEUED", status: "running" };' in src
+    assert "var active = getTrackedActiveJob(jobs);" in src
+    assert "renderActiveJob(jobs);" in src

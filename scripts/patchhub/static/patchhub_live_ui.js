@@ -196,9 +196,58 @@
 		return "";
 	}
 
+	function hasTrackedLiveContext(trackedId) {
+		if (!trackedId) return false;
+		if (liveStreamJobId && String(liveStreamJobId) === trackedId) {
+			return true;
+		}
+		if (liveES && getTrackedLiveJobId() === trackedId) {
+			return true;
+		}
+		if ((liveEvents || []).length > 0 && getTrackedLiveJobId() === trackedId) {
+			return true;
+		}
+		return String(w.__ph_last_enqueued_job_id || "") === trackedId;
+	}
+
+	function deriveTrackedFallbackStatus() {
+		for (let i = liveEvents.length - 1; i >= 0; i--) {
+			const ev = liveEvents[i];
+			if (!ev || typeof ev !== "object") continue;
+			if (String(ev.type || "") === "control") continue;
+			if (
+				String(ev.type || "") === "log" &&
+				String(ev.msg || "")
+					.trim()
+					.toLowerCase() === "queued"
+			) {
+				return "queued";
+			}
+			return "running";
+		}
+		return "queued";
+	}
+
+	function deriveTrackedFallbackMeta() {
+		var meta = { mode: "", issue_id: "" };
+		for (let i = 0; i < liveEvents.length; i++) {
+			const ev = liveEvents[i];
+			if (!ev || typeof ev !== "object") continue;
+			if (String(ev.type || "") !== "hello") continue;
+			meta.mode = String(ev.runner_mode || "");
+			meta.issue_id = String(ev.issue_id || "");
+			break;
+		}
+		if (!meta.mode) {
+			meta.mode = String(w.__ph_last_enqueued_mode || "");
+		}
+		return meta;
+	}
+
 	function getTrackedActiveJob(jobs) {
 		var trackedId = getTrackedLiveJobId();
 		var match = null;
+		var fallbackMeta = null;
 		if (!trackedId) return null;
 		if (
 			liveTerminalInfo &&
@@ -208,13 +257,20 @@
 		}
 		if (Array.isArray(jobs) && jobs.length) {
 			match = jobs.find((job) => String(job.job_id || "") === trackedId);
-			if (!match) return null;
-			return isNonTerminalJobStatus(match.status) ? match : null;
+			if (match) {
+				return isNonTerminalJobStatus(match.status) ? match : null;
+			}
 		}
-		if (liveStreamJobId && String(liveStreamJobId) === trackedId) {
-			return { job_id: trackedId, status: "queued" };
+		if (!hasTrackedLiveContext(trackedId)) {
+			return null;
 		}
-		return null;
+		fallbackMeta = deriveTrackedFallbackMeta();
+		return {
+			job_id: trackedId,
+			status: deriveTrackedFallbackStatus(),
+			mode: fallbackMeta.mode,
+			issue_id: fallbackMeta.issue_id,
+		};
 	}
 
 	function getTrackedActiveJobId(jobs) {
