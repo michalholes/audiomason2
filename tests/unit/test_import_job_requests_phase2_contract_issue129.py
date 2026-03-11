@@ -24,9 +24,10 @@ def test_build_job_requests_uses_phase1_authority_without_path_fallback() -> Non
             "summary": {"selected_books": 1},
         },
         inputs={
-            "covers_policy": {"mode": "embedded"},
-            "conflict_policy": {"mode": "overwrite"},
-            "delete_source_policy": {"enabled": True},
+            "covers_policy": {"mode": "skip"},
+            "conflict_policy": {"mode": "ask"},
+            "delete_source_policy": {"enabled": False},
+            "id3_policy": {"values": {"title": "Path Derived"}},
         },
         session_authority={
             "book_meta": {
@@ -37,6 +38,9 @@ def test_build_job_requests_uses_phase1_authority_without_path_fallback() -> Non
                 }
             },
             "phase2_inputs": {
+                "covers_policy": {"mode": "embedded"},
+                "conflict_policy": {"mode": "overwrite"},
+                "delete_source_policy": {"enabled": True},
                 "publish_policy": {"target_root": "outbox"},
             },
             "runtime": {
@@ -103,3 +107,19 @@ def test_build_job_requests_uses_phase1_authority_without_path_fallback() -> Non
         "title": "Canonical Book",
     }
     assert doc["plan_fingerprint"]
+
+
+def test_build_job_requests_requires_selected_books_for_planned_units() -> None:
+    doc = build_job_requests(
+        session_id="s1",
+        root="inbox",
+        relative_path="Raw/Source",
+        mode="stage",
+        diagnostics_context={},
+        config_fingerprint="cfg1",
+        plan={"source": {"relative_path": "Raw/Source"}},
+        inputs={},
+        session_authority={"phase2_inputs": {}},
+    )
+
+    assert doc["actions"] == []

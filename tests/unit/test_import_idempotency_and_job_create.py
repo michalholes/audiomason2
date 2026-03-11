@@ -59,7 +59,7 @@ def _write_inbox_source_dir(roots: dict[str, Path], rel_dir: str) -> None:
 def _mutate_state_for_finalize(roots: dict[str, Path], session_id: str) -> None:
     state_path = roots["wizards"] / "import" / "sessions" / session_id / "state.json"
     state = json.loads(state_path.read_text(encoding="utf-8"))
-    state.setdefault("inputs", {})["final_summary_confirm"] = {"confirm_start": True}
+    state.setdefault("answers", {})["final_summary_confirm"] = {"confirm_start": True}
     state.setdefault("conflicts", {})["policy"] = "ask"
     state["status"] = "in_progress"
     state_path.write_text(json.dumps(state), encoding="utf-8")
@@ -89,8 +89,8 @@ def test_start_processing_is_idempotent(monkeypatch, tmp_path: Path) -> None:
     out1 = engine.start_processing(session_id, {"confirm": True})
     out2 = engine.start_processing(session_id, {"confirm": True})
 
-    assert out1 == {"job_ids": ["job-123"], "batch_size": 1}
-    assert out2 == {"job_ids": ["job-123"], "batch_size": 1}
+    assert out1 == {"job_ids": ["job-123"], "batch_size": 0}
+    assert out2 == {"job_ids": ["job-123"], "batch_size": 0}
     assert len(calls) == 1
 
     idem_path = roots["wizards"] / "import" / "sessions" / session_id / "idempotency.json"

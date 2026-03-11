@@ -47,12 +47,15 @@ def start_processing_impl(
                 meta={},
             )
 
-        runtime_inputs = dict(state.get("inputs") or {})
-        final = runtime_inputs.get("final_summary_confirm")
+        phase1_any = state.get("vars", {}).get("phase1")
+        phase1 = dict(phase1_any) if isinstance(phase1_any, dict) else {}
+        runtime_any = phase1.get("runtime")
+        runtime = dict(runtime_any) if isinstance(runtime_any, dict) else {}
+        final = runtime.get("final_summary_confirm")
         if not (isinstance(final, dict) and final.get("confirm_start") is True):
             return validation_error(
                 message="final_summary_confirm must be submitted with confirm=true",
-                path="$.inputs.final_summary_confirm.confirm_start",
+                path="$.vars.phase1.runtime.final_summary_confirm.confirm_start",
                 reason="missing_or_false",
                 meta={},
             )
@@ -162,8 +165,6 @@ def start_processing_impl(
         }
 
         policy_inputs = dict(state.get("answers") or {})
-        phase1_any = state.get("vars", {}).get("phase1")
-        phase1 = dict(phase1_any) if isinstance(phase1_any, dict) else {}
         job_requests = build_job_requests(
             session_id=session_id,
             root=src_root,

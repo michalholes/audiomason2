@@ -170,27 +170,14 @@ def build_job_requests(
     if not isinstance(selected_any, list):
         selected_any = []
 
-    if not selected_any:
-        src_any = plan.get("source")
-        if isinstance(src_any, dict):
-            rel_any = src_any.get("relative_path")
-            if isinstance(rel_any, str) and rel_any.strip():
-                selected_any = [
-                    {
-                        "book_id": f"implicit:{rel_any.strip()}",
-                        "source_relative_path": rel_any.strip(),
-                        "proposed_target_relative_path": rel_any.strip(),
-                    }
-                ]
-
     actions: list[dict[str, Any]] = []
     authority = dict(session_authority) if isinstance(session_authority, dict) else {}
     phase1_runtime_any = authority.get("runtime")
     phase1_runtime = dict(phase1_runtime_any) if isinstance(phase1_runtime_any, dict) else {}
     phase2_inputs_any = authority.get("phase2_inputs")
     phase2_inputs = dict(phase2_inputs_any) if isinstance(phase2_inputs_any, dict) else {}
-    merged_inputs = {**phase2_inputs, **inputs}
-    publish_policy = _policy_dict(merged_inputs, "publish_policy")
+    del inputs
+    publish_policy = _policy_dict(phase2_inputs, "publish_policy")
     target_root = str(publish_policy.get("target_root") or "")
     if target_root not in {"stage", "outbox"}:
         target_root = "stage" if mode == "stage" else "outbox"
@@ -211,7 +198,7 @@ def build_job_requests(
         authority_meta = dict(authority_meta_any) if isinstance(authority_meta_any, dict) else {}
         if authority_meta:
             selected_book_meta[book_id] = dict(authority_meta)
-        tag_values = _tag_values_for_action(inputs=merged_inputs, authority_meta=authority_meta)
+        tag_values = _tag_values_for_action(inputs=phase2_inputs, authority_meta=authority_meta)
         actions.append(
             {
                 "type": "import.book",
@@ -229,7 +216,7 @@ def build_job_requests(
                     source_relative_path=src_rel,
                     target_root=target_root,
                     target_relative_path=tgt_rel,
-                    inputs=merged_inputs,
+                    inputs=phase2_inputs,
                     tag_values=tag_values,
                 ),
             }
@@ -244,7 +231,7 @@ def build_job_requests(
         "mode": mode,
         "config_fingerprint": config_fingerprint,
         "plan_summary": plan.get("summary", {}),
-        "policies": dict(merged_inputs),
+        "policies": dict(phase2_inputs),
         "actions": actions,
         "authority": {
             "phase1": {
@@ -260,7 +247,7 @@ def build_job_requests(
         "mode": mode,
         "config_fingerprint": config_fingerprint,
         "plan_fingerprint": plan_fingerprint,
-        "policies_fingerprint": fingerprint_json(merged_inputs),
+        "policies_fingerprint": fingerprint_json(phase2_inputs),
     }
     doc["idempotency_key"] = fingerprint_json(idem_payload)
     return doc
@@ -268,11 +255,6 @@ def build_job_requests(
 
 def planned_units_count(plan: dict[str, Any]) -> int:
     selected_any = plan.get("selected_books")
-    if isinstance(selected_any, list) and selected_any:
-        return len([it for it in selected_any if isinstance(it, dict)])
-    src_any = plan.get("source")
-    if isinstance(src_any, dict):
-        rel_any = src_any.get("relative_path")
-        if isinstance(rel_any, str) and rel_any.strip():
-            return 1
-    return 0
+    if not isinstance(selected_any, list):
+        return 0
+    return len([it for it in selected_any if isinstance(it, dict)])

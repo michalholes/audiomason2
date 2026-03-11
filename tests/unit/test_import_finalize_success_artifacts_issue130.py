@@ -75,7 +75,7 @@ def _mutate_state_for_finalize(roots: dict[str, Path], session_id: str, *, polic
             "album_artist": "Canonical Author",
         }
     }
-    state.setdefault("inputs", {})["final_summary_confirm"] = {"confirm_start": True}
+    state.setdefault("answers", {})["final_summary_confirm"] = {"confirm_start": True}
     state.setdefault("conflicts", {})["policy"] = policy
     state["status"] = "in_progress"
     state_path.write_text(json.dumps(state), encoding="utf-8")

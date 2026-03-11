@@ -82,7 +82,7 @@ def _disable_optional_steps() -> dict[str, object]:
 def _mutate_state_for_finalize(roots: dict[str, Path], session_id: str, *, policy: str) -> None:
     state_path = roots["wizards"] / "import" / "sessions" / session_id / "state.json"
     state = json.loads(state_path.read_text(encoding="utf-8"))
-    state.setdefault("inputs", {})["final_summary_confirm"] = {"confirm_start": True}
+    state.setdefault("answers", {})["final_summary_confirm"] = {"confirm_start": True}
     state.setdefault("conflicts", {})["policy"] = policy
     state["status"] = "in_progress"
     state_path.write_text(json.dumps(state), encoding="utf-8")

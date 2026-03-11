@@ -93,7 +93,7 @@ def test_rerun_and_resume_read_session_finalize_surface_only(tmp_path: Path) -> 
             "album_artist": "Canonical Author",
         }
     }
-    state_doc.setdefault("inputs", {})["final_summary_confirm"] = {"confirm_start": True}
+    state_doc.setdefault("answers", {})["final_summary_confirm"] = {"confirm_start": True}
     state_doc.setdefault("conflicts", {})["policy"] = "auto"
     state_doc["status"] = "in_progress"
     state_path.write_text(json.dumps(state_doc), encoding="utf-8")
