@@ -656,6 +656,11 @@ class Logger:
         ) -> None:
             if not to_screen and not to_log:
                 return
+            if to_screen:
+                hook = self._screen_break_hook
+                if hook is not None:
+                    with contextlib.suppress(Exception):
+                        hook()
             if banner:
                 emit_line(
                     "\n" + ("=" * 80) + "\nFAILED STEP OUTPUT\n" + ("=" * 80) + "\n",

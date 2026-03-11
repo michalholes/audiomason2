@@ -398,3 +398,37 @@ def test_runner_failure_detail_and_fingerprint_bypass_quiet(
     assert "AM_PATCH_FAILURE_FINGERPRINT" not in out
     assert "ERROR DETAIL: PREFLIGHT:PATCH_ASCII: bad patch" in data
     assert "AM_PATCH_FAILURE_FINGERPRINT" in data
+
+
+def test_failure_dump_breaks_active_status_line_before_screen_output(tmp_path: Path) -> None:
+    logger = _mk_logger(tmp_path, screen_level="quiet", log_level="quiet")
+    calls: list[str] = []
+    seen: list[str] = []
+
+    original = logger._write_screen
+
+    def _break_line() -> None:
+        calls.append("break")
+
+    def _write_screen(s: str) -> None:
+        seen.append(s)
+        original(s)
+
+    logger.set_screen_break_hook(_break_line)
+    logger._write_screen = _write_screen  # type: ignore[method-assign]
+    try:
+        logger.run_logged(
+            [
+                sys.executable,
+                "-c",
+                ("import sys; sys.stderr.write('boom\n'); sys.stderr.flush(); raise SystemExit(1)"),
+            ]
+        )
+    finally:
+        logger.close()
+
+    assert calls == ["break"]
+    assert seen
+    assert seen[0].startswith("\n" + ("=" * 80))
+    assert any(part == "[stderr]\n" for part in seen)
+    assert any("boom\n" in part for part in seen)
