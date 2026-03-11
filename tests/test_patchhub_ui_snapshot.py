@@ -92,6 +92,8 @@ class TestPatchhubUiSnapshot(unittest.TestCase):
                 raise
             self.assertEqual(resp.status_code, 200)
             self.assertEqual(resp.headers.get("etag"), '"snapshot:s1"')
+            self.assertEqual(resp.headers.get("cache-control"), "no-store")
+            self.assertTrue(resp.text.startswith('{\n  "ok": true,'))
             body = resp.json()
             self.assertEqual(body["seq"], 7)
             self.assertEqual(body["snapshot"]["workspaces"], snap.workspaces_items)
@@ -137,6 +139,7 @@ class TestPatchhubUiSnapshot(unittest.TestCase):
                 raise
             self.assertEqual(resp.status_code, 304)
             self.assertEqual(resp.headers.get("etag"), '"snapshot:s2"')
+            self.assertEqual(resp.headers.get("cache-control"), "no-store")
             self.assertEqual(resp.text, "")
 
     def test_legacy_snapshot_payload_includes_seq(self) -> None:

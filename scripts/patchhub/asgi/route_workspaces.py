@@ -4,9 +4,10 @@ import json
 from typing import TYPE_CHECKING
 
 from fastapi import Request
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import Response
 
 from .async_offload import to_thread
+from .json_contract import json_bytes_response, json_headers, json_response
 
 if TYPE_CHECKING:
     from .async_app_core import AsyncAppCore
@@ -34,24 +35,20 @@ async def handle_api_workspaces(core: AsyncAppCore, request: Request) -> Respons
             etag = _etag_quote(sig)
             inm = request.headers.get("if-none-match")
             if etag and _etag_matches(inm, etag):
-                return Response(status_code=304, headers={"ETag": etag})
+                return Response(status_code=304, headers=json_headers({"ETag": etag}))
             if since_sig and since_sig == sig:
-                return JSONResponse(
+                return json_response(
                     {"ok": True, "unchanged": True, "sig": sig},
+                    status=200,
                     headers={"ETag": etag},
                 )
-            data = json.dumps(
+            return json_response(
                 {
                     "ok": True,
                     "items": list(snap.workspaces_items),
                     "sig": sig,
                 },
-                ensure_ascii=True,
-            ).encode("utf-8")
-            return Response(
-                content=data,
-                status_code=200,
-                media_type="application/json",
+                status=200,
                 headers={"ETag": etag},
             )
 
@@ -67,7 +64,7 @@ async def handle_api_workspaces(core: AsyncAppCore, request: Request) -> Respons
         etag = ""
     inm = request.headers.get("if-none-match")
     if status == 200 and etag and _etag_matches(inm, etag):
-        return Response(status_code=304, headers={"ETag": etag})
+        return Response(status_code=304, headers=json_headers({"ETag": etag}))
     if status == 200 and since_sig:
         try:
             obj = json.loads(data.decode("utf-8"))
@@ -75,16 +72,10 @@ async def handle_api_workspaces(core: AsyncAppCore, request: Request) -> Respons
         except Exception:
             token = ""
         if token and token == since_sig:
-            return JSONResponse(
+            return json_response(
                 {"ok": True, "unchanged": True, "sig": token},
+                status=200,
                 headers={"ETag": etag} if etag else None,
             )
     headers = {"ETag": etag} if (status == 200 and etag) else None
-    if not headers:
-        return Response(content=data, status_code=status, media_type="application/json")
-    return Response(
-        content=data,
-        status_code=status,
-        media_type="application/json",
-        headers=headers,
-    )
+    return json_bytes_response(data, status=status, headers=headers)

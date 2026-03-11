@@ -14,6 +14,7 @@ from .app_support import (
     _iter_canceled_runs,
     _json_bytes,
     _ok,
+    active_canceled_runs_source,
     canceled_runs_signature,
     compute_success_archive_rel,
     read_tail,
@@ -353,16 +354,17 @@ def api_runs(self, qs: dict[str, str]) -> tuple[int, bytes]:
     issue_id = qs.get("issue_id")
     result = qs.get("result")
 
+    canceled_source = active_canceled_runs_source(self)
     base_sig = runs_signature(self.patches_root, self.cfg.indexing.log_filename_regex)
-    canceled_sig = canceled_runs_signature(self.patches_root)
-    sig = f"runs:l={base_sig[0]}:{base_sig[1]}:{base_sig[2]}:c={canceled_sig[0]}:{canceled_sig[1]}"
+    canceled_sig = canceled_runs_signature(canceled_source)
+    sig = f"runs:r={base_sig[0]}:{base_sig[1]}:{base_sig[2]}:c={canceled_sig[0]}:{canceled_sig[1]}"
 
     # Conditional refresh applies only to the default (unfiltered) runs list.
     if since_sig and not issue_id and not result and since_sig == sig:
         return _ok({"unchanged": True, "sig": sig})
 
     runs = iter_runs(self.patches_root, self.cfg.indexing.log_filename_regex)
-    runs.extend(_iter_canceled_runs(self.patches_root))
+    runs.extend(_iter_canceled_runs(canceled_source))
 
     runner_cfg_path = (self.repo_root / self.cfg.runner.runner_config_toml).resolve()
     success_rel = compute_success_archive_rel(
@@ -392,8 +394,9 @@ def api_runs(self, qs: dict[str, str]) -> tuple[int, bytes]:
 
 
 def api_run_detail(self, issue_id: int) -> tuple[int, bytes]:
+    canceled_source = active_canceled_runs_source(self)
     runs = iter_runs(self.patches_root, self.cfg.indexing.log_filename_regex)
-    runs.extend(_iter_canceled_runs(self.patches_root))
+    runs.extend(_iter_canceled_runs(canceled_source))
 
     runner_cfg_path = (self.repo_root / self.cfg.runner.runner_config_toml).resolve()
     success_rel = compute_success_archive_rel(

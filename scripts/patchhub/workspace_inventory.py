@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from patchhub.app_api_amp import _runner_config_path
+from patchhub.app_support import _iter_canceled_runs, active_canceled_runs_source
 from patchhub.models import compute_commit_summary
 
 
@@ -103,18 +104,19 @@ def _git_dirty(repo_dir: Path) -> bool:
     return bool((proc.stdout or "").strip())
 
 
-def _latest_run_result_by_issue(core: Any) -> dict[int, str]:
+def _latest_known_run_result_by_issue(core: Any) -> dict[int, str]:
     from patchhub.indexing import iter_runs
 
-    runs = iter_runs(core.patches_root, core.cfg.indexing.log_filename_regex)
-    out: dict[int, tuple[str, str]] = {}
+    runs = list(iter_runs(core.patches_root, core.cfg.indexing.log_filename_regex))
+    runs.extend(_iter_canceled_runs(active_canceled_runs_source(core)))
+    out: dict[int, tuple[str, str, str]] = {}
     for run in runs:
         issue_id = int(run.issue_id)
-        cand = (str(run.mtime_utc), str(run.result))
+        cand = (str(run.mtime_utc), str(run.log_rel_path), str(run.result))
         prev = out.get(issue_id)
-        if prev is None or cand[0] > prev[0]:
+        if prev is None or cand[:2] > prev[:2]:
             out[issue_id] = cand
-    return {issue_id: result for issue_id, (_mtime, result) in out.items()}
+    return {issue_id: result for issue_id, (_mtime, _path, result) in out.items()}
 
 
 def _busy_issue_ids(mem_jobs: list[Any]) -> set[int]:
@@ -149,7 +151,7 @@ def list_workspaces(
         mem_jobs = []
     runtime_cfg = _runner_workspace_config(core.repo_root, core.cfg)
     workspaces_root = core.patches_root / runtime_cfg.workspaces_root_rel
-    latest_results = _latest_run_result_by_issue(core)
+    latest_results = _latest_known_run_result_by_issue(core)
     busy_issue_ids = _busy_issue_ids(mem_jobs)
 
     items: list[dict[str, Any]] = []

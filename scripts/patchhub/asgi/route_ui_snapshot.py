@@ -20,6 +20,7 @@ from patchhub.workspace_inventory import list_workspaces
 
 from .async_jobs_runs_indexer import build_header_sig, build_header_summary
 from .async_offload import to_thread
+from .json_contract import json_head_response, json_headers, json_response
 
 if TYPE_CHECKING:
     from .async_app_core import AsyncAppCore
@@ -189,22 +190,17 @@ async def handle_api_ui_snapshot(
             etag = _etag_quote(snapshot_sig)
             inm = request.headers.get("if-none-match")
             if etag and _etag_matches(inm, etag):
-                return Response(status_code=304, headers={"ETag": etag})
+                return Response(status_code=304, headers=json_headers({"ETag": etag}))
             if since_sig and since_sig == snapshot_sig:
                 if head_only:
-                    return Response(status_code=200, headers={"ETag": etag})
-                data = json.dumps(
+                    return json_head_response(200, headers={"ETag": etag})
+                return json_response(
                     {"ok": True, "unchanged": True, "sig": snapshot_sig},
-                    ensure_ascii=True,
-                ).encode("utf-8")
-                return Response(
-                    content=data,
-                    status_code=200,
-                    media_type="application/json",
+                    status=200,
                     headers={"ETag": etag},
                 )
             if head_only:
-                return Response(status_code=200, headers={"ETag": etag})
+                return json_head_response(200, headers={"ETag": etag})
             payload: dict[str, Any] = {
                 "ok": True,
                 "seq": int(getattr(snap, "seq", 0) or 0),
@@ -222,11 +218,9 @@ async def handle_api_ui_snapshot(
                     "snapshot": snapshot_sig,
                 },
             }
-            data = json.dumps(payload, ensure_ascii=True).encode("utf-8")
-            return Response(
-                content=data,
-                status_code=200,
-                media_type="application/json",
+            return json_response(
+                payload,
+                status=200,
                 headers={"ETag": etag},
             )
 
@@ -235,26 +229,19 @@ async def handle_api_ui_snapshot(
     etag = _etag_quote(snapshot_sig)
     inm = request.headers.get("if-none-match")
     if etag and _etag_matches(inm, etag):
-        return Response(status_code=304, headers={"ETag": etag})
+        return Response(status_code=304, headers=json_headers({"ETag": etag}))
     if since_sig and since_sig == snapshot_sig:
         if head_only:
-            return Response(status_code=200, headers={"ETag": etag})
-        data = json.dumps(
+            return json_head_response(200, headers={"ETag": etag})
+        return json_response(
             {"ok": True, "unchanged": True, "sig": snapshot_sig},
-            ensure_ascii=True,
-        ).encode("utf-8")
-        return Response(
-            content=data,
-            status_code=200,
-            media_type="application/json",
+            status=200,
             headers={"ETag": etag},
         )
     if head_only:
-        return Response(status_code=200, headers={"ETag": etag})
-    data = json.dumps(payload, ensure_ascii=True).encode("utf-8")
-    return Response(
-        content=data,
-        status_code=200,
-        media_type="application/json",
+        return json_head_response(200, headers={"ETag": etag})
+    return json_response(
+        payload,
+        status=200,
         headers={"ETag": etag},
     )

@@ -8,6 +8,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 _SCRIPTS = Path(__file__).resolve().parents[1] / "scripts"
 sys.path.insert(0, str(_SCRIPTS))
@@ -19,6 +20,8 @@ class _DummyCore:
     def __init__(self, repo_root: Path) -> None:
         self.repo_root = repo_root
         self.patches_root = repo_root / "patches"
+        self.jobs_root = repo_root / "patches" / "artifacts" / "web_jobs"
+        self.web_jobs_db = None
         self.cfg = SimpleNamespace(
             paths=SimpleNamespace(patches_root="patches"),
             runner=SimpleNamespace(runner_config_toml="scripts/am_patch/am_patch.toml"),
@@ -97,4 +100,52 @@ class TestPatchhubWorkspaceInventory(unittest.TestCase):
             _sig, items = list_workspaces(core, [])
             self.assertEqual(len(items), 1)
             self.assertEqual(items[0]["state"], "KEPT_AFTER_SUCCESS")
+            self.assertEqual(items[0]["busy"], False)
+
+    def test_clean_workspace_after_newer_canceled_run_is_not_kept_after_success(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            patches = root / "patches"
+            ws_repo = patches / "workspaces" / "issue_503" / "repo"
+            ws_repo.mkdir(parents=True)
+            (root / "scripts" / "am_patch").mkdir(parents=True)
+            (root / "scripts" / "am_patch" / "am_patch.toml").write_text("", encoding="utf-8")
+            _git(["init"], ws_repo)
+            _git(["config", "user.email", "test@example.com"], ws_repo)
+            _git(["config", "user.name", "Tester"], ws_repo)
+            (ws_repo / "tracked.txt").write_text("base\n", encoding="utf-8")
+            _git(["add", "tracked.txt"], ws_repo)
+            _git(["commit", "-m", "base"], ws_repo)
+            (ws_repo.parent / "meta.json").write_text(
+                json.dumps({"attempt": 1, "message": "Canceled run wins"}),
+                encoding="utf-8",
+            )
+            core = _DummyCore(root)
+            with (
+                patch(
+                    "patchhub.indexing.iter_runs",
+                    return_value=[
+                        SimpleNamespace(
+                            issue_id=503,
+                            result="success",
+                            mtime_utc="2026-01-01T00:00:00Z",
+                            log_rel_path="logs/am_patch_issue_503_success.log",
+                        )
+                    ],
+                ),
+                patch(
+                    "patchhub.workspace_inventory._iter_canceled_runs",
+                    return_value=[
+                        SimpleNamespace(
+                            issue_id=503,
+                            result="canceled",
+                            mtime_utc="2026-01-02T00:00:00Z",
+                            log_rel_path="artifacts/web_jobs/job_1/am_patch_issue_503.jsonl",
+                        )
+                    ],
+                ),
+            ):
+                _sig, items = list_workspaces(core, [])
+            self.assertEqual(len(items), 1)
+            self.assertEqual(items[0]["state"], "CLEAN")
             self.assertEqual(items[0]["busy"], False)

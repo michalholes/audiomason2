@@ -338,6 +338,19 @@ def _jobs_source_path(source: WebJobsDatabase | Path) -> WebJobsDatabase | Path:
     return source
 
 
+def active_canceled_runs_source(owner: Any) -> WebJobsDatabase | Path:
+    source = getattr(owner, "web_jobs_db", None)
+    if isinstance(source, WebJobsDatabase):
+        return source
+    jobs_root = getattr(owner, "jobs_root", None)
+    if isinstance(jobs_root, Path):
+        return jobs_root
+    patches_root = getattr(owner, "patches_root", None)
+    if isinstance(patches_root, Path):
+        return patches_root
+    raise TypeError("owner must expose web_jobs_db, jobs_root, or patches_root")
+
+
 def canceled_runs_signature(source: WebJobsDatabase | Path) -> tuple[int, int]:
     source = _jobs_source_path(source)
     if isinstance(source, WebJobsDatabase):

@@ -9,7 +9,9 @@ const AMP_UI = __ph_w.AMP_PATCHHUB_UI;
 var activeJobId = null;
 var autoRefreshTimer = null;
 
-var uiStatusLatest = "";
+var UI_STATUS_LIMIT = 20;
+var uiStatusLines = [];
+var degradedNotes = [];
 
 var selectedJobId = null;
 var liveStreamJobId = null;
@@ -42,6 +44,23 @@ function appLog(kind, message) {
 	}
 }
 
+function rememberDegraded(message) {
+	var msg = String(message || "").trim();
+	if (!msg) return;
+	if (degradedNotes.indexOf(msg) < 0) degradedNotes.push(msg);
+	if (degradedNotes.length > UI_STATUS_LIMIT) {
+		degradedNotes.splice(0, degradedNotes.length - UI_STATUS_LIMIT);
+	}
+	var node = el("uiDegradedBanner");
+	if (node) {
+		node.classList.remove("hidden");
+		node.textContent =
+			"DEGRADED MODE: " + degradedNotes[degradedNotes.length - 1];
+	}
+}
+
+__ph_w.PH_APP_SHOW_DEGRADED = rememberDegraded;
+
 async function loadParts(rt) {
 	PH = rt;
 	if (!PH) {
@@ -49,61 +68,89 @@ async function loadParts(rt) {
 		throw new Error("PH runtime missing");
 	}
 
-	// Optional modules (degraded mode if missing).
-	await PH.loadScript("/static/patchhub_progress_ui.js", "progress");
-	await PH.loadScript("/static/patchhub_live_ui.js", "live");
-	await PH.loadScript("/static/amp_settings.js", "amp_settings");
-
-	// App part files. wire_init is required for app start.
-	await PH.loadScript("/static/app_part_runs.js", "app_part_runs");
-	await PH.loadScript("/static/app_part_jobs.js", "app_part_jobs");
-	await PH.loadScript("/static/app_part_workspaces.js", "app_part_workspaces");
-	await PH.loadScript(
-		"/static/app_part_queue_upload.js",
-		"app_part_queue_upload",
-	);
-	await PH.loadScript(
-		"/static/app_part_zip_subset_modal.js",
-		"app_part_zip_subset_modal",
-	);
-	await PH.loadScript("/static/app_part_zip_subset.js", "app_part_zip_subset");
-	await PH.loadScript(
-		"/static/app_part_autofill_header.js",
-		"app_part_autofill_header",
-	);
-	await PH.loadScript(
-		"/static/app_part_snapshot_events.js",
-		"app_part_snapshot_events",
-	);
-	var okWire = await PH.loadScript(
-		"/static/app_part_wire_init.js",
-		"app_part_wire_init",
-	);
-	if (!okWire) {
-		appLog("error", "wire init module failed to load");
-		if (
-			__ph_w.PH_BOOT &&
-			typeof __ph_w.PH_BOOT.setDegradedOnce === "function"
-		) {
-			__ph_w.PH_BOOT.setDegradedOnce("fatal: wire init missing");
-		}
-		return false;
+	function noteLoad(ok, note) {
+		if (!ok) rememberDegraded(note);
+		return ok;
 	}
+
+	// Optional modules (degraded mode if missing).
+	noteLoad(
+		await PH.loadScript("/static/patchhub_progress_ui.js", "progress"),
+		"progress module missing",
+	);
+	noteLoad(
+		await PH.loadScript("/static/patchhub_live_ui.js", "live"),
+		"live module missing",
+	);
+	noteLoad(
+		await PH.loadScript("/static/amp_settings.js", "amp_settings"),
+		"amp settings module missing",
+	);
+
+	// App part files. Missing modules fall back to minimal built-in handlers.
+	noteLoad(
+		await PH.loadScript("/static/app_part_runs.js", "app_part_runs"),
+		"runs module missing",
+	);
+	noteLoad(
+		await PH.loadScript("/static/app_part_jobs.js", "app_part_jobs"),
+		"jobs module missing",
+	);
+	noteLoad(
+		await PH.loadScript(
+			"/static/app_part_workspaces.js",
+			"app_part_workspaces",
+		),
+		"workspaces module missing",
+	);
+	noteLoad(
+		await PH.loadScript(
+			"/static/app_part_queue_upload.js",
+			"app_part_queue_upload",
+		),
+		"queue/upload module missing",
+	);
+	noteLoad(
+		await PH.loadScript(
+			"/static/app_part_zip_subset_modal.js",
+			"app_part_zip_subset_modal",
+		),
+		"zip subset modal module missing",
+	);
+	noteLoad(
+		await PH.loadScript(
+			"/static/app_part_zip_subset.js",
+			"app_part_zip_subset",
+		),
+		"zip subset module missing",
+	);
+	noteLoad(
+		await PH.loadScript(
+			"/static/app_part_autofill_header.js",
+			"app_part_autofill_header",
+		),
+		"autofill/header module missing",
+	);
+	noteLoad(
+		await PH.loadScript(
+			"/static/app_part_snapshot_events.js",
+			"app_part_snapshot_events",
+		),
+		"snapshot events module missing",
+	);
+	noteLoad(
+		await PH.loadScript("/static/app_part_wire_init.js", "app_part_wire_init"),
+		"wire init module missing; built-in fallback active",
+	);
 	return true;
 }
 
 // Called by bootstrap.
 __ph_w.PH_APP_MAIN = async function PH_APP_MAIN(rt) {
-	var ok = await loadParts(rt);
-	if (!ok) return;
-	if (!PH || typeof PH.has !== "function" || !PH.has("startAppWireInit")) {
-		appLog("error", "startAppWireInit capability missing");
-		if (
-			__ph_w.PH_BOOT &&
-			typeof __ph_w.PH_BOOT.setDegradedOnce === "function"
-		) {
-			__ph_w.PH_BOOT.setDegradedOnce("fatal: startAppWireInit missing");
-		}
+	await loadParts(rt);
+	if (!PH || typeof PH.call !== "function") {
+		appLog("error", "PatchHub runtime dispatcher unavailable");
+		rememberDegraded("runtime dispatcher unavailable");
 		return;
 	}
 	PH.call("startAppWireInit");
@@ -140,24 +187,54 @@ function el(id) {
 	return /** @type {any} */ (document.getElementById(id));
 }
 
-function setUiStatus(message) {
+function normalizeUiStatusLines(message) {
+	return String(message || "")
+		.split(/\r?\n/)
+		.map((line) => line.replace(/\s+/g, " ").trim())
+		.filter((line) => !!line);
+}
+
+function renderUiStatusLines() {
 	var node = el("uiStatusBar");
 	if (!node) return;
+	node.textContent = uiStatusLines.join("\n");
+}
 
-	var msg = String(message || "");
-	msg = msg.replace(/\s*\n\s*/g, " ").trim();
-	uiStatusLatest = msg;
-	node.textContent = uiStatusLatest;
+function pushUiStatusLine(message) {
+	var lines = normalizeUiStatusLines(message);
+	if (!lines.length) return;
+	lines.forEach((line) => {
+		uiStatusLines.push(line);
+	});
+	if (uiStatusLines.length > UI_STATUS_LIMIT) {
+		uiStatusLines.splice(0, uiStatusLines.length - UI_STATUS_LIMIT);
+	}
+	renderUiStatusLines();
+}
+
+function setUiStatus(message) {
+	pushUiStatusLine(message);
 }
 
 function setUiError(errorText) {
-	setUiStatus(`ERROR: ${String(errorText || "")}`);
+	pushUiStatusLine(`ERROR: ${String(errorText || "")}`);
 }
 
 function pushApiStatus(payload) {
-	if (!payload || !payload.status || !Array.isArray(payload.status)) return;
-	if (!payload.status.length) return;
-	setUiStatus(String(payload.status[payload.status.length - 1] || ""));
+	if (!payload) return;
+	if (payload.ok === false && payload.error) {
+		setUiError(String(payload.error || ""));
+	}
+	if (
+		!payload.status ||
+		!Array.isArray(payload.status) ||
+		!payload.status.length
+	) {
+		return;
+	}
+	payload.status.forEach((line) => {
+		pushUiStatusLine(String(line || ""));
+	});
 }
 
 function setPre(id, obj) {
@@ -670,6 +747,8 @@ function refreshFs() {
 		);
 	});
 }
+
+// Built-in degraded-mode fallbacks live in /static/app_part_fallback.js.
 
 // App parts are loaded by PH_APP_MAIN via PH.loadScript to avoid relying on
 // document.write order, and to ensure bootstrap can observe failures.

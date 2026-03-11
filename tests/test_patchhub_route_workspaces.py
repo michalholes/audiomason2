@@ -47,7 +47,7 @@ class _DummyCore:
         payload.setdefault("ok", True)
         payload.setdefault("items", [])
         payload.setdefault("sig", "workspaces:fallback")
-        return 200, json.dumps(payload, ensure_ascii=True).encode("utf-8")
+        return 200, json.dumps(payload, ensure_ascii=True, indent=2).encode("utf-8")
 
 
 def _request(*, since_sig: str = "", if_none_match: str = "") -> Request:
@@ -96,6 +96,7 @@ class TestPatchhubRouteWorkspaces(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 304)
         self.assertEqual(response.headers.get("etag"), '"workspaces:sig501"')
+        self.assertEqual(response.headers.get("cache-control"), "no-store")
 
     def test_fallback_returns_unchanged_for_matching_since_sig(self) -> None:
         core = _DummyCore(
@@ -114,6 +115,8 @@ class TestPatchhubRouteWorkspaces(unittest.TestCase):
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.headers.get("etag"), '"workspaces:fallback777"')
+        self.assertEqual(response.headers.get("cache-control"), "no-store")
+        self.assertTrue(response.body.decode("utf-8").startswith('{\n  "ok": true,'))
         body = json.loads(response.body.decode("utf-8"))
         self.assertEqual(
             body,

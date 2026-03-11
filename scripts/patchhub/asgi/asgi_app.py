@@ -9,13 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, File, HTTPException, Request, UploadFile
-from fastapi.responses import (
-    FileResponse,
-    HTMLResponse,
-    JSONResponse,
-    Response,
-    StreamingResponse,
-)
+from fastapi.responses import FileResponse, HTMLResponse, Response, StreamingResponse
 
 from patchhub import app_api_core as _core_api
 from patchhub.models import job_to_list_item_json
@@ -23,6 +17,7 @@ from patchhub.models import job_to_list_item_json
 from .async_app_core import AsyncAppCore
 from .async_offload import to_thread
 from .job_events_db_stream import stream_job_events_db_live
+from .json_contract import json_bytes_response, json_head_response, json_headers, json_response
 from .route_diagnostics import handle_api_debug_diagnostics
 from .route_snapshot_events import handle_api_snapshot_events
 from .route_ui_snapshot import handle_api_ui_snapshot
@@ -34,8 +29,27 @@ from .snapshot_delta_store import SnapshotDeltaStore
 UPLOAD_PATCH_FILE: Any = File(...)
 
 
-def _json_bytes_response(status: int, data: bytes) -> Response:
-    return Response(content=data, status_code=status, media_type="application/json")
+def _json_bytes_response(
+    status: int,
+    data: bytes,
+    *,
+    headers: dict[str, str] | None = None,
+) -> Response:
+    return json_bytes_response(data, status=status, headers=headers)
+
+
+def _json_response_obj(
+    status: int,
+    data: Any,
+    *,
+    headers: dict[str, str] | None = None,
+) -> Response:
+    return json_response(data, status=status, headers=headers)
+
+
+def _not_modified_response(*, etag: str = "") -> Response:
+    headers = {"ETag": etag} if etag else None
+    return Response(status_code=304, headers=json_headers(headers))
 
 
 def _guess_content_type(path: Path) -> str:
@@ -56,15 +70,8 @@ def _etag_matches(if_none_match: str | None, etag_value: str) -> bool:
 
 
 def _head_json_response(status: int, *, etag: str = "") -> Response:
-    headers: dict[str, str] = {}
-    if etag:
-        headers["ETag"] = etag
-    return Response(
-        content=b"",
-        status_code=status,
-        media_type="application/json",
-        headers=headers,
-    )
+    headers = {"ETag": etag} if etag else None
+    return json_head_response(status, headers=headers)
 
 
 def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
@@ -177,15 +184,9 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
 
         inm = request.headers.get("if-none-match")
         if status == 200 and etag and _etag_matches(inm, etag):
-            return Response(status_code=304, headers={"ETag": etag})
+            return _not_modified_response(etag=etag)
         headers = {"ETag": etag} if (status == 200 and etag) else None
-        return (
-            _json_bytes_response(status, data)
-            if not headers
-            else Response(
-                content=data, status_code=status, media_type="application/json", headers=headers
-            )
-        )
+        return _json_bytes_response(status, data, headers=headers)
 
     @app.get("/api/fs/read_text")
     async def api_fs_read_text(request: Request) -> Response:
@@ -230,16 +231,11 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
                 if not issue_id_s and not result:
                     inm = request.headers.get("if-none-match")
                     if etag and _etag_matches(inm, etag):
-                        return Response(status_code=304, headers={"ETag": etag})
+                        return _not_modified_response(etag=etag)
                     if since_sig and since_sig == sig:
-                        data = json.dumps(
+                        return _json_response_obj(
+                            200,
                             {"ok": True, "unchanged": True, "sig": sig},
-                            ensure_ascii=True,
-                        ).encode("utf-8")
-                        return Response(
-                            content=data,
-                            status_code=200,
-                            media_type="application/json",
                             headers={"ETag": etag},
                         )
 
@@ -250,33 +246,27 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
                     try:
                         iid = int(issue_id_s)
                     except ValueError:
-                        return JSONResponse(
+                        return _json_response_obj(
+                            400,
                             {"ok": False, "error": "Invalid issue_id"},
-                            status_code=400,
                         )
                     runs_items = [r for r in runs_items if int(r.get("issue_id", 0) or 0) == iid]
 
                 if result:
                     if result not in ("success", "fail", "unknown", "canceled"):
-                        return JSONResponse(
+                        return _json_response_obj(
+                            400,
                             {"ok": False, "error": "Invalid result filter"},
-                            status_code=400,
                         )
                     runs_items = [r for r in runs_items if str(r.get("result", "")) == result]
 
                 runs_items = runs_items[:limit]
-                data = json.dumps(
+                headers = {"ETag": etag} if (not issue_id_s and not result and etag) else None
+                return _json_response_obj(
+                    200,
                     {"ok": True, "runs": runs_items, "sig": sig},
-                    ensure_ascii=True,
-                ).encode("utf-8")
-                if not issue_id_s and not result and etag:
-                    return Response(
-                        content=data,
-                        status_code=200,
-                        media_type="application/json",
-                        headers={"ETag": etag},
-                    )
-                return _json_bytes_response(200, data)
+                    headers=headers,
+                )
 
         # Legacy path (indexer not ready / error).
         # ETag/304 is canonical only for default (unfiltered) list.
@@ -297,28 +287,17 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
             etag = _etag_quote(sig)
             inm = request.headers.get("if-none-match")
             if etag and _etag_matches(inm, etag):
-                return Response(status_code=304, headers={"ETag": etag})
+                return _not_modified_response(etag=etag)
             if since_sig and since_sig == sig:
-                data = json.dumps(
+                return _json_response_obj(
+                    200,
                     {"ok": True, "unchanged": True, "sig": sig},
-                    ensure_ascii=True,
-                ).encode("utf-8")
-                return Response(
-                    content=data,
-                    status_code=200,
-                    media_type="application/json",
                     headers={"ETag": etag},
                 )
 
         status, data = await to_thread(core.api_runs, qs)
-        if status == 200 and etag:
-            return Response(
-                content=data,
-                status_code=200,
-                media_type="application/json",
-                headers={"ETag": etag},
-            )
-        return _json_bytes_response(status, data)
+        headers = {"ETag": etag} if (status == 200 and etag) else None
+        return _json_bytes_response(status, data, headers=headers)
 
     @app.head("/api/runs")
     async def api_runs_head(request: Request) -> Response:
@@ -338,7 +317,7 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
 
                 inm = request.headers.get("if-none-match")
                 if etag and _etag_matches(inm, etag):
-                    return Response(status_code=304, headers={"ETag": etag})
+                    return _not_modified_response(etag=etag)
                 if since_sig and since_sig == sig:
                     return _head_json_response(200, etag=etag)
                 return _head_json_response(200, etag=etag)
@@ -361,7 +340,7 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
 
         inm = request.headers.get("if-none-match")
         if etag and _etag_matches(inm, etag):
-            return Response(status_code=304, headers={"ETag": etag})
+            return _not_modified_response(etag=etag)
         if since_sig and since_sig == sig:
             return _head_json_response(200, etag=etag)
         return _head_json_response(200, etag=etag)
@@ -388,20 +367,16 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
                 etag = _etag_quote(sig)
                 inm = request.headers.get("if-none-match")
                 if etag and _etag_matches(inm, etag):
-                    return Response(status_code=304, headers={"ETag": etag})
+                    return _not_modified_response(etag=etag)
                 if since_sig and since_sig == sig:
-                    return JSONResponse(
+                    return _json_response_obj(
+                        200,
                         {"ok": True, "unchanged": True, "sig": sig},
                         headers={"ETag": etag},
                     )
-                data = json.dumps(
+                return _json_response_obj(
+                    200,
                     {"ok": True, "jobs": jobs_items, "sig": sig},
-                    ensure_ascii=True,
-                ).encode("utf-8")
-                return Response(
-                    content=data,
-                    status_code=200,
-                    media_type="application/json",
                     headers={"ETag": etag},
                 )
 
@@ -425,9 +400,10 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
         etag = _etag_quote(sig)
         inm = request.headers.get("if-none-match")
         if etag and _etag_matches(inm, etag):
-            return Response(status_code=304, headers={"ETag": etag})
+            return _not_modified_response(etag=etag)
         if since_sig and since_sig == sig:
-            return JSONResponse(
+            return _json_response_obj(
+                200,
                 {"ok": True, "unchanged": True, "sig": sig},
                 headers={"ETag": etag},
             )
@@ -461,7 +437,8 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
 
         jobs = mem + disk
         jobs.sort(key=lambda j: str(j.created_utc or ""), reverse=True)
-        return JSONResponse(
+        return _json_response_obj(
+            200,
             {"ok": True, "jobs": [job_to_list_item_json(j) for j in jobs], "sig": sig},
             headers={"ETag": etag},
         )
@@ -478,7 +455,7 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
 
                 inm = request.headers.get("if-none-match")
                 if etag and _etag_matches(inm, etag):
-                    return Response(status_code=304, headers={"ETag": etag})
+                    return _not_modified_response(etag=etag)
                 if since_sig and since_sig == sig:
                     return _head_json_response(200, etag=etag)
                 return _head_json_response(200, etag=etag)
@@ -503,7 +480,7 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
 
         inm = request.headers.get("if-none-match")
         if etag and _etag_matches(inm, etag):
-            return Response(status_code=304, headers={"ETag": etag})
+            return _not_modified_response(etag=etag)
         if since_sig and since_sig == sig:
             return _head_json_response(200, etag=etag)
         return _head_json_response(200, etag=etag)
@@ -511,36 +488,36 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
     @app.get("/api/patches/zip_manifest")
     async def api_patch_zip_manifest(path: str) -> Response:
         status, data = await to_thread(core.api_patch_zip_manifest, {"path": path})
-        return Response(content=data, status_code=status, media_type="application/json")
+        return _json_bytes_response(status, data)
 
     @app.get("/api/jobs/{job_id}")
     async def api_jobs_get(job_id: str) -> Response:
         status, data = await to_thread(core.api_jobs_get, job_id)
-        return Response(content=data, status_code=status, media_type="application/json")
+        return _json_bytes_response(status, data)
 
     @app.get("/api/jobs/{job_id}/log_tail")
-    async def api_jobs_log_tail(job_id: str, lines: int = 200) -> JSONResponse:
+    async def api_jobs_log_tail(job_id: str, lines: int = 200) -> Response:
         job = await core.queue.get_job(job_id)
         if job is None:
             job = await to_thread(core._load_job_from_disk, job_id)
         if job is None:
-            return JSONResponse({"ok": False, "error": "Not found"}, status_code=404)
+            return _json_response_obj(404, {"ok": False, "error": "Not found"})
         tail = await to_thread(core.read_log_tail_sync, job_id, lines=lines)
-        return JSONResponse({"ok": True, "job_id": job_id, "tail": tail})
+        return _json_response_obj(200, {"ok": True, "job_id": job_id, "tail": tail})
 
     @app.post("/api/jobs/{job_id}/cancel")
     async def api_jobs_cancel(job_id: str) -> Response:
         ok = await core.queue.cancel(job_id)
         if not ok:
-            return JSONResponse({"ok": False, "error": "Cannot cancel"}, status_code=409)
-        return JSONResponse({"ok": True, "job_id": job_id})
+            return _json_response_obj(409, {"ok": False, "error": "Cannot cancel"})
+        return _json_response_obj(200, {"ok": True, "job_id": job_id})
 
     @app.post("/api/jobs/{job_id}/hard_stop")
     async def api_jobs_hard_stop(job_id: str) -> Response:
         ok = await core.queue.hard_stop(job_id)
         if not ok:
-            return JSONResponse({"ok": False, "error": "Cannot hard stop"}, status_code=409)
-        return JSONResponse({"ok": True, "job_id": job_id})
+            return _json_response_obj(409, {"ok": False, "error": "Cannot hard stop"})
+        return _json_response_obj(200, {"ok": True, "job_id": job_id})
 
     @app.post("/api/jobs/enqueue")
     async def api_jobs_enqueue(body: dict[str, Any]) -> Response:
@@ -620,8 +597,9 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
     async def api_fs_archive(body: dict[str, Any]) -> Response:
         paths = body.get("paths")
         if not isinstance(paths, list) or not paths:
-            return JSONResponse(
-                {"ok": False, "error": "paths must be a non-empty list"}, status_code=400
+            return _json_response_obj(
+                400,
+                {"ok": False, "error": "paths must be a non-empty list"},
             )
 
         rel_paths: list[str] = []
@@ -632,7 +610,7 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
             if rel:
                 rel_paths.append(rel)
         if not rel_paths:
-            return JSONResponse({"ok": False, "error": "No valid paths"}, status_code=400)
+            return _json_response_obj(400, {"ok": False, "error": "No valid paths"})
         rel_paths = sorted(set(rel_paths))
 
         def _build_archive_bytes_sync(core: AsyncAppCore, rel_paths: list[str]) -> bytes:
@@ -677,16 +655,16 @@ def create_app(*, repo_root: Path, cfg: Any) -> FastAPI:
         try:
             data = await to_thread(_build_archive_bytes_sync, core, rel_paths)
         except FileNotFoundError as e:
-            return JSONResponse({"ok": False, "error": f"Not found: {e.args[0]}"}, status_code=400)
+            return _json_response_obj(400, {"ok": False, "error": f"Not found: {e.args[0]}"})
         except Exception as e:
-            return JSONResponse({"ok": False, "error": str(e)}, status_code=400)
+            return _json_response_obj(400, {"ok": False, "error": str(e)})
         headers = {"Content-Disposition": 'attachment; filename="selection.zip"'}
         return Response(content=data, media_type="application/zip", headers=headers)
 
     @app.post("/api/debug/indexer/force_rescan")
-    async def api_debug_indexer_force_rescan() -> JSONResponse:
+    async def api_debug_indexer_force_rescan() -> Response:
         await core.indexer.force_rescan()
-        return JSONResponse({"ok": True})
+        return _json_response_obj(200, {"ok": True})
 
     @app.get("/api/debug/diagnostics")
     async def api_debug_diagnostics(request: Request) -> Response:

@@ -63,6 +63,13 @@
 		} catch (e) {
 			// ignore
 		}
+		try {
+			if (typeof W.PH_APP_SHOW_DEGRADED === "function") {
+				W.PH_APP_SHOW_DEGRADED(reason);
+			}
+		} catch (e) {
+			// ignore
+		}
 	}
 
 	function record(list, item, max) {
@@ -122,6 +129,21 @@
 		return !!findCapability(capabilityName);
 	}
 
+	function findFallback(capabilityName) {
+		const map = W.PH_APP_FALLBACKS || null;
+		if (!map) return null;
+		const fn = map[String(capabilityName || "")];
+		return typeof fn === "function" ? fn : null;
+	}
+
+	function runFallback(cap, args, kind, details) {
+		const fallback = findFallback(cap);
+		if (!fallback) return undefined;
+		record(diag, { ts: nowIso(), kind, cap, details }, 50);
+		setDegraded(`fallback active: ${cap}`);
+		return fallback.apply(null, args);
+	}
+
 	function call(capabilityName, ...args) {
 		const cap = String(capabilityName || "");
 		const hit = findCapability(cap);
@@ -132,7 +154,7 @@
 				logStatus("warn", degradedNote("capability", "missing", cap));
 				setDegraded(`capability missing: ${cap}`);
 			}
-			return undefined;
+			return runFallback(cap, args, "fallback_missing", "capability missing");
 		}
 
 		try {
@@ -157,7 +179,7 @@
 				logStatus("error", note);
 				setDegraded(`capability fault: ${cap}`);
 			}
-			return undefined;
+			return runFallback(cap, args, "fallback_fault", mod.last_error);
 		}
 	}
 

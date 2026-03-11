@@ -44,3 +44,23 @@ def test_wire_init_uses_dispatcher_for_amp_settings_and_snapshot_modules() -> No
     assert 'phCall("ensureSnapshotEvents")' in src
     assert 'phCall("stopSnapshotEvents")' in src
     assert "window).AmpSettings" not in src
+
+
+def test_status_bar_uses_bounded_history_buffer() -> None:
+    src = _read("scripts/patchhub/static/app.js")
+    assert "UI_STATUS_LIMIT = 20" in src
+    assert "var uiStatusLines = [];" in src
+    assert "payload.status.forEach((line) => {" in src
+    assert "uiStatusLines.splice(0, uiStatusLines.length - UI_STATUS_LIMIT);" in src
+
+
+def test_degraded_mode_exposes_banner_and_builtin_fallbacks() -> None:
+    app_src = _read("scripts/patchhub/static/app.js")
+    fallback_src = _read("scripts/patchhub/static/app_part_fallback.js")
+    runtime_src = _read("scripts/patchhub/static/patchhub_runtime.js")
+    html_src = _read("scripts/patchhub/templates/index.html")
+    assert 'id="uiDegradedBanner"' in html_src
+    assert "__ph_w.PH_APP_FALLBACKS" in fallback_src
+    assert "startAppWireInit: fallbackStartAppWireInit" in fallback_src
+    assert '"wire init module missing; built-in fallback active"' in app_src
+    assert 'return runFallback(cap, args, "fallback_missing", "capability missing")' in runtime_src
