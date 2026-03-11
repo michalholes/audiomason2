@@ -871,29 +871,27 @@ def finalize_and_report(ctx: RunContext, result: RunResult) -> int:
             lock.release()
 
     # Final summary must always be present in the log file (even at log_level=quiet).
-    try:
-        screen_quiet = str(verbosity or "").strip().lower() == "quiet"
-        log_quiet = str(log_level or "").strip().lower() == "quiet"
+    screen_quiet = str(verbosity or "").strip().lower() == "quiet"
+    log_quiet = str(log_level or "").strip().lower() == "quiet"
+    with suppress(Exception):
         logger.emit_json_result(
             ok=(exit_code == 0), return_code=exit_code, log_path=log_path, json_path=json_path
         )
-        emit_final_summary(
-            logger=logger,
-            log_path=log_path,
-            exit_code=exit_code,
-            commit_and_push=bool(getattr(policy, "commit_and_push", False)),
-            final_commit_sha=final_commit_sha,
-            final_pushed_files=final_pushed_files,
-            push_ok_for_posthook=push_ok_for_posthook,
-            final_fail_stage=final_fail_stage,
-            final_fail_reason=final_fail_reason,
-            final_fail_detail=final_fail_detail,
-            final_fail_fingerprint=final_fail_fingerprint,
-            screen_quiet=screen_quiet,
-            log_quiet=log_quiet,
-        )
-    except Exception:
-        pass
+    emit_final_summary(
+        logger=logger,
+        log_path=log_path,
+        exit_code=exit_code,
+        commit_and_push=bool(getattr(policy, "commit_and_push", False)),
+        final_commit_sha=final_commit_sha,
+        final_pushed_files=final_pushed_files,
+        push_ok_for_posthook=push_ok_for_posthook,
+        final_fail_stage=final_fail_stage,
+        final_fail_reason=final_fail_reason,
+        final_fail_detail=final_fail_detail,
+        final_fail_fingerprint=final_fail_fingerprint,
+        screen_quiet=screen_quiet,
+        log_quiet=log_quiet,
+    )
 
     if policy.test_mode and isolated_work_patch_dir is not None:
         with suppress(Exception):

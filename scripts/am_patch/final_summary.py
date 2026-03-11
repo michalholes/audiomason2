@@ -1,9 +1,41 @@
 from __future__ import annotations
 
+from contextlib import suppress
 from pathlib import Path
 
 from am_patch.errors import CANCEL_EXIT_CODE
 from am_patch.log import Logger
+
+
+def _emit_logger_message(
+    logger: Logger,
+    *,
+    severity: str,
+    channel: str,
+    message: str,
+    kind: str,
+    summary: bool,
+    error_detail: bool,
+    to_screen: bool,
+    to_log: bool,
+) -> None:
+    with suppress(Exception):
+        logger.emit(
+            severity=severity,
+            channel=channel,
+            message=message,
+            kind=kind,
+            summary=summary,
+            error_detail=error_detail,
+            to_screen=False,
+            to_log=False,
+        )
+    if to_log:
+        with suppress(Exception):
+            logger._write_file(message)
+    if to_screen:
+        with suppress(Exception):
+            logger._write_screen(message)
 
 
 def _emit_summary_line(
@@ -14,12 +46,14 @@ def _emit_summary_line(
     to_screen: bool,
     to_log: bool,
 ) -> None:
-    logger.emit(
+    _emit_logger_message(
+        logger,
         severity="INFO",
         channel="CORE",
         message=message,
         kind=kind,
         summary=True,
+        error_detail=False,
         to_screen=to_screen,
         to_log=to_log,
     )
@@ -190,22 +224,26 @@ def _emit_fail_summary(
     log_quiet: bool,
 ) -> None:
     if detail:
-        logger.emit(
+        _emit_logger_message(
+            logger,
             severity="ERROR",
             channel="CORE",
             message=detail,
-            error_detail=True,
             kind="TEXT",
+            summary=False,
+            error_detail=True,
             to_screen=True,
             to_log=True,
         )
     if fingerprint:
-        logger.emit(
+        _emit_logger_message(
+            logger,
             severity="ERROR",
             channel="CORE",
             message=fingerprint,
-            error_detail=True,
             kind="TEXT",
+            summary=False,
+            error_detail=True,
             to_screen=False,
             to_log=True,
         )

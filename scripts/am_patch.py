@@ -119,11 +119,17 @@ from am_patch.engine import (
     finalize_and_report,
     run_mode,
 )
+from am_patch.errors import RunnerError
 from am_patch.fs_junk import fs_junk_ignore_partition
 from am_patch.log import Logger
 from am_patch.patch_archive_select import select_latest_issue_patch
 from am_patch.post_success_audit import run_post_success_audit
 from am_patch.repo_root import is_under, resolve_repo_root
+from am_patch.run_result import RunResult
+from am_patch.runner_failure_detail import (
+    render_runner_error_detail,
+    render_runner_error_fingerprint,
+)
 
 # NOTE: Any change that alters runner behavior MUST bump RUNNER_VERSION and MUST update
 # the runner specification under scripts/ (e.g., scripts/am_patch_specification.md).
@@ -225,6 +231,18 @@ def _workspace_store_current_log(
     )
 
 
+def _build_internal_failure_result(exc: Exception) -> RunResult:
+    detail = f"{type(exc).__name__}: {exc}" if str(exc) else type(exc).__name__
+    err = RunnerError("INTERNAL", "INTERNAL", detail)
+    return RunResult(
+        exit_code=1,
+        final_fail_stage="INTERNAL",
+        final_fail_reason="unexpected error",
+        final_fail_detail=render_runner_error_detail(err),
+        final_fail_fingerprint=render_runner_error_fingerprint(err),
+    )
+
+
 def main(argv: list[str]) -> int:
     res = build_effective_policy(argv)
     if isinstance(res, int):
@@ -234,7 +252,10 @@ def main(argv: list[str]) -> int:
     exit_code: int | None = None
     try:
         ctx = build_paths_and_logger(cli, policy, config_path, used_cfg)
-        result = run_mode(ctx)
+        try:
+            result = run_mode(ctx)
+        except Exception as exc:
+            result = _build_internal_failure_result(exc)
         exit_code = finalize_and_report(ctx, result)
         return exit_code
     finally:

@@ -103,3 +103,46 @@ def test_fail_summary_keeps_quiet_screen_minimal_but_shows_error_detail(
     assert "AM_PATCH_FAILURE_FINGERPRINT" not in out
     assert "ERROR DETAIL: PREFLIGHT:PATCH_ASCII: bad patch" in data
     assert "AM_PATCH_FAILURE_FINGERPRINT" in data
+
+
+def test_fail_summary_keeps_log_summary_when_screen_sink_fails(
+    tmp_path: Path,
+) -> None:
+    _, emit_final_summary = _import_am_patch()
+    logger = _mk_logger(tmp_path, screen_level="normal", log_level="normal")
+    log_path = tmp_path / "am_patch.log"
+
+    def _write_screen(_message: str) -> None:
+        raise OSError("screen sink failed")
+
+    logger._write_screen = _write_screen  # type: ignore[method-assign]
+    try:
+        emit_final_summary(
+            logger=logger,
+            log_path=log_path,
+            exit_code=1,
+            commit_and_push=False,
+            final_commit_sha=None,
+            final_pushed_files=None,
+            push_ok_for_posthook=None,
+            final_fail_stage=("GATE_COMPILE, GATE_RUFF, GATE_MYPY, GATE_DOCS, GATE_MONOLITH"),
+            final_fail_reason="gates failed",
+            final_fail_detail=(
+                "ERROR DETAIL: GATES:GATES: gates failed: compile, ruff, mypy, monolith, docs\n"
+            ),
+            final_fail_fingerprint=(
+                "AM_PATCH_FAILURE_FINGERPRINT:\n- stage: GATES\n- category: GATES\n"
+            ),
+            screen_quiet=False,
+            log_quiet=False,
+        )
+    finally:
+        logger.close()
+
+    data = log_path.read_text(encoding="utf-8")
+
+    assert "RESULT: FAIL" in data
+    assert "STAGE: GATE_COMPILE, GATE_RUFF, GATE_MYPY, GATE_DOCS, GATE_MONOLITH" in data
+    assert "REASON: gates failed" in data
+    assert f"LOG: {log_path}" in data
+    assert "AM_PATCH_FAILURE_FINGERPRINT" in data
