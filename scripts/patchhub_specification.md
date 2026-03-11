@@ -3,7 +3,7 @@ Status: AUTHORITATIVE SPECIFICATION
 Applies to: scripts/patchhub/*
 Language: ENGLISH (ASCII ONLY)
 
-Specification Version: 1.11.2-spec
+Specification Version: 1.12.0-spec
 Code Baseline: audiomason2-main.zip (as provided in this chat)
 
 -------------------------------------------------------------------------------
@@ -65,9 +65,26 @@ The runtime version MUST NOT be hardcoded in code.
 
 - PatchHub server MUST NOT use timeout-based polling for the main job queue idle loop.
 - The job queue idle loop MUST block on queue.get() and MUST wake only on new work or on stop.
-- When the PatchHub UI document is hidden (document.hidden == true), the UI MUST pause all periodic refresh timers and MUST close any active SSE/EventSource connections.
-- When the document becomes visible again, the UI MUST resume timers and refresh UI state.
-- Timer creation MUST be centralized to prevent duplicated timers across multiple hide/show cycles.
+- PatchHub UI visibility handling MUST distinguish four UI states:
+  - visible+active
+  - visible+idle
+  - hidden+active
+  - hidden+idle
+- When the PatchHub UI document is hidden (document.hidden == true) and no non-terminal
+  tracked job exists, the UI MUST pause all periodic refresh timers and MUST close
+  active SSE/EventSource connections.
+- When the document becomes hidden during a non-terminal tracked job, the UI MUST
+  preserve the active lifecycle until backend-confirmed completion.
+  - In hidden+active, the UI MUST NOT degrade the tracked job from ACTIVE to IDLE
+    only because the document became hidden.
+  - In hidden+active, the UI MUST NOT disable the active-mode orchestration path
+    required for correct completion detection.
+  - In hidden+active, the tracked live job SSE stream MUST remain available until a
+    terminal backend signal is observed.
+- When the document becomes visible again, the UI MUST resume or reconcile state as
+  required by the current tracked job state.
+- Timer creation MUST be centralized to prevent duplicated timers across multiple
+  hide/show cycles.
 
 2.3 Client Fault Tolerance (HARD)
 
@@ -116,15 +133,25 @@ The runtime version MUST NOT be hardcoded in code.
 
 2.4 Refresh Policy: ACTIVE vs IDLE (HARD)
 
-- The UI MUST implement two refresh modes:
-  - ACTIVE: while a patching job is running (or an active job is selected), the
-    UI MUST provide near-realtime updates for:
-    - live logs,
-    - job state/progress (top-right),
-    - stop/cancel responsiveness.
-  - IDLE: when no patching is active, the UI MUST use a deterministic
-    backoff policy for visible-tab refresh (see 2.5.1). The UI MUST NOT
-    refresh more frequently than the first backoff interval.
+- The UI MUST implement ACTIVE and IDLE refresh behavior over the four UI states:
+  - visible+active
+  - visible+idle
+  - hidden+active
+  - hidden+idle
+- ACTIVE is defined by the presence of a tracked non-terminal job.
+  - The tracked active job MUST be the selected live job while that job remains in
+    a non-terminal state (`queued` or `running`).
+  - `document.hidden` alone MUST NOT clear ACTIVE for the tracked non-terminal job.
+- During ACTIVE (`visible+active` and `hidden+active`), the UI MUST provide
+  near-realtime updates for:
+  - live logs,
+  - job state/progress (top-right),
+  - stop/cancel responsiveness.
+- IDLE is defined by the absence of a tracked non-terminal job.
+  - In `visible+idle`, the UI MUST use a deterministic backoff policy for visible-tab
+    refresh (see 2.5.1). The UI MUST NOT refresh more frequently than the first
+    backoff interval.
+  - In `hidden+idle`, the UI MUST perform no refresh or streaming activity.
 - In IDLE mode, the UI MUST NOT re-fetch or re-render data that has not changed
   ("conditional refresh").
 - Timer creation MUST remain centralized and MUST NOT duplicate refresh loops.
@@ -750,20 +777,32 @@ This is a UI-only rendering rule. The SSE event payload fields
 7.1.3 Progress Card Rendering (Variant 2)
 
 The main UI includes a Progress card (right sidebar) that renders per-step status
-using runner textual markers found in the active log tail.
+for the tracked active job.
 
 HTML elements (templates/index.html):
 - <div id="progressSteps" class="progress-steps"></div>
 - <div id="progressSummary" class="progress-summary muted"></div>
 - <div id="progressApplied" class="progress-applied hidden"></div>
 
-Parsing source (static/app.js):
-- The UI consumes the live log tail text (same source used for the Tail view).
-- Step transitions are derived from lines that begin with:
+Primary parsing source (static client modules):
+- During ACTIVE, the UI MUST use the persisted job event SSE stream as the canonical
+  source for:
+  - the live log pane,
+  - the Active job surface,
+  - the top-right Progress card.
+- The canonical live source includes the terminal SSE trailer:
+  - event: end
+  - data: {"reason":"job_completed","status":"<job.status>"}
+- The Tail view remains available as a fallback/resync source.
+  - Tail text MAY be used to reconcile the Progress card when live events are not
+    yet available, after reconnect, or during explicit resync.
+  - Tail text MUST NOT replace SSE as the primary live progress source during ACTIVE.
+- Step transitions are derived from persisted event payloads corresponding to runner
+  progress markers:
   - DO: <STEP>
   - OK: <STEP>
-  - FAIL: <STEP> (preferred for explicit step failure)
-  - ERROR: ... or generic FAIL ... (fallback: marks the last running step as failed)
+  - FAIL: <STEP>
+  - terminal end status from `event: end`
 
 Rendering rules:
 - Each discovered step is rendered in first-seen order.
@@ -775,12 +814,20 @@ Rendering rules:
 - Exactly one step is shown as running (the most recent DO without a later OK/FAIL).
 
 Summary rule:
-- progressSummary shows the most recent RESULT:/STATUS:/FAIL:/OK:/DO: line
-  (compact single-line status for quick scanning).
+- During ACTIVE, progressSummary MUST follow the latest persisted live event state.
+- On receipt of terminal `event: end`, progressSummary MUST converge to the final
+  job status and MUST NOT remain stuck on an older running step.
+- Tail-derived summary is fallback/resync only.
 
 Applied files rule:
 - For a successful selected or just-finished job, Progress MUST render an
   Applied files block directly below RESULT: SUCCESS.
+- After a tracked job reaches a terminal state, the Progress card MUST retain the
+  final summary for that last tracked job until a newer tracked job or an explicit
+  user selection replaces it.
+- After a tracked job reaches a terminal state, the live event buffer for that last
+  tracked job MUST remain visible until a newer tracked job or explicit user
+  selection replaces it.
 - The block is a first-glance surface; it MUST NOT require opening Preview,
   Issue detail tabs, or the log pane.
 - Applied files are sourced from runner artifacts only:
