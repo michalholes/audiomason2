@@ -115,3 +115,20 @@ def test_load_state_repairs_missing_phase1_projection_on_resume(tmp_path: Path) 
 
     assert repaired["vars"]["phase1"]["select_authors"]["selection_expr"] == "1"
     assert repaired["vars"]["phase1"]["select_books"]["selection_expr"] == "1"
+
+
+def test_default_v3_phase1_runtime_step_uses_flow_visible_runtime_projection() -> None:
+    definition = build_default_wizard_definition_v3()
+    phase1_node = next(
+        node for node in definition["nodes"] if node["step_id"] == "phase1_runtime_defaults"
+    )
+    op = phase1_node["op"]
+
+    assert op["primitive_id"] == "data.set"
+    assert op["inputs"] == {"value": {"expr": "$.state.vars.phase1.runtime"}}
+    assert op["writes"] == [
+        {
+            "to_path": "$.state.vars.phase1.runtime",
+            "value": {"expr": "$.op.outputs.value"},
+        }
+    ]

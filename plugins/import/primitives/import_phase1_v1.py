@@ -55,18 +55,7 @@ DEFAULT_RESOLVE_CONFLICTS = {"confirm": False}
 DEFAULT_FINAL_CONFIRM = {"confirm_start": False}
 
 
-def execute(
-    primitive_id: str,
-    primitive_version: int,
-    inputs: dict[str, Any],
-    state: dict[str, Any],
-) -> dict[str, Any]:
-    del inputs
-    if primitive_version != 1:
-        raise ValueError("unsupported primitive version")
-    if primitive_id != "import.phase1_runtime":
-        raise ValueError("unknown import primitive")
-
+def build_runtime_snapshot(state: dict[str, Any]) -> dict[str, Any]:
     phase1_any = state.get("vars", {}).get("phase1")
     phase1 = _dict_copy(phase1_any)
     phase2_inputs = _dict_copy(phase1.get("phase2_inputs"))
@@ -126,7 +115,7 @@ def execute(
     has_conflicts = bool(conflicts.get("present")) or bool(conflicts.get("items"))
     resolve_required = str(conflict_policy.get("mode") or "ask") == "ask" and has_conflicts
 
-    snapshot = {
+    return {
         "plan_preview_batch": {
             "summary": deepcopy(_dict_copy(state.get("computed", {}).get("plan_summary"))),
             "selected_source_relative_paths": deepcopy(
@@ -155,7 +144,20 @@ def execute(
         "cover": cover,
         "policy": policy,
     }
-    return {"snapshot": snapshot}
 
 
-__all__ = ["REGISTRY_ENTRIES", "execute"]
+def execute(
+    primitive_id: str,
+    primitive_version: int,
+    inputs: dict[str, Any],
+    state: dict[str, Any],
+) -> dict[str, Any]:
+    del inputs
+    if primitive_version != 1:
+        raise ValueError("unsupported primitive version")
+    if primitive_id != "import.phase1_runtime":
+        raise ValueError("unknown import primitive")
+    return {"snapshot": build_runtime_snapshot(state)}
+
+
+__all__ = ["REGISTRY_ENTRIES", "build_runtime_snapshot", "execute"]

@@ -84,6 +84,10 @@ def test_load_or_bootstrap_can_create_python_defined_v3_default(tmp_path: Path) 
     assert out == canonicalize_wizard_definition(out)
     assert out["version"] == 3
     assert out["entry_step_id"] == "select_authors"
+    phase1_node = next(
+        node for node in out["nodes"] if node["step_id"] == "phase1_runtime_defaults"
+    )
+    assert phase1_node["op"]["primitive_id"] == "data.set"
     assert out == expected
 
 

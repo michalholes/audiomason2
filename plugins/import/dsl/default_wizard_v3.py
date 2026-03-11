@@ -79,10 +79,15 @@ _DEFAULT_WIZARD_DEFINITION_V3: dict[str, Any] = {
         {
             "step_id": "phase1_runtime_defaults",
             "op": {
-                "primitive_id": "ui.message",
+                "primitive_id": "data.set",
                 "primitive_version": 1,
-                "inputs": {},
-                "writes": [],
+                "inputs": {"value": {"expr": "$.state.vars.phase1.runtime"}},
+                "writes": [
+                    {
+                        "to_path": "$.state.vars.phase1.runtime",
+                        "value": {"expr": "$.op.outputs.value"},
+                    }
+                ],
             },
         },
         {

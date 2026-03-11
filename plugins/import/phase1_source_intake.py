@@ -11,7 +11,7 @@ from .fingerprints import sha256_hex
 from .phase1_cover_flow import build_phase1_cover_projection
 from .phase1_metadata_flow import build_phase1_metadata_projection
 from .phase1_policy_flow import build_phase1_policy_projection
-from .primitives.import_phase1_v1 import execute as execute_phase1_runtime
+from .primitives.import_phase1_v1 import build_runtime_snapshot
 
 
 def _selection_expr(*, ordered_ids: list[str], selected_ids: list[str]) -> str:
@@ -283,12 +283,7 @@ def build_phase1_projection(
         **state,
         "vars": {**dict(state.get("vars") or {}), "phase1": phase1_projection},
     }
-    runtime_snapshot = execute_phase1_runtime(
-        "import.phase1_runtime",
-        1,
-        {},
-        runtime_state,
-    ).get("snapshot")
+    runtime_snapshot = build_runtime_snapshot(runtime_state)
     if isinstance(runtime_snapshot, dict):
         phase1_projection["runtime"] = runtime_snapshot
     return phase1_projection
