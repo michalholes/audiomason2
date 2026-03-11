@@ -2,32 +2,37 @@
 var __ph_w = /** @type {any} */ (window);
 var PH = /** @type {any} */ (window).PH;
 var headerSummaryCache = {};
+
+function phCall(name, ...args) {
+	if (!PH || typeof PH.call !== "function") return undefined;
+	return PH.call(name, ...args);
+}
 var headerDiagnosticsCache = null;
 function applyAutofillFromPayload(p) {
 	if (!cfg || !cfg.autofill || !p) return;
 
 	if (cfg.autofill.fill_patch_path && p.stored_rel_path) {
 		const n1 = el("patchPath");
-		if (n1 && shouldOverwrite("patchPath", n1)) {
+		if (n1 && phCall("shouldOverwriteField", "patchPath", n1)) {
 			n1.value = String(p.stored_rel_path);
 		}
 	}
 
 	if (cfg.autofill.fill_issue_id && p.derived_issue != null) {
 		const n2 = el("issueId");
-		if (n2 && shouldOverwrite("issueId", n2)) {
+		if (n2 && phCall("shouldOverwriteField", "issueId", n2)) {
 			n2.value = String(p.derived_issue || "");
 		}
 	}
 
 	if (cfg.autofill.fill_commit_message && p.derived_commit_message != null) {
 		const n3 = el("commitMsg");
-		if (n3 && shouldOverwrite("commitMsg", n3)) {
+		if (n3 && phCall("shouldOverwriteField", "commitMsg", n3)) {
 			n3.value = String(p.derived_commit_message || "");
 		}
 	}
 
-	validateAndPreview();
+	phCall("validateAndPreview");
 }
 
 function resetOutputForNewPatch() {
@@ -36,7 +41,7 @@ function resetOutputForNewPatch() {
 
 	PH.call("openLiveStream", null);
 	setPre("tail", "");
-	__ph_w.updateShortProgressFromText("");
+	phCall("updateShortProgressFromText", "");
 
 	suppressIdleOutput = true;
 
@@ -368,4 +373,15 @@ function renderIssueDetail() {
 
 	// Default to overview when switching run.
 	renderOverview();
+}
+
+if (PH && typeof PH.register === "function") {
+	PH.register("app_part_autofill_header", {
+		applyAutofillFromPayload,
+		stopAutofillPolling,
+		startAutofillPolling,
+		renderHeaderFromSummary,
+		refreshHeader,
+		renderIssueDetail,
+	});
 }

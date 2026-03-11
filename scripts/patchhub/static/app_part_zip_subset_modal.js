@@ -137,4 +137,13 @@
 	ui.renderZipSubsetModal = render;
 	ui.openZipSubsetModalView = open;
 	ui.closeZipSubsetModalView = close;
+
+	var PH = w.PH;
+	if (PH && typeof PH.register === "function") {
+		PH.register("app_part_zip_subset_modal", {
+			renderZipSubsetModal: render,
+			openZipSubsetModalView: open,
+			closeZipSubsetModalView: close,
+		});
+	}
 })();

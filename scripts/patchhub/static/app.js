@@ -96,17 +96,17 @@ async function loadParts(rt) {
 __ph_w.PH_APP_MAIN = async function PH_APP_MAIN(rt) {
 	var ok = await loadParts(rt);
 	if (!ok) return;
-	if (typeof __ph_w.PH_APP_START !== "function") {
-		appLog("error", "PH_APP_START missing");
+	if (!PH || typeof PH.has !== "function" || !PH.has("startAppWireInit")) {
+		appLog("error", "startAppWireInit capability missing");
 		if (
 			__ph_w.PH_BOOT &&
 			typeof __ph_w.PH_BOOT.setDegradedOnce === "function"
 		) {
-			__ph_w.PH_BOOT.setDegradedOnce("fatal: PH_APP_START missing");
+			__ph_w.PH_BOOT.setDegradedOnce("fatal: startAppWireInit missing");
 		}
 		return;
 	}
-	__ph_w.PH_APP_START();
+	PH.call("startAppWireInit");
 };
 
 // Deterministic IDLE visible-tab backoff. ACTIVE mode is not affected.

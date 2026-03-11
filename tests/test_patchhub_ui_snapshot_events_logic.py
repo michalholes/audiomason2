@@ -39,6 +39,19 @@ global.renderJobsFromResponse = (payload) =>
   renderCalls.push({{ kind: "jobs", payload }});
 global.renderHeaderFromSummary = (payload, base) =>
   renderCalls.push({{ kind: "header", payload, base }});
+global.PH = {{
+  register() {{}},
+  call(name, ...args) {{
+    const map = {{
+      renderJobsFromResponse,
+      renderHeaderFromSummary,
+      renderRunsFromResponse: global.__ph_w.renderRunsFromResponse,
+      renderWorkspacesFromResponse: global.__ph_w.renderWorkspacesFromResponse,
+    }};
+    const fn = map[name];
+    return typeof fn === "function" ? fn(...args) : undefined;
+  }},
+}};
 global.__ph_w.renderRunsFromResponse = (payload) =>
   renderCalls.push({{ kind: "runs", payload }});
 global.__ph_w.renderWorkspacesFromResponse = (payload) =>

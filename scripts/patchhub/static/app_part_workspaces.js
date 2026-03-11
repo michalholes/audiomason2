@@ -2,6 +2,11 @@
 var __ph_w = /** @type {any} */ (window);
 var PH = /** @type {any} */ (window).PH;
 
+function phCall(name, ...args) {
+	if (!PH || typeof PH.call !== "function") return undefined;
+	return PH.call(name, ...args);
+}
+
 function renderWorkspacesFromResponse(r) {
 	var items = r.items || r.workspaces || [];
 	workspacesCache = items;
@@ -88,8 +93,8 @@ function renderWorkspacesFromResponse(r) {
 					dirty.issueId = true;
 					dirty.commitMsg = false;
 					dirty.patchPath = false;
-					validateAndPreview();
-					el("enqueueBtn").click();
+					phCall("validateAndPreview");
+					phCall("enqueue");
 				});
 			}
 
@@ -143,5 +148,9 @@ function refreshWorkspaces(opts) {
 	});
 }
 
-__ph_w.renderWorkspacesFromResponse = renderWorkspacesFromResponse;
-__ph_w.refreshWorkspaces = refreshWorkspaces;
+if (PH && typeof PH.register === "function") {
+	PH.register("app_part_workspaces", {
+		renderWorkspacesFromResponse,
+		refreshWorkspaces,
+	});
+}

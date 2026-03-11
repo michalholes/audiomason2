@@ -1,6 +1,11 @@
 /** @type {any} */
 var __ph_w = /** @type {any} */ (window);
 var PH = /** @type {any} */ (window).PH;
+
+function phCall(name, ...args) {
+	if (!PH || typeof PH.call !== "function") return undefined;
+	return PH.call(name, ...args);
+}
 function setStartFormState(state) {
 	var issueEnabled = !!(state && state.issue_id);
 	var msgEnabled = !!(state && state.commit_message);
@@ -83,7 +88,9 @@ function validateAndPreview() {
 			ok = true;
 		}
 
-		canonical = computeCanonicalPreview(mode, issueId, commitMsg, patchPath);
+		canonical =
+			phCall("computeCanonicalPreview", mode, issueId, commitMsg, patchPath) ||
+			[];
 		preview = {
 			mode: mode,
 			issue_id: issueId,
@@ -169,11 +176,11 @@ function enqueue() {
 			AMP_UI.saveLiveJobId(selectedJobId);
 			suppressIdleOutput = false;
 			PH.call("openLiveStream", selectedJobId);
-			__ph_w.refreshTail(tailLines);
+			phCall("refreshTail", tailLines);
 		} else {
 			setUiError(String((r && r.error) || "enqueue failed"));
 		}
-		refreshJobs();
+		phCall("refreshJobs");
 	});
 }
 
@@ -226,7 +233,7 @@ function uploadFile(file) {
 					el("fsPath").value = parent;
 				}
 			}
-			applyAutofillFromPayload(j);
+			phCall("applyAutofillFromPayload", j);
 			refreshFs();
 		})
 		.catch((e) => {
@@ -348,7 +355,7 @@ function loadConfig() {
 			if (cfg && cfg.meta && cfg.meta.version) {
 				setText("ampWebVersion", "v" + String(cfg.meta.version));
 			}
-			refreshHeader();
+			phCall("refreshHeader");
 			if (cfg && cfg.ui) {
 				if (cfg.ui.base_font_px) {
 					document.documentElement.style.fontSize =
@@ -372,4 +379,14 @@ function shouldOverwrite(fieldKey, node) {
 	if (pol === "only_if_empty") return String(node.value || "").trim() === "";
 	if (pol === "if_not_dirty") return !dirty[fieldKey];
 	return false;
+}
+
+if (PH && typeof PH.register === "function") {
+	PH.register("app_part_queue_upload", {
+		validateAndPreview,
+		enqueue,
+		setupUpload,
+		loadConfig,
+		shouldOverwriteField: shouldOverwrite,
+	});
 }

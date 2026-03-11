@@ -1,6 +1,11 @@
 /** @type {any} */
 var __ph_w = /** @type {any} */ (window);
 var PH = /** @type {any} */ (window).PH;
+
+function phCall(name, ...args) {
+	if (!PH || typeof PH.call !== "function") return undefined;
+	return PH.call(name, ...args);
+}
 function renderJobsFromResponse(r) {
 	var jobs = r.jobs || [];
 
@@ -36,9 +41,7 @@ function renderJobsFromResponse(r) {
 				} catch (_) {}
 				// Ensure the rest of the form state is updated.
 				try {
-					if (typeof __ph_w.validateAndPreview === "function") {
-						__ph_w.validateAndPreview();
-					} else if (m) {
+					if (phCall("validateAndPreview") == null && m) {
 						m.dispatchEvent(new Event("change"));
 					}
 				} catch (_) {}
@@ -168,12 +171,12 @@ function applyOverviewSnapshot(r) {
 
 	var snap = r.snapshot || {};
 	renderJobsFromResponse({ ok: true, jobs: snap.jobs || [] });
-	__ph_w.renderRunsFromResponse({ ok: true, runs: snap.runs || [] });
-	__ph_w.renderWorkspacesFromResponse({
+	phCall("renderRunsFromResponse", { ok: true, runs: snap.runs || [] });
+	phCall("renderWorkspacesFromResponse", {
 		ok: true,
 		items: snap.workspaces || [],
 	});
-	renderHeaderFromSummary(snap.header || {}, headerBaseLabel());
+	phCall("renderHeaderFromSummary", snap.header || {}, headerBaseLabel());
 	return true;
 }
 
@@ -278,4 +281,12 @@ function computeCanonicalPreview(mode, issueId, commitMsg, patchPath) {
 	return argv;
 }
 
-__ph_w.refreshOverviewSnapshot = refreshOverviewSnapshot;
+if (PH && typeof PH.register === "function") {
+	PH.register("app_part_jobs", {
+		renderJobsFromResponse,
+		refreshJobs,
+		refreshOverviewSnapshot,
+		idleRefreshTick,
+		computeCanonicalPreview,
+	});
+}

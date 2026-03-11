@@ -1,5 +1,10 @@
 /** @type {any} */
 var PH = /** @type {any} */ (window).PH;
+
+function phCall(name, ...args) {
+	if (!PH || typeof PH.call !== "function") return undefined;
+	return PH.call(name, ...args);
+}
 function wireButtons() {
 	el("fsRefresh").addEventListener("click", refreshFs);
 	el("fsUp").addEventListener("click", () => {
@@ -133,16 +138,18 @@ function wireButtons() {
 		});
 	}
 	el("workspacesRefresh").addEventListener("click", () => {
-		refreshWorkspaces({ mode: "user" });
+		phCall("refreshWorkspaces", { mode: "user" });
 	});
 	el("workspacesCollapse").addEventListener("click", () => {
 		workspacesVisible = !workspacesVisible;
 		PH.call("setWorkspacesVisible", workspacesVisible);
 		AMP_UI.saveWorkspacesVisible(workspacesVisible);
-		if (workspacesVisible) refreshWorkspaces({ mode: "user" });
+		if (workspacesVisible) phCall("refreshWorkspaces", { mode: "user" });
 	});
 
-	el("runsRefresh").addEventListener("click", refreshRuns);
+	el("runsRefresh").addEventListener("click", () => {
+		phCall("refreshRuns");
+	});
 
 	if (el("runsCollapse")) {
 		el("runsCollapse").addEventListener("click", () => {
@@ -163,7 +170,9 @@ function wireButtons() {
 		});
 	}
 
-	el("jobsRefresh").addEventListener("click", refreshJobs);
+	el("jobsRefresh").addEventListener("click", () => {
+		phCall("refreshJobs");
+	});
 
 	if (el("jobsCollapse")) {
 		el("jobsCollapse").addEventListener("click", () => {
@@ -191,9 +200,9 @@ function wireButtons() {
 					selectedJobId = String(jobId);
 					AMP_UI.saveLiveJobId(selectedJobId);
 					suppressIdleOutput = false;
-					refreshJobs();
+					phCall("refreshJobs");
 					PH.call("openLiveStream", PH.call("getLiveJobId"));
-					refreshTail(tailLines);
+					phCall("refreshTail", tailLines);
 					return;
 				}
 				t = t.parentElement;
@@ -201,7 +210,9 @@ function wireButtons() {
 		});
 	}
 
-	el("enqueueBtn").addEventListener("click", enqueue);
+	el("enqueueBtn").addEventListener("click", () => {
+		phCall("enqueue");
+	});
 
 	if (el("parseBtn")) {
 		el("parseBtn").addEventListener("click", () => {
@@ -219,7 +230,7 @@ function wireButtons() {
 			if (!raw) {
 				clearParsedState();
 				setParseHint("");
-				validateAndPreview();
+				phCall("validateAndPreview");
 				return;
 			}
 			scheduleParseDebounced(raw);
@@ -235,15 +246,15 @@ function wireButtons() {
 	el("mode").addEventListener("change", validateAndPreview);
 	el("issueId").addEventListener("input", () => {
 		dirty.issueId = true;
-		validateAndPreview();
+		phCall("validateAndPreview");
 	});
 	el("commitMsg").addEventListener("input", () => {
 		dirty.commitMsg = true;
-		validateAndPreview();
+		phCall("validateAndPreview");
 	});
 	el("patchPath").addEventListener("input", () => {
 		dirty.patchPath = true;
-		validateAndPreview();
+		phCall("validateAndPreview");
 	});
 
 	var browse = el("browsePatch");
@@ -255,7 +266,7 @@ function wireButtons() {
 			}
 			el("patchPath").value = normalizePatchPath(fsSelected);
 			dirty.patchPath = true;
-			validateAndPreview();
+			phCall("validateAndPreview");
 		});
 	}
 
@@ -264,17 +275,19 @@ function wireButtons() {
 			refreshFs();
 			PH.call("refreshStats");
 			if (activeJobId) {
-				refreshWorkspaces({ mode: "user" });
-				refreshRuns({ mode: "user" });
-				refreshJobs({ mode: "user" });
-				refreshHeader({ mode: "user" });
-				renderIssueDetail();
-				validateAndPreview();
+				phCall("refreshWorkspaces", { mode: "user" });
+				phCall("refreshRuns", { mode: "user" });
+				phCall("refreshJobs", { mode: "user" });
+				phCall("refreshHeader", { mode: "user" });
+				phCall("renderIssueDetail");
+				phCall("validateAndPreview");
 				return;
 			}
-			__ph_w.refreshOverviewSnapshot({ mode: "user" }).finally(() => {
-				renderIssueDetail();
-				validateAndPreview();
+			Promise.resolve(
+				phCall("refreshOverviewSnapshot", { mode: "user" }),
+			).finally(() => {
+				phCall("renderIssueDetail");
+				phCall("validateAndPreview");
 			});
 		});
 	}
@@ -282,7 +295,7 @@ function wireButtons() {
 
 function init() {
 	function start() {
-		setupUpload();
+		phCall("setupUpload");
 		wireButtons();
 		setPreviewVisible(false);
 		var vis = PH.call("loadUiVisibility") || {};
@@ -301,16 +314,15 @@ function init() {
 			if (v) el("liveLevel").value = String(v);
 		}
 
-		loadConfig().then(() => {
+		Promise.resolve(phCall("loadConfig")).then(() => {
 			refreshFs();
 			PH.call("refreshStats");
-			__ph_w
-				.refreshOverviewSnapshot({ mode: "user" })
+			Promise.resolve(phCall("refreshOverviewSnapshot", { mode: "user" }))
 				.catch((e) => setUiError(e))
 				.finally(() => {
-					refreshTail(tailLines);
-					renderIssueDetail();
-					validateAndPreview();
+					phCall("refreshTail", tailLines);
+					phCall("renderIssueDetail");
+					phCall("validateAndPreview");
 				});
 
 			if (patchStatTimer) {
@@ -335,10 +347,8 @@ function init() {
 					clearInterval(patchStatTimer);
 					patchStatTimer = null;
 				}
-				stopAutofillPolling();
-				if (typeof __ph_w.stopSnapshotEvents === "function") {
-					__ph_w.stopSnapshotEvents();
-				}
+				phCall("stopAutofillPolling");
+				phCall("stopSnapshotEvents");
 				PH.call("closeLiveStream");
 			}
 
@@ -350,25 +360,21 @@ function init() {
 				refreshTimer = setInterval(() => {
 					try {
 						if (activeJobId) {
-							if (typeof __ph_w.stopSnapshotEvents === "function") {
-								__ph_w.stopSnapshotEvents();
-							}
-							refreshJobs({ mode: "periodic" });
+							phCall("stopSnapshotEvents");
+							phCall("refreshJobs", { mode: "periodic" });
 							if (workspacesVisible) {
-								refreshWorkspaces({ mode: "periodic" });
+								phCall("refreshWorkspaces", { mode: "periodic" });
 							}
 						} else {
-							if (typeof __ph_w.ensureSnapshotEvents === "function") {
-								__ph_w.ensureSnapshotEvents();
-							}
+							phCall("ensureSnapshotEvents");
 							if (
-								typeof __ph_w.snapshotEventsNeedPolling !== "function" ||
-								__ph_w.snapshotEventsNeedPolling()
+								!PH.has("snapshotEventsNeedPolling") ||
+								phCall("snapshotEventsNeedPolling")
 							) {
-								idleRefreshTick();
+								phCall("idleRefreshTick");
 							}
 						}
-						refreshTail(tailLines);
+						phCall("refreshTail", tailLines);
 					} catch (e) {
 						setUiError(e);
 					}
@@ -376,20 +382,16 @@ function init() {
 
 				headerTimer = setInterval(() => {
 					try {
-						if (activeJobId) refreshHeader({ mode: "periodic" });
+						if (activeJobId) phCall("refreshHeader", { mode: "periodic" });
 					} catch (e) {
 						setUiError(e);
 					}
 				}, 5000);
 
-				startAutofillPolling();
+				phCall("startAutofillPolling");
 				if (activeJobId) {
-					if (typeof __ph_w.stopSnapshotEvents === "function") {
-						__ph_w.stopSnapshotEvents();
-					}
-				} else if (typeof __ph_w.ensureSnapshotEvents === "function") {
-					__ph_w.ensureSnapshotEvents();
-				}
+					phCall("stopSnapshotEvents");
+				} else phCall("ensureSnapshotEvents");
 			}
 
 			function resyncVisible() {
@@ -397,23 +399,22 @@ function init() {
 				PH.call("refreshStats");
 				if (activeJobId) {
 					if (workspacesVisible) {
-						refreshWorkspaces({ mode: "user" });
+						phCall("refreshWorkspaces", { mode: "user" });
 					}
-					refreshRuns({ mode: "user" });
-					refreshJobs({ mode: "user" });
-					refreshTail(tailLines);
-					refreshHeader({ mode: "user" });
-					renderIssueDetail();
-					validateAndPreview();
+					phCall("refreshRuns", { mode: "user" });
+					phCall("refreshJobs", { mode: "user" });
+					phCall("refreshTail", tailLines);
+					phCall("refreshHeader", { mode: "user" });
+					phCall("renderIssueDetail");
+					phCall("validateAndPreview");
 					return;
 				}
-				__ph_w
-					.refreshOverviewSnapshot({ mode: "user" })
+				Promise.resolve(phCall("refreshOverviewSnapshot", { mode: "user" }))
 					.catch((e) => setUiError(e))
 					.finally(() => {
-						refreshTail(tailLines);
-						renderIssueDetail();
-						validateAndPreview();
+						phCall("refreshTail", tailLines);
+						phCall("renderIssueDetail");
+						phCall("validateAndPreview");
 					});
 			}
 
@@ -432,16 +433,7 @@ function init() {
 
 			startTimers();
 
-			if (
-				/** @type {any} */ (window).AmpSettings &&
-				typeof (/** @type {any} */ (window).AmpSettings.init) === "function"
-			) {
-				try {
-					/** @type {any} */ (window).AmpSettings.init();
-				} catch (e) {
-					// Best-effort: do not break main UI if AMP settings init fails.
-				}
-			}
+			phCall("initAmpSettings");
 		});
 	}
 
@@ -452,5 +444,8 @@ function init() {
 	}
 }
 
-// Called by app.js after it loads all required parts.
-window.PH_APP_START = init;
+if (PH && typeof PH.register === "function") {
+	PH.register("app_part_wire_init", {
+		startAppWireInit: init,
+	});
+}

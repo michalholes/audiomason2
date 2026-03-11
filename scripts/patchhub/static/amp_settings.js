@@ -509,5 +509,10 @@
 		reload();
 	}
 
-	window.AmpSettings = { init: init };
+	var PH = window.PH;
+	if (PH && typeof PH.register === "function") {
+		PH.register("amp_settings", {
+			initAmpSettings: init,
+		});
+	}
 })();

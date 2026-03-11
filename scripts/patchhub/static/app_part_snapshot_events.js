@@ -1,6 +1,12 @@
 /** @type {any} */
 var __ph_w = /** @type {any} */ (window);
+var PH = /** @type {any} */ (window).PH;
 var snapshotEventsSource = null;
+
+function phCall(name, ...args) {
+	if (!PH || typeof PH.call !== "function") return undefined;
+	return PH.call(name, ...args);
+}
 var snapshotEventsHealthy = false;
 var snapshotSeenSeq = 0;
 var snapshotAppliedSeq = 0;
@@ -55,13 +61,17 @@ function applyOverviewSnapshotData(snapshot, sigs, seq) {
 	snapshot = snapshot || {};
 	overviewSnapshotCache = cloneOverviewSnapshot(snapshot);
 	updateSnapshotEventSigs({ sigs: sigs || {} });
-	renderJobsFromResponse({ ok: true, jobs: snapshot.jobs || [] });
-	__ph_w.renderRunsFromResponse({ ok: true, runs: snapshot.runs || [] });
-	__ph_w.renderWorkspacesFromResponse({
+	phCall("renderJobsFromResponse", { ok: true, jobs: snapshot.jobs || [] });
+	phCall("renderRunsFromResponse", { ok: true, runs: snapshot.runs || [] });
+	phCall("renderWorkspacesFromResponse", {
 		ok: true,
 		items: snapshot.workspaces || [],
 	});
-	renderHeaderFromSummary(snapshot.header || {}, overviewHeaderBaseLabel());
+	phCall(
+		"renderHeaderFromSummary",
+		snapshot.header || {},
+		overviewHeaderBaseLabel(),
+	);
 	seq = Number(seq || 0);
 	if (!Number.isNaN(seq) && seq > 0) {
 		snapshotAppliedSeq = seq;
@@ -217,13 +227,13 @@ function openSnapshotEvents() {
 		fetchOverviewDelta()
 			.then((delta) => {
 				if (!applyOverviewDelta(delta)) {
-					return __ph_w.refreshOverviewSnapshot({ mode: "latest" });
+					return refreshOverviewSnapshot({ mode: "latest" });
 				}
 				return { changed: true };
 			})
 			.catch((e) => {
 				setUiError(e);
-				return __ph_w.refreshOverviewSnapshot({ mode: "latest" });
+				return refreshOverviewSnapshot({ mode: "latest" });
 			})
 			.catch((e) => {
 				setUiError(e);
@@ -248,7 +258,11 @@ function snapshotEventsNeedPolling() {
 	return !snapshotEventsHealthy;
 }
 
-__ph_w.refreshOverviewSnapshot = refreshOverviewSnapshot;
-__ph_w.ensureSnapshotEvents = ensureSnapshotEvents;
-__ph_w.stopSnapshotEvents = stopSnapshotEvents;
-__ph_w.snapshotEventsNeedPolling = snapshotEventsNeedPolling;
+if (PH && typeof PH.register === "function") {
+	PH.register("app_part_snapshot_events", {
+		refreshOverviewSnapshot,
+		ensureSnapshotEvents,
+		stopSnapshotEvents,
+		snapshotEventsNeedPolling,
+	});
+}

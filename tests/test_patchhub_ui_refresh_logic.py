@@ -12,7 +12,7 @@ def test_idle_overview_refresh_uses_snapshot_endpoint() -> None:
     src = _read("scripts/patchhub/static/app_part_jobs.js")
     assert "function refreshOverviewSnapshot(opts)" in src
     assert 'apiGetETag("ui_snapshot", "/api/ui_snapshot" + qs' in src
-    assert "renderHeaderFromSummary(snap.header || {}, headerBaseLabel())" in src
+    assert 'phCall("renderHeaderFromSummary", snap.header || {}, headerBaseLabel())' in src
 
 
 def test_runs_refresh_uses_etag_single_flight_wrapper() -> None:
@@ -23,6 +23,6 @@ def test_runs_refresh_uses_etag_single_flight_wrapper() -> None:
 
 def test_wire_init_uses_snapshot_first_idle_flow() -> None:
     src = _read("scripts/patchhub/static/app_part_wire_init.js")
-    assert '.refreshOverviewSnapshot({ mode: "user" })' in src
-    assert 'refreshRuns({ mode: "user" });' in src
-    assert 'refreshHeader({ mode: "user" });' in src
+    assert 'phCall("refreshOverviewSnapshot", { mode: "user" })' in src
+    assert 'phCall("refreshRuns", { mode: "user" });' in src
+    assert 'phCall("refreshHeader", { mode: "user" });' in src

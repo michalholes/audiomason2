@@ -1,6 +1,11 @@
 /** @type {any} */
 var PH = /** @type {any} */ (window).PH;
 var lastRunLogPath = "";
+
+function phCall(name, ...args) {
+	if (!PH || typeof PH.call !== "function") return undefined;
+	return PH.call(name, ...args);
+}
 function renderRunsFromResponse(r) {
 	runsCache = r.runs || [];
 
@@ -58,7 +63,7 @@ function renderRunsFromResponse(r) {
 						return;
 					}
 					selectedRun = dr.run;
-					renderIssueDetail();
+					phCall("renderIssueDetail");
 				});
 			});
 		},
@@ -136,7 +141,7 @@ function refreshTail(lines) {
 	var jid = PH.call("getLiveJobId");
 	if (!jid && suppressIdleOutput && idleGuardOn) {
 		setPre("tail", "");
-		PH.call("updateProgressPanelFromEvents");
+		phCall("updateProgressPanelFromEvents");
 		return;
 	}
 
@@ -293,4 +298,14 @@ function normStepName(s) {
 	return String(s || "")
 		.replace(/\s+/g, " ")
 		.trim();
+}
+
+if (PH && typeof PH.register === "function") {
+	PH.register("app_part_runs", {
+		renderRunsFromResponse,
+		refreshRuns,
+		refreshLastRunLog,
+		refreshTail,
+		updateShortProgressFromText,
+	});
 }

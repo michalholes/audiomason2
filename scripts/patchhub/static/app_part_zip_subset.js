@@ -6,6 +6,13 @@
 		w.AMP_PATCHHUB_UI = ui;
 	}
 
+	var PH = w.PH;
+
+	function phCall(name, ...args) {
+		if (!PH || typeof PH.call !== "function") return undefined;
+		return PH.call(name, ...args);
+	}
+
 	var state = {
 		key: "",
 		loading: false,
@@ -145,9 +152,7 @@
 
 	function hideModal() {
 		state.modalOpen = false;
-		if (typeof ui.closeZipSubsetModalView === "function") {
-			ui.closeZipSubsetModalView();
-		}
+		phCall("closeZipSubsetModalView");
 	}
 
 	function clearState() {
@@ -264,8 +269,9 @@
 	}
 
 	function renderModal() {
-		if (typeof ui.renderZipSubsetModal !== "function") return;
-		ui.renderZipSubsetModal(modalModel());
+		if (!PH || typeof PH.has !== "function") return;
+		if (!PH.has("renderZipSubsetModal")) return;
+		phCall("renderZipSubsetModal", modalModel());
 	}
 
 	function discardDraftAndClose() {
@@ -277,8 +283,12 @@
 		if (!state.manifest) return;
 		cloneCommittedToDraft();
 		state.modalOpen = true;
-		if (typeof ui.openZipSubsetModalView === "function") {
-			ui.openZipSubsetModalView(modalModel());
+		if (
+			PH &&
+			typeof PH.has === "function" &&
+			PH.has("openZipSubsetModalView")
+		) {
+			phCall("openZipSubsetModalView", modalModel());
 			return;
 		}
 		renderModal();
@@ -289,7 +299,7 @@
 		ensureSelectionDefaults("committed");
 		hideModal();
 		renderStrip();
-		if (typeof validateAndPreview === "function") validateAndPreview();
+		phCall("validateAndPreview");
 	}
 
 	function fetchManifestForCurrentPath() {
@@ -308,7 +318,7 @@
 				state.error = String((r && r.error) || "cannot inspect zip patch");
 				state.manifest = null;
 				renderStrip();
-				if (typeof validateAndPreview === "function") validateAndPreview();
+				phCall("validateAndPreview");
 				return;
 			}
 			state.manifest = r.manifest;
@@ -316,7 +326,7 @@
 			state.draftSelected = {};
 			renderStrip();
 			if (state.modalOpen) renderModal();
-			if (typeof validateAndPreview === "function") validateAndPreview();
+			phCall("validateAndPreview");
 		});
 	}
 
@@ -425,9 +435,8 @@
 
 	bindEvents();
 
-	var PH = w.PH;
 	if (PH && typeof PH.register === "function") {
-		PH.register("zip_subset", {
+		PH.register("app_part_zip_subset", {
 			syncZipSubsetUiFromInputs: syncFromInputs,
 			getZipSubsetEnqueuePayload: enqueuePayload,
 			getZipSubsetValidationState: validationState,
