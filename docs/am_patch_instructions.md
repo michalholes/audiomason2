@@ -257,6 +257,38 @@ Before sending:
       - cross-area ownership violations,
       - structural coupling expansion.
 
+For PM validator machine-verifiable checks, Monolith enforcement applies
+only to repo files with extension `.py` or `.js`.
+These PM Monolith rules are authoritative for PM validator workflow.
+
+Machine-verifiable Monolith limits for PM validator purposes:
+
+-   Existing file thresholds:
+    -   if file has >= 900 LOC: allow at most +20 LOC, +2 exports, +1 imports
+    -   if file has >= 1300 LOC: allow +0 LOC, +0 exports, +0 imports
+-   New file thresholds:
+    -   max 400 LOC
+    -   max 25 exports
+    -   max 15 imports
+-   Catch-all basenames are forbidden:
+    -   `utils.py`
+    -   `common.py`
+    -   `helpers.py`
+    -   `misc.py`
+-   Catch-all directories are forbidden:
+    -   `utils/`
+    -   `common/`
+    -   `helpers/`
+    -   `misc/`
+-   Allowlist is empty.
+-   Hub thresholds used by the validator:
+    -   fan-in delta threshold = 5
+    -   fan-out delta threshold = 5
+    -   exports delta minimum = 3
+    -   LOC delta minimum = 100
+-   Cross-area threshold used by the validator:
+    -   3 or more distinct ownership areas in one change is forbidden
+
 
 The chat MUST NOT claim success without evidence.
 
@@ -271,9 +303,27 @@ The runner remains the authority.
 
 ## PM patch validator (HARD)
 
-Before delivering any initial patch or repair patch, the chat MUST run:
+Before delivering any initial patch or repair patch, the chat MUST run
+one self-contained PM validator Python file supplied as a project file.
+The validator artifact MUST NOT rely on repository-relative imports,
+repository-relative config files, or an opened repository checkout.
 
-    python3 scripts/check_patch_pm.py ISSUE_ID "commit message" PATCH
+Canonical invocation formats (NO REPO-BOUND VARIANTS):
+
+Initial patch:
+
+    python3 PM_VALIDATOR.py ISSUE_ID "commit message" PATCH --workspace-snapshot WORKSPACE_SNAPSHOT_ZIP
+
+Repair patch:
+
+    python3 PM_VALIDATOR.py ISSUE_ID "commit message" PATCH --repair-overlay PATCHED_ISSUE_ZIP [--workspace-snapshot WORKSPACE_SNAPSHOT_ZIP --supplemental-file REPO_PATH ...]
+
+Where:
+
+-   `PM_VALIDATOR.py` means the filesystem path to the single-file PM validator artifact.
+-   `WORKSPACE_SNAPSHOT_ZIP` means the authoritative full workspace snapshot artifact.
+-   `PATCHED_ISSUE_ZIP` means the authoritative latest `patched_issue{ISSUE}_*.zip` overlay artifact.
+-   `--supplemental-file REPO_PATH` is permitted only for explicit per-file supplemental authority outside the overlay as defined in Repair patch rules (HARD).
 
 Rules:
 
@@ -282,7 +332,12 @@ Rules:
 2.  The chat MUST include a validator evidence block containing:
     - the exact command,
     - the exact exit status,
-    - the full raw validator output without paraphrase or summarization.
+    - the full raw validator output without paraphrase or summarization,
+    - the exact authoritative artifact paths passed to the validator,
+    - for repair validation, whether the run was overlay-only or used
+      supplemental authority,
+    - if supplemental authority was used, the exact repo-relative file
+      list supplied via `--supplemental-file`.
 3.  The validator evidence block is mandatory for both initial patches
     and repair patches.
 4.  PASS means only that machine-verifiable PM checks covered by the
@@ -306,18 +361,27 @@ Repair patches MUST also satisfy PM patch validator (HARD) before delivery.
 
 ## Authoritative overlay model
 
-Authoritative file set is composed of:
+Default repair authority is overlay-only.
 
-1.  Last full workspace snapshot.
-2.  Most recent patched_issue{ISSUE}_*.zip.
+Authoritative artifacts for repair validator workflow:
+
+1.  Most recent `patched_issue{ISSUE}_*.zip`.
+2.  Optional full workspace snapshot, but only as per-file supplemental
+    authority for files outside the overlay when escalation is allowed
+    by these rules.
 
 Per-file authority:
 
--   If file exists in latest , that version is authoritative.
--   Otherwise, use version from full workspace.
+-   If file exists in latest `patched_issue{ISSUE}_*.zip`, that version
+    is authoritative by default.
+-   A file not present in the overlay MUST NOT be sourced from the full
+    workspace snapshot unless it is explicitly declared as a
+    supplemental authority file.
+-   Supplemental authority is per-file only. Bulk or implicit full-tree
+    fallback is FORBIDDEN.
 -   Logs are diagnostic only.
 
-Generating repair patch against outdated snapshot is FORBIDDEN.
+Generating repair patch against outdated overlay is FORBIDDEN.
 
 Repair patches MUST follow a file-local default workflow.
 The agent MUST NOT reconstruct, overwrite, or mechanically rebuild the
@@ -367,6 +431,9 @@ Escalation (only when required):
     references files not included in `patched_issue{ISSUE}_*.zip`, or the failure
     depends on configuration, fixtures, test resources, packaging,
     entrypoints, or other files outside the authoritative overlay.
+-   Any such escalation MUST stay per-file. Only the minimal explicit
+    supplemental authority file list is allowed; full-tree fallback is
+    prohibited.
 
 Even after escalation, only the minimal required files may be modified.
 
@@ -450,9 +517,12 @@ Before generating repair patch, the chat MUST output:
 
 1.  Full list of repo files to be modified.
 2.  Authority source per file:
-    -   source = patched_issue{ISSUE}_.zip
-    -   or source = full workspace snapshot
+    -   source = patched_issue{ISSUE}_*.zip (default repair authority)
+    -   or source = full workspace snapshot (supplemental authority,
+        permitted only for explicitly listed files outside overlay)
 3.  At least one structural anchor per file proving inspection.
+4.  If any file uses supplemental authority, the manifest MUST also list
+    the exact log-backed reason that required each such file.
 
 Missing manifest = NON-COMPLIANT.
 
