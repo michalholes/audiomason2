@@ -173,7 +173,7 @@ def test_wizard_definition_history_is_bounded_and_ordered(tmp_path: Path) -> Non
 
 
 @pytest.mark.skipif((not _HAS_FASTAPI) or (not _HAS_HTTPX), reason="fastapi+httpx required")
-def test_flow_config_validate_rejects_non_runtime_meaningful_default_key(tmp_path: Path) -> None:
+def test_flow_config_validate_preserves_opaque_defaults_payload(tmp_path: Path) -> None:
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
 
@@ -193,11 +193,12 @@ def test_flow_config_validate_rejects_non_runtime_meaningful_default_key(tmp_pat
         },
     )
 
-    assert response.status_code == 400
-    err = response.json()["error"]
-    assert err["code"] == "VALIDATION_ERROR"
-    assert err["details"][0]["path"] == "$.defaults.parallelism.bogus"
-    assert err["details"][0]["reason"] == "unknown_field"
+    assert response.status_code == 200
+    assert response.json()["config"] == {
+        "version": 1,
+        "steps": {},
+        "defaults": {"parallelism": {"bogus": 1}},
+    }
 
 
 @pytest.mark.skipif((not _HAS_FASTAPI) or (not _HAS_HTTPX), reason="fastapi+httpx required")

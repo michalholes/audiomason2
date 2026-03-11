@@ -11,20 +11,11 @@ from copy import deepcopy
 from typing import Any
 
 from .errors import FinalizeError
-from .field_schema_validation import FieldSchemaValidationError, validate_settings_schema_fields
+from .field_schema_validation import FieldSchemaValidationError
 from .models import BASE_REQUIRED_STEP_IDS
 
 _ALLOWED_KEYS = {"version", "steps", "defaults"}
 _ALLOWED_STEP_KEYS = {"enabled"}
-
-
-def _step_details_for_editor(step_id: str) -> dict[str, Any] | None:
-    from .step_catalog import get_step_details
-
-    details = get_step_details(step_id)
-    if isinstance(details, dict):
-        return details
-    return None
 
 
 def _type_matches(type_name: str, value: Any) -> bool:
@@ -143,9 +134,10 @@ def normalize_flow_config(raw: Any) -> dict[str, Any]:
 def validate_flow_config_editor_boundary(raw: Any) -> dict[str, Any]:
     """Apply editor-only FlowConfig validation without redefining authority.
 
-    Legacy defaults keys remain allowed. When a defaults entry targets a known
-    step with a declared settings schema, its field names and values must be
-    runtime-meaningful.
+    Defaults remain opaque editor payloads at this boundary. Projection metadata
+    may help a UI render forms, but it must not become runtime or validation
+    authority here. We therefore validate only the JSON object shape and preserve
+    defaults payloads verbatim.
     """
 
     cfg = normalize_flow_config(raw)
@@ -155,17 +147,10 @@ def validate_flow_config_editor_boundary(raw: Any) -> dict[str, Any]:
 
     validated_defaults: dict[str, Any] = {}
     for step_id, defaults_obj in sorted(defaults_any.items()):
-        details = _step_details_for_editor(step_id)
-        if details is None or not isinstance(defaults_obj, dict):
+        if not isinstance(defaults_obj, dict):
             validated_defaults[step_id] = deepcopy(defaults_obj)
             continue
 
-        schema = details.get("settings_schema")
-        fields = validate_settings_schema_fields(
-            step_id=step_id,
-            fields_any=(schema or {}).get("fields") if isinstance(schema, dict) else [],
-        )
-        field_map = {str(field.get("key")): field for field in fields}
         normalized_defaults: dict[str, Any] = {}
         for key, value in sorted(defaults_obj.items()):
             if not isinstance(key, str) or not key:
@@ -175,20 +160,7 @@ def validate_flow_config_editor_boundary(raw: Any) -> dict[str, Any]:
                     reason="missing_or_invalid",
                     meta={"step_id": step_id},
                 )
-            field = field_map.get(key)
-            if field is None:
-                raise FieldSchemaValidationError(
-                    message="flow_config default key is not runtime-meaningful",
-                    path=f"$.defaults.{step_id}.{key}",
-                    reason="unknown_field",
-                    meta={"step_id": step_id, "allowed": sorted(field_map.keys())},
-                )
-            normalized_defaults[key] = _validate_default_value(
-                step_id=step_id,
-                field=field,
-                value=value,
-                path=f"$.defaults.{step_id}.{key}",
-            )
+            normalized_defaults[key] = deepcopy(value)
         validated_defaults[step_id] = normalized_defaults
 
     cfg["defaults"] = validated_defaults

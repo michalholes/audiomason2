@@ -21,6 +21,13 @@ RootName = import_module("plugins.file_io.service.types").RootName
 WIZARD_DEFINITION_REL_PATH = import_module(
     "plugins.import.wizard_definition_model"
 ).WIZARD_DEFINITION_REL_PATH
+validate_flow_config_editor_boundary = import_module(
+    "plugins.import.flow_config_validation"
+).validate_flow_config_editor_boundary
+validate_wizard_definition_structure = import_module(
+    "plugins.import.wizard_definition_model"
+).validate_wizard_definition_structure
+step_catalog_module = import_module("plugins.import.step_catalog")
 
 
 PROMPT_METADATA_FLOW = {
@@ -243,3 +250,82 @@ def test_build_step_catalog_projection_rejects_underivable_inputs() -> None:
             wizard_definition={"version": 2, "graph": {}},
             flow_config={"version": 1, "steps": {}, "defaults": {}},
         )
+
+
+def test_flow_config_editor_boundary_preserves_defaults_without_catalog_authority() -> None:
+    original = step_catalog_module.STEP_CATALOG.get("parallelism")
+    step_catalog_module.STEP_CATALOG["parallelism"] = {"id": "parallelism"}
+    try:
+        out = validate_flow_config_editor_boundary(
+            {
+                "version": 1,
+                "steps": {},
+                "defaults": {"parallelism": {"workers": 4, "custom": {"mode": "x"}}},
+            }
+        )
+    finally:
+        if original is None:
+            step_catalog_module.STEP_CATALOG.pop("parallelism", None)
+        else:
+            step_catalog_module.STEP_CATALOG["parallelism"] = original
+
+    assert out["defaults"] == {"parallelism": {"workers": 4, "custom": {"mode": "x"}}}
+
+
+def test_validate_wizard_definition_structure_does_not_read_projection_behavioral_fields() -> None:
+    original = step_catalog_module.STEP_CATALOG.get("select_authors")
+    step_catalog_module.STEP_CATALOG["select_authors"] = {"id": "select_authors"}
+    try:
+        validate_wizard_definition_structure(
+            {
+                "version": 2,
+                "graph": {
+                    "entry_step_id": "select_authors",
+                    "nodes": [
+                        {"step_id": "select_authors"},
+                        {"step_id": "select_books"},
+                        {"step_id": "plan_preview_batch"},
+                        {"step_id": "conflict_policy"},
+                        {"step_id": "final_summary_confirm"},
+                        {"step_id": "processing"},
+                    ],
+                    "edges": [
+                        {
+                            "from_step_id": "select_authors",
+                            "to_step_id": "select_books",
+                            "priority": 0,
+                            "when": None,
+                        },
+                        {
+                            "from_step_id": "select_books",
+                            "to_step_id": "plan_preview_batch",
+                            "priority": 0,
+                            "when": None,
+                        },
+                        {
+                            "from_step_id": "plan_preview_batch",
+                            "to_step_id": "conflict_policy",
+                            "priority": 0,
+                            "when": None,
+                        },
+                        {
+                            "from_step_id": "conflict_policy",
+                            "to_step_id": "final_summary_confirm",
+                            "priority": 0,
+                            "when": None,
+                        },
+                        {
+                            "from_step_id": "final_summary_confirm",
+                            "to_step_id": "processing",
+                            "priority": 0,
+                            "when": None,
+                        },
+                    ],
+                },
+            }
+        )
+    finally:
+        if original is None:
+            step_catalog_module.STEP_CATALOG.pop("select_authors", None)
+        else:
+            step_catalog_module.STEP_CATALOG["select_authors"] = original

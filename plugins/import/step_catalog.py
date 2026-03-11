@@ -264,7 +264,11 @@ STEP_CATALOG: dict[str, dict[str, Any]] = {
 
 
 def get_step_details(step_id: str) -> dict[str, Any] | None:
-    """Return UI-only step details or None if unknown."""
+    """Return legacy editor fallback metadata only.
+
+    This helper is UI-only. Runtime and validation must not treat it as
+    authority. Active editor surfaces should prefer build_step_catalog_projection().
+    """
 
     return STEP_CATALOG.get(step_id)
 

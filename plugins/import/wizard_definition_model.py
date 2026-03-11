@@ -32,20 +32,11 @@ from .flow_runtime import (
     build_flow_model,
 )
 from .models import CatalogModel, FlowModel, validate_models
-from .step_catalog import build_authority_known_step_ids, build_default_step_catalog_projection
+from .step_catalog import build_authority_known_step_ids
 from .storage import atomic_write_json, atomic_write_json_if_missing, read_json
 
 WIZARD_DEFINITION_REL_PATH = "import/definitions/wizard_definition.json"
 
-_REQUIRED_BEHAVIORAL_FIELDS: tuple[str, ...] = (
-    "id",
-    "displayName",
-    "description",
-    "behavioralSummary",
-    "inputContract",
-    "outputContract",
-    "sideEffectsDescription",
-)
 
 # The default workflow definition is Python-defined and is used only for
 # bootstrap if the runtime artifact is missing.
@@ -178,7 +169,6 @@ def _assert_exact_keys(
 def validate_wizard_definition_structure(wd: Any) -> None:
     """Validate WizardDefinition v1/v2/v3 structure and invariants."""
 
-    _validate_step_catalog_behavioral_fields()
     if not isinstance(wd, dict):
         raise FinalizeError("wizard_definition must be a JSON object")
 
@@ -451,8 +441,6 @@ def _validate_v1_steps(wd: dict[str, Any]) -> None:
         if sid not in known:
             raise FinalizeError(f"wizard_definition contains unknown step_id: {sid}")
 
-        # UI-facing step metadata must be complete.
-        _validate_behavioral_fields_for_step_id(sid)
         seen.add(sid)
 
 
@@ -493,7 +481,6 @@ def _validate_v2_graph(wd: dict[str, Any]) -> None:
         if sid not in known:
             raise FinalizeError(f"wizard_definition contains unknown step_id: {sid}")
 
-        _validate_behavioral_fields_for_step_id(sid)
         seen.add(sid)
         nodes.append(sid)
 
@@ -608,28 +595,6 @@ def _reachable_from(start: str, adj: dict[str, set[str]]) -> set[str]:
 def _known_step_ids() -> set[str]:
     # UI catalog step ids plus canonical defaults.
     return build_authority_known_step_ids()
-
-
-def _validate_step_catalog_behavioral_fields() -> None:
-    for sid, details in build_default_step_catalog_projection().items():
-        if not isinstance(details, dict):
-            raise FinalizeError("MISSING_BEHAVIORAL_FIELDS: " + str(sid))
-        missing = [k for k in _REQUIRED_BEHAVIORAL_FIELDS if k not in details]
-        if missing:
-            raise FinalizeError(
-                "MISSING_BEHAVIORAL_FIELDS: " + str(sid) + " missing=" + ",".join(missing)
-            )
-        if str(details.get("id") or "") != str(sid):
-            raise FinalizeError("MISSING_BEHAVIORAL_FIELDS: " + str(sid) + " id_mismatch")
-
-
-def _validate_behavioral_fields_for_step_id(step_id: str) -> None:
-    details = build_default_step_catalog_projection().get(step_id)
-    if not isinstance(details, dict):
-        raise FinalizeError("MISSING_BEHAVIORAL_FIELDS: " + str(step_id))
-    for k in _REQUIRED_BEHAVIORAL_FIELDS:
-        if k not in details:
-            raise FinalizeError("MISSING_BEHAVIORAL_FIELDS: " + str(step_id) + " missing=" + k)
 
 
 def _is_enabled(step_id: str, flow_config: dict[str, Any]) -> bool:
