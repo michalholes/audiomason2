@@ -81,8 +81,7 @@ RC = Kontrakt riadiacich chatov
    - docs/
 
    musí obsahovať upozornenie na povinnosť aktualizovať:
-   - docs/specification.jsonl
-   - docs/changes.md
+   - docs/change_fragments/
 
    Povinnosť sa nevzťahuje na ostatné adresáre.
 
