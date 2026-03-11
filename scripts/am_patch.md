@@ -67,15 +67,13 @@ Levels are inherited: each higher mode includes everything from the lower mode.
 
 - verbose:
   - warning + diagnostic sections (config, workspace meta, gate summaries, patch summary, etc.)
-  - On FAIL: full stdout + stderr
+  - live subprocess stdout/stderr for the screen sink
+  - On FAIL: full stdout + stderr, with the final failed-step dump used only as a fallback for sinks that did not already receive live subprocess payload during the step
 
 - debug:
   - verbose + full internal command metadata (RUN cmd=..., cwd=..., returncode=...)
-  - when `json_out` is enabled, the NDJSON stream also includes live subprocess
-    stdout/stderr payload during the step; this is machine-facing only and
-    does not change the screen/file log filters
   - verbose + full diagnostic dumps
-  - On FAIL: full stdout + stderr
+  - On FAIL: full stdout + stderr, with the final failed-step dump used only as a fallback for sinks that did not already receive live subprocess payload during the step
 
 The runner supports an independent file log filter:
 
@@ -251,9 +249,17 @@ Logging / output:
 - When `json_out` is enabled, the machine-facing NDJSON stream may also include
   periodic `HEARTBEAT` log events so listeners can detect liveness during long
   subprocess steps.
-- In `--verbosity debug`, the same NDJSON stream may also include live
-  subprocess stdout/stderr payload as line-framed events. The runner still
-  buffers full stdout/stderr for `RunResult` and failed-step dumps.
+- When `json_out` is enabled, the same NDJSON stream also includes live
+  subprocess stdout/stderr payload as line-framed events regardless of
+  `--verbosity` or `--log-level`.
+- Human-readable live subprocess payload is sink-local:
+  - screen gets it only when `--verbosity` is `verbose` or `debug`
+  - file log gets it only when `--log-level` is `verbose` or `debug`
+- A sink that already received live subprocess payload must not receive the
+  same stdout/stderr a second time in the final failed-step dump.
+- The runner still buffers full stdout/stderr for `RunResult`, and the final
+  failed-step dump remains the fallback for sinks that did not receive live
+  payload.
 
 IPC cancellation semantics:
 

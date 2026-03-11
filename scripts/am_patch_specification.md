@@ -134,7 +134,7 @@ The runner prints its version: - on every invocation - in `--help`
 
 Example:
 
-    am_patch RUNNER_VERSION=4.4.2
+    am_patch RUNNER_VERSION=4.4.3
 
 Version discipline: - Any change that alters runner behavior MUST bump
 `RUNNER_VERSION`. - Any change that alters runner behavior MUST update
@@ -173,15 +173,17 @@ lower mode.
     -   warning + diagnostic sections (config, workspace meta, gate
         summaries, patch summary, etc.)
         -   Unified patch application progress (UNIFIED_PATCH ...) is part of the patch summary and appears only in verbose+ unless it represents a failure.
-    -   On FAIL: full stdout + stderr
+    -   live subprocess stdout/stderr for the screen sink
+    -   On FAIL: full stdout + stderr, with the final failed-step dump used
+        only as a fallback for sinks that did not already receive live
+        subprocess payload during the step
 -   debug:
     -   verbose + full internal command metadata (RUN cmd=..., cwd=...,
         returncode=...)
-    -   when `json_out` is enabled, the NDJSON stream also includes live
-        subprocess stdout/stderr payload during the step; this is
-        machine-facing only and does not change the screen/file log filters
     -   verbose + full diagnostic dumps
-    -   On FAIL: full stdout + stderr
+    -   On FAIL: full stdout + stderr, with the final failed-step dump used
+        only as a fallback for sinks that did not already receive live
+        subprocess payload during the step
 
 Verbosity inheritance (contract): - Verbosity modes are cumulative. Each
 higher mode MUST include all guaranteed outputs of the next lower mode,
@@ -1321,6 +1323,8 @@ This appendix is resolved by the authoritative policy glossary:
 
 When json_out is enabled, the runner writes a debug-complete NDJSON (JSONL) event log.
 This is an additional render of the same log emission events (it does not replace diagnostics).
+Live subprocess stdout/stderr payload is also written into this NDJSON sink and is not
+filtered by `--verbosity` or `--log-level`.
 
 Location:
 - The NDJSON file is written under patch_layout_json_dir (under patch_dir).
@@ -1335,22 +1339,34 @@ Behavior:
 - During long-running subprocess steps, the machine-facing stream MAY also
   include periodic liveness heartbeats emitted through the existing `log`
   event model.
-- In `--verbosity debug`, the NDJSON stream MAY also include live subprocess
-  stdout/stderr payload as additional `log` events. This live stream is
-  supplemental only: it does not replace buffering, `RunResult`, or the
-  failed-step dump contract.
+- Live subprocess stdout/stderr payload MUST be written into NDJSON whenever
+  `json_out` is enabled. This live stream is supplemental only: it does not
+  replace buffering or `RunResult`.
 - Live subprocess payload is line-framed: complete newline-terminated lines
   are emitted one event at a time, and any trailing non-newline fragment
   MUST be emitted once at EOF.
 - Ordering is guaranteed per stream only: stdout order is preserved and
   stderr order is preserved, but global interleaving between stdout and
   stderr is not guaranteed.
-- Full error detail (failed step stdout/stderr) must be included.
-- By default it must bypass filtering.
-- Exception: for Ruff/Biome autoformat/autofix steps, the failed-step dump must be
-  emitted without bypass, using DETAIL+WARNING.
+- For each sink, full failed-step stdout/stderr payload MUST appear at most
+  once.
+- In NDJSON, live subprocess payload is the authoritative raw payload carrier.
+  If the NDJSON sink already received live subprocess payload for a failed
+  step, the final failed-step JSON event MUST NOT repeat the same full
+  stdout/stderr payload.
+- Human-readable sinks are evaluated independently:
+  - screen emits live subprocess payload only when `--verbosity` is `verbose`
+    or `debug`
+  - file log emits live subprocess payload only when `--log-level` is
+    `verbose` or `debug`
+  - if a sink did not receive live subprocess payload, its final failed-step
+    dump remains required
+- By default the final failed-step dump still bypasses filtering in sinks that
+  require that fallback.
+- Exception: for Ruff/Biome autoformat/autofix steps, the final failed-step
+  dump fallback must be emitted without bypass, using DETAIL+WARNING.
 - When Ruff/Biome autofix is enabled, the pre-autofix check is diagnostic only and must
-  not emit `FAILED STEP OUTPUT`. If autofix runs, any failed-step dump for the gate must
+  not emit `FAILED STEP OUTPUT`. If autofix runs, any failed-step dump fallback for the gate must
   come only from the post-autofix final check.
 - The JSON sink is best-effort; failures to write NDJSON must not change runner
   behavior.
