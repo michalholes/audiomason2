@@ -122,6 +122,55 @@ def test_subprocess_live_json_ignores_screen_level(tmp_path: Path):
     assert any(evt.get("kind") == "SUBPROCESS_STDOUT" for evt in events)
 
 
+def test_live_ipc_output_arrives_before_process_exit(tmp_path: Path) -> None:
+    logger = _mk_logger(tmp_path, screen_level="normal", log_level="quiet")
+    events: list[dict[str, object]] = []
+    logger.set_ipc_stream(events.append)
+    done = threading.Event()
+    errors: list[BaseException] = []
+
+    def _runner() -> None:
+        try:
+            logger.run_logged(
+                [
+                    sys.executable,
+                    "-c",
+                    (
+                        "import sys, time; "
+                        "sys.stdout.write('first\\n'); sys.stdout.flush(); "
+                        "time.sleep(0.5); "
+                        "sys.stdout.write('tail'); sys.stdout.flush()"
+                    ),
+                ]
+            )
+        except BaseException as exc:
+            errors.append(exc)
+        finally:
+            done.set()
+
+    worker = threading.Thread(target=_runner, daemon=True)
+    worker.start()
+    try:
+        for _ in range(100):
+            if any(
+                evt.get("kind") == "SUBPROCESS_STDOUT" and evt.get("msg") == "first"
+                for evt in events
+            ):
+                assert not done.is_set()
+                break
+            done.wait(0.05)
+        else:
+            raise AssertionError("missing live IPC subprocess event")
+        worker.join(timeout=5.0)
+        assert not worker.is_alive()
+        assert not errors
+        assert any(
+            evt.get("kind") == "SUBPROCESS_STDOUT" and evt.get("msg") == "tail" for evt in events
+        )
+    finally:
+        logger.close()
+
+
 def test_live_screen_output_arrives_before_process_exit(tmp_path: Path) -> None:
     logger = _mk_logger(tmp_path, screen_level="verbose", log_level="quiet")
     done = threading.Event()
@@ -280,6 +329,33 @@ def test_failed_step_json_payload_is_not_duplicated_after_live_stream(tmp_path: 
         json.loads(line)
         for line in (tmp_path / "am_patch.jsonl").read_text(encoding="utf-8").splitlines()
     ]
+    failed = [evt for evt in events if evt.get("msg") == "FAILED STEP OUTPUT"]
+
+    assert result.returncode == 1
+    assert any(
+        evt.get("kind") == "SUBPROCESS_STDERR" and evt.get("msg") == "boom" for evt in events
+    )
+    assert len(failed) == 1
+    assert "stdout" not in failed[0]
+    assert "stderr" not in failed[0]
+
+
+def test_failed_step_ipc_payload_is_not_duplicated_after_live_stream(tmp_path: Path) -> None:
+    logger = _mk_logger(tmp_path, screen_level="normal", log_level="quiet")
+    logger.json_enabled = True
+    logger.json_path = tmp_path / "am_patch.jsonl"
+    logger._json_fp = logger._close_stack.enter_context(
+        logger.json_path.open("w", encoding="utf-8")
+    )
+    events: list[dict[str, object]] = []
+    logger.set_ipc_stream(events.append)
+    try:
+        result = logger.run_logged(
+            [sys.executable, "-c", "import sys; sys.stderr.write('boom\\n'); sys.exit(1)"]
+        )
+    finally:
+        logger.close()
+
     failed = [evt for evt in events if evt.get("msg") == "FAILED STEP OUTPUT"]
 
     assert result.returncode == 1

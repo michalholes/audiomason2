@@ -416,6 +416,24 @@ class Logger:
                 with contextlib.suppress(Exception):
                     ipc_stream(evt)
 
+    def _write_machine_event_locked(self, evt: dict[str, Any]) -> tuple[bool, bool]:
+        wrote_json = False
+        wrote_ipc = False
+        if self.json_enabled and self._json_fp is not None:
+            try:
+                self._write_json(evt)
+                wrote_json = True
+            except Exception:
+                pass
+        ipc_stream = self._ipc_stream
+        if ipc_stream is not None:
+            try:
+                ipc_stream(evt)
+                wrote_ipc = True
+            except Exception:
+                pass
+        return wrote_json, wrote_ipc
+
     def emit_json_failed_step_detail(
         self,
         *,
@@ -426,7 +444,8 @@ class Logger:
         bypass: bool,
         include_payload: bool = True,
     ) -> None:
-        if not self.json_enabled or self._json_fp is None:
+        ipc_stream = self._ipc_stream
+        if not ((self.json_enabled and self._json_fp is not None) or ipc_stream is not None):
             return
         with self._io_lock:
             self._json_seq += 1
@@ -445,10 +464,11 @@ class Logger:
             if include_payload:
                 evt["stdout"] = stdout
                 evt["stderr"] = stderr
-            with contextlib.suppress(Exception):
-                self._write_json(evt)
+            self._write_machine_event_locked(evt)
 
-    def _write_json_subprocess_stream_locked(self, *, stream: str, message: str) -> None:
+    def _write_json_subprocess_stream_locked(
+        self, *, stream: str, message: str
+    ) -> tuple[bool, bool]:
         kind = {
             "stdout": "SUBPROCESS_STDOUT",
             "stderr": "SUBPROCESS_STDERR",
@@ -468,17 +488,17 @@ class Logger:
             "bypass": False,
             "msg": _normalize_event_message(message),
         }
-        with contextlib.suppress(Exception):
-            self._write_json(evt)
+        return self._write_machine_event_locked(evt)
 
     def emit_json_subprocess_stream(self, *, stream: str, message: str) -> None:
-        if not self.json_enabled or self._json_fp is None:
+        ipc_stream = self._ipc_stream
+        if not ((self.json_enabled and self._json_fp is not None) or ipc_stream is not None):
             return
         with self._io_lock:
             self._write_json_subprocess_stream_locked(stream=stream, message=message)
 
-    def _live_subprocess_json_enabled(self) -> bool:
-        return self.json_enabled and self._json_fp is not None
+    def _live_subprocess_machine_enabled(self) -> bool:
+        return (self.json_enabled and self._json_fp is not None) or self._ipc_stream is not None
 
     def _live_subprocess_screen_enabled(self) -> bool:
         return _allowed(self.screen_level, "INFO", "DETAIL", summary=False)
@@ -493,13 +513,16 @@ class Logger:
         message: str,
     ) -> tuple[bool, bool, bool]:
         rendered = self._render_live_subprocess_line(stream=stream, message=message)
-        wrote_json = False
+        wrote_machine = False
         wrote_screen = False
         wrote_log = False
         with self._io_lock:
-            if self._live_subprocess_json_enabled():
-                self._write_json_subprocess_stream_locked(stream=stream, message=message)
-                wrote_json = True
+            if self._live_subprocess_machine_enabled():
+                wrote_json, wrote_ipc = self._write_json_subprocess_stream_locked(
+                    stream=stream,
+                    message=message,
+                )
+                wrote_machine = wrote_json or wrote_ipc
             if self._live_subprocess_log_enabled():
                 self._write_file(rendered)
                 wrote_log = True
@@ -510,7 +533,7 @@ class Logger:
                         hook()
                 self._write_screen(rendered)
                 wrote_screen = True
-        return wrote_json, wrote_screen, wrote_log
+        return wrote_machine, wrote_screen, wrote_log
 
     def _render_live_subprocess_line(self, *, stream: str, message: str) -> str:
         payload = _normalize_event_message(message)
@@ -609,15 +632,15 @@ class Logger:
         result: RunResult
         screen_got_live = False
         log_got_live = False
-        json_got_live = False
+        machine_got_live = False
 
         def _on_live(stream: str, message: str) -> None:
-            nonlocal json_got_live, screen_got_live, log_got_live
-            wrote_json, wrote_screen, wrote_log = self._write_live_subprocess_line(
+            nonlocal machine_got_live, screen_got_live, log_got_live
+            wrote_machine, wrote_screen, wrote_log = self._write_live_subprocess_line(
                 stream=stream,
                 message=message,
             )
-            json_got_live = json_got_live or wrote_json
+            machine_got_live = machine_got_live or wrote_machine
             screen_got_live = screen_got_live or wrote_screen
             log_got_live = log_got_live or wrote_log
 
@@ -706,7 +729,7 @@ class Logger:
 
         dump_screen = not screen_got_live
         dump_log = not log_got_live
-        failure_machine_event = not json_got_live
+        failure_machine_event = not machine_got_live
 
         if completed.timed_out:
             marker = f"subprocess timeout after {timeout_value}s"
@@ -719,7 +742,7 @@ class Logger:
                     severity="ERROR",
                     channel="CORE",
                     bypass=True,
-                    include_payload=not json_got_live,
+                    include_payload=not machine_got_live,
                 )
                 _emit_failure_dump(
                     self.emit_error_detail,
@@ -768,7 +791,7 @@ class Logger:
                 severity=sev,
                 channel=ch,
                 bypass=bypass,
-                include_payload=not json_got_live,
+                include_payload=not machine_got_live,
             )
 
             emit = self.emit_error_detail if bypass else self.emit_warning_detail
