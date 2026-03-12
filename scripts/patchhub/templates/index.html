@@ -105,6 +105,7 @@
             <option value="finalize_workspace">finalize_workspace (-w)</option>
             <option value="rerun_latest">rerun_latest (-l)</option>
           </select>
+          <button type="button" id="gateOptionsBtn" class="btn btn-small">Gate options</button>
         </div>
 
         <div class="row">
@@ -139,6 +140,10 @@
   <span id="liveStreamStatus" class="muted"></span>
 </div>
 <pre id="liveLog" class="pre pre-box"></pre>
+<div class="row live-copy-row">
+  <button type="button" id="liveCopySelection" class="btn btn-small">Copy selection</button>
+  <button type="button" id="liveCopyAll" class="btn btn-small">Copy all</button>
+</div>
       </section>
 
       <section class="card" id="ampCard">
@@ -255,6 +260,27 @@
       </section>
     </aside>
   </main>
+
+  <div id="gateOptionsModal" class="modal-backdrop hidden" aria-hidden="true">
+    <div class="modal-card gate-options-modal-card" role="dialog" aria-modal="true">
+      <div class="gate-options-modal-head">
+        <div>
+          <h2 class="gate-options-modal-title">Gate options</h2>
+          <div class="muted">Transient overrides for the current run only</div>
+        </div>
+        <button
+          type="button"
+          id="gateOptionsCloseBtn"
+          class="zip-subset-close"
+          aria-label="Close"
+        >&times;</button>
+      </div>
+      <div id="gateOptionsList" class="gate-options-list"></div>
+      <div class="gate-options-modal-footer">
+        <button type="button" id="gateOptionsCancelBtn" class="btn btn-small">Close</button>
+      </div>
+    </div>
+  </div>
 
   <div id="zipSubsetModal" class="modal-backdrop hidden" aria-hidden="true">
     <div class="modal-card zip-subset-modal-card" role="dialog" aria-modal="true">

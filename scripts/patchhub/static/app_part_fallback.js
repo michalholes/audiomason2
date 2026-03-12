@@ -11,7 +11,7 @@ function fallbackApplyModeRules(mode) {
 		return { issue_id: true, commit_message: false, patch_path: false };
 	}
 	if (mode === "rerun_latest") {
-		return { issue_id: false, commit_message: false, patch_path: false };
+		return { issue_id: true, commit_message: true, patch_path: true };
 	}
 	return { issue_id: true, commit_message: true, patch_path: true };
 }
@@ -45,17 +45,20 @@ function fallbackValidateAndPreview() {
 		if (mode === "finalize_live") ok = !!commitMsg;
 		else if (mode === "finalize_workspace")
 			ok = !!issueId && /^[0-9]+$/.test(issueId);
-		else if (mode === "rerun_latest") ok = true;
+		else if (mode === "rerun_latest")
+			ok = !!commitMsg && !!issueId && /^[0-9]+$/.test(issueId);
 		else ok = !!commitMsg && !!patchPath;
 	}
-	setPre("previewRight", {
+	var preview = {
 		mode: mode,
 		issue_id: issueId,
 		commit_message: commitMsg,
 		patch_path: patchPath,
 		raw_command: rawCommand,
 		degraded: true,
-	});
+	};
+	preview = PH.call("applyGatePreview", preview) || preview;
+	setPre("previewRight", preview);
 	if (el("enqueueBtn")) el("enqueueBtn").disabled = !ok;
 	if (el("enqueueHint")) {
 		el("enqueueHint").textContent = ok ? "" : "degraded mode: missing fields";

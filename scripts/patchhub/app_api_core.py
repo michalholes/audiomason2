@@ -341,6 +341,7 @@ def api_parse_command(self, body: dict[str, Any]) -> tuple[int, bytes]:
                 "issue_id": parsed.issue_id,
                 "commit_message": parsed.commit_message,
                 "patch_path": parsed.patch_path,
+                "gate_argv": parsed.gate_argv,
             },
             "canonical": {
                 "argv": parsed.canonical_argv,

@@ -22,6 +22,7 @@ class TestApiParseCommand(unittest.TestCase):
         self.assertEqual(obj["parsed"]["issue_id"], "219")
         self.assertEqual(obj["parsed"]["commit_message"], "x")
         self.assertEqual(obj["parsed"]["patch_path"], "patches/y.zip")
+        self.assertEqual(obj["parsed"]["gate_argv"], [])
         argv = obj["canonical"]["argv"]
         self.assertIn("scripts/am_patch.py", argv)
 

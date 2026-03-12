@@ -11,6 +11,7 @@ from .command_parse import (
     build_canonical_command,
     parse_runner_command,
 )
+from .gate_argv import GateArgvError, validate_gate_argv
 from .issue_alloc import allocate_next_issue_id
 from .job_ids import new_job_id
 from .models import (
@@ -105,6 +106,18 @@ def _selected_patch_entries_from_body(body: dict[str, Any]) -> list[str]:
         out.append(name)
         seen.add(name)
     return out
+
+
+def _gate_argv_from_body(body: dict[str, Any]) -> list[str]:
+    raw = body.get("gate_argv")
+    if raw is None:
+        return []
+    if not isinstance(raw, list):
+        raise ValueError("gate_argv must be a JSON array")
+    try:
+        return validate_gate_argv([str(item or "") for item in raw])
+    except GateArgvError as e:
+        raise ValueError(str(e)) from e
 
 
 def _job_patch_path_from_canonical(job: JobRecord) -> str | None:
@@ -235,6 +248,7 @@ def api_jobs_enqueue(self, body: dict[str, Any]) -> tuple[int, bytes]:
     raw_command = str(body.get("raw_command", ""))
     try:
         selected_patch_entries = _selected_patch_entries_from_body(body)
+        gate_argv = _gate_argv_from_body(body)
     except ValueError as e:
         return _err(str(e), status=400)
 
@@ -245,6 +259,8 @@ def api_jobs_enqueue(self, body: dict[str, Any]) -> tuple[int, bytes]:
 
     if raw_command and selected_patch_entries:
         return _err("raw_command cannot be combined with selected_patch_entries", status=400)
+    if raw_command and gate_argv:
+        return _err("raw_command cannot be combined with gate_argv", status=400)
 
     if raw_command:
         try:
@@ -254,6 +270,7 @@ def api_jobs_enqueue(self, body: dict[str, Any]) -> tuple[int, bytes]:
         if parsed.mode != mode and parsed.mode != "patch":
             pass
         canonical = parsed.canonical_argv
+        gate_argv = parsed.gate_argv
         issue_id = parsed.issue_id or issue_id
         commit_message = parsed.commit_message or commit_message
         patch_path = parsed.patch_path or patch_path
@@ -264,13 +281,40 @@ def api_jobs_enqueue(self, body: dict[str, Any]) -> tuple[int, bytes]:
         if mode == "finalize_live":
             if not commit_message:
                 return _err("Missing finalize_live message", status=400)
-            canonical = build_canonical_command(runner_prefix, mode, "", commit_message, "")
+            if gate_argv:
+                return _err("finalize_live must not include gate_argv", status=400)
+            canonical = build_canonical_command(
+                runner_prefix,
+                mode,
+                "",
+                commit_message,
+                "",
+                gate_argv,
+            )
         elif mode == "finalize_workspace":
             if not issue_id or not issue_id.isdigit():
                 return _err("Missing/invalid issue_id", status=400)
-            canonical = build_canonical_command(runner_prefix, mode, issue_id, "", "")
+            canonical = build_canonical_command(
+                runner_prefix,
+                mode,
+                issue_id,
+                "",
+                "",
+                gate_argv,
+            )
         elif mode == "rerun_latest":
-            canonical = build_canonical_command(runner_prefix, mode, "", "", "")
+            if not issue_id or not issue_id.isdigit():
+                return _err("Missing/invalid issue_id", status=400)
+            if not commit_message:
+                return _err("Missing commit_message", status=400)
+            canonical = build_canonical_command(
+                runner_prefix,
+                mode,
+                issue_id,
+                commit_message,
+                patch_path,
+                gate_argv,
+            )
         else:
             if not issue_id and patch_path:
                 issue_id = _try_fill_issue_from_zip(self, patch_path)
@@ -343,6 +387,7 @@ def api_jobs_enqueue(self, body: dict[str, Any]) -> tuple[int, bytes]:
                 issue_id,
                 commit_message,
                 str(effective_patch_path or patch_path),
+                gate_argv,
             )
             commit_summary = compute_commit_summary(commit_message)
             if not commit_summary:

@@ -165,3 +165,57 @@ def test_enqueue_fills_issue_and_commit_from_zip_when_missing(tmp_path: Path) ->
     payload = json.loads(raw.decode("utf-8"))
     assert payload["job"]["issue_id"] == "602"
     assert payload["job"]["commit_summary"] == "Hello"
+
+
+def test_enqueue_rerun_latest_builds_issue_bound_canonical_command(tmp_path: Path) -> None:
+    s = _mk_self(tmp_path)
+
+    body = {
+        "mode": "rerun_latest",
+        "issue_id": "534",
+        "commit_message": "Rerun latest patch",
+        "patch_path": "issue_534_v1.zip",
+        "gate_argv": ["--skip-pytest", "--override", "compile_check=true"],
+    }
+    status, raw = api_jobs_enqueue(s, body)
+    assert status == 200
+    payload = json.loads(raw.decode("utf-8"))
+    assert payload["job"]["canonical_command"] == [
+        "python3",
+        "scripts/am_patch.py",
+        "534",
+        "Rerun latest patch",
+        "issue_534_v1.zip",
+        "-l",
+        "--override",
+        "compile_check=true",
+        "--skip-pytest",
+    ]
+
+
+def test_enqueue_rejects_gate_argv_with_raw_command(tmp_path: Path) -> None:
+    s = _mk_self(tmp_path)
+
+    body = {
+        "mode": "patch",
+        "raw_command": 'python3 scripts/am_patch.py 1 "x" patches/x.zip',
+        "gate_argv": ["--skip-ruff"],
+    }
+    status, raw = api_jobs_enqueue(s, body)
+    assert status == 400
+    payload = json.loads(raw.decode("utf-8"))
+    assert "gate_argv" in payload["error"]
+
+
+def test_enqueue_rejects_finalize_live_gate_argv(tmp_path: Path) -> None:
+    s = _mk_self(tmp_path)
+
+    body = {
+        "mode": "finalize_live",
+        "commit_message": "Finalize",
+        "gate_argv": ["--skip-ruff"],
+    }
+    status, raw = api_jobs_enqueue(s, body)
+    assert status == 400
+    payload = json.loads(raw.decode("utf-8"))
+    assert "finalize_live" in payload["error"]

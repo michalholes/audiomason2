@@ -75,6 +75,7 @@ function pollLatestPatchOnce() {
 				dirty.patchPath = false;
 			}
 		} catch (_) {}
+		PH.call("clearGateOverrides");
 		try {
 			const m = el("mode");
 			if (m) m.value = "patch";

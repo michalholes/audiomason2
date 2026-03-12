@@ -190,6 +190,9 @@ function wireButtons() {
 		});
 	}
 
+	phCall("initGateOptionsUi");
+	phCall("initLiveCopyButtons");
+
 	if (el("liveLevel")) {
 		el("liveLevel").addEventListener("change", () => {
 			var v = String(el("liveLevel").value || "normal");
@@ -316,6 +319,9 @@ function init() {
 		PH.call("loadLiveLevel");
 		var savedJobId = PH.call("loadLiveJobId");
 		if (savedJobId) selectedJobId = savedJobId;
+		phCall("initGateOptionsUi");
+		phCall("initLiveCopyButtons");
+
 		if (el("liveLevel")) {
 			const v = PH.call("getLiveLevel");
 			if (v) el("liveLevel").value = String(v);

@@ -865,3 +865,81 @@ input::placeholder {
 	gap: 10px;
 	align-items: center;
 }
+
+.live-copy-row {
+	justify-content: flex-end;
+	margin-bottom: 0;
+}
+
+.gate-options-modal-card {
+	width: min(720px, 100%);
+}
+
+.gate-options-modal-head {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 16px;
+	margin-bottom: 12px;
+}
+
+.gate-options-modal-title {
+	margin: 0;
+}
+
+.gate-options-list {
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	max-height: 420px;
+	overflow: auto;
+}
+
+.gate-options-row {
+	display: grid;
+	grid-template-columns: minmax(120px, 1.2fr) minmax(0, 1fr) auto;
+	gap: 12px;
+	align-items: center;
+	padding: 12px;
+	border: 1px solid #2b467b;
+	border-radius: 10px;
+	background: #0f1c33;
+}
+
+.gate-options-row.changed {
+	border-color: #2f6fed;
+}
+
+.gate-options-label {
+	font-weight: 700;
+}
+
+.gate-options-group {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.gate-options-group.passive {
+	align-items: flex-end;
+}
+
+.gate-options-caption {
+	font-size: 12px;
+	color: #b7c3d6;
+}
+
+.gate-options-actions {
+	display: flex;
+	gap: 8px;
+}
+
+.gate-options-passive {
+	font-weight: 700;
+}
+
+.gate-options-modal-footer {
+	display: flex;
+	justify-content: flex-end;
+	margin-top: 12px;
+}

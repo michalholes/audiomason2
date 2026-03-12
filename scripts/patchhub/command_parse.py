@@ -3,6 +3,7 @@ from __future__ import annotations
 import shlex
 from dataclasses import dataclass
 
+from .gate_argv import GateArgvError, split_gate_argv, validate_gate_argv
 from .models import JobMode
 
 
@@ -16,7 +17,15 @@ class ParsedCommand:
     issue_id: str
     commit_message: str
     patch_path: str
+    gate_argv: list[str]
     canonical_argv: list[str]
+
+
+def _validated_gate_argv(tokens: list[str]) -> list[str]:
+    try:
+        return validate_gate_argv(tokens)
+    except GateArgvError as e:
+        raise CommandParseError(str(e)) from e
 
 
 def parse_runner_command(raw: str) -> ParsedCommand:
@@ -32,7 +41,6 @@ def parse_runner_command(raw: str) -> ParsedCommand:
     if len(argv) < 3:
         raise CommandParseError("Command is too short")
 
-    # Find scripts/am_patch.py in argv
     try:
         idx = argv.index("scripts/am_patch.py")
     except ValueError as e:
@@ -41,7 +49,6 @@ def parse_runner_command(raw: str) -> ParsedCommand:
     prefix = argv[: idx + 1]
     rest = argv[idx + 1 :]
 
-    mode: JobMode = "patch"
     flag_f = "-f" in rest
     flag_w = "-w" in rest
     flag_l = "-l" in rest
@@ -50,7 +57,6 @@ def parse_runner_command(raw: str) -> ParsedCommand:
         raise CommandParseError("Conflicting finalize/rerun flags")
 
     if flag_f:
-        mode = "finalize_live"
         rest = [a for a in rest if a != "-f"]
         if len(rest) != 1:
             raise CommandParseError("finalize_live requires exactly one MESSAGE argument")
@@ -58,59 +64,68 @@ def parse_runner_command(raw: str) -> ParsedCommand:
         if not message:
             raise CommandParseError("MESSAGE is empty")
         return ParsedCommand(
-            mode=mode,
+            mode="finalize_live",
             issue_id="",
             commit_message=message,
             patch_path="",
+            gate_argv=[],
             canonical_argv=prefix + ["-f", message],
         )
 
     if flag_w:
-        mode = "finalize_workspace"
-        rest = [a for a in rest if a != "-w"]
-        if len(rest) != 1:
+        pos = list(rest)
+        pos.remove("-w")
+        pos, gate_argv = split_gate_argv(pos)
+        if len(pos) != 1:
             raise CommandParseError("finalize_workspace requires exactly one ISSUE_ID argument")
-        issue_id = rest[0]
+        issue_id = pos[0]
         if not issue_id.isdigit():
             raise CommandParseError("ISSUE_ID must be digits")
         return ParsedCommand(
-            mode=mode,
+            mode="finalize_workspace",
             issue_id=issue_id,
             commit_message="",
             patch_path="",
-            canonical_argv=prefix + ["-w", issue_id],
+            gate_argv=gate_argv,
+            canonical_argv=prefix + ["-w", issue_id] + gate_argv,
         )
 
+    pos = list(rest)
     if flag_l:
-        mode = "rerun_latest"
-        rest = [a for a in rest if a != "-l"]
-        if len(rest) != 0:
-            raise CommandParseError("rerun_latest must not include extra args")
-        return ParsedCommand(
-            mode=mode,
-            issue_id="",
-            commit_message="",
-            patch_path="",
-            canonical_argv=prefix + ["-l"],
-        )
+        pos.remove("-l")
+    try:
+        pos, gate_argv = split_gate_argv(pos)
+    except GateArgvError as e:
+        raise CommandParseError(str(e)) from e
 
-    if len(rest) != 3:
+    if len(pos) not in (2, 3):
         raise CommandParseError('Expected: ISSUE_ID "commit message" PATCH')
 
-    issue_id, commit_message, patch_path = rest
+    issue_id = pos[0]
+    commit_message = pos[1]
+    patch_path = pos[2] if len(pos) == 3 else ""
     if not issue_id.isdigit():
         raise CommandParseError("ISSUE_ID must be digits")
     if not commit_message:
         raise CommandParseError("Commit message is empty")
-    if not patch_path:
+    if len(pos) == 3 and not patch_path:
         raise CommandParseError("PATCH is empty")
 
-    canonical = prefix + [issue_id, commit_message, patch_path]
+    mode: JobMode = "rerun_latest" if flag_l else "patch"
+    canonical = build_canonical_command(
+        prefix,
+        mode,
+        issue_id,
+        commit_message,
+        patch_path,
+        gate_argv,
+    )
     return ParsedCommand(
         mode=mode,
         issue_id=issue_id,
         commit_message=commit_message,
         patch_path=patch_path,
+        gate_argv=gate_argv,
         canonical_argv=canonical,
     )
 
@@ -121,13 +136,21 @@ def build_canonical_command(
     issue_id: str,
     commit_message: str,
     patch_path: str,
+    gate_argv: list[str] | None = None,
 ) -> list[str]:
+    gate_tail = _validated_gate_argv(list(gate_argv or []))
     if mode == "finalize_live":
+        if gate_tail:
+            raise CommandParseError("finalize_live must not include gate overrides")
         return runner_prefix + ["-f", commit_message]
     if mode == "finalize_workspace":
-        return runner_prefix + ["-w", issue_id]
+        return runner_prefix + ["-w", issue_id] + gate_tail
     if mode == "rerun_latest":
-        return runner_prefix + ["-l"]
+        argv = runner_prefix + [issue_id, commit_message]
+        if patch_path:
+            argv.append(patch_path)
+        argv.append("-l")
+        return argv + gate_tail
     if mode in ("patch", "repair"):
-        return runner_prefix + [issue_id, commit_message, patch_path]
+        return runner_prefix + [issue_id, commit_message, patch_path] + gate_tail
     raise CommandParseError(f"Unsupported mode: {mode}")

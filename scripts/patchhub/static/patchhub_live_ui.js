@@ -440,6 +440,83 @@
 		}, 50);
 	}
 
+	function getLiveLogRenderedText() {
+		var box = el("liveLog");
+		return box ? String(box.textContent || "") : "";
+	}
+
+	function getLiveLogSelectedText() {
+		var box = el("liveLog");
+		if (!box || typeof window.getSelection !== "function") return "";
+		var sel = window.getSelection();
+		if (!sel || !sel.rangeCount) return "";
+		var text = String(sel.toString() || "");
+		if (!text) return "";
+		var range = sel.getRangeAt(0);
+		var node =
+			range && range.commonAncestorContainer
+				? range.commonAncestorContainer
+				: null;
+		if (node && node.nodeType === 3) node = node.parentNode;
+		while (node) {
+			if (node === box) return text;
+			node = node.parentNode;
+		}
+		return "";
+	}
+
+	function copyLiveText(text) {
+		var payload = String(text || "");
+		if (!payload) return Promise.resolve("");
+		var nav = typeof navigator !== "undefined" ? navigator : null;
+		if ((!nav || !nav.clipboard) && window && window.navigator) {
+			nav = window.navigator;
+		}
+		if (nav && nav.clipboard && nav.clipboard.writeText) {
+			return nav.clipboard.writeText(payload).then(() => payload);
+		}
+		return Promise.reject(new Error("clipboard unavailable"));
+	}
+
+	function copyLiveSelection() {
+		return copyLiveText(getLiveLogSelectedText());
+	}
+
+	function copyLiveAll() {
+		return copyLiveText(getLiveLogRenderedText());
+	}
+
+	function initLiveCopyButtons() {
+		var selBtn = el("liveCopySelection");
+		if (selBtn) {
+			selBtn.addEventListener("click", () => {
+				copyLiveSelection()
+					.then(() => {
+						if (typeof setUiStatus === "function")
+							setUiStatus("live log: selection copied");
+					})
+					.catch((err) => {
+						if (typeof setUiError === "function")
+							setUiError(String(err || "copy failed"));
+					});
+			});
+		}
+		var allBtn = el("liveCopyAll");
+		if (allBtn) {
+			allBtn.addEventListener("click", () => {
+				copyLiveAll()
+					.then(() => {
+						if (typeof setUiStatus === "function")
+							setUiStatus("live log: all copied");
+					})
+					.catch((err) => {
+						if (typeof setUiError === "function")
+							setUiError(String(err || "copy failed"));
+					});
+			});
+		}
+	}
+
 	function updateProgressFromEvents() {
 		var box = el("activeStage");
 		if (!box) return;
@@ -616,6 +693,11 @@
 			jobSummaryCommit,
 			jobSummaryPatchName,
 			jobSummaryDurationSeconds,
+			getLiveLogRenderedText,
+			getLiveLogSelectedText,
+			copyLiveSelection,
+			copyLiveAll,
+			initLiveCopyButtons,
 		});
 	}
 	safeExport("loadLiveJobId", loadLiveJobId);
@@ -645,4 +727,9 @@
 	ui.jobSummaryCommit = jobSummaryCommit;
 	ui.jobSummaryPatchName = jobSummaryPatchName;
 	ui.jobSummaryDurationSeconds = jobSummaryDurationSeconds;
+	safeExport("getLiveLogRenderedText", getLiveLogRenderedText);
+	safeExport("getLiveLogSelectedText", getLiveLogSelectedText);
+	safeExport("copyLiveSelection", copyLiveSelection);
+	safeExport("copyLiveAll", copyLiveAll);
+	safeExport("initLiveCopyButtons", initLiveCopyButtons);
 })();

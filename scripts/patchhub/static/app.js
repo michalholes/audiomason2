@@ -112,6 +112,13 @@ async function loadParts(rt) {
 	);
 	noteLoad(
 		await PH.loadScript(
+			"/static/app_part_gate_options.js",
+			"app_part_gate_options",
+		),
+		"gate options module missing",
+	);
+	noteLoad(
+		await PH.loadScript(
 			"/static/app_part_zip_subset_modal.js",
 			"app_part_zip_subset_modal",
 		),

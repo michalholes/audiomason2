@@ -36,7 +36,7 @@ function validateAndPreview() {
 	} else if (mode === "finalize_workspace") {
 		modeRules = { issue_id: true, commit_message: false, patch_path: false };
 	} else if (mode === "rerun_latest") {
-		modeRules = { issue_id: false, commit_message: false, patch_path: false };
+		modeRules = { issue_id: true, commit_message: true, patch_path: true };
 	} else {
 		modeRules = { issue_id: true, commit_message: true, patch_path: true };
 	}
@@ -46,6 +46,7 @@ function validateAndPreview() {
 
 	var canonical = null;
 	var preview = null;
+	var gatePayload = {};
 
 	if (raw) {
 		ok = !parseInFlight && !!lastParsed && lastParsedRaw === raw;
@@ -85,12 +86,19 @@ function validateAndPreview() {
 		} else if (mode === "finalize_workspace") {
 			ok = !!issueId && /^[0-9]+$/.test(issueId);
 		} else if (mode === "rerun_latest") {
-			ok = true;
+			ok = !!commitMsg && !!issueId && /^[0-9]+$/.test(issueId);
 		}
 
+		gatePayload = phCall("getGateOptionsEnqueuePayload", mode) || {};
 		canonical =
-			phCall("computeCanonicalPreview", mode, issueId, commitMsg, patchPath) ||
-			[];
+			phCall(
+				"computeCanonicalPreview",
+				mode,
+				issueId,
+				commitMsg,
+				patchPath,
+				gatePayload.gate_argv || [],
+			) || [];
 		preview = {
 			mode: mode,
 			issue_id: issueId,
@@ -100,6 +108,7 @@ function validateAndPreview() {
 		};
 	}
 	preview = PH.call("applyZipSubsetPreview", preview) || preview;
+	preview = PH.call("applyGatePreview", preview) || preview;
 	var subsetState = PH.call("getZipSubsetValidationState") || {
 		ok: true,
 		hint: "",
@@ -121,6 +130,8 @@ function validateAndPreview() {
 				hint2.textContent = "missing message";
 			} else if (mode === "finalize_workspace") {
 				hint2.textContent = "missing issue id";
+			} else if (mode === "rerun_latest") {
+				hint2.textContent = "missing issue id or message";
 			} else if (mode === "patch") {
 				hint2.textContent = "missing commit message or patch path";
 			} else {
@@ -165,12 +176,27 @@ function enqueue() {
 		body.commit_message = String(el("commitMsg").value || "").trim();
 	} else if (mode === "finalize_workspace") {
 		body.issue_id = String(el("issueId").value || "").trim();
+	} else if (mode === "rerun_latest") {
+		body.issue_id = String(el("issueId").value || "").trim();
+		body.commit_message = String(el("commitMsg").value || "").trim();
+		body.patch_path = normalizePatchPath(
+			String(el("patchPath").value || "").trim(),
+		);
+	}
+	var gatePayload = PH.call("getGateOptionsEnqueuePayload", mode) || {};
+	if (gatePayload.error) {
+		setUiError(String(gatePayload.error || "invalid gate options state"));
+		return;
+	}
+	if (Array.isArray(gatePayload.gate_argv) && gatePayload.gate_argv.length) {
+		body.gate_argv = gatePayload.gate_argv.slice();
 	}
 
 	apiPost("/api/jobs/enqueue", body).then((r) => {
 		pushApiStatus(r);
 		setPre("previewRight", r);
 		if (r && r.ok !== false && r.job_id) {
+			PH.call("clearGateOverrides");
 			setUiStatus("enqueue: ok job_id=" + String(r.job_id));
 			selectedJobId = String(r.job_id);
 			try {
