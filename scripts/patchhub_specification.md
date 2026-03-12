@@ -3,7 +3,7 @@ Status: AUTHORITATIVE SPECIFICATION
 Applies to: scripts/patchhub/*
 Language: ENGLISH (ASCII ONLY)
 
-Specification Version: 1.12.1-spec
+Specification Version: 1.12.2-spec
 Code Baseline: audiomason2-main.zip (as provided in this chat)
 
 -------------------------------------------------------------------------------
@@ -83,6 +83,17 @@ The runtime version MUST NOT be hardcoded in code.
     terminal backend signal is observed.
 - When the document becomes visible again, the UI MUST resume or reconcile state as
   required by the current tracked job state.
+- In `visible+idle`, PatchHub UI routes MUST NOT automatically poll:
+  - GET /api/runner/tail
+  - GET /api/jobs/<job_id>/log_tail
+- In `visible+idle`, the Progress card MUST be derived only from structured state
+  (persisted job events, selected job detail, or retained terminal state) and MUST
+  NOT be synthesized from raw tail text.
+- GET /api/runner/tail is raw-text only and MUST NOT be used for:
+  - liveness detection
+  - overview invalidation
+  - progress reconstruction
+  - selected-job state
 - Timer creation MUST be centralized to prevent duplicated timers across multiple
   hide/show cycles.
 
@@ -793,10 +804,10 @@ Primary parsing source (static client modules):
 - The canonical live source includes the terminal SSE trailer:
   - event: end
   - data: {"reason":"job_completed","status":"<job.status>"}
-- The Tail view remains available as a fallback/resync source.
-  - Tail text MAY be used to reconcile the Progress card when live events are not
-    yet available, after reconnect, or during explicit resync.
-  - Tail text MUST NOT replace SSE as the primary live progress source during ACTIVE.
+- Tail endpoints remain available only as explicit raw-log fallback/debug surfaces.
+  - Tail text MUST NOT drive the Progress card.
+  - Tail text MUST NOT replace structured event/state sources during ACTIVE.
+  - Tail endpoints MUST NOT participate in automatic idle refresh.
 - Step transitions are derived from persisted event payloads corresponding to runner
   progress markers:
   - DO: <STEP>
@@ -990,17 +1001,18 @@ Config gates (patchhub.toml [ui]):
   - the Tail view,
   - the Progress summary and step list.
 
-  The UI also suppresses idle tail refresh so that the cleared output does not
-  immediately reappear from periodic /api/runner/tail polling.
+  Because automatic idle tail polling is forbidden, the cleared output MUST remain
+  cleared until structured selected/tracked data or an explicit user action replaces it.
 
 - show_autofill_clear_status (default true)
   If true and output is cleared due to autofill, the UI status bar is set to the
   exact line: "autofill: loaded new patch, output cleared".
 
 Job selection interaction:
-- Manual job selection (click on an item in the Jobs list) re-enables output
-  refresh and shows that job output.
-- Starting a new job (enqueue success) re-enables output refresh for that job.
+- Manual job selection (click on an item in the Jobs list) shows that job via
+  structured replay/state surfaces and MAY expose explicit raw-log access.
+- Starting a new job (enqueue success) activates the structured live event path
+  for that job.
 
 Idle auto-select:
 - If idle_auto_select_last_job is false (default), the UI does not auto-select
@@ -1297,6 +1309,11 @@ Output (success):
 
 Note:
 - This tails patches_root/am_patch.log, not a job-local log.
+- This endpoint is raw-text only.
+- PatchHub UI routes MUST NOT call it automatically during startup, idle refresh,
+  visible resync, or overview refresh.
+- It MUST NOT be used for liveness detection, progress rendering, selected-job
+  state, or overview invalidation.
 
 7.2.8 GET /api/jobs
 Output:
@@ -1359,6 +1376,12 @@ Source:
 - In `db_primary` mode, source is the persisted DB-backed web-jobs log store.
 - In `file_emergency` mode, source is the emergency file-backed `runner.log`.
 If the source log is missing: tail is empty string.
+Rules:
+- This endpoint is raw-text only.
+- PatchHub UI routes MUST NOT poll it automatically in `visible+idle`.
+- It MUST NOT be used for liveness detection, overview invalidation, or Progress
+  card reconstruction.
+- It MAY remain available for explicit raw-log fallback/debug access.
 
 7.2.11 GET /api/jobs/<job_id>/events
 Output:
