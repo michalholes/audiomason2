@@ -123,6 +123,7 @@ def test_create_session_uses_metadata_validation_and_explicit_cover_choice(
     engine, roots = _make_engine(tmp_path)
     _write_book(roots["inbox"], "A", "Book")
 
+    phase1_cover = import_module("plugins.import.phase1_cover_flow")
     phase1_metadata = import_module("plugins.import.phase1_metadata_flow")
 
     def _fake_validate(author: str, title: str) -> tuple[dict[str, object], str, str]:
@@ -142,7 +143,34 @@ def test_create_session_uses_metadata_validation_and_explicit_cover_choice(
             "Canonical Book",
         )
 
+    def _fake_discover(
+        self,
+        directory: Path,
+        *,
+        audio_file: Path | None = None,
+        group_root: str | None = None,
+    ):
+        assert directory == roots["inbox"] / "A" / "Book"
+        assert audio_file == roots["inbox"] / "A" / "Book" / "track01.mp3"
+        assert group_root == "inbox"
+        return [
+            {
+                "kind": "file",
+                "candidate_id": "file:canonical-cover.png",
+                "apply_mode": "copy",
+                "path": str(directory / "canonical-cover.png"),
+                "mime_type": "image/png",
+                "cache_key": "file:canonical-cover.png",
+                "root_name": group_root or "",
+            }
+        ]
+
     monkeypatch.setattr(phase1_metadata, "_validated_author_title", _fake_validate)
+    monkeypatch.setattr(
+        phase1_cover.CoverHandlerPlugin,
+        "discover_cover_candidates",
+        _fake_discover,
+    )
 
     state = engine.create_session("inbox", "", mode="stage")
 
@@ -153,11 +181,14 @@ def test_create_session_uses_metadata_validation_and_explicit_cover_choice(
     }
     assert state["vars"]["phase1"]["cover"]["choice"] == {
         "kind": "candidate",
-        "candidate_id": "embedded:track01.mp3",
+        "candidate_id": "file:canonical-cover.png",
         "source_relative_path": "A/Book",
     }
     assert state["vars"]["phase1"]["runtime"]["covers_policy"]["candidates"][0]["candidate_id"] == (
-        "embedded:track01.mp3"
+        "file:canonical-cover.png"
+    )
+    assert state["vars"]["phase1"]["runtime"]["covers_policy"]["candidates"][0]["path"] == (
+        "A/Book/canonical-cover.png"
     )
 
 

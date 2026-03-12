@@ -5,23 +5,11 @@ ASCII-only.
 
 from __future__ import annotations
 
-from pathlib import Path, PurePosixPath
+from pathlib import Path
 from typing import Any
 
 from plugins.cover_handler.plugin import CoverHandlerPlugin
 
-_FILE_COVER_NAMES = (
-    "cover.jpg",
-    "cover.jpeg",
-    "cover.png",
-    "cover.webp",
-    "folder.jpg",
-    "folder.jpeg",
-    "folder.png",
-    "front.jpg",
-    "front.png",
-)
-_GENERIC_COVER_SUFFIXES = (".jpg", ".jpeg", ".png", ".webp")
 _EMBEDDED_SUFFIXES = {".mp3", ".m4a", ".m4b"}
 
 
@@ -55,85 +43,101 @@ def _normalize_relative_path(*, rel_path: str, source_prefix: str) -> str:
     return normalized
 
 
+def _source_root_dir(state: dict[str, Any]) -> Path | None:
+    source_any = state.get("source")
+    source = dict(source_any) if isinstance(source_any, dict) else {}
+    root_dir = str(source.get("root_dir") or "")
+    return Path(root_dir) if root_dir else None
+
+
+def _source_directory(
+    *,
+    root_dir: Path | None,
+    source_prefix: str,
+    source_relative_path: str,
+) -> Path | None:
+    if root_dir is None:
+        return None
+    rel_parts = [part for part in (source_prefix, source_relative_path) if part]
+    rel = "/".join(rel_parts)
+    return root_dir / Path(*[part for part in rel.split("/") if part])
+
+
+def _first_audio_source(directory: Path) -> Path | None:
+    if not directory.exists() or not directory.is_dir():
+        return None
+    for path in sorted(directory.iterdir()):
+        if path.is_file() and path.suffix.lower() in _EMBEDDED_SUFFIXES:
+            return path
+    return None
+
+
+def _root_relative_path(*, root_dir: Path, path_text: str) -> str:
+    if not path_text:
+        return ""
+    path = Path(path_text)
+    if not path.is_absolute():
+        path = root_dir / path
+    return path.resolve().relative_to(root_dir.resolve()).as_posix()
+
+
+def _canonicalize_candidate(
+    *,
+    candidate: dict[str, Any],
+    root_dir: Path,
+    source_relative_path: str,
+    root_name: str,
+) -> dict[str, str]:
+    out = {
+        "source_relative_path": source_relative_path,
+        "root_name": str(candidate.get("root_name") or root_name),
+        "kind": str(candidate.get("kind") or ""),
+        "candidate_id": str(candidate.get("candidate_id") or ""),
+        "apply_mode": str(candidate.get("apply_mode") or ""),
+        "mime_type": str(candidate.get("mime_type") or ""),
+        "cache_key": str(candidate.get("cache_key") or ""),
+    }
+    path_text = str(candidate.get("path") or "")
+    if path_text:
+        out["path"] = _root_relative_path(root_dir=root_dir, path_text=path_text)
+    url = str(candidate.get("url") or "")
+    if url:
+        out["url"] = url
+    return out
+
+
 def _candidate_entries(
     *,
-    discovery: list[dict[str, Any]],
     source_relative_path: str,
     source_prefix: str,
     root_name: str,
+    state: dict[str, Any],
 ) -> list[dict[str, str]]:
+    root_dir = _source_root_dir(state)
+    source_directory = _source_directory(
+        root_dir=root_dir,
+        source_prefix=source_prefix,
+        source_relative_path=source_relative_path,
+    )
+    if root_dir is None or source_directory is None:
+        return []
+
     plugin = CoverHandlerPlugin()
-    entries: list[str] = []
-    for item in discovery:
-        if not isinstance(item, dict) or item.get("kind") != "file":
-            continue
-        rel_any = item.get("relative_path")
-        if not isinstance(rel_any, str):
-            continue
-        rel = _normalize_relative_path(rel_path=rel_any, source_prefix=source_prefix)
-        parent = str(PurePosixPath(rel).parent)
-        parent = "" if parent == "." else parent
-        if parent != source_relative_path:
-            continue
-        entries.append(rel)
-
-    named: list[dict[str, str]] = []
-    generic: list[dict[str, str]] = []
-    embedded: list[str] = []
-    lower_named = {name.lower() for name in _FILE_COVER_NAMES}
-    for rel in sorted(entries):
-        name = PurePosixPath(rel).name
-        lower_name = name.lower()
-        candidate = {
-            "source_relative_path": source_relative_path,
-            "root_name": root_name,
-        }
-        if lower_name in lower_named:
-            named.append(
-                {
-                    **candidate,
-                    "kind": "file",
-                    "candidate_id": f"file:{lower_name}",
-                    "apply_mode": "copy",
-                    "path": rel,
-                    "mime_type": plugin.resolve_cover_mime(path=Path(name)),
-                    "cache_key": f"file:{lower_name}",
-                }
-            )
-            continue
-        if lower_name.endswith(_GENERIC_COVER_SUFFIXES):
-            generic.append(
-                {
-                    **candidate,
-                    "kind": "file",
-                    "candidate_id": f"file:{lower_name}",
-                    "apply_mode": "copy",
-                    "path": rel,
-                    "mime_type": plugin.resolve_cover_mime(path=Path(name)),
-                    "cache_key": f"file:{lower_name}",
-                }
-            )
-            continue
-        if lower_name.endswith(tuple(_EMBEDDED_SUFFIXES)):
-            embedded.append(rel)
-
-    candidates = [*named, *generic]
-    if embedded:
-        first_audio = embedded[0]
-        audio_name = PurePosixPath(first_audio).name
-        candidates.append(
-            {
-                "source_relative_path": source_relative_path,
-                "root_name": root_name,
-                "kind": "embedded",
-                "candidate_id": f"embedded:{audio_name}",
-                "apply_mode": "extract_embedded",
-                "path": first_audio,
-                "mime_type": "image/jpeg",
-                "cache_key": f"embedded:{audio_name.lower()}",
-            }
+    candidates = plugin.discover_cover_candidates(
+        source_directory,
+        audio_file=_first_audio_source(source_directory),
+        group_root=root_name,
+    )
+    return [
+        _canonicalize_candidate(
+            candidate=dict(candidate),
+            root_dir=root_dir,
+            source_relative_path=source_relative_path,
+            root_name=root_name,
         )
-    return candidates
+        for candidate in candidates
+        if isinstance(candidate, dict)
+    ]
 
 
 def _default_choice(candidates: list[dict[str, str]], selected_paths: list[str]) -> dict[str, str]:
@@ -202,6 +206,7 @@ def build_phase1_cover_projection(
     source_projection: dict[str, Any],
     state: dict[str, Any],
 ) -> dict[str, Any]:
+    del discovery
     selected_paths = _selected_paths(source_projection)
     source_prefix = (
         str(state.get("source", {}).get("relative_path") or "").replace("\\", "/").strip("/")
@@ -211,10 +216,10 @@ def build_phase1_cover_projection(
         {
             "source_relative_path": source_relative_path,
             "candidates": _candidate_entries(
-                discovery=discovery,
                 source_relative_path=source_relative_path,
                 source_prefix=source_prefix,
                 root_name=root_name,
+                state=state,
             ),
         }
         for source_relative_path in selected_paths

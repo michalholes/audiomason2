@@ -163,6 +163,10 @@ def create_session_impl(
             },
         )
         loaded_state = _ensure_session_state_fields(loaded_state)
+        loaded_source = loaded_state.get("source")
+        loaded_source_dict = dict(loaded_source) if isinstance(loaded_source, dict) else {}
+        loaded_source_dict["root_dir"] = str(engine._fs.root_dir(RootName(root)))
+        loaded_state["source"] = loaded_source_dict
 
         # Snapshot artifacts are immutable (spec 10.9). Resume MUST NOT modify them.
         # However, state.json is allowed to track the runtime-effective model fingerprint
@@ -248,7 +252,11 @@ def create_session_impl(
         "model_fingerprint": model_fingerprint,
         "phase": 1,
         "mode": mode,
-        "source": {"root": root, "relative_path": relative_path},
+        "source": {
+            "root": root,
+            "relative_path": relative_path,
+            "root_dir": str(engine._fs.root_dir(RootName(root))),
+        },
         "current_step_id": start_step_id,
         "cursor": {"step_id": start_step_id},
         "completed_step_ids": [],
