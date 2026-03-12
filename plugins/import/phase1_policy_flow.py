@@ -14,6 +14,7 @@ DEFAULT_AUDIO_POLICY = {
     "split_chapters": False,
 }
 DEFAULT_PARALLELISM = {"workers": 1}
+_ROOT_AUDIO_BASELINE = {"author": "__ROOT_AUDIO__", "title": "Untitled"}
 
 
 def _answer_dict(state: dict[str, Any], key: str) -> dict[str, Any]:
@@ -21,6 +22,21 @@ def _answer_dict(state: dict[str, Any], key: str) -> dict[str, Any]:
     answers = dict(answers_any) if isinstance(answers_any, dict) else {}
     value = answers.get(key)
     return dict(value) if isinstance(value, dict) else {}
+
+
+def _normalize_clean_inbox(answer: dict[str, Any]) -> str:
+    clean_inbox = str(answer.get("clean_inbox") or "").strip().lower()
+    if clean_inbox in {"ask", "yes", "no"}:
+        return clean_inbox
+    enabled = answer.get("enabled")
+    if isinstance(enabled, bool):
+        return "yes" if enabled else "no"
+    mode = str(answer.get("mode") or "").strip().lower()
+    if mode in {"ask", "delete", "drop", "remove"}:
+        return "yes" if mode in {"delete", "drop", "remove"} else "ask"
+    if mode in {"keep", "no"}:
+        return "no"
+    return "ask"
 
 
 def build_phase1_policy_projection(
@@ -44,8 +60,19 @@ def build_phase1_policy_projection(
     publish_policy = {"target_root": target_root}
     publish_policy.update(_answer_dict(state, "publish_policy"))
 
-    delete_source_policy = {"enabled": False, "mode": "keep"}
-    delete_source_policy.update(_answer_dict(state, "delete_source_policy"))
+    delete_source_answer = _answer_dict(state, "delete_source_policy")
+    clean_inbox = _normalize_clean_inbox(delete_source_answer)
+    delete_source_policy = {
+        "clean_inbox": clean_inbox,
+        "enabled": clean_inbox == "yes",
+        "mode": "delete" if clean_inbox == "yes" else ("keep" if clean_inbox == "no" else "ask"),
+    }
+    delete_source_policy.update(delete_source_answer)
+    delete_source_policy["clean_inbox"] = clean_inbox
+    delete_source_policy["enabled"] = clean_inbox == "yes"
+    delete_source_policy["mode"] = (
+        "delete" if clean_inbox == "yes" else ("keep" if clean_inbox == "no" else "ask")
+    )
 
     parallelism = deepcopy(DEFAULT_PARALLELISM)
     parallelism.update(_answer_dict(state, "parallelism"))
@@ -56,9 +83,10 @@ def build_phase1_policy_projection(
         "publish_policy": publish_policy,
         "delete_source_policy": delete_source_policy,
         "parallelism": parallelism,
-        "clean_inbox": bool(delete_source_policy.get("enabled", False)),
+        "clean_inbox": clean_inbox,
         "skip_processed_books": str(conflict_policy.get("mode") or "ask") == "skip",
         "root_audio_baseline": {
+            **_ROOT_AUDIO_BASELINE,
             "target_root": str(publish_policy.get("target_root") or target_root),
             "selected_books": selected_count,
         },

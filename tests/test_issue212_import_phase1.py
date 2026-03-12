@@ -99,6 +99,9 @@ def test_session_state_min_fields_and_answers_are_canonical(tmp_path: Path) -> N
     ]:
         assert key in state
 
+    assert state["vars"]["phase1"]["policy"]["clean_inbox"] == "ask"
+    assert state["vars"]["phase1"]["policy"]["root_audio_baseline"]["title"] == "Untitled"
+
     session_id = str(state["session_id"])
 
     # select_authors updates answers and selected_author_ids.

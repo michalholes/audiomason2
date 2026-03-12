@@ -140,10 +140,21 @@ _DEFAULT_WIZARD_DEFINITION_V3: dict[str, Any] = {
                 "inputs": {
                     "label": "Covers policy",
                     "prompt": "Review the covers policy payload",
-                    "help": "Edit JSON to control embedded, skip, or URL-based cover handling.",
+                    "help": (
+                        "Edit JSON to control explicit cover candidates, "
+                        "skip, or URL-based handling."
+                    ),
                     "examples": [
-                        {"mode": "embedded", "url": ""},
-                        {"mode": "skip", "url": ""},
+                        {
+                            "choice": {
+                                "kind": "candidate",
+                                "candidate_id": "embedded:track01.mp3",
+                                "source_relative_path": "Author A/Book A",
+                            },
+                            "mode": "embedded",
+                            "url": "",
+                        },
+                        {"choice": {"kind": "skip"}, "mode": "skip", "url": ""},
                     ],
                     "default_expr": {"expr": "$.state.vars.phase1.runtime.covers_policy"},
                     "prefill_expr": {"expr": "$.state.vars.phase1.runtime.covers_policy"},
@@ -232,8 +243,12 @@ _DEFAULT_WIZARD_DEFINITION_V3: dict[str, Any] = {
                 "inputs": {
                     "label": "Delete source policy",
                     "prompt": "Review the delete-source policy payload",
-                    "help": "Edit JSON to control clean-inbox behavior after publish.",
-                    "examples": [{"enabled": False, "mode": "keep"}],
+                    "help": "Edit JSON to control the run-level clean_inbox ask|yes|no decision.",
+                    "examples": [
+                        {"clean_inbox": "ask", "enabled": False, "mode": "ask"},
+                        {"clean_inbox": "yes", "enabled": True, "mode": "delete"},
+                        {"clean_inbox": "no", "enabled": False, "mode": "keep"},
+                    ],
                     "default_expr": {"expr": "$.state.vars.phase1.runtime.delete_source_policy"},
                     "prefill_expr": {"expr": "$.state.vars.phase1.runtime.delete_source_policy"},
                 },

@@ -91,5 +91,6 @@ def test_cli_import_uses_bootstrapped_v3_default_program(tmp_path: Path) -> None
     assert "Label: Authors" in joined
     assert "Step: select_books" in joined
     assert "Step: effective_author_title" in joined
+    assert "Step: covers_policy" in joined
     assert "Step: final_summary_confirm" in joined
     assert '"status": "completed"' in joined

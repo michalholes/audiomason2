@@ -117,6 +117,50 @@ def test_load_state_repairs_missing_phase1_projection_on_resume(tmp_path: Path) 
     assert repaired["vars"]["phase1"]["select_books"]["selection_expr"] == "1"
 
 
+def test_create_session_uses_metadata_validation_and_explicit_cover_choice(
+    monkeypatch, tmp_path: Path
+) -> None:
+    engine, roots = _make_engine(tmp_path)
+    _write_book(roots["inbox"], "A", "Book")
+
+    phase1_metadata = import_module("plugins.import.phase1_metadata_flow")
+
+    def _fake_validate(author: str, title: str) -> tuple[dict[str, object], str, str]:
+        assert author == "A"
+        assert title == "Book"
+        return (
+            {
+                "provider": "metadata_openlibrary",
+                "author": {"valid": False, "canonical": None, "suggestion": "Author A"},
+                "book": {
+                    "valid": False,
+                    "canonical": None,
+                    "suggestion": {"author": "Author A", "title": "Canonical Book"},
+                },
+            },
+            "Author A",
+            "Canonical Book",
+        )
+
+    monkeypatch.setattr(phase1_metadata, "_validated_author_title", _fake_validate)
+
+    state = engine.create_session("inbox", "", mode="stage")
+
+    assert state["vars"]["phase1"]["metadata"]["validation"]["provider"] == "metadata_openlibrary"
+    assert state["vars"]["phase1"]["runtime"]["effective_author_title"] == {
+        "author": "Author A",
+        "title": "Canonical Book",
+    }
+    assert state["vars"]["phase1"]["cover"]["choice"] == {
+        "kind": "candidate",
+        "candidate_id": "embedded:track01.mp3",
+        "source_relative_path": "A/Book",
+    }
+    assert state["vars"]["phase1"]["runtime"]["covers_policy"]["candidates"][0]["candidate_id"] == (
+        "embedded:track01.mp3"
+    )
+
+
 def test_default_v3_phase1_runtime_step_uses_flow_visible_runtime_projection() -> None:
     definition = build_default_wizard_definition_v3()
     phase1_node = next(

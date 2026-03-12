@@ -93,6 +93,14 @@ def test_default_v3_cli_acceptance_keeps_selection_and_plan_state(tmp_path: Path
     assert state["computed"]["plan_summary"]["files"] == 1
     assert plan["summary"]["selected_books"] == 1
     assert state["vars"]["phase1"]["runtime"]["covers_policy"]["mode"] == "embedded"
+    assert state["vars"]["phase1"]["runtime"]["covers_policy"]["choice"] == {
+        "kind": "candidate",
+        "candidate_id": "embedded:track01.mp3",
+        "source_relative_path": "Author A/Book A",
+    }
+    assert state["vars"]["phase1"]["policy"]["clean_inbox"] == "ask"
+    assert state["vars"]["phase1"]["policy"]["root_audio_baseline"]["author"] == "__ROOT_AUDIO__"
+    assert state["vars"]["phase1"]["policy"]["root_audio_baseline"]["title"] == "Untitled"
     assert [entry["step_id"] for entry in state["trace"]] == [
         "select_authors",
         "select_books",

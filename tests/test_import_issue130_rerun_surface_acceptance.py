@@ -140,7 +140,7 @@ def test_rerun_and_resume_read_session_finalize_surface_only(tmp_path: Path) -> 
             ),
             "processing_log": f"wizards:import/sessions/{session_id}/finalize/processing_log.jsonl",
         },
-        "counts": {"books": 1, "capabilities": 4},
+        "counts": {"books": 1, "capabilities": 3},
         "status": "succeeded",
     }
 

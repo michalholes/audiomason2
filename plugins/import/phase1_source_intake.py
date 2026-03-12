@@ -242,6 +242,7 @@ def build_phase1_projection(
         state=state,
     )
     cover_projection = build_phase1_cover_projection(
+        discovery=discovery,
         source_projection=source_projection,
         state=state,
     )
@@ -253,6 +254,30 @@ def build_phase1_projection(
         "covers_policy": {
             "mode": str(cover_projection.get("mode") or "skip"),
             "url": str(cover_projection.get("url") or ""),
+            "choice": dict(cover_projection.get("choice") or {}),
+            "candidates": [
+                dict(item)
+                for item in cover_projection.get("candidates", [])
+                if isinstance(item, dict)
+            ],
+            "sources": [
+                {
+                    "source_relative_path": str(item.get("source_relative_path") or ""),
+                    "candidates": [
+                        dict(candidate)
+                        for candidate in item.get("candidates", [])
+                        if isinstance(candidate, dict)
+                    ],
+                }
+                for item in cover_projection.get("sources", [])
+                if isinstance(item, dict)
+            ],
+            "selected_source_relative_paths": [
+                str(item)
+                for item in cover_projection.get("selected_source_relative_paths", [])
+                if isinstance(item, str)
+            ],
+            "has_single_candidate": bool(cover_projection.get("has_single_candidate", False)),
         },
         "id3_policy": {
             "field_map": dict(metadata_projection.get("field_map") or {}),
@@ -273,7 +298,7 @@ def build_phase1_projection(
         "parallelism": dict(policy_projection.get("parallelism") or {}),
         "normalized_author": str(metadata_projection.get("normalize_author") or ""),
         "normalized_book_title": str(metadata_projection.get("normalize_book_title") or ""),
-        "clean_inbox": bool(policy_projection.get("clean_inbox", False)),
+        "clean_inbox": str(policy_projection.get("clean_inbox") or "ask"),
         "skip_processed_books": bool(policy_projection.get("skip_processed_books", True)),
         "root_audio_baseline": dict(policy_projection.get("root_audio_baseline") or {}),
         "two_pass_order": list(policy_projection.get("two_pass_order") or []),
