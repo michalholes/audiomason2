@@ -247,6 +247,7 @@ Before sending:
 2.  Patch MUST apply cleanly (`git apply --check`).
 3.  Modified files MUST compile (`python -m compileall` minimum).
 3a. Modified JavaScript files MUST pass a syntax check. For each modified file with extension .js, .mjs, or .cjs, the chat MUST run:  node --check <file>
+3b. Modified tests of pytest MUST pass.
 4.  Patch MUST not introduce new dependencies without explicit approval.
 5.  Patch MUST not introduce Monolith gate violations, except that
     this requirement does NOT apply to patching of .md and .json
@@ -534,6 +535,7 @@ For repair patches, the chat MUST provide evidence of:
 
 1.  `git apply --check` success per file
 2.  `python -m compileall` success (at least modified files)
+2.  all pytest tests
 3.  validator evidence as defined in PM patch validator (HARD)
 
 If evidence is not shown, the chat MUST NOT claim patch was tested.
