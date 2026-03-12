@@ -2,7 +2,7 @@
 
 Status: normative
 
-Specification Version: 0.3.3
+Specification Version: 0.3.4
 
 This document is the authoritative specification for the BadGuys suite shipped in this repository.
 BadGuys exists to systematically break the AM Patch Runner and verify that it FAILs correctly.
@@ -44,6 +44,21 @@ Coverage rules (normative):
   document before related coverage is claimed.
 - Capability-based coverage does not require enumerating every flag
   combination or every policy permutation.
+
+### 1.1.1 Expensive gate coverage discipline
+
+- For expensive runner gate families whose execution cost can dominate suite
+  runtime, BadGuys MUST prefer one explicit normative sentinel path over
+  repeated incidental triggering in unrelated tests.
+- When BadGuys claims coverage for the pytest gate family in G3, it MUST
+  provide at least one dedicated test whose central evaluation proves that the
+  pytest gate executed.
+- The dedicated pytest path MUST constrain runner pytest scope to a targeted
+  repo-relative test file rather than the full default tests target set.
+- Tests whose primary assertion is not pytest coverage MUST NOT rely on
+  incidental pytest execution for correctness claims. When such a test would
+  otherwise trigger pytest only as a side effect, its runner invocation SHOULD
+  pass --skip-pytest.
 
 ## 2. Terminology
 
