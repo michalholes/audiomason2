@@ -14,6 +14,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from badguys.bdg_ops_ipc import runner_socket_name
+
 
 @dataclass(frozen=True)
 class SuiteCfg:
@@ -299,6 +301,12 @@ def _cleanup_issue_artifacts(ctx: Ctx, *, issue_id: str, test_id: str | None) ->
     ):
         _log(ctx, level="verbose", test_id=test_id, obj={"type": "cleanup_glob", "pattern": pat})
         _rm_glob(pat)
+
+    socket_name = runner_socket_name(argv=ctx.cfg.runner_cmd, issue_id=issue_id)
+    socket_path = ctx.cfg.patches_dir / socket_name
+    _log(ctx, level="verbose", test_id=test_id, obj={"type": "cleanup", "path": str(socket_path)})
+    with contextlib.suppress(FileNotFoundError):
+        socket_path.unlink()
 
 
 def _load_eval_rules(repo_root: Path, config_path: Path) -> dict:
