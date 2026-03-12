@@ -38,11 +38,37 @@ def test_build_job_requests_uses_phase1_authority_without_path_fallback() -> Non
                 }
             },
             "phase2_inputs": {
-                "covers_policy": {"mode": "embedded"},
+                "covers_policy": {
+                    "mode": "file",
+                    "choice": {
+                        "kind": "candidate",
+                        "candidate_id": "file:cover.jpg",
+                        "source_relative_path": "Shelf/Disc-01",
+                    },
+                    "sources": [
+                        {
+                            "source_relative_path": "Shelf/Disc-01",
+                            "candidates": [
+                                {
+                                    "kind": "file",
+                                    "candidate_id": "file:cover.jpg",
+                                    "apply_mode": "copy",
+                                    "path": "Shelf/Disc-01/cover.jpg",
+                                    "mime_type": "image/jpeg",
+                                    "cache_key": "file:cover.jpg",
+                                    "source_relative_path": "Shelf/Disc-01",
+                                }
+                            ],
+                        }
+                    ],
+                },
                 "conflict_policy": {"mode": "overwrite"},
                 "delete_source_policy": {"enabled": True},
                 "publish_policy": {"target_root": "outbox"},
-                "id3_policy": {"track_start": 7},
+                "id3_policy": {
+                    "field_map": {"title": "album", "artist": "album_artist"},
+                    "track_start": 7,
+                },
             },
             "runtime": {
                 "effective_author_title": {
@@ -64,11 +90,15 @@ def test_build_job_requests_uses_phase1_authority_without_path_fallback() -> Non
         "source.delete",
     ]
     assert [cap["order"] for cap in capabilities] == [10, 20, 30, 40, 50]
+    assert capabilities[1]["choice"] == {
+        "kind": "candidate",
+        "candidate_id": "file:cover.jpg",
+        "source_relative_path": "Shelf/Disc-01",
+    }
+    assert capabilities[1]["candidate"]["path"] == "Shelf/Disc-01/cover.jpg"
     assert capabilities[2]["field_map"] == {
-        "title": "book_title",
-        "artist": "author",
-        "album": "book_title",
-        "album_artist": "author",
+        "title": "album",
+        "artist": "album_artist",
     }
     assert capabilities[2]["values"] == {
         "title": "Canonical Book",
@@ -88,10 +118,8 @@ def test_build_job_requests_uses_phase1_authority_without_path_fallback() -> Non
         },
         "metadata_tags": {
             "field_map": {
-                "title": "book_title",
-                "artist": "author",
-                "album": "book_title",
-                "album_artist": "author",
+                "title": "album",
+                "artist": "album_artist",
             },
             "values": {
                 "title": "Canonical Book",

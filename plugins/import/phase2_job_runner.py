@@ -103,6 +103,7 @@ async def _run_audio_import(
     *,
     plugin_loader: Any,
     source_path: Path,
+    source_root_dir: Path,
     work_path: Path,
     capability: dict[str, Any],
 ) -> None:
@@ -148,10 +149,23 @@ async def _run_audio_import(
                 setattr(plugin, key, value)
 
 
+def _resolved_cover_candidate(
+    *,
+    candidate: dict[str, Any],
+    source_root_dir: Path,
+) -> dict[str, Any]:
+    resolved = dict(candidate)
+    path_text = str(resolved.get("path") or "")
+    if path_text and not Path(path_text).is_absolute():
+        resolved["path"] = str(source_root_dir / normalize_relative_path(path_text))
+    return resolved
+
+
 async def _run_cover_embed(
     *,
     plugin_loader: Any,
     source_path: Path,
+    source_root_dir: Path,
     work_path: Path,
     capability: dict[str, Any],
 ) -> None:
@@ -162,16 +176,17 @@ async def _run_cover_embed(
 
     cover_path: Path | None = None
     if mode in {"file", "embedded"}:
-        directory = _source_directory(source_path)
-        audio_file = _first_audio_source(source_path)
-        candidates = plugin.discover_cover_candidates(directory, audio_file=audio_file)
-        desired_kind = "file" if mode == "file" else "embedded"
-        candidate = next(
-            (item for item in candidates if str(item.get("kind") or "") == desired_kind),
-            None,
-        )
-        if candidate is not None:
-            cover_path = await plugin.apply_cover_candidate(candidate, output_dir=work_path)
+        candidate_any = capability.get("candidate")
+        candidate = dict(candidate_any) if isinstance(candidate_any, dict) else {}
+        if candidate:
+            resolved_candidate = _resolved_cover_candidate(
+                candidate=candidate,
+                source_root_dir=source_root_dir,
+            )
+            cover_path = await plugin.apply_cover_candidate(
+                resolved_candidate,
+                output_dir=work_path,
+            )
     elif mode == "url":
         url = str(capability.get("url") or "")
         if url:
@@ -310,6 +325,7 @@ async def run_phase2_job_requests(
                 await _run_audio_import(
                     plugin_loader=plugin_loader,
                     source_path=source_path,
+                    source_root_dir=fs.root_dir(source_root),
                     work_path=work_path,
                     capability=capability,
                 )
@@ -318,6 +334,7 @@ async def run_phase2_job_requests(
                 await _run_cover_embed(
                     plugin_loader=plugin_loader,
                     source_path=source_path,
+                    source_root_dir=fs.root_dir(source_root),
                     work_path=work_path,
                     capability=capability,
                 )

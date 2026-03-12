@@ -48,15 +48,7 @@ class _FakeCoverHandler:
         *,
         audio_file: Path | None = None,
     ) -> list[dict[str, str]]:
-        self.calls.append("cover.discover")
-        return [
-            {
-                "kind": "file",
-                "candidate_id": "file:cover.jpg",
-                "apply_mode": "copy",
-                "path": str(directory / "cover.jpg"),
-            }
-        ]
+        raise AssertionError("runner must not rediscover cover candidates")
 
     async def apply_cover_candidate(
         self,
@@ -64,7 +56,7 @@ class _FakeCoverHandler:
         *,
         output_dir: Path | None = None,
     ) -> Path | None:
-        self.calls.append("cover.apply")
+        self.calls.append(f"cover.apply:{candidate.get('candidate_id')}")
         if output_dir is None:
             return Path(str(candidate["path"]))
         output = output_dir / "cover.jpg"
@@ -179,8 +171,8 @@ async def test_import_plugin_runs_phase2_process_contract_from_job_requests(tmp_
                     },
                     "metadata_tags": {
                         "field_map": {
-                            "title": "book_title",
-                            "artist": "author",
+                            "title": "album",
+                            "artist": "album_artist",
                         },
                         "values": {
                             "title": "Canonical Book",
@@ -194,13 +186,29 @@ async def test_import_plugin_runs_phase2_process_contract_from_job_requests(tmp_
                 },
                 "capabilities": [
                     {"kind": "audio.import", "order": 10, "options": {}},
-                    {"kind": "cover.embed", "order": 20, "mode": "file"},
+                    {
+                        "kind": "cover.embed",
+                        "order": 20,
+                        "mode": "file",
+                        "choice": {
+                            "kind": "candidate",
+                            "candidate_id": "file:cover.jpg",
+                            "source_relative_path": "Shelf/RawBook",
+                        },
+                        "candidate": {
+                            "kind": "file",
+                            "candidate_id": "file:cover.jpg",
+                            "apply_mode": "copy",
+                            "path": "Shelf/RawBook/cover.jpg",
+                            "source_relative_path": "Shelf/RawBook",
+                        },
+                    },
                     {
                         "kind": "metadata.tags",
                         "order": 30,
                         "field_map": {
-                            "title": "book_title",
-                            "artist": "author",
+                            "title": "album",
+                            "artist": "album_artist",
                         },
                         "values": {
                             "title": "Canonical Book",
@@ -233,8 +241,7 @@ async def test_import_plugin_runs_phase2_process_contract_from_job_requests(tmp_
     assert calls == [
         "audio.plan:track01.m4a",
         "audio.exec:track01.mp3",
-        "cover.discover",
-        "cover.apply",
+        "cover.apply:file:cover.jpg",
         "cover.convert",
         "cover.embed",
         "tags.write:track01.mp3:Canonical Book:Canonical Author:7",

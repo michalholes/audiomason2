@@ -11,13 +11,6 @@ from typing import Any
 
 from .fingerprints import fingerprint_json
 
-_METADATA_FIELD_MAP = {
-    "title": "book_title",
-    "artist": "author",
-    "album": "book_title",
-    "album_artist": "author",
-}
-
 
 def _policy_dict(inputs: dict[str, Any], key: str) -> dict[str, Any]:
     value = inputs.get(key)
@@ -48,6 +41,91 @@ def _tag_values_for_action(
     return {key: value for key, value in values.items() if value}
 
 
+def _string_dict(value: Any) -> dict[str, str]:
+    if not isinstance(value, dict):
+        return {}
+    out: dict[str, str] = {}
+    for key, item in value.items():
+        key_text = str(key)
+        item_text = str(item) if isinstance(item, str) else ""
+        if key_text and item_text:
+            out[key_text] = item_text
+    return out
+
+
+def _metadata_field_map(inputs: dict[str, Any]) -> dict[str, str]:
+    id3_policy = _policy_dict(inputs, "id3_policy")
+    return _string_dict(id3_policy.get("field_map"))
+
+
+def _cover_choice(inputs: dict[str, Any]) -> dict[str, str]:
+    covers_policy = _policy_dict(inputs, "covers_policy")
+    choice_any = covers_policy.get("choice")
+    choice = dict(choice_any) if isinstance(choice_any, dict) else {}
+    kind = str(choice.get("kind") or covers_policy.get("mode") or "skip")
+    if kind == "url":
+        url = str(choice.get("url") or covers_policy.get("url") or "")
+        return {"kind": "url", "url": url} if url else {"kind": "skip"}
+    if kind != "candidate":
+        return {"kind": "skip"}
+    return {
+        "kind": "candidate",
+        "candidate_id": str(choice.get("candidate_id") or covers_policy.get("candidate_id") or ""),
+        "source_relative_path": str(
+            choice.get("source_relative_path") or covers_policy.get("source_relative_path") or ""
+        ),
+    }
+
+
+def _cover_candidate_for_action(
+    *,
+    inputs: dict[str, Any],
+    source_relative_path: str,
+) -> dict[str, str] | None:
+    choice = _cover_choice(inputs)
+    if choice.get("kind") != "candidate":
+        return None
+    if choice.get("source_relative_path") != source_relative_path:
+        return None
+
+    covers_policy = _policy_dict(inputs, "covers_policy")
+    sources_any = covers_policy.get("sources")
+    sources = sources_any if isinstance(sources_any, list) else []
+    for source in sources:
+        if not isinstance(source, dict):
+            continue
+        if str(source.get("source_relative_path") or "") != source_relative_path:
+            continue
+        candidates_any = source.get("candidates")
+        candidates = candidates_any if isinstance(candidates_any, list) else []
+        for candidate in candidates:
+            if not isinstance(candidate, dict):
+                continue
+            if str(candidate.get("candidate_id") or "") != choice.get("candidate_id"):
+                continue
+            return {
+                key: str(value)
+                for key, value in candidate.items()
+                if isinstance(key, str) and isinstance(value, str) and value
+            }
+
+    candidates_any = covers_policy.get("candidates")
+    candidates = candidates_any if isinstance(candidates_any, list) else []
+    for candidate in candidates:
+        if not isinstance(candidate, dict):
+            continue
+        if str(candidate.get("candidate_id") or "") != choice.get("candidate_id"):
+            continue
+        if str(candidate.get("source_relative_path") or "") != source_relative_path:
+            continue
+        return {
+            key: str(value)
+            for key, value in candidate.items()
+            if isinstance(key, str) and isinstance(value, str) and value
+        }
+    return None
+
+
 def _track_start_value(inputs: dict[str, Any]) -> int | None:
     id3_policy = _policy_dict(inputs, "id3_policy")
     value = id3_policy.get("track_start")
@@ -60,6 +138,7 @@ def _track_start_value(inputs: dict[str, Any]) -> int | None:
 def _action_authority(
     *,
     book_meta: dict[str, Any] | None,
+    field_map: dict[str, str],
     tag_values: dict[str, str],
     target_root: str,
     target_relative_path: str,
@@ -67,7 +146,7 @@ def _action_authority(
 ) -> dict[str, Any]:
     book = dict(book_meta) if isinstance(book_meta, dict) else {}
     metadata_tags: dict[str, Any] = {
-        "field_map": dict(_METADATA_FIELD_MAP),
+        "field_map": dict(field_map),
         "values": dict(tag_values),
     }
     if track_start is not None:
@@ -89,6 +168,7 @@ def _build_capabilities(
     target_root: str,
     target_relative_path: str,
     inputs: dict[str, Any],
+    field_map: dict[str, str],
     tag_values: dict[str, str],
     track_start: int | None,
 ) -> list[dict[str, Any]]:
@@ -97,7 +177,14 @@ def _build_capabilities(
     conflict_policy = _policy_dict(inputs, "conflict_policy")
     delete_policy = _policy_dict(inputs, "delete_source_policy")
 
-    cover_mode = str(covers_policy.get("mode") or "skip")
+    cover_choice = _cover_choice(inputs)
+    cover_candidate = _cover_candidate_for_action(
+        inputs=inputs,
+        source_relative_path=source_relative_path,
+    )
+    cover_mode = str(cover_choice.get("kind") or "skip")
+    if cover_mode == "candidate":
+        cover_mode = str(cover_candidate.get("kind") or "skip") if cover_candidate else "skip"
     conflict_mode = str(conflict_policy.get("mode") or "ask")
 
     capabilities: list[dict[str, Any]] = [
@@ -118,8 +205,11 @@ def _build_capabilities(
             "order": 20,
             "plugin": "cover_handler",
             "mode": cover_mode,
+            "choice": dict(cover_choice),
         }
-        cover_url = str(covers_policy.get("url") or "")
+        if cover_candidate is not None:
+            cover_cap["candidate"] = dict(cover_candidate)
+        cover_url = str(cover_choice.get("url") or covers_policy.get("url") or "")
         if cover_url:
             cover_cap["url"] = cover_url
         capabilities.append(cover_cap)
@@ -128,7 +218,7 @@ def _build_capabilities(
         "kind": "metadata.tags",
         "order": 30,
         "plugin": "id3_tagger",
-        "field_map": dict(_METADATA_FIELD_MAP),
+        "field_map": dict(field_map),
         "values": tag_values,
         "wipe_before_write": True,
         "preserve_cover": True,
@@ -198,6 +288,7 @@ def build_job_requests(
         target_root = "stage" if mode == "stage" else "outbox"
     book_meta_any = authority.get("book_meta")
     book_meta = dict(book_meta_any) if isinstance(book_meta_any, dict) else {}
+    field_map = _metadata_field_map(phase2_inputs)
     track_start = _track_start_value(phase2_inputs)
     selected_book_meta: dict[str, dict[str, Any]] = {}
     for it in selected_any:
@@ -223,6 +314,7 @@ def build_job_requests(
                 "target": {"root": target_root, "relative_path": tgt_rel},
                 "authority": _action_authority(
                     book_meta=authority_meta,
+                    field_map=field_map,
                     tag_values=tag_values,
                     target_root=target_root,
                     target_relative_path=tgt_rel,
@@ -234,6 +326,7 @@ def build_job_requests(
                     target_root=target_root,
                     target_relative_path=tgt_rel,
                     inputs=phase2_inputs,
+                    field_map=field_map,
                     tag_values=tag_values,
                     track_start=track_start,
                 ),
