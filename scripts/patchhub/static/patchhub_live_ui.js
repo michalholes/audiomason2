@@ -77,9 +77,31 @@
 		return liveLevel;
 	}
 
+	function isDebugHumanLevel() {
+		return liveLevel === "debug_human";
+	}
+
+	function isDebugRawLevel() {
+		return liveLevel === "debug_raw";
+	}
+
+	function isDebugLevel() {
+		return isDebugHumanLevel() || isDebugRawLevel();
+	}
+
 	function setLiveLevel(v) {
 		v = String(v || "").trim();
-		if (["quiet", "normal", "warning", "verbose", "debug"].indexOf(v) < 0) {
+		if (v === "debug") v = "debug_raw";
+		if (
+			[
+				"quiet",
+				"normal",
+				"warning",
+				"verbose",
+				"debug_human",
+				"debug_raw",
+			].indexOf(v) < 0
+		) {
 			v = "normal";
 		}
 		liveLevel = v;
@@ -313,26 +335,29 @@
 
 	function filterLiveEvent(ev) {
 		if (!ev) return false;
+		if (isDebugLevel()) return true;
+
 		var t = String(ev.type || "");
 		if (t === "result") return true;
-		if (t === "hello") return liveLevel === "debug";
-		if (t !== "log") return liveLevel === "debug";
+		if (t !== "log") return false;
 
 		if (ev.bypass === true) return true;
 
 		var ch = String(ev.ch || "");
 		var sev = String(ev.sev || "");
+		var kind = String(ev.kind || "");
 		var summary = ev.summary === true;
 
-		if (liveLevel === "quiet") return summary;
-		if (liveLevel === "debug") return true;
-
+		if (summary || sev === "ERROR") return true;
+		if (liveLevel === "quiet") return false;
 		if (ch === "CORE") return true;
-
 		if (liveLevel === "normal") return false;
-
-		if (liveLevel === "warning") return ch === "DETAIL" && sev === "WARNING";
+		if (liveLevel === "warning") {
+			return ch === "DETAIL" && sev === "WARNING";
+		}
 		if (liveLevel === "verbose") {
+			if (kind === "SUBPROCESS_STDOUT" || kind === "SUBPROCESS_STDERR")
+				return true;
 			if (ch !== "DETAIL") return false;
 			return sev === "WARNING" || sev === "INFO";
 		}
@@ -348,6 +373,8 @@
 	}
 
 	function formatLiveEvent(ev) {
+		if (isDebugRawLevel()) return compactJson(ev);
+
 		var t = String(ev.type || "");
 		if (t === "hello") {
 			return (
@@ -373,24 +400,7 @@
 			return `CONTROL event=${String(ev.event || "")} ${compactJson(ev)}`;
 		}
 
-		var showPrefixes = liveLevel === "debug";
-		var line = "";
-
-		if (showPrefixes) {
-			const parts = [];
-			const stage = String(ev.stage || "");
-			const kind = String(ev.kind || "");
-			const sev = String(ev.sev || "");
-			const msg = String(ev.msg || "");
-			if (stage) parts.push(stage);
-			if (kind) parts.push(kind);
-			if (sev) parts.push(sev);
-			parts.push(msg);
-			line = parts.join(" | ");
-		} else {
-			line = String(ev.msg || "");
-		}
-
+		var line = String(ev.msg || "");
 		if (!line) {
 			line = `JSON ${compactJson(ev)}`;
 		}

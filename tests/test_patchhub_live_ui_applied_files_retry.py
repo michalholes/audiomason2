@@ -166,7 +166,7 @@ def test_end_event_replaces_stale_running_summary() -> None:
     result = _run_node_scenario(
         """
 ui.saveLiveJobId("job-720");
-ui.setLiveLevel("debug");
+ui.setLiveLevel("debug_human");
 ui.openLiveStream("job-720");
 __lastEventSource.onmessage({
   data: JSON.stringify({
