@@ -218,7 +218,6 @@
 		el("parse").addEventListener("click", parseCmd);
 
 		refreshDiag();
-		refreshTail();
 		loadClientStatus();
 		setInterval(loadClientStatus, 1000);
 	}

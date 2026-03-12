@@ -305,7 +305,6 @@ function fallbackStartAppWireInit() {
 	fallbackLoadConfig().then(() => {
 		refreshFs();
 		fallbackRefreshOverviewSnapshot();
-		fallbackRefreshTail(tailLines);
 		fallbackValidateAndPreview();
 	});
 }

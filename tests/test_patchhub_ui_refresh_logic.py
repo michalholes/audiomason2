@@ -39,13 +39,13 @@ def test_hidden_active_keeps_active_orchestration_paths() -> None:
     assert 'PH.call("hasTrackedActiveJob") || document.hidden' in snapshot_src
 
 
-def test_live_progress_prefers_stream_with_tail_fallback() -> None:
+def test_live_progress_stays_on_structured_stream_sources() -> None:
     progress_src = _read("scripts/patchhub/static/patchhub_progress_ui.js")
     assert 'String(ev.event || "") === "stream_end"' in progress_src
-    assert "function updateProgressPanelFromTailText(text, opts)" in progress_src
+    assert "function updateProgressPanelFromTailText(text, opts)" not in progress_src
 
     runs_src = _read("scripts/patchhub/static/app_part_runs.js")
-    assert 'phCall("updateProgressPanelFromTailText", t);' in runs_src
+    assert 'phCall("updateProgressPanelFromTailText", t);' not in runs_src
 
 
 def test_tracked_active_helper_does_not_depend_on_empty_jobs_only() -> None:
@@ -54,6 +54,23 @@ def test_tracked_active_helper_does_not_depend_on_empty_jobs_only() -> None:
     assert "if (match) {" in src
     assert "if (!hasTrackedLiveContext(trackedId)) {" in src
     assert "status: deriveTrackedFallbackStatus()," in src
+
+
+def test_main_ui_does_not_auto_poll_tail_sources() -> None:
+    wire_src = _read("scripts/patchhub/static/app_part_wire_init.js")
+    assert 'phCall("refreshTail", tailLines);' not in wire_src
+
+    enqueue_src = _read("scripts/patchhub/static/app_part_queue_upload.js")
+    assert 'phCall("refreshTail", tailLines);' not in enqueue_src
+
+
+def test_debug_and_fallback_do_not_auto_load_runner_tail() -> None:
+    debug_src = _read("scripts/patchhub/static/debug.js")
+    init_section = debug_src.split("function init()", 1)[1]
+    assert "refreshTail();" not in init_section
+
+    fallback_src = _read("scripts/patchhub/static/app_part_fallback.js")
+    assert "fallbackRefreshTail(tailLines);" not in fallback_src
 
 
 def test_progress_panel_replaces_retained_terminal_state_on_new_tracked_job() -> None:

@@ -182,15 +182,6 @@
 		return { text: line, status: "idle" };
 	}
 
-	function updateProgressPanelFromTailText(text, opts) {
-		if (PH && typeof PH.call === "function") {
-			PH.call("updateShortProgressFromText", text || "");
-		}
-		var summary = summaryFromTailText(text);
-		setProgressSummaryState(summary);
-		return refreshAppliedFilesForCurrentJob(summary, opts);
-	}
-
 	function deriveProgressFromEvents(events) {
 		var order = [];
 		var state = {};
@@ -563,7 +554,6 @@
 			deriveProgressSummaryFromEvents,
 			setProgressSummaryState,
 			updateProgressPanelFromEvents,
-			updateProgressPanelFromTailText,
 			refreshStats,
 			renderActiveJob,
 		});
@@ -572,7 +562,6 @@
 	ui.deriveProgressSummaryFromEvents = deriveProgressSummaryFromEvents;
 	ui.setProgressSummaryState = setProgressSummaryState;
 	ui.updateProgressPanelFromEvents = updateProgressPanelFromEvents;
-	ui.updateProgressPanelFromTailText = updateProgressPanelFromTailText;
 	ui.refreshStats = refreshStats;
 	ui.renderActiveJob = renderActiveJob;
 })();

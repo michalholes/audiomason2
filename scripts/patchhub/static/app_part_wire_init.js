@@ -210,7 +210,6 @@ function wireButtons() {
 					suppressIdleOutput = false;
 					phCall("refreshJobs");
 					PH.call("openLiveStream", PH.call("getLiveJobId"));
-					phCall("refreshTail", tailLines);
 					return;
 				}
 				t = t.parentElement;
@@ -328,7 +327,6 @@ function init() {
 			Promise.resolve(phCall("refreshOverviewSnapshot", { mode: "user" }))
 				.catch((e) => setUiError(e))
 				.finally(() => {
-					phCall("refreshTail", tailLines);
 					phCall("renderIssueDetail");
 					phCall("validateAndPreview");
 				});
@@ -392,7 +390,6 @@ function init() {
 								phCall("idleRefreshTick");
 							}
 						}
-						phCall("refreshTail", tailLines);
 					} catch (e) {
 						setUiError(e);
 					}
@@ -422,7 +419,6 @@ function init() {
 					}
 					phCall("refreshRuns", { mode: "user" });
 					phCall("refreshJobs", { mode: "user" });
-					phCall("refreshTail", tailLines);
 					phCall("refreshHeader", { mode: "user" });
 					phCall("renderIssueDetail");
 					phCall("validateAndPreview");
@@ -431,7 +427,6 @@ function init() {
 				Promise.resolve(phCall("refreshOverviewSnapshot", { mode: "user" }))
 					.catch((e) => setUiError(e))
 					.finally(() => {
-						phCall("refreshTail", tailLines);
 						phCall("renderIssueDetail");
 						phCall("validateAndPreview");
 					});
