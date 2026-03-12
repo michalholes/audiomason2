@@ -404,16 +404,22 @@ Runner value_text rule:
   by a single '\n'. This value_text MUST be used as the step's evaluation 'value'.
 
 Runner artifact copy rule:
-- If the IPC result includes json_path, BadGuys MUST copy it into logs_dir/<test_id>/ as:
-  runner.result.json
-- If the IPC result includes log_path:
-  - if suite.copy_runner_log=true, BadGuys MAY copy it into logs_dir/<test_id>/ as:
-    runner.log.txt
+- BadGuys MUST persist a structured terminal result object derived from the IPC `type="result"` event into:
+  `logs_dir/<test_id>/runner.result.json`
+- The file `runner.result.json` MUST contain exactly one JSON object and MUST NOT contain NDJSON stream content.
+- If the IPC result includes `json_path`, BadGuys MUST copy that runner-owned NDJSON file into:
+  `logs_dir/<test_id>/runner.log.jsonl`
+- If the IPC result includes `log_path`:
+  - if `suite.copy_runner_log=true`, BadGuys MAY copy it into `logs_dir/<test_id>/runner.log.txt`
   - otherwise, BadGuys MUST NOT copy it.
-- The copy operation for json_path and log_path MUST occur eagerly when the valid IPC
-  type="result" event is received, not after the runner subprocess exits.
-- After eager copy succeeds, BadGuys MUST treat the copied artifact in logs_dir/<test_id>/ as
-  authoritative and MUST NOT require the original source path to remain present after runner exit.
+- The copy/write operation for `runner.result.json`, `runner.log.jsonl`, and `runner.log.txt` MUST occur eagerly when the valid IPC `type="result"` event is received, not after the runner subprocess exits.
+- After eager persistence succeeds, BadGuys MUST treat the copied artifacts in `logs_dir/<test_id>/` as authoritative and MUST NOT require the original source path to remain present after runner exit.
+
+Artifact semantics (normative):
+- `runner.result.json` = structured terminal result only.
+- `runner.log.jsonl` = runner-owned NDJSON log copied from `json_path`.
+- `runner.ipc.step<step_index>.jsonl` = exact raw IPC stream captured from the socket.
+- `runner.log.txt` = optional human-readable runner log copied from `log_path`.
 
 #### 7.3.1 Required AMP-facing observability primitives (normative)
 
