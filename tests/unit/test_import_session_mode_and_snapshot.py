@@ -88,7 +88,7 @@ def test_snapshot_isolation_for_effective_files(tmp_path: Path) -> None:
     cfg_path = roots["wizards"] / "import" / "config" / "flow_config.json"
 
     wizard_any = json.loads(wizard_path.read_text(encoding="utf-8"))
-    wizard_any["graph"]["edges"][0]["priority"] = 1
+    wizard_any["flow_id"] = "mutated_flow_id"
     wizard_path.write_text(json.dumps(wizard_any), encoding="utf-8")
 
     cfg_any = json.loads(cfg_path.read_text(encoding="utf-8"))

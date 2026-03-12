@@ -22,22 +22,24 @@ from .engine import ImportWizardEngine
 from .errors import error_envelope
 from .wizard_definition_model import (
     canonicalize_wizard_definition,
-    validate_wizard_definition_constraints_v2,
     validate_wizard_definition_structure,
 )
-from .wizard_editor_storage import load_wizard_definition, save_wizard_definition
+from .wizard_editor_storage import (
+    ensure_wizard_definition_active_exists,
+    save_wizard_definition,
+)
 
 
 def show_wizard_definition(engine: ImportWizardEngine) -> EditorResult:
     fs = engine.get_file_service()
-    wd = load_wizard_definition(fs)
+    wd = ensure_wizard_definition_active_exists(fs)
     return EditorResult(ok=True, data=wd)
 
 
 def validate_wizard_definition(engine: ImportWizardEngine) -> EditorResult:
     fs = engine.get_file_service()
     try:
-        wd = load_wizard_definition(fs)
+        wd = ensure_wizard_definition_active_exists(fs)
         return EditorResult(ok=True, data={"ok": True, "wizard_definition": wd})
     except Exception as e:
         return EditorResult(
@@ -53,7 +55,7 @@ def validate_wizard_definition(engine: ImportWizardEngine) -> EditorResult:
 def save_wizard_definition_validated(engine: ImportWizardEngine) -> EditorResult:
     fs = engine.get_file_service()
     try:
-        wd = load_wizard_definition(fs)
+        wd = ensure_wizard_definition_active_exists(fs)
         save_wizard_definition(fs, wd)
         return EditorResult(ok=True, data={"ok": True})
     except Exception as e:
@@ -69,7 +71,7 @@ def save_wizard_definition_validated(engine: ImportWizardEngine) -> EditorResult
 
 def edit_wizard_definition_interactive(engine: ImportWizardEngine) -> EditorResult:
     fs = engine.get_file_service()
-    current = load_wizard_definition(fs)
+    current = ensure_wizard_definition_active_exists(fs)
     return _edit_interactive(
         title="wizard_definition",
         current=current,
@@ -82,8 +84,10 @@ def _validate_for_edit(obj: Any) -> dict[str, Any]:
     try:
         validate_wizard_definition_structure(obj)
         wd_canon = canonicalize_wizard_definition(obj)
-        if isinstance(wd_canon, dict) and wd_canon.get("version") == 2:
-            validate_wizard_definition_constraints_v2(wd_canon)
+        if not isinstance(wd_canon, dict):
+            raise ValueError("wizard_definition must be an object")
+        if wd_canon.get("version") != 3:
+            raise ValueError("wizard_definition editor authority must be version 3")
         return {"ok": True}
     except Exception as e:
         return error_envelope(

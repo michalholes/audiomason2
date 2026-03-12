@@ -46,6 +46,13 @@ HISTORY_LIMIT = 5
 DEFAULT_WIZARD_DEFINITION = _DEFAULT_WIZARD_DEFINITION
 
 
+def _validated_editor_definition(fs: FileService, obj: Any) -> dict[str, Any]:
+    canon = canonicalize_to_supported(fs, obj)
+    if canon.get("version") != 3:
+        raise ValueError("wizard_definition editor authority must be version 3")
+    return canon
+
+
 def canonicalize_to_supported(fs: FileService, obj: Any) -> dict[str, Any]:
     if not isinstance(obj, dict):
         raise ValueError("wizard_definition must be an object")
@@ -78,19 +85,27 @@ def canonicalize_to_supported(fs: FileService, obj: Any) -> dict[str, Any]:
 def ensure_wizard_definition_active_exists(fs: FileService) -> dict[str, Any]:
     bootstrap_primitive_registry_if_missing(fs)
 
+    canon_default = _validated_bootstrap_definition(fs, bootstrap_default_version=3)
     atomic_write_json_if_missing(
         fs,
         RootName.WIZARDS,
         WIZARD_DEFINITION_REL_PATH,
-        _validated_bootstrap_definition(fs, bootstrap_default_version=3),
+        canon_default,
     )
     active = read_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_REL_PATH)
     try:
-        return canonicalize_to_supported(fs, active)
+        canon_active = canonicalize_to_supported(fs, active)
+        if canon_active.get("version") == 3:
+            return canon_active
+        _store_history_entry(
+            fs,
+            fingerprint=fingerprint_json(canon_active),
+            obj=canon_active,
+        )
     except Exception:
-        canon_default = _validated_bootstrap_definition(fs, bootstrap_default_version=3)
-        atomic_write_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_REL_PATH, canon_default)
-        return canon_default
+        pass
+    atomic_write_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_REL_PATH, canon_default)
+    return canon_default
 
 
 def get_wizard_definition_draft(fs: FileService) -> dict[str, Any]:
@@ -103,7 +118,7 @@ def get_wizard_definition_draft(fs: FileService) -> dict[str, Any]:
 
 def put_wizard_definition_draft(fs: FileService, obj: Any) -> dict[str, Any]:
     active = ensure_wizard_definition_active_exists(fs)
-    canon = canonicalize_to_supported(fs, obj)
+    canon = _validated_editor_definition(fs, obj)
     atomic_write_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_DRAFT_REL_PATH, canon)
     _write_wizard_definition_draft_lineage(
         fs,
@@ -114,7 +129,7 @@ def put_wizard_definition_draft(fs: FileService, obj: Any) -> dict[str, Any]:
 
 def reset_wizard_definition_draft(fs: FileService) -> dict[str, Any]:
     active = ensure_wizard_definition_active_exists(fs)
-    canon = canonicalize_to_supported(fs, active)
+    canon = _validated_editor_definition(fs, active)
     atomic_write_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_DRAFT_REL_PATH, canon)
     _write_wizard_definition_draft_lineage(
         fs,
@@ -239,10 +254,25 @@ def _load_wizard_definition_draft(
         return None
 
     draft_any = read_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_DRAFT_REL_PATH)
-    draft = canonicalize_to_supported(fs, draft_any)
     active_fingerprint = fingerprint_json(active)
-    draft_fingerprint = fingerprint_json(draft)
     source_active_fingerprint = _read_wizard_definition_draft_lineage(fs)
+    try:
+        draft = _validated_editor_definition(fs, draft_any)
+    except ValueError as err:
+        draft = canonicalize_to_supported(fs, draft_any)
+        draft_fingerprint = fingerprint_json(draft)
+        _quarantine_wizard_definition_draft(
+            fs,
+            source_active_fingerprint=source_active_fingerprint,
+            current_active_fingerprint=active_fingerprint,
+            draft_fingerprint=draft_fingerprint,
+            reason="legacy_editor_authority_version",
+        )
+        if strict:
+            raise ValueError("wizard_definition editor draft must be version 3") from err
+        return None
+
+    draft_fingerprint = fingerprint_json(draft)
 
     if draft_fingerprint == active_fingerprint:
         _write_wizard_definition_draft_lineage(
@@ -307,7 +337,8 @@ def list_wizard_definition_history(fs: FileService) -> list[str]:
 def rollback_wizard_definition(fs: FileService, *, fingerprint: str) -> None:
     rel = f"{HISTORY_DIR}/wizard_definition/{fingerprint}.json"
     obj = read_json(fs, RootName.WIZARDS, rel)
-    save_wizard_definition_with_history(fs, obj)
+    canon = _validated_editor_definition(fs, obj)
+    save_wizard_definition_with_history(fs, canon)
 
 
 def _history_index_path() -> str:

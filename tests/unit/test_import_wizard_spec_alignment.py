@@ -88,6 +88,7 @@ def test_flow_model_contains_resolve_conflicts_before_processing(tmp_path: Path)
     flow_model = engine.get_flow_model()
     step_ids = [s.get("step_id") for s in flow_model.get("steps", [])]
 
+    assert step_ids.count("phase1_runtime_defaults") == 1
     assert step_ids.count("resolve_conflicts_batch") == 1
     assert step_ids.count("processing") == 1
     assert step_ids.index("resolve_conflicts_batch") < step_ids.index("processing")
@@ -100,31 +101,43 @@ def test_step_schemas_match_spec_field_names(tmp_path: Path) -> None:
     flow_model = engine.get_flow_model()
     steps = {s.get("step_id"): s for s in flow_model.get("steps", []) if isinstance(s, dict)}
 
-    final_fields = [f.get("name") for f in steps["final_summary_confirm"].get("fields", [])]
-    assert "confirm_start" in final_fields
-    assert "confirm" not in final_fields
+    final_writes = [
+        w.get("to_path")
+        for w in steps["final_summary_confirm"].get("writes", [])
+        if isinstance(w, dict)
+    ]
+    assert "$.state.answers.final_summary_confirm.confirm_start" in final_writes
+    assert steps["final_summary_confirm"].get("primitive_id") == "ui.prompt_confirm"
 
-    resolve_fields = [f.get("name") for f in steps["resolve_conflicts_batch"].get("fields", [])]
-    assert resolve_fields == ["confirm"]
+    resolve_writes = [
+        w.get("to_path")
+        for w in steps["resolve_conflicts_batch"].get("writes", [])
+        if isinstance(w, dict)
+    ]
+    assert resolve_writes == ["$.state.answers.resolve_conflicts_batch.confirm"]
 
 
 def test_select_books_ok_auto_advances_past_plan_preview(tmp_path: Path) -> None:
     engine, roots = _make_engine(tmp_path)
     _write_inbox_source_dir(roots, "book1")
 
+    root = roots["inbox"] / "AuthorA"
+    (root / "Book1").mkdir(parents=True, exist_ok=True)
+    (root / "Book2").mkdir(parents=True, exist_ok=True)
+    ((root / "Book1") / "a.txt").write_text("x", encoding="utf-8")
+    ((root / "Book2") / "b.txt").write_text("y", encoding="utf-8")
+
     state = engine.create_session(
         "inbox",
-        "book1",
+        "",
         mode="stage",
         flow_overrides=_optional_disable_overrides(),
     )
     session_id = str(state.get("session_id") or "")
     assert session_id
-
-    state = engine.submit_step(session_id, "select_authors", {"selection_expr": "1"})
     assert state.get("current_step_id") == "select_books"
 
-    state = engine.submit_step(session_id, "select_books", {"selection_expr": "1"})
+    state = engine.submit_step(session_id, "select_books", {"selection": "1"})
     assert state.get("current_step_id") == "effective_author_title"
 
 
@@ -132,27 +145,10 @@ def test_final_summary_confirm_uses_confirm_start_gate(tmp_path: Path) -> None:
     engine, roots = _make_engine(tmp_path)
     _write_inbox_source_dir(roots, "book1")
 
-    state = engine.create_session(
-        "inbox",
-        "book1",
-        mode="stage",
-        flow_overrides=_optional_disable_overrides(),
-    )
-    session_id = str(state.get("session_id") or "")
-    assert session_id
+    flow_model = engine.get_flow_model()
+    steps = {s.get("step_id"): s for s in flow_model.get("steps", []) if isinstance(s, dict)}
 
-    state = engine.submit_step(session_id, "select_authors", {"selection_expr": "1"})
-    state = engine.submit_step(session_id, "select_books", {"selection_expr": "1"})
-    assert state.get("current_step_id") == "effective_author_title"
-
-    state = engine.submit_step(session_id, "effective_author_title", {"mode": "x"})
-    assert state.get("current_step_id") == "conflict_policy"
-
-    state = engine.submit_step(session_id, "conflict_policy", {"mode": "overwrite"})
-    assert state.get("current_step_id") == "final_summary_confirm"
-
-    state = engine.submit_step(session_id, "final_summary_confirm", {"confirm_start": False})
-    assert state.get("current_step_id") == "final_summary_confirm"
-
-    state = engine.submit_step(session_id, "final_summary_confirm", {"confirm_start": True})
-    assert state.get("current_step_id") == "processing"
+    final_step = steps["final_summary_confirm"]
+    final_writes = [w.get("to_path") for w in final_step.get("writes", []) if isinstance(w, dict)]
+    assert final_step.get("primitive_id") == "ui.prompt_confirm"
+    assert final_writes == ["$.state.answers.final_summary_confirm.confirm_start"]

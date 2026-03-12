@@ -25,7 +25,6 @@ except ImportError:  # compatibility with issue-131 baseline
 
 from .wizard_definition_model import (
     canonicalize_wizard_definition,
-    validate_wizard_definition_constraints_v2,
     validate_wizard_definition_structure,
 )
 
@@ -349,6 +348,15 @@ def _translate_v2_definition_error(err: FinalizeError) -> FieldSchemaValidationE
     )
 
 
+def _raise_v3_editor_authority_error(version: Any) -> None:
+    raise FieldSchemaValidationError(
+        message="definition must be WizardDefinition v3 for editor authority",
+        path="$.definition.version",
+        reason="invalid_enum",
+        meta={"allowed": [3], "value": version},
+    )
+
+
 def _get_flow_config(engine: Any) -> dict[str, Any]:
     from .editor_storage import get_flow_config_draft
 
@@ -515,7 +523,11 @@ def _set_wizard_definition(engine: Any, body: Any) -> dict[str, Any]:
         allowed_keys={"definition"},
     )
     wd_any = obj.get("definition")
-    wd = put_wizard_definition_draft(_engine_fs(engine), wd_any)
+    validated = _validate_wizard_definition(engine, {"definition": wd_any})
+    wd = put_wizard_definition_draft(
+        _engine_fs(engine),
+        validated.get("definition"),
+    )
     return {"definition": wd}
 
 
@@ -541,25 +553,16 @@ def _validate_wizard_definition(engine: Any, body: Any) -> dict[str, Any]:
             )
 
         ver = wd_canon.get("version")
-        if ver not in {2, 3}:
-            raise FieldSchemaValidationError(
-                message="definition must be WizardDefinition v2 or v3",
-                path="$.definition.version",
-                reason="invalid_enum",
-                meta={"allowed": [2, 3], "value": ver},
-            )
+        if ver != 3:
+            _raise_v3_editor_authority_error(ver)
 
-        if ver == 3:
-            from .dsl.primitive_registry_storage import load_or_bootstrap_primitive_registry
-            from .dsl.wizard_definition_v3_model import (
-                validate_wizard_definition_v3_against_registry,
-            )
+        from .dsl.primitive_registry_storage import load_or_bootstrap_primitive_registry
+        from .dsl.wizard_definition_v3_model import (
+            validate_wizard_definition_v3_against_registry,
+        )
 
-            registry = load_or_bootstrap_primitive_registry(_engine_fs(engine))
-            validate_wizard_definition_v3_against_registry(wd_canon, registry)
-            return {"definition": wd_canon}
-
-        validate_wizard_definition_constraints_v2(wd_canon)
+        registry = load_or_bootstrap_primitive_registry(_engine_fs(engine))
+        validate_wizard_definition_v3_against_registry(wd_canon, registry)
         return {"definition": wd_canon}
     except FinalizeError as err:
         raise _translate_v2_definition_error(err) from err

@@ -77,10 +77,9 @@ def test_rerun_and_resume_read_session_finalize_surface_only(tmp_path: Path) -> 
     )
     session_id = str(state.get("session_id") or "")
     assert session_id
-    assert "error" not in engine.submit_step(
-        session_id, "select_authors", {"selection_expr": "all"}
-    )
-    assert "error" not in engine.submit_step(session_id, "select_books", {"selection_expr": "all"})
+    assert state.get("current_step_id") == "effective_author_title"
+    assert state.get("selected_author_ids")
+    assert state.get("selected_book_ids")
     _ = engine.compute_plan(session_id)
 
     state_path = roots["wizards"] / "import" / "sessions" / session_id / "state.json"

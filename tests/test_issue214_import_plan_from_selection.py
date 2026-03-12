@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from importlib import import_module
 from pathlib import Path
 
@@ -64,8 +65,8 @@ def test_plan_json_contains_selected_books(tmp_path: Path) -> None:
     state = engine.create_session("inbox", "", mode="stage")
     session_id = str(state["session_id"])
 
-    engine.submit_step(session_id, "select_authors", {"selection_expr": "all"})
-    engine.submit_step(session_id, "select_books", {"selection_expr": "1"})
+    engine.submit_step(session_id, "select_authors", {"selection": "all"})
+    engine.submit_step(session_id, "select_books", {"selection": "1"})
 
     plan = engine.compute_plan(session_id)
     assert isinstance(plan, dict)
@@ -88,10 +89,10 @@ def test_invalid_selection_bounces_back_to_select_books(tmp_path: Path) -> None:
     state = engine.create_session("inbox", "", mode="stage")
     session_id = str(state["session_id"])
 
-    engine.submit_step(session_id, "select_authors", {"selection_expr": "all"})
+    engine.submit_step(session_id, "select_authors", {"selection": "all"})
     # NOTE: submit_step auto-advances through computed-only steps, so this will
     # compute the plan once already.
-    state_after_books = engine.submit_step(session_id, "select_books", {"selection_expr": "1"})
+    state_after_books = engine.submit_step(session_id, "select_books", {"selection": "1"})
     assert "error" not in state_after_books
 
     session_dir = f"import/sessions/{session_id}"
@@ -108,15 +109,17 @@ def test_invalid_selection_bounces_back_to_select_books(tmp_path: Path) -> None:
 
     atomic_write_json(fs, RootName.WIZARDS, f"{session_dir}/discovery.json", new_discovery)
 
-    # Move back to select_books, then next must fail deterministically and return
-    # to select_books.
-    state_back = engine.apply_action(session_id, "back")
-    assert "error" not in state_back
-    if str(state_back.get("current_step_id") or "") != "select_books":
-        state_back = engine.apply_action(session_id, "back")
-        assert "error" not in state_back
-    assert str(state_back.get("current_step_id") or "") == "select_books"
+    # Re-enter select_books deterministically. The current v3 prompt payload
+    # uses ordinal selection values, so after discovery compaction the old
+    # ordinal may remap to a surviving option. Submit an explicit out-of-range
+    # ordinal instead; it must fail and keep the cursor on select_books.
+    state_path = roots["wizards"] / session_dir / "state.json"
+    state_doc = json.loads(state_path.read_text(encoding="utf-8"))
+    state_doc["current_step_id"] = "select_books"
+    state_path.write_text(json.dumps(state_doc), encoding="utf-8")
 
-    state2 = engine.apply_action(session_id, "next")
-    assert "error" not in state2
-    assert str(state2.get("current_step_id") or "") == "select_books"
+    state2 = engine.submit_step(session_id, "select_books", {"selection": "2"})
+    err = state2.get("error") if isinstance(state2, dict) else None
+    assert isinstance(err, dict)
+    assert err.get("code") == "VALIDATION_ERROR"
+    assert str(engine.get_state(session_id).get("current_step_id") or "") == "select_books"

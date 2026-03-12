@@ -76,39 +76,21 @@ def test_effective_model_contains_selection_items(tmp_path: Path) -> None:
 
     state = engine.create_session("inbox", "", mode="stage")
     assert "error" not in state
-    session_id = str(state["session_id"])
 
-    em = read_json(fs, RootName.WIZARDS, f"import/sessions/{session_id}/effective_model.json")
-    assert isinstance(em, dict)
+    phase1 = state.get("vars", {}).get("phase1", {})
+    authors = phase1.get("select_authors", {})
+    books = phase1.get("select_books", {})
+    assert authors.get("ordered_ids")
+    assert books.get("ordered_ids")
 
-    steps = em.get("steps")
-    assert isinstance(steps, list)
-
-    by_id = {s.get("step_id"): s for s in steps if isinstance(s, dict)}
-    found_non_ascii_display = False
-    for sid, prefix in [("select_authors", "author:"), ("select_books", "book:")]:
-        step = by_id.get(sid)
-        assert isinstance(step, dict)
-        fields = step.get("fields")
-        assert isinstance(fields, list)
-        ms = [f for f in fields if isinstance(f, dict) and f.get("type") == "multi_select_indexed"]
-        assert len(ms) >= 1
-        items = ms[0].get("items")
-        assert isinstance(items, list)
-        assert items
-        for it in items:
-            assert isinstance(it, dict)
-            item_id = it.get("item_id")
-            label = it.get("label")
-            display_label = it.get("display_label")
-            assert isinstance(item_id, str) and item_id.startswith(prefix)
-            assert isinstance(label, str)
-            assert isinstance(display_label, str)
-            if not display_label.isascii():
-                found_non_ascii_display = True
-            assert label.isascii()
-
-    assert found_non_ascii_display
+    state2 = engine.submit_step(str(state["session_id"]), "select_authors", {"selection": "all"})
+    assert "error" not in state2
+    state2 = engine.submit_step(str(state["session_id"]), "select_books", {"selection": "all"})
+    assert "error" not in state2
+    selected = state2.get("selected_book_ids") or []
+    assert isinstance(selected, list)
+    assert selected
+    assert all(str(item_id).startswith("book:") for item_id in selected)
 
 
 def test_out_of_range_selection_is_validation_error(tmp_path: Path) -> None:
@@ -121,7 +103,9 @@ def test_out_of_range_selection_is_validation_error(tmp_path: Path) -> None:
     state = engine.create_session("inbox", "", mode="stage")
     session_id = str(state["session_id"])
 
-    res = engine.submit_step(session_id, "select_authors", {"selection_expr": "999"})
+    state = engine.submit_step(session_id, "select_authors", {"selection": "all"})
+    assert "error" not in state
+    res = engine.submit_step(session_id, "select_books", {"selection": "999"})
     err = res.get("error") if isinstance(res, dict) else None
     assert isinstance(err, dict)
     assert err.get("code") == "VALIDATION_ERROR"

@@ -134,26 +134,29 @@ def test_wizard_definition_history_and_rollback(tmp_path: Path) -> None:
     ).canonicalize_wizard_definition
 
     base = client.get("/import/ui/wizard-definition").json()["definition"]
-    graph = base.get("graph")
-    assert isinstance(graph, dict)
-    edges_any = graph.get("edges")
-    assert isinstance(edges_any, list)
-    assert len(edges_any) >= 3
+    assert base.get("version") == 3
+    nodes_any = base.get("nodes")
+    assert isinstance(nodes_any, list)
+    assert len(nodes_any) >= 3
 
-    def _with_priority(edge_index: int, prio: int) -> dict:
+    def _with_help(node_index: int, marker: str) -> dict:
         d = dict(base)
-        g = dict(graph)
-        edges: list[dict] = []
-        for e in edges_any:
-            edges.append(dict(e) if isinstance(e, dict) else {})
-        if isinstance(edges[edge_index], dict):
-            edges[edge_index]["priority"] = prio
-        g["edges"] = edges
-        d["graph"] = g
+        nodes: list[dict] = []
+        for index, node_any in enumerate(nodes_any):
+            node = dict(node_any) if isinstance(node_any, dict) else {}
+            op = dict(node.get("op") or {})
+            inputs = dict(op.get("inputs") or {})
+            if index == node_index:
+                help_text = str(inputs.get("help") or "")
+                inputs["help"] = f"{help_text} {marker}".strip()
+            op["inputs"] = inputs
+            node["op"] = op
+            nodes.append(node)
+        d["nodes"] = nodes
         return canonicalize_wizard_definition(d)
 
-    d1 = _with_priority(0, 1)
-    d2 = _with_priority(1, 2)
+    d1 = _with_help(0, "history one")
+    d2 = _with_help(1, "history two")
 
     assert client.post("/import/ui/wizard-definition", json={"definition": d1}).status_code == 200
     assert client.post("/import/ui/wizard-definition/activate", json={}).status_code == 200
@@ -170,7 +173,7 @@ def test_wizard_definition_history_and_rollback(tmp_path: Path) -> None:
     )
     assert rb.status_code == 200
     cur = rb.json()["definition"]
-    assert cur.get("version") == 2
+    assert cur.get("version") == 3
     assert fingerprint_json(cur) == fingerprint_json(d1)
 
     nf = client.post(
@@ -178,3 +181,34 @@ def test_wizard_definition_history_and_rollback(tmp_path: Path) -> None:
         json={"id": "nope"},
     )
     assert nf.status_code == 404
+
+
+@pytest.mark.skipif((not _HAS_FASTAPI) or (not _HAS_HTTPX), reason="fastapi+httpx required")
+def test_wizard_definition_editor_rejects_v2_payloads(tmp_path: Path) -> None:
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    engine = _make_engine(tmp_path)
+    app = FastAPI()
+    app.include_router(build_router(engine=engine))
+    client = TestClient(app)
+
+    response = client.post(
+        "/import/ui/wizard-definition/validate",
+        json={
+            "definition": {
+                "version": 2,
+                "graph": {
+                    "entry_step_id": "select_authors",
+                    "nodes": [{"step_id": "select_authors"}],
+                    "edges": [],
+                },
+            }
+        },
+    )
+
+    assert response.status_code == 400
+    detail = response.json()["error"]["details"][0]
+    assert detail["path"] == "$.definition.version"
+    assert detail["reason"] == "invalid_enum"
+    assert detail["meta"]["allowed"] == [3]

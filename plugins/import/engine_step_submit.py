@@ -92,6 +92,33 @@ def _derive_v3_selected_ids(
     return _selection_ids_from_value(ordered_ids=ordered_ids, selection=selection)
 
 
+def _validate_v3_selection_payload(
+    *,
+    engine: Any,
+    session_id: str,
+    step_id: str,
+    payload: dict[str, Any],
+) -> None:
+    if step_id not in {"select_authors", "select_books"}:
+        return
+    if "selection" not in payload:
+        return
+
+    selection = payload.get("selection")
+    if selection in (None, "", []):
+        raise StepSubmissionError("selection is required")
+
+    selected_ids = _derive_v3_selected_ids(
+        engine=engine,
+        session_id=session_id,
+        step_id=step_id,
+        selection=selection,
+    )
+    if selected_ids:
+        return
+    raise StepSubmissionError("selection out of range")
+
+
 def _sync_v3_legacy_state(*, engine: Any, session_id: str, state: dict[str, Any]) -> dict[str, Any]:
     answers = dict(state.get("answers") or {})
     inputs = dict(state.get("inputs") or {})
@@ -182,6 +209,12 @@ def submit_step_impl(
 
         effective_model = engine._load_effective_model(session_id)
         if is_v3_effective_model(effective_model):
+            _validate_v3_selection_payload(
+                engine=engine,
+                session_id=session_id,
+                step_id=step_id,
+                payload=payload,
+            )
             next_state = submit_current_step(
                 effective_model=effective_model,
                 state=state,

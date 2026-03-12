@@ -92,10 +92,9 @@ def _start_processing(plugin: object, roots: dict[str, Path]) -> tuple[str, str]
     )
     session_id = str(state.get("session_id") or "")
     assert session_id
-    step1 = engine.submit_step(session_id, "select_authors", {"selection_expr": "all"})
+    assert state.get("current_step_id") == "select_books"
+    step1 = engine.submit_step(session_id, "select_books", {"selection": "all"})
     assert "error" not in step1
-    step2 = engine.submit_step(session_id, "select_books", {"selection_expr": "all"})
-    assert "error" not in step2
     _ = engine.compute_plan(session_id)
     _mutate_state_for_finalize(roots, session_id, policy="auto")
     started = engine.start_processing(session_id, {"confirm": True})

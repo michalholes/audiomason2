@@ -172,6 +172,14 @@ def create_session_impl(
                 discovery=discovery,
                 state=loaded_state,
             )
+        if effective_model.get("flowmodel_kind") == "dsl_step_graph_v3":
+            from .engine_step_submit import _sync_v3_legacy_state
+
+            loaded_state = _sync_v3_legacy_state(
+                engine=engine,
+                session_id=session_id,
+                state=loaded_state,
+            )
         engine._persist_state(session_id, loaded_state)
         return loaded_state
 
@@ -282,6 +290,8 @@ def create_session_impl(
         isinstance(effective_model, dict)
         and effective_model.get("flowmodel_kind") == "dsl_step_graph_v3"
     ):
+        from .engine_step_submit import _sync_v3_legacy_state
+
         state = initialize_state(
             state=state,
             effective_model=effective_model,
@@ -292,6 +302,11 @@ def create_session_impl(
                 discovery=discovery,
                 state=state,
             )
+        state = _sync_v3_legacy_state(
+            engine=engine,
+            session_id=session_id,
+            state=state,
+        )
     atomic_write_json(engine._fs, RootName.WIZARDS, state_path, state)
     engine._append_decision(
         session_id,

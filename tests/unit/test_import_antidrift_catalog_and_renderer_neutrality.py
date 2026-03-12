@@ -138,6 +138,6 @@ def test_runtime_uses_active_wizard_definition_shape_for_known_step_ids(tmp_path
     step_result = engine.submit_step(
         str(state["session_id"]),
         "select_authors",
-        {"selection_expr": "all"},
+        {"selection": "all"},
     )
     assert "error" not in step_result

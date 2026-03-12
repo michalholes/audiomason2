@@ -66,26 +66,31 @@ def test_put_draft_does_not_change_active(tmp_path: Path) -> None:
     fs = engine.get_file_service()
 
     active0 = wizard_storage.ensure_wizard_definition_active_exists(fs)
-    assert active0.get("version") == 2
+    assert active0.get("version") == 3
 
     d = dict(active0)
-    g = dict(d.get("graph") or {})
-    edges = list(g.get("edges") or [])
-    if edges and isinstance(edges[0], dict):
-        edges[0] = dict(edges[0])
-        edges[0]["priority"] = int(edges[0].get("priority") or 0) + 1
-    g["edges"] = edges
-    d["graph"] = g
+    nodes = []
+    for index, node_any in enumerate(active0.get("nodes") or []):
+        node = dict(node_any) if isinstance(node_any, dict) else {}
+        op = dict(node.get("op") or {})
+        inputs = dict(op.get("inputs") or {})
+        if index == 0:
+            help_text = str(inputs.get("help") or "")
+            inputs["help"] = f"{help_text} edited".strip()
+        op["inputs"] = inputs
+        node["op"] = op
+        nodes.append(node)
+    d["nodes"] = nodes
 
     out = wizard_storage.put_wizard_definition_draft(fs, d)
-    assert out.get("version") == 2
+    assert out.get("version") == 3
 
     active1 = wizard_storage.ensure_wizard_definition_active_exists(fs)
     assert fingerprint_json(active1) == fingerprint_json(active0)
 
 
 @pytest.mark.skipif((not _HAS_FASTAPI) or (not _HAS_HTTPX), reason="fastapi+httpx required")
-def test_rollback_endpoint_returns_v2(tmp_path: Path) -> None:
+def test_rollback_endpoint_returns_v3(tmp_path: Path) -> None:
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
 
@@ -95,14 +100,20 @@ def test_rollback_endpoint_returns_v2(tmp_path: Path) -> None:
     client = TestClient(app)
 
     base = client.get("/import/ui/wizard-definition").json()["definition"]
+    assert base.get("version") == 3
     d1 = dict(base)
-    g = dict(d1.get("graph") or {})
-    edges = list(g.get("edges") or [])
-    if edges and isinstance(edges[0], dict):
-        edges[0] = dict(edges[0])
-        edges[0]["priority"] = int(edges[0].get("priority") or 0) + 1
-    g["edges"] = edges
-    d1["graph"] = g
+    nodes = []
+    for index, node_any in enumerate(base.get("nodes") or []):
+        node = dict(node_any) if isinstance(node_any, dict) else {}
+        op = dict(node.get("op") or {})
+        inputs = dict(op.get("inputs") or {})
+        if index == 0:
+            help_text = str(inputs.get("help") or "")
+            inputs["help"] = f"{help_text} rollback".strip()
+        op["inputs"] = inputs
+        node["op"] = op
+        nodes.append(node)
+    d1["nodes"] = nodes
 
     assert client.post("/import/ui/wizard-definition", json={"definition": d1}).status_code == 200
     assert client.post("/import/ui/wizard-definition/activate", json={}).status_code == 200
@@ -113,4 +124,4 @@ def test_rollback_endpoint_returns_v2(tmp_path: Path) -> None:
     rb = client.post("/import/ui/wizard-definition/rollback", json={"id": rid})
     assert rb.status_code == 200
     out = rb.json()["definition"]
-    assert out.get("version") == 2
+    assert out.get("version") == 3

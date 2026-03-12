@@ -105,7 +105,7 @@ def test_session_state_min_fields_and_answers_are_canonical(tmp_path: Path) -> N
     session_id = str(state["session_id"])
 
     # select_authors updates answers and selected_author_ids.
-    state2 = engine.submit_step(session_id, "select_authors", {"selection_expr": "1"})
+    state2 = engine.submit_step(session_id, "select_authors", {"selection": "1"})
     assert "error" not in state2
 
     ans = state2.get("answers")
@@ -127,10 +127,31 @@ def test_compute_plan_populates_state_computed_plan_summary(tmp_path: Path) -> N
     state = engine.create_session("inbox", "src", mode="stage")
     session_id = str(state["session_id"])
 
-    engine.submit_step(session_id, "select_authors", {"selection_expr": "1"})
-    engine.submit_step(session_id, "select_books", {"selection_expr": "1"})
+    state = engine.submit_step(session_id, "select_authors", {"selection": "1"})
+    assert "error" not in state
+    if str(state.get("current_step_id") or "") == "select_books":
+        state = engine.submit_step(session_id, "select_books", {"selection": "1"})
+        assert "error" not in state
+    if str(state.get("current_step_id") or "") == "effective_author_title":
+        state = engine.submit_step(
+            session_id,
+            "effective_author_title",
+            {"value": {"author": "src", "title": "src"}},
+        )
+        assert "error" not in state
     _advance_to(engine, session_id, "filename_policy")
-    res = engine.submit_step(session_id, "filename_policy", {"mode": "keep"})
+    res = engine.submit_step(
+        session_id,
+        "filename_policy",
+        {
+            "value": {
+                "author": "src",
+                "mode": "keep",
+                "template": "{author}/{title}",
+                "title": "src",
+            }
+        },
+    )
     assert "error" not in res
 
     plan = engine.compute_plan(session_id)

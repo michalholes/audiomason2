@@ -164,7 +164,72 @@ def normalize_to_graph(
         _validate_graph(g)
         return g
 
-    raise FinalizeError("wizard_definition version must be 1 or 2")
+    if version == 3:
+        entry_any = wizard_definition.get("entry_step_id")
+        if not isinstance(entry_any, str) or not entry_any:
+            raise FinalizeError("wizard_definition entry_step_id must be a string")
+        entry = entry_any
+
+        nodes_any = wizard_definition.get("nodes")
+        if not isinstance(nodes_any, list) or not nodes_any:
+            raise FinalizeError("wizard_definition nodes must be a non-empty list")
+
+        nodes_v3: list[str] = []
+        seen_v3: set[str] = set()
+        for n in nodes_any:
+            sid = n.get("step_id") if isinstance(n, dict) else None
+            if not isinstance(sid, str) or not sid:
+                raise FinalizeError("wizard_definition nodes must contain step_id strings")
+            if sid in seen_v3:
+                raise FinalizeError("wizard_definition node step_id must be unique")
+            if sid not in known_step_ids:
+                raise FinalizeError(f"wizard_definition contains unknown step_id: {sid}")
+            seen_v3.add(sid)
+            nodes_v3.append(sid)
+
+        if entry not in seen_v3:
+            raise FinalizeError("wizard_definition entry_step_id must exist in nodes")
+
+        edges_any = wizard_definition.get("edges")
+        if not isinstance(edges_any, list):
+            raise FinalizeError("wizard_definition edges must be a list")
+
+        priorities: dict[str, int] = {}
+        edges_v3: list[FlowEdge] = []
+        for e in edges_any:
+            if not isinstance(e, dict):
+                raise FinalizeError("wizard_definition edges must be objects")
+            frm = e.get("from")
+            to = e.get("to")
+            if not isinstance(frm, str) or not frm:
+                raise FinalizeError("wizard_definition edges require from")
+            if not isinstance(to, str) or not to:
+                raise FinalizeError("wizard_definition edges require to")
+            if frm not in seen_v3:
+                raise FinalizeError("wizard_definition edge references unknown from")
+            if to not in seen_v3:
+                raise FinalizeError("wizard_definition edge references unknown to")
+            prio = priorities.get(frm, 0)
+            priorities[frm] = prio + 10
+            edges_v3.append(
+                FlowEdge(
+                    from_step_id=frm,
+                    to_step_id=to,
+                    when=e.get("condition_expr"),
+                    priority=prio,
+                )
+            )
+
+        g = FlowGraph(
+            version=3,
+            entry_step_id=entry,
+            nodes=tuple(nodes_v3),
+            edges=tuple(edges_v3),
+        )
+        _validate_graph(g)
+        return g
+
+    raise FinalizeError("wizard_definition version must be 1, 2, or 3")
 
 
 def select_next_step(

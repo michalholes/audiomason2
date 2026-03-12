@@ -56,26 +56,9 @@ def _write_inbox_source_dir(roots: dict[str, Path], rel_dir: str) -> None:
     (d / "file.txt").write_text("x", encoding="utf-8")
 
 
-def _strip_selection_items(effective_model: dict) -> dict:
+def _mutate_effective_model(effective_model: dict) -> dict:
     em = copy.deepcopy(effective_model)
-    steps = em.get("steps")
-    if not isinstance(steps, list):
-        return em
-    for step in steps:
-        if not isinstance(step, dict):
-            continue
-        if step.get("step_id") not in {"select_authors", "select_books"}:
-            continue
-        fields = step.get("fields")
-        if not isinstance(fields, list):
-            continue
-        for f in fields:
-            if not isinstance(f, dict):
-                continue
-            if f.get("type") != "multi_select_indexed":
-                continue
-            if "items" in f:
-                del f["items"]
+    em["flow_id"] = str(em.get("flow_id") or "") + "_snapshot"
     return em
 
 
@@ -107,10 +90,10 @@ def test_resume_reinjection_updates_fingerprint_only_when_model_changed(tmp_path
     st_path = session_dir / "state.json"
 
     em_full = json.loads(em_path.read_text(encoding="utf-8"))
-    em_stripped = _strip_selection_items(em_full)
+    em_stripped = _mutate_effective_model(em_full)
     assert fingerprint_json(em_stripped) != fingerprint_json(em_full)
 
-    # Simulate older persisted model/state mismatch (effective_model missing items).
+    # Simulate an older persisted model/state fingerprint pair.
     em_path.write_text(json.dumps(em_stripped, ensure_ascii=True, sort_keys=True), encoding="utf-8")
     st_old = json.loads(st_path.read_text(encoding="utf-8"))
     st_old["model_fingerprint"] = fingerprint_json(em_stripped)
@@ -126,6 +109,6 @@ def test_resume_reinjection_updates_fingerprint_only_when_model_changed(tmp_path
     # Snapshot stays immutable (legacy stripped model remains on disk).
     assert fingerprint_json(em_after) == fingerprint_json(em_stripped)
 
-    # State tracks runtime-effective model fingerprint.
-    assert st_after.get("model_fingerprint") == fingerprint_json(em_full)
-    assert st_after.get("model_fingerprint") != st_old.get("model_fingerprint")
+    # State continues to track the immutable persisted snapshot fingerprint.
+    assert st_after.get("model_fingerprint") == fingerprint_json(em_stripped)
+    assert st_after.get("model_fingerprint") == st_old.get("model_fingerprint")

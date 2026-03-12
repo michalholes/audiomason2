@@ -826,7 +826,7 @@ def _canonicalize_graph(body: dict[str, Any]) -> dict[str, Any]:
                     op["inputs"] = inputs
                 node["op"] = op
             nodes.append(node)
-        out["nodes"] = sorted(nodes, key=lambda item: str(item.get("step_id") or ""))
+        out["nodes"] = nodes
     edges_any = out.get("edges")
     if isinstance(edges_any, list):
         out["edges"] = sorted(

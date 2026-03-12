@@ -273,6 +273,7 @@ def build_effective_workflow_snapshot(
 
     For v1 WizardDefinition, the ordering is derived from the steps list.
     For v2 WizardDefinition, the ordering is derived from graph.nodes order.
+    For v3 WizardDefinition, the ordering is derived from nodes order.
 
     Applies flow_config optional-step enable/disable rules.
     """
@@ -314,7 +315,23 @@ def build_effective_workflow_snapshot(
         enforce_mandatory_constraints(ordered)
         return ordered
 
-    raise FinalizeError("wizard_definition version must be 1 or 2")
+    if version == 3:
+        nodes_any = wizard_definition.get("nodes")
+        if not isinstance(nodes_any, list):
+            raise FinalizeError("wizard_definition nodes must be a list")
+
+        for n in nodes_any:
+            sid = n.get("step_id") if isinstance(n, dict) else None
+            if not isinstance(sid, str) or not sid:
+                raise FinalizeError("wizard_definition contains invalid step_id")
+            if sid in OPTIONAL_STEP_IDS and not _is_enabled(sid, flow_config):
+                continue
+            ordered.append(sid)
+
+        enforce_mandatory_constraints(ordered)
+        return ordered
+
+    raise FinalizeError("wizard_definition version must be 1, 2, or 3")
 
 
 def build_legacy_runtime_flow_model_from_definition(

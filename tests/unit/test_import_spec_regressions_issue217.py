@@ -102,18 +102,14 @@ def test_selection_expr_grammar_and_stable_ordering(tmp_path: Path) -> None:
     session_id = str(state.get("session_id") or "")
     assert session_id
 
-    state = engine.submit_step(session_id, "select_authors", {"selection_expr": "all"})
     assert state.get("current_step_id") == "select_books"
 
-    step = engine.get_step_definition(session_id, "select_books")
-    fields = step.get("fields") if isinstance(step, dict) else None
-    field0 = fields[0] if isinstance(fields, list) and fields else {}
-    items = field0.get("items") if isinstance(field0, dict) else None
-    item_ids = [it.get("item_id") for it in items if isinstance(it, dict)] if items else []
+    item_ids = state.get("vars", {}).get("phase1", {}).get("select_books", {}).get("ordered_ids")
+    assert isinstance(item_ids, list)
     assert len(item_ids) == 2
 
     # Whitespace + duplicates + reverse order in expression must not affect output order.
-    state = engine.submit_step(session_id, "select_books", {"selection_expr": " 2, 1, 1 "})
+    state = engine.submit_step(session_id, "select_books", {"selection": " 2, 1, 1 "})
     assert state.get("current_step_id") == "effective_author_title"
     assert state.get("selected_book_ids") == item_ids
 
@@ -132,10 +128,9 @@ def test_selection_expr_out_of_range_returns_validation_error(tmp_path: Path) ->
     session_id = str(state.get("session_id") or "")
     assert session_id
 
-    state = engine.submit_step(session_id, "select_authors", {"selection_expr": "all"})
     assert state.get("current_step_id") == "select_books"
 
-    out = engine.submit_step(session_id, "select_books", {"selection_expr": "3"})
+    out = engine.submit_step(session_id, "select_books", {"selection": "3"})
     assert out.get("error", {}).get("code") == "VALIDATION_ERROR"
 
 
@@ -155,11 +150,9 @@ def test_plan_is_derived_from_selected_books(tmp_path: Path) -> None:
         )
         sid = str(st.get("session_id") or "")
         assert sid
-        st1 = engine.submit_step(sid, "select_authors", {"selection_expr": "all"})
-        assert "error" not in st1
-        assert st1.get("current_step_id") == "select_books"
+        assert st.get("current_step_id") == "select_books"
 
-        st2 = engine.submit_step(sid, "select_books", {"selection_expr": expr})
+        st2 = engine.submit_step(sid, "select_books", {"selection": expr})
         assert "error" not in st2
         plan = engine.compute_plan(sid)
         return sid, plan
@@ -190,8 +183,8 @@ def test_conflicts_are_derived_from_plan_targets(tmp_path: Path) -> None:
     )
     session_id = str(state.get("session_id") or "")
     assert session_id
-    _ = engine.submit_step(session_id, "select_authors", {"selection_expr": "all"})
-    _ = engine.submit_step(session_id, "select_books", {"selection_expr": "1"})
+    assert state.get("current_step_id") == "select_books"
+    _ = engine.submit_step(session_id, "select_books", {"selection": "1"})
 
     plan = engine.compute_plan(session_id)
     target_rel = plan.get("selected_books", [])[0].get("proposed_target_relative_path")
@@ -223,8 +216,8 @@ def test_job_requests_derived_from_plan_batch_size_and_idempotency(
     )
     session_id = str(state.get("session_id") or "")
     assert session_id
-    _ = engine.submit_step(session_id, "select_authors", {"selection_expr": "all"})
-    _ = engine.submit_step(session_id, "select_books", {"selection_expr": "all"})
+    assert state.get("current_step_id") == "select_books"
+    _ = engine.submit_step(session_id, "select_books", {"selection": "all"})
     plan = engine.compute_plan(session_id)
 
     from audiomason.core.jobs import api as jobs_api
