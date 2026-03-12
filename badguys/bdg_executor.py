@@ -213,6 +213,7 @@ def _exec_one(
                 total_timeout_s=0.0,
                 command_plans=command_plans,
                 result_json_copy_path=artifacts_dir / "runner.result.json",
+                runner_jsonl_copy_path=artifacts_dir / "runner.log.jsonl",
                 runner_log_copy_path=(
                     artifacts_dir / "runner.log.txt" if copy_runner_log else None
                 ),

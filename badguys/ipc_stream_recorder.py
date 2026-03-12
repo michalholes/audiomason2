@@ -14,20 +14,27 @@ def _copy_result_artifact(
     result: dict[str, Any],
     *,
     result_json_copy_path: Path | None,
+    runner_jsonl_copy_path: Path | None,
     runner_log_copy_path: Path | None,
 ) -> tuple[str | None, bool]:
-    result_json_missing = False
+    runner_jsonl_missing = False
+
+    if result_json_copy_path is not None:
+        try:
+            _write_json(result_json_copy_path, result)
+        except OSError as exc:
+            return f"write runner result failed: {result_json_copy_path}: {exc}", False
 
     json_path = result.get("json_path")
-    if result_json_copy_path is not None and isinstance(json_path, str) and json_path:
+    if runner_jsonl_copy_path is not None and isinstance(json_path, str) and json_path:
         err, missing_source = _copy_result_artifact_path(
             src_path=json_path,
-            dst_path=result_json_copy_path,
+            dst_path=runner_jsonl_copy_path,
             label="json_path",
         )
-        result_json_missing = missing_source
+        runner_jsonl_missing = missing_source
         if err is not None:
-            return err, result_json_missing
+            return err, runner_jsonl_missing
 
     log_path = result.get("log_path")
     if runner_log_copy_path is not None and isinstance(log_path, str) and log_path:
@@ -37,8 +44,8 @@ def _copy_result_artifact(
             label="log_path",
         )
         if err is not None:
-            return err, result_json_missing
-    return None, result_json_missing
+            return err, runner_jsonl_missing
+    return None, runner_jsonl_missing
 
 
 def _copy_result_artifact_path(
@@ -125,6 +132,7 @@ def record_ipc_stream(
     total_timeout_s: float,
     command_plans: list[dict[str, Any]] | None = None,
     result_json_copy_path: Path | None = None,
+    runner_jsonl_copy_path: Path | None = None,
     runner_log_copy_path: Path | None = None,
 ) -> tuple[dict[str, Any] | None, str, dict[str, Any]]:
     """Record the full runner IPC NDJSON stream and compute runner value_text.
@@ -177,10 +185,10 @@ def record_ipc_stream(
     connected_at = time.monotonic()
 
     artifact_copy_error: str | None = None
-    result_json_missing = False
+    runner_jsonl_missing = False
 
     def _handle_obj(obj: dict[str, Any]) -> None:
-        nonlocal artifact_copy_error, result, result_json_missing
+        nonlocal artifact_copy_error, result, runner_jsonl_missing
         if obj.get("type") == "log":
             msg = obj.get("msg")
             if isinstance(msg, str):
@@ -190,9 +198,10 @@ def record_ipc_stream(
             if valid is not None:
                 result = valid
                 if artifact_copy_error is None:
-                    artifact_copy_error, result_json_missing = _copy_result_artifact(
+                    artifact_copy_error, runner_jsonl_missing = _copy_result_artifact(
                         valid,
                         result_json_copy_path=result_json_copy_path,
+                        runner_jsonl_copy_path=runner_jsonl_copy_path,
                         runner_log_copy_path=runner_log_copy_path,
                     )
         for plan in plans:
@@ -308,13 +317,13 @@ def record_ipc_stream(
 
     _finalize_unresolved_plans(plans, code="EOF", message="ipc connection closed before reply")
     if (
-        result_json_missing
+        runner_jsonl_missing
         and artifact_copy_error is not None
-        and result_json_copy_path is not None
+        and runner_jsonl_copy_path is not None
     ):
         artifact_copy_error = _copy_ipc_stream_fallback(
             out_path=out_path,
-            dst_path=result_json_copy_path,
+            dst_path=runner_jsonl_copy_path,
         )
     value_text = "\n".join(value_msgs)
     return result, value_text, _result_artifact_copy_status(error=artifact_copy_error)
@@ -425,6 +434,7 @@ def _json_line(obj: dict[str, Any]) -> bytes:
 
 
 def _write_json(path: Path, obj: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
         json.dumps(obj, ensure_ascii=True, indent=2, sort_keys=True) + "\n",
         encoding="utf-8",

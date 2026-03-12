@@ -449,6 +449,9 @@ def _run_test_plan(test, ctx: Ctx) -> bool:
             res_path = ctx.test_dir(bdg.test_id) / "runner.result.json"
             if res_path.exists():
                 step_obj["runner_result"] = res_path.name
+            jsonl_path = ctx.test_dir(bdg.test_id) / "runner.log.jsonl"
+            if jsonl_path.exists():
+                step_obj["runner_jsonl"] = jsonl_path.name
 
         _log(ctx, level="normal", test_id=bdg.test_id, obj=step_obj)
 

@@ -634,6 +634,19 @@ value_contains = ["RESULT: SUCCESS"]
 [evaluation.tests.test_080_json_out_writes_ndjson_log.steps.1]
 rc_eq = 0
 value_contains = [
+  '"json_path":',
+  '"ok": true',
+  '"return_code": 0',
+]
+value_not_contains = [
+  '"event":"connected"',
+  '"kind":"HEARTBEAT"',
+  '"msg":"RESULT: SUCCESS"',
+]
+
+[evaluation.tests.test_080_json_out_writes_ndjson_log.steps.2]
+rc_eq = 0
+value_contains = [
   '"event":"connected"',
   '"kind":"HEARTBEAT"',
   '"type":"result"',
@@ -779,6 +792,10 @@ args = [
 [recipes.tests.test_080_json_out_writes_ndjson_log.steps.1]
 scope = "artifacts"
 relpath = "runner.result.json"
+
+[recipes.tests.test_080_json_out_writes_ndjson_log.steps.2]
+scope = "artifacts"
+relpath = "runner.log.jsonl"
 
 [recipes.tests.test_081_ipc_heartbeat_events_present.assets.patch]
 subject = "heartbeat_marker"

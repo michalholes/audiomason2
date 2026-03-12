@@ -116,7 +116,8 @@ def test_record_ipc_stream_copies_result_artifact_before_source_disappears(
     socket_path = tmp_path / "ipc.sock"
     result_src = tmp_path / "result.jsonl"
     result_src.write_text('{"ok":true}\n', encoding="utf-8")
-    copied_path = tmp_path / "artifacts" / "runner.result.json"
+    result_path = tmp_path / "artifacts" / "runner.result.json"
+    log_path = tmp_path / "artifacts" / "runner.log.jsonl"
 
     def _target() -> None:
         with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as srv:
@@ -143,14 +144,16 @@ def test_record_ipc_stream_copies_result_artifact_before_source_disappears(
         out_path=tmp_path / "runner.ipc.jsonl",
         connect_timeout_s=3.0,
         total_timeout_s=3.0,
-        result_json_copy_path=copied_path,
+        result_json_copy_path=result_path,
+        runner_jsonl_copy_path=log_path,
     )
     server.join(timeout=3.0)
 
     assert result == {"ok": True, "return_code": 0, "json_path": str(result_src)}
     assert value_text == ""
     assert artifact_copy == {"ok": True, "error": None}
-    assert copied_path.read_text(encoding="utf-8") == '{"ok":true}\n'
+    assert json.loads(result_path.read_text(encoding="utf-8")) == result
+    assert log_path.read_text(encoding="utf-8") == '{"ok":true}\n'
     assert not result_src.exists()
 
 
@@ -164,7 +167,8 @@ def test_record_ipc_stream_falls_back_to_ipc_stream_when_result_artifact_disappe
     result_src = tmp_path / "result.jsonl"
     result_src.write_text('{"ok":true}\n', encoding="utf-8")
     out_path = tmp_path / "runner.ipc.jsonl"
-    copied_path = tmp_path / "artifacts" / "runner.result.json"
+    result_path = tmp_path / "artifacts" / "runner.result.json"
+    log_path = tmp_path / "artifacts" / "runner.log.jsonl"
 
     real_copy2 = ipc_stream_recorder.shutil.copy2
     copy_attempted = {"value": False}
@@ -210,7 +214,8 @@ def test_record_ipc_stream_falls_back_to_ipc_stream_when_result_artifact_disappe
         out_path=out_path,
         connect_timeout_s=3.0,
         total_timeout_s=3.0,
-        result_json_copy_path=copied_path,
+        result_json_copy_path=result_path,
+        runner_jsonl_copy_path=log_path,
     )
     server.join(timeout=3.0)
 
@@ -218,7 +223,8 @@ def test_record_ipc_stream_falls_back_to_ipc_stream_when_result_artifact_disappe
     assert result == {"ok": True, "return_code": 0, "json_path": str(result_src)}
     assert value_text == ""
     assert artifact_copy == {"ok": True, "error": None}
-    copied_text = copied_path.read_text(encoding="utf-8")
+    assert json.loads(result_path.read_text(encoding="utf-8")) == result
+    copied_text = log_path.read_text(encoding="utf-8")
     assert copied_text == out_path.read_text(encoding="utf-8")
     copied_obj = json.loads(copied_text)
     assert copied_obj["json_path"] == str(result_src)
@@ -252,19 +258,23 @@ def test_record_ipc_stream_falls_back_to_ipc_stream_when_result_artifact_is_miss
     server.start()
 
     out_path = tmp_path / "runner.ipc.jsonl"
-    copied_path = tmp_path / "artifacts" / "runner.result.json"
+    result_path = tmp_path / "artifacts" / "runner.result.json"
+    log_path = tmp_path / "artifacts" / "runner.log.jsonl"
 
-    _, _, artifact_copy = record_ipc_stream(
+    result, _, artifact_copy = record_ipc_stream(
         socket_path,
         out_path=out_path,
         connect_timeout_s=3.0,
         total_timeout_s=3.0,
-        result_json_copy_path=copied_path,
+        result_json_copy_path=result_path,
+        runner_jsonl_copy_path=log_path,
     )
     server.join(timeout=3.0)
 
+    assert result == {"ok": True, "return_code": 0, "json_path": str(missing_src)}
     assert artifact_copy == {"ok": True, "error": None}
-    copied_text = copied_path.read_text(encoding="utf-8")
+    assert json.loads(result_path.read_text(encoding="utf-8")) == result
+    copied_text = log_path.read_text(encoding="utf-8")
     assert copied_text == out_path.read_text(encoding="utf-8")
     copied_obj = json.loads(copied_text)
     assert copied_obj["json_path"] == str(missing_src)

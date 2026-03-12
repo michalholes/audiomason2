@@ -12,3 +12,6 @@ input_asset = "patch"
 
 [[step]]
 op = "READ_TEXT_FILE"
+
+[[step]]
+op = "READ_TEXT_FILE"
