@@ -95,3 +95,12 @@ def test_bucketed_mode_escalates_to_broad_repo_targets() -> None:
         routing_policy=_routing_policy("bucketed"),
     )
     assert targets[-1] == "tests"
+
+
+def test_bucketed_mode_escalates_to_broad_repo_targets_for_tests_tree() -> None:
+    targets = select_pytest_targets(
+        decision_paths=["tests/unit/test_new_case.py"],
+        pytest_targets=["tests/legacy_only.py"],
+        routing_policy=_routing_policy("bucketed"),
+    )
+    assert targets[-1] == "tests"

@@ -189,6 +189,7 @@ PYTEST_FAMILY_TARGETS_DEFAULT = {
 
 PYTEST_BROAD_REPO_PREFIXES_DEFAULT = [
     "src/audiomason/core/",
+    "tests/",
     "pytest.ini",
     "pyproject.toml",
     "tests/conftest.py",

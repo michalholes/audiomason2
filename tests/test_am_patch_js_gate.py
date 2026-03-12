@@ -3,10 +3,12 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+SCRIPTS_DIR = Path(__file__).resolve().parents[1] / "scripts"
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
+
 
 def _import_gate():
-    scripts_dir = Path(__file__).parent.parent / "scripts"
-    sys.path.insert(0, str(scripts_dir))
     from am_patch.gates import check_js_gate
 
     return check_js_gate
@@ -53,8 +55,6 @@ def test_js_gate_handles_extension_without_dot() -> None:
 
 
 def _import_run_gate():
-    scripts_dir = Path(__file__).parent.parent / "scripts"
-    sys.path.insert(0, str(scripts_dir))
     from am_patch.gates import run_js_syntax_gate
 
     return run_js_syntax_gate
@@ -92,8 +92,6 @@ def test_js_syntax_gate_skips_when_only_deleted_js_is_touched(tmp_path: Path) ->
 
 
 def _import_run_gates():
-    scripts_dir = Path(__file__).parent.parent / "scripts"
-    sys.path.insert(0, str(scripts_dir))
     from am_patch.gates import run_gates
 
     return run_gates
@@ -215,3 +213,45 @@ def test_pytest_js_prefixes_still_trigger_pytest_gate(tmp_path: Path, monkeypatc
 
     assert captured["pytest_use_venv"] is False
     assert captured["targets"] == ["tests/legacy_target.py"]
+
+
+def _import_run_pytest():
+    from am_patch.gates import run_pytest
+
+    return run_pytest
+
+
+def _import_runner_error():
+    from am_patch.errors import RunnerError
+
+    return RunnerError
+
+
+def test_run_pytest_rejects_empty_effective_target_list(tmp_path: Path) -> None:
+    run_pytest = _import_run_pytest()
+    runner_error = _import_runner_error()
+
+    class DummyLogger:
+        def section(self, _msg: str) -> None:
+            raise AssertionError("section() must not be called for empty targets")
+
+        def line(self, _msg: str) -> None:
+            raise AssertionError("line() must not be called for empty targets")
+
+        def run_logged(self, _argv: list[str], *, cwd: Path, env=None):
+            raise AssertionError("run_logged() must not be called for empty targets")
+
+    try:
+        run_pytest(
+            DummyLogger(),  # type: ignore[arg-type]
+            tmp_path,
+            repo_root=tmp_path,
+            pytest_use_venv=False,
+            targets=[],
+        )
+    except runner_error as exc:
+        assert exc.stage == "CONFIG"
+        assert exc.category == "PYTEST_TARGETS_EMPTY"
+        assert exc.message == "effective pytest target list is empty"
+    else:
+        raise AssertionError("RunnerError was not raised for empty pytest targets")

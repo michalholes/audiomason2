@@ -431,7 +431,13 @@ def run_biome(
 def run_pytest(
     logger: Logger, cwd: Path, *, repo_root: Path, pytest_use_venv: bool, targets: list[str]
 ) -> bool:
-    targets = _norm_targets(targets, ["tests"])
+    targets = _norm_targets(targets, [])
+    if not targets:
+        raise RunnerError(
+            "CONFIG",
+            "PYTEST_TARGETS_EMPTY",
+            "effective pytest target list is empty",
+        )
 
     # IMPORTANT: pytest may need dependencies that exist only inside a venv.
     # Preferred: use repo_root/.venv/bin/python when it exists.
