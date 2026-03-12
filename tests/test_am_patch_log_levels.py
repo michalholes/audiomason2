@@ -432,3 +432,47 @@ def test_failure_dump_breaks_active_status_line_before_screen_output(tmp_path: P
     assert seen[0].startswith("\n" + ("=" * 80))
     assert any(part == "[stderr]\n" for part in seen)
     assert any("boom\n" in part for part in seen)
+
+
+def test_result_event_with_terminal_fields_keeps_ndjson_valid_after_live_stream(
+    tmp_path: Path,
+) -> None:
+    scripts_dir = Path(__file__).parent.parent / "scripts"
+    sys.path.insert(0, str(scripts_dir))
+    from am_patch.final_summary import build_terminal_summary
+
+    logger = _mk_logger(tmp_path, screen_level="normal", log_level="debug")
+    logger.json_enabled = True
+    logger.json_path = tmp_path / "am_patch.jsonl"
+    logger._json_fp = logger._close_stack.enter_context(
+        logger.json_path.open("w", encoding="utf-8")
+    )
+    try:
+        logger.run_logged([sys.executable, "-c", "print('hello', flush=True)"])
+        logger.emit_json_result(
+            summary=build_terminal_summary(
+                exit_code=0,
+                commit_and_push=False,
+                final_commit_sha=None,
+                final_pushed_files=None,
+                push_ok_for_posthook=None,
+                final_fail_stage=None,
+                final_fail_reason=None,
+                log_path=tmp_path / "am_patch.log",
+                json_path=tmp_path / "am_patch.jsonl",
+            )
+        )
+    finally:
+        logger.close()
+
+    events = [
+        json.loads(line)
+        for line in (tmp_path / "am_patch.jsonl").read_text(encoding="utf-8").splitlines()
+    ]
+    result_evt = next(evt for evt in events if evt.get("type") == "result")
+
+    assert any(evt.get("kind") == "SUBPROCESS_STDOUT" for evt in events)
+    assert result_evt["terminal_status"] == "success"
+    assert result_evt["final_stage"] is None
+    assert result_evt["final_reason"] is None
+    assert result_evt["json_path"] == str(tmp_path / "am_patch.jsonl")

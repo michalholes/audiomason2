@@ -24,7 +24,7 @@ from am_patch.engine_run_gates import run_finalize_gates
 from am_patch.engine_startup_runtime import build_startup_logger_and_ipc
 from am_patch.errors import CANCEL_EXIT_CODE, RunnerCancelledError, RunnerError, fingerprint
 from am_patch.execution_context import open_execution_context
-from am_patch.final_summary import emit_final_summary
+from am_patch.final_summary import build_terminal_summary, emit_final_summary
 from am_patch.gates import run_badguys
 from am_patch.ipc_socket import IpcController
 from am_patch.lock import FileLock
@@ -856,13 +856,19 @@ def finalize_and_report(ctx: RunContext, result: RunResult) -> int:
 
     lock = result.lock
     exit_code = run_post_run_pipeline(ctx=ctx, result=result)
-    final_commit_sha = result.final_commit_sha
-    final_pushed_files = result.final_pushed_files
-    final_fail_stage = result.final_fail_stage
-    final_fail_reason = result.final_fail_reason
     final_fail_detail = result.final_fail_detail
     final_fail_fingerprint = result.final_fail_fingerprint
-    push_ok_for_posthook = result.push_ok_for_posthook
+    summary = build_terminal_summary(
+        exit_code=exit_code,
+        commit_and_push=bool(getattr(policy, "commit_and_push", False)),
+        final_commit_sha=result.final_commit_sha,
+        final_pushed_files=result.final_pushed_files,
+        push_ok_for_posthook=result.push_ok_for_posthook,
+        final_fail_stage=result.final_fail_stage,
+        final_fail_reason=result.final_fail_reason,
+        log_path=log_path,
+        json_path=json_path,
+    )
 
     with suppress(Exception):
         status.stop()
@@ -874,19 +880,10 @@ def finalize_and_report(ctx: RunContext, result: RunResult) -> int:
     screen_quiet = str(verbosity or "").strip().lower() == "quiet"
     log_quiet = str(log_level or "").strip().lower() == "quiet"
     with suppress(Exception):
-        logger.emit_json_result(
-            ok=(exit_code == 0), return_code=exit_code, log_path=log_path, json_path=json_path
-        )
+        logger.emit_json_result(summary=summary)
     emit_final_summary(
         logger=logger,
-        log_path=log_path,
-        exit_code=exit_code,
-        commit_and_push=bool(getattr(policy, "commit_and_push", False)),
-        final_commit_sha=final_commit_sha,
-        final_pushed_files=final_pushed_files,
-        push_ok_for_posthook=push_ok_for_posthook,
-        final_fail_stage=final_fail_stage,
-        final_fail_reason=final_fail_reason,
+        summary=summary,
         final_fail_detail=final_fail_detail,
         final_fail_fingerprint=final_fail_fingerprint,
         screen_quiet=screen_quiet,

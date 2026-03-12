@@ -12,6 +12,7 @@ from typing import Any
 
 from .console import colorize_console_message, stdout_color_enabled
 from .errors import RunnerCancelledError, RunnerError
+from .final_summary import TerminalSummary, result_event_payload
 from .managed_subprocess import ManagedSubprocess
 
 
@@ -367,9 +368,7 @@ class Logger:
                 with contextlib.suppress(Exception):
                     ipc_stream(evt)
 
-    def emit_json_result(
-        self, *, ok: bool, return_code: int, log_path: Path, json_path: Path | None
-    ) -> None:
+    def emit_json_result(self, *, summary: TerminalSummary) -> None:
         with self._io_lock:
             ipc_stream = self._ipc_stream
             need_evt = (self.json_enabled and self._json_fp is not None) or ipc_stream is not None
@@ -381,10 +380,7 @@ class Logger:
                 "seq": self._json_seq,
                 "ts_mono_ms": self._now_mono_ms(),
                 "stage": self._get_stage(),
-                "ok": bool(ok),
-                "return_code": int(return_code),
-                "log_path": str(log_path),
-                "json_path": str(json_path) if json_path is not None else None,
+                **result_event_payload(summary),
             }
             if self.json_enabled and self._json_fp is not None:
                 with contextlib.suppress(Exception):

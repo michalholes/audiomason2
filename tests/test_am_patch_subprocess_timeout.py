@@ -581,3 +581,69 @@ def test_finalize_and_report_emits_canceled_result(tmp_path: Path) -> None:
     assert rc == cancel_exit_code
     text = (tmp_path / "am_patch.log").read_text(encoding="utf-8")
     assert "RESULT: CANCELED" in text
+
+
+def test_status_heartbeat_and_result_event_keep_ndjson_valid(tmp_path: Path) -> None:
+    scripts_dir = Path(__file__).parent.parent / "scripts"
+    sys.path.insert(0, str(scripts_dir))
+    from am_patch.config import Policy
+    from am_patch.engine_startup_runtime import build_startup_logger_and_ipc
+    from am_patch.final_summary import build_terminal_summary
+    from am_patch.status import StatusReporter
+
+    policy = Policy()
+    policy.current_log_symlink_enabled = False
+    policy.json_out = True
+
+    status = StatusReporter(enabled=True, interval_tty=0.01, interval_non_tty=0.01)
+    ctx = build_startup_logger_and_ipc(
+        cli=SimpleNamespace(mode="workspace", issue_id="1001"),
+        policy=policy,
+        patch_dir=tmp_path,
+        log_path=tmp_path / "am_patch.log",
+        json_path=tmp_path / "am_patch.jsonl",
+        status=status,
+        verbosity="quiet",
+        log_level="quiet",
+        symlink_path=tmp_path / "am_patch.symlink",
+    )
+
+    try:
+        status.start()
+        status.set_stage("GATE_PYTEST")
+        ctx.logger.run_logged([sys.executable, "-c", "import time; time.sleep(0.25); print('ok')"])
+        ctx.logger.emit_json_result(
+            summary=build_terminal_summary(
+                exit_code=0,
+                commit_and_push=False,
+                final_commit_sha=None,
+                final_pushed_files=None,
+                push_ok_for_posthook=None,
+                final_fail_stage=None,
+                final_fail_reason=None,
+                log_path=tmp_path / "am_patch.log",
+                json_path=tmp_path / "am_patch.jsonl",
+            )
+        )
+    finally:
+        status.stop()
+        ctx.logger.close()
+
+    events = [
+        json.loads(line)
+        for line in (tmp_path / "am_patch.jsonl").read_text(encoding="utf-8").splitlines()
+        if line.strip()
+    ]
+    result_evt = next(evt for evt in events if evt.get("type") == "result")
+
+    assert any(
+        evt.get("type") == "log"
+        and evt.get("stage") == "GATE_PYTEST"
+        and evt.get("kind") == "HEARTBEAT"
+        and evt.get("msg") == "HEARTBEAT"
+        for evt in events
+    )
+    assert result_evt["terminal_status"] == "success"
+    assert result_evt["final_stage"] is None
+    assert result_evt["final_reason"] is None
+    assert result_evt["json_path"] == str(tmp_path / "am_patch.jsonl")

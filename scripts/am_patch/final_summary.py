@@ -1,10 +1,164 @@
 from __future__ import annotations
 
 from contextlib import suppress
+from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from am_patch.errors import CANCEL_EXIT_CODE
-from am_patch.log import Logger
+from .errors import CANCEL_EXIT_CODE
+
+if TYPE_CHECKING:
+    from .log import Logger
+
+
+@dataclass(frozen=True)
+class TerminalSummary:
+    ok: bool
+    return_code: int
+    terminal_status: str
+    final_stage: str | None
+    final_reason: str | None
+    final_commit_sha: str | None
+    push_status: str | None
+    log_path: Path
+    json_path: Path | None
+    final_pushed_files: list[str] | None
+    commit_and_push: bool
+
+
+def build_terminal_summary(
+    *,
+    exit_code: int,
+    commit_and_push: bool,
+    final_commit_sha: str | None,
+    final_pushed_files: list[str] | None,
+    push_ok_for_posthook: bool | None,
+    final_fail_stage: str | None,
+    final_fail_reason: str | None,
+    log_path: Path,
+    json_path: Path | None,
+) -> TerminalSummary:
+    terminal_status = _terminal_status(exit_code)
+    return TerminalSummary(
+        ok=exit_code == 0,
+        return_code=int(exit_code),
+        terminal_status=terminal_status,
+        final_stage=_final_stage(terminal_status, final_fail_stage),
+        final_reason=_final_reason(terminal_status, final_fail_reason),
+        final_commit_sha=(final_commit_sha if terminal_status == "success" else None),
+        push_status=_push_status(commit_and_push, push_ok_for_posthook),
+        log_path=log_path,
+        json_path=json_path,
+        final_pushed_files=_final_pushed_files(
+            terminal_status,
+            final_pushed_files,
+        ),
+        commit_and_push=bool(commit_and_push),
+    )
+
+
+def result_event_payload(summary: TerminalSummary) -> dict[str, object]:
+    return {
+        "ok": bool(summary.ok),
+        "return_code": int(summary.return_code),
+        "terminal_status": summary.terminal_status,
+        "final_stage": summary.final_stage,
+        "final_reason": summary.final_reason,
+        "final_commit_sha": summary.final_commit_sha,
+        "push_status": summary.push_status,
+        "log_path": str(summary.log_path),
+        "json_path": str(summary.json_path) if summary.json_path is not None else None,
+    }
+
+
+def render_summary_lines(summary: TerminalSummary) -> list[tuple[str, str, bool, bool]]:
+    if summary.terminal_status == "success":
+        return _render_success_lines(summary)
+    if summary.terminal_status == "canceled":
+        return _render_canceled_lines(summary)
+    return _render_fail_lines(summary)
+
+
+def _final_pushed_files(
+    terminal_status: str,
+    final_pushed_files: list[str] | None,
+) -> list[str] | None:
+    if terminal_status != "success" or not isinstance(final_pushed_files, list):
+        return None
+    return list(final_pushed_files)
+
+
+def _terminal_status(exit_code: int) -> str:
+    if exit_code == 0:
+        return "success"
+    if exit_code == CANCEL_EXIT_CODE:
+        return "canceled"
+    return "fail"
+
+
+def _final_stage(terminal_status: str, final_fail_stage: str | None) -> str | None:
+    if terminal_status == "success":
+        return None
+    return final_fail_stage or "INTERNAL"
+
+
+def _final_reason(terminal_status: str, final_fail_reason: str | None) -> str | None:
+    if terminal_status == "success":
+        return None
+    if terminal_status == "canceled":
+        return "cancel requested"
+    return final_fail_reason or "unexpected error"
+
+
+def _push_status(commit_and_push: bool, push_ok_for_posthook: bool | None) -> str | None:
+    if not commit_and_push:
+        return None
+    if push_ok_for_posthook is True:
+        return "OK"
+    if push_ok_for_posthook is False:
+        return "FAIL"
+    return None
+
+
+def _render_success_lines(summary: TerminalSummary) -> list[tuple[str, str, bool, bool]]:
+    lines: list[tuple[str, str, bool, bool]] = [("RESULT: SUCCESS\n", "RESULT", True, True)]
+    if summary.push_status == "OK" and summary.final_pushed_files is not None:
+        lines.append(("FILES:\n\n", "FILES", False, False))
+        lines.extend((f"{line}\n", "TEXT", False, False) for line in summary.final_pushed_files)
+    lines.append((f"COMMIT: {summary.final_commit_sha or '(none)'}\n", "COMMIT", False, False))
+    if summary.commit_and_push:
+        push_text = summary.push_status or "UNKNOWN"
+        lines.append((f"PUSH: {push_text}\n", "PUSH", False, False))
+    lines.append((f"LOG: {summary.log_path}\n", "TEXT", False, True))
+    return lines
+
+
+def _render_canceled_lines(summary: TerminalSummary) -> list[tuple[str, str, bool, bool]]:
+    return [
+        ("RESULT: CANCELED\n", "RESULT", True, True),
+        (f"STAGE: {summary.final_stage or 'INTERNAL'}\n", "STAGE", False, True),
+        (
+            f"REASON: {summary.final_reason or 'cancel requested'}\n",
+            "REASON",
+            False,
+            True,
+        ),
+        (f"LOG: {summary.log_path}\n", "TEXT", False, True),
+    ]
+
+
+def _render_fail_lines(summary: TerminalSummary) -> list[tuple[str, str, bool, bool]]:
+    return [
+        ("RESULT: FAIL\n", "RESULT", True, True),
+        (f"STAGE: {summary.final_stage or 'INTERNAL'}\n", "STAGE", False, False),
+        (
+            f"REASON: {summary.final_reason or 'unexpected error'}\n",
+            "REASON",
+            False,
+            False,
+        ),
+        (f"LOG: {summary.log_path}\n", "TEXT", False, False),
+    ]
 
 
 def _emit_logger_message(
@@ -62,216 +216,41 @@ def _emit_summary_line(
 def emit_final_summary(
     *,
     logger: Logger,
-    log_path: Path,
-    exit_code: int,
-    commit_and_push: bool,
-    final_commit_sha: str | None,
-    final_pushed_files: list[str] | None,
-    push_ok_for_posthook: bool | None,
-    final_fail_stage: str | None,
-    final_fail_reason: str | None,
+    summary: TerminalSummary,
     final_fail_detail: str | None,
     final_fail_fingerprint: str | None,
     screen_quiet: bool,
     log_quiet: bool,
 ) -> None:
-    if exit_code == 0:
-        _emit_success_summary(
-            logger=logger,
-            log_path=log_path,
-            commit_and_push=commit_and_push,
-            final_commit_sha=final_commit_sha,
-            final_pushed_files=final_pushed_files,
-            push_ok_for_posthook=push_ok_for_posthook,
-            screen_quiet=screen_quiet,
-            log_quiet=log_quiet,
-        )
-        return
-
-    if exit_code == CANCEL_EXIT_CODE:
-        _emit_canceled_summary(
-            logger=logger,
-            log_path=log_path,
-            stage=final_fail_stage,
-            screen_quiet=screen_quiet,
-            log_quiet=log_quiet,
-        )
-        return
-
-    _emit_fail_summary(
-        logger=logger,
-        log_path=log_path,
-        stage=final_fail_stage,
-        reason=final_fail_reason,
-        detail=final_fail_detail,
-        fingerprint=final_fail_fingerprint,
-        screen_quiet=screen_quiet,
-        log_quiet=log_quiet,
-    )
-
-
-def _emit_success_summary(
-    *,
-    logger: Logger,
-    log_path: Path,
-    commit_and_push: bool,
-    final_commit_sha: str | None,
-    final_pushed_files: list[str] | None,
-    push_ok_for_posthook: bool | None,
-    screen_quiet: bool,
-    log_quiet: bool,
-) -> None:
-    _emit_summary_line(
-        logger,
-        message="RESULT: SUCCESS\n",
-        kind="RESULT",
-        to_screen=True,
-        to_log=True,
-    )
-    if push_ok_for_posthook is True and final_pushed_files is not None:
-        _emit_summary_line(
-            logger,
-            message="FILES:\n\n",
-            kind="FILES",
-            to_screen=not screen_quiet,
-            to_log=not log_quiet,
-        )
-        for line in final_pushed_files:
-            _emit_summary_line(
-                logger,
-                message=f"{line}\n",
-                kind="TEXT",
-                to_screen=not screen_quiet,
-                to_log=not log_quiet,
-            )
-    _emit_summary_line(
-        logger,
-        message=f"COMMIT: {final_commit_sha or '(none)'}\n",
-        kind="COMMIT",
-        to_screen=not screen_quiet,
-        to_log=not log_quiet,
-    )
-    if commit_and_push:
-        if push_ok_for_posthook is True:
-            push_txt = "OK"
-        elif push_ok_for_posthook is False:
-            push_txt = "FAIL"
-        else:
-            push_txt = "UNKNOWN"
-        _emit_summary_line(
-            logger,
-            message=f"PUSH: {push_txt}\n",
-            kind="PUSH",
-            to_screen=not screen_quiet,
-            to_log=not log_quiet,
-        )
-    _emit_summary_line(
-        logger,
-        message=f"LOG: {log_path}\n",
-        kind="TEXT",
-        to_screen=not screen_quiet,
-        to_log=True,
-    )
-
-
-def _emit_canceled_summary(
-    *,
-    logger: Logger,
-    log_path: Path,
-    stage: str | None,
-    screen_quiet: bool,
-    log_quiet: bool,
-) -> None:
-    _emit_summary_line(
-        logger,
-        message="RESULT: CANCELED\n",
-        kind="RESULT",
-        to_screen=True,
-        to_log=True,
-    )
-    _emit_summary_line(
-        logger,
-        message=f"STAGE: {stage or 'INTERNAL'}\n",
-        kind="STAGE",
-        to_screen=not screen_quiet,
-        to_log=True,
-    )
-    _emit_summary_line(
-        logger,
-        message="REASON: cancel requested\n",
-        kind="REASON",
-        to_screen=not screen_quiet,
-        to_log=True,
-    )
-    _emit_summary_line(
-        logger,
-        message=f"LOG: {log_path}\n",
-        kind="TEXT",
-        to_screen=not screen_quiet,
-        to_log=True,
-    )
-
-
-def _emit_fail_summary(
-    *,
-    logger: Logger,
-    log_path: Path,
-    stage: str | None,
-    reason: str | None,
-    detail: str | None,
-    fingerprint: str | None,
-    screen_quiet: bool,
-    log_quiet: bool,
-) -> None:
-    if detail:
+    if final_fail_detail:
         _emit_logger_message(
             logger,
             severity="ERROR",
             channel="CORE",
-            message=detail,
+            message=final_fail_detail,
             kind="TEXT",
             summary=False,
             error_detail=True,
             to_screen=True,
             to_log=True,
         )
-    if fingerprint:
+    if final_fail_fingerprint:
         _emit_logger_message(
             logger,
             severity="ERROR",
             channel="CORE",
-            message=fingerprint,
+            message=final_fail_fingerprint,
             kind="TEXT",
             summary=False,
             error_detail=True,
             to_screen=False,
             to_log=True,
         )
-    _emit_summary_line(
-        logger,
-        message="RESULT: FAIL\n",
-        kind="RESULT",
-        to_screen=True,
-        to_log=True,
-    )
-    _emit_summary_line(
-        logger,
-        message=f"STAGE: {stage or 'INTERNAL'}\n",
-        kind="STAGE",
-        to_screen=not screen_quiet,
-        to_log=not log_quiet,
-    )
-    _emit_summary_line(
-        logger,
-        message=f"REASON: {reason or 'unexpected error'}\n",
-        kind="REASON",
-        to_screen=not screen_quiet,
-        to_log=not log_quiet,
-    )
-    _emit_summary_line(
-        logger,
-        message=f"LOG: {log_path}\n",
-        kind="TEXT",
-        to_screen=not screen_quiet,
-        to_log=not log_quiet,
-    )
+    for message, kind, always_screen, always_log in render_summary_lines(summary):
+        _emit_summary_line(
+            logger,
+            message=message,
+            kind=kind,
+            to_screen=always_screen or not screen_quiet,
+            to_log=always_log or not log_quiet,
+        )

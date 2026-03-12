@@ -80,6 +80,66 @@ def test_main_converts_unhandled_run_exception_into_finalized_fail_result(
     assert logger.close_calls == 1
 
 
+def test_finalize_and_report_reuses_one_terminal_summary_object(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    scripts_dir = Path(__file__).parent.parent / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+
+    import am_patch.engine as engine_mod
+    from am_patch.engine import finalize_and_report
+    from am_patch.log import Logger
+    from am_patch.run_result import RunResult
+
+    log_path = tmp_path / "am_patch.log"
+    logger = Logger(
+        log_path=log_path,
+        symlink_path=tmp_path / "am_patch.symlink",
+        screen_level="quiet",
+        log_level="normal",
+        symlink_enabled=False,
+    )
+    ctx = SimpleNamespace(
+        policy=SimpleNamespace(test_mode=False, commit_and_push=True),
+        log_path=log_path,
+        logger=logger,
+        status=_FakeStatus(),
+        verbosity="quiet",
+        log_level="normal",
+        json_path=tmp_path / "am_patch.jsonl",
+        isolated_work_patch_dir=None,
+    )
+    result = RunResult(
+        exit_code=0,
+        final_commit_sha="deadbeef",
+        final_pushed_files=["alpha.py"],
+        push_ok_for_posthook=True,
+    )
+    captured: dict[str, object] = {}
+
+    def _capture_json_result(*, summary) -> None:
+        captured["json_summary"] = summary
+
+    def _capture_final_summary(**kwargs) -> None:
+        captured["final_summary"] = kwargs["summary"]
+
+    monkeypatch.setattr(logger, "emit_json_result", _capture_json_result)
+    monkeypatch.setattr(engine_mod, "emit_final_summary", _capture_final_summary)
+    monkeypatch.setattr(engine_mod, "run_post_run_pipeline", lambda ctx, result: 0)
+    try:
+        rc = finalize_and_report(ctx, result)
+    finally:
+        logger.close()
+
+    assert rc == 0
+    assert captured["json_summary"] is captured["final_summary"]
+    assert captured["json_summary"].terminal_status == "success"
+    assert captured["json_summary"].final_commit_sha == "deadbeef"
+    assert captured["json_summary"].push_status == "OK"
+
+
 def test_finalize_and_report_keeps_fail_summary_when_json_result_emit_fails(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
