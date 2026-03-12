@@ -788,12 +788,38 @@ Behavior (static/app.js):
 
 The main UI includes a live log view for the selected job.
 
-Rendering rule (static/app.js):
-- In non-debug live levels, each log line MUST render only ev.msg.
-  - If ev.stdout is present, the UI appends a block: STDOUT:\n<text>.
-  - If ev.stderr is present, the UI appends a block: STDERR:\n<text>.
-- In debug live level, each log line MUST render as:
-  <stage> | <kind> | <sev> | <msg>
+Live view levels (main UI):
+- quiet:
+  - summary baseline
+  - error-bearing content MUST remain visible
+- normal:
+  - human render
+  - MUST include everything from quiet
+  - MUST include concise step-flow lines derived from persisted log events
+    (for example: DO, OK, FAIL, STATUS, RESULT)
+- warning:
+  - MUST include everything from normal
+  - MUST include warning-level detail
+- verbose:
+  - MUST include everything from warning
+  - MUST include DETAIL/INFO log events
+  - MUST include live subprocess stdout/stderr content
+- debug_human:
+  - MUST render the same persisted event stream as a human-readable debug view
+  - log events MUST render without technical prefix expansion such as
+    <stage> | <kind> | <sev> | <msg>
+  - non-log persisted events MUST still render deterministically as readable lines
+- debug_raw:
+  - MUST render the persisted SSE event stream without filtering or humanization
+  - each persisted event line MUST render as one raw JSON line
+
+Rendering rule for human-rendered levels (quiet, normal, warning, verbose,
+debug_human):
+- each log line MUST render only ev.msg.
+- If ev.stdout is present, the UI appends a block: STDOUT:
+<text>.
+- If ev.stderr is present, the UI appends a block: STDERR:
+<text>.
 
 This is a UI-only rendering rule. The SSE event payload fields
 (stage/kind/sev/msg/stdout/stderr) remain unchanged.
@@ -2005,10 +2031,15 @@ Persistence:
 SSE (`/api/jobs/<job_id>/events`) streams persisted event lines from the active
 backend mode only. PatchHub does not parse or rewrite persisted NDJSON lines.
 Debug live view requirements (HARD):
-- In debug level, the UI MUST display every persisted event line, including
+- `debug_human` and `debug_raw` are two representations of the same persisted
+  SSE event stream.
+- In `debug_raw`, the UI MUST display every persisted event line, including
   non-log IPC reply/control frames.
-- Debug rendering MUST provide a deterministic non-empty fallback for reply,
+- In `debug_human`, the UI MUST render the same persisted events as readable
+  lines and MUST provide a deterministic non-empty fallback for reply,
   control, and other non-log JSON objects.
+- Persisted UI state that still stores the legacy level value `debug` MUST be
+  migrated to `debug_raw`.
 
 Bounded-growth contract (HARD)
 - Raw log and event history in `db_primary` mode MUST be subject to retention
