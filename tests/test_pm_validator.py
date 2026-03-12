@@ -6,8 +6,8 @@ import tempfile
 from pathlib import Path
 from zipfile import ZIP_DEFLATED, ZipFile
 
-SCRIPT = Path(__file__).resolve().parents[1] / "scripts/pm_validator_artifact.py"
-COMMIT = "Add repo PM validator artifact"
+SCRIPT = Path(__file__).resolve().parents[1] / "scripts/pm_validator.py"
+COMMIT = "Align PM validator monolith checks"
 
 
 def _write(path: Path, text: str) -> None:
@@ -53,6 +53,20 @@ def _safe_member(relpath: str) -> str:
     return "patches/per_file/" + relpath.replace("/", "__") + ".patch"
 
 
+def _added_patch(relpath: str, new_text: str) -> bytes:
+    added_lines = new_text.splitlines()
+    hunk = "".join(f"+{line}\n" for line in added_lines)
+    return (
+        f"diff --git a/{relpath} b/{relpath}\n"
+        "new file mode 100644\n"
+        "index 0000000..1111111\n"
+        "--- /dev/null\n"
+        f"+++ b/{relpath}\n"
+        f"@@ -0,0 +1,{len(added_lines)} @@\n"
+        f"{hunk}"
+    ).encode()
+
+
 def _write_zip(path: Path, members: dict[str, bytes]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with ZipFile(path, "w", compression=ZIP_DEFLATED) as zf:
@@ -60,13 +74,13 @@ def _write_zip(path: Path, members: dict[str, bytes]) -> None:
             zf.writestr(name, data)
 
 
-def _patch_zip(path: Path, patch_member: str, patch_bytes: bytes, *, issue: str = "601") -> None:
+def _patch_zip(path: Path, members: dict[str, bytes], *, issue: str = "601") -> None:
     _write_zip(
         path,
         {
             "COMMIT_MESSAGE.txt": (COMMIT + "\n").encode("utf-8"),
             "ISSUE_NUMBER.txt": (issue + "\n").encode("utf-8"),
-            patch_member: patch_bytes,
+            **members,
         },
     )
 
@@ -87,7 +101,7 @@ def test_initial_mode_passes(tmp_path: Path) -> None:
     snapshot = tmp_path / "workspace.zip"
     patch_zip = tmp_path / "issue_601_v2.zip"
     _write_zip(snapshot, {relpath: before.encode("utf-8")})
-    _patch_zip(patch_zip, _safe_member(relpath), _git_patch(relpath, before, after))
+    _patch_zip(patch_zip, {_safe_member(relpath): _git_patch(relpath, before, after)})
 
     proc = _run("601", COMMIT, str(patch_zip), "--workspace-snapshot", str(snapshot))
     assert proc.returncode == 0, proc.stdout + proc.stderr
@@ -102,7 +116,7 @@ def test_repair_overlay_only_passes(tmp_path: Path) -> None:
     overlay = tmp_path / "patched_issue601_v1.zip"
     patch_zip = tmp_path / "issue_601_v2.zip"
     _write_zip(overlay, {relpath: before.encode("utf-8")})
-    _patch_zip(patch_zip, _safe_member(relpath), _git_patch(relpath, before, after))
+    _patch_zip(patch_zip, {_safe_member(relpath): _git_patch(relpath, before, after)})
 
     proc = _run("601", COMMIT, str(patch_zip), "--repair-overlay", str(overlay))
     assert proc.returncode == 0, proc.stdout + proc.stderr
@@ -119,7 +133,7 @@ def test_repair_supplemental_file_is_supported(tmp_path: Path) -> None:
     patch_zip = tmp_path / "issue_601_v2.zip"
     _write_zip(snapshot, {relpath: before.encode("utf-8")})
     _write_zip(overlay, {"scripts/sample.py": b"def value():\n    return 2\n"})
-    _patch_zip(patch_zip, _safe_member(relpath), _git_patch(relpath, before, after))
+    _patch_zip(patch_zip, {_safe_member(relpath): _git_patch(relpath, before, after)})
 
     proc = _run(
         "601",
@@ -145,7 +159,7 @@ def test_repair_without_required_supplemental_file_fails(tmp_path: Path) -> None
     patch_zip = tmp_path / "issue_601_v2.zip"
     _write_zip(snapshot, {relpath: before.encode("utf-8")})
     _write_zip(overlay, {})
-    _patch_zip(patch_zip, _safe_member(relpath), _git_patch(relpath, before, after))
+    _patch_zip(patch_zip, {_safe_member(relpath): _git_patch(relpath, before, after)})
 
     proc = _run(
         "601",
@@ -161,3 +175,69 @@ def test_repair_without_required_supplemental_file_fails(tmp_path: Path) -> None
         "RULE VALIDATION_ERROR: FAIL - repair_requires_supplemental_file:['tests/test_sample.txt']"
     )
     assert expected in proc.stdout
+
+
+def test_monolith_hub_growth_is_reported(tmp_path: Path) -> None:
+    snapshot = tmp_path / "workspace.zip"
+    patch_zip = tmp_path / "issue_601_v2.zip"
+    base_files = {
+        "scripts/am_patch/importer_a.py": "def run() -> None:\n    return None\n",
+        "scripts/am_patch/importer_b.py": "def run() -> None:\n    return None\n",
+        "scripts/am_patch/importer_c.py": "def run() -> None:\n    return None\n",
+        "tests/test_importer_a.py": "def test_a() -> None:\n    return None\n",
+        "tests/test_importer_b.py": "def test_b() -> None:\n    return None\n",
+    }
+    _write_zip(snapshot, {path: text.encode("utf-8") for path, text in base_files.items()})
+
+    hub_body = "\n".join(
+        [
+            "def alpha() -> int:",
+            "    return 1",
+            "",
+            "def beta() -> int:",
+            "    return 2",
+            "",
+            "def gamma() -> int:",
+            "    return 3",
+            "",
+            *[f"VALUE_{idx} = {idx}" for idx in range(1, 105)],
+            "",
+        ]
+    )
+    members = {
+        _safe_member("scripts/am_patch/hub.py"): _added_patch(
+            "scripts/am_patch/hub.py",
+            hub_body,
+        ),
+        _safe_member("scripts/am_patch/importer_a.py"): _git_patch(
+            "scripts/am_patch/importer_a.py",
+            base_files["scripts/am_patch/importer_a.py"],
+            "from am_patch.hub import alpha\n\n\ndef run() -> None:\n    alpha()\n",
+        ),
+        _safe_member("scripts/am_patch/importer_b.py"): _git_patch(
+            "scripts/am_patch/importer_b.py",
+            base_files["scripts/am_patch/importer_b.py"],
+            "from am_patch.hub import beta\n\n\ndef run() -> None:\n    beta()\n",
+        ),
+        _safe_member("scripts/am_patch/importer_c.py"): _git_patch(
+            "scripts/am_patch/importer_c.py",
+            base_files["scripts/am_patch/importer_c.py"],
+            "from am_patch.hub import gamma\n\n\ndef run() -> None:\n    gamma()\n",
+        ),
+        _safe_member("tests/test_importer_a.py"): _git_patch(
+            "tests/test_importer_a.py",
+            base_files["tests/test_importer_a.py"],
+            "from am_patch.hub import alpha\n\n\ndef test_a() -> None:\n    assert alpha() == 1\n",
+        ),
+        _safe_member("tests/test_importer_b.py"): _git_patch(
+            "tests/test_importer_b.py",
+            base_files["tests/test_importer_b.py"],
+            "from am_patch.hub import beta\n\n\ndef test_b() -> None:\n    assert beta() == 2\n",
+        ),
+    }
+    _patch_zip(patch_zip, members)
+
+    proc = _run("601", COMMIT, str(patch_zip), "--workspace-snapshot", str(snapshot))
+    assert proc.returncode == 1
+    assert "RULE MONOLITH: FAIL" in proc.stdout
+    assert "hub_signal_fanin:scripts/am_patch/hub.py" in proc.stdout

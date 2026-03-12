@@ -19,6 +19,16 @@ JS_EXTS = {".js", ".mjs", ".cjs"}
 CATCHALL_BASENAMES = {"utils.py", "common.py", "helpers.py", "misc.py"}
 CATCHALL_DIRS = {"utils", "common", "helpers", "misc"}
 AREAS = {"src", "plugins", "badguys", "scripts", "tests", "docs"}
+HUB_FANIN_DELTA = 5
+HUB_FANOUT_DELTA = 5
+HUB_EXPORTS_DELTA_MIN = 3
+HUB_LOC_DELTA_MIN = 100
+
+_RE_EXPORT_LINE = re.compile(r"^\s*export\s+", re.MULTILINE)
+_RE_EXPORTS_DOT = re.compile(r"\bexports\.([A-Za-z0-9_$]+)")
+_RE_IMPORT_FROM = re.compile(r"\bimport\b[^;\n]*\bfrom\s*[\"']([^\"']+)[\"']")
+_RE_EXPORT_FROM = re.compile(r"\bexport\b[^;\n]*\bfrom\s*[\"']([^\"']+)[\"']")
+_RE_REQUIRE = re.compile(r"\brequire\(\s*[\"']([^\"']+)[\"']\s*\)")
 
 
 @dataclass(frozen=True)
@@ -26,6 +36,13 @@ class RuleResult:
     rule_id: str
     status: str
     detail: str
+
+
+@dataclass(frozen=True)
+class MonolithMetrics:
+    loc: int
+    internal_imports: int
+    exports: int
 
 
 class ValidationError(Exception):
@@ -284,50 +301,276 @@ def _check_js(root: Path, decision_paths: list[str]) -> RuleResult:
     return RuleResult("JS_SYNTAX", "PASS", f"files={len(targets)}")
 
 
-def _py_counts(text: str) -> tuple[int, int]:
-    tree = ast.parse(text)
-    imports = sum(isinstance(node, (ast.Import, ast.ImportFrom)) for node in ast.walk(tree))
-    exports = sum(
-        isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))
-        and not node.name.startswith("_")
-        for node in tree.body
-    )
+def _count_loc(text: str) -> int:
+    return sum(1 for line in text.splitlines() if line.strip())
+
+
+def _parse_tree(text: str) -> ast.AST | None:
+    try:
+        return ast.parse(text)
+    except SyntaxError:
+        return None
+
+
+def _count_exports(tree: ast.AST) -> int:
+    if not isinstance(tree, ast.Module):
+        return 0
+    total = 0
     for node in tree.body:
-        if not isinstance(node, ast.Assign):
-            continue
-        for target in node.targets:
-            is_all = isinstance(target, ast.Name) and target.id == "__all__"
-            value = node.value
-            if is_all and isinstance(value, (ast.List, ast.Tuple)):
-                exports += sum(
-                    isinstance(item, ast.Constant) and isinstance(item.value, str)
-                    for item in value.elts
-                )
-    return imports, exports
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            name = getattr(node, "name", "")
+            if name and not name.startswith("_"):
+                total += 1
+    return total
 
 
-def _js_counts(text: str) -> tuple[int, int]:
-    imports = sum(1 for line in text.splitlines() if line.lstrip().startswith("import "))
-    exports = sum(1 for line in text.splitlines() if line.lstrip().startswith("export "))
-    return imports, exports + text.count("module.exports") + text.count("exports.")
-
-
-def _counts(path: str, text: str) -> tuple[int, int, int]:
-    loc = len(text.splitlines())
-    suffix = Path(path).suffix
-    if suffix == ".py":
-        imports, exports = _py_counts(text)
-    elif suffix in JS_EXTS:
-        imports, exports = _js_counts(text)
-    else:
-        imports = exports = 0
-    return loc, imports, exports
+def _norm_relpath(path: str) -> str:
+    text = str(path).replace("\\", "/").strip()
+    if text.startswith("./"):
+        text = text[2:]
+    return text.strip("/")
 
 
 def _area(path: str) -> str:
     parts = PurePosixPath(path).parts
     first = parts[0] if parts else ""
+    if first == "plugins" and len(parts) >= 2:
+        return f"plugins.{parts[1]}"
     return first if first in AREAS else "other"
+
+
+def _module_for_relpath(relpath: str) -> str | None:
+    rp = _norm_relpath(relpath)
+    if rp.startswith("src/audiomason/") and rp.endswith(".py"):
+        sub = rp[len("src/") : -3].replace("/", ".")
+        return sub[: -len(".__init__")] if sub.endswith(".__init__") else sub
+    if rp.startswith("scripts/am_patch/") and rp.endswith(".py"):
+        sub = rp[len("scripts/") : -3].replace("/", ".")
+        return sub[: -len(".__init__")] if sub.endswith(".__init__") else sub
+    if rp.startswith("plugins/") and rp.endswith(".py"):
+        parts = rp.split("/")
+        if len(parts) >= 2:
+            name = parts[1]
+            rest = "/".join(parts[2:])
+            if rest == "__init__.py":
+                return f"plugins.{name}"
+            if rest.endswith(".py"):
+                rest = rest[:-3]
+            rest = rest.replace("/", ".")
+            return f"plugins.{name}.{rest}" if rest else f"plugins.{name}"
+    if rp.startswith("tests/") and rp.endswith(".py"):
+        sub = rp[:-3].replace("/", ".")
+        return sub[: -len(".__init__")] if sub.endswith(".__init__") else sub
+    return None
+
+
+def _module_to_rel_hint(mod: str) -> str | None:
+    text = str(mod).strip().strip(".")
+    if not text:
+        return None
+    parts = text.split(".")
+    root = parts[0]
+    if root == "audiomason":
+        rest = "/".join(parts[1:])
+        return f"src/audiomason/{rest}.py" if rest else "src/audiomason/__init__.py"
+    if root == "am_patch":
+        rest = "/".join(parts[1:])
+        return f"scripts/am_patch/{rest}.py" if rest else "scripts/am_patch/__init__.py"
+    if root == "plugins" and len(parts) >= 2:
+        name = parts[1]
+        rest = "/".join(parts[2:])
+        return f"plugins/{name}/{rest}.py" if rest else f"plugins/{name}/__init__.py"
+    if root == "tests":
+        rest = "/".join(parts[1:])
+        return f"tests/{rest}.py" if rest else "tests/__init__.py"
+    return None
+
+
+def _area_for_module(mod: str) -> str:
+    hint = _module_to_rel_hint(mod)
+    return "other" if hint is None else _area(hint)
+
+
+def _iter_import_modules(tree: ast.AST, *, current_module: str | None) -> list[str]:
+    modules: list[str] = []
+
+    def add(mod: str) -> None:
+        text = str(mod).strip().strip(".")
+        if text and text not in modules:
+            modules.append(text)
+
+    def resolve_relative(level: int, mod: str | None) -> str | None:
+        if not current_module or level <= 0:
+            return None
+        parts = current_module.split(".")
+        if parts:
+            parts = parts[:-1]
+        up = max(0, min(level - 1, len(parts)))
+        base = parts[: len(parts) - up]
+        if mod:
+            text = str(mod).strip(".")
+            if not text:
+                return ".".join(base) or None
+            return ".".join([*base, text]) if base else text
+        return ".".join(base) or None
+
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                add(alias.name)
+        elif isinstance(node, ast.ImportFrom):
+            if node.level and node.level > 0:
+                resolved = resolve_relative(node.level, node.module)
+                if resolved:
+                    add(resolved)
+                continue
+            if node.module:
+                add(node.module)
+
+    return modules
+
+
+def _count_js_exports(text: str) -> int:
+    export_lines = len(_RE_EXPORT_LINE.findall(text))
+    module_exports = text.count("module.exports")
+    dotted = {match.group(1) for match in _RE_EXPORTS_DOT.finditer(text)}
+    return export_lines + module_exports + len(dotted)
+
+
+def _iter_js_specs(text: str) -> list[str]:
+    specs: list[str] = []
+
+    def add(spec: str) -> None:
+        value = str(spec).strip()
+        if value and value not in specs:
+            specs.append(value)
+
+    for rx in (_RE_IMPORT_FROM, _RE_EXPORT_FROM, _RE_REQUIRE):
+        for match in rx.finditer(text):
+            add(match.group(1))
+    return specs
+
+
+def _resolve_js_spec(relpath: str, spec: str, known_paths: set[str]) -> str | None:
+    value = str(spec).strip()
+    if not (value.startswith("./") or value.startswith("../")):
+        return None
+    for sep in ("?", "#"):
+        if sep in value:
+            value = value.split(sep, 1)[0]
+    base = PurePosixPath(_norm_relpath(relpath)).parent
+    candidate = _norm_relpath(str(base / value))
+    options = [candidate]
+    if not any(candidate.endswith(ext) for ext in JS_EXTS):
+        options.append(candidate + ".js")
+        options.append(_norm_relpath(candidate + "/index.js"))
+    for option in options:
+        if option in known_paths:
+            return option
+    return options[0] if options else None
+
+
+def _py_metrics(relpath: str, text: str) -> MonolithMetrics:
+    tree = _parse_tree(text)
+    if tree is None:
+        return MonolithMetrics(loc=_count_loc(text), internal_imports=0, exports=0)
+    current_module = _module_for_relpath(relpath)
+    internal_mods = {
+        mod
+        for mod in _iter_import_modules(tree, current_module=current_module)
+        if _area_for_module(mod) != "other"
+    }
+    return MonolithMetrics(
+        loc=_count_loc(text),
+        internal_imports=len(internal_mods),
+        exports=_count_exports(tree),
+    )
+
+
+def _js_metrics(relpath: str, text: str, known_paths: set[str]) -> MonolithMetrics:
+    internal_targets = {
+        target
+        for spec in _iter_js_specs(text)
+        if (target := _resolve_js_spec(relpath, spec, known_paths)) is not None
+        and _area(target) != "other"
+    }
+    return MonolithMetrics(
+        loc=_count_loc(text),
+        internal_imports=len(internal_targets),
+        exports=_count_js_exports(text),
+    )
+
+
+def _metrics_for_path(relpath: str, text: str, known_paths: set[str]) -> MonolithMetrics:
+    suffix = Path(relpath).suffix
+    if suffix == ".py":
+        return _py_metrics(relpath, text)
+    if suffix in JS_EXTS:
+        return _js_metrics(relpath, text, known_paths)
+    return MonolithMetrics(loc=_count_loc(text), internal_imports=0, exports=0)
+
+
+def _resolve_fan_target(mod: str, module_to_rel: dict[str, str]) -> str | None:
+    current = str(mod).strip().strip(".")
+    if not current:
+        return None
+    while True:
+        if current in module_to_rel:
+            return module_to_rel[current]
+        if "." not in current:
+            return None
+        current = current.rsplit(".", 1)[0]
+
+
+def _fan_graph(texts: dict[str, str], relpaths: list[str]) -> tuple[dict[str, int], dict[str, int]]:
+    module_to_rel = {
+        module: relpath
+        for relpath in relpaths
+        if (module := _module_for_relpath(relpath)) is not None
+    }
+    known_paths = set(relpaths)
+    edges: dict[str, set[str]] = {relpath: set() for relpath in relpaths}
+    for relpath in relpaths:
+        text = texts.get(relpath)
+        if text is None:
+            continue
+        if relpath.endswith(".py"):
+            tree = _parse_tree(text)
+            if tree is None:
+                continue
+            current_module = _module_for_relpath(relpath)
+            for mod in _iter_import_modules(tree, current_module=current_module):
+                target = _resolve_fan_target(mod, module_to_rel)
+                if target and target != relpath:
+                    edges[relpath].add(target)
+        elif Path(relpath).suffix in JS_EXTS:
+            for spec in _iter_js_specs(text):
+                target = _resolve_js_spec(relpath, spec, known_paths)
+                if target in edges and target != relpath:
+                    edges[relpath].add(target)
+    fanout = {relpath: len(edges[relpath]) for relpath in relpaths}
+    fanin = {relpath: 0 for relpath in relpaths}
+    for targets in edges.values():
+        for target in targets:
+            fanin[target] = fanin.get(target, 0) + 1
+    return fanin, fanout
+
+
+def _hub_failure(
+    *,
+    path: str,
+    fanin_delta: int,
+    fanout_delta: int,
+    loc_delta: int,
+    exports_delta: int,
+) -> RuleResult | None:
+    if fanin_delta >= HUB_FANIN_DELTA and exports_delta >= HUB_EXPORTS_DELTA_MIN:
+        detail = f"hub_signal_fanin:{path}:fanin_delta={fanin_delta}:exports_delta={exports_delta}"
+        return RuleResult("MONOLITH", "FAIL", detail)
+    if fanout_delta >= HUB_FANOUT_DELTA and loc_delta >= HUB_LOC_DELTA_MIN:
+        detail = f"hub_signal_fanout:{path}:fanout_delta={fanout_delta}:loc_delta={loc_delta}"
+        return RuleResult("MONOLITH", "FAIL", detail)
+    return None
 
 
 def _monolith(root: Path, baseline: dict[str, bytes], decision_paths: list[str]) -> RuleResult:
@@ -339,29 +582,59 @@ def _monolith(root: Path, baseline: dict[str, bytes], decision_paths: list[str])
     areas = {_area(path) for path in targets}
     if len(areas) >= 3:
         return RuleResult("MONOLITH", "FAIL", f"cross_area_threshold:areas={sorted(areas)}")
+
+    new_texts = {path: (root / path).read_text(encoding="utf-8") for path in targets}
+    old_texts = {path: baseline[path].decode("utf-8") for path in targets if path in baseline}
+    known_paths = set(targets)
+    new_fanin, new_fanout = _fan_graph(new_texts, targets)
+    old_fanin, old_fanout = _fan_graph(old_texts, targets)
+
     for path in targets:
         posix = PurePosixPath(path)
         has_bad_dir = any(part in CATCHALL_DIRS for part in posix.parts[:-1])
         if posix.name in CATCHALL_BASENAMES or has_bad_dir:
             return RuleResult("MONOLITH", "FAIL", f"catchall_forbidden:{path}")
-        old = baseline.get(path)
-        new = (root / path).read_text(encoding="utf-8")
-        new_loc, new_imports, new_exports = _counts(path, new)
-        if old is None:
-            if new_loc > 400 or new_exports > 25 or new_imports > 15:
+
+        new_metrics = _metrics_for_path(path, new_texts[path], known_paths)
+        fanin_delta = new_fanin.get(path, 0) - old_fanin.get(path, 0)
+        fanout_delta = new_fanout.get(path, 0) - old_fanout.get(path, 0)
+        old_text = old_texts.get(path)
+        if old_text is None:
+            if (
+                new_metrics.loc > 400
+                or new_metrics.exports > 25
+                or new_metrics.internal_imports > 15
+            ):
                 return RuleResult("MONOLITH", "FAIL", f"new_file_limits:{path}")
+            hub_failure = _hub_failure(
+                path=path,
+                fanin_delta=fanin_delta,
+                fanout_delta=fanout_delta,
+                loc_delta=new_metrics.loc,
+                exports_delta=new_metrics.exports,
+            )
+            if hub_failure is not None:
+                return hub_failure
             continue
-        old_loc, old_imports, old_exports = _counts(path, old.decode("utf-8"))
-        d_loc = new_loc - old_loc
-        d_imports = new_imports - old_imports
-        d_exports = new_exports - old_exports
-        grew = any(value > 0 for value in (d_loc, d_imports, d_exports))
-        if old_loc >= 1300 and grew:
+
+        old_metrics = _metrics_for_path(path, old_text, known_paths)
+        loc_delta = new_metrics.loc - old_metrics.loc
+        imports_delta = new_metrics.internal_imports - old_metrics.internal_imports
+        exports_delta = new_metrics.exports - old_metrics.exports
+        grew = any(value > 0 for value in (loc_delta, imports_delta, exports_delta))
+        if old_metrics.loc >= 1300 and grew:
             return RuleResult("MONOLITH", "FAIL", f"huge_file_growth:{path}")
-        if old_loc >= 900 and (d_loc > 20 or d_exports > 2 or d_imports > 1):
+        if old_metrics.loc >= 900 and (loc_delta > 20 or exports_delta > 2 or imports_delta > 1):
             return RuleResult("MONOLITH", "FAIL", f"large_file_growth:{path}")
-        if d_loc >= 100 and d_exports >= 3 and d_imports >= 5:
-            return RuleResult("MONOLITH", "FAIL", f"hub_signal:{path}")
+        hub_failure = _hub_failure(
+            path=path,
+            fanin_delta=fanin_delta,
+            fanout_delta=fanout_delta,
+            loc_delta=loc_delta,
+            exports_delta=exports_delta,
+        )
+        if hub_failure is not None:
+            return hub_failure
     return RuleResult("MONOLITH", "PASS", "gate_passed")
 
 
