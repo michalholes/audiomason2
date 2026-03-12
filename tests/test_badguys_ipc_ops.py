@@ -12,6 +12,16 @@ from badguys.bdg_materializer import MaterializedAssets
 from badguys.bdg_ops_ipc import pop_ipc_plans, send_ipc_command
 from badguys.bdg_subst import SubstCtx
 
+RAW_NDJSON_TEXT = (
+    '{"type":"log","msg":"RESULT: SUCCESS"}\n{"type":"result","ok":true,"return_code":0}\n'
+)
+
+
+def _read_ndjson_lines(path: Path) -> list[dict[str, object]]:
+    return [
+        json.loads(line) for line in path.read_text(encoding="utf-8").splitlines() if line.strip()
+    ]
+
 
 def _serve_once(socket_path: Path, seen: list[dict[str, object]]) -> threading.Thread:
     def _target() -> None:
@@ -115,7 +125,7 @@ def test_record_ipc_stream_copies_result_artifact_before_source_disappears(
 
     socket_path = tmp_path / "ipc.sock"
     result_src = tmp_path / "result.jsonl"
-    result_src.write_text('{"ok":true}\n', encoding="utf-8")
+    result_src.write_text(RAW_NDJSON_TEXT, encoding="utf-8")
     result_path = tmp_path / "artifacts" / "runner.result.json"
     log_path = tmp_path / "artifacts" / "runner.log.jsonl"
 
@@ -153,7 +163,11 @@ def test_record_ipc_stream_copies_result_artifact_before_source_disappears(
     assert value_text == ""
     assert artifact_copy == {"ok": True, "error": None}
     assert json.loads(result_path.read_text(encoding="utf-8")) == result
-    assert log_path.read_text(encoding="utf-8") == '{"ok":true}\n'
+    assert log_path.read_text(encoding="utf-8") == RAW_NDJSON_TEXT
+    assert _read_ndjson_lines(log_path) == [
+        {"type": "log", "msg": "RESULT: SUCCESS"},
+        {"type": "result", "ok": True, "return_code": 0},
+    ]
     assert not result_src.exists()
 
 
@@ -165,7 +179,7 @@ def test_record_ipc_stream_falls_back_to_ipc_stream_when_result_artifact_disappe
 
     socket_path = tmp_path / "ipc.sock"
     result_src = tmp_path / "result.jsonl"
-    result_src.write_text('{"ok":true}\n', encoding="utf-8")
+    result_src.write_text(RAW_NDJSON_TEXT, encoding="utf-8")
     out_path = tmp_path / "runner.ipc.jsonl"
     result_path = tmp_path / "artifacts" / "runner.result.json"
     log_path = tmp_path / "artifacts" / "runner.log.jsonl"
@@ -226,8 +240,15 @@ def test_record_ipc_stream_falls_back_to_ipc_stream_when_result_artifact_disappe
     assert json.loads(result_path.read_text(encoding="utf-8")) == result
     copied_text = log_path.read_text(encoding="utf-8")
     assert copied_text == out_path.read_text(encoding="utf-8")
-    copied_obj = json.loads(copied_text)
-    assert copied_obj["json_path"] == str(result_src)
+    assert copied_text != result_path.read_text(encoding="utf-8")
+    assert _read_ndjson_lines(log_path) == [
+        {
+            "type": "result",
+            "ok": True,
+            "return_code": 0,
+            "json_path": str(result_src),
+        }
+    ]
     assert not result_src.exists()
 
 
@@ -276,5 +297,12 @@ def test_record_ipc_stream_falls_back_to_ipc_stream_when_result_artifact_is_miss
     assert json.loads(result_path.read_text(encoding="utf-8")) == result
     copied_text = log_path.read_text(encoding="utf-8")
     assert copied_text == out_path.read_text(encoding="utf-8")
-    copied_obj = json.loads(copied_text)
-    assert copied_obj["json_path"] == str(missing_src)
+    assert copied_text != result_path.read_text(encoding="utf-8")
+    assert _read_ndjson_lines(log_path) == [
+        {
+            "type": "result",
+            "ok": True,
+            "return_code": 0,
+            "json_path": str(missing_src),
+        }
+    ]

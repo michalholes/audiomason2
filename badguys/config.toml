@@ -667,6 +667,8 @@ value_not_contains = [
   '"event":"connected"',
   '"kind":"HEARTBEAT"',
   '"msg":"RESULT: SUCCESS"',
+  '"type": "result"',
+  '"type": "log"',
 ]
 
 [evaluation.tests.test_080_json_out_writes_ndjson_log.steps.2]
