@@ -3,7 +3,7 @@ Status: AUTHORITATIVE SPECIFICATION
 Applies to: scripts/patchhub/*
 Language: ENGLISH (ASCII ONLY)
 
-Specification Version: 1.12.2-spec
+Specification Version: 1.12.3-spec
 Code Baseline: audiomason2-main.zip (as provided in this chat)
 
 -------------------------------------------------------------------------------
@@ -738,6 +738,19 @@ All routes are handled in server.py.
 
 - GET /debug
   Output: text/html; charset=utf-8 (debug UI)
+
+Debug UI per-feed controls (templates/debug.html, static/debug.js):
+- Each debug feed MUST provide a Flush control that clears only that feed's
+  currently displayed buffer.
+- Each debug feed MUST provide a Copy control that copies the exact
+  currently visible text of that feed to the clipboard.
+- The required per-feed controls apply to at least:
+  - Client errors
+  - Client status
+  - Client network
+  - Server diagnostics
+  - Parser inspector output
+  - Runner tail
 
 - GET /static/<rel>
   Output: static bytes from scripts/patchhub/static/<rel>
