@@ -119,6 +119,7 @@ list_eq = [
   "test_083_ipc_cancel_command_stops_runner",
   "test_084_workspace_git_state_matches_mode",
   "test_085_success_archive_zip_hygiene",
+  "test_086_pytest_gate_runs_on_targeted_python_change",
   "test_100_rerun_latest_l",
   "test_900_commit_push_timestamp",
 ]
@@ -424,6 +425,9 @@ relpath = "docs/badguys_batch2/helpers.py"
 [subjects.tests.test_079_skip_flags_short_circuit_selected_gates.skip_invalid]
 relpath = "types/badguys_skip_invalid.ts"
 
+[subjects.tests.test_086_pytest_gate_runs_on_targeted_python_change.pytest_gate_target]
+relpath = "tests/test_badguys_pytest_gate_target.py"
+
 [subjects.tests.test_100_rerun_latest_l.rerun_latest_marker]
 relpath = "badguys/tmp/rerun_latest_marker.txt"
 
@@ -472,7 +476,7 @@ args = ["${issue_id}", "badguys: test-mode hard stop"]
 subject = "compile_fail_script"
 
 [recipes.tests.test_041_test_mode_cleanup_on_fail.steps.1]
-args = ["${issue_id}", "badguys: test-mode cleanup on fail"]
+args = ["--skip-pytest", "${issue_id}", "badguys: test-mode cleanup on fail"]
 
 [recipes.tests.test_050_unified_patch_zip_recursive_detection.assets.zip.entries.patch_entry]
 kind = "git_patch_text"
@@ -536,6 +540,7 @@ subject = "excluded_syntax"
 
 [recipes.tests.test_071_compile_exclude_respected.steps.0]
 args = [
+  "--skip-pytest",
   "--override",
   "compile_exclude=['scripts/badguys_batch1_excluded']",
   "${issue_id}",
@@ -548,7 +553,12 @@ zip_name = "inner.patch"
 subject = "compile_fail"
 
 [recipes.tests.test_072_g_continues_after_gate_fail.steps.0]
-args = ["-g", "${issue_id}", "badguys: -g continues after gate fail (compile)"]
+args = [
+  "--skip-pytest",
+  "-g",
+  "${issue_id}",
+  "badguys: -g continues after gate fail (compile)",
+]
 
 
 [recipes.tests.test_073_dont_touch_gate_blocks_protected_path.assets.script]
@@ -607,6 +617,17 @@ args = [
   "badguys: skip flags short circuit selected gates",
 ]
 
+[recipes.tests.test_086_pytest_gate_runs_on_targeted_python_change.assets.pytest_patch]
+subject = "pytest_gate_target"
+
+[recipes.tests.test_086_pytest_gate_runs_on_targeted_python_change.steps.0]
+args = [
+  "--override",
+  "pytest_targets=['tests/test_badguys_pytest_gate_target.py']",
+  "${issue_id}",
+  "badguys: pytest gate runs on targeted python change",
+]
+
 [recipes.tests.test_100_rerun_latest_l.steps.0]
 marker_subject = "rerun_latest_marker"
 
@@ -617,7 +638,11 @@ args = ["-l", "${issue_id}", "badguys: rerun-latest (-l) smoke"]
 subject = "seed_fail"
 
 [recipes.tests.test_900_commit_push_timestamp.steps.0]
-args = ["${issue_id}", "badguys: seed run to create workspace"]
+args = [
+  "--skip-pytest",
+  "${issue_id}",
+  "badguys: seed run to create workspace",
+]
 
 [recipes.tests.test_900_commit_push_timestamp.steps.2]
 marker_subject = "commit_marker"
@@ -758,6 +783,15 @@ list_not_contains = [
   "patches/badguys_success_archive_085.zip",
 ]
 
+[evaluation.tests.test_086_pytest_gate_runs_on_targeted_python_change.steps.0]
+rc_eq = 0
+value_contains = [
+  "GATE: PYTEST",
+  "tests/test_badguys_pytest_gate_target.py",
+  "RESULT: SUCCESS",
+]
+value_not_contains = ["gate_pytest=SKIP"]
+
 [subjects.tests.test_080_json_out_writes_ndjson_log.json_out_marker]
 relpath = "docs/badguys_batch3/json_out_marker.txt"
 
@@ -876,7 +910,11 @@ relpath = "runner.ipc.step1.jsonl"
 subject = "workspace_fail"
 
 [recipes.tests.test_084_workspace_git_state_matches_mode.steps.0]
-args = ["${issue_id}", "badguys: workspace git state matches mode"]
+args = [
+  "--skip-pytest",
+  "${issue_id}",
+  "badguys: workspace git state matches mode",
+]
 
 [recipes.tests.test_085_success_archive_zip_hygiene.assets.patch]
 subject = "archive_marker"
