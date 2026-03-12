@@ -331,12 +331,6 @@ function init() {
 					phCall("validateAndPreview");
 				});
 
-			if (patchStatTimer) {
-				clearInterval(patchStatTimer);
-				patchStatTimer = null;
-			}
-			patchStatTimer = setInterval(tickMissingPatchClear, 1000);
-
 			var refreshTimer = null;
 			var headerTimer = null;
 
@@ -350,10 +344,6 @@ function init() {
 					clearInterval(headerTimer);
 					headerTimer = null;
 				}
-				if (patchStatTimer) {
-					clearInterval(patchStatTimer);
-					patchStatTimer = null;
-				}
 				phCall("stopAutofillPolling");
 				phCall("stopSnapshotEvents");
 				if (!opts.keepLiveStream) {
@@ -366,8 +356,6 @@ function init() {
 				var activeMode = false;
 				stopTimers({ keepLiveStream: !!opts.keepLiveStream });
 
-				patchStatTimer = setInterval(tickMissingPatchClear, 1000);
-
 				refreshTimer = setInterval(() => {
 					try {
 						activeMode = hasTrackedActiveJob();
@@ -376,12 +364,14 @@ function init() {
 							return;
 						}
 						if (activeMode) {
+							tickMissingPatchClear({ mode: "active" });
 							phCall("stopSnapshotEvents");
 							phCall("refreshJobs", { mode: "periodic" });
 							if (workspacesVisible) {
 								phCall("refreshWorkspaces", { mode: "periodic" });
 							}
 						} else {
+							tickMissingPatchClear({ mode: "idle" });
 							phCall("ensureSnapshotEvents");
 							if (
 								!PH.has("snapshotEventsNeedPolling") ||

@@ -128,6 +128,10 @@ function validateAndPreview() {
 			}
 		}
 	}
+	tickMissingPatchClear({
+		mode:
+			document.hidden || !PH.call("hasTrackedActiveJob") ? "idle" : "active",
+	});
 }
 
 function enqueue() {

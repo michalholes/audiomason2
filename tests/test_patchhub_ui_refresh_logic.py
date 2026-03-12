@@ -78,3 +78,20 @@ def test_progress_panel_replaces_retained_terminal_state_on_new_tracked_job() ->
     assert 'return { text: "STATUS: QUEUED", status: "running" };' in src
     assert "var active = getTrackedActiveJob(jobs);" in src
     assert "renderActiveJob(jobs);" in src
+
+
+def test_missing_patch_check_has_no_separate_watchdog_timer() -> None:
+    wire_src = _read("scripts/patchhub/static/app_part_wire_init.js")
+    assert "patchStatTimer" not in wire_src
+    assert "setInterval(tickMissingPatchClear, 1000)" not in wire_src
+    assert 'tickMissingPatchClear({ mode: "idle" });' in wire_src
+    assert 'tickMissingPatchClear({ mode: "active" });' in wire_src
+
+
+def test_missing_patch_check_uses_empty_path_guard_and_backoff_state() -> None:
+    app_src = _read("scripts/patchhub/static/app.js")
+    assert "function getMissingPatchRel()" in app_src
+    assert "if (!rel) {" in app_src
+    assert "patchStatNextDueMs" in app_src
+    assert "patchStatIdleBackoffIdx" in app_src
+    assert "PATCH_STAT_ACTIVE_MS = 5000" in app_src

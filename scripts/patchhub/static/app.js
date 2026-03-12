@@ -417,8 +417,12 @@ var latestToken = "";
 var lastAutofillClearedToken = "";
 var autofillTimer = null;
 
-var patchStatTimer = null;
 var patchStatInFlight = false;
+var patchStatLastRel = "";
+var patchStatNextDueMs = 0;
+var patchStatIdleBackoffIdx = 0;
+
+var PATCH_STAT_ACTIVE_MS = 5000;
 
 var suppressIdleOutput = false;
 
@@ -457,28 +461,76 @@ function normalizePatchPath(p) {
 }
 
 function clearRunFieldsBecauseMissingPatch() {
+	resetMissingPatchState();
 	if (el("issueId")) el("issueId").value = "";
 	if (el("commitMsg")) el("commitMsg").value = "";
 	if (el("patchPath")) el("patchPath").value = "";
 	validateAndPreview();
 }
 
-function tickMissingPatchClear() {
-	if (patchStatInFlight) return;
-	if (!el("patchPath")) return;
+function resetMissingPatchState() {
+	patchStatLastRel = "";
+	patchStatNextDueMs = 0;
+	patchStatIdleBackoffIdx = 0;
+}
 
+function getMissingPatchRel() {
+	if (!el("patchPath")) return "";
 	var full = normalizePatchPath(String(el("patchPath").value || ""));
 	var rel = stripPatchesPrefix(full);
+	if (!rel) {
+		resetMissingPatchState();
+		return "";
+	}
+	return rel;
+}
 
+function nextMissingPatchDelayMs(mode, changedRel) {
+	if (mode === "active") return PATCH_STAT_ACTIVE_MS;
+	if (changedRel) patchStatIdleBackoffIdx = 0;
+	var idx = patchStatIdleBackoffIdx;
+	var delay = IDLE_BACKOFF_MS[idx] || IDLE_BACKOFF_MS[0];
+	if (patchStatIdleBackoffIdx < IDLE_BACKOFF_MS.length - 1) {
+		patchStatIdleBackoffIdx += 1;
+	}
+	return delay;
+}
+
+function tickMissingPatchClear(opts) {
+	opts = opts || {};
+	if (patchStatInFlight) return;
+
+	var rel = getMissingPatchRel();
+	if (!rel) return;
+
+	var mode = String(opts.mode || "idle");
+	var changedRel = rel !== patchStatLastRel;
+	var now = Date.now();
+	if (
+		!opts.force &&
+		!changedRel &&
+		patchStatNextDueMs &&
+		now < patchStatNextDueMs
+	) {
+		return;
+	}
+
+	patchStatLastRel = rel;
 	patchStatInFlight = true;
 	apiGet(`/api/fs/stat?path=${encodeURIComponent(rel)}`)
 		.then((r) => {
 			patchStatInFlight = false;
-			if (!r || r.ok === false) return;
-			if (r.exists === false) clearRunFieldsBecauseMissingPatch();
+			if (r && r.ok !== false && r.exists === false) {
+				clearRunFieldsBecauseMissingPatch();
+				return;
+			}
+			patchStatNextDueMs =
+				Date.now() + nextMissingPatchDelayMs(mode, changedRel);
 		})
 		.catch(() => {
 			patchStatInFlight = false;
+			patchStatNextDueMs =
+				Date.now() + nextMissingPatchDelayMs(mode, changedRel);
 		});
 }
 
