@@ -274,10 +274,11 @@ def get_step_details(step_id: str) -> dict[str, Any] | None:
 
 
 def build_authority_known_step_ids() -> set[str]:
-    """Return legacy known step ids for compatibility callers.
+    """Return a legacy compatibility-only step id snapshot.
 
-    Validation and projection authority now lives outside this module. This
-    helper remains only to preserve existing non-validation imports.
+    Runtime authority must derive step ids from the active wizard definition.
+    This helper remains projection-only for legacy callers that still need the
+    default catalog view.
     """
 
     return set(_legacy_catalog_step_ids()) | set(CANONICAL_STEP_ORDER)

@@ -56,7 +56,6 @@ from .phase1_source_intake import build_phase1_projection, phase1_session_author
 from .plan import PlanSelectionError, compute_plan
 from .preview import preview_action_impl
 from .session_effective_model import load_effective_model_json
-from .step_catalog import build_authority_known_step_ids
 from .storage import (
     append_jsonl,
     atomic_write_json,
@@ -77,6 +76,31 @@ __all__ = [
     "ImportWizardEngine",
     "atomic_write_text",
 ]
+
+
+def _wizard_definition_known_step_ids(wizard_definition: dict[str, Any]) -> set[str]:
+    version_any = wizard_definition.get("version")
+    version = int(version_any) if isinstance(version_any, int) else 1
+
+    if version == 1:
+        steps_any = wizard_definition.get("steps")
+        if not isinstance(steps_any, list):
+            return set()
+        return {
+            str(step.get("step_id") or "")
+            for step in steps_any
+            if isinstance(step, dict) and isinstance(step.get("step_id"), str)
+        }
+
+    graph_any = wizard_definition.get("graph") if version == 2 else wizard_definition
+    nodes_any = graph_any.get("nodes") if isinstance(graph_any, dict) else None
+    if not isinstance(nodes_any, list):
+        return set()
+    return {
+        str(node.get("step_id") or "")
+        for node in nodes_any
+        if isinstance(node, dict) and isinstance(node.get("step_id"), str)
+    }
 
 
 class ImportWizardEngine:
@@ -746,7 +770,7 @@ class ImportWizardEngine:
                     self._update_conflicts(session_id, state)
 
         wd = self._load_session_wizard_definition_snapshot(session_id, state)
-        known_step_ids = build_authority_known_step_ids()
+        known_step_ids = _wizard_definition_known_step_ids(wd)
         graph = normalize_to_graph(wd, known_step_ids=known_step_ids)
 
         inputs_view = state.get("inputs") if isinstance(state.get("inputs"), dict) else {}
@@ -884,7 +908,7 @@ class ImportWizardEngine:
     def _get_or_create_job(self, session_id: str, state: dict[str, Any], idem_key: str) -> str:
         # Invariants must be validated before job creation.
         wd = self._load_session_wizard_definition_snapshot(session_id, state)
-        known_step_ids = build_authority_known_step_ids()
+        known_step_ids = _wizard_definition_known_step_ids(wd)
         _ = normalize_to_graph(wd, known_step_ids=known_step_ids)
         _ = self._normalize_flow_config(self._load_effective_flow_config(session_id))
 

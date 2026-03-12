@@ -114,3 +114,30 @@ def test_renderer_neutrality_no_step_id_branching() -> None:
     for f in forbidden:
         assert f not in cli_text
         assert f not in ui_text
+
+
+def test_runtime_does_not_read_step_ids_from_step_catalog() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    engine_text = (repo_root / "plugins" / "import" / "engine.py").read_text(encoding="utf-8")
+
+    assert "build_authority_known_step_ids" not in engine_text
+
+
+def test_runtime_uses_active_wizard_definition_shape_for_known_step_ids(tmp_path: Path) -> None:
+    engine = _make_engine(tmp_path)
+    fs = engine.get_file_service()
+    ensure_default_models(fs)
+
+    source_dir = tmp_path / "inbox" / "src"
+    source_dir.mkdir(parents=True, exist_ok=True)
+    (source_dir / "a.txt").write_text("x", encoding="utf-8")
+
+    state = engine.create_session("inbox", "src", mode="stage")
+    assert "error" not in state
+
+    step_result = engine.submit_step(
+        str(state["session_id"]),
+        "select_authors",
+        {"selection_expr": "all"},
+    )
+    assert "error" not in step_result
