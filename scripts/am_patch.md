@@ -126,6 +126,11 @@ Additional `ERROR DETAIL:` records may appear before the final summary.
 They are failure detail, not summary lines, and do not change the fixed
 FAIL summary shape.
 
+NDJSON terminal contract:
+- `--json-out` writes NDJSON with one JSON object per line.
+- The NDJSON `type="result"` event is the canonical machine terminal summary.
+- Summary `type="log"` records and the human final summary remain deterministic renders of the same terminal summary.
+
 Quiet sinks:
 - If `--verbosity quiet`, the console prints only START + RESULT (plus error detail on FAIL).
 - If `--log-level quiet`, the log file contains only START + RESULT (plus error detail on FAIL),

@@ -284,6 +284,13 @@ Additional `ERROR DETAIL:` records MAY appear before the final summary.
 They are failure detail, not summary lines, and MUST NOT change the
 fixed FAIL summary shape.
 
+Canonical machine terminal summary:
+- The NDJSON `type="result"` event is the canonical machine terminal summary carrier.
+- It MUST include at minimum: `ok`, `return_code`, `terminal_status`, `final_stage`, `final_reason`, `final_commit_sha`, `push_status`, `log_path`, `json_path`.
+- `terminal_status` MUST be one of `success`, `fail`, `canceled`.
+- `json_path` denotes the current-run NDJSON file path when `json_out` is enabled; otherwise it MUST be `null`.
+- The human final summary text and the summary `type="log"` events are deterministic renders of this same canonical terminal summary and MUST remain consistent with it.
+
 Quiet sinks: - If `--verbosity quiet`, the console prints only START +
 RESULT (plus error detail on FAIL). - If `--log-level quiet`, the log
 file contains only START + RESULT (plus error detail on FAIL), except
@@ -1374,18 +1381,22 @@ Behavior:
 Format:
 - One JSON object per line (NDJSON).
 - Event types: hello, log, result.
-- log events include: seq, ts_mono_ms, stage, kind, sev, ch, summary, bypass,
-  msg.
+- log events include: `seq`, `ts_mono_ms`, `stage`, `kind`, `sev`, `ch`, `summary`, `bypass`, `msg`.
+- result events include: `seq`, `ts_mono_ms`, `stage`, `ok`, `return_code`, `terminal_status`, `final_stage`, `final_reason`, `final_commit_sha`, `push_status`, `log_path`, `json_path`.
+- `terminal_status` MUST be `success`, `fail`, or `canceled`.
+- `final_stage` MUST be the deterministic terminal stage summary or `null` when not applicable.
+- `final_reason` MUST be the deterministic terminal reason summary or `null` when not applicable.
+- `final_commit_sha` MUST be the final commit sha for success paths or `null` when not applicable.
+- `push_status` MUST be `OK`, `FAIL`, or `null` when commit/push is not applicable.
+- `json_path` denotes the current-run NDJSON file path when `json_out` is enabled and `null` otherwise.
 - Machine-facing liveness heartbeats MUST remain `type="log"` events.
-- For liveness heartbeats, `kind` MUST be `HEARTBEAT`, `sev` MUST be `DEBUG`,
-  `ch` MUST be `DETAIL`, `summary` MUST be `false`, `bypass` MUST be `false`,
-  and `msg` MUST be `HEARTBEAT`.
+- For liveness heartbeats, `kind` MUST be `HEARTBEAT`, `sev` MUST be `DEBUG`, `ch` MUST be `DETAIL`, `summary` MUST be `false`, `bypass` MUST be `false`, and `msg` MUST be `HEARTBEAT`.
 - Live subprocess stdout payload MUST use `kind="SUBPROCESS_STDOUT"`.
 - Live subprocess stderr payload MUST use `kind="SUBPROCESS_STDERR"`.
-- Live subprocess payload events MUST use `sev="DEBUG"`, `ch="DETAIL"`,
-  `summary=false`, and `bypass=false`.
+- Live subprocess payload events MUST use `sev="DEBUG"`, `ch="DETAIL"`, `summary=false`, and `bypass=false`.
 - Live subprocess payload text is carried in `msg`.
-- Failed step detail may include stdout and stderr fields.
+- Failed step detail may include `stdout` and `stderr` fields.
+- Summary `type="log"` events remain required as debug/human renders but are not the canonical machine terminal carrier.
 
 ## IPC socket
 
