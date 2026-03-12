@@ -1,4 +1,4 @@
-# AM Patch Runner - Functional Specification v5.1 (UPDATED)
+# AM Patch Runner - Functional Specification v6 (UPDATED)
 
 This document is **authoritative** for the AM Patch Runner contract.
 
@@ -663,6 +663,15 @@ Policy keys:
 - gate_mypy_mode in {auto, always}
 - gate_pytest_mode in {auto, always}
 - gate_pytest_js_prefixes: list[str] (default [])
+- pytest_routing_mode in {legacy, bucketed}
+- pytest_smoke_targets: list[str]
+- pytest_area_prefixes: list[str]
+- pytest_area_names: list[str]
+- pytest_area_targets: dict[str, list[str]]
+- pytest_family_areas: dict[str, list[str]]
+- pytest_family_targets: dict[str, list[str]]
+- pytest_broad_repo_prefixes: list[str]
+- pytest_broad_repo_targets: list[str]
 
 Mode semantics:
 - always: the gate executes whenever it is not skipped by existing skip_* mechanisms.
@@ -687,13 +696,28 @@ Auto mode triggers (decision-only; deterministic):
   - a .py file under src/ or plugins/ or scripts/, or
   - a .js/.mjs/.cjs file under any directory prefix listed in gate_pytest_js_prefixes.
   If not triggered: `gate_pytest=SKIP (no_matching_files)`
+  If triggered, target selection is controlled by pytest_routing_mode:
+  - legacy: pass pytest_targets to the pytest gate.
+  - bucketed: compute the effective pytest target list as the first-occurrence-preserving union of:
+    1) pytest_smoke_targets
+    2) every selected area target list from pytest_area_targets
+    3) every selected family target list from pytest_family_targets
+    4) pytest_broad_repo_targets, but only if any decision path matches pytest_broad_repo_prefixes
+  Bucketed-mode selection rules:
+  - Selection uses decision_paths after scope-ignore filtering.
+  - Area ownership uses pytest_area_prefixes and pytest_area_names with first-match-wins prefix semantics.
+  - A configured area matches a path if the prefix matches the whole path exactly or as prefix/.
+  - A family is selected when any impacted area belongs to that family via pytest_family_areas.
+  - Duplicates are removed deterministically, preserving first occurrence.
+  - Bucketed mode changes only target selection. It MUST NOT change gate_pytest_mode trigger semantics,
+    pytest_use_venv, gates_skip_pytest, gates_order, gates_allow_fail, or run_all_tests.
 
 Notes:
 - In auto mode, trigger evaluation uses the changed paths set for the run (after scope ignore
   filtering), and does not require the files to exist after patch application (deletions may
   still trigger).
 - gate_pytest_js_prefixes uses directory-prefix matching: a prefix matches "prefix" exactly
-  or any path starting with "prefix/".
+  or any path under "prefix/...".
 
 ### Dedicated CLI flags + precedence
 
@@ -705,6 +729,7 @@ most common mode switches. The flags map to policy keys as follows:
 - `--ruff-mode {auto,always}` -> gate_ruff_mode
 - `--mypy-mode {auto,always}` -> gate_mypy_mode
 - `--pytest-mode {auto,always}` -> gate_pytest_mode
+- `--pytest-routing-mode {legacy,bucketed}` -> pytest_routing_mode
 - `--pytest-js-prefixes CSV` -> gate_pytest_js_prefixes
 
 `--pytest-js-prefixes` semantics:
@@ -712,6 +737,14 @@ most common mode switches. The flags map to policy keys as follows:
   `scripts/patchhub/static,plugins/import/ui/web/assets`).
 - Matching uses the same directory-prefix rule as above: "prefix" or "prefix/...".
 - Default is an empty list.
+
+`--pytest-routing-mode` semantics:
+- `legacy` keeps the current single-target behavior and passes pytest_targets directly.
+- `bucketed` enables bucketed target selection using pytest_smoke_targets, pytest_area_prefixes,
+  pytest_area_names, pytest_area_targets, pytest_family_areas, pytest_family_targets,
+  pytest_broad_repo_prefixes, and pytest_broad_repo_targets.
+- `--pytest-mode` continues to control trigger timing only. It does not replace pytest_routing_mode.
+- The shipped repo policy may choose bucketed as the default routing mode; the mode remains fully configurable.
 
 These flags MUST override any config file values for the mapped keys.
 
@@ -1273,6 +1306,15 @@ This appendix is resolved by the authoritative policy glossary:
 -   `gates_skip_ruff` changes which gates run and in what order
 -   `mypy_targets` changes which gates run and in what order
 -   `pytest_targets` changes which gates run and in what order
+-   `pytest_routing_mode` changes which gates run and in what order
+-   `pytest_smoke_targets` changes which gates run and in what order
+-   `pytest_area_prefixes` changes which gates run and in what order
+-   `pytest_area_names` changes which gates run and in what order
+-   `pytest_area_targets` changes which gates run and in what order
+-   `pytest_family_areas` changes which gates run and in what order
+-   `pytest_family_targets` changes which gates run and in what order
+-   `pytest_broad_repo_prefixes` changes which gates run and in what order
+-   `pytest_broad_repo_targets` changes which gates run and in what order
 -   `pytest_use_venv` changes which gates run and in what order
 -   `run_all_tests` changes which gates run and in what order
 

@@ -98,6 +98,95 @@ Notes:
 - This is interpreted in the workspace repository root.
 Related: gates_skip_pytest
 
+## Key: pytest_routing_mode
+Key: pytest_routing_mode
+Type: str
+Default: "bucketed"
+Allowed: "legacy" | "bucketed"
+Meaning: Controls how the pytest gate selects its effective targets after the gate has been triggered.
+Notes:
+- legacy passes pytest_targets directly to the pytest gate.
+- bucketed uses pytest_smoke_targets, pytest_area_prefixes, pytest_area_names, pytest_area_targets,
+  pytest_family_areas, pytest_family_targets, pytest_broad_repo_prefixes, and pytest_broad_repo_targets.
+- This does not replace gate_pytest_mode. Trigger timing is still controlled by gate_pytest_mode.
+Related: pytest_targets, gate_pytest_mode
+
+## Key: pytest_smoke_targets
+Key: pytest_smoke_targets
+Type: list[str]
+Default: repo default mapping
+Meaning: Targets that always run in pytest_routing_mode="bucketed" whenever the pytest gate is triggered.
+Notes:
+- Order is preserved.
+Related: pytest_routing_mode, pytest_area_targets, pytest_family_targets, pytest_broad_repo_targets
+
+## Key: pytest_area_prefixes
+Key: pytest_area_prefixes
+Type: list[str]
+Default: repo default mapping
+Meaning: Ordered prefix list used to map decision paths to logical pytest areas.
+Notes:
+- Matching is first-match-wins.
+- A prefix matches the whole path exactly or as prefix/.
+- Must align positionally with pytest_area_names.
+Related: pytest_area_names, pytest_area_targets
+
+## Key: pytest_area_names
+Key: pytest_area_names
+Type: list[str]
+Default: repo default mapping
+Meaning: Ordered area names matched positionally with pytest_area_prefixes.
+Notes:
+- Length must equal pytest_area_prefixes.
+- Names are later referenced by pytest_area_targets and pytest_family_areas.
+Related: pytest_area_prefixes, pytest_area_targets, pytest_family_areas
+
+## Key: pytest_area_targets
+Key: pytest_area_targets
+Type: dict[str, list[str]]
+Default: repo default mapping
+Meaning: Maps an area name to pytest targets added when that area is impacted in bucketed mode.
+Notes:
+- Area names are resolved from pytest_area_prefixes and pytest_area_names.
+- Duplicate targets are removed deterministically, preserving first occurrence.
+Related: pytest_routing_mode, pytest_area_names, pytest_family_targets
+
+## Key: pytest_family_areas
+Key: pytest_family_areas
+Type: dict[str, list[str]]
+Default: repo default mapping
+Meaning: Maps a family name to the list of area names that activate that family in bucketed mode.
+Notes:
+- A family is selected when any impacted area belongs to that family.
+Related: pytest_area_names, pytest_family_targets
+
+## Key: pytest_family_targets
+Key: pytest_family_targets
+Type: dict[str, list[str]]
+Default: repo default mapping
+Meaning: Maps a family name to pytest targets added when that family is selected in bucketed mode.
+Notes:
+- Duplicate targets are removed deterministically, preserving first occurrence.
+Related: pytest_family_areas, pytest_broad_repo_targets
+
+## Key: pytest_broad_repo_prefixes
+Key: pytest_broad_repo_prefixes
+Type: list[str]
+Default: repo default mapping
+Meaning: Prefixes that escalate bucketed mode to an additional broad-repo pytest target set.
+Notes:
+- Matching uses the same exact-or-prefix/ rule as pytest_area_prefixes.
+Related: pytest_broad_repo_targets, pytest_routing_mode
+
+## Key: pytest_broad_repo_targets
+Key: pytest_broad_repo_targets
+Type: list[str]
+Default: repo default mapping
+Meaning: Extra pytest targets added in bucketed mode when any decision path matches pytest_broad_repo_prefixes.
+Notes:
+- Duplicate targets are removed deterministically, preserving first occurrence.
+Related: pytest_broad_repo_prefixes, pytest_smoke_targets
+
 ## Key: pytest_use_venv
 Key: pytest_use_venv
 Type: bool

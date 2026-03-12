@@ -1,4 +1,4 @@
-# AM Patch Runner v4 - User Manual
+# AM Patch Runner v5 - User Manual
 
 This manual describes how *you* use the new runner day-to-day so that runs are deterministic and issues can be safely closed.
 
@@ -30,6 +30,17 @@ This manual describes how *you* use the new runner day-to-day so that runs are d
 - `am_patch.py --test-mode` runs patch + gates in the workspace, verifies the live-repo guard (after gates), then stops (no promotion, no live gates, no commit/push, no archives) and always deletes the workspace on exit.
 - In --test-mode, if patch_dir is not explicitly set, the runner isolates its work paths under patches/_test_mode/issue_<ID>_pid_<PID>/ and deletes it on exit.
 - `am_patch.py --show-config` prints the effective policy/config and exits.
+
+Pytest routing:
+- `--pytest-mode {auto,always}` controls when the pytest gate runs.
+- `--pytest-routing-mode {legacy,bucketed}` controls how the pytest gate selects targets after it has been triggered.
+- `legacy` passes `pytest_targets` directly.
+- `bucketed` builds the effective target list from:
+  - `pytest_smoke_targets`
+  - `pytest_area_prefixes` + `pytest_area_names` + `pytest_area_targets`
+  - `pytest_family_areas` + `pytest_family_targets`
+  - `pytest_broad_repo_prefixes` + `pytest_broad_repo_targets`
+- `--pytest-js-prefixes CSV` keeps its existing role as the JS-only trigger surface for `gate_pytest_mode=auto`.
 
 Notes:
 - Only options listed in short help have short aliases. All other options are long-only.
