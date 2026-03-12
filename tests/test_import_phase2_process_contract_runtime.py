@@ -89,14 +89,20 @@ class _FakeID3Tagger:
     async def write_tags(
         self,
         mp3_file: Path,
-        tags: dict[str, str],
+        tags: dict[str, Any],
         *,
         wipe_before_write: bool = True,
         preserve_cover: bool = True,
+        file_index: int = 0,
     ) -> None:
-        self.calls.append(
-            f"tags.write:{mp3_file.name}:{tags.get('title', '')}:{tags.get('artist', '')}"
-        )
+        values = dict(tags.get("values") or {}) if isinstance(tags, dict) else {}
+        title = str(values.get("title") or "")
+        artist = str(values.get("artist") or "")
+        track_start = tags.get("track_start") if isinstance(tags, dict) else None
+        track = ""
+        if track_start is not None:
+            track = str(int(track_start) + file_index)
+        self.calls.append(f"tags.write:{mp3_file.name}:{title}:{artist}:{track}")
         mp3_file.write_bytes(mp3_file.read_bytes() + b"|tags")
 
 
@@ -192,7 +198,15 @@ async def test_import_plugin_runs_phase2_process_contract_from_job_requests(tmp_
                     {
                         "kind": "metadata.tags",
                         "order": 30,
-                        "values": {},
+                        "field_map": {
+                            "title": "book_title",
+                            "artist": "author",
+                        },
+                        "values": {
+                            "title": "Canonical Book",
+                            "artist": "Canonical Author",
+                        },
+                        "track_start": 7,
                     },
                     {
                         "kind": "publish.write",
@@ -223,5 +237,5 @@ async def test_import_plugin_runs_phase2_process_contract_from_job_requests(tmp_
         "cover.apply",
         "cover.convert",
         "cover.embed",
-        "tags.write:track01.mp3:Canonical Book:Canonical Author",
+        "tags.write:track01.mp3:Canonical Book:Canonical Author:7",
     ]

@@ -125,35 +125,25 @@ def test_rerun_and_resume_read_session_finalize_surface_only(tmp_path: Path) -> 
     )
     assert resumed["session_id"] == session_id
     assert resumed["status"] == "succeeded"
-    assert resumed["computed"]["finalize"] == {
-        "dry_run_summary_path": (
-            f"wizards:import/sessions/{session_id}/finalize/dry_run_summary.json"
-        ),
-        "job_id": job_id,
-        "processing_log_path": (
-            f"wizards:import/sessions/{session_id}/finalize/processing_log.jsonl"
-        ),
-        "report_path": f"wizards:import/sessions/{session_id}/finalize/report.json",
-        "artifacts": {
-            "dry_run_summary": (
-                f"wizards:import/sessions/{session_id}/finalize/dry_run_summary.json"
-            ),
-            "processing_log": f"wizards:import/sessions/{session_id}/finalize/processing_log.jsonl",
-        },
-        "counts": {"books": 1, "capabilities": 3},
-        "status": "succeeded",
-    }
+    dry_run_rel = (
+        f"import/sessions/{session_id}/finalize/AuthorA/Book1/"
+        "Canonical Author - Canonical Edition.dryrun.txt"
+    )
+    log_rel = f"import/sessions/{session_id}/finalize/AuthorA/Book1/processing.log"
+    finalize = resumed["computed"]["finalize"]
+    assert finalize["job_id"] == job_id
+    assert finalize["report_path"] == f"wizards:import/sessions/{session_id}/finalize/report.json"
+    report_ref = f"wizards:import/sessions/{session_id}/finalize/report.json"
+    assert finalize["artifacts"]["report"] == report_ref
+    assert list(finalize["artifacts"]["processing_logs"].values()) == [f"wizards:{log_rel}"]
+    assert list(finalize["artifacts"]["dry_run_texts"].values()) == [f"wizards:{dry_run_rel}"]
+    assert finalize["counts"] == {"books": 1, "capabilities": 3}
+    assert finalize["status"] == "succeeded"
 
-    summary = read_json(
-        engine.get_file_service(),
-        RootName.WIZARDS,
-        f"import/sessions/{session_id}/finalize/dry_run_summary.json",
-    )
-    assert summary["books"][0]["authority"]["metadata_tags"]["values"]["title"] == (
-        "Canonical Edition"
-    )
+    dry_run_text = (roots["wizards"] / dry_run_rel).read_text(encoding="utf-8")
+    assert "title=Canonical Edition" in dry_run_text
 
     rerun = engine.start_processing(session_id, {"confirm": True})
     assert rerun["job_ids"] == [job_id]
     assert rerun["batch_size"] == 1
-    assert rerun["finalize"] == resumed["computed"]["finalize"]
+    assert rerun["finalize"] == finalize

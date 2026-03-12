@@ -48,20 +48,33 @@ def _tag_values_for_action(
     return {key: value for key, value in values.items() if value}
 
 
+def _track_start_value(inputs: dict[str, Any]) -> int | None:
+    id3_policy = _policy_dict(inputs, "id3_policy")
+    value = id3_policy.get("track_start")
+    try:
+        return int(str(value).strip()) if value is not None else None
+    except (TypeError, ValueError):
+        return None
+
+
 def _action_authority(
     *,
     book_meta: dict[str, Any] | None,
     tag_values: dict[str, str],
     target_root: str,
     target_relative_path: str,
+    track_start: int | None,
 ) -> dict[str, Any]:
     book = dict(book_meta) if isinstance(book_meta, dict) else {}
+    metadata_tags: dict[str, Any] = {
+        "field_map": dict(_METADATA_FIELD_MAP),
+        "values": dict(tag_values),
+    }
+    if track_start is not None:
+        metadata_tags["track_start"] = track_start
     return {
         "book": book,
-        "metadata_tags": {
-            "field_map": dict(_METADATA_FIELD_MAP),
-            "values": dict(tag_values),
-        },
+        "metadata_tags": metadata_tags,
         "publish": {
             "root": target_root,
             "relative_path": target_relative_path,
@@ -77,6 +90,7 @@ def _build_capabilities(
     target_relative_path: str,
     inputs: dict[str, Any],
     tag_values: dict[str, str],
+    track_start: int | None,
 ) -> list[dict[str, Any]]:
     audio_processing = _policy_dict(inputs, "audio_processing")
     covers_policy = _policy_dict(inputs, "covers_policy")
@@ -110,17 +124,18 @@ def _build_capabilities(
             cover_cap["url"] = cover_url
         capabilities.append(cover_cap)
 
-    capabilities.append(
-        {
-            "kind": "metadata.tags",
-            "order": 30,
-            "plugin": "id3_tagger",
-            "field_map": dict(_METADATA_FIELD_MAP),
-            "values": tag_values,
-            "wipe_before_write": True,
-            "preserve_cover": True,
-        }
-    )
+    metadata_capability: dict[str, Any] = {
+        "kind": "metadata.tags",
+        "order": 30,
+        "plugin": "id3_tagger",
+        "field_map": dict(_METADATA_FIELD_MAP),
+        "values": tag_values,
+        "wipe_before_write": True,
+        "preserve_cover": True,
+    }
+    if track_start is not None:
+        metadata_capability["track_start"] = track_start
+    capabilities.append(metadata_capability)
     capabilities.append(
         {
             "kind": "publish.write",
@@ -183,6 +198,7 @@ def build_job_requests(
         target_root = "stage" if mode == "stage" else "outbox"
     book_meta_any = authority.get("book_meta")
     book_meta = dict(book_meta_any) if isinstance(book_meta_any, dict) else {}
+    track_start = _track_start_value(phase2_inputs)
     selected_book_meta: dict[str, dict[str, Any]] = {}
     for it in selected_any:
         if not isinstance(it, dict):
@@ -210,6 +226,7 @@ def build_job_requests(
                     tag_values=tag_values,
                     target_root=target_root,
                     target_relative_path=tgt_rel,
+                    track_start=track_start,
                 ),
                 "capabilities": _build_capabilities(
                     root=root,
@@ -218,6 +235,7 @@ def build_job_requests(
                     target_relative_path=tgt_rel,
                     inputs=phase2_inputs,
                     tag_values=tag_values,
+                    track_start=track_start,
                 ),
             }
         )

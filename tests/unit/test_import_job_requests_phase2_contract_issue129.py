@@ -42,6 +42,7 @@ def test_build_job_requests_uses_phase1_authority_without_path_fallback() -> Non
                 "conflict_policy": {"mode": "overwrite"},
                 "delete_source_policy": {"enabled": True},
                 "publish_policy": {"target_root": "outbox"},
+                "id3_policy": {"track_start": 7},
             },
             "runtime": {
                 "effective_author_title": {
@@ -98,9 +99,11 @@ def test_build_job_requests_uses_phase1_authority_without_path_fallback() -> Non
                 "album": "Canonical Book",
                 "album_artist": "Canonical Author",
             },
+            "track_start": 7,
         },
         "publish": {"root": "outbox", "relative_path": "Stage/Disc-01"},
     }
+    assert capabilities[2]["track_start"] == 7
     assert doc["authority"]["phase1"]["selected_books"]["book:1"]["book_label"] == "Canonical Book"
     assert doc["authority"]["phase1"]["runtime"]["effective_author_title"] == {
         "author": "Canonical Author",

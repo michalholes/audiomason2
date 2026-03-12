@@ -73,6 +73,13 @@ def test_processed_registry_updates_on_succeeded_diag_event(tmp_path: Path) -> N
                 "book_id": "b1",
                 "source": {"root": "inbox", "relative_path": "src/book"},
                 "target": {"root": "stage", "relative_path": "dst/book"},
+                "authority": {
+                    "metadata_tags": {
+                        "field_map": {"title": "book_title"},
+                        "values": {"title": "Canonical Book"},
+                        "track_start": 7,
+                    }
+                },
             }
         ],
         "idempotency_key": "idem",
@@ -130,3 +137,4 @@ def test_processed_registry_updates_on_succeeded_diag_event(tmp_path: Path) -> N
     entry = books["b1"]
     assert entry["idempotency_key"] == "idem"
     assert entry["config_fingerprint"] == "cfg"
+    assert entry["authority"]["metadata_tags"]["track_start"] == 7

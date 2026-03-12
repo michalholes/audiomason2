@@ -196,16 +196,19 @@ async def _run_metadata_tags(
     plugin = plugin_loader.get_plugin("id3_tagger")
     values_any = capability.get("values")
     values = dict(values_any) if isinstance(values_any, dict) else {}
-    if not values:
+    track_start = capability.get("track_start")
+    if not values and track_start is None:
         return
     wipe_before_write = bool(capability.get("wipe_before_write", True))
     preserve_cover = bool(capability.get("preserve_cover", True))
-    for mp3_file in _iter_mp3_outputs(work_path):
+    tag_payload = dict(capability)
+    for file_index, mp3_file in enumerate(_iter_mp3_outputs(work_path)):
         await plugin.write_tags(
             mp3_file,
-            values,
+            tag_payload,
             wipe_before_write=wipe_before_write,
             preserve_cover=preserve_cover,
+            file_index=file_index,
         )
 
 

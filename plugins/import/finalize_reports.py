@@ -29,28 +29,36 @@ def _artifact_ref(rel_path: str) -> str:
 
 
 def build_dry_run_summary(job_requests: dict[str, Any]) -> dict[str, Any]:
-    session_id = str(job_requests.get("session_id") or "")
     mode = str(job_requests.get("mode") or "")
     records = iter_import_book_records(job_requests)
-    books = [
-        {
-            "book_id": str(record["book_id"]),
-            "source": {
-                "root": str(record["source_root"]),
-                "relative_path": str(record["source_relative_path"]),
-            },
-            "target": {
-                "root": str(record["target_root"]),
-                "relative_path": str(record["target_relative_path"]),
-            },
-            "authority": dict(record.get("authority") or {}),
-            "capabilities": list(record.get("capabilities") or []),
-        }
-        for record in records
-    ]
+    books = []
+    for record in records:
+        book = dict(record.get("authority") or {}).get("book") or {}
+        meta = dict(dict(record.get("authority") or {}).get("metadata_tags") or {})
+        values = dict(meta.get("values") or {})
+        author = str(
+            values.get("artist") or values.get("album_artist") or book.get("author_label") or ""
+        )
+        title = str(values.get("title") or values.get("album") or book.get("book_label") or "")
+        books.append(
+            {
+                "book_id": str(record["book_id"]),
+                "source": {
+                    "root": str(record["source_root"]),
+                    "relative_path": str(record["source_relative_path"]),
+                },
+                "target": {
+                    "root": str(record["target_root"]),
+                    "relative_path": str(record["target_relative_path"]),
+                },
+                "authority": dict(record.get("authority") or {}),
+                "capabilities": list(record.get("capabilities") or []),
+                "dry_run_name": f"{author} - {title}.dryrun.txt",
+            }
+        )
     return {
         "schema_version": _SCHEMA_VERSION,
-        "session_id": session_id,
+        "session_id": str(job_requests.get("session_id") or ""),
         "mode": mode,
         "books": books,
         "counts": {
@@ -60,63 +68,69 @@ def build_dry_run_summary(job_requests: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def _processing_log_entries(*, job_id: str, job_requests: dict[str, Any]) -> list[dict[str, Any]]:
-    records = iter_import_book_records(job_requests)
-    return [
-        {
-            "book_id": str(record["book_id"]),
-            "job_id": job_id,
-            "source": {
-                "root": str(record["source_root"]),
-                "relative_path": str(record["source_relative_path"]),
-            },
-            "authority": dict(record.get("authority") or {}),
-            "status": "succeeded",
-            "target": {
-                "root": str(record["target_root"]),
-                "relative_path": str(record["target_relative_path"]),
-            },
-        }
-        for record in records
+def _book_artifact_paths(*, session_id: str, book: dict[str, Any]) -> dict[str, str]:
+    source_rel = str(book.get("source", {}).get("relative_path") or "")
+    dry_run_name = str(book.get("dry_run_name") or "dryrun.txt")
+    base = f"{_finalize_dir(session_id)}/{source_rel}" if source_rel else _finalize_dir(session_id)
+    return {
+        "processing_log": f"{base}/processing.log",
+        "dry_run_text": f"{base}/{dry_run_name}",
+    }
+
+
+def _dry_run_text(*, job_id: str, book: dict[str, Any]) -> str:
+    source = dict(book.get("source") or {})
+    target = dict(book.get("target") or {})
+    authority = dict(book.get("authority") or {})
+    meta = dict(authority.get("metadata_tags") or {})
+    values = dict(meta.get("values") or {})
+    lines = [
+        f"job_id={job_id}",
+        f"book_id={str(book.get('book_id') or '')}",
+        f"source={str(source.get('root') or '')}:{str(source.get('relative_path') or '')}",
+        f"target={str(target.get('root') or '')}:{str(target.get('relative_path') or '')}",
     ]
+    for key in ("title", "artist", "album", "album_artist"):
+        value = str(values.get(key) or "")
+        if value:
+            lines.append(f"{key}={value}")
+    return "\n".join(lines) + "\n"
 
 
-def _build_report(
-    *,
-    job_id: str,
-    job_requests: dict[str, Any],
-    dry_run_path: str,
-    processing_log_path: str,
-) -> dict[str, Any]:
+def _build_report(*, job_id: str, job_requests: dict[str, Any], report_path: str) -> dict[str, Any]:
     summary = build_dry_run_summary(job_requests)
+    session_id = str(job_requests.get("session_id") or "")
+    books = []
+    processing_logs: dict[str, str] = {}
+    dry_run_texts: dict[str, str] = {}
+    for book in summary["books"]:
+        paths = _book_artifact_paths(session_id=session_id, book=book)
+        refs = {key: _artifact_ref(value) for key, value in paths.items()}
+        processing_logs[str(book["book_id"])] = refs["processing_log"]
+        dry_run_texts[str(book["book_id"])] = refs["dry_run_text"]
+        books.append({**book, "artifacts": refs})
     return {
         "schema_version": _SCHEMA_VERSION,
         "job_id": job_id,
         "job_type": str(job_requests.get("job_type") or ""),
         "mode": str(job_requests.get("mode") or ""),
-        "session_id": str(job_requests.get("session_id") or ""),
+        "session_id": session_id,
         "status": "succeeded",
         "counts": dict(summary.get("counts") or {}),
         "artifacts": {
-            "dry_run_summary": _artifact_ref(dry_run_path),
-            "processing_log": _artifact_ref(processing_log_path),
+            "report": _artifact_ref(report_path),
+            "processing_logs": processing_logs,
+            "dry_run_texts": dry_run_texts,
         },
+        "books": books,
         "idempotency_key": str(job_requests.get("idempotency_key") or ""),
         "config_fingerprint": str(job_requests.get("config_fingerprint") or ""),
         "plan_fingerprint": str(job_requests.get("plan_fingerprint") or ""),
     }
 
 
-def _write_processing_log(
-    *,
-    fs: FileService,
-    rel_path: str,
-    entries: list[dict[str, Any]],
-) -> None:
-    text = "".join(
-        json.dumps(entry, ensure_ascii=True, separators=(",", ":"), sort_keys=True) + "\n"
-        for entry in entries
-    )
+def _write_processing_log(*, fs: FileService, rel_path: str, entry: dict[str, Any]) -> None:
+    text = json.dumps(entry, ensure_ascii=True, separators=(",", ":"), sort_keys=True) + "\n"
     atomic_write_text(fs, RootName.WIZARDS, rel_path, text)
 
 
@@ -126,8 +140,6 @@ def _update_session_state(
     session_id: str,
     job_id: str,
     report_path: str,
-    dry_run_path: str,
-    processing_log_path: str,
     report: dict[str, Any],
 ) -> None:
     state_path = f"{_session_dir(session_id)}/state.json"
@@ -140,9 +152,7 @@ def _update_session_state(
     if not isinstance(computed, dict):
         computed = {}
     computed["finalize"] = {
-        "dry_run_summary_path": _artifact_ref(dry_run_path),
         "job_id": job_id,
-        "processing_log_path": _artifact_ref(processing_log_path),
         "report_path": _artifact_ref(report_path),
         "artifacts": dict(report.get("artifacts") or {}),
         "counts": dict(report.get("counts") or {}),
@@ -165,30 +175,34 @@ def write_success_finalize_artifacts(
     if not session_id:
         return None
 
-    finalize_dir = _finalize_dir(session_id)
-    dry_run_path = f"{finalize_dir}/dry_run_summary.json"
-    processing_log_path = f"{finalize_dir}/processing_log.jsonl"
-    report_path = f"{finalize_dir}/report.json"
-
-    summary = build_dry_run_summary(job_requests)
-    entries = _processing_log_entries(job_id=job_id, job_requests=job_requests)
-    report = _build_report(
-        job_id=job_id,
-        job_requests=job_requests,
-        dry_run_path=dry_run_path,
-        processing_log_path=processing_log_path,
-    )
-
-    atomic_write_json(fs, RootName.WIZARDS, dry_run_path, summary)
-    _write_processing_log(fs=fs, rel_path=processing_log_path, entries=entries)
+    report_path = f"{_finalize_dir(session_id)}/report.json"
+    report = _build_report(job_id=job_id, job_requests=job_requests, report_path=report_path)
+    for book in report["books"]:
+        refs = dict(book.get("artifacts") or {})
+        log_path = str(refs.get("processing_log") or "").removeprefix("wizards:")
+        dry_run_path = str(refs.get("dry_run_text") or "").removeprefix("wizards:")
+        source = dict(book.get("source") or {})
+        target = dict(book.get("target") or {})
+        _write_processing_log(
+            fs=fs,
+            rel_path=log_path,
+            entry={
+                "book_id": str(book.get("book_id") or ""),
+                "job_id": job_id,
+                "source": source,
+                "authority": dict(book.get("authority") or {}),
+                "status": "succeeded",
+                "target": target,
+            },
+        )
+        dry_run_text = _dry_run_text(job_id=job_id, book=book)
+        atomic_write_text(fs, RootName.WIZARDS, dry_run_path, dry_run_text)
     atomic_write_json(fs, RootName.WIZARDS, report_path, report)
     _update_session_state(
         fs=fs,
         session_id=session_id,
         job_id=job_id,
         report_path=report_path,
-        dry_run_path=dry_run_path,
-        processing_log_path=processing_log_path,
         report=report,
     )
     return report

@@ -26,6 +26,7 @@ ASCII-only.
 
 from __future__ import annotations
 
+from contextlib import suppress
 from typing import Any
 
 from plugins.file_io.service import FileService, RootName
@@ -74,7 +75,7 @@ def _normalize_authority(action_any: dict[str, Any]) -> dict[str, Any]:
     field_map = dict(field_map_any) if isinstance(field_map_any, dict) else {}
     values_any = meta.get("values")
     values = dict(values_any) if isinstance(values_any, dict) else {}
-    normalized_meta = {
+    normalized_meta: dict[str, Any] = {
         "field_map": {
             str(key): str(value)
             for key, value in field_map.items()
@@ -86,6 +87,10 @@ def _normalize_authority(action_any: dict[str, Any]) -> dict[str, Any]:
             if isinstance(key, str) and isinstance(value, str) and value
         },
     }
+    track_start = meta.get("track_start")
+    if track_start is not None:
+        with suppress(TypeError, ValueError):
+            normalized_meta["track_start"] = int(str(track_start).strip())
 
     publish_any = authority.get("publish")
     publish = dict(publish_any) if isinstance(publish_any, dict) else {}

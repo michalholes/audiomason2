@@ -114,8 +114,16 @@ def test_finalize_success_artifacts_and_ignore_registry_are_success_only(tmp_pat
     fs = plugin.get_engine().get_file_service()
 
     report_rel = f"import/sessions/{session_id}/finalize/report.json"
-    summary_rel = f"import/sessions/{session_id}/finalize/dry_run_summary.json"
-    log_rel = f"import/sessions/{session_id}/finalize/processing_log.jsonl"
+    book1_log_rel = f"import/sessions/{session_id}/finalize/AuthorA/Book1/processing.log"
+    book2_log_rel = f"import/sessions/{session_id}/finalize/AuthorA/Book2/processing.log"
+    book1_dry_run_rel = (
+        f"import/sessions/{session_id}/finalize/AuthorA/Book1/"
+        "Canonical Author - Canonical Edition.dryrun.txt"
+    )
+    book2_dry_run_rel = (
+        f"import/sessions/{session_id}/finalize/AuthorA/Book2/"
+        "Canonical Author - Canonical Edition.dryrun.txt"
+    )
     ignore_rel = "import/processed/ignore_registry.json"
 
     bus.publish(
@@ -134,8 +142,8 @@ def test_finalize_success_artifacts_and_ignore_registry_are_success_only(tmp_pat
     )
 
     assert not fs.exists(RootName.WIZARDS, report_rel)
-    assert not fs.exists(RootName.WIZARDS, summary_rel)
-    assert not fs.exists(RootName.WIZARDS, log_rel)
+    assert not fs.exists(RootName.WIZARDS, book1_log_rel)
+    assert not fs.exists(RootName.WIZARDS, book1_dry_run_rel)
     assert not fs.exists(RootName.WIZARDS, ignore_rel)
 
     bus.publish(
@@ -154,37 +162,45 @@ def test_finalize_success_artifacts_and_ignore_registry_are_success_only(tmp_pat
     )
 
     report = read_json(fs, RootName.WIZARDS, report_rel)
-    summary = read_json(fs, RootName.WIZARDS, summary_rel)
     ignore_registry = read_json(fs, RootName.WIZARDS, ignore_rel)
     state = read_json(fs, RootName.WIZARDS, f"import/sessions/{session_id}/state.json")
 
     assert report["status"] == "succeeded"
-    assert report["artifacts"]["dry_run_summary"] == f"wizards:{summary_rel}"
-    assert report["artifacts"]["processing_log"] == f"wizards:{log_rel}"
-
-    assert summary["counts"] == {"books": 2, "capabilities": 6}
-    assert [book["source"]["relative_path"] for book in summary["books"]] == [
+    assert report["counts"] == {"books": 2, "capabilities": 6}
+    assert report["artifacts"]["report"] == f"wizards:{report_rel}"
+    report_books = {book["source"]["relative_path"]: book["book_id"] for book in report["books"]}
+    assert report["artifacts"]["processing_logs"] == {
+        report_books["AuthorA/Book1"]: f"wizards:{book1_log_rel}",
+        report_books["AuthorA/Book2"]: f"wizards:{book2_log_rel}",
+    }
+    assert report["artifacts"]["dry_run_texts"] == {
+        report_books["AuthorA/Book1"]: f"wizards:{book1_dry_run_rel}",
+        report_books["AuthorA/Book2"]: f"wizards:{book2_dry_run_rel}",
+    }
+    assert [book["source"]["relative_path"] for book in report["books"]] == [
         "AuthorA/Book1",
         "AuthorA/Book2",
     ]
-    assert summary["books"][0]["authority"]["metadata_tags"]["values"] == {
+    assert report["books"][0]["authority"]["metadata_tags"]["values"] == {
         "title": "Canonical Edition",
         "artist": "Canonical Author",
         "album": "Canonical Edition",
         "album_artist": "Canonical Author",
     }
-    assert [cap["kind"] for cap in summary["books"][0]["capabilities"]] == [
+    assert [cap["kind"] for cap in report["books"][0]["capabilities"]] == [
         "audio.import",
         "metadata.tags",
         "publish.write",
     ]
 
-    log_lines = (roots["wizards"] / log_rel).read_text(encoding="utf-8").strip().splitlines()
-    assert len(log_lines) == 2
-    line0 = json.loads(log_lines[0])
+    line0 = json.loads((roots["wizards"] / book1_log_rel).read_text(encoding="utf-8").strip())
     assert line0["status"] == "succeeded"
     assert line0["source"] == {"root": "inbox", "relative_path": "AuthorA/Book1"}
     assert line0["authority"]["metadata_tags"]["values"]["title"] == "Canonical Edition"
+
+    dry_run_text = (roots["wizards"] / book1_dry_run_rel).read_text(encoding="utf-8")
+    assert "title=Canonical Edition" in dry_run_text
+    assert "artist=Canonical Author" in dry_run_text
 
     assert ignore_registry == {
         "schema_version": 1,
@@ -196,13 +212,18 @@ def test_finalize_success_artifacts_and_ignore_registry_are_success_only(tmp_pat
 
     finalize = state.get("computed", {}).get("finalize")
     assert finalize == {
-        "dry_run_summary_path": f"wizards:{summary_rel}",
         "job_id": job_id,
-        "processing_log_path": f"wizards:{log_rel}",
         "report_path": f"wizards:{report_rel}",
         "artifacts": {
-            "dry_run_summary": f"wizards:{summary_rel}",
-            "processing_log": f"wizards:{log_rel}",
+            "report": f"wizards:{report_rel}",
+            "processing_logs": {
+                report_books["AuthorA/Book1"]: f"wizards:{book1_log_rel}",
+                report_books["AuthorA/Book2"]: f"wizards:{book2_log_rel}",
+            },
+            "dry_run_texts": {
+                report_books["AuthorA/Book1"]: f"wizards:{book1_dry_run_rel}",
+                report_books["AuthorA/Book2"]: f"wizards:{book2_dry_run_rel}",
+            },
         },
         "counts": {"books": 2, "capabilities": 6},
         "status": "succeeded",
