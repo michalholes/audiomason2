@@ -279,13 +279,7 @@ def build_phase1_projection(
         "two_pass_order": list(policy_projection.get("two_pass_order") or []),
         "phase2_inputs": phase2_inputs,
     }
-    runtime_state = {
-        **state,
-        "vars": {**dict(state.get("vars") or {}), "phase1": phase1_projection},
-    }
-    runtime_snapshot = build_runtime_snapshot(runtime_state)
-    if isinstance(runtime_snapshot, dict):
-        phase1_projection["runtime"] = runtime_snapshot
+    phase1_projection["runtime"] = build_runtime_snapshot(state)
     return phase1_projection
 
 

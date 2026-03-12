@@ -1,4 +1,4 @@
-"""Issue 105: minimal v3 runtime flow for non-interactive primitives."""
+"""Issue 149: minimal v3 runtime flow for import.phase1_runtime."""
 
 from __future__ import annotations
 
@@ -17,15 +17,20 @@ WIZARD_DEFINITION_REL_PATH = import_module(
 
 MINIMAL_V3 = {
     "version": 3,
-    "entry_step_id": "hello",
+    "entry_step_id": "phase1_runtime_defaults",
     "nodes": [
         {
-            "step_id": "hello",
+            "step_id": "phase1_runtime_defaults",
             "op": {
-                "primitive_id": "ui.message",
+                "primitive_id": "import.phase1_runtime",
                 "primitive_version": 1,
-                "inputs": {"text": "hello"},
-                "writes": [],
+                "inputs": {},
+                "writes": [
+                    {
+                        "to_path": "$.state.vars.phase1.runtime",
+                        "value": {"expr": "$.op.outputs.snapshot"},
+                    }
+                ],
             },
         },
         {
@@ -38,7 +43,7 @@ MINIMAL_V3 = {
             },
         },
     ],
-    "edges": [{"from": "hello", "to": "stop"}],
+    "edges": [{"from": "phase1_runtime_defaults", "to": "stop"}],
 }
 
 
@@ -76,7 +81,7 @@ def _make_engine(tmp_path: Path) -> ImportWizardEngine:
     return ImportWizardEngine(resolver=resolver)
 
 
-def test_v3_runtime_runs_ui_message_then_ctrl_stop(tmp_path: Path) -> None:
+def test_v3_runtime_runs_phase1_runtime_then_ctrl_stop(tmp_path: Path) -> None:
     engine = _make_engine(tmp_path)
     fs = engine.get_file_service()
     atomic_write_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_REL_PATH, MINIMAL_V3)
@@ -88,8 +93,13 @@ def test_v3_runtime_runs_ui_message_then_ctrl_stop(tmp_path: Path) -> None:
     assert state["cursor"]["step_id"] == "stop"
     assert state["answers"] == {}
     assert state["inputs"] == {}
-    assert [entry["step_id"] for entry in state["trace"]] == ["hello", "stop"]
+    assert [entry["step_id"] for entry in state["trace"]] == ["phase1_runtime_defaults", "stop"]
     assert [entry["result"] for entry in state["trace"]] == ["OK", "OK"]
+    assert state["vars"]["phase1"]["runtime"]["effective_author_title"] == {
+        "author": "",
+        "title": "",
+    }
+    assert state["vars"]["phase1"]["runtime"]["parallelism"] == {"workers": 1}
 
     blocked = engine.apply_action(state["session_id"], "next")
     assert blocked["error"]["code"] == "INVARIANT_VIOLATION"

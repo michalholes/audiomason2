@@ -124,11 +124,11 @@ def test_default_v3_phase1_runtime_step_uses_flow_visible_runtime_projection() -
     )
     op = phase1_node["op"]
 
-    assert op["primitive_id"] == "data.set"
-    assert op["inputs"] == {"value": {"expr": "$.state.vars.phase1.runtime"}}
+    assert op["primitive_id"] == "import.phase1_runtime"
+    assert op["inputs"] == {}
     assert op["writes"] == [
         {
             "to_path": "$.state.vars.phase1.runtime",
-            "value": {"expr": "$.op.outputs.value"},
+            "value": {"expr": "$.op.outputs.snapshot"},
         }
     ]

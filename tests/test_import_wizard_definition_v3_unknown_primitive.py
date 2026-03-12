@@ -134,3 +134,7 @@ def test_load_or_bootstrap_replaces_unknown_v3_primitive_with_bootstrap_default(
     assert loaded["version"] == 3
     assert loaded["entry_step_id"] == "select_authors"
     assert loaded["nodes"][0]["op"]["primitive_id"] != "ui.prompt_missing"
+    phase1_node = next(
+        node for node in loaded["nodes"] if node["step_id"] == "phase1_runtime_defaults"
+    )
+    assert phase1_node["op"]["primitive_id"] == "import.phase1_runtime"

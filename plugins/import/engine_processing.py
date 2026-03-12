@@ -16,6 +16,7 @@ from .engine_util import _emit_required, _exception_envelope, _iso_utc_now
 from .errors import FinalizeError, error_envelope, invariant_violation, validation_error
 from .fingerprints import fingerprint_json
 from .job_requests import build_job_requests, planned_units_count
+from .phase1_source_intake import build_phase1_projection, phase1_session_authority_applies
 from .serialization import canonical_serialize
 from .storage import atomic_write_json, read_json
 
@@ -47,6 +48,18 @@ def start_processing_impl(
                 meta={},
             )
 
+        effective_model = engine._load_effective_model(session_id)
+        if phase1_session_authority_applies(effective_model=effective_model):
+            session_dir = f"import/sessions/{session_id}"
+            discovery_any = read_json(engine._fs, RootName.WIZARDS, f"{session_dir}/discovery.json")
+            if isinstance(discovery_any, list) and all(
+                isinstance(item, dict) for item in discovery_any
+            ):
+                state.setdefault("vars", {})["phase1"] = build_phase1_projection(
+                    discovery=discovery_any,
+                    state=state,
+                )
+                engine._persist_state(session_id, state)
         phase1_any = state.get("vars", {}).get("phase1")
         phase1 = dict(phase1_any) if isinstance(phase1_any, dict) else {}
         runtime_any = phase1.get("runtime")

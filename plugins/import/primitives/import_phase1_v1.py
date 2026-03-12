@@ -56,7 +56,9 @@ DEFAULT_FINAL_CONFIRM = {"confirm_start": False}
 
 
 def build_runtime_snapshot(state: dict[str, Any]) -> dict[str, Any]:
-    phase1_any = state.get("vars", {}).get("phase1")
+    vars_any = state.get("vars")
+    vars_obj = dict(vars_any) if isinstance(vars_any, dict) else {}
+    phase1_any = vars_obj.get("phase1")
     phase1 = _dict_copy(phase1_any)
     phase2_inputs = _dict_copy(phase1.get("phase2_inputs"))
     metadata = _dict_copy(phase1.get("metadata"))

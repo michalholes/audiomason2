@@ -17,6 +17,12 @@ from ..primitives import (
     is_prompt_primitive,
     validate_submit_payload,
 )
+from ..primitives.import_phase1_v1 import (
+    REGISTRY_ENTRIES as IMPORT_PHASE1_REGISTRY_ENTRIES,
+)
+from ..primitives.import_phase1_v1 import (
+    execute as execute_import_phase1_primitive,
+)
 from ..primitives.ui_v1 import (
     PROMPT_METADATA_KEYS,
     normalize_prompt_ui,
@@ -338,11 +344,19 @@ def prompt_ui_from_resolved_inputs(inputs: dict[str, Any]) -> dict[str, Any]:
     return {key: inputs[key] for key in PROMPT_METADATA_KEYS if key in inputs}
 
 
+PHASE1_RUNTIME_ID = "import.phase1_runtime"
+PHASE1_RUNTIME_VERSION = 1
+
+
+def _is_phase1_runtime_primitive(primitive_id: str, primitive_version: int) -> bool:
+    return primitive_id == PHASE1_RUNTIME_ID and primitive_version == PHASE1_RUNTIME_VERSION
+
+
 def _registry_declares_primitive(primitive_id: str, primitive_version: int) -> bool:
     return any(
         str(entry.get("primitive_id") or "") == primitive_id
         and int(entry.get("version") or 0) == primitive_version
-        for entry in baseline_registry_entries()
+        for entry in [*baseline_registry_entries(), *IMPORT_PHASE1_REGISTRY_ENTRIES]
     )
 
 
@@ -374,7 +388,10 @@ def run_automatic_steps(
                 break
             current = next_step
             continue
-        if not is_non_interactive(primitive_id, primitive_version):
+        if not (
+            is_non_interactive(primitive_id, primitive_version)
+            or _is_phase1_runtime_primitive(primitive_id, primitive_version)
+        ):
             raise FinalizeError("non_prompt_submit_payload_forbidden")
         if not _registry_declares_primitive(primitive_id, primitive_version):
             raise FinalizeError("unknown primitive")
@@ -408,14 +425,28 @@ def run_automatic_steps(
                 append_trace=append_trace_event,
             )
             if phase2 is None:
-                outputs, jobs = execute_non_prompt(
-                    session_id=session_id,
-                    step_id=current,
-                    primitive_id=primitive_id,
-                    primitive_version=primitive_version,
-                    inputs=inputs,
-                    state=state,
-                )
+                if _is_phase1_runtime_primitive(primitive_id, primitive_version):
+                    outputs = execute_import_phase1_primitive(
+                        primitive_id,
+                        primitive_version,
+                        inputs,
+                        state,
+                    )
+                    jobs_any = state.get("jobs")
+                    jobs = (
+                        dict(jobs_any)
+                        if isinstance(jobs_any, dict)
+                        else {"emitted": [], "submitted": []}
+                    )
+                else:
+                    outputs, jobs = execute_non_prompt(
+                        session_id=session_id,
+                        step_id=current,
+                        primitive_id=primitive_id,
+                        primitive_version=primitive_version,
+                        inputs=inputs,
+                        state=state,
+                    )
             else:
                 state, outputs, jobs, writes_applied = phase2
         except Exception as exc:

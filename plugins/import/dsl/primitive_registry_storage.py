@@ -32,9 +32,10 @@ def _default_schema_object() -> dict[str, Any]:
 
 def _default_primitives() -> list[dict[str, Any]]:
     from ..primitives import baseline_registry_entries
+    from ..primitives.import_phase1_v1 import REGISTRY_ENTRIES as IMPORT_PHASE1_REGISTRY_ENTRIES
 
     out: list[dict[str, Any]] = []
-    for entry in baseline_registry_entries():
+    for entry in [*baseline_registry_entries(), *IMPORT_PHASE1_REGISTRY_ENTRIES]:
         item = dict(entry)
         item.setdefault("inputs_schema", _default_schema_object())
         item.setdefault("outputs_schema", _default_schema_object())
