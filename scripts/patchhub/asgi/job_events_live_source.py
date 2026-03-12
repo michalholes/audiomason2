@@ -5,6 +5,11 @@ import json
 from collections.abc import AsyncIterator, Awaitable, Callable
 from pathlib import Path
 
+from patchhub.live_event_retention import (
+    LIVE_EVENT_RETENTION_MIN,
+    clamp_live_event_retention,
+)
+
 from .job_event_broker import JobEventBroker
 
 
@@ -17,7 +22,7 @@ def _read_tail_snapshot(
     if not path.exists():
         return "", 0
 
-    lines = max(1, min(int(lines), 5000))
+    lines = clamp_live_event_retention(lines)
     max_bytes = max(0, int(max_bytes))
     file_size = path.stat().st_size
     if file_size <= 0:
@@ -44,7 +49,7 @@ async def stream_job_events_live_source(
     job_status: Callable[[], Awaitable[str | None]],
     get_broker: Callable[[], Awaitable[JobEventBroker | None]],
     historical_stream: Callable[[], AsyncIterator[bytes]],
-    tail_lines: int = 500,
+    tail_lines: int = LIVE_EVENT_RETENTION_MIN,
     ping_interval_s: float = 10.0,
     broker_poll_interval_s: float = 0.1,
 ) -> AsyncIterator[bytes]:

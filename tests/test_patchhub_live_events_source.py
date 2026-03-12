@@ -13,7 +13,10 @@ sys.path.insert(0, str(_SCRIPTS))
 
 import patchhub.asgi.job_events_live_source as live_source_mod
 from patchhub.asgi.job_event_broker import JobEventBroker
-from patchhub.asgi.job_events_live_source import stream_job_events_live_source
+from patchhub.asgi.job_events_live_source import (
+    _read_tail_snapshot,
+    stream_job_events_live_source,
+)
 
 
 class TestPatchhubLiveEventsSource(unittest.IsolatedAsyncioTestCase):
@@ -202,3 +205,18 @@ class TestPatchhubLiveEventsSource(unittest.IsolatedAsyncioTestCase):
         payload = b"".join(chunks).decode("utf-8")
         self.assertIn("event: end", payload)
         self.assertIn('"status": "canceled"', payload)
+
+    def test_read_tail_snapshot_clamps_to_20000_lines(self) -> None:
+        with TemporaryDirectory() as tmpdir:
+            jsonl_path = Path(tmpdir) / "job.jsonl"
+            jsonl_path.write_text(
+                "\n".join(f'{{"type":"log","msg":"{idx}"}}' for idx in range(20_005)) + "\n",
+                encoding="utf-8",
+            )
+
+            tail, _offset = _read_tail_snapshot(jsonl_path, 99_999)
+
+        lines = tail.splitlines()
+        self.assertEqual(len(lines), 20_000)
+        self.assertEqual(lines[0], '{"type":"log","msg":"5"}')
+        self.assertEqual(lines[-1], '{"type":"log","msg":"20004"}')

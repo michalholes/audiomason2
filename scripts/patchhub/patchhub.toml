@@ -4,7 +4,7 @@ port = 8099
 backend = "asgi"
 
 [meta]
-version = "1.12.2"
+version = "1.12.3"
 
 [runner]
 command = ["python3", "scripts/am_patch.py"]
@@ -127,7 +127,7 @@ max_completed_job_raw_log_lines = 100000
 max_completed_job_raw_event_lines = 100000
 max_completed_job_raw_age_days = 30
 keep_recent_terminal_jobs_per_mode = 5
-compact_tail_lines = 200
+compact_tail_lines = 20000
 reclaim_trigger_policy = "after_compaction"
 reclaim_interval_seconds = 60
 reclaim_min_pruned_rows = 1

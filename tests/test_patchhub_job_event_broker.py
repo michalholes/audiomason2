@@ -37,3 +37,20 @@ class TestPatchhubJobEventBroker(unittest.IsolatedAsyncioTestCase):
 
         self.assertIsNone(q.get_nowait())
         self.assertEqual(broker.dropped_total(), 1)
+
+    async def test_replay_retains_20000_most_recent_items(self) -> None:
+        broker = JobEventBroker()
+        for idx in range(20_005):
+            broker.publish(f'{{"type":"log","msg":"{idx}"}}', idx + 1)
+
+        sub = broker.subscribe(after_offset=0).__aiter__()
+        items = []
+        try:
+            for _ in range(20_000):
+                items.append(await asyncio.wait_for(sub.__anext__(), timeout=1.0))
+        finally:
+            await sub.aclose()
+
+        self.assertEqual(len(items), 20_000)
+        self.assertEqual(items[0], '{"type":"log","msg":"5"}')
+        self.assertEqual(items[-1], '{"type":"log","msg":"20004"}')

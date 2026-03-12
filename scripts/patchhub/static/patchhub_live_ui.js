@@ -10,7 +10,7 @@
 	var liveStreamJobId = null;
 	var liveES = null;
 	var liveEvents = [];
-	var MAX_LIVE_EVENTS = 2000;
+	var MAX_LIVE_EVENTS = 20000;
 	var liveRenderTimer = null;
 	var liveLevel = "normal";
 	var liveTerminalInfo = null;

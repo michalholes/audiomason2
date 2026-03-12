@@ -4,6 +4,7 @@ import asyncio
 import json
 from collections.abc import AsyncIterator, Awaitable, Callable
 
+from patchhub.live_event_retention import LIVE_EVENT_RETENTION_MIN
 from patchhub.web_jobs_db import WebJobsDatabase
 
 from .job_event_broker import JobEventBroker
@@ -16,7 +17,7 @@ async def stream_job_events_db_live(
     in_memory_job: bool,
     job_status: Callable[[], Awaitable[str | None]],
     get_broker: Callable[[], Awaitable[JobEventBroker | None]],
-    tail_lines: int = 500,
+    tail_lines: int = LIVE_EVENT_RETENTION_MIN,
     broker_poll_interval_s: float = 0.1,
     ping_interval_s: float = 10.0,
 ) -> AsyncIterator[bytes]:

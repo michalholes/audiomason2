@@ -128,3 +128,39 @@ async def test_db_live_stream_replays_db_tail_then_switches_to_broker(
     broker.close()
     third = (await iterator.__anext__()).decode("utf-8")
     assert third == 'event: end\ndata: {"reason": "job_completed", "status": "running"}\n\n'
+
+
+@pytest.mark.asyncio
+async def test_db_live_stream_default_tail_replays_20000_rows(
+    seeded_db: WebJobsDatabase,
+) -> None:
+    for idx in range(2, 20_006):
+        seeded_db.append_event_line(
+            "job-514-events",
+            f'{{"type":"log","msg":"{idx}"}}',
+        )
+
+    broker = JobEventBroker()
+    broker.close()
+
+    async def _job_status() -> str | None:
+        return "success"
+
+    async def _get_broker() -> JobEventBroker | None:
+        return broker
+
+    chunks = [
+        chunk
+        async for chunk in stream_job_events_db_live(
+            job_id="job-514-events",
+            db=seeded_db,
+            in_memory_job=True,
+            job_status=_job_status,
+            get_broker=_get_broker,
+        )
+    ]
+
+    data_lines = [chunk.decode("utf-8").strip() for chunk in chunks if chunk.startswith(b"data: ")]
+    assert len(data_lines) == 20_000
+    assert data_lines[0] == 'data: {"type":"log","msg":"6"}'
+    assert data_lines[-1] == 'data: {"type":"log","msg":"20005"}'

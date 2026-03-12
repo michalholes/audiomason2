@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from .job_store import _json_dumps
+from .live_event_retention import clamp_live_event_retention
 
 if TYPE_CHECKING:
     from .models import JobRecord, WebJobsDbConfig
@@ -252,7 +253,7 @@ def read_effective_event_tail_text(
     *,
     lines: int = 500,
 ) -> str:
-    limit = max(1, min(int(lines), 5000))
+    limit = clamp_live_event_retention(lines)
     rows, _last_seq = job_db.read_event_tail(job_id, lines=limit)
     if rows:
         return "\n".join(row.raw_line for row in rows)
@@ -279,7 +280,7 @@ def read_effective_applied_files(job_db: WebJobsDatabase, job_id: str) -> tuple[
 
 
 def read_effective_log_tail(job_db: WebJobsDatabase, job_id: str, *, lines: int = 200) -> str:
-    limit = max(1, min(int(lines), 5000))
+    limit = clamp_live_event_retention(lines)
     raw_tail = job_db._read_raw_log_tail(job_id, lines=limit)
     if raw_tail:
         return raw_tail

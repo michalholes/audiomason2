@@ -18,6 +18,7 @@ from .job_store import (
     _none_if_blank,
     _read_event_frame,
 )
+from .live_event_retention import clamp_live_event_retention
 from .models import EventRow, JobRecord, VirtualEntry, WebJobsDbConfig
 from .run_applied_files import derive_applied_files_from_log_text
 
@@ -395,7 +396,7 @@ class WebJobsDatabase:
         return [_event_row_from_sql(row) for row in rows]
 
     def read_event_tail(self, job_id: str, *, lines: int = 500) -> tuple[list[EventRow], int]:
-        limit = max(1, min(int(lines), 5000))
+        limit = clamp_live_event_retention(lines)
         with self._store._connect() as conn:
             rows = conn.execute(
                 """

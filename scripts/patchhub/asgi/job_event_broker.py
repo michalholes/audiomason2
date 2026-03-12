@@ -5,6 +5,8 @@ from collections import deque
 from collections.abc import AsyncIterator
 from typing import TypeAlias
 
+from patchhub.live_event_retention import LIVE_EVENT_RETENTION_MIN
+
 _EventItem: TypeAlias = tuple[int, str]
 _QueueItem: TypeAlias = _EventItem | None
 
@@ -45,7 +47,7 @@ class JobEventBroker:
         self,
         *,
         max_queue_items: int = 10000,
-        max_replay_items: int = 2000,
+        max_replay_items: int = LIVE_EVENT_RETENTION_MIN,
     ) -> None:
         self._max_queue_items = max(1, int(max_queue_items))
         self._max_replay_items = max(1, int(max_replay_items))

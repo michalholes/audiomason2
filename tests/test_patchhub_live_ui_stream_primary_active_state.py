@@ -175,3 +175,26 @@ process.stdout.write(
     assert "queued" in result["activeHtml"]
     assert result["summaryText"] == "STATUS: QUEUED"
     assert result["appliedHidden"] is True
+
+
+def test_live_ui_keeps_20000_most_recent_events() -> None:
+    result = _run_node_scenario(
+        """
+ui.saveLiveJobId("job-retain");
+ui.openLiveStream("job-retain");
+for (let idx = 0; idx < 20005; idx += 1) {
+  __lastEventSource.onmessage({
+    data: JSON.stringify({ type: "log", msg: String(idx) }),
+  });
+}
+await flush(80);
+process.stdout.write(
+  JSON.stringify({
+    length: window.AMP_PATCHHUB_UI.liveEvents.length,
+    first: window.AMP_PATCHHUB_UI.liveEvents[0].msg,
+    last: window.AMP_PATCHHUB_UI.liveEvents[window.AMP_PATCHHUB_UI.liveEvents.length - 1].msg,
+  }),
+);
+"""
+    )
+    assert result == {"length": 20000, "first": "5", "last": "20004"}
