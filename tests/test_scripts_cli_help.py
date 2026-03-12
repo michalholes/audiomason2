@@ -39,3 +39,43 @@ def test_scripts_help_smoke(rel_script: str, extra_env: dict[str, str]) -> None:
     out = (p.stdout or "") + (p.stderr or "")
     assert p.returncode == 0, f"help failed for {rel_script}: rc={p.returncode}\n{out}"
     assert out.strip(), f"no help output for {rel_script}"
+
+
+def test_am_patch_help_all_mentions_pytest_routing_mode() -> None:
+    repo_root = _repo_root()
+    script_path = repo_root / "scripts" / "am_patch.py"
+
+    env = os.environ.copy()
+    env["AM_PATCH_VENV_BOOTSTRAPPED"] = "1"
+
+    p = subprocess.run(
+        [sys.executable, str(script_path), "--help-all"],
+        cwd=str(repo_root),
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    out = (p.stdout or "") + (p.stderr or "")
+    assert p.returncode == 0, out
+    assert "--pytest-routing-mode legacy|bucketed" in out
+
+
+def test_am_patch_show_config_prints_pytest_routing_keys() -> None:
+    repo_root = _repo_root()
+    script_path = repo_root / "scripts" / "am_patch.py"
+
+    env = os.environ.copy()
+    env["AM_PATCH_VENV_BOOTSTRAPPED"] = "1"
+
+    p = subprocess.run(
+        [sys.executable, str(script_path), "--show-config"],
+        cwd=str(repo_root),
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    out = (p.stdout or "") + (p.stderr or "")
+    assert p.returncode == 0, out
+    assert "pytest_routing_mode='bucketed'" in out
+    assert "pytest_smoke_targets=" in out
+    assert "pytest_area_targets=" in out

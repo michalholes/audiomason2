@@ -28,3 +28,27 @@ def test_config_edit_roundtrip_preserves_comments_and_builds_policy():
     assert 'verbosity = "quiet"' in updated
     assert "ipc_socket_enabled = false" in updated
     assert 'success_archive_name = "{repo}-{branch}.zip"' in updated
+
+
+def test_config_edit_roundtrip_handles_bucketed_pytest_routing_keys() -> None:
+    from pathlib import Path
+
+    from am_patch.config_edit import apply_update_to_config_text
+    from am_patch.config_schema import get_policy_schema
+
+    cfg_path = Path(__file__).parent.parent / "scripts" / "am_patch" / "am_patch.toml"
+    schema = get_policy_schema()
+
+    updated = apply_update_to_config_text(
+        cfg_path.read_text(encoding="utf-8"),
+        {
+            "pytest_routing_mode": "legacy",
+            "pytest_smoke_targets": ["tests/test_complete.py"],
+            "pytest_area_targets": {"plugins.audio_processor": ["tests/smoke_audio.py"]},
+        },
+        schema,
+    )
+
+    assert 'pytest_routing_mode = "legacy"' in updated
+    assert 'pytest_smoke_targets = ["tests/test_complete.py"]' in updated
+    assert 'pytest_area_targets = {"plugins.audio_processor" = ["tests/smoke_audio.py"]}' in updated

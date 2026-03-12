@@ -52,7 +52,15 @@ class TestAmpConfigRoundtrip(unittest.TestCase):
 
             # Dry-run validation (no write).
             st2, data2 = api_amp_config_post(
-                dummy, {"values": {"verbosity": "quiet"}, "dry_run": True}
+                dummy,
+                {
+                    "values": {
+                        "verbosity": "quiet",
+                        "pytest_routing_mode": "legacy",
+                        "pytest_smoke_targets": ["tests/audio_smoke.py"],
+                    },
+                    "dry_run": True,
+                },
             )
             self.assertEqual(st2, 200)
             obj2 = json.loads(data2.decode("utf-8"))
@@ -61,6 +69,11 @@ class TestAmpConfigRoundtrip(unittest.TestCase):
 
             # Dry-run returns typed values as-if the update was written.
             self.assertEqual(obj2.get("values", {}).get("verbosity"), "quiet")
+            self.assertEqual(obj2.get("values", {}).get("pytest_routing_mode"), "legacy")
+            self.assertEqual(
+                obj2.get("values", {}).get("pytest_smoke_targets"),
+                ["tests/audio_smoke.py"],
+            )
 
             # No write happened.
             self.assertIn('verbosity = "normal"', cfg_path.read_text(encoding="utf-8"))
@@ -73,7 +86,15 @@ class TestAmpConfigRoundtrip(unittest.TestCase):
 
             # Save.
             st3, data3 = api_amp_config_post(
-                dummy, {"values": {"verbosity": "quiet"}, "dry_run": False}
+                dummy,
+                {
+                    "values": {
+                        "verbosity": "quiet",
+                        "pytest_routing_mode": "legacy",
+                        "pytest_smoke_targets": ["tests/test_complete.py"],
+                    },
+                    "dry_run": False,
+                },
             )
             self.assertEqual(st3, 200)
             obj3 = json.loads(data3.decode("utf-8"))
@@ -84,3 +105,8 @@ class TestAmpConfigRoundtrip(unittest.TestCase):
             obj4 = json.loads(data4.decode("utf-8"))
             self.assertTrue(obj4.get("ok"))
             self.assertEqual(obj4.get("values", {}).get("verbosity"), "quiet")
+            self.assertEqual(obj4.get("values", {}).get("pytest_routing_mode"), "legacy")
+            self.assertEqual(
+                obj4.get("values", {}).get("pytest_smoke_targets"),
+                ["tests/test_complete.py"],
+            )

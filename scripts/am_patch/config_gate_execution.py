@@ -12,6 +12,10 @@ from .policy_gate_modes import apply_gate_modes
 ConfigBool = Callable[[dict[str, Any], str, bool], bool]
 ConfigStrRequired = Callable[[dict[str, Any], str, str], str]
 ConfigListStr = Callable[[dict[str, Any], str, list[str]], list[str]]
+ConfigDictListStr = Callable[
+    [dict[str, Any], str, dict[str, list[str]]],
+    dict[str, list[str]],
+]
 MarkCfg = Callable[[Any, dict[str, Any], str], None]
 
 
@@ -22,6 +26,7 @@ def apply_gate_execution_cfg(
     as_bool: ConfigBool,
     as_str_required: ConfigStrRequired,
     as_list_str: ConfigListStr,
+    as_dict_list_str: ConfigDictListStr,
     mark_cfg: MarkCfg,
 ) -> None:
     p.run_all_tests = as_bool(cfg, "run_all_tests", p.run_all_tests)
@@ -326,6 +331,42 @@ def apply_gate_execution_cfg(
     mark_cfg(p, cfg, "ruff_targets")
     p.pytest_targets = as_list_str(cfg, "pytest_targets", p.pytest_targets)
     mark_cfg(p, cfg, "pytest_targets")
+    p.pytest_routing_mode = str(cfg.get("pytest_routing_mode", p.pytest_routing_mode)).strip()
+    mark_cfg(p, cfg, "pytest_routing_mode")
+    if p.pytest_routing_mode not in ("legacy", "bucketed"):
+        raise RunnerError(
+            "CONFIG",
+            "INVALID_PYTEST_ROUTING_MODE",
+            f"invalid pytest_routing_mode: {p.pytest_routing_mode!r}",
+        )
+    p.pytest_smoke_targets = as_list_str(cfg, "pytest_smoke_targets", p.pytest_smoke_targets)
+    mark_cfg(p, cfg, "pytest_smoke_targets")
+    p.pytest_area_prefixes = as_list_str(cfg, "pytest_area_prefixes", p.pytest_area_prefixes)
+    mark_cfg(p, cfg, "pytest_area_prefixes")
+    p.pytest_area_names = as_list_str(cfg, "pytest_area_names", p.pytest_area_names)
+    mark_cfg(p, cfg, "pytest_area_names")
+    p.pytest_area_targets = as_dict_list_str(cfg, "pytest_area_targets", p.pytest_area_targets)
+    mark_cfg(p, cfg, "pytest_area_targets")
+    p.pytest_family_areas = as_dict_list_str(cfg, "pytest_family_areas", p.pytest_family_areas)
+    mark_cfg(p, cfg, "pytest_family_areas")
+    p.pytest_family_targets = as_dict_list_str(
+        cfg, "pytest_family_targets", p.pytest_family_targets
+    )
+    mark_cfg(p, cfg, "pytest_family_targets")
+    p.pytest_broad_repo_prefixes = as_list_str(
+        cfg, "pytest_broad_repo_prefixes", p.pytest_broad_repo_prefixes
+    )
+    mark_cfg(p, cfg, "pytest_broad_repo_prefixes")
+    p.pytest_broad_repo_targets = as_list_str(
+        cfg, "pytest_broad_repo_targets", p.pytest_broad_repo_targets
+    )
+    mark_cfg(p, cfg, "pytest_broad_repo_targets")
+    if len(p.pytest_area_prefixes) != len(p.pytest_area_names):
+        raise RunnerError(
+            "CONFIG",
+            "INVALID_PYTEST_AREA_MAP",
+            "pytest_area_prefixes and pytest_area_names must have the same length",
+        )
     p.mypy_targets = as_list_str(cfg, "mypy_targets", p.mypy_targets)
     mark_cfg(p, cfg, "mypy_targets")
     p.typescript_targets = as_list_str(cfg, "typescript_targets", p.typescript_targets)

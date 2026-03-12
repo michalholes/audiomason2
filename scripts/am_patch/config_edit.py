@@ -54,6 +54,14 @@ def validate_patchhub_update(values: dict[str, Any], schema: dict[str, Any]) -> 
         elif type_name == "list[str]":
             if not isinstance(v, list) or any(not isinstance(x, str) for x in v):
                 raise RunnerError("CONFIG", "CONFIG", f"expected list[str] for {k}")
+        elif type_name == "dict[str,list[str]]":
+            if not isinstance(v, dict):
+                raise RunnerError("CONFIG", "CONFIG", f"expected dict[str,list[str]] for {k}")
+            for kk, vv in v.items():
+                if not isinstance(kk, str) or not isinstance(vv, list):
+                    raise RunnerError("CONFIG", "CONFIG", f"expected dict[str,list[str]] for {k}")
+                if any(not isinstance(item, str) for item in vv):
+                    raise RunnerError("CONFIG", "CONFIG", f"expected dict[str,list[str]] for {k}")
         else:
             raise RunnerError("CONFIG", "CONFIG", f"unsupported schema type for {k}: {type_name}")
 
@@ -126,6 +134,12 @@ def _render_value(v: Any, type_name: str) -> str:
     if type_name == "list[str]":
         items = ", ".join(_toml_quote(str(x)) for x in v)
         return f"[{items}]"
+    if type_name == "dict[str,list[str]]":
+        parts: list[str] = []
+        for key, values in v.items():
+            rendered = ", ".join(_toml_quote(str(item)) for item in values)
+            parts.append(f"{_toml_quote(str(key))} = [{rendered}]")
+        return "{" + ", ".join(parts) + "}"
     raise RunnerError("CONFIG", "CONFIG", f"cannot render type: {type_name}")
 
 

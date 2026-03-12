@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 import tomllib
+from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -10,6 +11,16 @@ from .config_gate_execution import apply_gate_execution_cfg
 from .config_ipc_surface import apply_ipc_cfg_surface
 from .errors import RunnerError
 from .policy_monolith_mixin import PolicyMonolithMixin
+from .pytest_bucket_routing import (
+    PYTEST_AREA_NAMES_DEFAULT,
+    PYTEST_AREA_PREFIXES_DEFAULT,
+    PYTEST_AREA_TARGETS_DEFAULT,
+    PYTEST_BROAD_REPO_PREFIXES_DEFAULT,
+    PYTEST_BROAD_REPO_TARGETS_DEFAULT,
+    PYTEST_FAMILY_AREAS_DEFAULT,
+    PYTEST_FAMILY_TARGETS_DEFAULT,
+    PYTEST_SMOKE_TARGETS_DEFAULT,
+)
 from .success_archive_retention import validate_success_archive_retention
 
 
@@ -239,6 +250,29 @@ class Policy(PolicyMonolithMixin):
     gate_mypy_mode: str = "auto"
     gate_pytest_mode: str = "auto"
     gate_pytest_js_prefixes: list[str] = field(default_factory=list)
+    pytest_routing_mode: str = "bucketed"
+    pytest_smoke_targets: list[str] = field(
+        default_factory=lambda: list(PYTEST_SMOKE_TARGETS_DEFAULT)
+    )
+    pytest_area_prefixes: list[str] = field(
+        default_factory=lambda: list(PYTEST_AREA_PREFIXES_DEFAULT)
+    )
+    pytest_area_names: list[str] = field(default_factory=lambda: list(PYTEST_AREA_NAMES_DEFAULT))
+    pytest_area_targets: dict[str, list[str]] = field(
+        default_factory=lambda: deepcopy(PYTEST_AREA_TARGETS_DEFAULT)
+    )
+    pytest_family_areas: dict[str, list[str]] = field(
+        default_factory=lambda: deepcopy(PYTEST_FAMILY_AREAS_DEFAULT)
+    )
+    pytest_family_targets: dict[str, list[str]] = field(
+        default_factory=lambda: deepcopy(PYTEST_FAMILY_TARGETS_DEFAULT)
+    )
+    pytest_broad_repo_prefixes: list[str] = field(
+        default_factory=lambda: list(PYTEST_BROAD_REPO_PREFIXES_DEFAULT)
+    )
+    pytest_broad_repo_targets: list[str] = field(
+        default_factory=lambda: list(PYTEST_BROAD_REPO_TARGETS_DEFAULT)
+    )
 
     pytest_use_venv: bool = True
 
@@ -294,6 +328,30 @@ def _as_rollback_mode(d: dict[str, Any], k: str, default: str) -> str:
     if v not in ("none-applied", "always", "never"):
         raise ValueError(f"config key {k!r} has invalid value {v!r}")
     return v
+
+
+def _as_dict_list_str(
+    d: dict[str, Any],
+    k: str,
+    default: dict[str, list[str]],
+) -> dict[str, list[str]]:
+    v = d.get(k)
+    if v is None:
+        return deepcopy(default)
+    if not isinstance(v, dict):
+        return deepcopy(default)
+    out: dict[str, list[str]] = {}
+    for key, raw_value in v.items():
+        skey = str(key).strip()
+        if not skey:
+            continue
+        if isinstance(raw_value, list):
+            out[skey] = [str(item).strip() for item in raw_value if str(item).strip()]
+            continue
+        if isinstance(raw_value, str):
+            sval = raw_value.strip()
+            out[skey] = [sval] if sval else []
+    return out
 
 
 def _as_list_str(d: dict[str, Any], k: str, default: list[str]) -> list[str]:
@@ -721,6 +779,7 @@ def build_policy(defaults: Policy, cfg: dict[str, Any]) -> Policy:
         as_bool=_as_bool,
         as_str_required=_as_str_required,
         as_list_str=_as_list_str,
+        as_dict_list_str=_as_dict_list_str,
         mark_cfg=_mark_cfg,
     )
 

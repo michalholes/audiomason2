@@ -226,6 +226,13 @@ def parse_args(argv: list[str]) -> CliArgs:
         choices=("auto", "always"),
     )
     p.add_argument(
+        "--pytest-routing-mode",
+        action=AppendOverride,
+        key="pytest_routing_mode",
+        dest="overrides",
+        choices=("legacy", "bucketed"),
+    )
+    p.add_argument(
         "--typescript-mode",
         action=AppendOverride,
         key="gate_typescript_mode",

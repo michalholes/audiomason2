@@ -55,6 +55,8 @@ class TestAmpSchema(unittest.TestCase):
 
             self.assertIn("verbosity", policy)
             self.assertIn("console_color", policy)
+            self.assertIn("pytest_routing_mode", policy)
+            self.assertIn("pytest_area_targets", policy)
 
             # Variant B file-scoped gates
             self.assertIn("gates_skip_biome", policy)

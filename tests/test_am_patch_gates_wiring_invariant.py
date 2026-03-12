@@ -52,3 +52,20 @@ def test_single_run_gates_callsite_in_scripts_am_patch() -> None:
 
     bad = [x for x in found if not x.startswith(allowed + ":")]
     assert not bad, "unexpected run_gates call-sites:\n" + "\n".join(sorted(bad))
+
+
+def test_pytest_bucket_routing_external_callsite_is_only_gates_py() -> None:
+    repo_root = _repo_root()
+    am_patch_dir = repo_root / "scripts" / "am_patch"
+
+    hits: list[str] = []
+    for py in _iter_py_files(am_patch_dir):
+        rel = py.relative_to(repo_root).as_posix()
+        if rel == "scripts/am_patch/pytest_bucket_routing.py":
+            continue
+        src = py.read_text(encoding="utf-8")
+        if "select_pytest_targets(" not in src:
+            continue
+        hits.append(rel)
+
+    assert hits == ["scripts/am_patch/gates.py"]

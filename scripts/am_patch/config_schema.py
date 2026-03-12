@@ -19,7 +19,7 @@ from typing import Any, get_args, get_origin, get_type_hints
 
 from am_patch.config import Policy
 
-SCHEMA_VERSION = "1"
+SCHEMA_VERSION = "2"
 
 
 # Explicit mapping of policy keys to TOML sections.
@@ -91,6 +91,15 @@ _SECTION_BY_KEY: dict[str, str] = {
     "gate_ruff_mode": "",
     "gate_mypy_mode": "",
     "gate_pytest_mode": "",
+    "pytest_routing_mode": "",
+    "pytest_smoke_targets": "",
+    "pytest_area_prefixes": "",
+    "pytest_area_names": "",
+    "pytest_area_targets": "",
+    "pytest_family_areas": "",
+    "pytest_family_targets": "",
+    "pytest_broad_repo_prefixes": "",
+    "pytest_broad_repo_targets": "",
     "gate_docs_include": "",
     "gate_docs_exclude": "",
     "gate_docs_required_files": "",
@@ -204,6 +213,15 @@ _LABEL_BY_KEY: dict[str, str] = {
     "gates_skip_ruff": "Gates: skip ruff",
     "mypy_targets": "Mypy: targets",
     "pytest_targets": "Pytest: targets",
+    "pytest_routing_mode": "Pytest: routing mode",
+    "pytest_smoke_targets": "Pytest: smoke targets",
+    "pytest_area_prefixes": "Pytest: area prefixes",
+    "pytest_area_names": "Pytest: area names",
+    "pytest_area_targets": "Pytest: area targets",
+    "pytest_family_areas": "Pytest: family areas",
+    "pytest_family_targets": "Pytest: family targets",
+    "pytest_broad_repo_prefixes": "Pytest: broad repo prefixes",
+    "pytest_broad_repo_targets": "Pytest: broad repo targets",
     "pytest_use_venv": "Pytest: use venv",
     "run_all_tests": "Workflow: run all gates",
     "allow_non_main": "Git safety: allow non-main",
@@ -291,6 +309,42 @@ _HELP_BY_KEY: dict[str, str] = {
     ),
     "pytest_targets": (
         "Targets passed to pytest. See: scripts/am_patch_policy_glossary.md## Key: pytest_targets"
+    ),
+    "pytest_routing_mode": (
+        "Select legacy or bucketed pytest target routing. "
+        "See: scripts/am_patch_policy_glossary.md## Key: pytest_routing_mode"
+    ),
+    "pytest_smoke_targets": (
+        "Bucketed pytest smoke targets. "
+        "See: scripts/am_patch_policy_glossary.md## Key: pytest_smoke_targets"
+    ),
+    "pytest_area_prefixes": (
+        "Ordered prefixes used to map paths to pytest areas. "
+        "See: scripts/am_patch_policy_glossary.md## Key: pytest_area_prefixes"
+    ),
+    "pytest_area_names": (
+        "Ordered area names paired with pytest_area_prefixes. "
+        "See: scripts/am_patch_policy_glossary.md## Key: pytest_area_names"
+    ),
+    "pytest_area_targets": (
+        "Map impacted pytest areas to target lists. "
+        "See: scripts/am_patch_policy_glossary.md## Key: pytest_area_targets"
+    ),
+    "pytest_family_areas": (
+        "Map pytest families to member areas. "
+        "See: scripts/am_patch_policy_glossary.md## Key: pytest_family_areas"
+    ),
+    "pytest_family_targets": (
+        "Map selected pytest families to target lists. "
+        "See: scripts/am_patch_policy_glossary.md## Key: pytest_family_targets"
+    ),
+    "pytest_broad_repo_prefixes": (
+        "Prefixes that escalate bucketed pytest routing to broad targets. "
+        "See: scripts/am_patch_policy_glossary.md## Key: pytest_broad_repo_prefixes"
+    ),
+    "pytest_broad_repo_targets": (
+        "Broad pytest targets added after escalation. "
+        "See: scripts/am_patch_policy_glossary.md## Key: pytest_broad_repo_targets"
     ),
     "pytest_use_venv": (
         "Run pytest under the configured venv python. "
@@ -456,6 +510,7 @@ _ENUM_BY_KEY: dict[str, list[str]] = {
     "gate_ruff_mode": ["auto", "always"],
     "gate_mypy_mode": ["auto", "always"],
     "gate_pytest_mode": ["auto", "always"],
+    "pytest_routing_mode": ["legacy", "bucketed"],
     "gate_typescript_mode": ["auto", "always"],
 }
 
@@ -473,6 +528,10 @@ def _infer_schema_type(typ: Any) -> str:
 
     if origin is list and args and args[0] is str:
         return "list[str]"
+    if origin is dict and len(args) == 2 and args[0] is str:
+        value = args[1]
+        if get_origin(value) is list and get_args(value) and get_args(value)[0] is str:
+            return "dict[str,list[str]]"
 
     # PEP 604 union (e.g., str | None)
     if args and len(args) == 2 and type(None) in args:

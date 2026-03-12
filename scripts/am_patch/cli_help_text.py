@@ -228,6 +228,9 @@ FORMAT / TOOLS
   --pytest-mode auto|always
       Control pytest gate trigger mode (auto=file-scoped; always=force run).
 
+  --pytest-routing-mode legacy|bucketed
+      Control pytest target selection after the gate has been triggered.
+
   --pytest-js-prefixes CSV
       JS triggers for pytest (CSV prefixes; e.g. scripts/patchhub/static,
       plugins/import/ui/web/assets).

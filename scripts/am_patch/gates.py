@@ -12,6 +12,7 @@ from .gate_docs import check_docs_gate
 from .gates_wiring_guard import assert_single_run_gates_callsite
 from .log import Logger
 from .monolith_gate import run_monolith_gate
+from .pytest_bucket_routing import select_pytest_targets
 
 _RUN_GATES_WIRING_CHECKED = False
 
@@ -637,6 +638,7 @@ def run_gates(
     gate_mypy_mode: str = "auto",
     gate_pytest_mode: str = "auto",
     gate_pytest_js_prefixes: list[str] | None = None,
+    pytest_routing_policy: dict[str, object] | None = None,
     gates_order: list[str] | None,
     pytest_use_venv: bool,
     decision_paths: list[str],
@@ -818,7 +820,11 @@ def run_gates(
                 cwd,
                 repo_root=repo_root,
                 pytest_use_venv=pytest_use_venv,
-                targets=pytest_targets,
+                targets=select_pytest_targets(
+                    decision_paths=decision_paths,
+                    pytest_targets=pytest_targets,
+                    routing_policy=pytest_routing_policy,
+                ),
             )
 
         if name == "mypy":
