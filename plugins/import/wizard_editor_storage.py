@@ -82,13 +82,13 @@ def ensure_wizard_definition_active_exists(fs: FileService) -> dict[str, Any]:
         fs,
         RootName.WIZARDS,
         WIZARD_DEFINITION_REL_PATH,
-        _validated_bootstrap_definition(fs, bootstrap_default_version=2),
+        _validated_bootstrap_definition(fs, bootstrap_default_version=3),
     )
     active = read_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_REL_PATH)
     try:
         return canonicalize_to_supported(fs, active)
     except Exception:
-        canon_default = _validated_bootstrap_definition(fs, bootstrap_default_version=2)
+        canon_default = _validated_bootstrap_definition(fs, bootstrap_default_version=3)
         atomic_write_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_REL_PATH, canon_default)
         return canon_default
 
@@ -296,7 +296,7 @@ def save_wizard_definition_with_history(fs: FileService, obj: Any) -> None:
 
 def reset_wizard_definition(fs: FileService, obj: Any | None = None) -> None:
     if obj is None:
-        obj = _validated_bootstrap_definition(fs, bootstrap_default_version=2)
+        obj = _validated_bootstrap_definition(fs, bootstrap_default_version=3)
     save_wizard_definition_with_history(fs, obj)
 
 

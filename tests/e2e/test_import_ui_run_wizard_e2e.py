@@ -3,9 +3,6 @@ from __future__ import annotations
 import re
 
 import pytest
-
-pytest.importorskip("pytest_playwright")
-
 from _asset_inventory import active_import_ui_paths
 from _browser_probe import BrowserProbe
 from playwright.async_api import Page, expect
@@ -33,17 +30,19 @@ async def test_import_ui_run_wizard_happy_path(page: Page, e2e_web_base_url: str
     await expect(page.locator("#status")).to_contain_text("session_id:")
     await expect(page.locator("#step")).to_contain_text("Step:")
 
-    author_choices = page.locator("#step input[type='checkbox']")
-    await expect(author_choices.first).to_be_visible()
-    await author_choices.first.check()
+    author_selection = page.locator('#step [data-v3-payload-key="selection"]')
+    await expect(author_selection).to_be_visible()
+    await author_selection.fill("1")
     await page.locator("#submit").click()
 
-    await expect(page.locator("#state")).to_contain_text('"current_step_id": "select_books"')
+    state_view = page.locator("#state")
+    await expect(state_view).to_contain_text('"current_step_id": "select_books"')
 
-    book_choices = page.locator("#step input[type='checkbox']")
-    await expect(book_choices.first).to_be_visible()
-    await book_choices.first.check()
+    book_selection = page.locator('#step [data-v3-payload-key="selection"]')
+    await expect(book_selection).to_be_visible()
+    await book_selection.fill("1")
     await page.locator("#submit").click()
 
-    await expect(page.locator("#state")).to_contain_text('"selected_book_ids"')
+    await expect(state_view).to_contain_text('"selected_book_ids": [')
+    await expect(state_view).to_contain_text('"current_step_id": "effective_author_title"')
     await probe.assert_clean()

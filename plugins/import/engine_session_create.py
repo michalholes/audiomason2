@@ -42,15 +42,7 @@ if TYPE_CHECKING:
 
 
 def _preferred_bootstrap_default_version(*, engine: ImportWizardEngine) -> int:
-    cli_scope_keys = (
-        "plugins.import.cli.launcher_mode",
-        "plugins.import.cli.default_root",
-        "plugins.import.cli.default_path",
-        "plugins.import.cli.noninteractive",
-        "plugins.import.cli.render.nav_ui",
-    )
-    if not any(engine._has_key(key) for key in cli_scope_keys):
-        return 2
+    del engine
     return 3
 
 

@@ -48,12 +48,35 @@ DEFAULT_REGISTRY: dict[str, Any] = {
 }
 
 
+def _merge_required_primitives(registry: dict[str, Any]) -> dict[str, Any]:
+    prims_any = registry.get("primitives")
+    primitives = list(prims_any) if isinstance(prims_any, list) else []
+    seen: set[tuple[str, int]] = set()
+    for item in primitives:
+        if not isinstance(item, dict):
+            continue
+        primitive_id = item.get("primitive_id")
+        version = item.get("version")
+        if isinstance(primitive_id, str) and isinstance(version, int):
+            seen.add((primitive_id, version))
+
+    for entry in _default_primitives():
+        key = (str(entry.get("primitive_id") or ""), int(entry.get("version") or 0))
+        if key not in seen:
+            primitives.append(entry)
+            seen.add(key)
+
+    out = dict(registry)
+    out["primitives"] = primitives
+    return out
+
+
 def _canonicalize_validated_registry(obj: Any) -> dict[str, Any]:
     reg = validate_primitive_registry(obj)
-    canon_any = canonicalize_primitive_registry(reg)
+    canon_any = canonicalize_primitive_registry(_merge_required_primitives(reg))
     if not isinstance(canon_any, dict):
         raise ValueError("primitive registry must be an object")
-    return canon_any
+    return validate_primitive_registry(canon_any)
 
 
 def bootstrap_primitive_registry_if_missing(fs: FileService) -> bool:
@@ -73,8 +96,10 @@ def load_primitive_registry(fs: FileService) -> dict[str, Any]:
 def load_or_bootstrap_primitive_registry(fs: FileService) -> dict[str, Any]:
     bootstrap_primitive_registry_if_missing(fs)
 
-    reg = load_primitive_registry(fs)
-    # Self-heal ordering-only diffs.
+    try:
+        reg = load_primitive_registry(fs)
+    except Exception:
+        reg = _canonicalize_validated_registry(DEFAULT_REGISTRY)
     atomic_write_json(fs, RootName.WIZARDS, REL_PATH, reg)
     return reg
 

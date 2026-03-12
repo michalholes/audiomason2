@@ -101,7 +101,7 @@ def _validated_bootstrap_definition(
 def load_or_bootstrap_wizard_definition(
     fs: FileService,
     *,
-    bootstrap_default_version: int = 2,
+    bootstrap_default_version: int = 3,
 ) -> dict[str, Any]:
     """Load WizardDefinition JSON, bootstrapping it if missing.
 

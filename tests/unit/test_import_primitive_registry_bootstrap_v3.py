@@ -97,11 +97,13 @@ def test_load_or_bootstrap_primitive_registry_uses_baseline_ids(tmp_path: Path) 
     assert ("select_books", 1) not in got
 
 
-def test_existing_registry_artifact_stays_authoritative_after_bootstrap(tmp_path: Path) -> None:
+def test_existing_registry_artifact_keeps_custom_entries_and_gains_baseline_ids(
+    tmp_path: Path,
+) -> None:
     engine = _make_engine(tmp_path)
     fs = engine.get_file_service()
 
-    saved = save_primitive_registry(
+    save_primitive_registry(
         fs,
         {
             "registry_version": 1,
@@ -128,5 +130,13 @@ def test_existing_registry_artifact_stays_authoritative_after_bootstrap(tmp_path
 
     loaded = load_or_bootstrap_primitive_registry(fs)
 
-    assert loaded == saved
-    assert loaded["primitives"][0]["primitive_id"] == "custom.prompt"
+    got = {
+        (str(item.get("primitive_id")), int(item.get("version")))
+        for item in loaded["primitives"]
+        if isinstance(item, dict)
+        and isinstance(item.get("primitive_id"), str)
+        and isinstance(item.get("version"), int)
+    }
+    assert ("custom.prompt", 1) in got
+    assert BASELINE_IDS.issubset(got)
+    assert len(got) == len(loaded["primitives"])

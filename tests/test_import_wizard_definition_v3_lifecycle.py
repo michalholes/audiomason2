@@ -96,7 +96,8 @@ def test_wizard_definition_v3_draft_activate_history_and_rollback(tmp_path: Path
     client = TestClient(app)
 
     active0 = client.get("/import/ui/wizard-definition").json()["definition"]
-    assert active0["version"] == 2
+    assert active0["version"] == 3
+    assert active0["entry_step_id"] == "select_authors"
 
     wd = _minimal_v3_definition()
     post = client.post("/import/ui/wizard-definition", json={"definition": wd})
@@ -120,13 +121,15 @@ def test_wizard_definition_v3_draft_activate_history_and_rollback(tmp_path: Path
         "/import/ui/wizard-definition/rollback", json={"id": str(items[0]["id"])}
     )
     assert rollback.status_code == 200
-    assert rollback.json()["definition"]["version"] == 2
+    rolled = rollback.json()["definition"]
+    assert rolled["version"] == 3
+    assert rolled["entry_step_id"] == active0["entry_step_id"]
 
     active2 = client.get("/import/ui/wizard-definition").json()["definition"]
-    assert active2["version"] == 2
+    assert active2 == active0
 
 
-def test_load_or_bootstrap_replaces_invalid_v3_with_v2_default(tmp_path: Path) -> None:
+def test_load_or_bootstrap_replaces_invalid_v3_with_v3_default(tmp_path: Path) -> None:
     engine = _make_engine(tmp_path)
     fs = engine.get_file_service()
 
@@ -154,4 +157,5 @@ def test_load_or_bootstrap_replaces_invalid_v3_with_v2_default(tmp_path: Path) -
 
     out = load_or_bootstrap_wizard_definition(fs)
 
-    assert out["version"] == 2
+    assert out["version"] == 3
+    assert out["entry_step_id"] == "select_authors"

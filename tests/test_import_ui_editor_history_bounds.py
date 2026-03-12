@@ -122,24 +122,29 @@ def test_wizard_definition_history_is_bounded_and_ordered(tmp_path: Path) -> Non
     ).canonicalize_wizard_definition
 
     base = client.get("/import/ui/wizard-definition").json()["definition"]
-    graph = base.get("graph")
-    assert isinstance(graph, dict)
-    edges_any = graph.get("edges")
-    assert isinstance(edges_any, list)
-    assert len(edges_any) >= 7
+    assert base.get("version") == 3
+    nodes_any = base.get("nodes")
+    assert isinstance(nodes_any, list)
+    assert len(nodes_any) >= 7
 
-    # Generate valid variants by changing edge priority.
+    # Generate valid variants by changing prompt help on distinct nodes.
     defs: list[dict] = []
     for i in range(6):
         d = dict(base)
-        g = dict(graph)
-        edges: list[dict] = []
-        for e in edges_any:
-            edges.append(dict(e) if isinstance(e, dict) else {})
-        if isinstance(edges[i], dict):
-            edges[i]["priority"] = i + 1
-        g["edges"] = edges
-        d["graph"] = g
+        nodes: list[dict] = []
+        for index, node_any in enumerate(nodes_any):
+            node = dict(node_any) if isinstance(node_any, dict) else {}
+            op_any = node.get("op")
+            op = dict(op_any) if isinstance(op_any, dict) else {}
+            inputs_any = op.get("inputs")
+            inputs = dict(inputs_any) if isinstance(inputs_any, dict) else {}
+            if index == i:
+                help_text = str(inputs.get("help") or "")
+                inputs["help"] = f"{help_text} history marker {i + 1}".strip()
+            op["inputs"] = inputs
+            node["op"] = op
+            nodes.append(node)
+        d["nodes"] = nodes
         defs.append(canonicalize_wizard_definition(d))
         r = client.post("/import/ui/wizard-definition", json={"definition": d})
         assert r.status_code == 200
@@ -160,10 +165,9 @@ def test_wizard_definition_history_is_bounded_and_ordered(tmp_path: Path) -> Non
     rb = client.post("/import/ui/wizard-definition/rollback", json={"id": expected[1]})
     assert rb.status_code == 200
     out = rb.json()["definition"]
-    out_graph = out.get("graph")
-    assert isinstance(out_graph, dict)
-    out_edges = out_graph.get("edges")
-    assert isinstance(out_edges, list)
+    assert out.get("version") == 3
+    out_nodes = out.get("nodes")
+    assert isinstance(out_nodes, list)
     # Rolled back to expected[1] == defs[3].
     out_canon = canonicalize_wizard_definition(out)
     assert fingerprint_json(out_canon) == fingerprint_json(defs[3])
