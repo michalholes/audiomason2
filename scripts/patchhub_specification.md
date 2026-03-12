@@ -838,10 +838,10 @@ Rendering rules:
 - Exactly one step is shown as running (the most recent DO without a later OK/FAIL).
 
 Summary rule:
-- During ACTIVE, progressSummary MUST follow the latest persisted live event state.
-- On receipt of terminal `event: end`, progressSummary MUST converge to the final
-  job status and MUST NOT remain stuck on an older running step.
-- Tail-derived summary is fallback/resync only.
+- During ACTIVE, `progressSummary` MUST follow the latest persisted live event state.
+- On receipt of terminal `event: end`, `progressSummary` MUST converge to the canonical structured terminal summary derived from the AMP `type="result"` payload and MUST NOT remain stuck on an older running step.
+- The terminal structured payload is the primary authority for terminal summary text, stage, reason, commit, push, and NDJSON/log paths.
+- Tail-derived summary is legacy fallback/resync only for artifacts that do not carry the canonical structured terminal payload.
 
 Applied files rule:
 - For a successful selected or just-finished job, Progress MUST render an
@@ -1353,6 +1353,15 @@ Detail-only additive fields for patch/repair jobs:
 - selected_repo_paths: ["<repo path>", ...]
 - applied_files: ["<repo path>", ...]
 - applied_files_source: "diff_manifest|final_summary|non_success|unavailable"
+- terminal_summary: {
+    "terminal_status": "success|fail|canceled|null",
+    "final_stage": "<string|null>",
+    "final_reason": "<string|null>",
+    "final_commit_sha": "<string|null>",
+    "push_status": "OK|FAIL|null",
+    "log_path": "<string|null>",
+    "json_path": "<string|null>"
+  }
 
 GET /api/jobs remains the thin list endpoint defined elsewhere in this spec;
 these fields are detail-only and MUST NOT be added to list items.
