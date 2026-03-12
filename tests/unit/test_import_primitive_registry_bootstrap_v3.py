@@ -92,6 +92,7 @@ def test_load_or_bootstrap_primitive_registry_uses_baseline_ids(tmp_path: Path) 
         and isinstance(item.get("primitive_id"), str)
         and isinstance(item.get("version"), int)
     }
+    assert len(got) == len(primitives)
     assert BASELINE_IDS.issubset(got)
     assert ("select_books", 1) not in got
 

@@ -5,13 +5,80 @@ ASCII-only.
 
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any
 
 from .fingerprints import sha256_hex
 from .phase1_cover_flow import build_phase1_cover_projection
 from .phase1_metadata_flow import build_phase1_metadata_projection
 from .phase1_policy_flow import build_phase1_policy_projection
-from .primitives.import_phase1_v1 import build_runtime_snapshot
+
+
+def _answer_dict(state: dict[str, Any], key: str) -> dict[str, Any]:
+    answers_any = state.get("answers")
+    answers = dict(answers_any) if isinstance(answers_any, dict) else {}
+    value = answers.get(key)
+    return dict(value) if isinstance(value, dict) else {}
+
+
+def _build_runtime_projection(
+    *,
+    state: dict[str, Any],
+    metadata_projection: dict[str, Any],
+    cover_projection: dict[str, Any],
+    policy_projection: dict[str, Any],
+    phase2_inputs: dict[str, Any],
+) -> dict[str, Any]:
+    conflicts_any = state.get("conflicts")
+    conflicts = dict(conflicts_any) if isinstance(conflicts_any, dict) else {}
+    has_conflicts = bool(conflicts.get("present")) or bool(conflicts.get("items"))
+    conflict_policy = dict(phase2_inputs.get("conflict_policy") or {})
+    conflict_mode = str(conflict_policy.get("mode") or "ask")
+
+    final_summary_confirm = {"confirm_start": False}
+    final_summary_confirm.update(_answer_dict(state, "final_summary_confirm"))
+
+    computed_any = state.get("computed")
+    computed = dict(computed_any) if isinstance(computed_any, dict) else {}
+    summary_any = computed.get("plan_summary")
+    summary = dict(summary_any) if isinstance(summary_any, dict) else {}
+
+    selected_paths_any = cover_projection.get("selected_source_relative_paths")
+    selected_paths = (
+        [item for item in selected_paths_any if isinstance(item, str)]
+        if isinstance(selected_paths_any, list)
+        else []
+    )
+
+    return {
+        "plan_preview_batch": {
+            "summary": deepcopy(summary),
+            "selected_source_relative_paths": deepcopy(selected_paths),
+            "has_conflicts": has_conflicts,
+        },
+        "effective_author_title": deepcopy(
+            dict(metadata_projection.get("effective_author_title") or {})
+        ),
+        "filename_policy": deepcopy(dict(metadata_projection.get("filename_policy") or {})),
+        "covers_policy": deepcopy(dict(phase2_inputs.get("covers_policy") or {})),
+        "id3_policy": deepcopy(dict(phase2_inputs.get("id3_policy") or {})),
+        "audio_processing": deepcopy(dict(phase2_inputs.get("audio_processing") or {})),
+        "publish_policy": deepcopy(dict(phase2_inputs.get("publish_policy") or {})),
+        "delete_source_policy": deepcopy(dict(phase2_inputs.get("delete_source_policy") or {})),
+        "conflict_policy": deepcopy(conflict_policy),
+        "parallelism": deepcopy(dict(policy_projection.get("parallelism") or {})),
+        "final_summary_confirm": final_summary_confirm,
+        "resolve_conflicts_batch": {
+            "confirm": False,
+            "has_conflicts": has_conflicts,
+            "required": conflict_mode == "ask" and has_conflicts,
+            "policy": conflict_mode,
+        },
+        "phase2_inputs": deepcopy(phase2_inputs),
+        "metadata": deepcopy(metadata_projection),
+        "cover": deepcopy(cover_projection),
+        "policy": deepcopy(policy_projection),
+    }
 
 
 def _selection_expr(*, ordered_ids: list[str], selected_ids: list[str]) -> str:
@@ -304,7 +371,13 @@ def build_phase1_projection(
         "two_pass_order": list(policy_projection.get("two_pass_order") or []),
         "phase2_inputs": phase2_inputs,
     }
-    phase1_projection["runtime"] = build_runtime_snapshot(state)
+    phase1_projection["runtime"] = _build_runtime_projection(
+        state=state,
+        metadata_projection=metadata_projection,
+        cover_projection=cover_projection,
+        policy_projection=policy_projection,
+        phase2_inputs=phase2_inputs,
+    )
     return phase1_projection
 
 
