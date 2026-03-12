@@ -824,6 +824,40 @@ debug_human):
 This is a UI-only rendering rule. The SSE event payload fields
 (stage/kind/sev/msg/stdout/stderr) remain unchanged.
 
+Main-screen control rules:
+- The mode dropdown remains the only main-screen control for selecting:
+  - patch
+  - finalize_live (-f)
+  - finalize_workspace (-w)
+  - rerun_latest (-l)
+- The same mode row MUST include a Gate options button on the right side.
+- Gate options opens a dedicated modal for transient per-run gate overrides.
+- The modal MUST NOT contain a separate control for -l.
+- Gate options are available only for:
+  - patch
+  - finalize_workspace
+  - rerun_latest
+- finalize_live MUST NOT expose or apply gate overrides.
+- The modal renders one row per gate with exactly two visible state surfaces:
+  - This run: clickable RUN/SKIP state
+  - Config: passive RUN/SKIP state
+- The UI MUST NOT expose a visible inherit state.
+- Gate overrides are transient for the current run only and MUST NOT write to
+  AMP config.
+- After successful enqueue, terminal mode reset, or autofill token change, the
+  UI MUST clear transient gate overrides.
+
+Live retention and clipboard rules:
+- The live event view MUST retain at least 20000 events for the tracked job.
+- The same retention minimum MUST remain available after reconnect/replay; the
+  UI MUST NOT silently reconnect to a smaller history window.
+- The main screen MUST render Copy selection and Copy all buttons directly below
+  the live log, aligned to the bottom-right.
+- Copy selection copies only the current text selection inside the live log.
+- Copy all copies the full currently rendered live log text.
+- The main screen MUST NOT render a dedicated visible badge/label showing the
+  numeric live buffer size.
+
 7.1.3 Progress Card Rendering (Variant 2)
 
 The main UI includes a Progress card (right sidebar) that renders per-step status
@@ -1085,6 +1119,9 @@ Rule:
 Additionally, after resetting mode to patch due to a terminal job state,
   the UI MUST clear the start-form inputs: issueId, commitMsg, patchPath, rawCommand.
 
+Additionally, after the same terminal reset, the UI MUST clear any transient
+Gate options overrides for the next run.
+
 
 Notes:
 - This rule applies to all UI-exposed modes (patch, finalize_live, finalize_workspace, rerun_latest).
@@ -1140,7 +1177,8 @@ Output schema (success):
     "drop_overlay_enabled": <bool>,
     "clear_output_on_autofill": <bool>,
     "show_autofill_clear_status": <bool>,
-    "idle_auto_select_last_job": <bool>
+    "idle_auto_select_last_job": <bool>,
+    "live_event_buffer_limit": <int>
   },
   "autofill": {
     "enabled": <bool>,
@@ -1617,9 +1655,20 @@ Parsing rules (command_parse.py):
 - supports finalize/rerun flags in rest (combinations are rejected):
   -f MESSAGE => finalize_live (MESSAGE is required; stored as commit_message)
   -w ISSUE_ID => finalize_workspace (ISSUE_ID is required; digits only)
-  -l => rerun_latest (no extra args)
+  - ISSUE_ID MESSAGE [PATCH] -l => rerun_latest
 - patch mode requires exactly 3 args after scripts/am_patch.py:
   ISSUE_ID (digits), commit message (non-empty), PATCH (non-empty)
+- finalize_workspace, rerun_latest, and patch accept canonical gate overrides:
+  - --no-compile-check
+  - --skip-ruff
+  - --skip-pytest
+  - --skip-mypy
+  - --skip-js
+  - --skip-docs
+  - --skip-monolith
+  - --override KEY=VALUE for compile_check and gates_skip_* booleans
+- finalize_live MUST reject gate overrides.
+- Canonicalization MUST normalize gate flags into deterministic argv order.
 
 Errors:
 - 400 with ok=false and error string on parse/validation failure
@@ -1631,6 +1680,7 @@ Input JSON fields (minimum accepted by app_api_jobs.py):
 - commit_message: "<string>"     (required for patch/repair unless raw_command provides)
 - patch_path: "<string>"         (required for patch/repair unless raw_command provides)
 - raw_command: "<string>"        (optional; if provided, it is parsed and canonicalized)
+- gate_argv: ["<flag>", ...]     (optional; patch/finalize_workspace/rerun_latest only)
 - selected_patch_entries: ["<zip member>", ...] (optional; patch/repair zip subset only)
 
 Behavior:
@@ -1639,12 +1689,19 @@ Behavior:
   - canonical argv from parsed command is used
   - missing fields may be filled from body fields as fallback
   - raw_command MUST NOT be combined with selected_patch_entries
+  - raw_command MUST NOT be combined with gate_argv
 - If raw_command is absent:
   - finalize_live requires commit_message and builds: runner_prefix + ['-f', commit_message]
-  - finalize_workspace requires issue_id (digits) and builds: runner_prefix + ['-w', issue_id]
-  - rerun_latest builds: runner_prefix + ['-l']
+  - finalize_live MUST reject gate_argv
+  - finalize_workspace requires issue_id (digits) and builds:
+    runner_prefix + ['-w', issue_id] + gate_argv
+  - rerun_latest requires issue_id (digits) and commit_message and builds:
+    runner_prefix + [issue_id, commit_message, optional patch_path, '-l'] + gate_argv
   - patch/repair requires commit_message and patch_path
+  - patch builds: runner_prefix + [issue_id, commit_message, patch_path] + gate_argv
   - if issue_id missing, PatchHub auto-allocates it (see Section 11)
+- Gate options in the main UI are transient only; they feed gate_argv for the
+  current enqueue request and MUST NOT mutate AMP config.
 - Zip subset semantics for patch/repair:
   - No-subset branch is unchanged: if selected_patch_entries is absent, empty, or
     selects all selectable entries, PatchHub runs the original zip path.
