@@ -150,6 +150,26 @@
 
 	const paletteItems = [];
 
+	function renderCanvasPanel() {
+		const renderer = W.AM2FlowCanvasPanel;
+		if (!renderer || !renderer.renderCanvas) return;
+		const graph = stableGraph(wizardDraft());
+		const catalog = {};
+		paletteItems.forEach((item) => {
+			const sid = String(item && item.step_id ? item.step_id : "");
+			if (sid) catalog[sid] = item;
+		});
+		renderer.renderCanvas({
+			mount: $("flowCanvasPanel"),
+			metaMount: $("flowCanvasMeta"),
+			nodes: Array.isArray(graph.nodes) ? graph.nodes : [],
+			edges: Array.isArray(graph.edges) ? graph.edges : [],
+			selectedStepId: selectedStepId(),
+			onSelectStep: setSelectedStep,
+			catalog: catalog,
+		});
+	}
+
 	function v3() {
 		const editor = W.AM2DSLEditorV3;
 		return editor && editor.isV3Draft && editor.isV3Draft(wizardDraft())
@@ -881,6 +901,8 @@
 				},
 			});
 		}
+
+		renderCanvasPanel();
 
 		if (root && root.validationClear) {
 			root.validationClear.onclick = () => {

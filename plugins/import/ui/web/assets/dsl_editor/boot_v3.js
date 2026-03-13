@@ -1,7 +1,8 @@
 (function () {
 	"use strict";
 
-	const httpApi = window.AM2EditorHTTP;
+	const W = /** @type {any} */ (window);
+	const httpApi = W.AM2EditorHTTP;
 	const registryApi = window["AM2DSLEditorRegistryAPI"];
 	const graphOps = window["AM2DSLEditorGraphOps"];
 	if (!httpApi || !registryApi || !graphOps) {
@@ -46,7 +47,7 @@
 	}
 
 	function confirmIfDirty(actionName) {
-		const flowEditor = window.AM2FlowEditorState;
+		const flowEditor = W.AM2FlowEditorState;
 		const snap =
 			flowEditor && flowEditor.getSnapshot ? flowEditor.getSnapshot() : null;
 		return (
@@ -254,6 +255,19 @@
 		}
 	}
 
+	function renderCanvasPanel(definition) {
+		const renderer = W.AM2FlowCanvasPanel;
+		if (!renderer || !renderer.renderCanvas) return;
+		renderer.renderCanvas({
+			mount: $("flowCanvasPanel"),
+			metaMount: $("flowCanvasMeta"),
+			nodes: Array.isArray(definition.nodes) ? definition.nodes : [],
+			edges: Array.isArray(definition.edges) ? definition.edges : [],
+			selectedStepId: graphOps.selectedStepId(),
+			onSelectStep: graphOps.setSelectedStep,
+		});
+	}
+
 	function renderSummary(definition, meta) {
 		const header = $("flowStepHeader");
 		if (header) {
@@ -406,6 +420,7 @@
 			definition,
 			graphOps.primitiveMeta(graphOps.currentNode(), state.registry),
 		);
+		renderCanvasPanel(graphOps.currentGraphDefinition());
 		renderForms(definition);
 		renderHistory();
 		setError(state.errorPayload);

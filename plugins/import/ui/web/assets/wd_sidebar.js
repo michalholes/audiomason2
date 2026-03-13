@@ -14,19 +14,17 @@
 		const flowSidebar = ctx && ctx.flowSidebar;
 		const stepPanel = ctx && ctx.stepPanel;
 		const transitionsPanel = ctx && ctx.transitionsPanel;
-		const rightCol = ctx && ctx.rightCol;
 		const clear = ctx && ctx.clear;
 		const el = ctx && ctx.el;
 		const text = ctx && ctx.text;
 
-		if (!flowSidebar || !stepPanel || !transitionsPanel || !rightCol) return;
+		if (!flowSidebar || !stepPanel || !transitionsPanel) return;
 
 		clear(flowSidebar);
-		flowSidebar.appendChild(_section("Step Details", stepPanel, el, text));
+		flowSidebar.appendChild(_section("Inspector", stepPanel, el, text));
 		flowSidebar.appendChild(
 			_section("Transitions", transitionsPanel, el, text),
 		);
-		flowSidebar.appendChild(_section("Step Palette", rightCol, el, text));
 
 		return {};
 	}

@@ -1,0 +1,420 @@
+body {
+	background:
+		radial-gradient(circle at top, rgba(36, 74, 128, 0.22), transparent 28%),
+		#081225;
+	color: #edf2ff;
+}
+
+.container {
+	max-width: none;
+	width: min(1440px, calc(100vw - 40px));
+	padding: 22px 20px 30px 20px;
+}
+
+.header {
+	display: flex;
+	align-items: baseline;
+	gap: 18px;
+	margin-bottom: 18px;
+}
+
+.title {
+	font-size: 24px;
+	line-height: 1;
+}
+
+.subtitle {
+	margin-top: 0;
+	font-size: 15px;
+	color: rgba(227, 235, 255, 0.82);
+}
+
+.tabs {
+	margin-bottom: 18px;
+}
+
+.tabBtn,
+.btn {
+	background: rgba(48, 75, 130, 0.9);
+	border-color: rgba(156, 181, 255, 0.18);
+	box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.tabBtn.active,
+.btn:hover:not(:disabled) {
+	background: #4264ad;
+}
+
+.tabPanel[data-panel="flow"] > .card:first-child {
+	padding: 16px;
+	border-radius: 16px;
+	background: rgba(13, 28, 56, 0.95);
+	border-color: rgba(122, 151, 226, 0.18);
+	box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28);
+}
+
+.tabPanel[data-panel="flow"] > .card:first-child > .buttonRow {
+	justify-content: flex-end;
+	margin-top: 0;
+	margin-bottom: 12px;
+}
+
+#flowAllStatus {
+	margin-top: 0;
+	margin-bottom: 16px;
+	padding: 11px 14px;
+	border-radius: 12px;
+	border: 1px solid rgba(90, 203, 145, 0.18);
+	background: linear-gradient(
+		90deg,
+		rgba(23, 67, 75, 0.95),
+		rgba(20, 46, 54, 0.92)
+	);
+	font-weight: 700;
+}
+
+.flow-editor-layout {
+	grid-template-columns: 250px minmax(0, 1fr) 420px;
+	gap: 16px;
+	align-items: stretch;
+}
+
+.flow-editor-palette,
+.flow-editor-main,
+.flow-editor-sidebar {
+	min-width: 0;
+}
+
+.flowRailSection,
+.flowCanvasShell,
+.flowSidebarSection {
+	height: 100%;
+	border: 1px solid rgba(120, 152, 226, 0.16);
+	border-radius: 16px;
+	background: rgba(10, 24, 48, 0.94);
+	box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+}
+
+.flowRailSectionHead,
+.flowCanvasShellHead,
+.flowSidebarSectionHead {
+	padding: 14px 16px;
+	border-bottom: 1px solid rgba(120, 152, 226, 0.14);
+	background: rgba(16, 33, 66, 0.96);
+	font-weight: 800;
+	letter-spacing: 0.05em;
+	text-transform: uppercase;
+	color: rgba(148, 178, 255, 0.98);
+}
+
+.flowRailSectionBody {
+	padding: 14px;
+}
+
+.flowCanvasShell {
+	display: flex;
+	flex-direction: column;
+	min-height: 760px;
+	overflow: hidden;
+}
+
+.flowCanvasShellHead {
+	display: flex;
+	justify-content: space-between;
+	gap: 12px;
+	align-items: center;
+}
+
+.flowCanvasShellTitle {
+	font-size: 15px;
+}
+
+.flowCanvasShellMeta {
+	font-size: 14px;
+	font-weight: 600;
+	color: rgba(220, 230, 255, 0.8);
+	text-transform: none;
+	letter-spacing: normal;
+}
+
+.flowCanvasPanel {
+	position: relative;
+	padding: 22px 16px 20px 16px;
+	background:
+		radial-gradient(circle at top, rgba(50, 90, 150, 0.12), transparent 38%),
+		radial-gradient(circle, rgba(121, 152, 224, 0.12) 0.8px, transparent 0.9px);
+	background-size:
+		auto,
+		18px 18px;
+	background-position: center, center;
+	flex: 1 1 auto;
+	overflow: auto;
+}
+
+.flowCanvasEmpty {
+	padding: 32px 20px;
+	border: 1px dashed rgba(120, 152, 226, 0.18);
+	border-radius: 14px;
+	color: rgba(221, 229, 255, 0.82);
+	text-align: center;
+}
+
+.flowCanvasTrack {
+	display: grid;
+	gap: 14px;
+	justify-items: center;
+}
+
+.flowCanvasCardWrap {
+	position: relative;
+	width: min(360px, 100%);
+	padding-bottom: 14px;
+}
+
+.flowCanvasCardWrap:last-child {
+	padding-bottom: 0;
+}
+
+.flowCanvasCardWrap:not(:last-child)::after {
+	content: "";
+	position: absolute;
+	left: calc(50% - 1px);
+	top: calc(100% - 14px);
+	width: 2px;
+	height: 14px;
+	background: rgba(170, 190, 245, 0.55);
+}
+
+.flowCanvasCard {
+	position: relative;
+	width: 100%;
+	padding: 15px 48px 15px 18px;
+	border: 1px solid rgba(138, 168, 238, 0.18);
+	border-radius: 18px;
+	background: linear-gradient(
+		180deg,
+		rgba(33, 50, 90, 0.94),
+		rgba(22, 35, 64, 0.95)
+	);
+	color: #f2f6ff;
+	cursor: pointer;
+}
+
+.flowCanvasCard:hover {
+	border-color: rgba(154, 184, 252, 0.34);
+	transform: translateY(-1px);
+}
+
+.flowCanvasCard.is-selected {
+	border-color: rgba(241, 188, 91, 0.62);
+	box-shadow: 0 0 0 1px rgba(241, 188, 91, 0.18);
+}
+
+.flowCanvasCardTitle {
+	font-size: 16px;
+	font-weight: 800;
+	line-height: 1.25;
+}
+
+.flowCanvasCardSubtitle {
+	margin-top: 4px;
+	font-size: 14px;
+	color: rgba(223, 231, 255, 0.82);
+	line-height: 1.35;
+}
+
+.flowCanvasCardMeta {
+	margin-top: 8px;
+	display: inline-flex;
+	gap: 8px;
+	align-items: center;
+	font-size: 12px;
+	color: rgba(173, 191, 238, 0.94);
+}
+
+.flowCanvasCardDot {
+	position: absolute;
+	right: 18px;
+	top: 18px;
+	width: 10px;
+	height: 10px;
+	border-radius: 999px;
+	background: #5ccf97;
+	box-shadow: 0 0 0 4px rgba(92, 207, 151, 0.12);
+}
+
+.flowCanvasCardDot.kind-message {
+	background: #8fbbff;
+	box-shadow: 0 0 0 4px rgba(143, 187, 255, 0.12);
+}
+
+.flowCanvasCardDot.kind-io {
+	background: #f1bc5b;
+	box-shadow: 0 0 0 4px rgba(241, 188, 91, 0.12);
+}
+
+.flowCanvasCardDot.kind-decision {
+	background: #ea8080;
+	box-shadow: 0 0 0 4px rgba(234, 128, 128, 0.12);
+}
+
+.flow-editor-main .wdLayoutRoot {
+	margin-top: 16px;
+}
+
+.flow-editor-main .wdToolbar,
+.flow-editor-main .wdValidation,
+.flow-editor-main .wdTable,
+.flow-editor-main .wdDropHint,
+.flow-editor-main .jsonEditor,
+.flow-editor-main #wdError {
+	margin-left: 0;
+	margin-right: 0;
+}
+
+.flow-editor-main .wdTable,
+.flow-editor-main .wdValidation,
+.flow-editor-main .jsonEditor,
+.flow-editor-main .wdDropHint {
+	border-radius: 16px;
+	border-color: rgba(120, 152, 226, 0.16);
+	background: rgba(10, 24, 48, 0.92);
+}
+
+.flow-editor-main .jsonEditor {
+	margin-top: 16px;
+	min-height: 320px;
+}
+
+.flow-editor-sidebar {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+}
+
+.flowSidebarSection {
+	margin-bottom: 0;
+}
+
+.flowStepPanel,
+.flowTransPanel {
+	border: 0;
+	border-radius: 0;
+	background: transparent;
+}
+
+.flowStepHeader {
+	padding: 16px 18px 10px 18px;
+	background: transparent;
+	border-bottom: 0;
+	font-size: 18px;
+	letter-spacing: 0;
+	color: #f1f5ff;
+}
+
+.flowStepPanel > .buttonRow,
+.flowStepBody {
+	padding-left: 18px;
+	padding-right: 18px;
+}
+
+.flowStepPanel > .buttonRow {
+	margin-top: 0;
+	margin-bottom: 4px;
+}
+
+.flowStepBody {
+	padding-bottom: 18px;
+	max-height: 760px;
+	overflow: auto;
+}
+
+.flowStepSection,
+.flowField,
+.flowTransRow,
+.flowTransAdd,
+.historyItem {
+	border-radius: 12px;
+}
+
+.flowStepSection {
+	padding: 0;
+}
+
+.flowStepContract,
+.flowField,
+.flowTransEditor,
+.flowTransPanel,
+.flowTransAdd,
+.flowTransRow,
+.flowTransCondBtn,
+.flowTransSelect,
+.flowTransPrio,
+.flowTransWhen,
+.historyItem,
+.flowStepHistory .historyItem,
+.flowStepHistory,
+[data-am2-library-card],
+[data-am2-library-editor],
+[data-am2-library-panel] .flowStepSection,
+[data-am2-node-form] .flowStepSection {
+	background: rgba(8, 20, 41, 0.78);
+	border-color: rgba(120, 152, 226, 0.14);
+}
+
+#flowPalettePanel .flowStepSection {
+	margin-bottom: 14px;
+}
+
+#flowPalettePanel .flowStepSectionTitle,
+#flowTransitionsPanel .flowStepSectionTitle,
+#flowEditorSidebar .flowStepSectionTitle {
+	letter-spacing: 0.01em;
+}
+
+#flowPalettePanel input,
+#flowPalettePanel select,
+#flowPalettePanel textarea,
+#flowTransitionsPanel input,
+#flowTransitionsPanel select,
+#flowTransitionsPanel textarea,
+#flowEditorSidebar input,
+#flowEditorSidebar select,
+#flowEditorSidebar textarea {
+	width: 100%;
+	box-sizing: border-box;
+	background: rgba(11, 24, 46, 0.96);
+}
+
+#flowPalettePanel .historyItem,
+#flowPalettePanel .flowStepSection,
+#flowTransitionsPanel .flowStepSection,
+#flowTransitionsPanel .flowTransAdd,
+#flowTransitionsPanel .flowTransRow {
+	padding: 10px 12px;
+}
+
+#flowPalettePanel .historyMeta,
+#flowEditorSidebar .historyMeta {
+	gap: 4px;
+}
+
+#flowPalettePanel .btn,
+#flowTransitionsPanel .btn,
+#flowEditorSidebar .btn {
+	padding: 8px 12px;
+}
+
+@media (max-width: 1260px) {
+	.flow-editor-layout {
+		grid-template-columns: 1fr;
+	}
+
+	.flowCanvasShell {
+		min-height: 420px;
+	}
+
+	.flowStepBody {
+		max-height: none;
+	}
+}

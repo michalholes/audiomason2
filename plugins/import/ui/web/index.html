@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>AudioMason Import</title>
   <link rel="stylesheet" href="/import/ui/assets/import_wizard.css" />
+  <link rel="stylesheet" href="/import/ui/assets/flow_editor_redesign.css" />
 </head>
 <body>
   <div class="container">
@@ -66,8 +67,22 @@
         </div>
         <div id="flowAllStatus" class="status"></div>
 
-        <div class="flow-editor-layout">
+        <div class="flow-editor-layout" id="flowEditorLayout">
+          <div class="flow-editor-palette" id="flowPaletteRail">
+            <div class="flowRailSection">
+              <div class="flowRailSectionHead">Palette</div>
+              <div class="flowRailSectionBody" id="flowPalettePanel"></div>
+            </div>
+          </div>
+
           <div class="flow-editor-main">
+            <div class="flowCanvasShell">
+              <div class="flowCanvasShellHead">
+                <div class="flowCanvasShellTitle">Flow Canvas</div>
+                <div class="flowCanvasShellMeta" id="flowCanvasMeta"></div>
+              </div>
+              <div class="flowCanvasPanel" id="flowCanvasPanel"></div>
+            </div>
             <textarea id="wdJson" class="jsonEditor is-hidden" rows="22"></textarea>
             <div id="wdError" class="error"></div>
           </div>
@@ -134,7 +149,6 @@
             </div>
 
             <div id="flowTransitionsPanel"></div>
-            <div id="flowPalettePanel"></div>
           </div>
         </div>
 
@@ -172,6 +186,7 @@
   <script src="/import/ui/assets/wd_dom_icons.js"></script>
   <script src="/import/ui/assets/wd_graph_stable.js"></script>
   <script src="/import/ui/assets/wd_edges_integrity.js"></script>
+  <script src="/import/ui/assets/flow_canvas_panel.js"></script>
   <script src="/import/ui/assets/wd_sidebar.js"></script>
   <script src="/import/ui/assets/wd_raw_error.js"></script>
   <script src="/import/ui/assets/wd_layout_root.js"></script>
