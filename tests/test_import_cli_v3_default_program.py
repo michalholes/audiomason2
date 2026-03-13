@@ -94,3 +94,45 @@ def test_cli_import_uses_bootstrapped_v3_default_program(tmp_path: Path) -> None
     assert "Step: covers_policy" in joined
     assert "Step: final_summary_confirm" in joined
     assert '"status": "completed"' in joined
+
+
+def test_cli_import_validation_error_does_not_loop(tmp_path: Path) -> None:
+    engine, resolver, _wizards_root = _make_engine(tmp_path)
+
+    prompts: list[str] = []
+    printed: list[str] = []
+
+    def _submit_step(
+        _session_id: str,
+        _step_id: str,
+        _payload: dict[str, object],
+    ) -> dict[str, object]:
+        return {
+            "error": {
+                "code": "VALIDATION_ERROR",
+                "message": "selection is required",
+                "details": [{"path": "$", "reason": "validation_error", "meta": {}}],
+            }
+        }
+
+    engine.submit_step = _submit_step  # type: ignore[method-assign]
+
+    def _input_fn(prompt: str) -> str:
+        prompts.append(prompt)
+        if len(prompts) > 1:
+            raise AssertionError(f"CLI looped after validation error: {prompt!r}")
+        return ""
+
+    rc = run_launcher(
+        engine=engine,
+        resolver=resolver,
+        cli_overrides={},
+        input_fn=_input_fn,
+        print_fn=printed.append,
+    )
+
+    assert rc == 1
+    assert len(prompts) == 1
+    joined = "\n".join(printed)
+    assert '"code": "VALIDATION_ERROR"' in joined
+    assert '"message": "selection is required"' in joined

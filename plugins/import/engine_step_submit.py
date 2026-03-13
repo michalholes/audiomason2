@@ -69,6 +69,16 @@ def _selection_ids_from_value(*, ordered_ids: list[str], selection: Any) -> list
     ]
 
 
+def _load_v3_discovery(*, engine: Any, session_id: str) -> list[dict[str, Any]]:
+    session_dir = f"import/sessions/{session_id}"
+    discovery_any = read_json(engine._fs, RootName.WIZARDS, f"{session_dir}/discovery.json")
+    if not isinstance(discovery_any, list) or not all(
+        isinstance(item, dict) for item in discovery_any
+    ):
+        return []
+    return [dict(item) for item in discovery_any]
+
+
 def _derive_v3_selected_ids(
     *,
     engine: Any,
@@ -76,14 +86,10 @@ def _derive_v3_selected_ids(
     step_id: str,
     selection: Any,
 ) -> list[str]:
-    session_dir = f"import/sessions/{session_id}"
-    discovery_any = read_json(engine._fs, RootName.WIZARDS, f"{session_dir}/discovery.json")
-    if not isinstance(discovery_any, list) or not all(
-        isinstance(item, dict) for item in discovery_any
-    ):
+    discovery = _load_v3_discovery(engine=engine, session_id=session_id)
+    if not discovery:
         return []
 
-    discovery = [dict(item) for item in discovery_any]
     authors_items, books_items = _derive_selection_items(discovery)
     items = authors_items if step_id == "select_authors" else books_items
     ordered_ids = [
@@ -98,6 +104,7 @@ def _validate_v3_selection_payload(
     session_id: str,
     step_id: str,
     payload: dict[str, Any],
+    state: dict[str, Any],
 ) -> None:
     if step_id not in {"select_authors", "select_books"}:
         return
@@ -105,6 +112,12 @@ def _validate_v3_selection_payload(
         return
 
     selection = payload.get("selection")
+    discovery = _load_v3_discovery(engine=engine, session_id=session_id)
+    if not discovery:
+        if selection in (None, "", [], "all"):
+            return
+        raise StepSubmissionError("selection out of range")
+
     if selection in (None, "", []):
         raise StepSubmissionError("selection is required")
 
@@ -214,6 +227,7 @@ def submit_step_impl(
                 session_id=session_id,
                 step_id=step_id,
                 payload=payload,
+                state=state,
             )
             next_state = submit_current_step(
                 effective_model=effective_model,
@@ -277,10 +291,7 @@ def submit_step_impl(
             raise StepSubmissionError("computed-only step cannot be submitted")
 
         normalized_payload = engine._validate_and_canonicalize_payload(
-            step_id=step_id,
-            schema=schema,
-            payload=payload,
-            state=state,
+            step_id=step_id, schema=schema, payload=payload
         )
 
         if step_id == "conflict_policy":
@@ -323,13 +334,11 @@ def submit_step_impl(
 
         next_step = engine._next_step_after_submit(
             step_id=step_id,
-            state=state,
             flow_cfg_norm=flow_cfg_norm,
         )
 
         state["current_step_id"] = engine._auto_advance_computed_steps(
             session_id=session_id,
-            state=state,
             next_step_id=next_step,
             flow_cfg_norm=flow_cfg_norm,
         )

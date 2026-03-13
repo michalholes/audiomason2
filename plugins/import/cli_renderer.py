@@ -218,6 +218,9 @@ def _render_loop(
                     return v3_rc
                 continue
             state3 = engine.submit_step(session_id, cur, v3_payload)
+            if "error" in state3:
+                print_fn(_json_dump({"state": state3}))
+                return 1
             if int(state3.get("phase") or 1) == 2:
                 return _finalize(engine, session_id, print_fn=print_fn)
             continue
@@ -328,6 +331,9 @@ def _render_loop(
             continue
 
         state3 = engine.submit_step(session_id, cur, payload)
+        if "error" in state3:
+            print_fn(_json_dump({"state": state3}))
+            return 1
         if int(state3.get("phase") or 1) == 2:
             return _finalize(engine, session_id, print_fn=print_fn)
 
