@@ -206,6 +206,15 @@ function wireButtons() {
 		el("jobsList").addEventListener("click", (e) => {
 			var t = e && e.target ? e.target : null;
 			while (t && t !== el("jobsList")) {
+				const rerunJobId = t.getAttribute && t.getAttribute("data-rerun-jobid");
+				if (rerunJobId) {
+					el("mode").value = "rerun_latest";
+					phCall("prepareRerunLatestFromJobId", String(rerunJobId), {
+						sourceLabel: "selected jobs item",
+						clearOnFailure: false,
+					});
+					return;
+				}
 				const jobId = t.getAttribute && t.getAttribute("data-jobid");
 				if (jobId) {
 					selectedJobId = String(jobId);
@@ -253,7 +262,14 @@ function wireButtons() {
 		});
 	}
 
-	el("mode").addEventListener("change", validateAndPreview);
+	el("mode").addEventListener("change", () => {
+		var mode = String(el("mode").value || "patch");
+		if (mode === "rerun_latest") {
+			phCall("prepareRerunLatestFromLatestJob");
+			return;
+		}
+		validateAndPreview();
+	});
 	el("issueId").addEventListener("input", () => {
 		dirty.issueId = true;
 		phCall("validateAndPreview");

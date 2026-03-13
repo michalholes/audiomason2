@@ -90,11 +90,15 @@ function renderWorkspacesFromResponse(r) {
 					el("commitMsg").value = "";
 					el("patchPath").value = "";
 					el("rawCommand").value = "";
-					dirty.issueId = true;
+					clearParsedState();
+					setParseHint("");
+					dirty.issueId = false;
 					dirty.commitMsg = false;
 					dirty.patchPath = false;
+					setUiStatus(
+						"finalize_workspace: prepared form for issue_id=" + issueId,
+					);
 					phCall("validateAndPreview");
-					phCall("enqueue");
 				});
 			}
 

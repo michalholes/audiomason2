@@ -11,7 +11,7 @@ from .command_parse import (
     build_canonical_command,
     parse_runner_command,
 )
-from .gate_argv import GateArgvError, validate_gate_argv
+from .gate_argv import GateArgvError, split_gate_argv, validate_gate_argv
 from .issue_alloc import allocate_next_issue_id
 from .job_ids import new_job_id
 from .models import (
@@ -120,12 +120,84 @@ def _gate_argv_from_body(body: dict[str, Any]) -> list[str]:
         raise ValueError(str(e)) from e
 
 
+def _canonical_tail_parts(job: JobRecord) -> tuple[list[str], list[str]]:
+    argv = [str(item or "") for item in list(job.canonical_command or [])]
+    if not argv:
+        return [], []
+    try:
+        idx = argv.index("scripts/am_patch.py")
+    except ValueError:
+        return [], []
+    rest = argv[idx + 1 :]
+    if job.mode == "finalize_live":
+        pos = list(rest)
+        try:
+            pos.remove("-f")
+        except ValueError:
+            return [], []
+        try:
+            return split_gate_argv(pos)
+        except GateArgvError:
+            return [], []
+    if job.mode == "finalize_workspace":
+        pos = list(rest)
+        try:
+            pos.remove("-w")
+        except ValueError:
+            return [], []
+        try:
+            return split_gate_argv(pos)
+        except GateArgvError:
+            return [], []
+    if job.mode == "rerun_latest":
+        pos = list(rest)
+        try:
+            pos.remove("-l")
+        except ValueError:
+            return [], []
+        try:
+            return split_gate_argv(pos)
+        except GateArgvError:
+            return [], []
+    if job.mode in ("patch", "repair"):
+        try:
+            return split_gate_argv(list(rest))
+        except GateArgvError:
+            return [], []
+    return [], []
+
+
+def _job_commit_message_from_canonical(job: JobRecord) -> str:
+    pos, _gate = _canonical_tail_parts(job)
+    if job.mode == "finalize_live":
+        if len(pos) == 1:
+            return str(pos[0] or "")
+        return ""
+    if job.mode in ("patch", "repair", "rerun_latest") and len(pos) >= 2:
+        return str(pos[1] or "")
+    return ""
+
+
+def _job_commit_message(job: JobRecord) -> str:
+    commit_message = getattr(job, "commit_message", "")
+    if commit_message:
+        return str(commit_message or "")
+    return _job_commit_message_from_canonical(job)
+
+
 def _job_patch_path_from_canonical(job: JobRecord) -> str | None:
-    if job.mode not in ("patch", "repair"):
-        return None
-    if len(job.canonical_command) < 4:
-        return None
-    return str(job.canonical_command[-1] or "") or None
+    pos, _gate = _canonical_tail_parts(job)
+    if job.mode in ("patch", "repair", "rerun_latest") and len(pos) == 3:
+        return str(pos[2] or "") or None
+    return None
+
+
+def _job_resolved_patch_path(job: JobRecord) -> str | None:
+    if job.effective_patch_path:
+        return str(job.effective_patch_path or "") or None
+    if job.original_patch_path:
+        return str(job.original_patch_path or "") or None
+    return _job_patch_path_from_canonical(job)
 
 
 def _job_jsonl_path_from_fields(self, job_id: str, mode: str, issue_id: str) -> Path:
@@ -178,12 +250,16 @@ def _pick_tail_job(self) -> JobRecord | None:
 
 def _job_detail_json(self, job: JobRecord) -> dict[str, Any]:
     payload = job.to_json()
+    if not payload.get("commit_message"):
+        commit_message = _job_commit_message(job)
+        if commit_message:
+            payload["commit_message"] = commit_message
     if not payload.get("original_patch_path"):
         patch_path = _job_patch_path_from_canonical(job)
         if patch_path:
             payload["original_patch_path"] = patch_path
     if not payload.get("effective_patch_path"):
-        patch_path = _job_patch_path_from_canonical(job)
+        patch_path = _job_resolved_patch_path(job)
         if patch_path:
             payload["effective_patch_path"] = patch_path
     if not payload.get("effective_patch_kind") and payload.get("effective_patch_path"):
@@ -281,8 +357,6 @@ def api_jobs_enqueue(self, body: dict[str, Any]) -> tuple[int, bytes]:
         if mode == "finalize_live":
             if not commit_message:
                 return _err("Missing finalize_live message", status=400)
-            if gate_argv:
-                return _err("finalize_live must not include gate_argv", status=400)
             canonical = build_canonical_command(
                 runner_prefix,
                 mode,

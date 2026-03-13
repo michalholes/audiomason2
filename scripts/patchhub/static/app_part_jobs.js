@@ -1,13 +1,174 @@
 /** @type {any} */
 var __ph_w = /** @type {any} */ (window);
 var PH = /** @type {any} */ (window).PH;
+var jobsCache = [];
+var rerunPrepareSeq = 0;
 
 function phCall(name, ...args) {
 	if (!PH || typeof PH.call !== "function") return undefined;
 	return PH.call(name, ...args);
 }
+
+function isRerunLatestListCandidate(job) {
+	var mode = String((job && job.mode) || "").trim();
+	var issueId = String((job && job.issue_id) || "").trim();
+	var commit = String((job && job.commit_summary) || "").trim();
+	return (mode === "patch" || mode === "rerun_latest") && !!issueId && !!commit;
+}
+
+function clearRerunLatestRawCommand() {
+	var rawNode = el("rawCommand");
+	if (rawNode) rawNode.value = "";
+	clearParsedState();
+	setParseHint("");
+}
+
+function clearRerunLatestFormFields(statusText) {
+	clearRerunLatestRawCommand();
+	el("issueId").value = "";
+	el("commitMsg").value = "";
+	el("patchPath").value = "";
+	dirty.issueId = false;
+	dirty.commitMsg = false;
+	dirty.patchPath = false;
+	if (statusText) setUiStatus(statusText);
+	phCall("validateAndPreview");
+}
+
+function resolveRerunLatestPatchPath(job) {
+	var detail = job || {};
+	var effective = String(detail.effective_patch_path || "").trim();
+	var original = String(detail.original_patch_path || "").trim();
+	var argv = Array.isArray(detail.canonical_command)
+		? detail.canonical_command.slice()
+		: [];
+	var mode = String(detail.mode || "").trim();
+	var idx = argv.indexOf("scripts/am_patch.py");
+	var tail = idx >= 0 ? argv.slice(idx + 1) : [];
+	var flagIdx = tail.indexOf("-l");
+	if (effective) return effective;
+	if (original) return original;
+	if (idx < 0) return "";
+	if (mode === "patch" || mode === "repair") {
+		if (tail.length >= 3) return String(tail[2] || "").trim();
+		return "";
+	}
+	if (mode === "rerun_latest") {
+		if (flagIdx === 3) return String(tail[2] || "").trim();
+		return "";
+	}
+	return "";
+}
+
+function extractRerunLatestValues(job) {
+	var detail = job || {};
+	var mode = String(detail.mode || "").trim();
+	var issueId = String(detail.issue_id || "").trim();
+	var commitMsg = String(detail.commit_message || "").trim();
+	var patchPath = resolveRerunLatestPatchPath(detail);
+	if ((mode !== "patch" && mode !== "rerun_latest") || !issueId || !commitMsg) {
+		return null;
+	}
+	if (!patchPath) return null;
+	return {
+		issueId: issueId,
+		commitMsg: commitMsg,
+		patchPath: patchPath,
+		jobId: String(detail.job_id || "").trim(),
+	};
+}
+
+function applyRerunLatestValues(values, sourceLabel) {
+	if (!values) return false;
+	clearRerunLatestRawCommand();
+	el("mode").value = "rerun_latest";
+	el("issueId").value = String(values.issueId || "");
+	el("commitMsg").value = String(values.commitMsg || "");
+	el("patchPath").value = normalizePatchPath(String(values.patchPath || ""));
+	dirty.issueId = false;
+	dirty.commitMsg = false;
+	dirty.patchPath = false;
+	if (sourceLabel) {
+		setUiStatus(
+			"rerun_latest: prepared form from " +
+				String(sourceLabel) +
+				" job_id=" +
+				String(values.jobId || ""),
+		);
+	}
+	phCall("validateAndPreview");
+	return true;
+}
+
+function loadJobDetail(jobId) {
+	return apiGet("/api/jobs/" + encodeURIComponent(String(jobId || "")));
+}
+
+function prepareRerunLatestFromJobId(jobId, opts) {
+	opts = opts || {};
+	var seq = ++rerunPrepareSeq;
+	var sourceLabel = String(opts.sourceLabel || "selected");
+	var clearOnFailure = opts.clearOnFailure !== false;
+	var errText = "Cannot load rerun_latest job";
+	if (!jobId) {
+		if (clearOnFailure) {
+			clearRerunLatestFormFields("rerun_latest: no eligible previous job");
+		}
+		return Promise.resolve(false);
+	}
+	setUiStatus("rerun_latest: loading job_id=" + String(jobId));
+	return loadJobDetail(jobId).then((resp) => {
+		if (seq !== rerunPrepareSeq) return false;
+		if (String(el("mode").value || "") !== "rerun_latest") return false;
+		if (!resp || resp.ok === false || !resp.job) {
+			errText = String((resp && resp.error) || "Cannot load rerun_latest job");
+			if (clearOnFailure) {
+				clearRerunLatestFormFields("rerun_latest: no eligible previous job");
+			}
+			setUiError(errText);
+			return false;
+		}
+		var values = extractRerunLatestValues(resp.job);
+		if (!values) {
+			if (clearOnFailure) {
+				clearRerunLatestFormFields("rerun_latest: no eligible previous job");
+			}
+			setUiError(
+				"rerun_latest: selected job is not eligible for Start-form autofill",
+			);
+			return false;
+		}
+		return applyRerunLatestValues(values, sourceLabel);
+	});
+}
+
+function prepareRerunLatestFromLatestJob() {
+	var seq = ++rerunPrepareSeq;
+	setUiStatus("rerun_latest: resolving latest eligible job");
+	return apiGet("/api/jobs").then((resp) => {
+		if (seq !== rerunPrepareSeq) return false;
+		if (String(el("mode").value || "") !== "rerun_latest") return false;
+		if (!resp || resp.ok === false) {
+			clearRerunLatestFormFields("rerun_latest: no eligible previous job");
+			setUiError(String((resp && resp.error) || "Cannot load jobs"));
+			return false;
+		}
+		var jobs = Array.isArray(resp.jobs) ? resp.jobs : [];
+		var found = jobs.find((job) => isRerunLatestListCandidate(job)) || null;
+		if (!found || !found.job_id) {
+			clearRerunLatestFormFields("rerun_latest: no eligible previous job");
+			return false;
+		}
+		return prepareRerunLatestFromJobId(String(found.job_id || ""), {
+			sourceLabel: "latest eligible",
+			clearOnFailure: true,
+		});
+	});
+}
+
 function renderJobsFromResponse(r) {
 	var jobs = r.jobs || [];
+	jobsCache = Array.isArray(jobs) ? jobs.slice() : [];
 
 	// If the most recently enqueued job reached a terminal state, reset mode to patch.
 	try {
@@ -108,6 +269,7 @@ function renderJobsFromResponse(r) {
 
 			var meta = metaParts.join(" | ");
 			var commit = String(j.commit_summary || "").trim();
+			var showRerun = isRerunLatestListCandidate(j);
 
 			var line = '<div class="' + cls + '">';
 			line +=
@@ -124,6 +286,15 @@ function renderJobsFromResponse(r) {
 			line += "</div>";
 			line += '<div class="job-commit">' + escapeHtml(commit) + "</div>";
 			line += '<div class="job-meta">' + escapeHtml(meta) + "</div>";
+			if (showRerun) {
+				line += '<div class="actions job-actions">';
+				line +=
+					'<button type="button" class="btn btn-small jobUseForRerun" ' +
+					'data-rerun-jobid="' +
+					escapeHtml(jobId) +
+					'">Use for -l</button>';
+				line += "</div>";
+			}
 			line += "</div>";
 			line += "</div>";
 			line += "</div>";
@@ -271,7 +442,7 @@ function computeCanonicalPreview(
 	if (mode === "finalize_live") {
 		argv.push("-f");
 		argv.push(String(commitMsg || ""));
-		return argv;
+		return argv.concat(gateTail);
 	}
 	if (mode === "finalize_workspace") {
 		argv.push("-w");
@@ -299,5 +470,8 @@ if (PH && typeof PH.register === "function") {
 		refreshOverviewSnapshot,
 		idleRefreshTick,
 		computeCanonicalPreview,
+		isRerunLatestListCandidate,
+		prepareRerunLatestFromJobId,
+		prepareRerunLatestFromLatestJob,
 	});
 }

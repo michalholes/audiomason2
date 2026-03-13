@@ -207,7 +207,7 @@ def test_enqueue_rejects_gate_argv_with_raw_command(tmp_path: Path) -> None:
     assert "gate_argv" in payload["error"]
 
 
-def test_enqueue_rejects_finalize_live_gate_argv(tmp_path: Path) -> None:
+def test_enqueue_finalize_live_accepts_gate_argv(tmp_path: Path) -> None:
     s = _mk_self(tmp_path)
 
     body = {
@@ -216,6 +216,13 @@ def test_enqueue_rejects_finalize_live_gate_argv(tmp_path: Path) -> None:
         "gate_argv": ["--skip-ruff"],
     }
     status, raw = api_jobs_enqueue(s, body)
-    assert status == 400
+    assert status == 200
     payload = json.loads(raw.decode("utf-8"))
-    assert "finalize_live" in payload["error"]
+    assert payload["job"]["commit_message"] == "Finalize"
+    assert payload["job"]["canonical_command"] == [
+        "python3",
+        "scripts/am_patch.py",
+        "-f",
+        "Finalize",
+        "--skip-ruff",
+    ]

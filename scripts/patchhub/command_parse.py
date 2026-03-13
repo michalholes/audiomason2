@@ -57,10 +57,15 @@ def parse_runner_command(raw: str) -> ParsedCommand:
         raise CommandParseError("Conflicting finalize/rerun flags")
 
     if flag_f:
-        rest = [a for a in rest if a != "-f"]
-        if len(rest) != 1:
+        pos = list(rest)
+        pos.remove("-f")
+        try:
+            pos, gate_argv = split_gate_argv(pos)
+        except GateArgvError as e:
+            raise CommandParseError(str(e)) from e
+        if len(pos) != 1:
             raise CommandParseError("finalize_live requires exactly one MESSAGE argument")
-        message = rest[0]
+        message = pos[0]
         if not message:
             raise CommandParseError("MESSAGE is empty")
         return ParsedCommand(
@@ -68,8 +73,15 @@ def parse_runner_command(raw: str) -> ParsedCommand:
             issue_id="",
             commit_message=message,
             patch_path="",
-            gate_argv=[],
-            canonical_argv=prefix + ["-f", message],
+            gate_argv=gate_argv,
+            canonical_argv=build_canonical_command(
+                prefix,
+                "finalize_live",
+                "",
+                message,
+                "",
+                gate_argv,
+            ),
         )
 
     if flag_w:
@@ -140,9 +152,7 @@ def build_canonical_command(
 ) -> list[str]:
     gate_tail = _validated_gate_argv(list(gate_argv or []))
     if mode == "finalize_live":
-        if gate_tail:
-            raise CommandParseError("finalize_live must not include gate overrides")
-        return runner_prefix + ["-f", commit_message]
+        return runner_prefix + ["-f", commit_message] + gate_tail
     if mode == "finalize_workspace":
         return runner_prefix + ["-w", issue_id] + gate_tail
     if mode == "rerun_latest":

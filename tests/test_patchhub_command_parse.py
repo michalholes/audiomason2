@@ -55,11 +55,23 @@ class TestCommandParse(unittest.TestCase):
             ],
         )
 
-    def test_parse_rejects_finalize_live_gate_overrides(self) -> None:
-        with self.assertRaises(CommandParseError):
-            parse_runner_command(
-                'python3 scripts/am_patch.py -f "Issue #1000: finalize" --skip-ruff'
-            )
+    def test_parse_finalize_live_with_gate_overrides(self) -> None:
+        p = parse_runner_command(
+            'python3 scripts/am_patch.py -f "Issue #1000: finalize" --skip-ruff'
+        )
+        self.assertEqual(p.mode, "finalize_live")
+        self.assertEqual(p.commit_message, "Issue #1000: finalize")
+        self.assertEqual(p.gate_argv, ["--skip-ruff"])
+        self.assertEqual(
+            p.canonical_argv,
+            [
+                "python3",
+                "scripts/am_patch.py",
+                "-f",
+                "Issue #1000: finalize",
+                "--skip-ruff",
+            ],
+        )
 
     def test_missing_runner(self) -> None:
         with self.assertRaises(CommandParseError):

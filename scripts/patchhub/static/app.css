@@ -707,6 +707,12 @@ input::placeholder {
 	flex-wrap: wrap;
 }
 
+.job-actions {
+	margin-top: 6px;
+	justify-content: flex-start;
+	flex-wrap: wrap;
+}
+
 .workspace-item .job-meta {
 	font-size: 12px;
 }

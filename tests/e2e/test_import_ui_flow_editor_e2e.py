@@ -36,7 +36,7 @@ async def test_import_ui_flow_editor_shell_is_present_and_wired(
     await expect(page.locator("#flowResetAll")).to_be_visible()
 
     await expect(page.locator("#flowStepHeader")).to_have_text(
-        re.compile(r".+ - .+"),
+        re.compile(r"(?:Step settings \(FlowConfig draft\)|.+ - .+)"),
     )
     await expect(page.locator("#flowTransitionsPanel")).to_be_visible()
     await expect(page.locator("#flowPalettePanel")).to_be_visible()

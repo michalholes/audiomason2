@@ -112,7 +112,9 @@ function gateOptionsModeSupported(mode, rawCommand) {
 	var currentMode = String(mode || (el("mode") && el("mode").value) || "patch");
 	if (gateOptionsRawDisabled(rawCommand)) return false;
 	return (
-		["patch", "finalize_workspace", "rerun_latest"].indexOf(currentMode) >= 0
+		["patch", "finalize_live", "finalize_workspace", "rerun_latest"].indexOf(
+			currentMode,
+		) >= 0
 	);
 }
 
@@ -121,7 +123,10 @@ function gateOptionsReason(mode, rawCommand) {
 		return "Gate options are disabled when raw command is set";
 	}
 	if (!gateOptionsModeSupported(mode, rawCommand)) {
-		return "Gate options are available for patch, finalize_workspace, and rerun_latest";
+		return (
+			"Gate options are available for patch, finalize_live, " +
+			"finalize_workspace, and rerun_latest"
+		);
 	}
 	return "";
 }
