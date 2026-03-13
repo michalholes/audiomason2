@@ -92,14 +92,10 @@ _SECTION_BY_KEY: dict[str, str] = {
     "gate_mypy_mode": "",
     "gate_pytest_mode": "",
     "pytest_routing_mode": "",
-    "pytest_smoke_targets": "",
-    "pytest_area_prefixes": "",
-    "pytest_area_names": "",
-    "pytest_area_targets": "",
-    "pytest_family_areas": "",
-    "pytest_family_targets": "",
-    "pytest_broad_repo_prefixes": "",
-    "pytest_broad_repo_targets": "",
+    "pytest_roots": "pytest_roots",
+    "pytest_tree": "pytest_tree",
+    "pytest_dependencies": "pytest_dependencies",
+    "pytest_full_suite_prefixes": "",
     "gate_docs_include": "",
     "gate_docs_exclude": "",
     "gate_docs_required_files": "",
@@ -214,14 +210,10 @@ _LABEL_BY_KEY: dict[str, str] = {
     "mypy_targets": "Mypy: targets",
     "pytest_targets": "Pytest: targets",
     "pytest_routing_mode": "Pytest: routing mode",
-    "pytest_smoke_targets": "Pytest: smoke targets",
-    "pytest_area_prefixes": "Pytest: area prefixes",
-    "pytest_area_names": "Pytest: area names",
-    "pytest_area_targets": "Pytest: area targets",
-    "pytest_family_areas": "Pytest: family areas",
-    "pytest_family_targets": "Pytest: family targets",
-    "pytest_broad_repo_prefixes": "Pytest: broad repo prefixes",
-    "pytest_broad_repo_targets": "Pytest: broad repo targets",
+    "pytest_roots": "Pytest: namespace roots",
+    "pytest_tree": "Pytest: namespace tree",
+    "pytest_dependencies": "Pytest: namespace dependencies",
+    "pytest_full_suite_prefixes": "Pytest: full-suite prefixes",
     "pytest_use_venv": "Pytest: use venv",
     "run_all_tests": "Workflow: run all gates",
     "allow_non_main": "Git safety: allow non-main",
@@ -314,37 +306,21 @@ _HELP_BY_KEY: dict[str, str] = {
         "Select legacy or bucketed pytest target routing. "
         "See: scripts/am_patch_policy_glossary.md## Key: pytest_routing_mode"
     ),
-    "pytest_smoke_targets": (
-        "Bucketed pytest smoke targets. "
-        "See: scripts/am_patch_policy_glossary.md## Key: pytest_smoke_targets"
+    "pytest_roots": (
+        "Namespace root mapping for bucketed pytest routing. "
+        "See: scripts/am_patch_policy_glossary.md## Key: pytest_roots"
     ),
-    "pytest_area_prefixes": (
-        "Ordered prefixes used to map paths to pytest areas. "
-        "See: scripts/am_patch_policy_glossary.md## Key: pytest_area_prefixes"
+    "pytest_tree": (
+        "Most-specific namespace subtree mapping for bucketed pytest routing. "
+        "See: scripts/am_patch_policy_glossary.md## Key: pytest_tree"
     ),
-    "pytest_area_names": (
-        "Ordered area names paired with pytest_area_prefixes. "
-        "See: scripts/am_patch_policy_glossary.md## Key: pytest_area_names"
+    "pytest_dependencies": (
+        "One-way namespace dependency map used for reverse-closure routing. "
+        "See: scripts/am_patch_policy_glossary.md## Key: pytest_dependencies"
     ),
-    "pytest_area_targets": (
-        "Map impacted pytest areas to target lists. "
-        "See: scripts/am_patch_policy_glossary.md## Key: pytest_area_targets"
-    ),
-    "pytest_family_areas": (
-        "Map pytest families to member areas. "
-        "See: scripts/am_patch_policy_glossary.md## Key: pytest_family_areas"
-    ),
-    "pytest_family_targets": (
-        "Map selected pytest families to target lists. "
-        "See: scripts/am_patch_policy_glossary.md## Key: pytest_family_targets"
-    ),
-    "pytest_broad_repo_prefixes": (
-        "Prefixes that escalate bucketed pytest routing to broad targets. "
-        "See: scripts/am_patch_policy_glossary.md## Key: pytest_broad_repo_prefixes"
-    ),
-    "pytest_broad_repo_targets": (
-        "Broad pytest targets added after escalation. "
-        "See: scripts/am_patch_policy_glossary.md## Key: pytest_broad_repo_targets"
+    "pytest_full_suite_prefixes": (
+        "Prefixes that escalate bucketed pytest routing to the full pytest target set. "
+        "See: scripts/am_patch_policy_glossary.md## Key: pytest_full_suite_prefixes"
     ),
     "pytest_use_venv": (
         "Run pytest under the configured venv python. "
@@ -532,6 +508,8 @@ def _infer_schema_type(typ: Any) -> str:
         value = args[1]
         if get_origin(value) is list and get_args(value) and get_args(value)[0] is str:
             return "dict[str,list[str]]"
+        if value is str:
+            return "dict[str,str]"
 
     # PEP 604 union (e.g., str | None)
     if args and len(args) == 2 and type(None) in args:

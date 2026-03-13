@@ -11,15 +11,11 @@ from .config_gate_execution import apply_gate_execution_cfg
 from .config_ipc_surface import apply_ipc_cfg_surface
 from .errors import RunnerError
 from .policy_monolith_mixin import PolicyMonolithMixin
-from .pytest_bucket_routing import (
-    PYTEST_AREA_NAMES_DEFAULT,
-    PYTEST_AREA_PREFIXES_DEFAULT,
-    PYTEST_AREA_TARGETS_DEFAULT,
-    PYTEST_BROAD_REPO_PREFIXES_DEFAULT,
-    PYTEST_BROAD_REPO_TARGETS_DEFAULT,
-    PYTEST_FAMILY_AREAS_DEFAULT,
-    PYTEST_FAMILY_TARGETS_DEFAULT,
-    PYTEST_SMOKE_TARGETS_DEFAULT,
+from .pytest_namespace_config import (
+    PYTEST_DEPENDENCIES_DEFAULT,
+    PYTEST_FULL_SUITE_PREFIXES_DEFAULT,
+    PYTEST_ROOTS_DEFAULT,
+    PYTEST_TREE_DEFAULT,
 )
 from .success_archive_retention import validate_success_archive_retention
 
@@ -251,27 +247,13 @@ class Policy(PolicyMonolithMixin):
     gate_pytest_mode: str = "auto"
     gate_pytest_js_prefixes: list[str] = field(default_factory=list)
     pytest_routing_mode: str = "bucketed"
-    pytest_smoke_targets: list[str] = field(
-        default_factory=lambda: list(PYTEST_SMOKE_TARGETS_DEFAULT)
+    pytest_roots: dict[str, str] = field(default_factory=lambda: deepcopy(PYTEST_ROOTS_DEFAULT))
+    pytest_tree: dict[str, str] = field(default_factory=lambda: deepcopy(PYTEST_TREE_DEFAULT))
+    pytest_dependencies: dict[str, list[str]] = field(
+        default_factory=lambda: deepcopy(PYTEST_DEPENDENCIES_DEFAULT)
     )
-    pytest_area_prefixes: list[str] = field(
-        default_factory=lambda: list(PYTEST_AREA_PREFIXES_DEFAULT)
-    )
-    pytest_area_names: list[str] = field(default_factory=lambda: list(PYTEST_AREA_NAMES_DEFAULT))
-    pytest_area_targets: dict[str, list[str]] = field(
-        default_factory=lambda: deepcopy(PYTEST_AREA_TARGETS_DEFAULT)
-    )
-    pytest_family_areas: dict[str, list[str]] = field(
-        default_factory=lambda: deepcopy(PYTEST_FAMILY_AREAS_DEFAULT)
-    )
-    pytest_family_targets: dict[str, list[str]] = field(
-        default_factory=lambda: deepcopy(PYTEST_FAMILY_TARGETS_DEFAULT)
-    )
-    pytest_broad_repo_prefixes: list[str] = field(
-        default_factory=lambda: list(PYTEST_BROAD_REPO_PREFIXES_DEFAULT)
-    )
-    pytest_broad_repo_targets: list[str] = field(
-        default_factory=lambda: list(PYTEST_BROAD_REPO_TARGETS_DEFAULT)
+    pytest_full_suite_prefixes: list[str] = field(
+        default_factory=lambda: list(PYTEST_FULL_SUITE_PREFIXES_DEFAULT)
     )
 
     pytest_use_venv: bool = True

@@ -57,7 +57,7 @@ class TestAmpConfigRoundtrip(unittest.TestCase):
                     "values": {
                         "verbosity": "quiet",
                         "pytest_routing_mode": "legacy",
-                        "pytest_smoke_targets": ["tests/audio_smoke.py"],
+                        "pytest_full_suite_prefixes": ["tests/conftest.py"],
                     },
                     "dry_run": True,
                 },
@@ -71,8 +71,8 @@ class TestAmpConfigRoundtrip(unittest.TestCase):
             self.assertEqual(obj2.get("values", {}).get("verbosity"), "quiet")
             self.assertEqual(obj2.get("values", {}).get("pytest_routing_mode"), "legacy")
             self.assertEqual(
-                obj2.get("values", {}).get("pytest_smoke_targets"),
-                ["tests/audio_smoke.py"],
+                obj2.get("values", {}).get("pytest_full_suite_prefixes"),
+                ["tests/conftest.py"],
             )
 
             # No write happened.
@@ -91,7 +91,7 @@ class TestAmpConfigRoundtrip(unittest.TestCase):
                     "values": {
                         "verbosity": "quiet",
                         "pytest_routing_mode": "legacy",
-                        "pytest_smoke_targets": ["tests/test_complete.py"],
+                        "pytest_full_suite_prefixes": ["pyproject.toml"],
                     },
                     "dry_run": False,
                 },
@@ -107,6 +107,6 @@ class TestAmpConfigRoundtrip(unittest.TestCase):
             self.assertEqual(obj4.get("values", {}).get("verbosity"), "quiet")
             self.assertEqual(obj4.get("values", {}).get("pytest_routing_mode"), "legacy")
             self.assertEqual(
-                obj4.get("values", {}).get("pytest_smoke_targets"),
-                ["tests/test_complete.py"],
+                obj4.get("values", {}).get("pytest_full_suite_prefixes"),
+                ["pyproject.toml"],
             )

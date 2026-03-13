@@ -93,5 +93,5 @@ def test_am_patch_show_config_prints_pytest_routing_keys() -> None:
 
     expected_mode = _configured_pytest_routing_mode(repo_root)
     assert f"pytest_routing_mode={expected_mode!r}" in out
-    assert "pytest_smoke_targets=" in out
-    assert "pytest_area_targets=" in out
+    assert "pytest_roots=" in out
+    assert "pytest_dependencies=" in out

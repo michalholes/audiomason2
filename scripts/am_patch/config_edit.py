@@ -62,6 +62,12 @@ def validate_patchhub_update(values: dict[str, Any], schema: dict[str, Any]) -> 
                     raise RunnerError("CONFIG", "CONFIG", f"expected dict[str,list[str]] for {k}")
                 if any(not isinstance(item, str) for item in vv):
                     raise RunnerError("CONFIG", "CONFIG", f"expected dict[str,list[str]] for {k}")
+        elif type_name == "dict[str,str]":
+            if not isinstance(v, dict):
+                raise RunnerError("CONFIG", "CONFIG", f"expected dict[str,str] for {k}")
+            for kk, vv in v.items():
+                if not isinstance(kk, str) or not isinstance(vv, str):
+                    raise RunnerError("CONFIG", "CONFIG", f"expected dict[str,str] for {k}")
         else:
             raise RunnerError("CONFIG", "CONFIG", f"unsupported schema type for {k}: {type_name}")
 
@@ -118,6 +124,7 @@ class _Edit:
     index: int
     new_line: str | None = None
     insert_lines: list[str] | None = None
+    delete_to: int | None = None
 
 
 def _render_value(v: Any, type_name: str) -> str:
@@ -140,7 +147,24 @@ def _render_value(v: Any, type_name: str) -> str:
             rendered = ", ".join(_toml_quote(str(item)) for item in values)
             parts.append(f"{_toml_quote(str(key))} = [{rendered}]")
         return "{" + ", ".join(parts) + "}"
+    if type_name == "dict[str,str]":
+        parts = [f"{_toml_quote(str(key))} = {_toml_quote(str(value))}" for key, value in v.items()]
+        return "{" + ", ".join(parts) + "}"
     raise RunnerError("CONFIG", "CONFIG", f"cannot render type: {type_name}")
+
+
+def _render_table_lines(v: Any, type_name: str) -> list[str]:
+    if type_name == "dict[str,str]":
+        return [
+            f"{_toml_quote(str(key))} = {_toml_quote(str(value))}\n" for key, value in v.items()
+        ]
+    if type_name == "dict[str,list[str]]":
+        lines: list[str] = []
+        for key, values in v.items():
+            rendered = ", ".join(_toml_quote(str(item)) for item in values)
+            lines.append(f"{_toml_quote(str(key))} = [{rendered}]\n")
+        return lines
+    raise RunnerError("CONFIG", "CONFIG", f"cannot render table type: {type_name}")
 
 
 def _toml_quote(s: str) -> str:
@@ -161,12 +185,22 @@ def _compute_edits(
         item = policy_schema[key]
         section = str(item.get("section") or "")
         type_name = str(item.get("type") or "")
-        rhs = _render_value(value, type_name)
 
         span = spans.get(section)
         if span is None:
             raise RunnerError("CONFIG", "CONFIG", f"missing section in config: {section}")
 
+        if type_name in {"dict[str,list[str]]", "dict[str,str]"} and section == key:
+            edits.append(
+                _Edit(
+                    index=span.start + 1,
+                    insert_lines=_render_table_lines(value, type_name),
+                    delete_to=span.end,
+                )
+            )
+            continue
+
+        rhs = _render_value(value, type_name)
         found_idx = _find_assignment(lines, span, key)
         if found_idx is not None:
             edits.append(_Edit(index=found_idx, new_line=_replace_rhs(lines[found_idx], rhs)))
@@ -175,7 +209,6 @@ def _compute_edits(
             insert_line = f"{key} = {rhs}\n"
             edits.append(_Edit(index=insert_at, insert_lines=[insert_line]))
 
-    # Apply edits in reverse order for stable indices.
     edits.sort(key=lambda e: e.index, reverse=True)
     return edits
 
@@ -186,7 +219,8 @@ def _apply_edits(lines: list[str], edits: list[_Edit]) -> list[str]:
         if e.new_line is not None:
             out[e.index] = e.new_line
         elif e.insert_lines is not None:
-            out[e.index : e.index] = e.insert_lines
+            delete_to = e.delete_to if e.delete_to is not None else e.index
+            out[e.index : delete_to] = e.insert_lines
         else:  # pragma: no cover
             raise RunnerError("CONFIG", "CONFIG", "invalid edit")
     return out
