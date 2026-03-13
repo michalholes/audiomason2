@@ -206,9 +206,6 @@ function applyGatePreview(preview) {
 	if (gateOptionsModeSupported(out.mode, out.raw_command)) {
 		gateArgv = gateOverrideArgv();
 		out.gate_argv = gateArgv.slice();
-		if (Array.isArray(out.canonical_argv) && gateArgv.length) {
-			out.canonical_argv = out.canonical_argv.concat(gateArgv);
-		}
 	}
 	return out;
 }

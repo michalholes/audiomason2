@@ -286,6 +286,9 @@ global.apiGet = (path) => {
       },
     });
   }
+  if (path === "/api/fs/stat?path=issue_311_v1.zip") {
+    return Promise.resolve({ ok: true, exists: true });
+  }
   return Promise.resolve({ ok: false, error: "unexpected path: " + path });
 };
 document.getElementById("mode").value = "rerun_latest";
@@ -325,7 +328,7 @@ process.stdout.write(JSON.stringify({
     assert result["validated"]["patchPath"] == "patches/issue_311_v1.zip"
     assert result["uiErrors"] == []
     assert result["uiStatus"][-1] == (
-        "rerun_latest: prepared form from latest eligible job_id=job-eligible"
+        "rerun_latest: prepared form from latest usable job_id=job-eligible"
     )
 
 
@@ -367,13 +370,13 @@ global.apiGet = (path) => {
         job_id: "job-invalid",
         mode: "patch",
         issue_id: "312",
-        commit_message: "",
+        commit_message: "Invalid missing patch",
         effective_patch_path: "patches/issue_312_v5.zip",
         canonical_command: [
           "python3",
           "scripts/am_patch.py",
           "312",
-          "",
+          "Invalid missing patch",
           "patches/issue_312_v5.zip",
         ],
       },
@@ -398,6 +401,12 @@ global.apiGet = (path) => {
       },
     });
   }
+  if (path === "/api/fs/stat?path=issue_312_v5.zip") {
+    return Promise.resolve({ ok: true, exists: false });
+  }
+  if (path === "/api/fs/stat?path=issue_311_v1.zip") {
+    return Promise.resolve({ ok: true, exists: true });
+  }
   return Promise.resolve({ ok: false, error: "unexpected path: " + path });
 };
 document.getElementById("mode").value = "rerun_latest";
@@ -420,31 +429,26 @@ process.stdout.write(JSON.stringify({
     assert result["patchPath"] == "patches/issue_311_v1.zip"
     assert result["uiErrors"] == []
     assert result["uiStatus"][-1] == (
-        "rerun_latest: prepared form from latest eligible job_id=job-valid"
+        "rerun_latest: prepared form from latest usable job_id=job-valid"
     )
 
 
-def test_progress_ui_handles_fallback_and_cancel_409() -> None:
+def test_progress_ui_keeps_active_controls_for_tracked_fallback_and_cancel_409() -> None:
     script_path = REPO_ROOT / "scripts" / "patchhub" / "static" / "patchhub_progress_ui.js"
     script = (
         _node_prelude(script_path)
         + """
-let fetchMode = "fallback";
 window.PH.register("progress_stub", {
-  getTrackedActiveJob(jobs) {
-    if (fetchMode === "fallback") {
-      return {
-        job_id: "job-fallback",
-        status: "running",
-        mode: "patch",
-        issue_id: "310",
-      };
-    }
-    return jobs[0] || null;
+  getTrackedActiveJob() {
+    return {
+      job_id: "job-fallback",
+      status: "running",
+      mode: "patch",
+      issue_id: "310",
+    };
   },
-  getTrackedActiveJobId(jobs) {
-    const active = this.getTrackedActiveJob(jobs);
-    return active ? active.job_id : "";
+  getTrackedActiveJobId() {
+    return "job-fallback";
   },
 });
 global.refreshJobs = () => {};
@@ -454,10 +458,6 @@ global.fetch = (path) => Promise.resolve({
 });
 window.AMP_PATCHHUB_UI.renderActiveJob([]);
 const fallbackHtml = document.getElementById("activeJob").innerHTML;
-fetchMode = "snapshot";
-window.AMP_PATCHHUB_UI.renderActiveJob([
-  { job_id: "job-live", status: "running", mode: "patch", issue_id: "310" },
-]);
 const cancelBtn = document.getElementById("cancelActive");
 await cancelBtn._listeners.click[0]({ target: cancelBtn });
 await new Promise((resolve) => setTimeout(resolve, 0));
@@ -468,7 +468,8 @@ process.stdout.write(JSON.stringify({
 """
     )
     result = _run_node(script)
-    assert "cancel unavailable: no queue-backed active job" in result["fallbackHtml"]
+    assert 'id="cancelActive"' in result["fallbackHtml"]
+    assert 'id="hardStopActive"' in result["fallbackHtml"]
     assert result["uiErrors"][-1] == "Cannot cancel"
 
 
@@ -485,7 +486,10 @@ def test_source_wires_rerun_latest_prepare_and_removes_workspace_auto_enqueue() 
 
     assert "Use for -l" in jobs_src
     assert 'phCall("prepareRerunLatestFromLatestJob")' in wire_src
-    assert "clearOnFailure: true" in wire_src
+    assert "clearOnFailure: false" in wire_src
+    assert "out.canonical_argv = out.canonical_argv.concat(gateArgv);" not in (
+        REPO_ROOT / "scripts" / "patchhub" / "static" / "app_part_gate_options.js"
+    ).read_text(encoding="utf-8")
     finalize_handler = workspaces_src.split('finBtn.addEventListener("click", () => {', 1)[1]
     finalize_handler = finalize_handler.split("});", 1)[0]
     assert 'phCall("enqueue")' not in finalize_handler
@@ -493,7 +497,7 @@ def test_source_wires_rerun_latest_prepare_and_removes_workspace_auto_enqueue() 
     patchhub_toml = (REPO_ROOT / "scripts" / "patchhub" / "patchhub.toml").read_text(
         encoding="utf-8"
     )
-    assert 'version = "1.12.5"' in patchhub_toml
+    assert 'version = "1.12.6"' in patchhub_toml
 
 
 def test_rerun_latest_helper_clears_form_when_no_detail_eligible_job() -> None:
@@ -525,17 +529,20 @@ global.apiGet = (path) => {
         job_id: "job-invalid",
         mode: "patch",
         issue_id: "312",
-        commit_message: "",
+        commit_message: "Invalid missing patch",
         effective_patch_path: "patches/issue_312_v5.zip",
         canonical_command: [
           "python3",
           "scripts/am_patch.py",
           "312",
-          "",
+          "Invalid missing patch",
           "patches/issue_312_v5.zip",
         ],
       },
     });
+  }
+  if (path === "/api/fs/stat?path=issue_312_v5.zip") {
+    return Promise.resolve({ ok: true, exists: false });
   }
   return Promise.resolve({ ok: false, error: "unexpected path: " + path });
 };
@@ -558,10 +565,10 @@ process.stdout.write(JSON.stringify({
     assert result["commitMsg"] == ""
     assert result["patchPath"] == ""
     assert result["uiErrors"] == []
-    assert result["uiStatus"][-1] == "rerun_latest: no eligible previous job"
+    assert result["uiStatus"][-1] == "rerun_latest: no usable previous job"
 
 
-def test_rerun_latest_selected_job_invalid_clears_form_and_sets_error() -> None:
+def test_rerun_latest_selected_job_invalid_leaves_form_unchanged_and_sets_error() -> None:
     script_path = REPO_ROOT / "scripts" / "patchhub" / "static" / "app_part_jobs.js"
     script = (
         _node_prelude(script_path)
@@ -574,17 +581,20 @@ global.apiGet = (path) => {
         job_id: "job-invalid",
         mode: "patch",
         issue_id: "312",
-        commit_message: "",
+        commit_message: "Invalid missing patch",
         effective_patch_path: "patches/issue_312_v5.zip",
         canonical_command: [
           "python3",
           "scripts/am_patch.py",
           "312",
-          "",
+          "Invalid missing patch",
           "patches/issue_312_v5.zip",
         ],
       },
     });
+  }
+  if (path === "/api/fs/stat?path=issue_312_v5.zip") {
+    return Promise.resolve({ ok: true, exists: false });
   }
   return Promise.resolve({ ok: false, error: "unexpected path: " + path });
 };
@@ -594,7 +604,7 @@ document.getElementById("commitMsg").value = "stale-message";
 document.getElementById("patchPath").value = "stale-patch";
 await prepareRerunLatestFromJobId("job-invalid", {
   sourceLabel: "selected jobs item",
-  clearOnFailure: true,
+  clearOnFailure: false,
 });
 process.stdout.write(JSON.stringify({
   issueId: document.getElementById("issueId").value,
@@ -606,12 +616,12 @@ process.stdout.write(JSON.stringify({
 """
     )
     result = _run_node(script)
-    assert result["issueId"] == ""
-    assert result["commitMsg"] == ""
-    assert result["patchPath"] == ""
+    assert result["issueId"] == "stale-issue"
+    assert result["commitMsg"] == "stale-message"
+    assert result["patchPath"] == "stale-patch"
     assert result["uiStatus"][-1] == (
-        "rerun_latest: selected job is not eligible for Start-form autofill"
+        "rerun_latest: selected job is not usable for Start-form autofill"
     )
     assert result["uiErrors"][-1] == (
-        "rerun_latest: selected job is not eligible for Start-form autofill"
+        "rerun_latest: selected job is not usable for Start-form autofill"
     )

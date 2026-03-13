@@ -208,10 +208,9 @@ function wireButtons() {
 			while (t && t !== el("jobsList")) {
 				const rerunJobId = t.getAttribute && t.getAttribute("data-rerun-jobid");
 				if (rerunJobId) {
-					el("mode").value = "rerun_latest";
 					phCall("prepareRerunLatestFromJobId", String(rerunJobId), {
 						sourceLabel: "selected jobs item",
-						clearOnFailure: true,
+						clearOnFailure: false,
 					});
 					return;
 				}

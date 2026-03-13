@@ -78,6 +78,51 @@ function extractRerunLatestValues(job) {
 	};
 }
 
+function rerunLatestPatchesRootPrefix() {
+	var raw =
+		cfg && cfg.paths && cfg.paths.patches_root
+			? String(cfg.paths.patches_root || "")
+			: "patches";
+	return raw.trim().replace(/\\/g, "/").replace(/^\/+/, "").replace(/\/+$/, "");
+}
+
+function rerunLatestPatchStatRel(patchPath) {
+	var full = normalizePatchPath(String(patchPath || "").trim())
+		.replace(/\\/g, "/")
+		.replace(/^\/+/, "");
+	var prefix = rerunLatestPatchesRootPrefix();
+	if (!full) return "";
+	if (!prefix) return full;
+	if (full === prefix) return "";
+	if (full.indexOf(prefix + "/") === 0) {
+		return full.slice(prefix.length + 1);
+	}
+	return full;
+}
+
+function loadRerunLatestUsableValues(job) {
+	var values = extractRerunLatestValues(job);
+	var rel = "";
+	if (!values) {
+		return Promise.resolve({ ok: false, reason: "detail_invalid" });
+	}
+	rel = rerunLatestPatchStatRel(values.patchPath);
+	if (!rel) {
+		return Promise.resolve({ ok: false, reason: "patch_missing" });
+	}
+	return apiGet("/api/fs/stat?path=" + encodeURIComponent(rel))
+		.then((resp) => {
+			if (!resp || resp.ok === false) {
+				return { ok: false, reason: "patch_stat_error" };
+			}
+			if (resp.exists === false) {
+				return { ok: false, reason: "patch_missing" };
+			}
+			return { ok: true, values: values };
+		})
+		.catch(() => ({ ok: false, reason: "patch_stat_error" }));
+}
+
 function applyRerunLatestValues(values, sourceLabel) {
 	if (!values) return false;
 	clearRerunLatestRawCommand();
@@ -111,42 +156,60 @@ function prepareRerunLatestFromJobId(jobId, opts) {
 	var clearOnFailure = opts.clearOnFailure !== false;
 	var failureStatus = String(
 		opts.failureStatus ||
-			"rerun_latest: selected job is not eligible for Start-form autofill",
+			"rerun_latest: selected job is not usable for Start-form autofill",
 	);
+	var requiredMode = String(opts.requiredMode || "").trim();
 	var errText = "Cannot load rerun_latest job";
 	if (!jobId) {
 		if (clearOnFailure) {
-			clearRerunLatestFormFields("rerun_latest: no eligible previous job");
+			clearRerunLatestFormFields("rerun_latest: no usable previous job");
+		} else {
+			setUiStatus("rerun_latest: no usable previous job");
 		}
 		return Promise.resolve(false);
 	}
 	setUiStatus("rerun_latest: loading job_id=" + String(jobId));
 	return loadJobDetail(jobId).then((resp) => {
 		if (seq !== rerunPrepareSeq) return false;
-		if (String(el("mode").value || "") !== "rerun_latest") return false;
+		if (requiredMode && String(el("mode").value || "") !== requiredMode) {
+			return false;
+		}
 		if (!resp || resp.ok === false || !resp.job) {
 			errText = String((resp && resp.error) || "Cannot load rerun_latest job");
 			if (clearOnFailure) {
 				clearRerunLatestFormFields(failureStatus);
+			} else {
+				setUiStatus(failureStatus);
 			}
 			setUiError(errText);
 			return false;
 		}
-		var values = extractRerunLatestValues(resp.job);
-		if (!values) {
-			if (clearOnFailure) {
-				clearRerunLatestFormFields(failureStatus);
+		return loadRerunLatestUsableValues(resp.job).then((usable) => {
+			var usableValues =
+				usable && usable.ok === true && "values" in usable
+					? usable.values
+					: null;
+			if (seq !== rerunPrepareSeq) return false;
+			if (requiredMode && String(el("mode").value || "") !== requiredMode) {
+				return false;
 			}
-			setUiError(failureStatus);
-			return false;
-		}
-		return applyRerunLatestValues(values, sourceLabel);
+			if (!usableValues) {
+				if (clearOnFailure) {
+					clearRerunLatestFormFields(failureStatus);
+				} else {
+					setUiStatus(failureStatus);
+				}
+				setUiError(failureStatus);
+				return false;
+			}
+			return applyRerunLatestValues(usableValues, sourceLabel);
+		});
 	});
 }
 
 function prepareRerunLatestFromLatestJob() {
 	var seq = ++rerunPrepareSeq;
-	setUiStatus("rerun_latest: resolving latest eligible job");
+	setUiStatus("rerun_latest: resolving latest usable job");
 	return apiGet("/api/jobs").then((resp) => {
 		function tryNext(candidates, idx) {
 			if (seq !== rerunPrepareSeq) return Promise.resolve(false);
@@ -154,7 +217,7 @@ function prepareRerunLatestFromLatestJob() {
 				return Promise.resolve(false);
 			}
 			if (idx >= candidates.length) {
-				clearRerunLatestFormFields("rerun_latest: no eligible previous job");
+				clearRerunLatestFormFields("rerun_latest: no usable previous job");
 				return Promise.resolve(false);
 			}
 			var jobId = String(
@@ -167,22 +230,33 @@ function prepareRerunLatestFromLatestJob() {
 				if (!detailResp || detailResp.ok === false || !detailResp.job) {
 					return tryNext(candidates, idx + 1);
 				}
-				var values = extractRerunLatestValues(detailResp.job);
-				if (!values) return tryNext(candidates, idx + 1);
-				return applyRerunLatestValues(values, "latest eligible");
+				return loadRerunLatestUsableValues(detailResp.job).then((usable) => {
+					var usableValues =
+						usable && usable.ok === true && "values" in usable
+							? usable.values
+							: null;
+					if (seq !== rerunPrepareSeq) return false;
+					if (String(el("mode").value || "") !== "rerun_latest") {
+						return false;
+					}
+					if (!usableValues) {
+						return tryNext(candidates, idx + 1);
+					}
+					return applyRerunLatestValues(usableValues, "latest usable");
+				});
 			});
 		}
 		if (seq !== rerunPrepareSeq) return false;
 		if (String(el("mode").value || "") !== "rerun_latest") return false;
 		if (!resp || resp.ok === false) {
-			clearRerunLatestFormFields("rerun_latest: no eligible previous job");
+			clearRerunLatestFormFields("rerun_latest: no usable previous job");
 			setUiError(String((resp && resp.error) || "Cannot load jobs"));
 			return false;
 		}
 		var jobs = Array.isArray(resp.jobs) ? resp.jobs : [];
 		var candidates = jobs.filter((job) => isRerunLatestListCandidate(job));
 		if (!candidates.length) {
-			clearRerunLatestFormFields("rerun_latest: no eligible previous job");
+			clearRerunLatestFormFields("rerun_latest: no usable previous job");
 			return false;
 		}
 		return tryNext(candidates, 0);

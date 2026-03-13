@@ -471,19 +471,10 @@
 	function renderActiveJob(jobs) {
 		var active = getTrackedActiveJob(jobs);
 		var activeStatus = "";
-		var hasSnapshotActive = false;
 		activeJobId = getTrackedActiveJobId(jobs) || null;
 		w.activeJobId = activeJobId;
 		var queued = (jobs || []).filter((j) => j.status === "queued");
 		var jidEnc = "";
-		if (active && Array.isArray(jobs) && jobs.length) {
-			hasSnapshotActive = jobs.some(
-				(j) => String(j.job_id || "") === String(active.job_id || ""),
-			);
-		}
-		if (active && !hasSnapshotActive) {
-			queued = [];
-		}
 
 		var box = el("activeJob");
 		if (!box) return;
@@ -503,21 +494,16 @@
 			html +=
 				`<div class="muted">mode=${escapeHtml(active.mode || "")} ` +
 				`issue=${escapeHtml(active.issue_id || "")}</div>`;
-			if (hasSnapshotActive) {
+			html +=
+				'<div class="row"><button class="btn btn-small" id="cancelActive">Cancel</button>';
+			if (activeStatus === "running") {
 				html +=
-					'<div class="row"><button class="btn btn-small" id="cancelActive">Cancel</button>';
-				if (activeStatus === "running") {
-					html +=
-						'<button class="btn btn-small" id="hardStopActive">Hard stop AMP</button>';
-				}
-				html +=
-					'<a class="linklike" href="/api/jobs/' +
-					jidEnc +
-					'/log_tail?lines=200">log</a></div>';
-			} else {
-				html +=
-					'<div class="muted">cancel unavailable: no queue-backed active job</div>';
+					'<button class="btn btn-small" id="hardStopActive">Hard stop AMP</button>';
 			}
+			html +=
+				'<a class="linklike" href="/api/jobs/' +
+				jidEnc +
+				'/log_tail?lines=200">log</a></div>';
 		}
 
 		if (queued.length) {
@@ -527,7 +513,7 @@
 		box.innerHTML = html;
 
 		var cancelBtn = el("cancelActive");
-		if (cancelBtn && active && active.job_id && hasSnapshotActive) {
+		if (cancelBtn && active && active.job_id) {
 			cancelBtn.addEventListener("click", () => {
 				apiPost(
 					`/api/jobs/${encodeURIComponent(active.job_id)}/cancel`,
@@ -542,7 +528,7 @@
 		}
 
 		var hardStopBtn = el("hardStopActive");
-		if (hardStopBtn && active && active.job_id && hasSnapshotActive) {
+		if (hardStopBtn && active && active.job_id) {
 			hardStopBtn.addEventListener("click", () => {
 				apiPost(
 					`/api/jobs/${encodeURIComponent(active.job_id)}/hard_stop`,
