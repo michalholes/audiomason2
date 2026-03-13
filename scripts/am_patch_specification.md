@@ -666,7 +666,9 @@ Policy keys:
 - pytest_routing_mode in {legacy, bucketed}
 - pytest_roots: dict[str, str]
 - pytest_tree: dict[str, str]
+- pytest_namespace_modules: dict[str, list[str]]
 - pytest_dependencies: dict[str, list[str]]
+- pytest_external_dependencies: dict[str, list[str]]
 - pytest_full_suite_prefixes: list[str]
 
 Mode semantics:
@@ -702,9 +704,19 @@ Auto mode triggers (decision-only; deterministic):
   - If no tree entry matches, explicit root matching uses `pytest_roots` excluding `*`.
   - If no explicit root matches, the changed path routes to the catch-all `*` namespace.
   - Discovery maps tests to namespace ownership.
+  - Discovery and validator evidence MUST be driven by both `pytest_tree` path signals and
+    `pytest_namespace_modules` module-prefix signals.
+  - `pytest_namespace_modules` maps each namespace to zero or more module prefixes. New roots,
+    leafs, and nodes MUST become discovery- and validator-addressable by config alone once they
+    are added to `pytest_tree` and `pytest_namespace_modules`; bucketed mode MUST NOT require new
+    Python hardcode for each added namespace family.
   - `pytest_dependencies` is one-way. If namespace `A` depends on namespace `B`, a patch that
     touches `B` MUST also include tests owned by `A`. A patch that touches `A` MUST NOT include
     tests owned by `B` solely because of that dependency.
+  - `pytest_external_dependencies` is also one-way, but it is reserved for explicit routing-policy
+    overrides that are not presented as repo-documented dependency evidence. Routing MAY use the
+    union of `pytest_dependencies` and `pytest_external_dependencies`, but validator output and
+    tests MUST keep the two layers separate.
   - If a touched node has no explicit dependency rule, routing falls back to its subtree suite.
   - If the touched subtree has no explicit dependency rule, routing falls back to its root suite.
   - Full suite escalation is controlled only by `pytest_full_suite_prefixes`.
@@ -743,8 +755,8 @@ most common mode switches. The flags map to policy keys as follows:
 `--pytest-routing-mode` semantics:
 - `legacy` keeps the current single-target behavior and passes pytest_targets directly.
 - `bucketed` enables namespace routing using `pytest_roots`, `pytest_tree`,
-  `pytest_dependencies`, discovery ownership, direct changed tests, and
-  `pytest_full_suite_prefixes`.
+  `pytest_namespace_modules`, `pytest_dependencies`, `pytest_external_dependencies`,
+  discovery ownership, direct changed tests, and `pytest_full_suite_prefixes`.
 - `--pytest-mode` continues to control trigger timing only. It does not replace pytest_routing_mode.
 - The shipped repo policy may choose bucketed as the default routing mode; the mode remains fully configurable.
 

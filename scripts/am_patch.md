@@ -38,13 +38,19 @@ Pytest routing:
 - `bucketed` uses namespace routing plus discovery:
   - `pytest_roots` defines root namespaces. The minimal shipped roots are `amp.*`, `am2.*`, and `*`.
   - `pytest_tree` maps namespace nodes and subtrees to repo path prefixes.
-  - `pytest_dependencies` defines one-way namespace dependencies.
-  - discovery maps tests to namespaces.
+  - `pytest_namespace_modules` maps each namespace to zero or more module prefixes used by discovery and validator evidence.
+  - `pytest_dependencies` defines repo-documented one-way namespace dependencies.
+  - `pytest_external_dependencies` defines explicit one-way routing overrides that are not presented as repo-documented dependency evidence.
+  - discovery maps tests to namespaces using both tree/path signals and namespace module-prefix signals.
   - direct changed tests are always included.
   - `pytest_full_suite_prefixes` defines the explicit global full-suite escalation surface.
 - Dependency semantics are one-way:
   - if `A` depends on `B`, a patch that touches `B` must also run tests owned by `A`.
   - a patch that touches `A` must not pull tests owned by `B` solely because of that dependency.
+- Evidence semantics are split:
+  - `pytest_dependencies` is reserved for repo-documented or repo-verifiable dependency edges.
+  - `pytest_external_dependencies` is reserved for explicit routing-policy overrides that are not claimed as repo-documented evidence.
+  - routing may use the union of both layers, but validator output and tests must keep the two layers separate.
 - Fallback semantics in bucketed mode:
   - if a touched node has no explicit dependency rule, route it to its subtree suite.
   - if the touched subtree has no explicit dependency rule, route it to its root suite.
