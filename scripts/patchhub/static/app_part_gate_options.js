@@ -266,13 +266,6 @@ function renderGateOptionsModal() {
 		html += "</span>";
 		html += "</button>";
 		html += "</div>";
-		html += '<div class="gate-options-group passive">';
-		html += '<div class="gate-options-caption">Config</div>';
-		html +=
-			'<div class="gate-options-passive">' +
-			(configRun ? "RUN" : "SKIP") +
-			"</div>";
-		html += "</div>";
 		html += "</div>";
 		html += "</div>";
 	}

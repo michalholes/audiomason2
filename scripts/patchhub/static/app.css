@@ -785,7 +785,6 @@ input::placeholder {
 .zip-subset-list-head {
 	display: grid;
 	grid-template-columns: 32px minmax(0, 1fr);
-	gap: 12px;
 	align-items: center;
 	padding: 10px 12px;
 	border: 1px solid #2b467b;
@@ -806,7 +805,7 @@ input::placeholder {
 .zip-subset-item {
 	display: grid;
 	grid-template-columns: 32px minmax(0, 1fr);
-	gap: 12px;
+	gap: 0;
 	align-items: center;
 	padding: 10px 12px;
 	border-bottom: 1px solid #1f3460;
@@ -898,10 +897,10 @@ input::placeholder {
 
 .gate-options-row {
 	display: grid;
-	grid-template-columns: minmax(120px, 1.2fr) minmax(150px, auto);
+	grid-template-columns: minmax(120px, 1.2fr) minmax(92px, auto);
 	gap: 10px;
 	align-items: center;
-	padding: 10px 0;
+	padding: 9px 0;
 	border-bottom: 1px solid rgba(116, 145, 205, 0.28);
 	background: linear-gradient(
 		90deg,
@@ -935,12 +934,8 @@ input::placeholder {
 .gate-options-group {
 	display: flex;
 	flex-direction: column;
-	gap: 4px;
-}
-
-.gate-options-group.passive {
 	align-items: flex-end;
-	min-width: 56px;
+	gap: 4px;
 }
 
 .gate-options-caption {
@@ -956,8 +951,8 @@ input::placeholder {
 	align-items: center;
 	justify-content: flex-start;
 	padding: 2px;
-	width: 75px;
-	height: 29px;
+	width: 60px;
+	height: 23px;
 	border: 1px solid rgba(96, 120, 178, 0.55);
 	border-radius: 999px;
 	background: linear-gradient(
@@ -999,7 +994,7 @@ input::placeholder {
 	content: "";
 	position: absolute;
 	inset: 0 auto 0 0;
-	width: 56%;
+	width: calc(100% - 3px);
 	border-radius: inherit;
 	background: linear-gradient(
 		180deg,
@@ -1023,9 +1018,9 @@ input::placeholder {
 .gate-options-switch-thumb {
 	position: absolute;
 	top: 50%;
-	left: calc(50% - 10px);
-	width: 20px;
-	height: 20px;
+	left: calc(100% - 18px);
+	width: 16px;
+	height: 16px;
 	border-radius: 50%;
 	background: linear-gradient(
 		180deg,
@@ -1035,9 +1030,9 @@ input::placeholder {
 	box-shadow:
 		0 2px 10px rgba(0, 0, 0, 0.36),
 		inset 0 1px 1px rgba(255, 255, 255, 0.36);
-	transform: translate(0, -50%);
+	transform: translateY(-50%);
 	transition:
-		transform 140ms ease,
+		left 140ms ease,
 		background 140ms ease;
 }
 
@@ -1047,23 +1042,7 @@ input::placeholder {
 		rgba(98, 108, 151, 0.96),
 		rgba(59, 68, 109, 0.96)
 	);
-	transform: translate(-22px, -50%);
-}
-
-.gate-options-passive {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	min-width: 48px;
-	height: 24px;
-	padding: 0 9px;
-	border: 1px solid rgba(106, 127, 175, 0.34);
-	border-radius: 999px;
-	background: rgba(12, 20, 40, 0.82);
-	font-size: 12px;
-	font-weight: 700;
-	letter-spacing: 0.06em;
-	color: #d8e3ff;
+	left: 2px;
 }
 
 .gate-options-modal-footer {
