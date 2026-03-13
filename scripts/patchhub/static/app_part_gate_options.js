@@ -372,12 +372,17 @@ function initGateOptionsUi() {
 	if (list) {
 		list.addEventListener("click", (event) => {
 			var target = event && event.target ? event.target : null;
-			if (!target || !target.getAttribute) return;
-			var key = String(target.getAttribute("data-gate-key") || "");
+			var button =
+				target && typeof target.closest === "function"
+					? target.closest(".gate-options-switch")
+					: null;
+			var key;
+			if (!button || !button.getAttribute) return;
+			key = String(button.getAttribute("data-gate-key") || "");
 			if (!key) return;
 			setGateRunState(
 				key,
-				String(target.getAttribute("data-gate-run") || "") === "true",
+				String(button.getAttribute("data-gate-run") || "") === "true",
 			);
 		});
 	}
