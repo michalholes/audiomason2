@@ -465,6 +465,43 @@
 		return "";
 	}
 
+	function copyLiveTextExecCommand(payload) {
+		return new Promise((resolve, reject) => {
+			var ta = null;
+			var ok = false;
+			try {
+				if (!document || !document.body || !document.createElement) {
+					reject(new Error("clipboard unavailable"));
+					return;
+				}
+				ta = document.createElement("textarea");
+				ta.value = payload;
+				ta.setAttribute("readonly", "true");
+				ta.style.position = "absolute";
+				ta.style.left = "-9999px";
+				document.body.appendChild(ta);
+				ta.select();
+				ok = document.execCommand && document.execCommand("copy");
+				document.body.removeChild(ta);
+				ta = null;
+				if (ok) {
+					resolve(payload);
+					return;
+				}
+				reject(new Error("execCommand(copy) returned false"));
+			} catch (e) {
+				if (ta) {
+					try {
+						document.body.removeChild(ta);
+					} catch (removeErr) {
+						console.error("PatchHub live copy cleanup failed:", removeErr);
+					}
+				}
+				reject(e);
+			}
+		});
+	}
+
 	function copyLiveText(text) {
 		var payload = String(text || "");
 		if (!payload) return Promise.resolve("");
@@ -473,9 +510,12 @@
 			nav = window.navigator;
 		}
 		if (nav && nav.clipboard && nav.clipboard.writeText) {
-			return nav.clipboard.writeText(payload).then(() => payload);
+			return nav.clipboard.writeText(payload).then(
+				() => payload,
+				() => copyLiveTextExecCommand(payload),
+			);
 		}
-		return Promise.reject(new Error("clipboard unavailable"));
+		return copyLiveTextExecCommand(payload);
 	}
 
 	function copyLiveSelection() {
