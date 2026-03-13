@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+import tomllib
 from pathlib import Path
 
 import pytest
@@ -10,6 +11,19 @@ import pytest
 
 def _repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
+
+
+def _configured_pytest_routing_mode(repo_root: Path) -> str:
+    config_path = repo_root / "scripts" / "am_patch" / "am_patch.toml"
+    data = tomllib.loads(config_path.read_text(encoding="utf-8"))
+    flat: dict[str, object] = {}
+    for key, value in data.items():
+        if isinstance(value, dict):
+            for subkey, subvalue in value.items():
+                flat[str(subkey)] = subvalue
+        else:
+            flat[str(key)] = value
+    return str(flat.get("pytest_routing_mode", "bucketed"))
 
 
 @pytest.mark.parametrize(
@@ -76,6 +90,8 @@ def test_am_patch_show_config_prints_pytest_routing_keys() -> None:
     )
     out = (p.stdout or "") + (p.stderr or "")
     assert p.returncode == 0, out
-    assert "pytest_routing_mode='bucketed'" in out
+
+    expected_mode = _configured_pytest_routing_mode(repo_root)
+    assert f"pytest_routing_mode={expected_mode!r}" in out
     assert "pytest_smoke_targets=" in out
     assert "pytest_area_targets=" in out
