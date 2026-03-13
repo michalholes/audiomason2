@@ -838,10 +838,12 @@ Main-screen control rules:
   - finalize_workspace
   - rerun_latest
 - finalize_live MUST NOT expose or apply gate overrides.
-- The modal renders one row per gate with exactly two visible state surfaces:
-  - This run: clickable RUN/SKIP state
-  - Config: passive RUN/SKIP state
+- The modal renders one row per gate with exactly one visible interactive state surface:
+  - This run: clickable binary switch representing RUN vs SKIP
+- The modal MUST NOT render a separate Config column or passive RUN/SKIP pill.
 - The UI MUST NOT expose a visible inherit state.
+- The switch visual MUST use full-travel end positions so the thumb reaches the
+  left edge for SKIP and the right edge for RUN.
 - Gate overrides are transient for the current run only and MUST NOT write to
   AMP config.
 - After successful enqueue, terminal mode reset, or autofill token change, the
