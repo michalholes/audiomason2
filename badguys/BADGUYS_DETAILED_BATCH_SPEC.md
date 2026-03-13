@@ -5,6 +5,7 @@ so that it fully enforces the AudioMason2 runner specification.
 
 This is a **design-level specification**, not implementation.
 It defines *what each test must do and prove*, not *how it is coded*.
+The authoritative BadGuys specification is docs/badguys_specification.jsonl.
 
 ---
 

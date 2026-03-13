@@ -1,11 +1,11 @@
 # BadGuys Specification
 
-Status: normative
+Status: mirror (non-authoritative)
 
-Specification Version: 0.3.4
+Specification Version: 0.3.5
 
-This document is the authoritative specification for the BadGuys suite shipped in this repository.
-BadGuys exists to systematically break the AM Patch Runner and verify that it FAILs correctly.
+The authoritative BadGuys specification for this repository is docs/badguys_specification.jsonl.
+This Markdown file is a human-readable mirror. BadGuys exists to systematically break the AM Patch Runner and verify that it FAILs correctly.
 
 Normative keywords: MUST, MUST NOT, SHOULD, SHOULD NOT, MAY are used in their standard RFC sense.
 
