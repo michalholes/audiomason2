@@ -5,10 +5,13 @@ from collections.abc import Mapping, Sequence
 from .errors import RunnerError
 from .pytest_namespace_config import (
     PYTEST_DEPENDENCIES_DEFAULT,
+    PYTEST_EXTERNAL_DEPENDENCIES_DEFAULT,
     PYTEST_FULL_SUITE_PREFIXES_DEFAULT,
+    PYTEST_NAMESPACE_MODULES_DEFAULT,
     PYTEST_ROOTS_DEFAULT,
     PYTEST_TREE_DEFAULT,
     _normalize_dependencies,
+    _normalize_namespace_modules,
 )
 from .pytest_namespace_routing import select_namespace_pytest_targets
 
@@ -68,8 +71,14 @@ def select_pytest_targets(
 
     pytest_roots = _mapping_dict_str(routing_policy, "pytest_roots")
     pytest_tree = _mapping_dict_str(routing_policy, "pytest_tree")
+    pytest_namespace_modules = _normalize_namespace_modules(
+        _mapping_dict_list(routing_policy, "pytest_namespace_modules")
+    )
     pytest_dependencies = _normalize_dependencies(
         _mapping_dict_list(routing_policy, "pytest_dependencies")
+    )
+    pytest_external_dependencies = _normalize_dependencies(
+        _mapping_dict_list(routing_policy, "pytest_external_dependencies")
     )
     pytest_full_suite_prefixes = _mapping_list(routing_policy, "pytest_full_suite_prefixes")
 
@@ -78,7 +87,11 @@ def select_pytest_targets(
         pytest_targets=pytest_targets,
         pytest_roots=pytest_roots or PYTEST_ROOTS_DEFAULT,
         pytest_tree=pytest_tree or PYTEST_TREE_DEFAULT,
+        pytest_namespace_modules=(pytest_namespace_modules or PYTEST_NAMESPACE_MODULES_DEFAULT),
         pytest_dependencies=pytest_dependencies or PYTEST_DEPENDENCIES_DEFAULT,
+        pytest_external_dependencies=(
+            pytest_external_dependencies or PYTEST_EXTERNAL_DEPENDENCIES_DEFAULT
+        ),
         pytest_full_suite_prefixes=(
             pytest_full_suite_prefixes or PYTEST_FULL_SUITE_PREFIXES_DEFAULT
         ),

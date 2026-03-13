@@ -31,6 +31,31 @@ PYTEST_TREE_DEFAULT = {
     "am2.plugins.web_interface": "plugins/web_interface/",
 }
 
+PYTEST_NAMESPACE_MODULES_DEFAULT = {
+    "amp": ["am_patch", "scripts.am_patch"],
+    "amp.phb": ["patchhub", "scripts.patchhub"],
+    "amp.badguys": ["badguys"],
+    "am2": ["audiomason.core"],
+    "am2.plugins": ["plugins"],
+    "am2.plugins.audio_processor": ["plugins.audio_processor"],
+    "am2.plugins.cmd_interface": ["plugins.cmd_interface"],
+    "am2.plugins.cover_handler": ["plugins.cover_handler"],
+    "am2.plugins.daemon": ["plugins.daemon"],
+    "am2.plugins.diagnostics_console": ["plugins.diagnostics_console"],
+    "am2.plugins.example_plugin": ["plugins.example_plugin"],
+    "am2.plugins.file_io": ["plugins.file_io"],
+    "am2.plugins.id3_tagger": ["plugins.id3_tagger"],
+    "am2.plugins.import": ["plugins.import"],
+    "am2.plugins.metadata_googlebooks": ["plugins.metadata_googlebooks"],
+    "am2.plugins.metadata_openlibrary": ["plugins.metadata_openlibrary"],
+    "am2.plugins.syslog": ["plugins.syslog"],
+    "am2.plugins.test_all_plugin": ["plugins.test_all_plugin"],
+    "am2.plugins.text_utils": ["plugins.text_utils"],
+    "am2.plugins.tui": ["plugins.tui"],
+    "am2.plugins.ui_rich": ["plugins.ui_rich"],
+    "am2.plugins.web_interface": ["plugins.web_interface"],
+}
+
 PYTEST_DEPENDENCIES_DEFAULT = {
     "amp.phb": ["amp"],
     "amp.badguys": ["amp"],
@@ -40,13 +65,6 @@ PYTEST_DEPENDENCIES_DEFAULT = {
         "am2.plugins.metadata_openlibrary",
         "am2.plugins.audio_processor",
         "am2.plugins.id3_tagger",
-        "am2.plugins.cmd_interface",
-        "am2.plugins.daemon",
-        "am2.plugins.diagnostics_console",
-        "am2.plugins.metadata_googlebooks",
-        "am2.plugins.syslog",
-        "am2.plugins.text_utils",
-        "am2.plugins.web_interface",
     ],
     "am2.plugins.web_interface": [
         "am2.plugins.file_io",
@@ -55,6 +73,18 @@ PYTEST_DEPENDENCIES_DEFAULT = {
     "am2.plugins.diagnostics_console": ["am2.plugins.file_io"],
     "am2.plugins.syslog": ["am2.plugins.file_io"],
     "am2.plugins.tui": ["am2.plugins.file_io"],
+}
+
+PYTEST_EXTERNAL_DEPENDENCIES_DEFAULT = {
+    "am2.plugins.import": [
+        "am2.plugins.cmd_interface",
+        "am2.plugins.daemon",
+        "am2.plugins.diagnostics_console",
+        "am2.plugins.metadata_googlebooks",
+        "am2.plugins.syslog",
+        "am2.plugins.text_utils",
+        "am2.plugins.web_interface",
+    ],
 }
 
 PYTEST_FULL_SUITE_PREFIXES_DEFAULT = [
@@ -172,3 +202,20 @@ def _namespace_contains(parent: str, child: str) -> bool:
     if p == "*":
         return True
     return c == p or c.startswith(p + ".")
+
+
+def _normalize_namespace_modules(
+    raw: Mapping[str, Sequence[str]] | None,
+) -> dict[str, list[str]]:
+    out: dict[str, list[str]] = {}
+    for namespace, prefixes in (raw or {}).items():
+        ns = _namespace_stem(str(namespace))
+        if not ns or ns == "*" or not isinstance(prefixes, Sequence):
+            continue
+        cleaned: list[str] = []
+        for prefix in prefixes:
+            item = str(prefix).strip().strip(".")
+            if item and item not in cleaned:
+                cleaned.append(item)
+        out[ns] = cleaned
+    return out

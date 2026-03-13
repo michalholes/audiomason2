@@ -22,4 +22,6 @@ def test_policy_schema_exposes_bucketed_pytest_routing_keys() -> None:
     assert schema["schema_version"] == "2"
     assert policy["pytest_routing_mode"]["enum"] == ["legacy", "bucketed"]
     assert policy["pytest_roots"]["type"] == "dict[str,str]"
+    assert policy["pytest_namespace_modules"]["type"] == "dict[str,list[str]]"
     assert policy["pytest_dependencies"]["type"] == "dict[str,list[str]]"
+    assert policy["pytest_external_dependencies"]["type"] == "dict[str,list[str]]"

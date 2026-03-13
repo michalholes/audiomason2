@@ -20,32 +20,35 @@ class NamespaceMatcher:
         *,
         namespace: str,
         path_prefix: str,
-        module_prefix: str | None,
+        module_prefixes: Sequence[str],
     ) -> None:
         self.namespace = _namespace_stem(namespace)
         self.path_prefix = _normalize_path(path_prefix)
-        self.module_prefix = module_prefix.strip(".") if module_prefix else None
+        self.module_prefixes = tuple(
+            prefix.strip(".") for prefix in module_prefixes if str(prefix).strip().strip(".")
+        )
 
     def matches_module(self, module_name: str) -> bool:
-        if not self.module_prefix:
-            return False
-        return module_name == self.module_prefix or module_name.startswith(self.module_prefix + ".")
+        return any(
+            module_name == prefix or module_name.startswith(prefix + ".")
+            for prefix in self.module_prefixes
+        )
 
     def matches_text(self, text: str) -> bool:
         if self.path_prefix and self.path_prefix in text:
             return True
-        if not self.module_prefix:
-            return False
-        module = self.module_prefix
-        markers = (
-            f'"{module}',
-            f"'{module}",
-            f" {module}.",
-            f"from {module}",
-            f"import {module}",
-            f"({module}",
-        )
-        return any(marker in text for marker in markers)
+        for module in self.module_prefixes:
+            markers = (
+                f'"{module}',
+                f"'{module}",
+                f" {module}.",
+                f"from {module}",
+                f"import {module}",
+                f"({module}",
+            )
+            if any(marker in text for marker in markers):
+                return True
+        return False
 
 
 class _RefCollector(ast.NodeVisitor):
@@ -113,23 +116,6 @@ class _ScriptPathCollector(ast.NodeVisitor):
 
 def default_repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
-
-
-def _module_prefix_for_path(path_prefix: str) -> str | None:
-    prefix = _normalize_path(path_prefix).rstrip("/")
-    if not prefix:
-        return None
-    if prefix.startswith("plugins/"):
-        return prefix.replace("/", ".")
-    if prefix == "scripts/am_patch":
-        return "am_patch"
-    if prefix.startswith("scripts/patchhub"):
-        return "patchhub"
-    if prefix == "badguys":
-        return "badguys"
-    if prefix == "src/audiomason/core":
-        return "audiomason.core"
-    return None
 
 
 def _test_file_paths(repo_root: Path) -> list[str]:
@@ -519,6 +505,7 @@ def _matcher_defs(
     *,
     roots: Mapping[str, str],
     tree: Mapping[str, str],
+    namespace_modules: Mapping[str, Sequence[str]],
 ) -> tuple[NamespaceMatcher, ...]:
     matchers: dict[str, NamespaceMatcher] = {}
     for raw_namespace, prefix in roots.items():
@@ -530,14 +517,15 @@ def _matcher_defs(
             NamespaceMatcher(
                 namespace=namespace,
                 path_prefix=prefix,
-                module_prefix=_module_prefix_for_path(prefix),
+                module_prefixes=namespace_modules.get(namespace, ()),
             ),
         )
     for namespace, prefix in tree.items():
-        matchers[_namespace_stem(namespace)] = NamespaceMatcher(
+        stem = _namespace_stem(namespace)
+        matchers[stem] = NamespaceMatcher(
             namespace=namespace,
             path_prefix=prefix,
-            module_prefix=_module_prefix_for_path(prefix),
+            module_prefixes=namespace_modules.get(stem, ()),
         )
     ordered = sorted(matchers.values(), key=lambda item: (-len(item.namespace), item.namespace))
     return tuple(ordered)
@@ -577,11 +565,17 @@ def discover_namespace_ownership(
     repo_root_str: str,
     roots_items: tuple[tuple[str, str], ...],
     tree_items: tuple[tuple[str, str], ...],
+    namespace_modules_items: tuple[tuple[str, tuple[str, ...]], ...],
 ) -> tuple[tuple[str, tuple[str, ...]], ...]:
     repo_root = Path(repo_root_str)
     roots = dict(roots_items)
     tree = dict(tree_items)
-    matchers = _matcher_defs(roots=roots, tree=tree)
+    namespace_modules = {key: list(values) for key, values in namespace_modules_items}
+    matchers = _matcher_defs(
+        roots=roots,
+        tree=tree,
+        namespace_modules=namespace_modules,
+    )
     known_roots = set(_root_namespaces(roots))
     known_paths = _python_paths_under_tests(repo_root)
 

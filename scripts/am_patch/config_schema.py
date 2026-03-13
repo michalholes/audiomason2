@@ -94,7 +94,9 @@ _SECTION_BY_KEY: dict[str, str] = {
     "pytest_routing_mode": "",
     "pytest_roots": "pytest_roots",
     "pytest_tree": "pytest_tree",
+    "pytest_namespace_modules": "pytest_dependencies",
     "pytest_dependencies": "pytest_dependencies",
+    "pytest_external_dependencies": "pytest_dependencies",
     "pytest_full_suite_prefixes": "",
     "gate_docs_include": "",
     "gate_docs_exclude": "",
@@ -212,7 +214,9 @@ _LABEL_BY_KEY: dict[str, str] = {
     "pytest_routing_mode": "Pytest: routing mode",
     "pytest_roots": "Pytest: namespace roots",
     "pytest_tree": "Pytest: namespace tree",
+    "pytest_namespace_modules": "Pytest: namespace modules",
     "pytest_dependencies": "Pytest: namespace dependencies",
+    "pytest_external_dependencies": "Pytest: external dependencies",
     "pytest_full_suite_prefixes": "Pytest: full-suite prefixes",
     "pytest_use_venv": "Pytest: use venv",
     "run_all_tests": "Workflow: run all gates",
@@ -314,9 +318,17 @@ _HELP_BY_KEY: dict[str, str] = {
         "Most-specific namespace subtree mapping for bucketed pytest routing. "
         "See: scripts/am_patch_policy_glossary.md## Key: pytest_tree"
     ),
+    "pytest_namespace_modules": (
+        "Namespace-to-module-prefix mapping used by discovery and validator evidence. "
+        "See: scripts/am_patch_policy_glossary.md## Key: pytest_namespace_modules"
+    ),
     "pytest_dependencies": (
-        "One-way namespace dependency map used for reverse-closure routing. "
+        "One-way repo-verifiable namespace dependency map used for reverse-closure routing. "
         "See: scripts/am_patch_policy_glossary.md## Key: pytest_dependencies"
+    ),
+    "pytest_external_dependencies": (
+        "One-way explicit routing overrides that are not claimed as repo-verifiable evidence. "
+        "See: scripts/am_patch_policy_glossary.md## Key: pytest_external_dependencies"
     ),
     "pytest_full_suite_prefixes": (
         "Prefixes that escalate bucketed pytest routing to the full pytest target set. "

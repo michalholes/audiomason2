@@ -10,6 +10,7 @@ from .pytest_namespace_config import (
     _namespace_stem,
     _normalize_dependencies,
     _normalize_full_suite_prefixes,
+    _normalize_namespace_modules,
     _normalize_roots,
     _normalize_tree,
     _root_for_namespace,
@@ -28,7 +29,9 @@ def _validate_policy_once(
     repo_root_str: str,
     roots_items: tuple[tuple[str, str], ...],
     tree_items: tuple[tuple[str, str], ...],
+    namespace_module_items: tuple[tuple[str, tuple[str, ...]], ...],
     dependency_items: tuple[tuple[str, tuple[str, ...]], ...],
+    external_dependency_items: tuple[tuple[str, tuple[str, ...]], ...],
 ) -> None:
     repo_root = Path(repo_root_str)
     if not (repo_root / "plugins").exists():
@@ -39,7 +42,11 @@ def _validate_policy_once(
         repo_root=repo_root,
         pytest_roots=dict(roots_items),
         pytest_tree=dict(tree_items),
+        pytest_namespace_modules={key: list(values) for key, values in namespace_module_items},
         pytest_dependencies={key: list(values) for key, values in dependency_items},
+        pytest_external_dependencies={
+            key: list(values) for key, values in external_dependency_items
+        },
     )
 
 
@@ -53,6 +60,25 @@ def dedupe_keep_first(items: Sequence[str]) -> list[str]:
         seen.add(value)
         out.append(value)
     return out
+
+
+def _merge_dependency_layers(
+    dependencies: Mapping[str, Sequence[str]],
+    external_dependencies: Mapping[str, Sequence[str]],
+) -> dict[str, list[str]]:
+    merged: dict[str, list[str]] = {
+        _namespace_stem(namespace): [
+            _namespace_stem(provider) for provider in providers if _namespace_stem(provider) != "*"
+        ]
+        for namespace, providers in dependencies.items()
+    }
+    for namespace, providers in external_dependencies.items():
+        merged.setdefault(_namespace_stem(namespace), [])
+        for provider in providers:
+            stem = _namespace_stem(provider)
+            if stem != "*" and stem not in merged[_namespace_stem(namespace)]:
+                merged[_namespace_stem(namespace)].append(stem)
+    return merged
 
 
 def match_namespace(
@@ -163,27 +189,35 @@ def select_namespace_pytest_targets(
     pytest_targets: Sequence[str],
     pytest_roots: Mapping[str, str],
     pytest_tree: Mapping[str, str],
+    pytest_namespace_modules: Mapping[str, Sequence[str]],
     pytest_dependencies: Mapping[str, Sequence[str]],
+    pytest_external_dependencies: Mapping[str, Sequence[str]],
     pytest_full_suite_prefixes: Sequence[str],
     repo_root=None,
 ) -> list[str]:
     roots = _normalize_roots(pytest_roots)
     tree = _normalize_tree(pytest_tree)
+    namespace_modules = _normalize_namespace_modules(pytest_namespace_modules)
     dependencies = _normalize_dependencies(pytest_dependencies)
+    external_dependencies = _normalize_dependencies(pytest_external_dependencies)
+    merged_dependencies = _merge_dependency_layers(dependencies, external_dependencies)
     full_suite_prefixes = _normalize_full_suite_prefixes(pytest_full_suite_prefixes)
     repo_root = default_repo_root() if repo_root is None else repo_root
     _validate_policy_once(
         str(repo_root),
         tuple(sorted(roots.items())),
         tuple(sorted(tree.items())),
+        tuple(sorted((key, tuple(values)) for key, values in namespace_modules.items())),
         tuple(sorted((key, tuple(values)) for key, values in dependencies.items())),
+        tuple(sorted((key, tuple(values)) for key, values in external_dependencies.items())),
     )
     ownership = discover_namespace_ownership(
         str(repo_root),
         tuple(sorted(roots.items())),
         tuple(sorted(tree.items())),
+        tuple(sorted((key, tuple(values)) for key, values in namespace_modules.items())),
     )
-    reverse_closure = reverse_dependency_closure(dependencies)
+    reverse_closure = reverse_dependency_closure(merged_dependencies)
 
     selected: list[str] = []
     selected.extend(path for path in decision_paths if is_direct_test_path(path))
@@ -200,7 +234,7 @@ def select_namespace_pytest_targets(
         selected.extend(
             namespace_targets(
                 namespace=namespace,
-                dependencies=dependencies,
+                dependencies=merged_dependencies,
                 reverse_closure=reverse_closure,
                 ownership=ownership,
                 roots=roots,

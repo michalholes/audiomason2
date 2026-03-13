@@ -10,7 +10,9 @@ sys.path.insert(0, str(SCRIPTS_DIR))
 from am_patch.pytest_bucket_routing import select_pytest_targets  # noqa: E402
 from am_patch.pytest_namespace_config import (  # noqa: E402
     PYTEST_DEPENDENCIES_DEFAULT,
+    PYTEST_EXTERNAL_DEPENDENCIES_DEFAULT,
     PYTEST_FULL_SUITE_PREFIXES_DEFAULT,
+    PYTEST_NAMESPACE_MODULES_DEFAULT,
     PYTEST_ROOTS_DEFAULT,
     PYTEST_TREE_DEFAULT,
 )
@@ -29,12 +31,12 @@ def _write(rel_path: str, text: str, *, root: Path) -> None:
 def _make_repo(tmp_path: Path) -> Path:
     _write(
         "tests/test_amp_root.py",
-        "from am_patch.cli import main\n",
+        "from scripts.am_patch.cli import main\n",
         root=tmp_path,
     )
     _write(
         "tests/test_patchhub_ui.py",
-        "from patchhub.app import create_app\n",
+        "from scripts.patchhub.app import create_app\n",
         root=tmp_path,
     )
     _write(
@@ -90,15 +92,27 @@ def _make_repo(tmp_path: Path) -> Path:
     return tmp_path
 
 
-def _bucketed_targets(*, decision_paths: list[str], repo_root: Path) -> list[str]:
+def _bucketed_targets(
+    *,
+    decision_paths: list[str],
+    repo_root: Path,
+    pytest_roots=PYTEST_ROOTS_DEFAULT,
+    pytest_tree=PYTEST_TREE_DEFAULT,
+    pytest_namespace_modules=PYTEST_NAMESPACE_MODULES_DEFAULT,
+    pytest_dependencies=PYTEST_DEPENDENCIES_DEFAULT,
+    pytest_external_dependencies=PYTEST_EXTERNAL_DEPENDENCIES_DEFAULT,
+    pytest_full_suite_prefixes=PYTEST_FULL_SUITE_PREFIXES_DEFAULT,
+) -> list[str]:
     discover_namespace_ownership.cache_clear()
     return select_namespace_pytest_targets(
         decision_paths=decision_paths,
         pytest_targets=TEST_TARGETS,
-        pytest_roots=PYTEST_ROOTS_DEFAULT,
-        pytest_tree=PYTEST_TREE_DEFAULT,
-        pytest_dependencies=PYTEST_DEPENDENCIES_DEFAULT,
-        pytest_full_suite_prefixes=PYTEST_FULL_SUITE_PREFIXES_DEFAULT,
+        pytest_roots=pytest_roots,
+        pytest_tree=pytest_tree,
+        pytest_namespace_modules=pytest_namespace_modules,
+        pytest_dependencies=pytest_dependencies,
+        pytest_external_dependencies=pytest_external_dependencies,
+        pytest_full_suite_prefixes=pytest_full_suite_prefixes,
         repo_root=repo_root,
     )
 
@@ -206,6 +220,49 @@ def test_full_suite_prefix_is_the_only_global_escalation_surface(tmp_path: Path)
     assert targets == ["tests"]
 
 
+def test_external_dependency_layer_routes_without_collapsing_into_repo_edges(
+    tmp_path: Path,
+) -> None:
+    repo_root = _make_repo(tmp_path)
+    targets = _bucketed_targets(
+        decision_paths=["plugins/text_utils/plugin.py"],
+        repo_root=repo_root,
+    )
+    assert "tests/test_import_flow.py" in targets
+    assert "tests/test_text_utils.py" not in targets
+
+
+def test_synthetic_root_and_leafs_work_without_python_hardcode(tmp_path: Path) -> None:
+    _write(
+        "tests/test_hocico_1.py",
+        "from hocico.hocico_1.api import run\n",
+        root=tmp_path,
+    )
+    _write(
+        "tests/test_hocico_2.py",
+        "from hocico.hocico_2.api import run\n",
+        root=tmp_path,
+    )
+    targets = _bucketed_targets(
+        decision_paths=["src/hocico/hocico_1/api.py"],
+        repo_root=tmp_path,
+        pytest_roots={"hocico.*": "src/hocico/", "*": "*"},
+        pytest_tree={
+            "hocico.hocico_1": "src/hocico/hocico_1/",
+            "hocico.hocico_2": "src/hocico/hocico_2/",
+        },
+        pytest_namespace_modules={
+            "hocico": ["hocico"],
+            "hocico.hocico_1": ["hocico.hocico_1"],
+            "hocico.hocico_2": ["hocico.hocico_2"],
+        },
+        pytest_dependencies={},
+        pytest_external_dependencies={},
+        pytest_full_suite_prefixes=[],
+    )
+    assert targets == ["tests/test_hocico_1.py"]
+
+
 def _actual_repo_ownership() -> dict[str, tuple[str, ...]]:
     discover_namespace_ownership.cache_clear()
     return dict(
@@ -213,6 +270,11 @@ def _actual_repo_ownership() -> dict[str, tuple[str, ...]]:
             str(REPO_ROOT),
             tuple(sorted(PYTEST_ROOTS_DEFAULT.items())),
             tuple(sorted(PYTEST_TREE_DEFAULT.items())),
+            tuple(
+                sorted(
+                    (key, tuple(values)) for key, values in PYTEST_NAMESPACE_MODULES_DEFAULT.items()
+                )
+            ),
         )
     )
 
@@ -224,10 +286,28 @@ def _actual_repo_targets(*decision_paths: str) -> list[str]:
         pytest_targets=TEST_TARGETS,
         pytest_roots=PYTEST_ROOTS_DEFAULT,
         pytest_tree=PYTEST_TREE_DEFAULT,
+        pytest_namespace_modules=PYTEST_NAMESPACE_MODULES_DEFAULT,
         pytest_dependencies=PYTEST_DEPENDENCIES_DEFAULT,
+        pytest_external_dependencies=PYTEST_EXTERNAL_DEPENDENCIES_DEFAULT,
         pytest_full_suite_prefixes=PYTEST_FULL_SUITE_PREFIXES_DEFAULT,
         repo_root=REPO_ROOT,
     )
+
+
+def test_actual_repo_tooling_false_negatives_are_no_longer_catch_all() -> None:
+    ownership = _actual_repo_ownership()
+
+    amp_namespaces = ownership["tests/test_patch_jail_bwrap_preflight_issue904.py"]
+    assert amp_namespaces != ("*",)
+    assert "amp" in amp_namespaces
+
+    for rel_path in (
+        "tests/test_patchhub_zip_commit_message.py",
+        "tests/test_patchhub_zip_issue_number.py",
+    ):
+        namespaces = ownership[rel_path]
+        assert namespaces != ("*",)
+        assert "amp.phb" in namespaces
 
 
 def test_actual_repo_web_and_import_false_negatives_are_no_longer_catch_all() -> None:

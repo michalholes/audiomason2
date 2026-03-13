@@ -44,7 +44,9 @@ def test_config_edit_roundtrip_handles_bucketed_pytest_routing_keys() -> None:
         {
             "pytest_routing_mode": "legacy",
             "pytest_roots": {"amp.*": "scripts/am_patch/"},
+            "pytest_namespace_modules": {"amp": ["am_patch", "scripts.am_patch"]},
             "pytest_dependencies": {"amp.phb": ["amp"]},
+            "pytest_external_dependencies": {"amp.phb": ["amp.badguys"]},
         },
         schema,
     )
@@ -52,5 +54,9 @@ def test_config_edit_roundtrip_handles_bucketed_pytest_routing_keys() -> None:
     assert 'pytest_routing_mode = "legacy"' in updated
     assert "[pytest_roots]" in updated
     assert '"amp.*" = "scripts/am_patch/"' in updated
+    assert "[pytest_namespace_modules]" in updated
+    assert '"amp" = ["am_patch", "scripts.am_patch"]' in updated
     assert "[pytest_dependencies]" in updated
     assert '"amp.phb" = ["amp"]' in updated
+    assert "[pytest_external_dependencies]" in updated
+    assert '"amp.phb" = ["amp.badguys"]' in updated

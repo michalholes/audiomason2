@@ -13,7 +13,9 @@ from .errors import RunnerError
 from .policy_monolith_mixin import PolicyMonolithMixin
 from .pytest_namespace_config import (
     PYTEST_DEPENDENCIES_DEFAULT,
+    PYTEST_EXTERNAL_DEPENDENCIES_DEFAULT,
     PYTEST_FULL_SUITE_PREFIXES_DEFAULT,
+    PYTEST_NAMESPACE_MODULES_DEFAULT,
     PYTEST_ROOTS_DEFAULT,
     PYTEST_TREE_DEFAULT,
 )
@@ -249,8 +251,14 @@ class Policy(PolicyMonolithMixin):
     pytest_routing_mode: str = "bucketed"
     pytest_roots: dict[str, str] = field(default_factory=lambda: deepcopy(PYTEST_ROOTS_DEFAULT))
     pytest_tree: dict[str, str] = field(default_factory=lambda: deepcopy(PYTEST_TREE_DEFAULT))
+    pytest_namespace_modules: dict[str, list[str]] = field(
+        default_factory=lambda: deepcopy(PYTEST_NAMESPACE_MODULES_DEFAULT)
+    )
     pytest_dependencies: dict[str, list[str]] = field(
         default_factory=lambda: deepcopy(PYTEST_DEPENDENCIES_DEFAULT)
+    )
+    pytest_external_dependencies: dict[str, list[str]] = field(
+        default_factory=lambda: deepcopy(PYTEST_EXTERNAL_DEPENDENCIES_DEFAULT)
     )
     pytest_full_suite_prefixes: list[str] = field(
         default_factory=lambda: list(PYTEST_FULL_SUITE_PREFIXES_DEFAULT)

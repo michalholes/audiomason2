@@ -361,12 +361,24 @@ def apply_gate_execution_cfg(
         }
         mark_cfg(p, cfg, "pytest_tree")
 
+    p.pytest_namespace_modules = as_dict_list_str(
+        cfg,
+        "pytest_namespace_modules",
+        p.pytest_namespace_modules,
+    )
+    mark_cfg(p, cfg, "pytest_namespace_modules")
     p.pytest_dependencies = as_dict_list_str(
         cfg,
         "pytest_dependencies",
         p.pytest_dependencies,
     )
     mark_cfg(p, cfg, "pytest_dependencies")
+    p.pytest_external_dependencies = as_dict_list_str(
+        cfg,
+        "pytest_external_dependencies",
+        p.pytest_external_dependencies,
+    )
+    mark_cfg(p, cfg, "pytest_external_dependencies")
     p.pytest_full_suite_prefixes = as_list_str(
         cfg,
         "pytest_full_suite_prefixes",

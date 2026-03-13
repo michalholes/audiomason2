@@ -345,6 +345,30 @@ mypy_targets = ["src", "badguys", "plugins", "scripts"]
 "am2.plugins.ui_rich" = "plugins/ui_rich/"
 "am2.plugins.web_interface" = "plugins/web_interface/"
 
+[pytest_namespace_modules]
+"amp" = ["am_patch", "scripts.am_patch"]
+"amp.phb" = ["patchhub", "scripts.patchhub"]
+"amp.badguys" = ["badguys"]
+"am2" = ["audiomason.core"]
+"am2.plugins" = ["plugins"]
+"am2.plugins.audio_processor" = ["plugins.audio_processor"]
+"am2.plugins.cmd_interface" = ["plugins.cmd_interface"]
+"am2.plugins.cover_handler" = ["plugins.cover_handler"]
+"am2.plugins.daemon" = ["plugins.daemon"]
+"am2.plugins.diagnostics_console" = ["plugins.diagnostics_console"]
+"am2.plugins.example_plugin" = ["plugins.example_plugin"]
+"am2.plugins.file_io" = ["plugins.file_io"]
+"am2.plugins.id3_tagger" = ["plugins.id3_tagger"]
+"am2.plugins.import" = ["plugins.import"]
+"am2.plugins.metadata_googlebooks" = ["plugins.metadata_googlebooks"]
+"am2.plugins.metadata_openlibrary" = ["plugins.metadata_openlibrary"]
+"am2.plugins.syslog" = ["plugins.syslog"]
+"am2.plugins.test_all_plugin" = ["plugins.test_all_plugin"]
+"am2.plugins.text_utils" = ["plugins.text_utils"]
+"am2.plugins.tui" = ["plugins.tui"]
+"am2.plugins.ui_rich" = ["plugins.ui_rich"]
+"am2.plugins.web_interface" = ["plugins.web_interface"]
+
 [pytest_dependencies]
 "amp.phb" = ["amp"]
 "amp.badguys" = ["amp"]
@@ -354,13 +378,6 @@ mypy_targets = ["src", "badguys", "plugins", "scripts"]
     "am2.plugins.metadata_openlibrary",
     "am2.plugins.audio_processor",
     "am2.plugins.id3_tagger",
-    "am2.plugins.cmd_interface",
-    "am2.plugins.daemon",
-    "am2.plugins.diagnostics_console",
-    "am2.plugins.metadata_googlebooks",
-    "am2.plugins.syslog",
-    "am2.plugins.text_utils",
-    "am2.plugins.web_interface",
 ]
 "am2.plugins.web_interface" = [
     "am2.plugins.file_io",
@@ -369,6 +386,17 @@ mypy_targets = ["src", "badguys", "plugins", "scripts"]
 "am2.plugins.diagnostics_console" = ["am2.plugins.file_io"]
 "am2.plugins.syslog" = ["am2.plugins.file_io"]
 "am2.plugins.tui" = ["am2.plugins.file_io"]
+
+[pytest_external_dependencies]
+"am2.plugins.import" = [
+    "am2.plugins.cmd_interface",
+    "am2.plugins.daemon",
+    "am2.plugins.diagnostics_console",
+    "am2.plugins.metadata_googlebooks",
+    "am2.plugins.syslog",
+    "am2.plugins.text_utils",
+    "am2.plugins.web_interface",
+]
 
 
 [audit]
