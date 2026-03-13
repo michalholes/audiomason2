@@ -835,9 +835,11 @@ Main-screen control rules:
 - The modal MUST NOT contain a separate control for -l.
 - Gate options are available only for:
   - patch
+  - finalize_live
   - finalize_workspace
   - rerun_latest
-- finalize_live MUST NOT expose or apply gate overrides.
+- finalize_live gate overrides are transient only and MUST flow through the same
+  gate_argv canonicalization and enqueue contract as the other supported modes.
 - The modal renders one row per gate with exactly one visible interactive state surface:
   - This run: clickable binary switch representing RUN vs SKIP
 - The modal MUST NOT render a separate Config column or passive RUN/SKIP pill.
@@ -1032,8 +1034,12 @@ Layout requirements:
   activity time when present.
 - Actions MUST operate as follows:
   - Open: navigate the Files panel to workspace_rel_path.
-  - Finalize (-w): enqueue a standard finalize_workspace job via the existing
-    jobs enqueue API; PatchHub MUST NOT bypass the queue.
+  - Finalize (-w): prepare the Start form for finalize_workspace only; it MUST:
+    - set mode = finalize_workspace
+    - set issueId = workspace issue id
+    - clear commitMsg, patchPath, and rawCommand
+    - refresh preview/validation
+    - MUST NOT enqueue a job and MUST NOT start processing before explicit Start
   - Delete: use the existing filesystem delete endpoint against workspace_rel_path.
 
 Terminology rule:
@@ -1060,9 +1066,69 @@ Layout requirements:
 - First line MUST show: issue id and status.
 - Commit summary MUST be on its own line.
 - Meta line MUST include: mode, patch basename (when present), and duration (when present).
+- A quick action row MAY appear below the meta line.
+- The quick action label MUST be: Use for -l
+
+Quick action rules:
+- The quick action is a Start-form preparation control, not an enqueue control.
+- The UI MAY render the quick action only for list items whose visible summary is
+  compatible with rerun_latest candidate selection:
+  - mode is patch or rerun_latest
+  - issue id is non-empty
+  - commit summary is non-empty
+- On click, the UI MUST fetch GET /api/jobs/<job_id> and MUST validate the detail
+  record before mutating the Start form.
+- If the detail record is eligible, the UI MUST:
+  - set mode = rerun_latest
+  - set issueId, commitMsg, and patchPath from that JobRecord
+  - clear rawCommand
+  - refresh preview/validation
+  - MUST NOT enqueue a job and MUST NOT start processing before explicit Start
+- If the detail record is not eligible, the UI MUST leave the Start form unchanged
+  and MUST show an explicit operator-visible status.
 
 Forbidden in visible item text:
 - job_id (may exist only as an internal data attribute for selection)
+
+7.1.5A rerun_latest Autofill Authority (UI)
+
+Definitions:
+- eligible rerun job = a JobRecord that satisfies all of the following:
+  - mode is patch or rerun_latest
+  - issue_id is non-empty
+  - commit_message is non-empty
+  - patch path resolves by this algorithm:
+    1) effective_patch_path when non-empty
+    2) else original_patch_path when non-empty
+    3) else the patch operand derived from canonical_command for patch/rerun_latest
+- latest eligible job = the first eligible rerun job in jobs history sorted by
+  created_utc descending.
+
+Single source of truth:
+- Global rerun_latest (-l) preparation and per-job quick action preparation MUST
+  use the same authority model: JobRecord detail selected by job_id.
+- The client MUST NOT derive rerun_latest autofill from:
+  - /api/runs
+  - tracked live fallback state
+  - /api/patches/latest
+  - workspace metadata
+- /api/jobs list is a candidate discovery surface only.
+- GET /api/jobs/<job_id> is the authoritative detail source for rerun_latest
+  Start-form filling.
+
+Global mode-switch behavior:
+- When the operator changes the mode dropdown to rerun_latest, the UI MUST:
+  - clear rawCommand
+  - resolve the latest eligible job from jobs history
+  - fetch the authoritative JobRecord detail for the selected job_id
+  - fill issueId, commitMsg, and patchPath from that one JobRecord
+  - refresh preview/validation
+  - MUST NOT enqueue a job and MUST NOT start processing before explicit Start
+- If no eligible rerun job exists, the UI MUST:
+  - clear issueId, commitMsg, and patchPath
+  - refresh preview/validation
+  - show an explicit operator-visible status indicating that no eligible previous
+    job exists for rerun_latest
 
 7.1.6 Autofill Token Change Output Clearing (UI)
 
@@ -1655,12 +1721,13 @@ Parsing rules (command_parse.py):
 - shlex.split(raw)
 - must contain "scripts/am_patch.py" as an argv element
 - supports finalize/rerun flags in rest (combinations are rejected):
-  -f MESSAGE => finalize_live (MESSAGE is required; stored as commit_message)
+  -f MESSAGE [gate overrides] => finalize_live
+    (MESSAGE is required; stored as commit_message)
   -w ISSUE_ID => finalize_workspace (ISSUE_ID is required; digits only)
   - ISSUE_ID MESSAGE [PATCH] -l => rerun_latest
 - patch mode requires exactly 3 args after scripts/am_patch.py:
   ISSUE_ID (digits), commit message (non-empty), PATCH (non-empty)
-- finalize_workspace, rerun_latest, and patch accept canonical gate overrides:
+- finalize_live, finalize_workspace, rerun_latest, and patch accept canonical gate overrides:
   - --no-compile-check
   - --skip-ruff
   - --skip-pytest
@@ -1669,7 +1736,6 @@ Parsing rules (command_parse.py):
   - --skip-docs
   - --skip-monolith
   - --override KEY=VALUE for compile_check and gates_skip_* booleans
-- finalize_live MUST reject gate overrides.
 - Canonicalization MUST normalize gate flags into deterministic argv order.
 
 Errors:
@@ -1682,7 +1748,7 @@ Input JSON fields (minimum accepted by app_api_jobs.py):
 - commit_message: "<string>"     (required for patch/repair unless raw_command provides)
 - patch_path: "<string>"         (required for patch/repair unless raw_command provides)
 - raw_command: "<string>"        (optional; if provided, it is parsed and canonicalized)
-- gate_argv: ["<flag>", ...]     (optional; patch/finalize_workspace/rerun_latest only)
+- gate_argv: ["<flag>", ...]     (optional; patch/finalize_live/finalize_workspace/rerun_latest only)
 - selected_patch_entries: ["<zip member>", ...] (optional; patch/repair zip subset only)
 
 Behavior:
@@ -1693,8 +1759,8 @@ Behavior:
   - raw_command MUST NOT be combined with selected_patch_entries
   - raw_command MUST NOT be combined with gate_argv
 - If raw_command is absent:
-  - finalize_live requires commit_message and builds: runner_prefix + ['-f', commit_message]
-  - finalize_live MUST reject gate_argv
+  - finalize_live requires commit_message and builds:
+    runner_prefix + ['-f', commit_message] + gate_argv
   - finalize_workspace requires issue_id (digits) and builds:
     runner_prefix + ['-w', issue_id] + gate_argv
   - rerun_latest requires issue_id (digits) and commit_message and builds:
@@ -1730,6 +1796,7 @@ JobRecord JSON schema (models.JobRecord):
   "created_utc": "<UTC ISO Z string>",
   "mode": "patch|repair|finalize_live|finalize_workspace|rerun_latest",
   "issue_id": "<string>",
+  "commit_message": "<string>",
   "commit_summary": "<string>",
   "patch_basename": "<string|null>",
   "raw_command": "<string>",
@@ -1751,6 +1818,8 @@ JobRecord JSON schema (models.JobRecord):
 
 Notes:
 - created_utc/started_utc/ended_utc use format "%Y-%m-%dT%H:%M:%SZ".
+- commit_message stores the full message for detail consumers.
+- commit_summary is the single-line deterministic truncation used by JobListItem.
 
 JobListItem JSON schema (used by Section 7.2.8 GET /api/jobs):
 {
