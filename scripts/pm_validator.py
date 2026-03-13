@@ -60,9 +60,25 @@ def _read_zip(path: Path) -> tuple[list[str], dict[str, bytes]]:
     return names, items
 
 
+def _decode_ascii_text(raw: bytes) -> str | None:
+    try:
+        text = raw.decode("ascii")
+    except UnicodeDecodeError:
+        return None
+    return text[:-1] if text.endswith("\n") else text
+
+
 def _zip_text(items: dict[str, bytes], name: str) -> str | None:
     raw = items.get(name)
-    return None if raw is None else raw.decode("utf-8").rstrip("\n")
+    return None if raw is None else _decode_ascii_text(raw)
+
+
+def _is_ascii_text(text: str) -> bool:
+    return text.isascii()
+
+
+def _is_ascii_bytes(raw: bytes) -> bool:
+    return _decode_ascii_text(raw) is not None
 
 
 def _validate_basename(path: Path, issue_id: str) -> RuleResult:
@@ -133,14 +149,14 @@ def _collect_patch_members(
         RuleResult(
             "COMMIT_MESSAGE_FILE",
             "PASS" if zmsg == commit_message else "FAIL",
-            zmsg or "missing_commit_message",
+            zmsg if zmsg is not None else "missing_or_non_ascii_commit_message",
         )
     )
     results.append(
         RuleResult(
             "ISSUE_NUMBER_FILE",
             "PASS" if zid == issue_id else "FAIL",
-            zid or "missing_issue_number",
+            zid if zid is not None else "missing_or_non_ascii_issue_number",
         )
     )
     if zmsg != commit_message or zid != issue_id:
@@ -165,11 +181,20 @@ def _collect_patch_members(
         if repo_path is None:
             detail = f"invalid_member:{member}"
             return results + [RuleResult("PATCH_MEMBER_PATHS", "FAIL", detail)], [], []
+        if not _is_ascii_text(member):
+            detail = f"non_ascii_member:{member}"
+            return results + [RuleResult("PATCH_MEMBER_PATHS", "FAIL", detail)], [], []
+        if not _is_ascii_text(repo_path):
+            detail = f"non_ascii_repo_path:{repo_path}"
+            return results + [RuleResult("PATCH_MEMBER_PATHS", "FAIL", detail)], [], []
         if repo_path in seen:
             detail = f"duplicate_repo_path:{repo_path}"
             return results + [RuleResult("PATCH_MEMBER_PATHS", "FAIL", detail)], [], []
         seen.add(repo_path)
-        text = items[member].decode("utf-8")
+        if not _is_ascii_bytes(items[member]):
+            detail = f"{member}:non_ascii_patch_text"
+            return results + [RuleResult("PATCH_ASCII", "FAIL", detail)], [], []
+        text = items[member].decode("ascii")
         header_err = _validate_patch_headers(repo_path, text)
         if header_err is not None:
             detail = f"{member}:{header_err}"
@@ -182,6 +207,7 @@ def _collect_patch_members(
         patch_members.append((member, items[member]))
         decision_paths.append(repo_path)
     results.append(RuleResult("PATCH_MEMBER_PATHS", "PASS", f"paths={len(decision_paths)}"))
+    results.append(RuleResult("PATCH_ASCII", "PASS", "patch_members_ascii_only"))
     results.append(RuleResult("LINE_LENGTH", "PASS", "py_js_added_lines<=100"))
     return results, patch_members, decision_paths
 

@@ -241,3 +241,59 @@ def test_monolith_hub_growth_is_reported(tmp_path: Path) -> None:
     assert proc.returncode == 1
     assert "RULE MONOLITH: FAIL" in proc.stdout
     assert "hub_signal_fanin:scripts/am_patch/hub.py" in proc.stdout
+
+
+def test_initial_mode_fails_on_non_ascii_commit_message(tmp_path: Path) -> None:
+    relpath = "scripts/sample.py"
+    before = "def value():\n    return 1\n"
+    after = "def value():\n    return 2\n"
+    snapshot = tmp_path / "workspace.zip"
+    patch_zip = tmp_path / "issue_601_v2.zip"
+    _write_zip(snapshot, {relpath: before.encode("utf-8")})
+    _write_zip(
+        patch_zip,
+        {
+            "COMMIT_MESSAGE.txt": ("Align PM validator monolith checks e\u0301\n".encode()),
+            "ISSUE_NUMBER.txt": b"601\n",
+            _safe_member(relpath): _git_patch(relpath, before, after),
+        },
+    )
+
+    proc = _run("601", COMMIT, str(patch_zip), "--workspace-snapshot", str(snapshot))
+    assert proc.returncode == 1
+    assert "RULE COMMIT_MESSAGE_FILE: FAIL - missing_or_non_ascii_commit_message" in proc.stdout
+
+
+def test_initial_mode_fails_on_non_ascii_patch_text(tmp_path: Path) -> None:
+    relpath = "scripts/sample.py"
+    before = "def value():\n    return 1\n"
+    after = 'def value():\n    return "e\u0301"\n'
+    snapshot = tmp_path / "workspace.zip"
+    patch_zip = tmp_path / "issue_601_v2.zip"
+    _write_zip(snapshot, {relpath: before.encode("utf-8")})
+    _patch_zip(patch_zip, {_safe_member(relpath): _git_patch(relpath, before, after)})
+
+    proc = _run("601", COMMIT, str(patch_zip), "--workspace-snapshot", str(snapshot))
+    assert proc.returncode == 1
+    assert "RULE PATCH_ASCII: FAIL" in proc.stdout
+    assert "non_ascii_patch_text" in proc.stdout
+
+
+def test_initial_mode_fails_on_non_ascii_patch_member_path(tmp_path: Path) -> None:
+    relpath = "scripts/sample.py"
+    snapshot = tmp_path / "workspace.zip"
+    patch_zip = tmp_path / "issue_601_v2.zip"
+    _write_zip(snapshot, {relpath: b"def value():\n    return 1\n"})
+    _patch_zip(
+        patch_zip,
+        {
+            "patches/per_file/scripts__na\u00efve.py.patch": _added_patch(
+                relpath,
+                "def value():\n    return 2\n",
+            )
+        },
+    )
+
+    proc = _run("601", COMMIT, str(patch_zip), "--workspace-snapshot", str(snapshot))
+    assert proc.returncode == 1
+    assert "RULE PATCH_MEMBER_PATHS: FAIL - non_ascii_member:" in proc.stdout
