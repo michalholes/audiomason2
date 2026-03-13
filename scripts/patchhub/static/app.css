@@ -116,6 +116,28 @@ select {
 	font-size: 14px;
 	min-width: 0;
 }
+.start-run-mode,
+.start-run-issue {
+	flex: 0 0 50px;
+	width: 50px;
+}
+.start-run-patch {
+	flex: 0 0 120px;
+	width: 120px;
+}
+.live-log-level {
+	flex: 0 0 220px;
+	width: 220px;
+}
+.live-toolbar-right {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	margin-left: auto;
+}
+.live-autoscroll-label {
+	white-space: nowrap;
+}
 .btn {
 	background: #1b1b1b;
 	color: #eaeaea;

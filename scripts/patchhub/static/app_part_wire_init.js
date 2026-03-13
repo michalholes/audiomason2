@@ -192,6 +192,7 @@ function wireButtons() {
 
 	phCall("initGateOptionsUi");
 	phCall("initLiveCopyButtons");
+	phCall("initLiveAutoscrollToggle");
 
 	if (el("liveLevel")) {
 		el("liveLevel").addEventListener("change", () => {

@@ -497,7 +497,7 @@ def test_source_wires_rerun_latest_prepare_and_removes_workspace_auto_enqueue() 
     patchhub_toml = (REPO_ROOT / "scripts" / "patchhub" / "patchhub.toml").read_text(
         encoding="utf-8"
     )
-    assert 'version = "1.12.6"' in patchhub_toml
+    assert 'version = "1.12.7"' in patchhub_toml
 
 
 def test_rerun_latest_helper_clears_form_when_no_detail_eligible_job() -> None:

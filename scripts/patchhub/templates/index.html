@@ -96,54 +96,73 @@
     <section class="panel panel-center">
 
       <section class="card">
-        <h2>B) Start run</h2>
         <div class="row">
           <label class="lbl">Mode</label>
-          <select id="mode" class="input">
+          <select id="mode" class="input start-run-mode">
             <option value="patch">patch</option>
             <option value="finalize_live">finalize_live (-f)</option>
             <option value="finalize_workspace">finalize_workspace (-w)</option>
             <option value="rerun_latest">rerun_latest (-l)</option>
           </select>
+          <input
+            id="patchPath"
+            class="input start-run-patch"
+            placeholder="patch path (e.g. patches/incoming/issue_1000.zip)"
+          />
+          <span class="spacer"></span>
           <button type="button" id="gateOptionsBtn" class="btn btn-small">Gate options</button>
+          <button type="button" id="browsePatch" class="btn btn-small hidden">From file manager</button>
         </div>
+        <div id="zipSubsetStrip" class="zip-subset-strip hidden"></div>
 
         <div class="row">
-          <input id="issueId" class="input" placeholder="issue id (auto if empty for patch; required for -w)" />
+          <input
+            id="issueId"
+            class="input start-run-issue"
+            placeholder="issue id (auto if empty for patch; required for -w)"
+          />
           <input id="commitMsg" class="input" placeholder="message (required for patch and -f)" />
           <button type="button" id="enqueueBtn" class="btn btn-danger btn-start" disabled>Start</button>
         </div>
-
-        <div class="row">
-          <input id="patchPath" class="input" placeholder="patch path (e.g. patches/incoming/issue_1000.zip)" />
-          <button type="button" id="browsePatch" class="btn btn-small">From file manager</button>
-        </div>
-        <div id="zipSubsetStrip" class="zip-subset-strip hidden"></div>
 
         <div id="uiDegradedBanner" class="statusbar hidden" aria-live="polite"></div>
         <div id="uiStatusBar" class="statusbar" aria-live="polite"></div>
         <div id="enqueueHint" class="muted"></div>
 
-
-
         <h3>Live log (events)</h3>
-<div class="row">
-  <label class="lbl">Level</label>
-  <select id="liveLevel" class="input">
-    <option value="quiet">quiet</option>
-    <option value="normal">normal</option>
-    <option value="warning">warning</option>
-    <option value="verbose">verbose</option>
-    <option value="debug_human">debug_human</option>
-    <option value="debug_raw">debug_raw</option>
-  </select>
-  <span id="liveStreamStatus" class="muted"></span>
-</div>
-<pre id="liveLog" class="pre pre-box"></pre>
-<div class="row live-copy-row">
-  <button type="button" id="liveCopySelection" class="btn btn-small">Copy selection</button>
-  <button type="button" id="liveCopyAll" class="btn btn-small">Copy all</button>
-</div>
+        <div class="row">
+          <label class="lbl">Level</label>
+          <select id="liveLevel" class="input live-log-level">
+            <option value="quiet">quiet</option>
+            <option value="normal">normal</option>
+            <option value="warning">warning</option>
+            <option value="verbose">verbose</option>
+            <option value="debug_human">debug_human</option>
+            <option value="debug_raw">debug_raw</option>
+          </select>
+          <span class="spacer"></span>
+          <span id="liveStreamStatus" class="muted"></span>
+          <span class="live-toolbar-right">
+            <span class="muted live-autoscroll-label">Auto-scroll</span>
+            <button
+              type="button"
+              id="liveAutoscrollToggle"
+              class="gate-options-switch is-on"
+              role="switch"
+              aria-checked="true"
+              aria-label="Auto-scroll"
+            >
+              <span class="gate-options-switch-track">
+                <span class="gate-options-switch-thumb"></span>
+              </span>
+            </button>
+          </span>
+        </div>
+        <pre id="liveLog" class="pre pre-box"></pre>
+        <div class="row live-copy-row">
+          <button type="button" id="liveCopySelection" class="btn btn-small">Copy selection</button>
+          <button type="button" id="liveCopyAll" class="btn btn-small">Copy all</button>
+        </div>
       </section>
 
       <section class="card" id="ampCard">

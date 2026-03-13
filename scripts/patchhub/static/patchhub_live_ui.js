@@ -13,6 +13,7 @@
 	var MAX_LIVE_EVENTS = 20000;
 	var liveRenderTimer = null;
 	var liveLevel = "normal";
+	var liveAutoscrollEnabled = true;
 	var liveTerminalInfo = null;
 	var workspacesVisible = false;
 	var runsVisible = false;
@@ -73,8 +74,34 @@
 		setLiveLevel(v);
 	}
 
+	function syncLiveAutoscrollToggle() {
+		var btn = el("liveAutoscrollToggle");
+		if (!btn) return;
+		btn.classList.toggle("is-on", liveAutoscrollEnabled);
+		btn.setAttribute("aria-checked", liveAutoscrollEnabled ? "true" : "false");
+		btn.title = liveAutoscrollEnabled ? "Auto-scroll: on" : "Auto-scroll: off";
+	}
+
+	function loadLiveAutoscroll() {
+		var v = null;
+		try {
+			v = localStorage.getItem("amp.liveLogAutoscroll");
+		} catch (e) {
+			v = null;
+		}
+		if (v === null) {
+			syncLiveAutoscrollToggle();
+			return;
+		}
+		setLiveAutoscrollEnabled(v !== "0");
+	}
+
 	function getLiveLevel() {
 		return liveLevel;
+	}
+
+	function getLiveAutoscrollEnabled() {
+		return liveAutoscrollEnabled;
 	}
 
 	function isDebugHumanLevel() {
@@ -109,6 +136,28 @@
 			localStorage.setItem("amp.liveLogLevel", liveLevel);
 		} catch (e) {}
 		return liveLevel;
+	}
+
+	function setLiveAutoscrollEnabled(v) {
+		liveAutoscrollEnabled = !!v;
+		try {
+			localStorage.setItem(
+				"amp.liveLogAutoscroll",
+				liveAutoscrollEnabled ? "1" : "0",
+			);
+		} catch (e) {}
+		syncLiveAutoscrollToggle();
+		return liveAutoscrollEnabled;
+	}
+
+	function initLiveAutoscrollToggle() {
+		var btn = el("liveAutoscrollToggle");
+		if (!btn) return;
+		syncLiveAutoscrollToggle();
+		btn.addEventListener("click", () => {
+			setLiveAutoscrollEnabled(!liveAutoscrollEnabled);
+			if (liveAutoscrollEnabled) renderLiveLog();
+		});
 	}
 
 	function loadUiVisibility() {
@@ -419,12 +468,15 @@
 		var box = el("liveLog");
 		if (!box) return;
 		var lines = [];
+		var prevScrollTop = box.scrollTop;
 		for (let i = 0; i < liveEvents.length; i++) {
 			const ev = liveEvents[i];
 			if (!filterLiveEvent(ev)) continue;
 			lines.push(formatLiveEvent(ev));
 		}
 		box.textContent = lines.join("\n");
+		if (liveAutoscrollEnabled) box.scrollTop = box.scrollHeight;
+		else box.scrollTop = prevScrollTop;
 		var wrap = box.parentElement;
 		if (wrap && wrap.classList && wrap.classList.contains("card-tight")) {
 			// no-op
@@ -743,8 +795,11 @@
 	safeExport("loadLiveJobId", loadLiveJobId);
 	safeExport("saveLiveJobId", saveLiveJobId);
 	safeExport("loadLiveLevel", loadLiveLevel);
+	safeExport("loadLiveAutoscroll", loadLiveAutoscroll);
 	safeExport("getLiveLevel", getLiveLevel);
+	safeExport("getLiveAutoscrollEnabled", getLiveAutoscrollEnabled);
 	safeExport("setLiveLevel", setLiveLevel);
+	safeExport("setLiveAutoscrollEnabled", setLiveAutoscrollEnabled);
 	safeExport("loadUiVisibility", loadUiVisibility);
 	safeExport("saveWorkspacesVisible", saveWorkspacesVisible);
 	safeExport("saveRunsVisible", saveRunsVisible);
@@ -772,4 +827,5 @@
 	safeExport("copyLiveSelection", copyLiveSelection);
 	safeExport("copyLiveAll", copyLiveAll);
 	safeExport("initLiveCopyButtons", initLiveCopyButtons);
+	safeExport("initLiveAutoscrollToggle", initLiveAutoscrollToggle);
 })();
