@@ -486,6 +486,7 @@ def test_source_wires_rerun_latest_prepare_and_removes_workspace_auto_enqueue() 
 
     assert "Use for -l" in jobs_src
     assert 'phCall("prepareRerunLatestFromLatestJob")' in wire_src
+    assert 'phCall("prepareRerunLatestFromJobId"' in wire_src
     assert "clearOnFailure: false" in wire_src
     assert "out.canonical_argv = out.canonical_argv.concat(gateArgv);" not in (
         REPO_ROOT / "scripts" / "patchhub" / "static" / "app_part_gate_options.js"
@@ -497,7 +498,7 @@ def test_source_wires_rerun_latest_prepare_and_removes_workspace_auto_enqueue() 
     patchhub_toml = (REPO_ROOT / "scripts" / "patchhub" / "patchhub.toml").read_text(
         encoding="utf-8"
     )
-    assert 'version = "1.12.7"' in patchhub_toml
+    assert 'version = "1.12.8"' in patchhub_toml
 
 
 def test_rerun_latest_helper_clears_form_when_no_detail_eligible_job() -> None:
@@ -624,4 +625,145 @@ process.stdout.write(JSON.stringify({
     )
     assert result["uiErrors"][-1] == (
         "rerun_latest: selected job is not usable for Start-form autofill"
+    )
+
+
+def test_mode_change_to_rerun_latest_prepares_form_via_wire_buttons() -> None:
+    jobs_path = REPO_ROOT / "scripts" / "patchhub" / "static" / "app_part_jobs.js"
+    wire_path = REPO_ROOT / "scripts" / "patchhub" / "static" / "app_part_wire_init.js"
+    script = (
+        _node_prelude(jobs_path, wire_path)
+        + """
+global.apiGet = (path) => {
+  if (path === "/api/jobs") {
+    return Promise.resolve({
+      ok: true,
+      jobs: [
+        {
+          job_id: "job-valid",
+          mode: "patch",
+          issue_id: "311",
+          commit_summary: "Ready patch",
+          created_utc: "2026-03-13T13:00:00Z",
+          status: "success",
+          patch_basename: "issue_311_v2.zip",
+        },
+      ],
+    });
+  }
+  if (path === "/api/jobs/job-valid") {
+    return Promise.resolve({
+      ok: true,
+      job: {
+        job_id: "job-valid",
+        mode: "patch",
+        issue_id: "311",
+        commit_message: "Ready patch",
+        effective_patch_path: "patches/issue_311_v2.zip",
+        canonical_command: [
+          "python3",
+          "scripts/am_patch.py",
+          "311",
+          "Ready patch",
+          "patches/issue_311_v2.zip",
+        ],
+      },
+    });
+  }
+  if (path === "/api/fs/stat?path=issue_311_v2.zip") {
+    return Promise.resolve({ ok: true, exists: true });
+  }
+  return Promise.resolve({ ok: false, error: "unexpected path: " + path });
+};
+wireButtons();
+document.getElementById("mode").value = "rerun_latest";
+document.getElementById("mode").dispatch("change");
+await new Promise((resolve) => setTimeout(resolve, 0));
+await new Promise((resolve) => setTimeout(resolve, 0));
+process.stdout.write(JSON.stringify({
+  mode: document.getElementById("mode").value,
+  issueId: document.getElementById("issueId").value,
+  commitMsg: document.getElementById("commitMsg").value,
+  patchPath: document.getElementById("patchPath").value,
+  validated: global.__validated,
+  uiStatus: window.__uiStatus,
+  uiErrors: window.__uiErrors,
+}));
+"""
+    )
+    result = _run_node(script)
+    assert result["mode"] == "rerun_latest"
+    assert result["issueId"] == "311"
+    assert result["commitMsg"] == "Ready patch"
+    assert result["patchPath"] == "patches/issue_311_v2.zip"
+    assert result["validated"]["mode"] == "rerun_latest"
+    assert result["uiErrors"] == []
+    assert result["uiStatus"][-1] == (
+        "rerun_latest: prepared form from latest usable job_id=job-valid"
+    )
+
+
+def test_jobs_rerun_button_prepares_form_via_wire_buttons() -> None:
+    jobs_path = REPO_ROOT / "scripts" / "patchhub" / "static" / "app_part_jobs.js"
+    wire_path = REPO_ROOT / "scripts" / "patchhub" / "static" / "app_part_wire_init.js"
+    script = (
+        _node_prelude(jobs_path, wire_path)
+        + """
+global.apiGet = (path) => {
+  if (path === "/api/jobs/job-eligible") {
+    return Promise.resolve({
+      ok: true,
+      job: {
+        job_id: "job-eligible",
+        mode: "patch",
+        issue_id: "312",
+        commit_message: "Chosen patch",
+        effective_patch_path: "patches/issue_312_v3.zip",
+        canonical_command: [
+          "python3",
+          "scripts/am_patch.py",
+          "312",
+          "Chosen patch",
+          "patches/issue_312_v3.zip",
+        ],
+      },
+    });
+  }
+  if (path === "/api/fs/stat?path=issue_312_v3.zip") {
+    return Promise.resolve({ ok: true, exists: true });
+  }
+  return Promise.resolve({ ok: false, error: "unexpected path: " + path });
+};
+wireButtons();
+const jobsList = document.getElementById("jobsList");
+const button = {
+  parentElement: jobsList,
+  getAttribute(name) {
+    if (name === "data-rerun-jobid") return "job-eligible";
+    return null;
+  },
+};
+jobsList.dispatch("click", { target: button });
+await new Promise((resolve) => setTimeout(resolve, 0));
+await new Promise((resolve) => setTimeout(resolve, 0));
+process.stdout.write(JSON.stringify({
+  mode: document.getElementById("mode").value,
+  issueId: document.getElementById("issueId").value,
+  commitMsg: document.getElementById("commitMsg").value,
+  patchPath: document.getElementById("patchPath").value,
+  validated: global.__validated,
+  uiStatus: window.__uiStatus,
+  uiErrors: window.__uiErrors,
+}));
+"""
+    )
+    result = _run_node(script)
+    assert result["mode"] == "rerun_latest"
+    assert result["issueId"] == "312"
+    assert result["commitMsg"] == "Chosen patch"
+    assert result["patchPath"] == "patches/issue_312_v3.zip"
+    assert result["validated"]["mode"] == "rerun_latest"
+    assert result["uiErrors"] == []
+    assert result["uiStatus"][-1] == (
+        "rerun_latest: prepared form from selected jobs item job_id=job-eligible"
     )
