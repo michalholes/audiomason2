@@ -109,6 +109,10 @@ function prepareRerunLatestFromJobId(jobId, opts) {
 	var seq = ++rerunPrepareSeq;
 	var sourceLabel = String(opts.sourceLabel || "selected");
 	var clearOnFailure = opts.clearOnFailure !== false;
+	var failureStatus = String(
+		opts.failureStatus ||
+			"rerun_latest: selected job is not eligible for Start-form autofill",
+	);
 	var errText = "Cannot load rerun_latest job";
 	if (!jobId) {
 		if (clearOnFailure) {
@@ -123,7 +127,7 @@ function prepareRerunLatestFromJobId(jobId, opts) {
 		if (!resp || resp.ok === false || !resp.job) {
 			errText = String((resp && resp.error) || "Cannot load rerun_latest job");
 			if (clearOnFailure) {
-				clearRerunLatestFormFields("rerun_latest: no eligible previous job");
+				clearRerunLatestFormFields(failureStatus);
 			}
 			setUiError(errText);
 			return false;
@@ -131,11 +135,9 @@ function prepareRerunLatestFromJobId(jobId, opts) {
 		var values = extractRerunLatestValues(resp.job);
 		if (!values) {
 			if (clearOnFailure) {
-				clearRerunLatestFormFields("rerun_latest: no eligible previous job");
+				clearRerunLatestFormFields(failureStatus);
 			}
-			setUiError(
-				"rerun_latest: selected job is not eligible for Start-form autofill",
-			);
+			setUiError(failureStatus);
 			return false;
 		}
 		return applyRerunLatestValues(values, sourceLabel);
@@ -146,6 +148,30 @@ function prepareRerunLatestFromLatestJob() {
 	var seq = ++rerunPrepareSeq;
 	setUiStatus("rerun_latest: resolving latest eligible job");
 	return apiGet("/api/jobs").then((resp) => {
+		function tryNext(candidates, idx) {
+			if (seq !== rerunPrepareSeq) return Promise.resolve(false);
+			if (String(el("mode").value || "") !== "rerun_latest") {
+				return Promise.resolve(false);
+			}
+			if (idx >= candidates.length) {
+				clearRerunLatestFormFields("rerun_latest: no eligible previous job");
+				return Promise.resolve(false);
+			}
+			var jobId = String(
+				(candidates[idx] && candidates[idx].job_id) || "",
+			).trim();
+			if (!jobId) return tryNext(candidates, idx + 1);
+			return loadJobDetail(jobId).then((detailResp) => {
+				if (seq !== rerunPrepareSeq) return false;
+				if (String(el("mode").value || "") !== "rerun_latest") return false;
+				if (!detailResp || detailResp.ok === false || !detailResp.job) {
+					return tryNext(candidates, idx + 1);
+				}
+				var values = extractRerunLatestValues(detailResp.job);
+				if (!values) return tryNext(candidates, idx + 1);
+				return applyRerunLatestValues(values, "latest eligible");
+			});
+		}
 		if (seq !== rerunPrepareSeq) return false;
 		if (String(el("mode").value || "") !== "rerun_latest") return false;
 		if (!resp || resp.ok === false) {
@@ -154,15 +180,12 @@ function prepareRerunLatestFromLatestJob() {
 			return false;
 		}
 		var jobs = Array.isArray(resp.jobs) ? resp.jobs : [];
-		var found = jobs.find((job) => isRerunLatestListCandidate(job)) || null;
-		if (!found || !found.job_id) {
+		var candidates = jobs.filter((job) => isRerunLatestListCandidate(job));
+		if (!candidates.length) {
 			clearRerunLatestFormFields("rerun_latest: no eligible previous job");
 			return false;
 		}
-		return prepareRerunLatestFromJobId(String(found.job_id || ""), {
-			sourceLabel: "latest eligible",
-			clearOnFailure: true,
-		});
+		return tryNext(candidates, 0);
 	});
 }
 

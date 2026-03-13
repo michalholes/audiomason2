@@ -329,6 +329,101 @@ process.stdout.write(JSON.stringify({
     )
 
 
+def test_rerun_latest_helper_skips_first_detail_ineligible_job() -> None:
+    script_path = REPO_ROOT / "scripts" / "patchhub" / "static" / "app_part_jobs.js"
+    script = (
+        _node_prelude(script_path)
+        + """
+global.apiGet = (path) => {
+  if (path === "/api/jobs") {
+    return Promise.resolve({
+      ok: true,
+      jobs: [
+        {
+          job_id: "job-invalid",
+          mode: "patch",
+          issue_id: "312",
+          commit_summary: "Invalid first",
+          created_utc: "2026-03-13T12:00:00Z",
+          status: "success",
+          patch_basename: "issue_312_v5.zip",
+        },
+        {
+          job_id: "job-valid",
+          mode: "patch",
+          issue_id: "311",
+          commit_summary: "Valid second",
+          created_utc: "2026-03-13T11:00:00Z",
+          status: "success",
+          patch_basename: "issue_311_v1.zip",
+        },
+      ],
+    });
+  }
+  if (path === "/api/jobs/job-invalid") {
+    return Promise.resolve({
+      ok: true,
+      job: {
+        job_id: "job-invalid",
+        mode: "patch",
+        issue_id: "312",
+        commit_message: "",
+        effective_patch_path: "patches/issue_312_v5.zip",
+        canonical_command: [
+          "python3",
+          "scripts/am_patch.py",
+          "312",
+          "",
+          "patches/issue_312_v5.zip",
+        ],
+      },
+    });
+  }
+  if (path === "/api/jobs/job-valid") {
+    return Promise.resolve({
+      ok: true,
+      job: {
+        job_id: "job-valid",
+        mode: "patch",
+        issue_id: "311",
+        commit_message: "Valid second job",
+        effective_patch_path: "patches/issue_311_v1.zip",
+        canonical_command: [
+          "python3",
+          "scripts/am_patch.py",
+          "311",
+          "Valid second job",
+          "patches/issue_311_v1.zip",
+        ],
+      },
+    });
+  }
+  return Promise.resolve({ ok: false, error: "unexpected path: " + path });
+};
+document.getElementById("mode").value = "rerun_latest";
+document.getElementById("issueId").value = "stale";
+document.getElementById("commitMsg").value = "stale";
+document.getElementById("patchPath").value = "stale";
+await prepareRerunLatestFromLatestJob();
+process.stdout.write(JSON.stringify({
+  issueId: document.getElementById("issueId").value,
+  commitMsg: document.getElementById("commitMsg").value,
+  patchPath: document.getElementById("patchPath").value,
+  uiStatus: window.__uiStatus,
+  uiErrors: window.__uiErrors,
+}));
+"""
+    )
+    result = _run_node(script)
+    assert result["issueId"] == "311"
+    assert result["commitMsg"] == "Valid second job"
+    assert result["patchPath"] == "patches/issue_311_v1.zip"
+    assert result["uiErrors"] == []
+    assert result["uiStatus"][-1] == (
+        "rerun_latest: prepared form from latest eligible job_id=job-valid"
+    )
+
+
 def test_progress_ui_handles_fallback_and_cancel_409() -> None:
     script_path = REPO_ROOT / "scripts" / "patchhub" / "static" / "patchhub_progress_ui.js"
     script = (
@@ -390,7 +485,133 @@ def test_source_wires_rerun_latest_prepare_and_removes_workspace_auto_enqueue() 
 
     assert "Use for -l" in jobs_src
     assert 'phCall("prepareRerunLatestFromLatestJob")' in wire_src
+    assert "clearOnFailure: true" in wire_src
     finalize_handler = workspaces_src.split('finBtn.addEventListener("click", () => {', 1)[1]
     finalize_handler = finalize_handler.split("});", 1)[0]
     assert 'phCall("enqueue")' not in finalize_handler
     assert "clearParsedState();" in finalize_handler
+    patchhub_toml = (REPO_ROOT / "scripts" / "patchhub" / "patchhub.toml").read_text(
+        encoding="utf-8"
+    )
+    assert 'version = "1.12.5"' in patchhub_toml
+
+
+def test_rerun_latest_helper_clears_form_when_no_detail_eligible_job() -> None:
+    script_path = REPO_ROOT / "scripts" / "patchhub" / "static" / "app_part_jobs.js"
+    script = (
+        _node_prelude(script_path)
+        + """
+global.apiGet = (path) => {
+  if (path === "/api/jobs") {
+    return Promise.resolve({
+      ok: true,
+      jobs: [
+        {
+          job_id: "job-invalid",
+          mode: "patch",
+          issue_id: "312",
+          commit_summary: "Invalid only",
+          created_utc: "2026-03-13T12:00:00Z",
+          status: "success",
+          patch_basename: "issue_312_v5.zip",
+        },
+      ],
+    });
+  }
+  if (path === "/api/jobs/job-invalid") {
+    return Promise.resolve({
+      ok: true,
+      job: {
+        job_id: "job-invalid",
+        mode: "patch",
+        issue_id: "312",
+        commit_message: "",
+        effective_patch_path: "patches/issue_312_v5.zip",
+        canonical_command: [
+          "python3",
+          "scripts/am_patch.py",
+          "312",
+          "",
+          "patches/issue_312_v5.zip",
+        ],
+      },
+    });
+  }
+  return Promise.resolve({ ok: false, error: "unexpected path: " + path });
+};
+document.getElementById("mode").value = "rerun_latest";
+document.getElementById("issueId").value = "stale-issue";
+document.getElementById("commitMsg").value = "stale-message";
+document.getElementById("patchPath").value = "stale-patch";
+await prepareRerunLatestFromLatestJob();
+process.stdout.write(JSON.stringify({
+  issueId: document.getElementById("issueId").value,
+  commitMsg: document.getElementById("commitMsg").value,
+  patchPath: document.getElementById("patchPath").value,
+  uiStatus: window.__uiStatus,
+  uiErrors: window.__uiErrors,
+}));
+"""
+    )
+    result = _run_node(script)
+    assert result["issueId"] == ""
+    assert result["commitMsg"] == ""
+    assert result["patchPath"] == ""
+    assert result["uiErrors"] == []
+    assert result["uiStatus"][-1] == "rerun_latest: no eligible previous job"
+
+
+def test_rerun_latest_selected_job_invalid_clears_form_and_sets_error() -> None:
+    script_path = REPO_ROOT / "scripts" / "patchhub" / "static" / "app_part_jobs.js"
+    script = (
+        _node_prelude(script_path)
+        + """
+global.apiGet = (path) => {
+  if (path === "/api/jobs/job-invalid") {
+    return Promise.resolve({
+      ok: true,
+      job: {
+        job_id: "job-invalid",
+        mode: "patch",
+        issue_id: "312",
+        commit_message: "",
+        effective_patch_path: "patches/issue_312_v5.zip",
+        canonical_command: [
+          "python3",
+          "scripts/am_patch.py",
+          "312",
+          "",
+          "patches/issue_312_v5.zip",
+        ],
+      },
+    });
+  }
+  return Promise.resolve({ ok: false, error: "unexpected path: " + path });
+};
+document.getElementById("mode").value = "rerun_latest";
+document.getElementById("issueId").value = "stale-issue";
+document.getElementById("commitMsg").value = "stale-message";
+document.getElementById("patchPath").value = "stale-patch";
+await prepareRerunLatestFromJobId("job-invalid", {
+  sourceLabel: "selected jobs item",
+  clearOnFailure: true,
+});
+process.stdout.write(JSON.stringify({
+  issueId: document.getElementById("issueId").value,
+  commitMsg: document.getElementById("commitMsg").value,
+  patchPath: document.getElementById("patchPath").value,
+  uiStatus: window.__uiStatus,
+  uiErrors: window.__uiErrors,
+}));
+"""
+    )
+    result = _run_node(script)
+    assert result["issueId"] == ""
+    assert result["commitMsg"] == ""
+    assert result["patchPath"] == ""
+    assert result["uiStatus"][-1] == (
+        "rerun_latest: selected job is not eligible for Start-form autofill"
+    )
+    assert result["uiErrors"][-1] == (
+        "rerun_latest: selected job is not eligible for Start-form autofill"
+    )

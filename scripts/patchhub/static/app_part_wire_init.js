@@ -211,7 +211,7 @@ function wireButtons() {
 					el("mode").value = "rerun_latest";
 					phCall("prepareRerunLatestFromJobId", String(rerunJobId), {
 						sourceLabel: "selected jobs item",
-						clearOnFailure: false,
+						clearOnFailure: true,
 					});
 					return;
 				}
