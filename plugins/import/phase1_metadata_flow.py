@@ -6,6 +6,8 @@ ASCII-only.
 from __future__ import annotations
 
 import asyncio
+import threading
+from collections.abc import Callable, Coroutine
 from copy import deepcopy
 from functools import lru_cache
 from typing import Any
@@ -36,6 +38,43 @@ def _normalize_root_audio_value(*, value: Any, fallback: str) -> str:
     return text or fallback
 
 
+def _run_async_validation(
+    *,
+    factory: Callable[[], Coroutine[Any, Any, dict[str, Any]]],
+    default: dict[str, Any],
+) -> dict[str, Any]:
+    def _direct() -> dict[str, Any]:
+        result: dict[str, Any] = asyncio.run(factory())
+        return dict(result) if isinstance(result, dict) else dict(default)
+
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        try:
+            return _direct()
+        except Exception:
+            return dict(default)
+
+    result_box: dict[str, Any] = dict(default)
+    error_box: list[BaseException] = []
+
+    def _runner() -> None:
+        try:
+            result: dict[str, Any] = asyncio.run(factory())
+            if isinstance(result, dict):
+                result_box.clear()
+                result_box.update(dict(result))
+        except Exception as exc:
+            error_box.append(exc)
+
+    worker = threading.Thread(target=_runner, daemon=True)
+    worker.start()
+    worker.join()
+    if error_box:
+        return dict(default)
+    return dict(result_box)
+
+
 @lru_cache(maxsize=128)
 def _openlibrary_validate(author: str, title: str) -> tuple[dict[str, Any], dict[str, Any]]:
     default_author = {"valid": False, "canonical": None, "suggestion": None}
@@ -54,19 +93,19 @@ def _openlibrary_validate(author: str, title: str) -> tuple[dict[str, Any], dict
         }
     )
 
-    try:
-        author_validation = asyncio.run(plugin.validate_author(author))
-    except Exception:
-        author_validation = default_author
+    author_validation = _run_async_validation(
+        factory=lambda: plugin.validate_author(author),
+        default=default_author,
+    )
 
     validated_author = str(
         author_validation.get("canonical") or author_validation.get("suggestion") or author
     )
 
-    try:
-        book_validation = asyncio.run(plugin.validate_book(validated_author, title))
-    except Exception:
-        book_validation = default_book
+    book_validation = _run_async_validation(
+        factory=lambda: plugin.validate_book(validated_author, title),
+        default=default_book,
+    )
 
     return dict(author_validation), dict(book_validation)
 

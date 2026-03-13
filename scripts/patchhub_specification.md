@@ -3,7 +3,7 @@ Status: AUTHORITATIVE SPECIFICATION
 Applies to: scripts/patchhub/*
 Language: ENGLISH (ASCII ONLY)
 
-Specification Version: 1.12.4-spec
+Specification Version: 1.12.7-spec
 Code Baseline: audiomason2-main.zip (as provided in this chat)
 
 -------------------------------------------------------------------------------
@@ -768,8 +768,24 @@ Debug UI per-feed controls (templates/debug.html, static/debug.js):
 7.1.0 UI Layout Notes
 
 In the main UI (templates/index.html), the Start button for launching a run
-(HTML id: enqueueBtn) MUST be located in the "B) Start run" section on the
-same row as the commit message input (HTML id: commitMsg).
+(HTML id: enqueueBtn) MUST remain on the same row as the commit message input
+(HTML id: commitMsg).
+
+Approved compact-layout allowances for the run-launch card:
+- The visible card heading MAY omit the literal text "B) Start run".
+- The mode dropdown (HTML id: mode) MAY use a compact fixed width and MUST
+  remain left-aligned.
+- The patch path input (HTML id: patchPath) MAY appear either:
+  - on the same row as mode and Gate options, or
+  - on a dedicated row below.
+- If patchPath is placed on the mode row, Gate options MUST remain on the
+  right side of that same row.
+- The file-manager chooser control (HTML id: browsePatch) MAY remain wired in
+  the DOM while being visually hidden from the main screen.
+- Compact fixed-width variants are permitted for:
+  - issueId: 50 px
+  - mode: 50 px
+  - patchPath: 120 px
 
 Result badge sizing rule (UI):
 - The result badge text (progress summary) MUST be approximately 2x the step header size,
@@ -840,6 +856,8 @@ Main-screen control rules:
   - finalize_workspace (-w)
   - rerun_latest (-l)
 - The same mode row MUST include a Gate options button on the right side.
+- Approved compact layout MAY colocate patchPath on the same mode row while
+  keeping Gate options right-aligned.
 - Gate options opens a dedicated modal for transient per-run gate overrides.
 - The modal MUST NOT contain a separate control for -l.
 - Gate options are available only for:
@@ -864,6 +882,14 @@ Live retention and clipboard rules:
 - The live event view MUST retain at least 20000 events for the tracked job.
 - The same retention minimum MUST remain available after reconnect/replay; the
   UI MUST NOT silently reconnect to a smaller history window.
+- The live log toolbar MAY render an Auto-scroll toggle on the right side using
+  the same switch visual family as the Gate options modal.
+- If the Auto-scroll toggle is rendered and enabled, each live-log render MUST
+  scroll the live log to the bottom.
+- If the Auto-scroll toggle is rendered and disabled, a rerender MUST preserve
+  the current manual scroll position.
+- The live level dropdown MAY use a compact fixed width in the live log
+  toolbar.
 - The main screen MUST render Copy selection and Copy all buttons directly below
   the live log, aligned to the bottom-right.
 - Copy selection copies only the current text selection inside the live log.

@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import gc
 import json
+import warnings
 from importlib import import_module
 from pathlib import Path
 
@@ -207,3 +209,137 @@ def test_default_v3_phase1_runtime_step_uses_flow_visible_runtime_projection() -
             "value": {"expr": "$.op.outputs.snapshot"},
         }
     ]
+
+
+async def test_create_session_under_running_loop_awaits_metadata_validation_without_warning(
+    monkeypatch, tmp_path: Path
+) -> None:
+    engine, roots = _make_engine(tmp_path)
+    _write_book(roots["inbox"], "A", "Book")
+
+    phase1_metadata = import_module("plugins.import.phase1_metadata_flow")
+    metadata_plugin = import_module("plugins.metadata_openlibrary.plugin")
+    phase1_metadata._openlibrary_validate.cache_clear()
+
+    async def _validate_author(self, name: str) -> dict[str, object]:
+        assert name == "A"
+        return {"valid": False, "canonical": None, "suggestion": "Author A"}
+
+    async def _validate_book(self, author: str, title: str) -> dict[str, object]:
+        assert author == "Author A"
+        assert title == "Book"
+        return {
+            "valid": False,
+            "canonical": None,
+            "suggestion": {"author": "Author A", "title": "Canonical Book"},
+        }
+
+    monkeypatch.setattr(metadata_plugin.OpenLibraryPlugin, "validate_author", _validate_author)
+    monkeypatch.setattr(metadata_plugin.OpenLibraryPlugin, "validate_book", _validate_book)
+
+    with warnings.catch_warnings(record=True) as seen:
+        warnings.simplefilter("always")
+        state = engine.create_session("inbox", "", mode="stage")
+        gc.collect()
+
+    assert not any("was never awaited" in str(item.message) for item in seen)
+    assert state["vars"]["phase1"]["metadata"]["validation"] == {
+        "provider": "metadata_openlibrary",
+        "author": {"valid": False, "canonical": None, "suggestion": "Author A"},
+        "book": {
+            "valid": False,
+            "canonical": None,
+            "suggestion": {"author": "Author A", "title": "Canonical Book"},
+        },
+    }
+    assert state["vars"]["phase1"]["runtime"]["effective_author_title"] == {
+        "author": "Author A",
+        "title": "Canonical Book",
+    }
+
+
+async def test_resume_repair_under_running_loop_rebuilds_phase1_without_warning(
+    monkeypatch, tmp_path: Path
+) -> None:
+    engine, roots = _make_engine(tmp_path)
+    _write_book(roots["inbox"], "A", "Book")
+
+    phase1_metadata = import_module("plugins.import.phase1_metadata_flow")
+    metadata_plugin = import_module("plugins.metadata_openlibrary.plugin")
+    phase1_metadata._openlibrary_validate.cache_clear()
+
+    async def _validate_author(self, name: str) -> dict[str, object]:
+        assert name == "A"
+        return {"valid": False, "canonical": None, "suggestion": "Author A"}
+
+    async def _validate_book(self, author: str, title: str) -> dict[str, object]:
+        assert author == "Author A"
+        assert title == "Book"
+        return {
+            "valid": False,
+            "canonical": None,
+            "suggestion": {"author": "Author A", "title": "Canonical Book"},
+        }
+
+    monkeypatch.setattr(metadata_plugin.OpenLibraryPlugin, "validate_author", _validate_author)
+    monkeypatch.setattr(metadata_plugin.OpenLibraryPlugin, "validate_book", _validate_book)
+
+    state = engine.create_session("inbox", "", mode="stage")
+    session_id = str(state["session_id"])
+    state_path = roots["wizards"] / "import" / "sessions" / session_id / "state.json"
+    stored = json.loads(state_path.read_text(encoding="utf-8"))
+    stored["vars"] = {}
+    state_path.write_text(json.dumps(stored), encoding="utf-8")
+    phase1_metadata._openlibrary_validate.cache_clear()
+
+    with warnings.catch_warnings(record=True) as seen:
+        warnings.simplefilter("always")
+        repaired = engine.create_session("inbox", "", mode="stage")
+        gc.collect()
+
+    assert not any("was never awaited" in str(item.message) for item in seen)
+    assert repaired["vars"]["phase1"]["runtime"]["effective_author_title"] == {
+        "author": "Author A",
+        "title": "Canonical Book",
+    }
+    assert repaired["vars"]["phase1"]["metadata"]["validation"]["provider"] == (
+        "metadata_openlibrary"
+    )
+
+
+async def test_create_session_under_running_loop_keeps_fallback_on_validation_failure(
+    monkeypatch, tmp_path: Path
+) -> None:
+    engine, roots = _make_engine(tmp_path)
+    _write_book(roots["inbox"], "Author", "Book")
+
+    phase1_metadata = import_module("plugins.import.phase1_metadata_flow")
+    metadata_plugin = import_module("plugins.metadata_openlibrary.plugin")
+    phase1_metadata._openlibrary_validate.cache_clear()
+
+    async def _fail_author(self, name: str) -> dict[str, object]:
+        del self, name
+        raise RuntimeError("boom")
+
+    async def _fail_book(self, author: str, title: str) -> dict[str, object]:
+        del self, author, title
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(metadata_plugin.OpenLibraryPlugin, "validate_author", _fail_author)
+    monkeypatch.setattr(metadata_plugin.OpenLibraryPlugin, "validate_book", _fail_book)
+
+    with warnings.catch_warnings(record=True) as seen:
+        warnings.simplefilter("always")
+        state = engine.create_session("inbox", "", mode="stage")
+        gc.collect()
+
+    assert not any("was never awaited" in str(item.message) for item in seen)
+    assert state["vars"]["phase1"]["metadata"]["validation"] == {
+        "provider": "metadata_openlibrary",
+        "author": {"valid": False, "canonical": None, "suggestion": None},
+        "book": {"valid": False, "canonical": None, "suggestion": None},
+    }
+    assert state["vars"]["phase1"]["runtime"]["effective_author_title"] == {
+        "author": "Author",
+        "title": "Book",
+    }
