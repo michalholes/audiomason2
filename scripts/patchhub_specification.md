@@ -158,6 +158,15 @@ The runtime version MUST NOT be hardcoded in code.
   - live logs,
   - job state/progress (top-right),
   - stop/cancel responsiveness.
+- During ACTIVE, the Active job controls MUST be derived from the tracked
+  non-terminal job identity together with PatchHub queue/runner actionability
+  signals. The UI MUST NOT use current `/api/jobs` list membership as the sole
+  criterion for whether Cancel or Hard stop AMP is shown or hidden.
+- A temporary `/api/jobs` snapshot gap for the tracked non-terminal job MUST NOT
+  by itself suppress Cancel or Hard stop AMP controls.
+- If the backend later rejects Cancel or Hard stop AMP for that tracked job, the
+  UI MUST leave the form state intact and MUST show an explicit operator-visible
+  status/error rather than relying on preventive hiding.
 - IDLE is defined by the absence of a tracked non-terminal job.
   - In `visible+idle`, the UI MUST use a deterministic backoff policy for visible-tab
     refresh (see 2.5.1). The UI MUST NOT refresh more frequently than the first
@@ -1078,14 +1087,14 @@ Quick action rules:
   - commit summary is non-empty
 - On click, the UI MUST fetch GET /api/jobs/<job_id> and MUST validate the detail
   record before mutating the Start form.
-- If the detail record is eligible, the UI MUST:
+- If the clicked job is start-form-usable for rerun_latest, the UI MUST:
   - set mode = rerun_latest
   - set issueId, commitMsg, and patchPath from that JobRecord
   - clear rawCommand
   - refresh preview/validation
   - MUST NOT enqueue a job and MUST NOT start processing before explicit Start
-- If the detail record is not eligible, the UI MUST leave the Start form unchanged
-  and MUST show an explicit operator-visible status.
+- If the clicked job is not start-form-usable for rerun_latest, the UI MUST leave
+  the Start form unchanged and MUST show an explicit operator-visible status.
 
 Forbidden in visible item text:
 - job_id (may exist only as an internal data attribute for selection)
@@ -1093,7 +1102,7 @@ Forbidden in visible item text:
 7.1.5A rerun_latest Autofill Authority (UI)
 
 Definitions:
-- eligible rerun job = a JobRecord that satisfies all of the following:
+- detail-eligible rerun job = a JobRecord that satisfies all of the following:
   - mode is patch or rerun_latest
   - issue_id is non-empty
   - commit_message is non-empty
@@ -1101,8 +1110,10 @@ Definitions:
     1) effective_patch_path when non-empty
     2) else original_patch_path when non-empty
     3) else the patch operand derived from canonical_command for patch/rerun_latest
-- latest eligible job = the first eligible rerun job in jobs history sorted by
-  created_utc descending.
+- start-form-usable rerun job = a detail-eligible rerun job whose resolved patch
+  path also exists under patches_root after PatchHub jail resolution.
+- latest start-form-usable job = the first start-form-usable rerun job in jobs
+  history sorted by created_utc descending.
 
 Single source of truth:
 - Global rerun_latest (-l) preparation and per-job quick action preparation MUST
@@ -1115,20 +1126,25 @@ Single source of truth:
 - /api/jobs list is a candidate discovery surface only.
 - GET /api/jobs/<job_id> is the authoritative detail source for rerun_latest
   Start-form filling.
+- Patch path existence for rerun_latest Start-form usability MUST be checked
+  against PatchHub filesystem authority under patches_root with jail
+  constraints; discovery/list summary alone is insufficient.
 
 Global mode-switch behavior:
 - When the operator changes the mode dropdown to rerun_latest, the UI MUST:
   - clear rawCommand
-  - resolve the latest eligible job from jobs history
+  - resolve the latest start-form-usable job from jobs history
   - fetch the authoritative JobRecord detail for the selected job_id
+  - verify the resolved patch path exists under patches_root with jail
+    constraints before mutating the Start form
   - fill issueId, commitMsg, and patchPath from that one JobRecord
   - refresh preview/validation
   - MUST NOT enqueue a job and MUST NOT start processing before explicit Start
-- If no eligible rerun job exists, the UI MUST:
+- If no start-form-usable rerun job exists, the UI MUST:
   - clear issueId, commitMsg, and patchPath
   - refresh preview/validation
-  - show an explicit operator-visible status indicating that no eligible previous
-    job exists for rerun_latest
+  - show an explicit operator-visible status indicating that no start-form-usable
+    previous job exists for rerun_latest
 
 7.1.6 Autofill Token Change Output Clearing (UI)
 
