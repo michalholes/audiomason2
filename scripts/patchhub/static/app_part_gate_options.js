@@ -248,7 +248,6 @@ function renderGateOptionsModal() {
 			'<div class="gate-options-label">' + escapeHtml(def.label) + "</div>";
 		html += '<div class="gate-options-state">';
 		html += '<div class="gate-options-group">';
-		html += '<div class="gate-options-caption">This run</div>';
 		html += '<button type="button" class="gate-options-switch';
 		html += thisRun ? " is-on" : "";
 		html +=

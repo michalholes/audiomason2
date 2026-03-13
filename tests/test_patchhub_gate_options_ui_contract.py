@@ -27,7 +27,7 @@ def test_gate_options_module_is_loaded_and_registered() -> None:
     assert "getGateOptionsEnqueuePayload" in mod_src
     assert "gate-options-switch" in mod_src
     assert ".gate-options-switch" in css_src
-    assert ".gate-options-passive" in css_src
+    assert ".gate-options-caption" not in css_src
 
 
 def test_wire_init_dispatches_gate_modal_and_live_copy_setup() -> None:
