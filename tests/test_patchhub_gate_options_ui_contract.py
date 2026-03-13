@@ -20,10 +20,14 @@ def test_gate_options_controls_are_present_on_main_screen() -> None:
 def test_gate_options_module_is_loaded_and_registered() -> None:
     app_src = _read("scripts/patchhub/static/app.js")
     mod_src = _read("scripts/patchhub/static/app_part_gate_options.js")
+    css_src = _read("scripts/patchhub/static/app.css")
     assert "/static/app_part_gate_options.js" in app_src
     assert 'PH.register("app_part_gate_options"' in mod_src
     assert "clearGateOverrides" in mod_src
     assert "getGateOptionsEnqueuePayload" in mod_src
+    assert "gate-options-switch" in mod_src
+    assert ".gate-options-switch" in css_src
+    assert ".gate-options-passive" in css_src
 
 
 def test_wire_init_dispatches_gate_modal_and_live_copy_setup() -> None:

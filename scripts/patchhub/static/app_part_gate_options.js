@@ -246,28 +246,33 @@ function renderGateOptionsModal() {
 		html += '<div class="' + rowCls + '">';
 		html +=
 			'<div class="gate-options-label">' + escapeHtml(def.label) + "</div>";
+		html += '<div class="gate-options-state">';
 		html += '<div class="gate-options-group">';
 		html += '<div class="gate-options-caption">This run</div>';
-		html += '<div class="gate-options-actions">';
-		html += '<button type="button" class="btn btn-small';
-		html += thisRun ? " primary" : "";
+		html += '<button type="button" class="gate-options-switch';
+		html += thisRun ? " is-on" : "";
 		html +=
 			'" data-gate-key="' +
 			escapeHtml(def.key) +
-			'" data-gate-run="true">RUN</button>';
-		html += '<button type="button" class="btn btn-small';
-		html += !thisRun ? " primary" : "";
-		html +=
-			'" data-gate-key="' +
-			escapeHtml(def.key) +
-			'" data-gate-run="false">SKIP</button>';
-		html += "</div></div>";
+			'" data-gate-run="' +
+			(thisRun ? "false" : "true") +
+			'" aria-label="' +
+			escapeHtml(def.label + (thisRun ? ": RUN" : ": SKIP")) +
+			'" aria-pressed="' +
+			(thisRun ? "true" : "false") +
+			'">';
+		html += '<span class="gate-options-switch-track">';
+		html += '<span class="gate-options-switch-thumb"></span>';
+		html += "</span>";
+		html += "</button>";
+		html += "</div>";
 		html += '<div class="gate-options-group passive">';
 		html += '<div class="gate-options-caption">Config</div>';
 		html +=
 			'<div class="gate-options-passive">' +
 			(configRun ? "RUN" : "SKIP") +
 			"</div>";
+		html += "</div>";
 		html += "</div>";
 		html += "</div>";
 	}
