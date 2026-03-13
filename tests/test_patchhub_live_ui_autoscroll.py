@@ -109,6 +109,27 @@ document.getElementById("liveAutoscrollToggle");
     return json.loads(proc.stdout)
 
 
+def test_live_autoscroll_load_restores_saved_state() -> None:
+    result = _run_node_scenario(
+        """
+global.localStorage.setItem("amp.liveLogAutoscroll", "0");
+ui.initLiveAutoscrollToggle();
+ui.loadLiveAutoscroll();
+const toggle = document.getElementById("liveAutoscrollToggle");
+process.stdout.write(
+  JSON.stringify({
+    enabled: ui.getLiveAutoscrollEnabled(),
+    ariaChecked: String(toggle["aria-checked"] || ""),
+    isOn: toggle.classList.contains("is-on"),
+  }),
+);
+""",
+    )
+    assert result["enabled"] is False
+    assert result["ariaChecked"] == "false"
+    assert result["isOn"] is False
+
+
 def test_live_autoscroll_toggle_scrolls_only_when_enabled() -> None:
     result = _run_node_scenario(
         """

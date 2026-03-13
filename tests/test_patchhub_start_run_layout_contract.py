@@ -14,15 +14,22 @@ def test_start_run_layout_contract_matches_compact_layout() -> None:
     assert 'id="mode" class="input start-run-mode"' in html
     assert 'id="patchPath"' in html
     assert 'class="input start-run-patch"' in html
+    assert 'id="gateOptionsBtn"' in html
     assert 'id="browsePatch" class="btn btn-small hidden"' in html
     assert 'id="issueId"' in html
     assert 'class="input start-run-issue"' in html
     assert 'id="liveAutoscrollToggle"' in html
     assert "Auto-scroll" in html
+    top_row = html.split('<select id="mode" class="input start-run-mode">', 1)[1]
+    top_row = top_row.split("</div>", 1)[0]
+    assert '<span class="spacer"></span>' not in top_row
+    assert top_row.index('id="patchPath"') < top_row.index('id="gateOptionsBtn"')
     assert ".start-run-mode" in css
+    assert "flex: 0 0 75px;" in css
+    assert "width: 75px;" in css
     assert ".start-run-issue" in css
     assert "flex: 0 0 50px;" in css
     assert "width: 50px;" in css
     assert ".start-run-patch" in css
-    assert "flex: 0 0 120px;" in css
-    assert "width: 120px;" in css
+    assert "flex: 1 1 0;" in css
+    assert "width: auto;" in css

@@ -46,6 +46,17 @@ def test_wire_init_uses_dispatcher_for_amp_settings_and_snapshot_modules() -> No
     assert "window).AmpSettings" not in src
 
 
+def test_live_module_registers_autoscroll_runtime_capabilities() -> None:
+    src = _read("scripts/patchhub/static/patchhub_live_ui.js")
+    assert "loadLiveAutoscroll," in src
+    assert "initLiveAutoscrollToggle," in src
+
+
+def test_wire_init_restores_live_autoscroll_state() -> None:
+    src = _read("scripts/patchhub/static/app_part_wire_init.js")
+    assert 'PH.call("loadLiveAutoscroll")' in src
+
+
 def test_status_bar_uses_bounded_history_buffer() -> None:
     src = _read("scripts/patchhub/static/app.js")
     assert "UI_STATUS_LIMIT = 20" in src

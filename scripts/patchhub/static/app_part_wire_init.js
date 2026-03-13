@@ -333,6 +333,7 @@ function init() {
 		PH.call("setJobsVisible", jobsVisible);
 
 		PH.call("loadLiveLevel");
+		PH.call("loadLiveAutoscroll");
 		var savedJobId = PH.call("loadLiveJobId");
 		if (savedJobId) selectedJobId = savedJobId;
 		phCall("initGateOptionsUi");

@@ -761,6 +761,7 @@
 			loadLiveJobId,
 			saveLiveJobId,
 			loadLiveLevel,
+			loadLiveAutoscroll,
 			getLiveLevel,
 			setLiveLevel,
 			loadUiVisibility,
@@ -790,6 +791,7 @@
 			copyLiveSelection,
 			copyLiveAll,
 			initLiveCopyButtons,
+			initLiveAutoscrollToggle,
 		});
 	}
 	safeExport("loadLiveJobId", loadLiveJobId);
