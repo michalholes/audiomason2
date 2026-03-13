@@ -3,7 +3,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-SCRIPTS_DIR = Path(__file__).resolve().parents[1] / "scripts"
+REPO_ROOT = Path(__file__).resolve().parents[1]
+SCRIPTS_DIR = REPO_ROOT / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
 
 from am_patch.pytest_bucket_routing import select_pytest_targets  # noqa: E402
@@ -203,3 +204,82 @@ def test_full_suite_prefix_is_the_only_global_escalation_surface(tmp_path: Path)
         repo_root=repo_root,
     )
     assert targets == ["tests"]
+
+
+def _actual_repo_ownership() -> dict[str, tuple[str, ...]]:
+    discover_namespace_ownership.cache_clear()
+    return dict(
+        discover_namespace_ownership(
+            str(REPO_ROOT),
+            tuple(sorted(PYTEST_ROOTS_DEFAULT.items())),
+            tuple(sorted(PYTEST_TREE_DEFAULT.items())),
+        )
+    )
+
+
+def _actual_repo_targets(*decision_paths: str) -> list[str]:
+    discover_namespace_ownership.cache_clear()
+    return select_namespace_pytest_targets(
+        decision_paths=list(decision_paths),
+        pytest_targets=TEST_TARGETS,
+        pytest_roots=PYTEST_ROOTS_DEFAULT,
+        pytest_tree=PYTEST_TREE_DEFAULT,
+        pytest_dependencies=PYTEST_DEPENDENCIES_DEFAULT,
+        pytest_full_suite_prefixes=PYTEST_FULL_SUITE_PREFIXES_DEFAULT,
+        repo_root=REPO_ROOT,
+    )
+
+
+def test_actual_repo_web_and_import_false_negatives_are_no_longer_catch_all() -> None:
+    ownership = _actual_repo_ownership()
+
+    expected_web_and_import = [
+        "tests/e2e/test_import_ui_flow_editor_e2e.py",
+        "tests/e2e/test_import_ui_run_wizard_e2e.py",
+        "tests/e2e/test_web_interface_app_e2e.py",
+        "tests/e2e/test_web_interface_smoke.py",
+    ]
+    for rel_path in expected_web_and_import:
+        namespaces = ownership[rel_path]
+        assert namespaces != ("*",)
+        assert "am2.plugins.web_interface" in namespaces
+        assert "am2.plugins.import" in namespaces
+
+    for rel_path in (
+        "tests/unit/test_web_interface_wizards_backward_compat.py",
+        "tests/unit/test_web_interface_wizards_validation.py",
+    ):
+        namespaces = ownership[rel_path]
+        assert namespaces != ("*",)
+        assert "am2.plugins.web_interface" in namespaces
+
+
+def test_import_change_pulls_web_and_import_e2e_surfaces_in_actual_repo() -> None:
+    targets = _actual_repo_targets("plugins/import/plugin.py")
+    assert "tests/e2e/test_import_ui_flow_editor_e2e.py" in targets
+    assert "tests/e2e/test_import_ui_run_wizard_e2e.py" in targets
+    assert "tests/e2e/test_web_interface_app_e2e.py" in targets
+    assert "tests/e2e/test_web_interface_smoke.py" in targets
+
+
+def test_web_interface_change_pulls_web_and_import_e2e_surfaces_in_actual_repo() -> None:
+    targets = _actual_repo_targets("plugins/web_interface/core.py")
+    assert "tests/e2e/test_import_ui_flow_editor_e2e.py" in targets
+    assert "tests/e2e/test_import_ui_run_wizard_e2e.py" in targets
+    assert "tests/e2e/test_web_interface_app_e2e.py" in targets
+    assert "tests/e2e/test_web_interface_smoke.py" in targets
+
+
+def test_file_io_change_keeps_consumer_and_web_surfaces_in_actual_repo() -> None:
+    targets = _actual_repo_targets("plugins/file_io/plugin.py")
+    assert "tests/unit/test_file_io_service.py" in targets
+    assert "tests/e2e/test_import_ui_run_wizard_e2e.py" in targets
+    assert "tests/e2e/test_web_interface_app_e2e.py" in targets
+
+
+def test_patchhub_change_does_not_pull_import_only_e2e_from_asset_inventory_helper() -> None:
+    targets = _actual_repo_targets("scripts/patchhub/app.py")
+    assert "tests/e2e/test_patchhub_debug_ui_e2e.py" in targets
+    assert "tests/e2e/test_import_ui_run_wizard_e2e.py" not in targets
+    assert "tests/e2e/test_import_ui_flow_editor_e2e.py" not in targets
+    assert "tests/e2e/test_web_interface_smoke.py" not in targets

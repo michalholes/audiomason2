@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from collections import deque
 from collections.abc import Mapping, Sequence
+from functools import lru_cache
+from pathlib import Path
 
 from .pytest_namespace_config import (
     _matches_prefix,
@@ -18,6 +20,27 @@ from .pytest_namespace_discovery import (
     is_direct_test_path,
     select_tests_for_namespaces,
 )
+from .pytest_namespace_validator import validate_namespace_policy
+
+
+@lru_cache(maxsize=32)
+def _validate_policy_once(
+    repo_root_str: str,
+    roots_items: tuple[tuple[str, str], ...],
+    tree_items: tuple[tuple[str, str], ...],
+    dependency_items: tuple[tuple[str, tuple[str, ...]], ...],
+) -> None:
+    repo_root = Path(repo_root_str)
+    if not (repo_root / "plugins").exists():
+        return
+    if not (repo_root / "scripts" / "am_patch").exists():
+        return
+    validate_namespace_policy(
+        repo_root=repo_root,
+        pytest_roots=dict(roots_items),
+        pytest_tree=dict(tree_items),
+        pytest_dependencies={key: list(values) for key, values in dependency_items},
+    )
 
 
 def dedupe_keep_first(items: Sequence[str]) -> list[str]:
@@ -149,6 +172,12 @@ def select_namespace_pytest_targets(
     dependencies = _normalize_dependencies(pytest_dependencies)
     full_suite_prefixes = _normalize_full_suite_prefixes(pytest_full_suite_prefixes)
     repo_root = default_repo_root() if repo_root is None else repo_root
+    _validate_policy_once(
+        str(repo_root),
+        tuple(sorted(roots.items())),
+        tuple(sorted(tree.items())),
+        tuple(sorted((key, tuple(values)) for key, values in dependencies.items())),
+    )
     ownership = discover_namespace_ownership(
         str(repo_root),
         tuple(sorted(roots.items())),
