@@ -664,14 +664,10 @@ Policy keys:
 - gate_pytest_mode in {auto, always}
 - gate_pytest_js_prefixes: list[str] (default [])
 - pytest_routing_mode in {legacy, bucketed}
-- pytest_smoke_targets: list[str]
-- pytest_area_prefixes: list[str]
-- pytest_area_names: list[str]
-- pytest_area_targets: dict[str, list[str]]
-- pytest_family_areas: dict[str, list[str]]
-- pytest_family_targets: dict[str, list[str]]
-- pytest_broad_repo_prefixes: list[str]
-- pytest_broad_repo_targets: list[str]
+- pytest_roots: dict[str, str]
+- pytest_tree: dict[str, str]
+- pytest_dependencies: dict[str, list[str]]
+- pytest_full_suite_prefixes: list[str]
 
 Mode semantics:
 - always: the gate executes whenever it is not skipped by existing skip_* mechanisms.
@@ -698,19 +694,25 @@ Auto mode triggers (decision-only; deterministic):
   If not triggered: `gate_pytest=SKIP (no_matching_files)`
   If triggered, target selection is controlled by pytest_routing_mode:
   - legacy: pass pytest_targets to the pytest gate.
-  - bucketed: compute the effective pytest target list as the first-occurrence-preserving union of:
-    1) pytest_smoke_targets
-    2) every selected area target list from pytest_area_targets
-    3) every selected family target list from pytest_family_targets
-    4) pytest_broad_repo_targets, but only if any decision path matches pytest_broad_repo_prefixes
+  - bucketed: compute the effective pytest target list from namespace routing and discovery.
   Bucketed-mode selection rules:
   - Selection uses decision_paths after scope-ignore filtering.
-  - Area ownership uses pytest_area_prefixes and pytest_area_names with first-match-wins prefix semantics.
-  - A configured area matches a path if the prefix matches the whole path exactly or as prefix/.
-  - A family is selected when any impacted area belongs to that family via pytest_family_areas.
+  - Direct changed tests are always included.
+  - Tree matching uses longest-prefix wins over `pytest_tree`.
+  - If no tree entry matches, explicit root matching uses `pytest_roots` excluding `*`.
+  - If no explicit root matches, the changed path routes to the catch-all `*` namespace.
+  - Discovery maps tests to namespace ownership.
+  - `pytest_dependencies` is one-way. If namespace `A` depends on namespace `B`, a patch that
+    touches `B` MUST also include tests owned by `A`. A patch that touches `A` MUST NOT include
+    tests owned by `B` solely because of that dependency.
+  - If a touched node has no explicit dependency rule, routing falls back to its subtree suite.
+  - If the touched subtree has no explicit dependency rule, routing falls back to its root suite.
+  - Full suite escalation is controlled only by `pytest_full_suite_prefixes`.
+  - The catch-all `*` namespace is not automatic full suite.
   - Duplicates are removed deterministically, preserving first occurrence.
-  - Bucketed mode changes only target selection. It MUST NOT change gate_pytest_mode trigger semantics,
-    pytest_use_venv, gates_skip_pytest, gates_order, gates_allow_fail, or run_all_tests.
+  - Bucketed mode changes only target selection. It MUST NOT change gate_pytest_mode trigger
+    semantics, pytest_use_venv, gates_skip_pytest, gates_order, gates_allow_fail, or
+    run_all_tests.
 
 Notes:
 - In auto mode, trigger evaluation uses the changed paths set for the run (after scope ignore
@@ -740,9 +742,9 @@ most common mode switches. The flags map to policy keys as follows:
 
 `--pytest-routing-mode` semantics:
 - `legacy` keeps the current single-target behavior and passes pytest_targets directly.
-- `bucketed` enables bucketed target selection using pytest_smoke_targets, pytest_area_prefixes,
-  pytest_area_names, pytest_area_targets, pytest_family_areas, pytest_family_targets,
-  pytest_broad_repo_prefixes, and pytest_broad_repo_targets.
+- `bucketed` enables namespace routing using `pytest_roots`, `pytest_tree`,
+  `pytest_dependencies`, discovery ownership, direct changed tests, and
+  `pytest_full_suite_prefixes`.
 - `--pytest-mode` continues to control trigger timing only. It does not replace pytest_routing_mode.
 - The shipped repo policy may choose bucketed as the default routing mode; the mode remains fully configurable.
 

@@ -35,11 +35,21 @@ Pytest routing:
 - `--pytest-mode {auto,always}` controls when the pytest gate runs.
 - `--pytest-routing-mode {legacy,bucketed}` controls how the pytest gate selects targets after it has been triggered.
 - `legacy` passes `pytest_targets` directly.
-- `bucketed` builds the effective target list from:
-  - `pytest_smoke_targets`
-  - `pytest_area_prefixes` + `pytest_area_names` + `pytest_area_targets`
-  - `pytest_family_areas` + `pytest_family_targets`
-  - `pytest_broad_repo_prefixes` + `pytest_broad_repo_targets`
+- `bucketed` uses namespace routing plus discovery:
+  - `pytest_roots` defines root namespaces. The minimal shipped roots are `amp.*`, `am2.*`, and `*`.
+  - `pytest_tree` maps namespace nodes and subtrees to repo path prefixes.
+  - `pytest_dependencies` defines one-way namespace dependencies.
+  - discovery maps tests to namespaces.
+  - direct changed tests are always included.
+  - `pytest_full_suite_prefixes` defines the explicit global full-suite escalation surface.
+- Dependency semantics are one-way:
+  - if `A` depends on `B`, a patch that touches `B` must also run tests owned by `A`.
+  - a patch that touches `A` must not pull tests owned by `B` solely because of that dependency.
+- Fallback semantics in bucketed mode:
+  - if a touched node has no explicit dependency rule, route it to its subtree suite.
+  - if the touched subtree has no explicit dependency rule, route it to its root suite.
+  - if a changed path matches no explicit root, route it to the catch-all `*` namespace suite.
+  - full suite is reserved for `pytest_full_suite_prefixes` only; `*` is not automatic full suite.
 - `--pytest-js-prefixes CSV` keeps its existing role as the JS-only trigger surface for `gate_pytest_mode=auto`.
 
 Notes:
