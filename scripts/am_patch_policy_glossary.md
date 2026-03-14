@@ -68,7 +68,18 @@ Meaning: Controls when the pytest gate runs.
 Notes:
 - In mode "auto", the gate runs only when a file-scoped trigger matches.
 - Trigger semantics are defined in scripts/am_patch_specification.md (Python gates - auto mode).
-Related: gates_skip_pytest, pytest_targets, gate_pytest_js_prefixes
+Related: gates_skip_pytest, gate_pytest_py_prefixes, pytest_targets, gate_pytest_js_prefixes
+
+## Key: gate_pytest_py_prefixes
+Key: gate_pytest_py_prefixes
+Type: list[str]
+Default: ["tests", "src", "plugins", "scripts"]
+Meaning: In gate_pytest_mode="auto", a Python change under a listed prefix triggers pytest.
+Notes:
+- Prefix match is a directory-prefix match: "prefix" or "prefix/...".
+- This key controls trigger timing only. It does not control the targets passed to pytest.
+- Trigger semantics are defined in scripts/am_patch_specification.md (Python gates - auto mode).
+Related: gate_pytest_mode, gate_pytest_js_prefixes, pytest_targets
 
 ## Key: gate_pytest_js_prefixes
 Key: gate_pytest_js_prefixes
@@ -78,7 +89,7 @@ Meaning: In gate_pytest_mode="auto", a JS change under a listed prefix triggers 
 Notes:
 - Prefix match is a directory-prefix match: "prefix" or "prefix/...".
 - Trigger semantics are defined in scripts/am_patch_specification.md (Python gates - auto mode).
-Related: gate_pytest_mode, pytest_targets
+Related: gate_pytest_mode, gate_pytest_py_prefixes, pytest_targets
 
 ## Key: mypy_targets
 Key: mypy_targets
@@ -96,7 +107,8 @@ Default: ["tests"]
 Meaning: Paths passed to the pytest gate.
 Notes:
 - This is interpreted in the workspace repository root.
-Related: gates_skip_pytest
+- This key does not define the Python trigger surface for gate_pytest_mode="auto".
+Related: gates_skip_pytest, gate_pytest_py_prefixes
 
 ## Key: pytest_routing_mode
 Key: pytest_routing_mode

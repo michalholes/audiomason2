@@ -662,6 +662,7 @@ Policy keys:
 - gate_ruff_mode in {auto, always}
 - gate_mypy_mode in {auto, always}
 - gate_pytest_mode in {auto, always}
+- gate_pytest_py_prefixes: list[str] (default ["tests", "src", "plugins", "scripts"])
 - gate_pytest_js_prefixes: list[str] (default [])
 - pytest_routing_mode in {legacy, bucketed}
 - pytest_roots: dict[str, str]
@@ -690,8 +691,7 @@ Auto mode triggers (decision-only; deterministic):
 
 - Pytest (gate_pytest_mode=auto) triggers if any changed path is:
   - pyproject.toml or pytest.ini, or
-  - a .py file under any directory prefix listed in pytest_targets, or
-  - a .py file under src/ or plugins/ or scripts/, or
+  - a .py file under any directory prefix listed in gate_pytest_py_prefixes, or
   - a .js/.mjs/.cjs file under any directory prefix listed in gate_pytest_js_prefixes.
   If not triggered: `gate_pytest=SKIP (no_matching_files)`
   If triggered, target selection is controlled by pytest_routing_mode:
@@ -725,11 +725,15 @@ Auto mode triggers (decision-only; deterministic):
   - Bucketed mode changes only target selection. It MUST NOT change gate_pytest_mode trigger
     semantics, pytest_use_venv, gates_skip_pytest, gates_order, gates_allow_fail, or
     run_all_tests.
+  - pytest_targets controls only the targets passed to pytest after the gate has been triggered.
+    It MUST NOT define the Python trigger surface for gate_pytest_mode=auto.
 
 Notes:
 - In auto mode, trigger evaluation uses the changed paths set for the run (after scope ignore
   filtering), and does not require the files to exist after patch application (deletions may
   still trigger).
+- gate_pytest_py_prefixes uses directory-prefix matching: a prefix matches "prefix" exactly
+  or any path under "prefix/...".
 - gate_pytest_js_prefixes uses directory-prefix matching: a prefix matches "prefix" exactly
   or any path under "prefix/...".
 
@@ -745,6 +749,9 @@ most common mode switches. The flags map to policy keys as follows:
 - `--pytest-mode {auto,always}` -> gate_pytest_mode
 - `--pytest-routing-mode {legacy,bucketed}` -> pytest_routing_mode
 - `--pytest-js-prefixes CSV` -> gate_pytest_js_prefixes
+
+Policy keys without a dedicated UX flag remain fully controllable through
+`--override KEY=VALUE`. This includes `gate_pytest_py_prefixes`.
 
 `--pytest-js-prefixes` semantics:
 - CSV is a comma-separated list of directory prefixes (example:
@@ -1319,6 +1326,7 @@ This appendix is resolved by the authoritative policy glossary:
 -   `gates_skip_pytest` changes which gates run and in what order
 -   `gates_skip_ruff` changes which gates run and in what order
 -   `mypy_targets` changes which gates run and in what order
+-   `gate_pytest_py_prefixes` changes which gates run and in what order
 -   `pytest_targets` changes which gates run and in what order
 -   `pytest_routing_mode` changes which gates run and in what order
 -   `pytest_smoke_targets` changes which gates run and in what order

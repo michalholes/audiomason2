@@ -33,6 +33,9 @@ This manual describes how *you* use the new runner day-to-day so that runs are d
 
 Pytest routing:
 - `--pytest-mode {auto,always}` controls when the pytest gate runs.
+- `gate_pytest_py_prefixes` defines the Python trigger surface for `gate_pytest_mode=auto`.
+  - The shipped default is `tests`, `src`, `plugins`, and `scripts`.
+  - Configure it via `scripts/am_patch/am_patch.toml` or `--override gate_pytest_py_prefixes=...`.
 - `--pytest-routing-mode {legacy,bucketed}` controls how the pytest gate selects targets after it has been triggered.
 - `legacy` passes `pytest_targets` directly.
 - `bucketed` uses namespace routing plus discovery:
@@ -56,6 +59,8 @@ Pytest routing:
   - if the touched subtree has no explicit dependency rule, route it to its root suite.
   - if a changed path matches no explicit root, route it to the catch-all `*` namespace suite.
   - full suite is reserved for `pytest_full_suite_prefixes` only; `*` is not automatic full suite.
+- `pytest_targets` remains the list of targets passed to pytest after the gate has been triggered.
+  It does not define the Python trigger surface.
 - `--pytest-js-prefixes CSV` keeps its existing role as the JS-only trigger surface for `gate_pytest_mode=auto`.
 
 Notes:
