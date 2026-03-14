@@ -16,18 +16,31 @@ def _import_ipc_controller():
     return IpcController
 
 
+def _import_logger_cls():
+    scripts_dir = Path(__file__).parent.parent / "scripts"
+    if str(scripts_dir) not in sys.path:
+        sys.path.insert(0, str(scripts_dir))
+    from am_patch.log import Logger
+
+    return Logger
+
+
 class _FakeLogger:
     def __init__(self) -> None:
         self.screen_level = "verbose"
         self.log_level = "verbose"
         self._stream = None
+        self._seq = 0
 
     def set_ipc_stream(self, cb):
         self._stream = cb
 
-    def emit_control_event(self, payload):
+    def emit_control_event(self, payload, *, before_publish=None):
+        self._seq += 1
+        if callable(before_publish):
+            before_publish(self._seq)
         if self._stream is not None:
-            self._stream({"seq": 1, **payload})
+            self._stream({"seq": self._seq, **payload})
 
 
 class _FakeStatus:
@@ -177,6 +190,51 @@ def test_drain_ack_survives_idle_connection_on_same_socket(tmp_path: Path) -> No
             conn.close()
     finally:
         ipc.stop()
+
+
+def test_drain_ack_succeeds_for_immediate_ack_after_emitted_eos(tmp_path: Path) -> None:
+    ipc_controller_cls = _import_ipc_controller()
+    logger_cls = _import_logger_cls()
+    socket_path = tmp_path / "am_patch_immediate.sock"
+    logger = logger_cls(
+        log_path=tmp_path / "am_patch.log",
+        symlink_path=tmp_path / "am_patch.current.log",
+        screen_level="quiet",
+        log_level="quiet",
+        symlink_enabled=False,
+        json_enabled=False,
+    )
+    ipc = ipc_controller_cls(
+        socket_path=socket_path,
+        issue_id="1000",
+        mode="workspace",
+        status_provider=_FakeStatus(),
+        logger=logger,
+        handshake_enabled=True,
+        handshake_wait_s=1,
+    )
+    ipc.start()
+    try:
+        conn, fp = _open_client(socket_path)
+        try:
+            ready_reply = _send_cmd(fp, cmd="ready", cmd_id="c1")
+            assert ready_reply["ok"] is True
+            assert ipc.wait_for_ready() is True
+
+            logger.emit_control_event(
+                {"type": "control", "event": "eos"},
+                before_publish=lambda seq: ipc.begin_shutdown_handshake(eos_seq=seq),
+            )
+            eos = _read_control_event(fp, event="eos")
+            ok_reply = _send_cmd(fp, cmd="drain_ack", cmd_id="c2", args={"seq": eos["seq"]})
+            assert ok_reply["ok"] is True
+            assert ipc.wait_for_drain_ack() is True
+        finally:
+            fp.close()
+            conn.close()
+    finally:
+        ipc.stop()
+        logger.close()
 
 
 class _BlockingConn:

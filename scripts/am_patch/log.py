@@ -392,12 +392,17 @@ class Logger:
     def get_last_json_seq(self) -> int:
         return int(self._json_seq)
 
-    def emit_control_event(self, payload: dict[str, Any]) -> None:
+    def emit_control_event(
+        self,
+        payload: dict[str, Any],
+        *,
+        before_publish: Callable[[int], None] | None = None,
+    ) -> int:
         with self._io_lock:
             ipc_stream = self._ipc_stream
             need_evt = (self.json_enabled and self._json_fp is not None) or ipc_stream is not None
             if not need_evt:
-                return
+                return 0
             self._json_seq += 1
             evt = {
                 "seq": self._json_seq,
@@ -405,12 +410,16 @@ class Logger:
                 "stage": self._get_stage(),
                 **payload,
             }
+            if callable(before_publish):
+                with contextlib.suppress(Exception):
+                    before_publish(self._json_seq)
             if self.json_enabled and self._json_fp is not None:
                 with contextlib.suppress(Exception):
                     self._write_json(evt)
             if ipc_stream is not None:
                 with contextlib.suppress(Exception):
                     ipc_stream(evt)
+            return self._json_seq
 
     def _write_machine_event_locked(self, evt: dict[str, Any]) -> tuple[bool, bool]:
         wrote_json = False

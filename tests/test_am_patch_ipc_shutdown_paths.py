@@ -37,10 +37,13 @@ class _FakeLogger:
         self.actions.append("logger.emit")
         self.debug_messages.append(str(kwargs.get("message", "")))
 
-    def emit_control_event(self, payload: dict[str, object]) -> None:
-        self.actions.append(f"logger.control:{payload.get('event', '')}")
+    def emit_control_event(self, payload: dict[str, object], *, before_publish=None) -> int:
         self._last_seq += 1
+        if callable(before_publish):
+            before_publish(self._last_seq)
+        self.actions.append(f"logger.control:{payload.get('event', '')}")
         self.control_events.append(dict(payload))
+        return self._last_seq
 
     def get_last_json_seq(self) -> int:
         return self._last_seq
@@ -126,8 +129,8 @@ def test_main_shutdown_handshake_runs_from_all_supported_modes(
     assert actions == [
         "finalize_and_report",
         "logger.emit",
-        "logger.control:eos",
         "ipc.begin:1",
+        "logger.control:eos",
         "ipc.wait_for_drain_ack",
         "ipc.stop",
         "logger.close",

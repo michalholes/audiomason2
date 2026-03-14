@@ -269,9 +269,17 @@ def main(argv: list[str]) -> int:
                         message="DEBUG: IPC shutdown handshake waiting for drain_ack\n",
                         kind="TEXT",
                     )
-                    ctx.logger.emit_control_event({"type": "control", "event": "eos"})
-                    eos_seq = ctx.logger.get_last_json_seq()
-                    shutdown_handshake_active = ctx.ipc.begin_shutdown_handshake(eos_seq=eos_seq)
+
+                    def _arm_shutdown_handshake(eos_seq: int) -> None:
+                        nonlocal shutdown_handshake_active
+                        shutdown_handshake_active = ctx.ipc.begin_shutdown_handshake(
+                            eos_seq=eos_seq
+                        )
+
+                    ctx.logger.emit_control_event(
+                        {"type": "control", "event": "eos"},
+                        before_publish=_arm_shutdown_handshake,
+                    )
                     if shutdown_handshake_active:
                         ctx.ipc.wait_for_drain_ack()
             if not shutdown_handshake_active:
