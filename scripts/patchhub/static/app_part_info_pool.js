@@ -24,6 +24,7 @@ function infoPoolModalEl(id) {
 	return el(id);
 }
 
+/** @returns {InfoPoolSnapshot} */
 function infoPoolSnapshot() {
 	if (typeof getInfoPoolSnapshot === "function") {
 		return /** @type {InfoPoolSnapshot} */ (getInfoPoolSnapshot());
