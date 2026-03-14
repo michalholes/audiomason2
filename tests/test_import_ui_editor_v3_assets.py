@@ -29,6 +29,7 @@ except Exception:
 ASSET_PATHS = [
     "/import/ui/assets/flow_json_clipboard.js",
     "/import/ui/assets/flow_json_modal_dom.js",
+    "/import/ui/assets/flow_json_file_io.js",
     "/import/ui/assets/dsl_editor/registry_api.js",
     "/import/ui/assets/dsl_editor/palette.js",
     "/import/ui/assets/dsl_editor/node_form.js",
@@ -101,6 +102,9 @@ def test_import_ui_index_loads_v3_editor_assets_in_order(tmp_path: Path) -> None
     assert html.index("/import/ui/assets/flow_all_actions.js") < html.index(
         "/import/ui/assets/flow_json_modal_state.js"
     )
+    assert html.index("/import/ui/assets/flow_json_file_io.js") < html.index(
+        "/import/ui/assets/flow_json_modal_state.js"
+    )
     assert html.index("/import/ui/assets/flow_json_modal_state.js") < html.index(
         "/import/ui/assets/flow_json_modal_entrypoints.js"
     )
@@ -139,10 +143,15 @@ def test_import_ui_index_exposes_flow_json_modal_controls(tmp_path: Path) -> Non
     assert 'id="flowOpenWizardJson"' in html
     assert 'id="flowOpenConfigJson"' in html
     assert 'id="flowJsonModal"' in html
+    assert 'id="flowJsonOpenFromFile"' in html
+    assert 'id="flowJsonSaveToFile"' in html
     assert 'id="flowJsonCopySelected"' in html
     assert 'id="flowJsonCopyAll"' in html
     assert 'id="flowJsonApply"' in html
     assert '<link rel="stylesheet" href="/import/ui/assets/flow_json_modal.css" />' in html
+    assert html.index("/import/ui/assets/flow_json_file_io.js") < html.index(
+        "/import/ui/assets/flow_json_modal_state.js"
+    )
     assert html.index("/import/ui/assets/flow_json_modal_state.js") < html.index(
         "/import/ui/assets/flow_json_modal_entrypoints.js"
     )

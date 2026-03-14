@@ -3,7 +3,8 @@
 
 	var dom = root.AM2FlowJSONModalDOM;
 	var clip = root.AM2FlowJSONClipboard;
-	if (!dom || !clip) {
+	var fileIO = root.AM2FlowJSONFileIO;
+	if (!dom || !clip || !fileIO) {
 		return;
 	}
 
@@ -52,6 +53,16 @@
 			return true;
 		}
 		return root.confirm(message);
+	}
+
+	function setModalError(message) {
+		dom.setStatus("", "");
+		dom.setError(String(message || ""));
+	}
+
+	function setModalStatus(message) {
+		dom.setError("");
+		dom.setStatus(String(message || ""), "ok");
 	}
 
 	var state = {
@@ -230,10 +241,10 @@
 		dom.clearFeedback();
 		var ok = await reloadArtifact(currentDriver().key);
 		if (!ok) {
-			dom.setError("Re-read failed.");
+			setModalError("Re-read failed.");
 			return false;
 		}
-		dom.setStatus("Draft re-read from server.", "ok");
+		setModalStatus("Draft re-read from server.");
 		return true;
 	}
 
@@ -244,14 +255,14 @@
 			stageFromEditor();
 			ok = await currentDriver().save();
 			if (!ok) {
-				dom.setError("Save failed.");
+				setModalError("Save failed.");
 				return false;
 			}
 			syncFromState();
-			dom.setStatus("Draft saved.", "ok");
+			setModalStatus("Draft saved.");
 			return true;
 		} catch (err) {
-			dom.setError(String(err || "Save failed."));
+			setModalError(String(err || "Save failed."));
 			return false;
 		}
 	}
@@ -263,22 +274,21 @@
 			stageFromEditor();
 			ok = await currentDriver().apply();
 			if (!ok) {
-				dom.setError("Apply for future runs failed.");
+				setModalError("Apply for future runs failed.");
 				return false;
 			}
 			syncFromState();
-			dom.setStatus("Applied for future runs.", "ok");
+			setModalStatus("Applied for future runs.");
 			return true;
 		} catch (err) {
-			dom.setError(String(err || "Apply for future runs failed."));
+			setModalError(String(err || "Apply for future runs failed."));
 			return false;
 		}
 	}
 
 	function abortChanges() {
 		dom.setValue(state.lastLoadedText);
-		dom.setError("");
-		dom.setStatus("Modal changes discarded.", "ok");
+		setModalStatus("Modal changes discarded.");
 		return true;
 	}
 
@@ -291,17 +301,16 @@
 	function copySelected() {
 		var text = dom.getSelectedText();
 		if (!text) {
-			dom.setError("No text selected.");
+			setModalError("No text selected.");
 			return Promise.resolve(false);
 		}
 		return clip.copyText(text).then(
 			() => {
-				dom.setError("");
-				dom.setStatus("Selected JSON copied.", "ok");
+				setModalStatus("Selected JSON copied.");
 				return true;
 			},
 			(err) => {
-				dom.setError(String(err || "Copy selected failed."));
+				setModalError(String(err || "Copy selected failed."));
 				return false;
 			},
 		);
@@ -310,15 +319,47 @@
 	function copyAll() {
 		return clip.copyText(dom.getValue()).then(
 			() => {
-				dom.setError("");
-				dom.setStatus("Full JSON copied.", "ok");
+				setModalStatus("Full JSON copied.");
 				return true;
 			},
 			(err) => {
-				dom.setError(String(err || "Copy all failed."));
+				setModalError(String(err || "Copy all failed."));
 				return false;
 			},
 		);
+	}
+
+	async function openFromFile() {
+		var result = null;
+		if (
+			modalDirty() &&
+			!confirmDiscard("Discard current modal changes and open JSON from file?")
+		) {
+			return false;
+		}
+		try {
+			result = await fileIO.openTextFile(currentDriver().key);
+			if (!result || result.cancelled === true) {
+				return false;
+			}
+			dom.setValue(String(result.text || ""));
+			setModalStatus("JSON loaded from file.");
+			return true;
+		} catch (err) {
+			setModalError(String(err || "Open from file failed."));
+			return false;
+		}
+	}
+
+	async function saveToFile() {
+		try {
+			await fileIO.saveTextFile(currentDriver().key, dom.getValue());
+			setModalStatus("JSON saved to file.");
+			return true;
+		} catch (err) {
+			setModalError(String(err || "Save to file failed."));
+			return false;
+		}
 	}
 
 	async function openModal(artifact) {
@@ -340,16 +381,16 @@
 			if (!ok) {
 				restoreModalSnapshot(previous);
 				if (previous.wasOpen === true) {
-					dom.setError("Re-read failed.");
+					setModalError("Re-read failed.");
 				}
 				return false;
 			}
-			dom.setStatus("Draft re-read from server.", "ok");
+			setModalStatus("Draft re-read from server.");
 			return true;
 		} catch (err) {
 			restoreModalSnapshot(previous);
 			if (previous.wasOpen === true) {
-				dom.setError(String(err || "Re-read failed."));
+				setModalError(String(err || "Re-read failed."));
 			}
 			return false;
 		}
@@ -367,6 +408,8 @@
 	bind(dom.ui.reread, rereadFromServer);
 	bind(dom.ui.abort, abortChanges);
 	bind(dom.ui.save, saveDraft);
+	bind(dom.ui.openFromFile, openFromFile);
+	bind(dom.ui.saveToFile, saveToFile);
 	bind(dom.ui.cancel, cancelModal);
 	bind(dom.ui.copySelected, copySelected);
 	bind(dom.ui.copyAll, copyAll);
@@ -378,9 +421,11 @@
 		cancelModal: cancelModal,
 		copyAll: copyAll,
 		copySelected: copySelected,
+		openFromFile: openFromFile,
 		openModal: openModal,
 		rereadFromServer: rereadFromServer,
 		saveDraft: saveDraft,
+		saveToFile: saveToFile,
 		_syncFromState: syncFromState,
 	};
 })();

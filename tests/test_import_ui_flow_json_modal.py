@@ -18,6 +18,7 @@ def _run_node_scenario(body: str) -> dict[str, object]:
     script_paths = {
         "clipboard": ASSET_BASE / "flow_json_clipboard.js",
         "dom": ASSET_BASE / "flow_json_modal_dom.js",
+        "file_io": ASSET_BASE / "flow_json_file_io.js",
         "state": ASSET_BASE / "flow_json_modal_state.js",
         "entrypoints": ASSET_BASE / "flow_json_modal_entrypoints.js",
     }
@@ -27,6 +28,7 @@ const vm = require("vm");
 const src = {{
   clipboard: fs.readFileSync({json.dumps(str(script_paths["clipboard"]))}, "utf8"),
   dom: fs.readFileSync({json.dumps(str(script_paths["dom"]))}, "utf8"),
+  fileIo: fs.readFileSync({json.dumps(str(script_paths["file_io"]))}, "utf8"),
   state: fs.readFileSync({json.dumps(str(script_paths["state"]))}, "utf8"),
   entrypoints: fs.readFileSync({json.dumps(str(script_paths["entrypoints"]))}, "utf8"),
 }};
@@ -92,6 +94,8 @@ function ensureNode(id) {{
   "flowJsonReread",
   "flowJsonAbort",
   "flowJsonSave",
+  "flowJsonOpenFromFile",
+  "flowJsonSaveToFile",
   "flowJsonCancel",
   "flowJsonCopySelected",
   "flowJsonCopyAll",
@@ -215,6 +219,7 @@ global.CustomEvent = function(name, init) {{
 }};
 vm.runInThisContext(src.clipboard, {{ filename: {json.dumps(str(script_paths["clipboard"]))} }});
 vm.runInThisContext(src.dom, {{ filename: {json.dumps(str(script_paths["dom"]))} }});
+vm.runInThisContext(src.fileIo, {{ filename: {json.dumps(str(script_paths["file_io"]))} }});
 vm.runInThisContext(src.state, {{ filename: {json.dumps(str(script_paths["state"]))} }});
 vm.runInThisContext(
   src.entrypoints,
@@ -394,3 +399,203 @@ process.stdout.write(JSON.stringify({
     assert result["modalHidden"] is True
     assert result["modalTitle"] == ""
     assert result["editorValue"] == ""
+
+
+def test_flow_json_modal_open_from_file_marks_editor_dirty_and_abort_restores_server() -> None:
+    result = _run_node_scenario(
+        """
+await window.AM2FlowJSONModalState.openModal("config");
+const editorNode = document.getElementById("flowJsonModalEditor");
+const loadedValue = editorNode.value;
+window.AM2FlowJSONFileIO.setHooks({
+  openTextFile: async (artifact) => ({
+    cancelled: false,
+    text: (`
+{
+  "artifact": "${artifact}",
+  "defaults": {
+    "marker": 88
+  }
+}`),
+  }),
+});
+const openedConfig = await window.AM2FlowJSONModalState.openFromFile();
+const dirtyAfterConfig = editorNode.value !== loadedValue;
+const configValue = editorNode.value;
+window.AM2FlowJSONModalState.abortChanges();
+const afterAbort = editorNode.value;
+await window.AM2FlowJSONModalState.openModal("wizard");
+const wizardEditor = document.getElementById("flowJsonModalEditor");
+const wizardServerValue = wizardEditor.value;
+window.AM2FlowJSONFileIO.setHooks({
+  openTextFile: async (artifact) => ({
+    cancelled: false,
+    text: (`
+{
+  "artifact": "${artifact}",
+  "nodes": [
+    {
+      "step_id": "wiz_local"
+    }
+  ]
+}`),
+  }),
+});
+const openedWizard = await window.AM2FlowJSONModalState.openFromFile();
+const wizardDirty = wizardEditor.value !== wizardServerValue;
+process.stdout.write(JSON.stringify({
+  openedConfig,
+  openedWizard,
+  dirtyAfterConfig,
+  wizardDirty,
+  loadedValue,
+  configValue,
+  afterAbort,
+  wizardValue: wizardEditor.value,
+  statusText: document.getElementById("flowJsonModalStatus").textContent,
+  errorText: document.getElementById("flowJsonModalError").textContent,
+  configDraft: state.configDraft,
+  wizardDraft: state.wizardDraft,
+}));
+"""
+    )
+    assert result["openedConfig"] is True
+    assert result["openedWizard"] is True
+    assert result["dirtyAfterConfig"] is True
+    assert result["wizardDirty"] is True
+    assert '"marker": 88' in str(result["configValue"])
+    assert result["afterAbort"] == result["loadedValue"]
+    assert '"step_id": "wiz_local"' in str(result["wizardValue"])
+    assert result["statusText"] == "JSON loaded from file."
+    assert result["errorText"] == ""
+    assert result["configDraft"]["defaults"]["marker"] == 7
+    assert result["wizardDraft"]["nodes"][0]["step_id"] == "server"
+
+
+def test_flow_json_modal_save_to_file_uses_exact_editor_text_and_filenames() -> None:
+    result = _run_node_scenario(
+        """
+const saved = [];
+window.AM2FlowJSONFileIO.setHooks({
+  saveTextFile: async (artifact, text) => {
+    saved.push({
+      artifact,
+      text,
+      filename: window.AM2FlowJSONFileIO.fileNameForArtifact(artifact),
+    });
+  },
+});
+await window.AM2FlowJSONModalState.openModal("config");
+const editorNode = document.getElementById("flowJsonModalEditor");
+editorNode.value = (`
+{
+  "version": 1,
+  "defaults": {
+    "marker": 31
+  }
+}`);
+await window.AM2FlowJSONModalState.saveToFile();
+await window.AM2FlowJSONModalState.openModal("wizard");
+const wizardEditor = document.getElementById("flowJsonModalEditor");
+wizardEditor.value = (`
+{
+  "version": 3,
+  "nodes": [
+    {
+      "step_id": "wiz_save"
+    }
+  ]
+}`);
+await window.AM2FlowJSONModalState.saveToFile();
+process.stdout.write(JSON.stringify({
+  saved,
+  statusText: document.getElementById("flowJsonModalStatus").textContent,
+  errorText: document.getElementById("flowJsonModalError").textContent,
+  configDraft: state.configDraft,
+  wizardDraft: state.wizardDraft,
+}));
+"""
+    )
+    assert result["saved"][0]["artifact"] == "config"
+    assert result["saved"][0]["filename"] == "flow_config_draft.json"
+    assert result["saved"][0]["text"].endswith('"marker": 31\n  }\n}')
+    assert result["saved"][1]["artifact"] == "wizard"
+    assert result["saved"][1]["filename"] == "wizard_definition_draft.json"
+    assert '"step_id": "wiz_save"' in result["saved"][1]["text"]
+    assert result["statusText"] == "JSON saved to file."
+    assert result["errorText"] == ""
+    assert result["configDraft"]["defaults"]["marker"] == 7
+    assert result["wizardDraft"]["nodes"][0]["step_id"] == "server"
+
+
+def test_flow_json_modal_open_from_file_cancel_and_failures_are_noop_or_error() -> None:
+    result = _run_node_scenario(
+        """
+await window.AM2FlowJSONModalState.openModal("config");
+const editorNode = document.getElementById("flowJsonModalEditor");
+const serverValue = editorNode.value;
+window.AM2FlowJSONFileIO.setHooks({
+  openTextFile: async () => ({ cancelled: true, text: "" }),
+});
+const cancelled = await window.AM2FlowJSONModalState.openFromFile();
+const afterCancel = editorNode.value;
+editorNode.value = (`
+{
+  "version": 1,
+  "defaults": {
+    "marker": 999
+  }
+}`);
+window.confirm = (message) => {
+  confirmCalls.push(String(message));
+  return false;
+};
+const rejectedDirtyOpen = await window.AM2FlowJSONModalState.openFromFile();
+const afterRejectedDirtyOpen = editorNode.value;
+window.confirm = (message) => {
+  confirmCalls.push(String(message));
+  return true;
+};
+window.AM2FlowJSONFileIO.setHooks({
+  openTextFile: async () => {
+    throw new Error("read exploded");
+  },
+});
+const failedOpen = await window.AM2FlowJSONModalState.openFromFile();
+const openError = document.getElementById("flowJsonModalError").textContent;
+window.AM2FlowJSONFileIO.setHooks({
+  saveTextFile: async () => {
+    throw new Error("write exploded");
+  },
+});
+const failedSave = await window.AM2FlowJSONModalState.saveToFile();
+process.stdout.write(JSON.stringify({
+  cancelled,
+  afterCancel,
+  serverValue,
+  rejectedDirtyOpen,
+  afterRejectedDirtyOpen,
+  failedOpen,
+  openError,
+  failedSave,
+  saveError: document.getElementById("flowJsonModalError").textContent,
+  confirmCalls,
+  configDraft: state.configDraft,
+  statusText: document.getElementById("flowJsonModalStatus").textContent,
+}));
+"""
+    )
+    assert result["cancelled"] is False
+    assert result["afterCancel"] == result["serverValue"]
+    assert result["rejectedDirtyOpen"] is False
+    assert result["afterRejectedDirtyOpen"] != result["serverValue"]
+    assert result["confirmCalls"] == [
+        "Discard current modal changes and open JSON from file?",
+        "Discard current modal changes and open JSON from file?",
+    ]
+    assert result["failedOpen"] is False
+    assert result["openError"] == "Error: read exploded"
+    assert result["failedSave"] is False
+    assert result["saveError"] == "Error: write exploded"
+    assert result["configDraft"]["defaults"]["marker"] == 7
+    assert result["statusText"] == ""

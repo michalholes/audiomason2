@@ -17,6 +17,8 @@
 		reread: $("flowJsonReread"),
 		abort: $("flowJsonAbort"),
 		save: $("flowJsonSave"),
+		openFromFile: $("flowJsonOpenFromFile"),
+		saveToFile: $("flowJsonSaveToFile"),
 		cancel: $("flowJsonCancel"),
 		copySelected: $("flowJsonCopySelected"),
 		copyAll: $("flowJsonCopyAll"),
