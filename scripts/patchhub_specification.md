@@ -3,7 +3,7 @@ Status: AUTHORITATIVE SPECIFICATION
 Applies to: scripts/patchhub/*
 Language: ENGLISH (ASCII ONLY)
 
-Specification Version: 1.12.9-spec
+Specification Version: 1.12.10-spec
 Code Baseline: audiomason2-main.zip (as provided in this chat)
 
 -------------------------------------------------------------------------------
@@ -989,6 +989,22 @@ Rendering rules:
   - skip: gray dot and a SKIPPED pill that includes the skip reason
   - ok: green dot
   - fail: red dot
+- Per-gate duration pill rule for GATE_PYTEST and GATE_MYPY:
+  - The Progress card MUST derive the gate duration only from structured event
+    payload fields `stage`, `kind`, and `ts_mono_ms`.
+  - Tail text and human-readable log lines MUST NOT start, stop, advance or
+    reconstruct the duration pill.
+  - Start is the first persisted event for that stage with `kind="DO"`.
+  - Stop is the first later persisted event for that stage with
+    `kind="OK"` or `kind="FAIL"`.
+  - A skip marker for that stage MUST suppress the duration pill and MUST
+    annul any running duration for that stage.
+  - While the gate is running, the UI MUST render `RUNNING (<elapsed>s)`.
+  - After the gate reaches OK or FAIL, the UI MUST render `<elapsed>s` and
+    MUST retain that frozen duration until the tracked job is replaced by a
+    newer tracked job or explicit user selection.
+  - A skipped gate MUST render only the existing `SKIPPED (...)` pill and
+    MUST NOT render a duration pill.
 - A step that emitted a skip marker MUST remain visually skipped even if the
   surrounding runner wrapper later emits OK for that same step.
 - Exactly one step is shown as running (the most recent DO without a later
