@@ -120,6 +120,7 @@ list_eq = [
   "test_084_workspace_git_state_matches_mode",
   "test_085_success_archive_zip_hygiene",
   "test_086_pytest_gate_runs_on_targeted_python_change",
+  "test_087_pytest_gate_runs_on_configured_badguys_python_change",
   "test_100_rerun_latest_l",
   "test_900_commit_push_timestamp",
 ]
@@ -428,6 +429,9 @@ relpath = "types/badguys_skip_invalid.ts"
 [subjects.tests.test_086_pytest_gate_runs_on_targeted_python_change.pytest_gate_target]
 relpath = "tests/test_badguys_pytest_gate_target.py"
 
+[subjects.tests.test_087_pytest_gate_runs_on_configured_badguys_python_change.pytest_gate_badguys_trigger]
+relpath = "badguys/pytest_gate_trigger_marker.py"
+
 [subjects.tests.test_100_rerun_latest_l.rerun_latest_marker]
 relpath = "badguys/tmp/rerun_latest_marker.txt"
 
@@ -628,6 +632,21 @@ args = [
   "badguys: pytest gate runs on targeted python change",
 ]
 
+[recipes.tests.test_087_pytest_gate_runs_on_configured_badguys_python_change.assets.pytest_badguys_patch]
+subject = "pytest_gate_badguys_trigger"
+
+[recipes.tests.test_087_pytest_gate_runs_on_configured_badguys_python_change.steps.0]
+args = [
+  "--override",
+  "gate_pytest_py_prefixes=['badguys']",
+  "--override",
+  "pytest_routing_mode=legacy",
+  "--override",
+  "pytest_targets=['tests/test_badguys_pytest_gate_target.py']",
+  "${issue_id}",
+  "badguys: pytest gate runs on configured badguys python change",
+]
+
 [recipes.tests.test_100_rerun_latest_l.steps.0]
 marker_subject = "rerun_latest_marker"
 
@@ -793,6 +812,15 @@ value_contains = [
   "RESULT: SUCCESS",
 ]
 value_not_contains = ["gate_pytest=SKIP"]
+
+[evaluation.tests.test_087_pytest_gate_runs_on_configured_badguys_python_change.steps.0]
+rc_eq = 0
+value_contains = [
+  "GATE: PYTEST",
+  "tests/test_badguys_pytest_gate_target.py",
+  "RESULT: SUCCESS",
+]
+value_not_contains = ["gate_pytest=SKIP", "gate_pytest=SKIP (no_matching_files)"]
 
 [subjects.tests.test_080_json_out_writes_ndjson_log.json_out_marker]
 relpath = "docs/badguys_batch3/json_out_marker.txt"
