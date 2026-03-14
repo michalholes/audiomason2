@@ -39,6 +39,27 @@
 			.trim();
 	}
 
+	function stageNameFromGateName(name) {
+		name = String(name || "")
+			.trim()
+			.toUpperCase()
+			.replace(/_/g, "-");
+		if (!name) return "";
+		return `GATE_${name}`;
+	}
+
+	function parseSkipInfo(ev, fallbackStage) {
+		var msg = String((ev && ev.msg) || "").trim();
+		var m = msg.match(/^gate_([a-z0-9_-]+)=SKIP \((.+)\)$/i);
+		if (!m) return null;
+		var stage = normStepName(fallbackStage || stageNameFromGateName(m[1]));
+		if (!stage) return null;
+		return {
+			stage: stage,
+			reason: String(m[2] || "").trim(),
+		};
+	}
+
 	function apiPost(path, body) {
 		return fetch(path, {
 			method: "POST",
@@ -69,6 +90,7 @@
 
 		var order = progress && progress.order ? progress.order : [];
 		var state = progress && progress.state ? progress.state : {};
+		var details = progress && progress.details ? progress.details : {};
 
 		if (!order.length) {
 			box.innerHTML = "";
@@ -79,11 +101,16 @@
 		for (let i = 0; i < order.length; i++) {
 			const name = order[i];
 			const st = state[name] || "pending";
+			const dotState = st === "skip" ? "pending" : st;
 			html += '<div class="step">';
-			html += `<span class="dot ${escapeHtml(st)}"></span>`;
+			html += `<span class="dot ${escapeHtml(dotState)}"></span>`;
 			html += `<span class="step-name">${escapeHtml(name)}</span>`;
 			if (st === "running") {
 				html += '<span class="pill running">RUNNING</span>';
+			} else if (st === "skip") {
+				const reason = String(details[name] || "").trim();
+				const label = reason ? `SKIPPED (${reason})` : "SKIPPED";
+				html += `<span class="pill">${escapeHtml(label)}</span>`;
 			}
 			html += "</div>";
 		}
@@ -185,6 +212,7 @@
 	function deriveProgressFromEvents(events) {
 		var order = [];
 		var state = {};
+		var details = {};
 		var currentRunning = "";
 		var resultStatus = "";
 
@@ -203,6 +231,14 @@
 			state[name] = st;
 		}
 
+		function setSkip(name, reason) {
+			name = normStepName(name);
+			if (!name) return;
+			ensureStep(name);
+			state[name] = "skip";
+			details[name] = String(reason || "").trim();
+		}
+
 		for (let i = 0; i < (events || []).length; i++) {
 			const ev = events[i];
 			if (!ev || typeof ev !== "object") continue;
@@ -214,6 +250,13 @@
 			}
 
 			if (t !== "log") continue;
+
+			const skipInfo = parseSkipInfo(ev, currentRunning);
+			if (skipInfo) {
+				setSkip(skipInfo.stage, skipInfo.reason);
+				if (currentRunning === skipInfo.stage) currentRunning = "";
+				continue;
+			}
 
 			const kind = String(ev.kind || "");
 			if (kind !== "DO" && kind !== "OK" && kind !== "FAIL") continue;
@@ -228,13 +271,16 @@
 			}
 
 			if (kind === "OK") {
-				setState(stage, "ok");
+				if (state[stage] !== "skip") {
+					setState(stage, "ok");
+				}
 				if (currentRunning === stage) currentRunning = "";
 				continue;
 			}
 
 			if (kind === "FAIL") {
 				setState(stage, "fail");
+				delete details[stage];
 				if (currentRunning === stage) currentRunning = "";
 			}
 		}
@@ -253,7 +299,12 @@
 			if (!Object.hasOwn(state, nm2)) state[nm2] = "pending";
 		}
 
-		return { order: order, state: state, resultStatus: resultStatus };
+		return {
+			order: order,
+			state: state,
+			details: details,
+			resultStatus: resultStatus,
+		};
 	}
 
 	function deriveProgressSummaryFromEvents(events, progress, active) {
@@ -273,6 +324,13 @@
 				break;
 			}
 			if (t === "log") {
+				const skipInfo = parseSkipInfo(ev, ev.stage || "");
+				if (skipInfo) {
+					return {
+						text: `SKIP: ${skipInfo.stage} (${skipInfo.reason})`,
+						status: "running",
+					};
+				}
 				const kind = String(ev.kind || "");
 				if (kind === "DO" || kind === "OK" || kind === "FAIL") {
 					lastLog = ev;
@@ -295,6 +353,20 @@
 		if (lastLog) {
 			const stage = normStepName(lastLog.stage || "");
 			const kind = String(lastLog.kind || "");
+			if (
+				kind === "OK" &&
+				progress &&
+				progress.state &&
+				progress.state[stage] === "skip"
+			) {
+				const reason = String(
+					(progress.details && progress.details[stage]) || "",
+				).trim();
+				return {
+					text: reason ? `SKIP: ${stage} (${reason})` : `SKIP: ${stage}`,
+					status: "running",
+				};
+			}
 			if (kind === "FAIL") {
 				return { text: `FAIL: ${stage}`, status: "fail" };
 			}
@@ -488,12 +560,24 @@
 		if (active) {
 			activeStatus = String(active.status || "running").toLowerCase();
 			jidEnc = encodeURIComponent(active.job_id || "");
+			let elapsed = "";
+			if (PH && typeof PH.call === "function") {
+				elapsed = String(
+					PH.call(
+						"jobSummaryDurationSeconds",
+						active.started_utc,
+						active.ended_utc,
+					) || "",
+				);
+			}
 			html +=
 				`<div><b>${escapeHtml(activeStatus)}</b> ` +
 				`${escapeHtml(active.job_id || "")}</div>`;
 			html +=
 				`<div class="muted">mode=${escapeHtml(active.mode || "")} ` +
-				`issue=${escapeHtml(active.issue_id || "")}</div>`;
+				`issue=${escapeHtml(active.issue_id || "")}` +
+				(elapsed ? ` elapsed=${escapeHtml(elapsed)}s` : "") +
+				"</div>";
 			html +=
 				'<div class="row"><button class="btn btn-small" id="cancelActive">Cancel</button>';
 			if (activeStatus === "running") {

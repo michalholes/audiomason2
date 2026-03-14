@@ -190,10 +190,70 @@ process.stdout.write(
     assert "WARNING: check me" in result["warning"]
     assert "INFO: detail" not in result["warning"]
     assert "INFO: detail" in result["verbose"]
-    assert "stdout tail" in result["verbose"]
-    assert "stderr tail" in result["verbose"]
+    assert "[stdout] stdout tail" in result["verbose"]
+    assert "[stderr] stderr tail" in result["verbose"]
+    assert "RESULT: FAIL" in result["verbose"]
+    assert "rc=1" not in result["verbose"]
     assert "REPLY cmd=ready" in result["debugHuman"]
     assert "DO: PATCH_APPLY" in result["debugHuman"]
     assert "PATCH_APPLY | DO | INFO | DO: PATCH_APPLY" not in result["debugHuman"]
     assert '"type":"reply"' in result["debugRaw"]
     assert '"kind":"SUBPROCESS_STDOUT"' in result["debugRaw"]
+
+
+def test_live_levels_group_failure_detail_from_subprocess_events() -> None:
+    result = _run_node_scenario(
+        """
+events.push(
+  {
+    type: "log",
+    ch: "CORE",
+    sev: "INFO",
+    kind: "DO",
+    stage: "GATE_RUFF",
+    summary: false,
+    msg: "DO: GATE_RUFF",
+  },
+  {
+    type: "log",
+    ch: "DETAIL",
+    sev: "DEBUG",
+    kind: "SUBPROCESS_STDOUT",
+    stage: "GATE_RUFF",
+    summary: false,
+    msg: "lint line",
+  },
+  {
+    type: "log",
+    ch: "DETAIL",
+    sev: "DEBUG",
+    kind: "SUBPROCESS_STDERR",
+    stage: "GATE_RUFF",
+    summary: false,
+    msg: "boom line",
+  },
+  {
+    type: "log",
+    ch: "DETAIL",
+    sev: "ERROR",
+    kind: "TEXT",
+    stage: "GATE_RUFF",
+    summary: false,
+    msg: "FAILED STEP OUTPUT",
+  },
+  { type: "result", ok: false, return_code: 1 },
+);
+process.stdout.write(
+  JSON.stringify({
+    normal: capture("normal"),
+    verbose: capture("verbose"),
+  }),
+);
+""",
+    )
+    assert "FAILED STEP OUTPUT" in result["normal"]
+    assert "[stdout] lint line" in result["normal"]
+    assert "[stderr] boom line" in result["normal"]
+    assert "FAILED STEP OUTPUT" not in result["verbose"]
+    assert "[stdout] lint line" in result["verbose"]
+    assert "[stderr] boom line" in result["verbose"]

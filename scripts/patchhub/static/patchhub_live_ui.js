@@ -382,14 +382,22 @@
 		liveStreamJobId = null;
 	}
 
-	function filterLiveEvent(ev) {
+	function isSubprocessKind(kind) {
+		return kind === "SUBPROCESS_STDOUT" || kind === "SUBPROCESS_STDERR";
+	}
+
+	function subprocessLabelFromKind(kind) {
+		return kind === "SUBPROCESS_STDERR" ? "stderr" : "stdout";
+	}
+
+	function formatSubprocessLine(kind, message) {
+		var label = `[${subprocessLabelFromKind(kind)}]`;
+		var payload = String(message || "");
+		return payload ? `${label} ${payload}` : label;
+	}
+
+	function humanLevelAllowsLogEvent(ev) {
 		if (!ev) return false;
-		if (isDebugLevel()) return true;
-
-		var t = String(ev.type || "");
-		if (t === "result") return true;
-		if (t !== "log") return false;
-
 		if (ev.bypass === true) return true;
 
 		var ch = String(ev.ch || "");
@@ -405,12 +413,20 @@
 			return ch === "DETAIL" && sev === "WARNING";
 		}
 		if (liveLevel === "verbose") {
-			if (kind === "SUBPROCESS_STDOUT" || kind === "SUBPROCESS_STDERR")
-				return true;
+			if (isSubprocessKind(kind)) return true;
 			if (ch !== "DETAIL") return false;
 			return sev === "WARNING" || sev === "INFO";
 		}
 		return false;
+	}
+
+	function filterLiveEvent(ev) {
+		if (!ev) return false;
+		if (isDebugLevel()) return true;
+		var t = String(ev.type || "");
+		if (t === "result") return true;
+		if (t !== "log") return false;
+		return humanLevelAllowsLogEvent(ev);
 	}
 
 	function compactJson(value) {
@@ -419,6 +435,60 @@
 		} catch (e) {
 			return "{}";
 		}
+	}
+
+	function formatHumanLogEvent(ev) {
+		var line = String(ev.msg || "");
+		if (!line) {
+			line = `JSON ${compactJson(ev)}`;
+		}
+		if (isSubprocessKind(String(ev.kind || ""))) {
+			line = formatSubprocessLine(String(ev.kind || ""), ev.msg);
+		}
+		if (ev.stdout || ev.stderr) {
+			const out = [line];
+			if (ev.stdout) out.push(`STDOUT:\n${String(ev.stdout)}`);
+			if (ev.stderr) out.push(`STDERR:\n${String(ev.stderr)}`);
+			return out.join("\n");
+		}
+		return line;
+	}
+
+	function normalizeEventStage(stage) {
+		return String(stage || "")
+			.replace(/\s+/g, " ")
+			.trim();
+	}
+
+	function stageBufferKey(ev) {
+		var stage = normalizeEventStage(ev && ev.stage);
+		return stage || "__NO_STAGE__";
+	}
+
+	function isFailedStepOutputEvent(ev) {
+		return String((ev && ev.msg) || "").trim() === "FAILED STEP OUTPUT";
+	}
+
+	function takeBufferedStageLines(buffers, key) {
+		var items = Array.isArray(buffers[key]) ? buffers[key].slice() : [];
+		delete buffers[key];
+		return items;
+	}
+
+	function formatFailureDetailEvent(ev, stageBuffers) {
+		var key = stageBufferKey(ev);
+		var grouped = takeBufferedStageLines(stageBuffers, key);
+		if (liveLevel === "verbose" && grouped.length > 0) {
+			return "";
+		}
+		if (grouped.length > 0 && !(ev.stdout || ev.stderr)) {
+			const lines = [String(ev.msg || "FAILED STEP OUTPUT")];
+			for (let i = 0; i < grouped.length; i++) {
+				lines.push(formatSubprocessLine(grouped[i].kind, grouped[i].msg));
+			}
+			return lines.join("\n");
+		}
+		return formatHumanLogEvent(ev);
 	}
 
 	function formatLiveEvent(ev) {
@@ -433,8 +503,7 @@
 			);
 		}
 		if (t === "result") {
-			const ok = ev.ok ? "SUCCESS" : "FAIL";
-			return `RESULT: ${ok} rc=${String(ev.return_code)}`;
+			return ev.ok ? "RESULT: SUCCESS" : "RESULT: FAIL";
 		}
 		if (t === "reply") {
 			const replyData =
@@ -448,20 +517,45 @@
 		if (t === "control") {
 			return `CONTROL event=${String(ev.event || "")} ${compactJson(ev)}`;
 		}
+		return formatHumanLogEvent(ev);
+	}
 
-		var line = String(ev.msg || "");
-		if (!line) {
-			line = `JSON ${compactJson(ev)}`;
+	function renderHumanLiveLines(events) {
+		var lines = [];
+		var stageBuffers = Object.create(null);
+		for (let i = 0; i < (events || []).length; i++) {
+			const ev = events[i];
+			if (!ev || typeof ev !== "object") continue;
+			const t = String(ev.type || "");
+			if (t === "result") {
+				lines.push(formatLiveEvent(ev));
+				continue;
+			}
+			if (t !== "log") continue;
+			const kind = String(ev.kind || "");
+			if (isSubprocessKind(kind)) {
+				const key = stageBufferKey(ev);
+				if (!Array.isArray(stageBuffers[key])) {
+					stageBuffers[key] = [];
+				}
+				stageBuffers[key].push({
+					kind: kind,
+					msg: String(ev.msg || ""),
+				});
+				if (liveLevel === "verbose") {
+					lines.push(formatSubprocessLine(kind, ev.msg));
+				}
+				continue;
+			}
+			if (!humanLevelAllowsLogEvent(ev)) continue;
+			if (isFailedStepOutputEvent(ev)) {
+				const failureText = formatFailureDetailEvent(ev, stageBuffers);
+				if (failureText) lines.push(failureText);
+				continue;
+			}
+			lines.push(formatHumanLogEvent(ev));
 		}
-
-		if (ev.stdout || ev.stderr) {
-			const out = [];
-			out.push(line);
-			if (ev.stdout) out.push(`STDOUT:\n${String(ev.stdout)}`);
-			if (ev.stderr) out.push(`STDERR:\n${String(ev.stderr)}`);
-			return out.join("\n");
-		}
-		return line;
+		return lines;
 	}
 
 	function renderLiveLog() {
@@ -469,10 +563,14 @@
 		if (!box) return;
 		var lines = [];
 		var prevScrollTop = box.scrollTop;
-		for (let i = 0; i < liveEvents.length; i++) {
-			const ev = liveEvents[i];
-			if (!filterLiveEvent(ev)) continue;
-			lines.push(formatLiveEvent(ev));
+		if (isDebugLevel()) {
+			for (let i = 0; i < liveEvents.length; i++) {
+				const ev = liveEvents[i];
+				if (!filterLiveEvent(ev)) continue;
+				lines.push(formatLiveEvent(ev));
+			}
+		} else {
+			lines = renderHumanLiveLines(liveEvents);
 		}
 		box.textContent = lines.join("\n");
 		if (liveAutoscrollEnabled) box.scrollTop = box.scrollHeight;
@@ -744,9 +842,9 @@
 	}
 
 	function jobSummaryDurationSeconds(startUtc, endUtc) {
-		if (!startUtc || !endUtc) return "";
+		if (!startUtc) return "";
 		var a = new Date(String(startUtc));
-		var b = new Date(String(endUtc));
+		var b = endUtc ? new Date(String(endUtc)) : new Date(Date.now());
 		if (isNaN(a.getTime()) || isNaN(b.getTime())) return "";
 		var sec = (b.getTime() - a.getTime()) / 1000;
 		if (sec < 0) return "";

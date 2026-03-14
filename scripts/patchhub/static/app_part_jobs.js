@@ -3,10 +3,36 @@ var __ph_w = /** @type {any} */ (window);
 var PH = /** @type {any} */ (window).PH;
 var jobsCache = [];
 var rerunPrepareSeq = 0;
+var jobDurationTimer = null;
 
 function phCall(name, ...args) {
 	if (!PH || typeof PH.call !== "function") return undefined;
 	return PH.call(name, ...args);
+}
+
+function syncJobDurationTimer(jobs) {
+	var tracked = phCall("getTrackedActiveJob", jobs || []);
+	var needTimer = !!(
+		tracked &&
+		tracked.started_utc &&
+		phCall("isNonTerminalJobStatus", tracked.status)
+	);
+	if (needTimer) {
+		if (!jobDurationTimer) {
+			jobDurationTimer = setInterval(() => {
+				if (!phCall("hasTrackedActiveJob", jobsCache)) {
+					syncJobDurationTimer([]);
+					return;
+				}
+				renderJobsFromResponse({ ok: true, jobs: jobsCache });
+			}, 1000);
+		}
+		return;
+	}
+	if (jobDurationTimer) {
+		clearInterval(jobDurationTimer);
+		jobDurationTimer = null;
+	}
 }
 
 function isRerunLatestListCandidate(job) {
@@ -335,6 +361,7 @@ function renderJobsFromResponse(r) {
 		suppressIdleOutput = false;
 	}
 	PH.call("renderActiveJob", jobs);
+	syncJobDurationTimer(jobs);
 	ensureAutoRefresh(jobs);
 
 	var html = jobs
@@ -489,6 +516,7 @@ function refreshJobs(opts) {
 			if (!r || r.ok === false) {
 				setPre("jobsList", r);
 				PH.call("renderActiveJob", []);
+				syncJobDurationTimer([]);
 				return;
 			}
 			if (r.unchanged) return;
