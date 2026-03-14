@@ -84,6 +84,112 @@
 		);
 	}
 
+	var progressTimer = null;
+	var lastProgressModel = null;
+	var progressClock = {
+		eventKey: "",
+		monoMs: 0,
+		clientMs: 0,
+	};
+
+	function isTimedGateStage(name) {
+		name = normStepName(name);
+		return name === "GATE_PYTEST" || name === "GATE_MYPY";
+	}
+
+	function parseMonoMs(value) {
+		var num = Number(value);
+		return Number.isFinite(num) ? num : null;
+	}
+
+	function syncProgressClock(events) {
+		var lastKey = "";
+		var lastMonoMs = null;
+		for (let i = 0; i < (events || []).length; i++) {
+			const ev = events[i];
+			if (!ev || typeof ev !== "object") continue;
+			const monoMs = parseMonoMs(ev.ts_mono_ms);
+			if (monoMs === null) continue;
+			lastMonoMs = monoMs;
+			lastKey = `${String(ev.seq || "")}:${String(ev.type || "")}:${String(i)}`;
+		}
+		if (!lastKey || lastMonoMs === null) {
+			progressClock = { eventKey: "", monoMs: 0, clientMs: 0 };
+			return progressClock;
+		}
+		if (progressClock.eventKey !== lastKey) {
+			progressClock = {
+				eventKey: lastKey,
+				monoMs: lastMonoMs,
+				clientMs: Date.now(),
+			};
+		}
+		return progressClock;
+	}
+
+	function formatDurationSeconds(startMonoMs, endMonoMs) {
+		if (!Number.isFinite(startMonoMs) || !Number.isFinite(endMonoMs)) return "";
+		var sec = (endMonoMs - startMonoMs) / 1000;
+		if (sec < 0) return "";
+		return String(Math.round(sec * 10) / 10);
+	}
+
+	function getStepDurationLabel(progress, name, st) {
+		if (!progress || st === "skip") return "";
+		var timing = progress.timing && progress.timing[name];
+		var endMonoMs = null;
+		var clock = null;
+		var deltaMs = 0;
+		if (!timing || !Number.isFinite(timing.startMonoMs)) return "";
+		if (st !== "running" && st !== "ok" && st !== "fail") return "";
+		endMonoMs = Number.isFinite(timing.stopMonoMs) ? timing.stopMonoMs : null;
+		if (endMonoMs === null && st === "running") {
+			clock = progress.clock || { monoMs: 0, clientMs: 0 };
+			if (Number.isFinite(clock.monoMs) && Number.isFinite(clock.clientMs)) {
+				deltaMs = Date.now() - clock.clientMs;
+				if (deltaMs < 0) deltaMs = 0;
+				endMonoMs = clock.monoMs + deltaMs;
+			}
+		}
+		if (endMonoMs === null) return "";
+		return formatDurationSeconds(timing.startMonoMs, endMonoMs);
+	}
+
+	function hasRunningTimedGate(progress) {
+		var order = progress && progress.order ? progress.order : [];
+		var state = progress && progress.state ? progress.state : {};
+		for (let i = 0; i < order.length; i++) {
+			const name = order[i];
+			if (
+				state[name] === "running" &&
+				getStepDurationLabel(progress, name, "running")
+			) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	function syncProgressTimer(progress) {
+		lastProgressModel = progress || null;
+		if (hasRunningTimedGate(progress)) {
+			if (!progressTimer) {
+				progressTimer = setInterval(() => {
+					if (!lastProgressModel || !hasRunningTimedGate(lastProgressModel)) {
+						syncProgressTimer(null);
+						return;
+					}
+					renderProgressSteps(lastProgressModel);
+				}, 1000);
+			}
+			return;
+		}
+		if (progressTimer) {
+			clearInterval(progressTimer);
+			progressTimer = null;
+		}
+	}
+
 	function renderProgressSteps(progress) {
 		var box = el("progressSteps");
 		if (!box) return;
@@ -102,15 +208,22 @@
 			const name = order[i];
 			const st = state[name] || "pending";
 			const dotState = st === "skip" ? "pending" : st;
+			const duration = getStepDurationLabel(progress, name, st);
 			html += '<div class="step">';
 			html += `<span class="dot ${escapeHtml(dotState)}"></span>`;
 			html += `<span class="step-name">${escapeHtml(name)}</span>`;
 			if (st === "running") {
-				html += '<span class="pill running">RUNNING</span>';
+				if (duration && isTimedGateStage(name)) {
+					html += `<span class="pill running">RUNNING (${escapeHtml(duration)}s)</span>`;
+				} else {
+					html += '<span class="pill running">RUNNING</span>';
+				}
 			} else if (st === "skip") {
 				const reason = String(details[name] || "").trim();
 				const label = reason ? `SKIPPED (${reason})` : "SKIPPED";
 				html += `<span class="pill">${escapeHtml(label)}</span>`;
+			} else if (duration && isTimedGateStage(name)) {
+				html += `<span class="pill">${escapeHtml(duration)}s</span>`;
 			}
 			html += "</div>";
 		}
@@ -213,8 +326,10 @@
 		var order = [];
 		var state = {};
 		var details = {};
+		var timing = {};
 		var currentRunning = "";
 		var resultStatus = "";
+		var clock = syncProgressClock(events);
 
 		function ensureStep(name) {
 			if (!name) return;
@@ -222,6 +337,13 @@
 				state[name] = "pending";
 			}
 			if (order.indexOf(name) < 0) order.push(name);
+		}
+
+		function ensureTiming(name, startMonoMs) {
+			if (!isTimedGateStage(name) || !Number.isFinite(startMonoMs)) return;
+			if (!Object.hasOwn(timing, name)) {
+				timing[name] = { startMonoMs: startMonoMs, stopMonoMs: null };
+			}
 		}
 
 		function setState(name, st) {
@@ -237,12 +359,14 @@
 			ensureStep(name);
 			state[name] = "skip";
 			details[name] = String(reason || "").trim();
+			delete timing[name];
 		}
 
 		for (let i = 0; i < (events || []).length; i++) {
 			const ev = events[i];
 			if (!ev || typeof ev !== "object") continue;
 			const t = String(ev.type || "");
+			const monoMs = parseMonoMs(ev.ts_mono_ms);
 
 			if (t === "result") {
 				resultStatus = ev.ok ? "success" : "fail";
@@ -266,6 +390,7 @@
 
 			if (kind === "DO") {
 				setState(stage, "running");
+				ensureTiming(stage, monoMs);
 				currentRunning = stage;
 				continue;
 			}
@@ -273,6 +398,13 @@
 			if (kind === "OK") {
 				if (state[stage] !== "skip") {
 					setState(stage, "ok");
+					if (
+						Object.hasOwn(timing, stage) &&
+						!Number.isFinite(timing[stage].stopMonoMs) &&
+						Number.isFinite(monoMs)
+					) {
+						timing[stage].stopMonoMs = monoMs;
+					}
 				}
 				if (currentRunning === stage) currentRunning = "";
 				continue;
@@ -281,6 +413,13 @@
 			if (kind === "FAIL") {
 				setState(stage, "fail");
 				delete details[stage];
+				if (
+					Object.hasOwn(timing, stage) &&
+					!Number.isFinite(timing[stage].stopMonoMs) &&
+					Number.isFinite(monoMs)
+				) {
+					timing[stage].stopMonoMs = monoMs;
+				}
 				if (currentRunning === stage) currentRunning = "";
 			}
 		}
@@ -303,6 +442,8 @@
 			order: order,
 			state: state,
 			details: details,
+			timing: timing,
+			clock: clock,
 			resultStatus: resultStatus,
 		};
 	}

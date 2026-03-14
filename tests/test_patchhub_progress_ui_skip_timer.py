@@ -249,3 +249,154 @@ process.stdout.write(
     assert "finished" in result["jobsHtml"]
     assert "dur=3s" in result["jobsHtml"]
     assert 'other</div><div class="job-meta">mode=patch</div>' in result["jobsHtml"]
+
+
+def test_progress_pytest_timer_advances_without_new_log_lines() -> None:
+    result = _run_node_scenario(
+        """
+let nowMs = new Date("2026-03-14T08:00:05Z").getTime();
+Date.now = () => nowMs;
+ui.saveLiveJobId("job-55");
+ui.liveEvents.push({
+  type: "log",
+  seq: 1,
+  ts_mono_ms: 1000,
+  kind: "DO",
+  stage: "GATE_PYTEST",
+  msg: "DO: GATE_PYTEST",
+});
+const jobs = [
+  {
+    job_id: "job-55",
+    status: "running",
+    mode: "patch",
+    issue_id: "328",
+    started_utc: "2026-03-14T08:00:00Z",
+  },
+];
+await ui.updateProgressPanelFromEvents({ jobs });
+const firstHtml = document.getElementById("progressSteps").innerHTML;
+nowMs += 3000;
+await ui.updateProgressPanelFromEvents({ jobs });
+process.stdout.write(
+  JSON.stringify({
+    firstHtml,
+    secondHtml: document.getElementById("progressSteps").innerHTML,
+  }),
+);
+""",
+    )
+    assert "RUNNING (0s)" in result["firstHtml"]
+    assert "RUNNING (3s)" in result["secondHtml"]
+
+
+def test_progress_pytest_duration_freezes_after_finish_and_terminal_end() -> None:
+    result = _run_node_scenario(
+        """
+let nowMs = new Date("2026-03-14T08:00:10Z").getTime();
+Date.now = () => nowMs;
+ui.saveLiveJobId("job-56");
+ui.liveEvents.push(
+  {
+    type: "log",
+    seq: 1,
+    ts_mono_ms: 1000,
+    kind: "DO",
+    stage: "GATE_PYTEST",
+    msg: "DO: GATE_PYTEST",
+  },
+  {
+    type: "log",
+    seq: 2,
+    ts_mono_ms: 4500,
+    kind: "OK",
+    stage: "GATE_PYTEST",
+    msg: "OK: GATE_PYTEST",
+  },
+  {
+    type: "control",
+    event: "stream_end",
+    status: "success",
+    reason: "job_completed",
+  },
+);
+const jobs = [
+  {
+    job_id: "job-56",
+    status: "success",
+    mode: "patch",
+    issue_id: "328",
+    started_utc: "2026-03-14T08:00:00Z",
+    ended_utc: "2026-03-14T08:00:07Z",
+  },
+];
+await ui.updateProgressPanelFromEvents({ jobs, forceAppliedFilesRetry: true });
+const firstHtml = document.getElementById("progressSteps").innerHTML;
+nowMs += 10000;
+await ui.updateProgressPanelFromEvents({ jobs, forceAppliedFilesRetry: true });
+process.stdout.write(
+  JSON.stringify({
+    firstHtml,
+    secondHtml: document.getElementById("progressSteps").innerHTML,
+    summaryText: document.getElementById("progressSummary").textContent,
+  }),
+);
+""",
+    )
+    assert ">3.5s<" in result["firstHtml"]
+    assert ">3.5s<" in result["secondHtml"]
+    assert result["summaryText"] == "RESULT: SUCCESS"
+
+
+def test_progress_mypy_skip_clears_duration_pill() -> None:
+    result = _run_node_scenario(
+        """
+ui.saveLiveJobId("job-57");
+ui.liveEvents.push(
+  {
+    type: "log",
+    seq: 1,
+    ts_mono_ms: 1000,
+    kind: "DO",
+    stage: "GATE_MYPY",
+    msg: "DO: GATE_MYPY",
+  },
+  {
+    type: "log",
+    seq: 2,
+    ts_mono_ms: 1500,
+    kind: "TEXT",
+    ch: "CORE",
+    sev: "WARNING",
+    msg: "gate_mypy=SKIP (no_matching_files)",
+  },
+  {
+    type: "log",
+    seq: 3,
+    ts_mono_ms: 2000,
+    kind: "OK",
+    stage: "GATE_MYPY",
+    msg: "OK: GATE_MYPY",
+  },
+);
+await ui.updateProgressPanelFromEvents({
+  jobs: [
+    {
+      job_id: "job-57",
+      status: "running",
+      mode: "patch",
+      issue_id: "328",
+      started_utc: "2026-03-14T08:00:00Z",
+    },
+  ],
+});
+process.stdout.write(
+  JSON.stringify({
+    progressHtml: document.getElementById("progressSteps").innerHTML,
+  }),
+);
+""",
+    )
+    assert "SKIPPED (no_matching_files)" in result["progressHtml"]
+    assert "RUNNING (" not in result["progressHtml"]
+    assert ">1s<" not in result["progressHtml"]
