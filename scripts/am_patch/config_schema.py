@@ -19,7 +19,7 @@ from typing import Any, get_args, get_origin, get_type_hints
 
 from am_patch.config import Policy
 
-SCHEMA_VERSION = "2"
+SCHEMA_VERSION = "3"
 
 
 # Explicit mapping of policy keys to TOML sections.
@@ -108,6 +108,7 @@ _SECTION_BY_KEY: dict[str, str] = {
     "ruff_targets": "",
     "pytest_targets": "",
     "mypy_targets": "",
+    "gate_pytest_py_prefixes": "",
     "gate_pytest_js_prefixes": "",
     "pytest_use_venv": "",
     "fail_if_live_files_changed": "",
@@ -211,6 +212,7 @@ _LABEL_BY_KEY: dict[str, str] = {
     "gates_skip_ruff": "Gates: skip ruff",
     "mypy_targets": "Mypy: targets",
     "pytest_targets": "Pytest: targets",
+    "gate_pytest_py_prefixes": "Pytest: Python trigger prefixes",
     "pytest_routing_mode": "Pytest: routing mode",
     "pytest_roots": "Pytest: namespace roots",
     "pytest_tree": "Pytest: namespace tree",
@@ -305,6 +307,10 @@ _HELP_BY_KEY: dict[str, str] = {
     ),
     "pytest_targets": (
         "Targets passed to pytest. See: scripts/am_patch_policy_glossary.md## Key: pytest_targets"
+    ),
+    "gate_pytest_py_prefixes": (
+        "Python trigger prefixes for gate_pytest_mode=auto. "
+        "See: scripts/am_patch_policy_glossary.md## Key: gate_pytest_py_prefixes"
     ),
     "pytest_routing_mode": (
         "Select legacy or bucketed pytest target routing. "

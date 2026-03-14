@@ -18,8 +18,9 @@ def test_policy_schema_exposes_bucketed_pytest_routing_keys() -> None:
     schema = get_policy_schema()
     policy = schema["policy"]
 
-    assert SCHEMA_VERSION == "2"
-    assert schema["schema_version"] == "2"
+    assert SCHEMA_VERSION == "3"
+    assert schema["schema_version"] == "3"
+    assert policy["gate_pytest_py_prefixes"]["type"] == "list[str]"
     assert policy["pytest_routing_mode"]["enum"] == ["legacy", "bucketed"]
     assert policy["pytest_roots"]["type"] == "dict[str,str]"
     assert policy["pytest_namespace_modules"]["type"] == "dict[str,list[str]]"

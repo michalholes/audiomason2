@@ -42,6 +42,7 @@ def test_config_edit_roundtrip_handles_bucketed_pytest_routing_keys() -> None:
     updated = apply_update_to_config_text(
         cfg_path.read_text(encoding="utf-8"),
         {
+            "gate_pytest_py_prefixes": ["badguys", "scripts/am_patch"],
             "pytest_routing_mode": "legacy",
             "pytest_roots": {"amp.*": "scripts/am_patch/"},
             "pytest_namespace_modules": {"amp": ["am_patch", "scripts.am_patch"]},
@@ -51,6 +52,7 @@ def test_config_edit_roundtrip_handles_bucketed_pytest_routing_keys() -> None:
         schema,
     )
 
+    assert 'gate_pytest_py_prefixes = ["badguys", "scripts/am_patch"]' in updated
     assert 'pytest_routing_mode = "legacy"' in updated
     assert "[pytest_roots]" in updated
     assert '"amp.*" = "scripts/am_patch/"' in updated

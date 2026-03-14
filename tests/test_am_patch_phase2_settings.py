@@ -44,6 +44,7 @@ def test_phase2_cfg_keys_apply() -> None:
         "scope_ignore_contains": ["/z/"],
         "venv_bootstrap_mode": "never",
         "venv_bootstrap_python": ".venv/bin/python3",
+        "gate_pytest_py_prefixes": ["badguys", "scripts/am_patch"],
     }
     p = build_policy(defaults, cfg)
 
@@ -70,6 +71,7 @@ def test_phase2_cfg_keys_apply() -> None:
     assert p.scope_ignore_contains == ["/z/"]
     assert p.venv_bootstrap_mode == "never"
     assert p.venv_bootstrap_python == ".venv/bin/python3"
+    assert p.gate_pytest_py_prefixes == ["badguys", "scripts/am_patch"]
 
 
 def test_phase2_cli_flags_set_overrides() -> None:
@@ -237,3 +239,17 @@ def test_failure_zip_template_rejects_missing_uniqueness_key() -> None:
         assert "must contain at least one of" in str(e)
     else:
         raise AssertionError("expected failure")
+
+
+def test_phase2_cli_override_replaces_gate_pytest_py_prefixes() -> None:
+    policy_cls, apply_cli_overrides, _build_policy, _parse_args = _import_am_patch()
+    p = policy_cls()
+
+    apply_cli_overrides(
+        p,
+        {
+            "overrides": ["gate_pytest_py_prefixes=badguys,scripts/custom"],
+        },
+    )
+
+    assert p.gate_pytest_py_prefixes == ["badguys", "scripts/custom"]

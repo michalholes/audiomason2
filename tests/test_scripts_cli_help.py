@@ -13,6 +13,20 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
+def _configured_pytest_py_prefixes(repo_root: Path) -> list[str]:
+    config_path = repo_root / "scripts" / "am_patch" / "am_patch.toml"
+    data = tomllib.loads(config_path.read_text(encoding="utf-8"))
+    flat: dict[str, object] = {}
+    for key, value in data.items():
+        if isinstance(value, dict):
+            for subkey, subvalue in value.items():
+                flat[str(subkey)] = subvalue
+        else:
+            flat[str(key)] = value
+    raw = flat.get("gate_pytest_py_prefixes", ["tests", "src", "plugins", "scripts"])
+    return [str(item) for item in raw] if isinstance(raw, list) else []
+
+
 def _configured_pytest_routing_mode(repo_root: Path) -> str:
     config_path = repo_root / "scripts" / "am_patch" / "am_patch.toml"
     data = tomllib.loads(config_path.read_text(encoding="utf-8"))
@@ -92,7 +106,9 @@ def test_am_patch_show_config_prints_pytest_routing_keys() -> None:
     assert p.returncode == 0, out
 
     expected_mode = _configured_pytest_routing_mode(repo_root)
+    expected_py_prefixes = _configured_pytest_py_prefixes(repo_root)
     assert f"pytest_routing_mode={expected_mode!r}" in out
+    assert f"gate_pytest_py_prefixes={expected_py_prefixes!r}" in out
     assert "pytest_roots=" in out
     assert "pytest_namespace_modules=" in out
     assert "pytest_dependencies=" in out

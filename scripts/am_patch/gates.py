@@ -643,6 +643,7 @@ def run_gates(
     gate_ruff_mode: str = "auto",
     gate_mypy_mode: str = "auto",
     gate_pytest_mode: str = "auto",
+    gate_pytest_py_prefixes: list[str] | None = None,
     gate_pytest_js_prefixes: list[str] | None = None,
     pytest_routing_policy: dict[str, object] | None = None,
     gates_order: list[str] | None,
@@ -680,6 +681,7 @@ def run_gates(
         return
 
     _norm_decision_paths = [p.replace("\\", "/").lstrip("./") for p in decision_paths]
+    gate_pytest_py_prefixes = gate_pytest_py_prefixes or []
     gate_pytest_js_prefixes = gate_pytest_js_prefixes or []
 
     def _has_changed_basename(names: tuple[str, ...]) -> bool:
@@ -808,12 +810,9 @@ def run_gates(
                 logger.warning_core("gate_pytest=SKIP (skipped_by_user)")
                 return True
             if gate_pytest_mode != "always":
-                py_triggers_prefixes = list(
-                    dict.fromkeys(pytest_targets + ["src", "plugins", "scripts"])
-                )
                 trigger_py = _has_changed_basename(
                     ("pyproject.toml", "pytest.ini")
-                ) or _has_changed_file((".py",), py_triggers_prefixes)
+                ) or _has_changed_file((".py",), gate_pytest_py_prefixes)
                 trigger_js = bool(gate_pytest_js_prefixes) and _has_changed_file(
                     (".js", ".mjs", ".cjs"), gate_pytest_js_prefixes
                 )

@@ -99,6 +99,7 @@ def run_policy_gates(
         gate_ruff_mode=policy.gate_ruff_mode,
         gate_mypy_mode=policy.gate_mypy_mode,
         gate_pytest_mode=policy.gate_pytest_mode,
+        gate_pytest_py_prefixes=policy.gate_pytest_py_prefixes,
         gate_pytest_js_prefixes=policy.gate_pytest_js_prefixes,
         pytest_routing_policy={
             "pytest_routing_mode": policy.pytest_routing_mode,

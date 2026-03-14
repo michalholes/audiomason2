@@ -247,6 +247,9 @@ class Policy(PolicyMonolithMixin):
     gate_ruff_mode: str = "auto"
     gate_mypy_mode: str = "auto"
     gate_pytest_mode: str = "auto"
+    gate_pytest_py_prefixes: list[str] = field(
+        default_factory=lambda: ["tests", "src", "plugins", "scripts"]
+    )
     gate_pytest_js_prefixes: list[str] = field(default_factory=list)
     pytest_routing_mode: str = "bucketed"
     pytest_roots: dict[str, str] = field(default_factory=lambda: deepcopy(PYTEST_ROOTS_DEFAULT))
@@ -864,10 +867,12 @@ def apply_cli_overrides(p: Policy, mapping: dict[str, object | None]) -> None:
         cur = getattr(p, k)
         coerced = _coerce_override_value(cur, v)
         if isinstance(cur, list):
-            if isinstance(coerced, list):
-                cur.extend(coerced)
-            else:
+            if not isinstance(coerced, list):
                 raise RunnerError("CONFIG", "INVALID", f"invalid list override: {coerced!r}")
+            if k == "gate_pytest_py_prefixes":
+                setattr(p, k, coerced)
+            else:
+                cur.extend(coerced)
         else:
             setattr(p, k, coerced)
         p._src[k] = "cli"

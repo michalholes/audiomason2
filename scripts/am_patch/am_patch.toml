@@ -303,6 +303,7 @@ allow_non_main = false
 gate_ruff_mode = "auto"
 gate_mypy_mode = "auto"
 gate_pytest_mode = "auto"
+gate_pytest_py_prefixes = ["tests", "src", "plugins", "scripts"]
 gate_pytest_js_prefixes = ["scripts/patchhub/static", "plugins", "src",]
 pytest_routing_mode = "bucketed"
 pytest_full_suite_prefixes = [
