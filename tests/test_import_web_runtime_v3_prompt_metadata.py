@@ -154,6 +154,173 @@ def test_import_wizard_v3_builds_prompt_model_from_step_ui(tmp_path: Path) -> No
         "help": "CLI and Web must render the same metadata",
         "hint": "Press Enter to accept the backend prefill",
         "examples": ["Ada", "Grace"],
+        "items": [],
         "default_value": None,
         "prefill": "Ada",
     }
+
+
+def _write_selection_tree(tmp_path: Path) -> None:
+    for rel_path in ("A/Book1/a.txt", "B/Book2/b.txt"):
+        path = tmp_path / "inbox" / rel_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("x", encoding="utf-8")
+
+
+def test_import_wizard_v3_builds_prompt_model_with_display_items(tmp_path: Path) -> None:
+    engine = _make_engine(tmp_path)
+    _write_selection_tree(tmp_path)
+
+    state = engine.create_session("inbox", "")
+    step = engine.get_step_definition(state["session_id"], "select_authors")
+
+    model = _run_v3_renderer("buildPromptModel", step)
+
+    assert model["items"] == [
+        {"item_id": step["ui"]["items"][0]["item_id"], "label": "A"},
+        {"item_id": step["ui"]["items"][1]["item_id"], "label": "B"},
+    ]
+
+
+def test_import_wizard_v3_render_keeps_existing_step_heading_when_items_refresh(
+    tmp_path: Path,
+) -> None:
+    engine = _make_engine(tmp_path)
+    _write_selection_tree(tmp_path)
+
+    state = engine.create_session("inbox", "")
+    state_view = engine.get_state(str(state["session_id"]))
+    projected_step = engine.get_step_definition(str(state["session_id"]), "select_authors")
+
+    script = """
+const fs = require('fs');
+const vm = require('vm');
+const source = fs.readFileSync('plugins/import/ui/web/assets/import_wizard_v3.js', 'utf8');
+const payload = JSON.parse(fs.readFileSync(0, 'utf8'));
+function makeEl(tag, attrs) {
+  return {
+    tag,
+    attrs: attrs || {},
+    text: attrs && attrs.text ? String(attrs.text) : '',
+    children: [],
+    appendChild(child) { this.children.push(child); },
+    replaceChildren(...nodes) { this.children = nodes; },
+  };
+}
+function flatten(nodes) {
+  const out = [];
+  function visit(node) {
+    if (!node || typeof node !== 'object') return;
+    if (node.text) out.push(String(node.text));
+    const kids = Array.isArray(node.children) ? node.children : [];
+    kids.forEach(visit);
+  }
+  nodes.forEach(visit);
+  return out;
+}
+const mount = {
+  children: [makeEl('div', { text: 'Step: select_authors' })],
+  appendChild(child) { this.children.push(child); },
+  replaceChildren(...nodes) { this.children = nodes; },
+};
+const sandbox = {
+  window: {
+    fetch: async () => ({
+      ok: true,
+      text: async () => JSON.stringify(payload.projected_step),
+    }),
+  },
+  globalThis: {},
+  console,
+};
+vm.createContext(sandbox);
+vm.runInContext(source, sandbox, { filename: 'import_wizard_v3.js' });
+const api = sandbox.window.AM2ImportWizardV3 || sandbox.globalThis.AM2ImportWizardV3;
+api.renderCurrentStep({ state: payload.state, mount, el: makeEl });
+setTimeout(() => {
+  process.stdout.write(JSON.stringify(flatten(mount.children)));
+}, 20);
+"""
+    proc = subprocess.run(
+        ["node", "-e", script],
+        input=json.dumps({"projected_step": projected_step, "state": state_view}),
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+
+    flattened = json.loads(proc.stdout)
+    assert flattened[0] == "Step: select_authors"
+    assert "Options:" in flattened
+
+
+def test_import_wizard_v3_fetches_current_step_projection_for_display_items(
+    tmp_path: Path,
+) -> None:
+    engine = _make_engine(tmp_path)
+    _write_selection_tree(tmp_path)
+
+    state = engine.create_session("inbox", "")
+    state_view = engine.get_state(str(state["session_id"]))
+    projected_step = engine.get_step_definition(str(state["session_id"]), "select_authors")
+
+    script = """
+const fs = require('fs');
+const vm = require('vm');
+const source = fs.readFileSync('plugins/import/ui/web/assets/import_wizard_v3.js', 'utf8');
+const payload = JSON.parse(fs.readFileSync(0, 'utf8'));
+function makeEl(tag, attrs) {
+  return {
+    tag,
+    attrs: attrs || {},
+    text: attrs && attrs.text ? String(attrs.text) : '',
+    children: [],
+    appendChild(child) { this.children.push(child); },
+  };
+}
+function flatten(nodes) {
+  const out = [];
+  function visit(node) {
+    if (!node || typeof node !== 'object') return;
+    if (node.text) out.push(String(node.text));
+    const kids = Array.isArray(node.children) ? node.children : [];
+    kids.forEach(visit);
+  }
+  nodes.forEach(visit);
+  return out;
+}
+const mount = {
+  children: [],
+  appendChild(child) { this.children.push(child); },
+  replaceChildren(...nodes) { this.children = nodes; },
+};
+const sandbox = {
+  window: {
+    fetch: async () => ({
+      ok: true,
+      text: async () => JSON.stringify(payload.projected_step),
+    }),
+  },
+  globalThis: {},
+  console,
+};
+vm.createContext(sandbox);
+vm.runInContext(source, sandbox, { filename: 'import_wizard_v3.js' });
+const api = sandbox.window.AM2ImportWizardV3 || sandbox.globalThis.AM2ImportWizardV3;
+api.renderCurrentStep({ state: payload.state, mount, el: makeEl });
+setTimeout(() => {
+  process.stdout.write(JSON.stringify(flatten(mount.children)));
+}, 20);
+"""
+    proc = subprocess.run(
+        ["node", "-e", script],
+        input=json.dumps({"projected_step": projected_step, "state": state_view}),
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+
+    flattened = json.loads(proc.stdout)
+    assert "Options:" in flattened
+    assert "1. A" in flattened
+    assert "2. B" in flattened

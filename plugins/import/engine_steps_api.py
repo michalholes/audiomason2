@@ -14,6 +14,7 @@ from .dsl.flowmodel_v3 import FLOWMODEL_KIND
 from .dsl.interpreter_v3 import prompt_ui_from_resolved_inputs, resolve_inputs
 from .engine_util import _exception_envelope
 from .primitives import is_prompt_primitive
+from .prompt_select_ui_projection import build_prompt_select_ui_items
 
 
 def get_step_definition_impl(*, engine: Any, session_id: str, step_id: str) -> dict[str, Any]:
@@ -41,6 +42,10 @@ def get_step_definition_impl(*, engine: Any, session_id: str, step_id: str) -> d
                 if is_prompt_primitive(primitive_id, primitive_version):
                     inputs = resolve_inputs(step, state)
                     ui = prompt_ui_from_resolved_inputs(inputs)
+                    if primitive_id == "ui.prompt_select":
+                        items = build_prompt_select_ui_items(step_id=step_id, state=state)
+                        if items:
+                            ui["items"] = items
                     if ui:
                         out["ui"] = ui
                     else:

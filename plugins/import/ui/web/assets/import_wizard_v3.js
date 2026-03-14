@@ -35,6 +35,23 @@
 		return isPromptStep(findCurrentStep(state));
 	}
 
+	function normalizeDisplayItems(items) {
+		if (!Array.isArray(items)) return [];
+		return items
+			.filter((item) => item && typeof item === "object")
+			.map((item) => ({
+				item_id: typeof item.item_id === "string" ? item.item_id : "",
+				label:
+					typeof item.display_label === "string"
+						? item.display_label
+						: typeof item.label === "string"
+							? item.label
+							: typeof item.item_id === "string"
+								? item.item_id
+								: "",
+			}));
+	}
+
 	function buildPromptModel(step) {
 		if (!isPromptStep(step)) return null;
 		const ui = step && typeof step.ui === "object" ? step.ui : {};
@@ -48,6 +65,7 @@
 			help: typeof ui.help === "string" ? ui.help : "",
 			hint: typeof ui.hint === "string" ? ui.hint : "",
 			examples: Array.isArray(ui.examples) ? ui.examples.slice() : [],
+			items: normalizeDisplayItems(ui.items),
 			default_value: Object.prototype.hasOwnProperty.call(ui, "default_value")
 				? ui.default_value
 				: null,
@@ -57,18 +75,67 @@
 		};
 	}
 
-	function renderCurrentStep(args) {
-		const state = args && args.state ? args.state : null;
-		const mount = args && args.mount ? args.mount : null;
-		const makeEl = args && typeof args.el === "function" ? args.el : null;
-		if (!mount || !makeEl || !canRenderCurrentStep(state)) return false;
-		const step = findCurrentStep(state);
-		const model = buildPromptModel(step);
-		if (!model) return false;
+	function clearMount(mount) {
+		if (!mount) return;
+		if (typeof mount.replaceChildren === "function") {
+			mount.replaceChildren();
+			return;
+		}
+		if (Array.isArray(mount.children)) {
+			mount.children = [];
+		}
+	}
+
+	function findBodyMount(mount) {
+		if (!mount || typeof mount.querySelector !== "function") return null;
+		return mount.querySelector('[data-v3-step-body="1"]');
+	}
+
+	function ensureBodyMount(mount, makeEl) {
+		const existing = findBodyMount(mount);
+		if (existing) return existing;
+		const body = makeEl("div", { "data-v3-step-body": "1" });
+		mount.appendChild(body);
+		if (Array.isArray(mount.children)) {
+			Object.defineProperty(body, "children", {
+				value: [],
+				writable: true,
+				enumerable: true,
+				configurable: true,
+			});
+			body.appendChild = function (child) {
+				this.children.push(child);
+			};
+			body.replaceChildren = function (...nodes) {
+				this.children = nodes;
+			};
+		}
+		return body;
+	}
+
+	function renderDisplayItems(mount, makeEl, items) {
+		if (!items.length) return;
+		mount.appendChild(makeEl("div", { class: "hint", text: "Options:" }));
+		items.forEach((item, index) => {
+			mount.appendChild(
+				makeEl("div", {
+					class: "hint",
+					text: `${index + 1}. ${item.label || item.item_id || ""}`,
+				}),
+			);
+		});
+	}
+
+	function renderPromptBody(args) {
+		const mount = ensureBodyMount(args.mount, args.el);
+		const makeEl = args.el;
+		const step = args.step;
+		const model = args.model;
 		const promptText = model.prompt || model.label || model.title;
 		const seed = model.prefill !== null ? model.prefill : model.default_value;
 		const seedText = serializeSeed(seed);
 
+		clearMount(mount);
 		if (model.label) {
 			mount.appendChild(
 				makeEl("div", { class: "fieldName", text: model.label }),
@@ -95,6 +162,7 @@
 				makeEl("div", { class: "hint", text: `Prefill: ${seedText}` }),
 			);
 		}
+		renderDisplayItems(mount, makeEl, model.items);
 
 		const primitiveId = String(step.primitive_id || "");
 		if (primitiveId === "ui.prompt_confirm") {
@@ -121,6 +189,48 @@
 				});
 		input.value = seedText;
 		mount.appendChild(input);
+		return true;
+	}
+
+	async function fetchCurrentStepProjection(state) {
+		if (!state || !state.session_id || !state.current_step_id || !root.fetch) {
+			return null;
+		}
+		const sid = encodeURIComponent(String(state.session_id || ""));
+		const stepId = encodeURIComponent(String(state.current_step_id || ""));
+		const response = await root.fetch(
+			`/import/ui/session/${sid}/step/${stepId}`,
+		);
+		const text = await response.text();
+		if (!response.ok) return null;
+		try {
+			return JSON.parse(text || "{}");
+		} catch {
+			return null;
+		}
+	}
+
+	function renderCurrentStep(args) {
+		const state = args && args.state ? args.state : null;
+		const mount = args && args.mount ? args.mount : null;
+		const makeEl = args && typeof args.el === "function" ? args.el : null;
+		if (!mount || !makeEl || !canRenderCurrentStep(state)) return false;
+		const step = findCurrentStep(state);
+		const model = buildPromptModel(step);
+		if (!model) return false;
+		renderPromptBody({ el: makeEl, model, mount, step });
+		if (model.items.length) return true;
+		void fetchCurrentStepProjection(state).then((projectedStep) => {
+			if (!isPromptStep(projectedStep)) return;
+			const projectedModel = buildPromptModel(projectedStep);
+			if (!projectedModel || !projectedModel.items.length) return;
+			renderPromptBody({
+				el: makeEl,
+				model: projectedModel,
+				mount,
+				step: projectedStep,
+			});
+		});
 		return true;
 	}
 

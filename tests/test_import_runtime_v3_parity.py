@@ -9,7 +9,8 @@ from pathlib import Path
 
 from audiomason.core.config import ConfigResolver
 
-run_launcher = import_module("plugins.import.cli_renderer").run_launcher
+cli_renderer = import_module("plugins.import.cli_renderer")
+run_launcher = cli_renderer.run_launcher
 ImportWizardEngine = import_module("plugins.import.engine").ImportWizardEngine
 atomic_write_json = import_module("plugins.import.storage").atomic_write_json
 RootName = import_module("plugins.file_io.service.types").RootName
@@ -238,3 +239,51 @@ def test_autofill_path_is_backend_driven_for_cli_and_web(tmp_path: Path) -> None
     joined = "\n".join(printed)
     assert '"status": "completed"' in joined
     assert "Prompt: Enter the final display name" not in joined
+
+
+def _write_selection_tree(tmp_path: Path) -> None:
+    for rel_path in ("A/Book1/a.txt", "B/Book2/b.txt"):
+        path = tmp_path / "inbox" / rel_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("x", encoding="utf-8")
+
+
+def test_cli_and_web_share_same_prompt_select_display_items(tmp_path: Path) -> None:
+    engine, _resolver = _make_engine(tmp_path)
+    _write_selection_tree(tmp_path)
+
+    state = engine.create_session("inbox", "")
+    step = engine.get_step_definition(state["session_id"], "select_authors")
+    metadata = cli_renderer._v3_prompt_metadata(step)
+    assert isinstance(metadata, dict)
+
+    model = _run_v3_renderer("buildPromptModel", step)
+    assert model["items"] == [
+        {
+            "item_id": step["ui"]["items"][0]["item_id"],
+            "label": "A",
+        },
+        {
+            "item_id": step["ui"]["items"][1]["item_id"],
+            "label": "B",
+        },
+    ]
+
+    printed: list[str] = []
+    payload, rc = cli_renderer._collect_v3_prompt_payload(
+        engine=engine,
+        session_id=str(state["session_id"]),
+        step=step,
+        metadata=metadata,
+        input_fn=lambda _prompt: "",
+        print_fn=printed.append,
+        confirm_defaults=True,
+        allow_inline=False,
+    )
+
+    assert rc is None
+    assert payload == {"selection": "all"}
+    joined = "\n".join(printed)
+    assert "Options:" in joined
+    assert "  1. A" in joined
+    assert "  2. B" in joined

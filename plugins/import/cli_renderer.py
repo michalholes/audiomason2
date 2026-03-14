@@ -419,6 +419,27 @@ def _parse_prompt_value(raw: str) -> Any:
         return raw
 
 
+def _display_prompt_select_items(
+    metadata: dict[str, Any],
+    *,
+    print_fn: Callable[[str], None],
+) -> None:
+    items_any = metadata.get("items")
+    items = (
+        [item for item in items_any if isinstance(item, dict)]
+        if isinstance(items_any, list)
+        else []
+    )
+    if not items:
+        return
+    print_fn("Options:")
+    for index, item in enumerate(items, start=1):
+        label = str(item.get("display_label") or item.get("label") or item.get("item_id") or "")
+        if not label:
+            label = f"item {index}"
+        print_fn(f"  {index}. {label}")
+
+
 def _collect_v3_prompt_payload(
     *,
     engine: ImportWizardEngine,
@@ -453,6 +474,8 @@ def _collect_v3_prompt_payload(
             print_fn(f"  - {_stringify_prompt_value(example)}")
     if seed_defined:
         print_fn(f"Prefill: {_stringify_prompt_value(seed)}")
+    if primitive_id == "ui.prompt_select":
+        _display_prompt_select_items(metadata, print_fn=print_fn)
 
     def _handle_inline_nav(raw: str) -> tuple[dict[str, Any] | None, int | None] | None:
         if not allow_inline:
