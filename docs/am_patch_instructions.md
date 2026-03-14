@@ -248,6 +248,7 @@ Before sending:
 3.  Modified files MUST compile (`python -m compileall` minimum).
 3a. Modified JavaScript files MUST pass a syntax check. For each modified file with extension .js, .mjs, or .cjs, the chat MUST run:  node --check <file>
 3b. Modified tests of pytest MUST pass.
+3c. Ruff, MyPy, TypeScript, Biome on changed files must pass
 4.  Patch MUST not introduce new dependencies without explicit approval.
 5.  Patch MUST not introduce Monolith gate violations, except that
     this requirement does NOT apply to patching of .md and .json
