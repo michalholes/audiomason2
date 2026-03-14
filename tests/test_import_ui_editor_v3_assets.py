@@ -27,6 +27,8 @@ except Exception:
 
 
 ASSET_PATHS = [
+    "/import/ui/assets/flow_json_clipboard.js",
+    "/import/ui/assets/flow_json_modal_dom.js",
     "/import/ui/assets/dsl_editor/registry_api.js",
     "/import/ui/assets/dsl_editor/palette.js",
     "/import/ui/assets/dsl_editor/node_form.js",
@@ -34,6 +36,8 @@ ASSET_PATHS = [
     "/import/ui/assets/dsl_editor/raw_json.js",
     "/import/ui/assets/dsl_editor/graph_ops.js",
     "/import/ui/assets/dsl_editor/boot_v3.js",
+    "/import/ui/assets/flow_json_modal_state.js",
+    "/import/ui/assets/flow_json_modal_entrypoints.js",
 ]
 
 
@@ -88,7 +92,18 @@ def test_import_ui_index_loads_v3_editor_assets_in_order(tmp_path: Path) -> None
     assert html.index("/import/ui/assets/dsl_editor/graph_ops.js") < html.index(
         "/import/ui/assets/dsl_editor/boot_v3.js"
     )
-    assert html.index(ASSET_PATHS[-1]) < html.index("/import/ui/assets/wizard_definition_editor.js")
+    assert html.index("/import/ui/assets/dsl_editor/boot_v3.js") < html.index(
+        "/import/ui/assets/wizard_definition_editor.js"
+    )
+    assert html.index("/import/ui/assets/wizard_definition_editor.js") < html.index(
+        "/import/ui/assets/flow_all_actions.js"
+    )
+    assert html.index("/import/ui/assets/flow_all_actions.js") < html.index(
+        "/import/ui/assets/flow_json_modal_state.js"
+    )
+    assert html.index("/import/ui/assets/flow_json_modal_state.js") < html.index(
+        "/import/ui/assets/flow_json_modal_entrypoints.js"
+    )
 
 
 @pytest.mark.skipif((not _HAS_FASTAPI) or (not _HAS_HTTPX), reason="fastapi+httpx required")
@@ -105,3 +120,29 @@ def test_import_ui_serves_v3_editor_assets(tmp_path: Path) -> None:
         response = client.get(asset_path)
         assert response.status_code == 200, asset_path
         assert response.text
+
+
+@pytest.mark.skipif((not _HAS_FASTAPI) or (not _HAS_HTTPX), reason="fastapi+httpx required")
+def test_import_ui_index_exposes_flow_json_modal_controls(tmp_path: Path) -> None:
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    engine = _make_engine(tmp_path)
+    app = FastAPI()
+    app.include_router(build_router(engine=engine))
+    client = TestClient(app)
+
+    response = client.get("/import/ui/")
+    assert response.status_code == 200
+    html = response.text
+
+    assert 'id="flowOpenWizardJson"' in html
+    assert 'id="flowOpenConfigJson"' in html
+    assert 'id="flowJsonModal"' in html
+    assert 'id="flowJsonCopySelected"' in html
+    assert 'id="flowJsonCopyAll"' in html
+    assert 'id="flowJsonApply"' in html
+    assert '<link rel="stylesheet" href="/import/ui/assets/flow_json_modal.css" />' in html
+    assert html.index("/import/ui/assets/flow_json_modal_state.js") < html.index(
+        "/import/ui/assets/flow_json_modal_entrypoints.js"
+    )

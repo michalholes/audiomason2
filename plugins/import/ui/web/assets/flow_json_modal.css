@@ -1,0 +1,60 @@
+.flowJsonModal {
+	position: fixed;
+	inset: 0;
+	z-index: 1000;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 24px;
+	background: rgba(7, 13, 24, 0.72);
+}
+
+.flowJsonDialog {
+	width: min(980px, 100%);
+	max-height: calc(100vh - 48px);
+	overflow: auto;
+	padding: 20px;
+	border-radius: 18px;
+	border: 1px solid rgba(120, 152, 226, 0.22);
+	background: rgba(10, 24, 48, 0.98);
+	box-shadow: 0 24px 64px rgba(0, 0, 0, 0.4);
+}
+
+.flowJsonModalHead {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+	margin-bottom: 12px;
+}
+
+.flowJsonModalTitle {
+	font-size: 20px;
+	font-weight: 700;
+	color: #f1f5ff;
+}
+
+.flowJsonModalSubtitle {
+	font-size: 13px;
+	line-height: 1.5;
+	color: #bdd2ff;
+}
+
+.flowJsonModalEditor {
+	min-height: 520px;
+	margin-top: 8px;
+	border-radius: 16px;
+	border: 1px solid rgba(120, 152, 226, 0.16);
+	background: rgba(10, 24, 48, 0.92);
+}
+
+.flowJsonModal .buttonRow {
+	flex-wrap: wrap;
+}
+
+.flowJsonModalActionsTop {
+	margin-top: 12px;
+}
+
+.flowJsonModalActionsBottom {
+	margin-top: 14px;
+}
