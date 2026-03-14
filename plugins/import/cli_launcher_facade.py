@@ -122,48 +122,18 @@ def _pick_path(
     input_fn: Callable[[str], str],
     print_fn: Callable[[str], None],
 ) -> str | None:
+    del engine
+    del root
+
     default = str(getattr(cfg, "default_path", ""))
-
-    try:
-        root_enum = RootName(str(root or "").strip())
-    except Exception:
-        return default
-
-    fs = engine.get_file_service()
-
-    # Offer a shallow directory picker (root-level only).
-    try:
-        entries = fs.list_dir(root_enum, ".", recursive=False)
-    except Exception:
-        entries = []
-
-    dirs = sorted(
-        [
-            e.rel_path
-            for e in entries
-            if getattr(e, "is_dir", False) and isinstance(getattr(e, "rel_path", None), str)
-        ]
-    )
-
-    max_list_items = int(getattr(cfg, "max_list_items", 200) or 200)
-    if max_list_items < 1:
-        max_list_items = 1
-
-    if dirs and len(dirs) > max_list_items:
-        dirs = dirs[:max_list_items]
-
     confirm_defaults = bool(getattr(cfg, "confirm_defaults", True))
 
-    print_fn("Select path (relative):")
-    print_fn(f"  0. (root) {'*' if default in {'', '.'} else ''}")
-    for idx, d in enumerate(dirs, start=1):
-        mark = " *" if d == default else ""
-        print_fn(f"  {idx}. {d}{mark}")
+    print_fn("Path is relative to the selected root. Leave empty for root.")
 
     if not confirm_defaults:
-        prompt = "Enter path number (or custom path): "
+        prompt = "Enter path (relative): "
     else:
-        prompt = "Enter path number (Enter=default): "
+        prompt = "Enter path (relative) (Enter=default): "
 
     raw = input_fn(prompt).strip()
     nav_ui = str(getattr(cfg, "nav_ui", "prompt"))
@@ -171,19 +141,7 @@ def _pick_path(
         return None
     if raw == "" and confirm_defaults:
         return default
-
-    try:
-        n = int(raw)
-        if n == 0:
-            return ""
-        if 1 <= n <= len(dirs):
-            return dirs[n - 1]
-    except Exception:
-        # Treat as custom path
-        return raw
-
-    print_fn("Invalid selection, using default.")
-    return default
+    return raw
 
 
 def begin_phase2(engine: Any, session_id: str, *, print_fn: Callable[[str], None]) -> int:

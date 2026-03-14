@@ -169,7 +169,7 @@ def _book_pairs(
     *,
     discovery: list[dict[str, Any]],
     state: dict[str, Any],
-) -> tuple[dict[str, list[str]], dict[str, dict[str, str]], list[str], list[str], bool]:
+) -> tuple[dict[str, list[str]], dict[str, dict[str, str]], list[str], list[str]]:
     pairs = _discovery_pairs(discovery=discovery, state=state)
 
     authors: dict[str, dict[str, str]] = {}
@@ -205,10 +205,7 @@ def _book_pairs(
                 seen.add(book_id)
         author_to_books[author_id] = ordered
 
-    source_any = state.get("source")
-    source = dict(source_any) if isinstance(source_any, dict) else {}
-    allow_autofill = str(source.get("relative_path") or "") == ""
-    return author_to_books, book_meta, author_ids, book_ids, allow_autofill
+    return author_to_books, book_meta, author_ids, book_ids
 
 
 def build_phase1_source_projection(
@@ -216,10 +213,14 @@ def build_phase1_source_projection(
     discovery: list[dict[str, Any]],
     state: dict[str, Any],
 ) -> dict[str, Any]:
-    author_to_books, book_meta, author_ids, book_ids, allow_autofill = _book_pairs(
+    author_to_books, book_meta, author_ids, book_ids = _book_pairs(
         discovery=discovery,
         state=state,
     )
+
+    source_any = state.get("source")
+    source = dict(source_any) if isinstance(source_any, dict) else {}
+    allow_autofill = str(source.get("relative_path") or "") == ""
 
     selected_author_ids_any = state.get("selected_author_ids")
     selected_author_ids = (

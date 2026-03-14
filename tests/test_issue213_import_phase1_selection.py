@@ -115,3 +115,60 @@ def test_cli_renderer_has_no_step_id_branching() -> None:
     p = Path(__file__).resolve().parents[1] / "plugins" / "import" / "cli_renderer.py"
     txt = p.read_text(encoding="utf-8")
     assert "if step_id ==" not in txt
+
+
+def test_cli_launcher_uses_raw_path_prompt_without_directory_listing(
+    tmp_path: Path,
+) -> None:
+    facade = import_module("plugins.import.cli_launcher_facade")
+
+    class _Cfg:
+        launcher_mode = "interactive"
+        default_root = "inbox"
+        default_path = ""
+        confirm_defaults = True
+        nav_ui = "prompt"
+
+    prompts: list[str] = []
+    printed: list[str] = []
+    answers = iter(["", "A/Book1"])
+
+    ok, root, rel_path, err = facade.resolve_launcher_inputs(
+        engine=object(),
+        cfg=_Cfg(),
+        input_fn=lambda prompt: prompts.append(prompt) or next(answers),
+        print_fn=printed.append,
+    )
+
+    assert ok is True
+    assert root == "inbox"
+    assert rel_path == "A/Book1"
+    assert err == ""
+    assert prompts == [
+        "Enter root number (Enter=default): ",
+        "Enter path (relative) (Enter=default): ",
+    ]
+    joined = "\n".join(printed)
+    assert "  0. (root)" not in joined
+    assert "Select path (relative):" not in joined
+    assert "Path is relative to the selected root." in joined
+
+
+def test_scoped_path_keeps_phase1_selection_steps_backend_authoritative(
+    tmp_path: Path,
+) -> None:
+    engine, roots = _make_engine(tmp_path)
+    fs = engine.get_file_service()
+
+    _write_inbox_tree(roots)
+    ensure_default_models(fs)
+
+    state = engine.create_session("inbox", "A/Book1", mode="stage")
+    assert "error" not in state
+    assert state.get("current_step_id") == "select_authors"
+
+    phase1 = state.get("vars", {}).get("phase1", {})
+    authors = phase1.get("select_authors", {})
+    books = phase1.get("select_books", {})
+    assert authors.get("autofill_if") is False
+    assert books.get("autofill_if") is False
