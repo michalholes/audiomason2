@@ -109,11 +109,21 @@ def _strip_source_prefix(*, rel_path: str, source_prefix: str) -> str:
     return rel_path
 
 
-def _discovery_pairs(
+def _scope_tail(scope_path: str) -> str:
+    parts = [part for part in scope_path.split("/") if part]
+    return parts[-1] if parts else "(root)"
+
+
+def _scope_parent_tail(scope_path: str) -> str:
+    parts = [part for part in scope_path.split("/") if part]
+    return parts[-2] if len(parts) >= 2 else _scope_tail(scope_path)
+
+
+def _collect_scoped_entries(
     *,
     discovery: list[dict[str, Any]],
     state: dict[str, Any],
-) -> list[tuple[str, str, str]]:
+) -> tuple[str, list[str], list[str]]:
     source_any = state.get("source")
     source = dict(source_any) if isinstance(source_any, dict) else {}
     source_prefix = _normalize_rel_path(str(source.get("relative_path") or ""))
@@ -135,7 +145,36 @@ def _discovery_pairs(
             dirs.append(rel)
         elif kind in {"file", "bundle"}:
             files.append(rel)
+    return source_prefix, dirs, files
 
+
+def _scoped_depth(*, rel_path: str, is_file: bool) -> int:
+    parts = [part for part in rel_path.split("/") if part]
+    if is_file and parts:
+        return len(parts[:-1])
+    return len(parts)
+
+
+def _scope_kind(*, source_prefix: str, dirs: list[str], files: list[str]) -> str:
+    if not source_prefix:
+        return "root"
+    depths = [_scoped_depth(rel_path=rel, is_file=False) for rel in dirs if rel]
+    depths.extend(_scoped_depth(rel_path=rel, is_file=True) for rel in files if rel)
+    max_depth = max(depths, default=0)
+    if max_depth >= 2:
+        return "container"
+    if max_depth == 1:
+        return "author"
+    if len([part for part in source_prefix.split("/") if part]) >= 2:
+        return "book"
+    return "container"
+
+
+def _pairs_for_multilevel_scope(
+    *,
+    dirs: list[str],
+    files: list[str],
+) -> set[tuple[str, str, str]]:
     pairs: set[tuple[str, str, str]] = set()
     for rel in dirs:
         parts = [part for part in rel.split("/") if part]
@@ -162,15 +201,69 @@ def _discovery_pairs(
                 pairs.add((parent_parts[0], parent_parts[0], parent_parts[0]))
             elif parts:
                 pairs.add(("(root)", "(root)", ""))
-    return sorted(pairs)
+    return pairs
+
+
+def _pairs_for_author_scope(
+    *,
+    source_prefix: str,
+    dirs: list[str],
+    files: list[str],
+) -> set[tuple[str, str, str]]:
+    author_key = _scope_tail(source_prefix)
+    pairs: set[tuple[str, str, str]] = set()
+    for rel in dirs:
+        parts = [part for part in rel.split("/") if part]
+        if parts:
+            pairs.add((author_key, parts[0], parts[0]))
+    if not pairs:
+        for rel in files:
+            parent_parts = [part for part in rel.split("/") if part][:-1]
+            if parent_parts:
+                pairs.add((author_key, parent_parts[0], parent_parts[0]))
+    if not pairs:
+        pairs.add((author_key, author_key, ""))
+    return pairs
+
+
+def _pairs_for_book_scope(source_prefix: str) -> set[tuple[str, str, str]]:
+    author_key = _scope_parent_tail(source_prefix)
+    book_key = _scope_tail(source_prefix)
+    return {(author_key, book_key, "")}
+
+
+def _discovery_pairs(
+    *,
+    discovery: list[dict[str, Any]],
+    state: dict[str, Any],
+) -> tuple[list[tuple[str, str, str]], str]:
+    source_prefix, dirs, files = _collect_scoped_entries(discovery=discovery, state=state)
+    scope_kind = _scope_kind(source_prefix=source_prefix, dirs=dirs, files=files)
+    if scope_kind in {"root", "container"}:
+        pairs = _pairs_for_multilevel_scope(dirs=dirs, files=files)
+    elif scope_kind == "author":
+        pairs = _pairs_for_author_scope(
+            source_prefix=source_prefix,
+            dirs=dirs,
+            files=files,
+        )
+    else:
+        pairs = _pairs_for_book_scope(source_prefix)
+    return sorted(pairs), scope_kind
 
 
 def _book_pairs(
     *,
     discovery: list[dict[str, Any]],
     state: dict[str, Any],
-) -> tuple[dict[str, list[str]], dict[str, dict[str, str]], list[str], list[str]]:
-    pairs = _discovery_pairs(discovery=discovery, state=state)
+) -> tuple[
+    dict[str, list[str]],
+    dict[str, dict[str, str]],
+    list[str],
+    list[str],
+    str,
+]:
+    pairs, scope_kind = _discovery_pairs(discovery=discovery, state=state)
 
     authors: dict[str, dict[str, str]] = {}
     books: dict[str, dict[str, str]] = {}
@@ -205,7 +298,7 @@ def _book_pairs(
                 seen.add(book_id)
         author_to_books[author_id] = ordered
 
-    return author_to_books, book_meta, author_ids, book_ids
+    return author_to_books, book_meta, author_ids, book_ids, scope_kind
 
 
 def build_phase1_source_projection(
@@ -213,14 +306,12 @@ def build_phase1_source_projection(
     discovery: list[dict[str, Any]],
     state: dict[str, Any],
 ) -> dict[str, Any]:
-    author_to_books, book_meta, author_ids, book_ids = _book_pairs(
+    author_to_books, book_meta, author_ids, book_ids, scope_kind = _book_pairs(
         discovery=discovery,
         state=state,
     )
 
-    source_any = state.get("source")
-    source = dict(source_any) if isinstance(source_any, dict) else {}
-    allow_autofill = str(source.get("relative_path") or "") == ""
+    allow_autofill = scope_kind in {"root", "author", "book"}
 
     selected_author_ids_any = state.get("selected_author_ids")
     selected_author_ids = (

@@ -287,3 +287,50 @@ def test_cli_and_web_share_same_prompt_select_display_items(tmp_path: Path) -> N
     assert "Options:" in joined
     assert "  1. A" in joined
     assert "  2. B" in joined
+
+
+def test_cli_and_web_share_scoped_author_prompt_select_display_items(
+    tmp_path: Path,
+) -> None:
+    engine, _resolver = _make_engine(tmp_path)
+    for rel_path in ("A/Book1/a.txt", "A/Book2/b.txt"):
+        path = tmp_path / "inbox" / rel_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("x", encoding="utf-8")
+
+    state = engine.create_session("inbox", "A")
+    assert state["current_step_id"] == "select_books"
+    step = engine.get_step_definition(state["session_id"], "select_books")
+    metadata = cli_renderer._v3_prompt_metadata(step)
+    assert isinstance(metadata, dict)
+
+    model = _run_v3_renderer("buildPromptModel", step)
+    assert model["items"] == [
+        {
+            "item_id": step["ui"]["items"][0]["item_id"],
+            "label": "A / Book1",
+        },
+        {
+            "item_id": step["ui"]["items"][1]["item_id"],
+            "label": "A / Book2",
+        },
+    ]
+
+    printed: list[str] = []
+    payload, rc = cli_renderer._collect_v3_prompt_payload(
+        engine=engine,
+        session_id=str(state["session_id"]),
+        step=step,
+        metadata=metadata,
+        input_fn=lambda _prompt: "",
+        print_fn=printed.append,
+        confirm_defaults=True,
+        allow_inline=False,
+    )
+
+    assert rc is None
+    assert payload == {"selection": "all"}
+    joined = "\n".join(printed)
+    assert "Options:" in joined
+    assert "  1. A / Book1" in joined
+    assert "  2. A / Book2" in joined

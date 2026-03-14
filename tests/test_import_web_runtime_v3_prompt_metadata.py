@@ -324,3 +324,84 @@ setTimeout(() => {
     assert "Options:" in flattened
     assert "1. A" in flattened
     assert "2. B" in flattened
+
+
+def test_import_wizard_v3_builds_scoped_prompt_model_with_display_items(
+    tmp_path: Path,
+) -> None:
+    engine = _make_engine(tmp_path)
+    for rel_path in ("A/Book1/a.txt", "A/Book2/b.txt"):
+        path = tmp_path / "inbox" / rel_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("x", encoding="utf-8")
+
+    state = engine.create_session("inbox", "A")
+    assert state["current_step_id"] == "select_books"
+    step = engine.get_step_definition(state["session_id"], "select_books")
+
+    model = _run_v3_renderer("buildPromptModel", step)
+
+    assert model["items"] == [
+        {"item_id": step["ui"]["items"][0]["item_id"], "label": "A / Book1"},
+        {"item_id": step["ui"]["items"][1]["item_id"], "label": "A / Book2"},
+    ]
+
+
+def test_import_wizard_v3_does_not_fetch_projection_for_non_select_prompt(
+    tmp_path: Path,
+) -> None:
+    engine = _make_engine(tmp_path)
+    fs = engine.get_file_service()
+    atomic_write_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_REL_PATH, PROMPT_FLOW)
+
+    state = engine.create_session("inbox", "")
+    state_view = engine.get_state(str(state["session_id"]))
+
+    script = """
+const fs = require('fs');
+const vm = require('vm');
+const source = fs.readFileSync('plugins/import/ui/web/assets/import_wizard_v3.js', 'utf8');
+const payload = JSON.parse(fs.readFileSync(0, 'utf8'));
+function makeEl(tag, attrs) {
+  return {
+    tag,
+    attrs: attrs || {},
+    text: attrs && attrs.text ? String(attrs.text) : '',
+    children: [],
+    appendChild(child) { this.children.push(child); },
+    replaceChildren(...nodes) { this.children = nodes; },
+  };
+}
+let fetchCalls = 0;
+const mount = {
+  children: [],
+  appendChild(child) { this.children.push(child); },
+  replaceChildren(...nodes) { this.children = nodes; },
+};
+const sandbox = {
+  window: {
+    fetch: async () => {
+      fetchCalls += 1;
+      return { ok: true, text: async () => '{}' };
+    },
+  },
+  globalThis: {},
+  console,
+};
+vm.createContext(sandbox);
+vm.runInContext(source, sandbox, { filename: 'import_wizard_v3.js' });
+const api = sandbox.window.AM2ImportWizardV3 || sandbox.globalThis.AM2ImportWizardV3;
+api.renderCurrentStep({ state: payload.state, mount, el: makeEl });
+setTimeout(() => {
+  process.stdout.write(JSON.stringify({ fetchCalls }));
+}, 20);
+"""
+    proc = subprocess.run(
+        ["node", "-e", script],
+        input=json.dumps({"state": state_view}),
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+
+    assert json.loads(proc.stdout) == {"fetchCalls": 0}

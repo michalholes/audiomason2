@@ -219,7 +219,12 @@
 		const model = buildPromptModel(step);
 		if (!model) return false;
 		renderPromptBody({ el: makeEl, model, mount, step });
-		if (model.items.length) return true;
+		if (
+			String(step.primitive_id || "") !== "ui.prompt_select" ||
+			model.items.length
+		) {
+			return true;
+		}
 		void fetchCurrentStepProjection(state).then((projectedStep) => {
 			if (!isPromptStep(projectedStep)) return;
 			const projectedModel = buildPromptModel(projectedStep);

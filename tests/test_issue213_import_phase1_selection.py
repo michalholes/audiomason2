@@ -154,9 +154,32 @@ def test_cli_launcher_uses_raw_path_prompt_without_directory_listing(
     assert "Path is relative to the selected root." in joined
 
 
-def test_scoped_path_keeps_phase1_selection_steps_backend_authoritative(
-    tmp_path: Path,
-) -> None:
+def test_author_scoped_path_skips_duplicate_author_prompt(tmp_path: Path) -> None:
+    engine, roots = _make_engine(tmp_path)
+    fs = engine.get_file_service()
+
+    _write_inbox_tree(roots)
+    ensure_default_models(fs)
+
+    state = engine.create_session("inbox", "A", mode="stage")
+    assert "error" not in state
+    assert state.get("current_step_id") == "select_books"
+
+    phase1 = state.get("vars", {}).get("phase1", {})
+    authors = phase1.get("select_authors", {})
+    books = phase1.get("select_books", {})
+    assert authors.get("autofill_if") is True
+    assert books.get("autofill_if") is False
+    assert books.get("selected_source_relative_paths") == ["Book1", "Book2"]
+
+    step = engine.get_step_definition(str(state["session_id"]), "select_books")
+    assert [item["display_label"] for item in step["ui"]["items"]] == [
+        "A / Book1",
+        "A / Book2",
+    ]
+
+
+def test_book_scoped_path_skips_duplicate_author_and_book_prompts(tmp_path: Path) -> None:
     engine, roots = _make_engine(tmp_path)
     fs = engine.get_file_service()
 
@@ -165,10 +188,31 @@ def test_scoped_path_keeps_phase1_selection_steps_backend_authoritative(
 
     state = engine.create_session("inbox", "A/Book1", mode="stage")
     assert "error" not in state
-    assert state.get("current_step_id") == "select_authors"
+    assert state.get("current_step_id") == "effective_author_title"
 
     phase1 = state.get("vars", {}).get("phase1", {})
     authors = phase1.get("select_authors", {})
     books = phase1.get("select_books", {})
-    assert authors.get("autofill_if") is False
-    assert books.get("autofill_if") is False
+    assert authors.get("autofill_if") is True
+    assert books.get("autofill_if") is True
+    assert books.get("selected_source_relative_paths") == [""]
+
+
+def test_unicode_author_scoped_path_keeps_canonical_phase1_labels(tmp_path: Path) -> None:
+    engine, roots = _make_engine(tmp_path)
+    fs = engine.get_file_service()
+
+    _write_inbox_tree(roots)
+    ensure_default_models(fs)
+
+    author = "Meyr\u00ednk, Gust\u00e1v"
+    title = "Obrazy vep\u00edsan\u00e9 do vzduchu"
+    state = engine.create_session("inbox", author, mode="stage")
+    assert "error" not in state
+    assert state.get("current_step_id") == "effective_author_title"
+
+    phase1 = state.get("vars", {}).get("phase1", {})
+    books = phase1.get("select_books", {})
+    assert books.get("selected_source_relative_paths") == [title]
+    runtime = phase1.get("runtime", {}).get("effective_author_title", {})
+    assert runtime == {"author": author, "title": title}
