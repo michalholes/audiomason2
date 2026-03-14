@@ -175,9 +175,23 @@
 		return text;
 	}
 
-	async function rereadFromServer() {
-		var driver = currentDriver();
-		if (modalDirty()) {
+	function restoreModalSnapshot(snapshotState) {
+		var driver = null;
+		state.artifact = snapshotState.artifact || "";
+		state.lastLoadedText = snapshotState.lastLoadedText || "";
+		dom.setValue(snapshotState.value || "");
+		dom.clearFeedback();
+		if (snapshotState.artifact) {
+			driver = driverFor(snapshotState.artifact);
+			dom.setArtifactMeta(driver.title, driver.subtitle);
+		} else {
+			dom.setArtifactMeta("", "");
+		}
+		dom.setOpen(snapshotState.wasOpen === true);
+	}
+
+	function confirmRereadDiscards() {
+		if (state.artifact && modalDirty()) {
 			if (
 				!confirmDiscard("Discard modal changes and re-read the server draft?")
 			) {
@@ -194,13 +208,31 @@
 				return false;
 			}
 		}
-		dom.clearFeedback();
+		return true;
+	}
+
+	async function reloadArtifact(artifact) {
+		var driver = driverFor(artifact);
+		state.artifact = artifact;
+		dom.setArtifactMeta(driver.title, driver.subtitle);
 		var ok = await driver.reload();
+		if (!ok) {
+			return false;
+		}
+		syncFromState();
+		return true;
+	}
+
+	async function rereadFromServer() {
+		if (!confirmRereadDiscards()) {
+			return false;
+		}
+		dom.clearFeedback();
+		var ok = await reloadArtifact(currentDriver().key);
 		if (!ok) {
 			dom.setError("Re-read failed.");
 			return false;
 		}
-		syncFromState();
 		dom.setStatus("Draft re-read from server.", "ok");
 		return true;
 	}
@@ -290,12 +322,37 @@
 	}
 
 	async function openModal(artifact) {
-		state.artifact = artifact === "wizard" ? "wizard" : "config";
-		var driver = currentDriver();
-		dom.setArtifactMeta(driver.title, driver.subtitle);
+		var ok = false;
+		var nextArtifact = artifact === "wizard" ? "wizard" : "config";
+		var previous = {
+			artifact: state.artifact,
+			lastLoadedText: state.lastLoadedText,
+			value: dom.getValue(),
+			wasOpen: dom.isOpen(),
+		};
+		if (!confirmRereadDiscards()) {
+			return false;
+		}
+		dom.clearFeedback();
 		dom.setOpen(true);
-		await rereadFromServer();
-		return true;
+		try {
+			ok = await reloadArtifact(nextArtifact);
+			if (!ok) {
+				restoreModalSnapshot(previous);
+				if (previous.wasOpen === true) {
+					dom.setError("Re-read failed.");
+				}
+				return false;
+			}
+			dom.setStatus("Draft re-read from server.", "ok");
+			return true;
+		} catch (err) {
+			restoreModalSnapshot(previous);
+			if (previous.wasOpen === true) {
+				dom.setError(String(err || "Re-read failed."));
+			}
+			return false;
+		}
 	}
 
 	function bind(node, handler) {

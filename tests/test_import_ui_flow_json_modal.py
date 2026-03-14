@@ -326,3 +326,71 @@ process.stdout.write(JSON.stringify({
 """
     )
     assert result["bodyChildrenAfter"] == 0
+
+
+def test_flow_json_modal_rejects_switch_without_artifact_drift() -> None:
+    result = _run_node_scenario(
+        """
+await window.AM2FlowJSONModalState.openModal("config");
+const editorNode = document.getElementById("flowJsonModalEditor");
+editorNode.value = (`\n{\n  "version": 1,\n  "defaults": {\n    "marker": 55\n  }\n}`);
+window.AM2FlowJSONModalState.cancelModal();
+window.confirm = (message) => {
+  confirmCalls.push(String(message));
+  return false;
+};
+const switched = await window.AM2FlowJSONModalState.openModal("wizard");
+await window.AM2FlowJSONModalState.saveDraft();
+process.stdout.write(JSON.stringify({
+  switched,
+  confirmCalls,
+  actionCounts,
+  modalHidden: document.getElementById("flowJsonModal").classList.contains("is-hidden"),
+  modalTitle: document.getElementById("flowJsonModalTitle").textContent,
+  editorValue: document.getElementById("flowJsonModalEditor").value,
+  configDraft: state.configDraft,
+  wizardDraft: state.wizardDraft,
+}));
+"""
+    )
+    assert result["switched"] is False
+    assert result["confirmCalls"] == ["Discard modal changes and re-read the server draft?"]
+    assert result["modalHidden"] is True
+    assert result["modalTitle"] == "FlowConfig JSON"
+    assert '"marker": 55' in str(result["editorValue"])
+    assert result["actionCounts"]["configSave"] == 1
+    assert result["actionCounts"]["wizardSave"] == 0
+    assert result["configDraft"]["defaults"]["marker"] == 55
+    assert result["configDraft"]["saved"] is True
+    assert result["wizardDraft"]["nodes"][0]["step_id"] == "s1"
+    assert "saved" not in result["wizardDraft"]
+
+
+def test_flow_json_modal_rejects_initial_open_when_flow_editor_has_unsaved_changes() -> None:
+    result = _run_node_scenario(
+        """
+state.draftDirty = true;
+window.confirm = (message) => {
+  confirmCalls.push(String(message));
+  return false;
+};
+const opened = await window.AM2FlowJSONModalState.openModal("wizard");
+process.stdout.write(JSON.stringify({
+  opened,
+  confirmCalls,
+  actionCounts,
+  modalHidden: document.getElementById("flowJsonModal").classList.contains("is-hidden"),
+  modalTitle: document.getElementById("flowJsonModalTitle").textContent,
+  editorValue: document.getElementById("flowJsonModalEditor").value,
+}));
+"""
+    )
+    assert result["opened"] is False
+    assert result["confirmCalls"] == [
+        "Discard current unsaved Flow Editor changes and re-read the server draft?"
+    ]
+    assert result["actionCounts"]["wizardReload"] == 0
+    assert result["actionCounts"]["configReload"] == 0
+    assert result["modalHidden"] is True
+    assert result["modalTitle"] == ""
+    assert result["editorValue"] == ""

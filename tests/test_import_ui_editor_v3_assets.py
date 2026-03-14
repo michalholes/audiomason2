@@ -146,3 +146,30 @@ def test_import_ui_index_exposes_flow_json_modal_controls(tmp_path: Path) -> Non
     assert html.index("/import/ui/assets/flow_json_modal_state.js") < html.index(
         "/import/ui/assets/flow_json_modal_entrypoints.js"
     )
+
+
+@pytest.mark.skipif((not _HAS_FASTAPI) or (not _HAS_HTTPX), reason="fastapi+httpx required")
+def test_import_ui_serves_flow_json_modal_layout_contract(tmp_path: Path) -> None:
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    engine = _make_engine(tmp_path)
+    app = FastAPI()
+    app.include_router(build_router(engine=engine))
+    client = TestClient(app)
+
+    css_response = client.get("/import/ui/assets/flow_json_modal.css")
+    assert css_response.status_code == 200
+    css = css_response.text
+    assert "display: flex;" in css
+    assert "flex-direction: column;" in css
+    assert "overflow: hidden;" in css
+    assert "flex: 1 1 320px;" in css
+    assert "min-height: 180px;" in css
+    assert "min-height: 520px;" not in css
+
+    html_response = client.get("/import/ui/")
+    assert html_response.status_code == 200
+    html = html_response.text
+    assert 'class="buttonRow flowJsonModalActionsBottom"' in html
+    assert 'rows="16"' in html

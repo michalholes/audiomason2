@@ -5,14 +5,16 @@
 	display: flex;
 	align-items: center;
 	justify-content: center;
-	padding: 24px;
+	padding: 16px;
 	background: rgba(7, 13, 24, 0.72);
 }
 
 .flowJsonDialog {
 	width: min(980px, 100%);
-	max-height: calc(100vh - 48px);
-	overflow: auto;
+	max-height: calc(100vh - 32px);
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
 	padding: 20px;
 	border-radius: 18px;
 	border: 1px solid rgba(120, 152, 226, 0.22);
@@ -40,7 +42,8 @@
 }
 
 .flowJsonModalEditor {
-	min-height: 520px;
+	flex: 1 1 320px;
+	min-height: 180px;
 	margin-top: 8px;
 	border-radius: 16px;
 	border: 1px solid rgba(120, 152, 226, 0.16);
@@ -57,4 +60,6 @@
 
 .flowJsonModalActionsBottom {
 	margin-top: 14px;
+	padding-top: 12px;
+	border-top: 1px solid rgba(120, 152, 226, 0.12);
 }
