@@ -157,7 +157,8 @@ The runtime version MUST NOT be hardcoded in code.
   near-realtime updates for:
   - live logs,
   - job state/progress (top-right),
-  - stop/cancel responsiveness.
+  - stop/cancel responsiveness,
+  - the tracked active-job elapsed timer.
 - During ACTIVE, the Active job controls MUST be derived from the tracked
   non-terminal job identity together with PatchHub queue/runner actionability
   signals. The UI MUST NOT use current `/api/jobs` list membership as the sole
@@ -878,11 +879,25 @@ Live view levels (main UI):
 
 Rendering rule for human-rendered levels (quiet, normal, warning, verbose,
 debug_human):
-- each log line MUST render only ev.msg.
+- each rendered line MUST be derived deterministically from the persisted
+  structured event payload for that event sequence; the UI MUST NOT be limited to
+  emitting only ev.msg.
+- result events MUST render as: RESULT: SUCCESS or RESULT: FAIL.
+- log events with kind=SUBPROCESS_STDOUT MUST render as: [stdout] <msg>.
+- log events with kind=SUBPROCESS_STDERR MUST render as: [stderr] <msg>.
 - If ev.stdout is present, the UI appends a block: STDOUT:
 <text>.
 - If ev.stderr is present, the UI appends a block: STDERR:
 <text>.
+- For quiet, normal, warning, and verbose, the UI MAY synthesize a grouped
+  failure-detail block from already received persisted subprocess events for the
+  same stage when those subprocess lines were not directly visible at the active
+  level and a later error-bearing event for that stage requires them.
+- Any grouped failure-detail synthesis MUST use only already received persisted
+  structured events; it MUST NOT fetch tail text or infer payload from missing
+  data.
+- debug_human MUST remain event-faithful: it MAY humanize field combinations, but
+  it MUST still represent the same persisted event stream without raw JSON lines.
 
 This is a UI-only rendering rule. The SSE event payload fields
 (stage/kind/sev/msg/stdout/stderr) remain unchanged.
@@ -963,6 +978,7 @@ Primary parsing source (static client modules):
   - DO: <STEP>
   - OK: <STEP>
   - FAIL: <STEP>
+  - gate_<name>=SKIP (<reason>) markers emitted during that step
   - terminal end status from `event: end`
 
 Rendering rules:
@@ -970,15 +986,25 @@ Rendering rules:
 - Per-step states:
   - pending: gray dot
   - running: yellow dot and a RUNNING pill
+  - skip: gray dot and a SKIPPED pill that includes the skip reason
   - ok: green dot
   - fail: red dot
-- Exactly one step is shown as running (the most recent DO without a later OK/FAIL).
+- A step that emitted a skip marker MUST remain visually skipped even if the
+  surrounding runner wrapper later emits OK for that same step.
+- Exactly one step is shown as running (the most recent DO without a later
+  terminal step outcome).
 
 Summary rule:
 - During ACTIVE, `progressSummary` MUST follow the latest persisted live event state.
-- On receipt of terminal `event: end`, `progressSummary` MUST converge to the canonical structured terminal summary derived from the AMP `type="result"` payload and MUST NOT remain stuck on an older running step.
-- The terminal structured payload is the primary authority for terminal summary text, stage, reason, commit, push, and NDJSON/log paths.
-- Tail-derived summary is legacy fallback/resync only for artifacts that do not carry the canonical structured terminal payload.
+- If the latest step-local persisted state is a skip marker, `progressSummary`
+  MUST surface that skip as: SKIP: <STEP> (<reason>).
+- On receipt of terminal `event: end`, `progressSummary` MUST converge to the
+  canonical structured terminal summary derived from the AMP `type="result"`
+  payload and MUST NOT remain stuck on an older running step.
+- The terminal structured payload is the primary authority for terminal summary
+  text, stage, reason, commit, push, and NDJSON/log paths.
+- Tail-derived summary is legacy fallback/resync only for artifacts that do not
+  carry the canonical structured terminal payload.
 
 Applied files rule:
 - For a successful selected or just-finished job, Progress MUST render an
@@ -1143,11 +1169,16 @@ Required visible fields per item:
 - mode
 - patch basename (filename only)
 - duration in seconds when both started_utc and ended_utc are available
+- for the tracked active job, a client-side elapsed duration derived from
+  started_utc and current wall-clock time while the job remains non-terminal
 
 Layout requirements:
 - First line MUST show: issue id and status.
 - Commit summary MUST be on its own line.
-- Meta line MUST include: mode, patch basename (when present), and duration (when present).
+- Meta line MUST include: mode, patch basename (when present), and duration
+  (when present).
+- The elapsed duration for the tracked active job MUST update client-side without
+  requiring an additional backend fetch cycle.
 - A quick action row MAY appear below the meta line.
 - The quick action label MUST be: Use for -l
 
