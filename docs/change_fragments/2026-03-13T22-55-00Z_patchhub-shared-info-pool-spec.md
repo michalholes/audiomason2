@@ -1,0 +1,1 @@
+2026-03-13T22:55:00Z Define a shared PatchHub operator info pool and modal that consolidate pooled hints and status lines while keeping header, job, workspace, progress, and debug status surfaces local.

@@ -3,7 +3,7 @@ Status: AUTHORITATIVE SPECIFICATION
 Applies to: scripts/patchhub/*
 Language: ENGLISH (ASCII ONLY)
 
-Specification Version: 1.12.7-spec
+Specification Version: 1.12.9-spec
 Code Baseline: audiomason2-main.zip (as provided in this chat)
 
 -------------------------------------------------------------------------------
@@ -791,16 +791,42 @@ Result badge sizing rule (UI):
 - The result badge text (progress summary) MUST be approximately 2x the step header size,
   and MUST NOT dominate the right pane.
 
-7.1.1 UI Status Bar
+7.1.1 Shared Operator Info Pool
 
-The main UI includes a compact status bar for PatchHub events.
+The main UI includes exactly one always-visible shared operator info strip for
+operator-facing pooled status and hint messages.
 
-HTML element (templates/index.html):
+Primary strip element (templates/index.html):
 - <div id="uiStatusBar" class="statusbar" aria-live="polite"></div>
 
-Behavior (static/app.js):
-- The frontend keeps a ring buffer of recent status lines (default: 20).
-- The frontend pushes status lines for:
+Detail modal requirement:
+- The main UI MUST provide a dedicated modal for pooled operator info detail.
+- The strip MUST be the only main-screen entry point for that modal.
+- The main screen MUST NOT render extra status buttons, tabs, or secondary
+  open controls for the shared pool.
+
+Pooled sources:
+- uploadHint
+- uiDegradedBanner
+- uiStatusBar recent status lines
+- enqueueHint
+- fsHint
+- parseHint
+
+Explicitly excluded from the shared pool:
+- hdrMeta
+- activeJob
+- liveStreamStatus
+- ampStatus
+- progressSummary
+- Jobs item status surfaces
+- Runs item result surfaces
+- Workspaces per-item state badges and meta
+- /debug status and diagnostic surfaces
+
+Behavior (static/app.js plus pool-specific UI module):
+- The frontend keeps a ring buffer of recent pooled status lines (default: 20).
+- The frontend pushes pooled status lines for:
   - upload (ok/failed)
   - parse_command (ok/failed)
   - enqueue/start job (ok/failed)
@@ -808,6 +834,18 @@ Behavior (static/app.js):
 - If an API response includes status: [...], the frontend appends each line.
 - If an API response is {ok:false,error:"..."}, the frontend appends:
   - ERROR: <error>
+- The strip summary line MUST be deterministic:
+  - if any degraded-mode note exists, the strip shows the latest degraded note
+  - else if any pooled hint is currently non-empty, the strip shows the latest
+    non-empty pooled hint
+  - else if any pooled status line exists, the strip shows the latest pooled
+    status line
+  - else the strip shows: (idle)
+- Clicking the strip MUST open the pooled-detail modal.
+- The pooled-detail modal MUST expose:
+  - the latest degraded-mode note
+  - current pooled hints by source
+  - the recent pooled status line history
 
 7.1.2 Live Log Rendering
 
@@ -985,8 +1023,17 @@ semantics.
 Header rules (templates/index.html):
 - The header MUST render only the top title/status row.
 - The header MUST NOT render parseHint or enqueueHint.
-- enqueueHint MUST render inside the Start run card.
-- parseHint MUST render inside the Advanced card.
+
+Shared pool placement and local-surface rules:
+- The shared operator info strip MUST render inside the Start run card below the
+  start-form rows and above the Live log heading.
+- The Start run card MUST NOT render separate visible rows for uiDegradedBanner
+  or enqueueHint.
+- The Active job card MUST NOT render a separate visible uploadHint line.
+- The Files card MUST NOT render a separate visible fsHint line.
+- The Advanced card MUST NOT render a separate visible parseHint line.
+- The pooled sources listed in 7.1.1 MUST remain available through the shared
+  operator info modal even when their original inline surfaces are not visible.
 
 Left sidebar order (top to bottom):
 - Active job
