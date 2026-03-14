@@ -45,6 +45,62 @@ def _outside_sentinel(repo_root: Path, *, issue_id: str) -> Path:
     return repo_root.parent / f"badguys_sentinel_issue_{issue_id}.txt"
 
 
+def _workspace_root(patch_root: Path, *, issue_id: str) -> Path:
+    return patch_root / "workspaces" / f"issue_{issue_id}"
+
+
+def _workspace_repo(patch_root: Path, *, issue_id: str) -> Path:
+    return _workspace_root(patch_root, issue_id=issue_id) / "repo"
+
+
+def _git_stdout(*, cwd: Path, argv: list[str], label: str) -> str:
+    proc = subprocess.run(
+        argv,
+        cwd=str(cwd),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode == 0:
+        return (proc.stdout or "").strip()
+    detail = (proc.stderr or proc.stdout or "").strip()
+    if not detail:
+        detail = "command failed"
+    raise SystemExit(f"FAIL: bdg: {label}: {detail}")
+
+
+def _ensure_runner_workspace_repo(
+    repo_root: Path,
+    *,
+    patch_root: Path,
+    issue_id: str,
+) -> Path:
+    ws_repo = _workspace_repo(patch_root, issue_id=issue_id)
+    if ws_repo.exists():
+        if not ws_repo.is_dir():
+            raise SystemExit(f"FAIL: bdg: workspace repo is not directory: {ws_repo}")
+        return ws_repo
+
+    ws_root = _workspace_root(patch_root, issue_id=issue_id)
+    ws_root.mkdir(parents=True, exist_ok=True)
+    base_sha = _git_stdout(
+        cwd=repo_root,
+        argv=["git", "rev-parse", "HEAD"],
+        label="unable to resolve live repo HEAD for workspace bootstrap",
+    )
+    _git_stdout(
+        cwd=repo_root,
+        argv=["git", "clone", str(repo_root), str(ws_repo)],
+        label="git clone failed while bootstrapping workspace",
+    )
+    _git_stdout(
+        cwd=ws_repo,
+        argv=["git", "checkout", base_sha],
+        label=(f"git checkout failed while bootstrapping workspace at {base_sha}"),
+    )
+    return ws_repo
+
+
 def execute_bdg(
     *,
     repo_root: Path,
@@ -116,6 +172,15 @@ def _patches_dir(step_runner_cfg: dict[str, object]) -> Path:
     return out
 
 
+def _runner_patch_dir(step_runner_cfg: dict[str, object]) -> Path | None:
+    out = step_runner_cfg.get("runner_patch_dir")
+    if out is None:
+        return None
+    if not isinstance(out, Path):
+        raise SystemExit("FAIL: bdg: runner_patch_dir must be Path")
+    return out
+
+
 def _exec_one(
     *,
     repo_root: Path,
@@ -160,6 +225,7 @@ def _exec_one(
             )
 
         patches_dir = _patches_dir(step_runner_cfg)
+        runner_patch_dir = _runner_patch_dir(step_runner_cfg)
         artifacts_dir = _artifacts_dir(step_runner_cfg)
         copy_runner_log = bool(step_runner_cfg.get("copy_runner_log", False))
         write_subprocess_stdio = bool(step_runner_cfg.get("write_subprocess_stdio", False))
@@ -167,6 +233,8 @@ def _exec_one(
         artifacts_dir.mkdir(parents=True, exist_ok=True)
 
         argv = list(cfg_runner_cmd)
+        if runner_patch_dir is not None:
+            argv.extend(["--override", f"patch_dir={runner_patch_dir}"])
         if test_id not in full_runner_tests:
             argv.append("--test-mode")
         argv.extend([_subst(a, subst=subst) for a in extra_args])
@@ -179,7 +247,8 @@ def _exec_one(
         socket_name = runner_socket_name(argv=argv, issue_id=subst.issue_id)
         ipc_stream_path = artifacts_dir / f"runner.ipc.step{int(step_index)}.jsonl"
         ipc_holder: dict[str, object] = {"result": None, "value_text": ""}
-        socket_path_holder: dict[str, Path] = {"path": patches_dir / socket_name}
+        socket_base_dir = runner_patch_dir or patches_dir
+        socket_path_holder: dict[str, Path] = {"path": socket_base_dir / socket_name}
 
         plans = pop_ipc_plans(step_runner_cfg)
 
@@ -234,13 +303,16 @@ def _exec_one(
             text=True,
         )
 
-        socket_path_holder["path"] = runner_socket_path(
-            patches_dir=patches_dir,
-            issue_id=subst.issue_id,
-            socket_name=socket_name,
-            test_mode=(test_id not in full_runner_tests),
-            runner_pid=proc.pid,
-        )
+        if runner_patch_dir is not None:
+            socket_path_holder["path"] = runner_patch_dir / socket_name
+        else:
+            socket_path_holder["path"] = runner_socket_path(
+                patches_dir=patches_dir,
+                issue_id=subst.issue_id,
+                socket_name=socket_name,
+                test_mode=(test_id not in full_runner_tests),
+                runner_pid=proc.pid,
+            )
 
         ipc_thread = threading.Thread(
             target=_run_recorder,
@@ -539,7 +611,14 @@ def _exec_one(
         target_rel = subjects.get(subject)
         if target_rel is None:
             raise SystemExit(f"FAIL: bdg recipe: unknown subject '{subject}' for {test_id}")
-        target_path = repo_root / target_rel
+        patches_dir = _patches_dir(step_runner_cfg)
+        step_runner_cfg["runner_patch_dir"] = patches_dir
+        workspace_repo = _ensure_runner_workspace_repo(
+            repo_root,
+            patch_root=patches_dir,
+            issue_id=subst.issue_id,
+        )
+        target_path = workspace_repo / target_rel
         if target_path.is_symlink():
             target_path.unlink()
             return StepResult(rc=0, stdout=None, stderr=None, value=str(target_path))
