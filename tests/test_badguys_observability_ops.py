@@ -197,7 +197,7 @@ def test_git_status_porcelain_supports_workspace_scope(tmp_path: Path) -> None:
 def test_delete_subject_removes_existing_file_subject(tmp_path: Path) -> None:
     repo_root = tmp_path
     cfg_path = _write_config(repo_root)
-    target = repo_root / "docs" / "delete_me.txt"
+    target = repo_root / "patches" / "workspaces" / "issue_777" / "repo" / "docs" / "delete_me.txt"
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text("delete me\n", encoding="utf-8")
 
@@ -225,7 +225,8 @@ def test_delete_subject_removes_existing_file_subject(tmp_path: Path) -> None:
 def test_delete_subject_is_idempotent_when_file_missing(tmp_path: Path) -> None:
     repo_root = tmp_path
     cfg_path = _write_config(repo_root)
-    target = repo_root / "docs" / "delete_me.txt"
+    target = repo_root / "patches" / "workspaces" / "issue_777" / "repo" / "docs" / "delete_me.txt"
+    target.parent.mkdir(parents=True, exist_ok=True)
 
     result = execute_bdg_step(
         repo_root=repo_root,
@@ -273,7 +274,7 @@ def test_delete_subject_fails_for_unknown_subject(tmp_path: Path) -> None:
 def test_delete_subject_fails_for_directory_target(tmp_path: Path) -> None:
     repo_root = tmp_path
     cfg_path = _write_config(repo_root)
-    target = repo_root / "docs" / "delete_dir"
+    target = repo_root / "patches" / "workspaces" / "issue_777" / "repo" / "docs" / "delete_dir"
     target.mkdir(parents=True, exist_ok=True)
 
     result = execute_bdg_step(
