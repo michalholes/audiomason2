@@ -4,8 +4,17 @@ is_guard = false
 
 [[asset]]
 id = "pytest_badguys_patch"
-kind = "git_patch_text"
-content = """BADGUYS_PYTEST_TRIGGER_MARKER = "issue_701"
+kind = "patch_zip_manifest"
+
+  [[asset.entry]]
+  name = "trigger_entry"
+  content = """BADGUYS_PYTEST_TRIGGER_MARKER = "issue_704"
+"""
+
+  [[asset.entry]]
+  name = "target_entry"
+  content = """def test_badguys_pytest_gate_target() -> None:
+    assert True
 """
 
 [[step]]

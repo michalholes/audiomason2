@@ -432,6 +432,9 @@ relpath = "tests/test_badguys_pytest_gate_target.py"
 [subjects.tests.test_087_pytest_gate_runs_on_configured_badguys_python_change.pytest_gate_badguys_trigger]
 relpath = "badguys/pytest_gate_trigger_marker.py"
 
+[subjects.tests.test_087_pytest_gate_runs_on_configured_badguys_python_change.pytest_gate_target]
+relpath = "tests/test_badguys_pytest_gate_target.py"
+
 [subjects.tests.test_100_rerun_latest_l.rerun_latest_marker]
 relpath = "badguys/tmp/rerun_latest_marker.txt"
 
@@ -632,8 +635,15 @@ args = [
   "badguys: pytest gate runs on targeted python change",
 ]
 
-[recipes.tests.test_087_pytest_gate_runs_on_configured_badguys_python_change.assets.pytest_badguys_patch]
+[recipes.tests.test_087_pytest_gate_runs_on_configured_badguys_python_change.assets.pytest_badguys_patch.entries.trigger_entry]
+kind = "git_patch_text"
+zip_name = "trigger.patch"
 subject = "pytest_gate_badguys_trigger"
+
+[recipes.tests.test_087_pytest_gate_runs_on_configured_badguys_python_change.assets.pytest_badguys_patch.entries.target_entry]
+kind = "git_patch_text"
+zip_name = "target.patch"
+subject = "pytest_gate_target"
 
 [recipes.tests.test_087_pytest_gate_runs_on_configured_badguys_python_change.steps.0]
 args = [
