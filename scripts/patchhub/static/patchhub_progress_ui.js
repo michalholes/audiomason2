@@ -640,6 +640,7 @@
 		var active = getTrackedActiveJob(jobs);
 		var progress = deriveProgressFromEvents(events);
 		renderProgressSteps(progress);
+		syncProgressTimer(progress);
 		renderActiveJob(jobs);
 		var summary = deriveProgressSummaryFromEvents(events, progress, active);
 		renderProgressSummary(summary.text);

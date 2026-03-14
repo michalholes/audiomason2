@@ -103,8 +103,16 @@ global.idleSigs = {{ jobs: "", runs: "", workspaces: "", hdr: "", snapshot: "" }
 global.autoRefreshTimer = null;
 global.idleNextDueMs = 0;
 global.IDLE_BACKOFF_MS = [1000];
-global.setInterval = () => 1;
-global.clearInterval = () => {{}};
+global.__intervals = new Map();
+global.__nextIntervalId = 1;
+global.setInterval = (fn) => {{
+  const id = global.__nextIntervalId++;
+  global.__intervals.set(id, fn);
+  return id;
+}};
+global.clearInterval = (id) => {{
+  global.__intervals.delete(Number(id));
+}};
 global.dirty = {{ issueId: false, commitMsg: false, patchPath: false }};
 global.normalizePatchPath = (value) => String(value || "");
 global.apiGet = () => Promise.resolve({{ ok: true }});
@@ -276,18 +284,82 @@ const jobs = [
 ];
 await ui.updateProgressPanelFromEvents({ jobs });
 const firstHtml = document.getElementById("progressSteps").innerHTML;
+const timerIds = Array.from(global.__intervals.keys());
 nowMs += 3000;
-await ui.updateProgressPanelFromEvents({ jobs });
+if (timerIds.length) {{
+  global.__intervals.get(timerIds[0])();
+}}
 process.stdout.write(
   JSON.stringify({
     firstHtml,
     secondHtml: document.getElementById("progressSteps").innerHTML,
+    intervalCount: timerIds.length,
   }),
 );
 """,
     )
+    assert result["intervalCount"] == 1
     assert "RUNNING (0s)" in result["firstHtml"]
     assert "RUNNING (3s)" in result["secondHtml"]
+
+
+def test_progress_pytest_timer_cleans_up_after_finish() -> None:
+    result = _run_node_scenario(
+        """
+let nowMs = new Date("2026-03-14T08:00:05Z").getTime();
+Date.now = () => nowMs;
+ui.saveLiveJobId("job-58");
+const jobs = [
+  {
+    job_id: "job-58",
+    status: "running",
+    mode: "patch",
+    issue_id: "329",
+    started_utc: "2026-03-14T08:00:00Z",
+  },
+];
+ui.liveEvents.push({
+  type: "log",
+  seq: 1,
+  ts_mono_ms: 1000,
+  kind: "DO",
+  stage: "GATE_PYTEST",
+  msg: "DO: GATE_PYTEST",
+});
+await ui.updateProgressPanelFromEvents({ jobs });
+const runningIntervals = Array.from(global.__intervals.keys());
+ui.liveEvents.push({
+  type: "log",
+  seq: 2,
+  ts_mono_ms: 4500,
+  kind: "OK",
+  stage: "GATE_PYTEST",
+  msg: "OK: GATE_PYTEST",
+});
+await ui.updateProgressPanelFromEvents({
+  jobs: [
+    {
+      job_id: "job-58",
+      status: "success",
+      mode: "patch",
+      issue_id: "329",
+      started_utc: "2026-03-14T08:00:00Z",
+      ended_utc: "2026-03-14T08:00:06Z",
+    },
+  ],
+});
+process.stdout.write(
+  JSON.stringify({
+    runningIntervalCount: runningIntervals.length,
+    remainingIntervalCount: global.__intervals.size,
+    progressHtml: document.getElementById("progressSteps").innerHTML,
+  }),
+);
+""",
+    )
+    assert result["runningIntervalCount"] == 1
+    assert result["remainingIntervalCount"] == 0
+    assert ">3.5s<" in result["progressHtml"]
 
 
 def test_progress_pytest_duration_freezes_after_finish_and_terminal_end() -> None:
