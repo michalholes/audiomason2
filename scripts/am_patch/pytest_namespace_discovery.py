@@ -114,6 +114,15 @@ class _ScriptPathCollector(ast.NodeVisitor):
         self.generic_visit(node)
 
 
+_REPO_PY_PATH_PREFIXES = (
+    "badguys/",
+    "plugins/",
+    "scripts/",
+    "src/",
+    "tests/",
+)
+
+
 def default_repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
@@ -157,6 +166,14 @@ def _path_candidate_from_expr(node: ast.AST) -> str | None:
     parts: list[str] = []
 
     def visit(expr: ast.AST) -> None:
+        if (
+            isinstance(expr, ast.Call)
+            and isinstance(expr.func, ast.Name)
+            and expr.func.id in {"Path", "PurePath", "PurePosixPath"}
+        ):
+            for arg in expr.args:
+                visit(arg)
+            return
         if isinstance(expr, ast.BinOp) and isinstance(expr.op, ast.Div):
             visit(expr.left)
             visit(expr.right)
@@ -178,6 +195,36 @@ def _path_candidate_from_expr(node: ast.AST) -> str | None:
         return None
     rel_path = _normalize_path("/".join(parts))
     return rel_path if rel_path.endswith(".py") else None
+
+
+def _repo_python_path(value: str) -> str | None:
+    norm = _normalize_path(value.strip())
+    first_segment = norm.split("/", 1)[0]
+    if not norm.endswith(".py") or "/" not in norm:
+        return None
+    if (
+        norm.startswith(("/", "../"))
+        or any(ch.isspace() for ch in norm)
+        or first_segment.endswith(":")
+        or "://" in norm
+    ):
+        return None
+    return norm
+
+
+def _collect_repo_path_refs(node: ast.AST) -> tuple[str, ...]:
+    out: list[str] = []
+    for child in ast.walk(node):
+        candidate = _path_candidate_from_expr(child)
+        if candidate is not None:
+            repo_path = _repo_python_path(candidate)
+            if repo_path is not None and repo_path not in out:
+                out.append(repo_path)
+        if isinstance(child, ast.Constant) and isinstance(child.value, str):
+            repo_path = _repo_python_path(child.value)
+            if repo_path is not None and repo_path not in out:
+                out.append(repo_path)
+    return tuple(out)
 
 
 def _resolve_local_import(
@@ -311,13 +358,14 @@ def _module_details(
     tuple[str, ...],
     tuple[str, ...],
     tuple[str, ...],
+    tuple[str, ...],
 ]:
     repo_root = Path(repo_root_str)
     known_paths = set(known_paths_items)
     text = (repo_root / rel_path).read_text(encoding="utf-8")
     tree = _parse_ast(text)
     if tree is None:
-        return text, (), (), (), (), ()
+        return text, (), (), (), (), (), ()
     refs = tuple(sorted(_collect_module_references(tree)))
     local_imports = _collect_local_import_specs(
         rel_path=rel_path,
@@ -325,9 +373,10 @@ def _module_details(
         known_paths=known_paths,
     )
     script_targets = _collect_script_targets(tree, known_paths)
+    repo_paths = _collect_repo_path_refs(tree)
     fixture_names = _test_requested_fixtures(tree)
     conftests = _conftest_candidates(rel_path, known_paths)
-    return text, refs, local_imports, script_targets, fixture_names, conftests
+    return text, refs, local_imports, script_targets, repo_paths, fixture_names, conftests
 
 
 def _local_called_names(node: ast.AST) -> tuple[str, ...]:
@@ -359,13 +408,14 @@ def _selected_module_details(
     tuple[str, ...],
     tuple[tuple[str, tuple[str, ...] | None], ...],
     tuple[str, ...],
+    tuple[str, ...],
 ]:
     repo_root = Path(repo_root_str)
     known_paths = set(known_paths_items)
     text = (repo_root / rel_path).read_text(encoding="utf-8")
     tree = _parse_ast(text)
     if tree is None:
-        return "", (), (), ()
+        return "", (), (), (), ()
 
     definitions = _top_level_defs(tree)
     pending = [name for name in selected_names if name in definitions]
@@ -383,7 +433,7 @@ def _selected_module_details(
                 pending.append(helper_name)
 
     if not nodes:
-        return "", (), (), ()
+        return "", (), (), (), ()
 
     selected_tree = ast.Module(body=list(nodes), type_ignores=[])
     selected_text = "\n\n".join(
@@ -396,7 +446,8 @@ def _selected_module_details(
         known_paths=known_paths,
     )
     script_targets = _collect_script_targets(selected_tree, known_paths)
-    return selected_text, refs, local_imports, script_targets
+    repo_paths = _collect_repo_path_refs(selected_tree)
+    return selected_text, refs, local_imports, script_targets, repo_paths
 
 
 def _find_fixture_definition(
@@ -406,7 +457,7 @@ def _find_fixture_definition(
     fixture_name: str,
     known_paths_items: tuple[str, ...],
 ) -> tuple[str, str] | None:
-    _text, _refs, _imports, _scripts, _fixtures, conftests = _module_details(
+    _text, _refs, _imports, _scripts, _paths, _fixtures, conftests = _module_details(
         repo_root_str,
         rel_path,
         known_paths_items,
@@ -540,6 +591,23 @@ def _reduce_candidates(candidates: set[str]) -> tuple[str, ...]:
     return tuple(sorted(reduced))
 
 
+def _is_catchall_surface(
+    *,
+    rel_path: str,
+    roots: Mapping[str, str],
+    tree: Mapping[str, str],
+) -> bool:
+    norm = _normalize_path(rel_path)
+    if _matches_prefix(norm, "tests"):
+        return False
+    if any(_matches_prefix(norm, prefix) for prefix in tree.values()):
+        return False
+    return not any(
+        _namespace_stem(namespace) != "*" and _matches_prefix(norm, prefix)
+        for namespace, prefix in roots.items()
+    )
+
+
 def _collect_candidates(
     *,
     text: str,
@@ -581,10 +649,12 @@ def discover_namespace_ownership(
 
     ownership: list[tuple[str, tuple[str, ...]]] = []
     for rel_path in _test_file_paths(repo_root):
-        text, refs, local_imports, script_targets, fixture_names, _conftests = _module_details(
-            repo_root_str,
-            rel_path,
-            known_paths,
+        text, refs, local_imports, script_targets, _paths, fixture_names, _conftests = (
+            _module_details(
+                repo_root_str,
+                rel_path,
+                known_paths,
+            )
         )
         candidates = _collect_candidates(
             text=text,
@@ -623,13 +693,13 @@ def discover_namespace_ownership(
                 seen_selected.add((support_path, names_key))
 
             if names_key is None:
-                support_text, support_refs, imports, scripts, _fix, _conf = _module_details(
+                support_text, support_refs, imports, scripts, _paths, _fix, _conf = _module_details(
                     repo_root_str,
                     support_path,
                     known_paths,
                 )
             else:
-                support_text, support_refs, imports, scripts = _selected_module_details(
+                support_text, support_refs, imports, scripts, _paths = _selected_module_details(
                     repo_root_str,
                     support_path,
                     known_paths,
@@ -652,6 +722,91 @@ def discover_namespace_ownership(
             candidates.update(_filename_fallback_candidates(rel_path=rel_path, matchers=matchers))
         namespaces = _reduce_candidates(candidates) or ("*",)
         ownership.append((rel_path, namespaces))
+    return tuple(ownership)
+
+
+@lru_cache(maxsize=32)
+def discover_catchall_path_ownership(
+    repo_root_str: str,
+    roots_items: tuple[tuple[str, str], ...],
+    tree_items: tuple[tuple[str, str], ...],
+    namespace_modules_items: tuple[tuple[str, tuple[str, ...]], ...],
+) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    del namespace_modules_items
+    repo_root = Path(repo_root_str)
+    roots = dict(roots_items)
+    tree = dict(tree_items)
+    known_paths = _python_paths_under_tests(repo_root)
+
+    ownership: list[tuple[str, tuple[str, ...]]] = []
+    for rel_path in _test_file_paths(repo_root):
+        _text, _refs, local_imports, script_targets, repo_paths, fixture_names, _conf = (
+            _module_details(
+                repo_root_str,
+                rel_path,
+                known_paths,
+            )
+        )
+        candidates = [
+            path
+            for path in repo_paths
+            if _is_catchall_surface(rel_path=path, roots=roots, tree=tree)
+        ]
+
+        pending: list[tuple[str, tuple[str, ...] | None]] = list(local_imports)
+        pending.extend((target, None) for target in script_targets)
+        pending.extend(
+            (target, None)
+            for target in _collect_fixture_support_paths(
+                repo_root_str=repo_root_str,
+                rel_path=rel_path,
+                fixture_names=fixture_names,
+                known_paths_items=known_paths,
+            )
+        )
+        seen_full: set[str] = set()
+        seen_selected: set[tuple[str, tuple[str, ...]]] = set()
+        while pending:
+            support_path, selected_names = pending.pop(0)
+            if support_path == rel_path:
+                continue
+
+            names_key = None
+            if selected_names is None:
+                if support_path in seen_full:
+                    continue
+                seen_full.add(support_path)
+            else:
+                names_key = tuple(dict.fromkeys(selected_names))
+                if support_path in seen_full or (support_path, names_key) in seen_selected:
+                    continue
+                seen_selected.add((support_path, names_key))
+
+            if names_key is None:
+                _st, _rf, imports, scripts, support_paths, _fx, _cf = _module_details(
+                    repo_root_str,
+                    support_path,
+                    known_paths,
+                )
+            else:
+                _st, _rf, imports, scripts, support_paths = _selected_module_details(
+                    repo_root_str,
+                    support_path,
+                    known_paths,
+                    names_key,
+                )
+            for path in support_paths:
+                if (
+                    _is_catchall_surface(rel_path=path, roots=roots, tree=tree)
+                    and path not in candidates
+                ):
+                    candidates.append(path)
+            for target, child_names in imports:
+                pending.append((target, child_names))
+            for target in scripts:
+                pending.append((target, None))
+
+        ownership.append((rel_path, tuple(sorted(candidates))))
     return tuple(ownership)
 
 

@@ -357,6 +357,63 @@ def test_file_io_change_keeps_consumer_and_web_surfaces_in_actual_repo() -> None
     assert "tests/e2e/test_web_interface_app_e2e.py" in targets
 
 
+def test_actual_repo_unmatched_script_changes_route_via_catchall_path_evidence() -> None:
+    check_patch_targets = _actual_repo_targets("scripts/check_patch_pm.py")
+    assert "tests/test_check_patch_pm.py" in check_patch_targets
+    assert "tests/test_scripts_cli_help.py" in check_patch_targets
+    assert "tests" not in check_patch_targets
+
+    gov_versions_targets = _actual_repo_targets("scripts/gov_versions.py")
+    assert "tests/test_scripts_cli_help.py" in gov_versions_targets
+    assert "tests" not in gov_versions_targets
+
+    sync_targets = _actual_repo_targets("scripts/sync_issues_archive.py")
+    assert "tests/test_scripts_cli_help.py" in sync_targets
+    assert "tests" not in sync_targets
+
+
+def test_unmatched_change_uses_helper_path_evidence_before_generic_catch_all(
+    tmp_path: Path,
+) -> None:
+    repo_root = _make_repo(tmp_path)
+    _write(
+        "tests/tooling_support.py",
+        """from pathlib import Path
+
+def _tool_script() -> Path:
+    return Path("tools") / "future_script.py"
+
+def tool_script_path(repo_root: Path) -> Path:
+    return repo_root / _tool_script()
+""",
+        root=repo_root,
+    )
+    _write(
+        "tests/test_tooling_help.py",
+        """import subprocess
+import sys
+from pathlib import Path
+
+from tests.tooling_support import tool_script_path
+
+
+def test_help_smoke() -> None:
+    repo_root = Path(__file__).resolve().parents[1]
+    subprocess.run(
+        [sys.executable, str(tool_script_path(repo_root)), "--help"],
+        check=False,
+    )
+""",
+        root=repo_root,
+    )
+
+    targets = _bucketed_targets(
+        decision_paths=["tools/future_script.py"],
+        repo_root=repo_root,
+    )
+    assert targets == ["tests/test_tooling_help.py"]
+
+
 def test_patchhub_change_does_not_pull_import_only_e2e_from_asset_inventory_helper() -> None:
     targets = _actual_repo_targets("scripts/patchhub/app.py")
     assert "tests/e2e/test_patchhub_debug_ui_e2e.py" in targets

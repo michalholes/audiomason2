@@ -11,12 +11,14 @@ from .pytest_namespace_config import (
     _normalize_dependencies,
     _normalize_full_suite_prefixes,
     _normalize_namespace_modules,
+    _normalize_path,
     _normalize_roots,
     _normalize_tree,
     _root_for_namespace,
 )
 from .pytest_namespace_discovery import (
     default_repo_root,
+    discover_catchall_path_ownership,
     discover_namespace_ownership,
     is_direct_test_path,
     select_tests_for_namespaces,
@@ -136,6 +138,19 @@ def reverse_dependency_closure(dependencies: Mapping[str, Sequence[str]]) -> dic
     return closure
 
 
+def _catchall_evidence_targets(
+    *,
+    path: str,
+    catchall_ownership: Sequence[tuple[str, Sequence[str]]],
+) -> list[str]:
+    norm = _normalize_path(path)
+    return [
+        rel_path
+        for rel_path, evidence_paths in catchall_ownership
+        if norm in {_normalize_path(item) for item in evidence_paths}
+    ]
+
+
 def namespace_targets(
     *,
     namespace: str,
@@ -217,6 +232,12 @@ def select_namespace_pytest_targets(
         tuple(sorted(tree.items())),
         tuple(sorted((key, tuple(values)) for key, values in namespace_modules.items())),
     )
+    catchall_ownership = discover_catchall_path_ownership(
+        str(repo_root),
+        tuple(sorted(roots.items())),
+        tuple(sorted(tree.items())),
+        tuple(sorted((key, tuple(values)) for key, values in namespace_modules.items())),
+    )
     reverse_closure = reverse_dependency_closure(merged_dependencies)
 
     selected: list[str] = []
@@ -230,7 +251,15 @@ def select_namespace_pytest_targets(
     matched_namespaces = [
         match_namespace(path=path, roots=roots, tree=tree) for path in decision_paths
     ]
-    for namespace in matched_namespaces:
+    for path, namespace in zip(decision_paths, matched_namespaces, strict=False):
+        if namespace == "*":
+            catchall_targets = _catchall_evidence_targets(
+                path=path,
+                catchall_ownership=catchall_ownership,
+            )
+            if catchall_targets:
+                selected.extend(catchall_targets)
+                continue
         selected.extend(
             namespace_targets(
                 namespace=namespace,
