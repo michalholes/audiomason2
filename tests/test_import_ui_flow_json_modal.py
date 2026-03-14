@@ -599,3 +599,80 @@ process.stdout.write(JSON.stringify({
     assert result["saveError"] == "Error: write exploded"
     assert result["configDraft"]["defaults"]["marker"] == 7
     assert result["statusText"] == ""
+
+
+def test_flow_json_modal_keeps_closed_state_when_initial_open_reload_fails() -> None:
+    result = _run_node_scenario(
+        """
+window.AM2FlowEditor.config.reload = async () => {
+  actionCounts.configReload += 1;
+  return false;
+};
+const opened = await window.AM2FlowJSONModalState.openModal("config");
+process.stdout.write(JSON.stringify({
+  opened,
+  actionCounts,
+  modalHidden: document.getElementById("flowJsonModal").classList.contains("is-hidden"),
+  modalTitle: document.getElementById("flowJsonModalTitle").textContent,
+  modalSubtitle: document.getElementById("flowJsonModalSubtitle").textContent,
+  editorValue: document.getElementById("flowJsonModalEditor").value,
+  statusText: document.getElementById("flowJsonModalStatus").textContent,
+  errorText: document.getElementById("flowJsonModalError").textContent,
+}));
+"""
+    )
+    assert result["opened"] is False
+    assert result["actionCounts"]["configReload"] == 1
+    assert result["modalHidden"] is True
+    assert result["modalTitle"] == ""
+    assert result["modalSubtitle"] == ""
+    assert result["editorValue"] == ""
+    assert result["statusText"] == ""
+    assert result["errorText"] == ""
+
+
+def test_flow_json_modal_keeps_previous_artifact_when_switch_reload_fails() -> None:
+    result = _run_node_scenario(
+        """
+await window.AM2FlowJSONModalState.openModal("config");
+window.AM2DSLEditorV3.reloadAll = async () => {
+  actionCounts.wizardReload += 1;
+  return false;
+};
+window.AM2FlowEditor.wizard.reload = async () => {
+  actionCounts.wizardReload += 1;
+  return false;
+};
+const switched = await window.AM2FlowJSONModalState.openModal("wizard");
+await window.AM2FlowJSONModalState.saveDraft();
+await window.AM2FlowJSONModalState.applyForFutureRuns();
+process.stdout.write(JSON.stringify({
+  switched,
+  actionCounts,
+  modalHidden: document.getElementById("flowJsonModal").classList.contains("is-hidden"),
+  modalTitle: document.getElementById("flowJsonModalTitle").textContent,
+  modalSubtitle: document.getElementById("flowJsonModalSubtitle").textContent,
+  editorValue: document.getElementById("flowJsonModalEditor").value,
+  statusText: document.getElementById("flowJsonModalStatus").textContent,
+  errorText: document.getElementById("flowJsonModalError").textContent,
+  configDraft: state.configDraft,
+  wizardDraft: state.wizardDraft,
+}));
+"""
+    )
+    assert result["switched"] is False
+    assert result["actionCounts"]["wizardReload"] == 1
+    assert result["modalHidden"] is False
+    assert result["modalTitle"] == "FlowConfig JSON"
+    assert "runtime defaults" in str(result["modalSubtitle"])
+    assert '"marker": 7' in str(result["editorValue"])
+    assert result["actionCounts"]["configSave"] == 1
+    assert result["actionCounts"]["configActivate"] == 1
+    assert result["actionCounts"]["wizardSave"] == 0
+    assert result["actionCounts"]["wizardActivate"] == 0
+    assert result["statusText"] == "Applied for future runs."
+    assert result["errorText"] == ""
+    assert result["configDraft"]["saved"] is True
+    assert result["configDraft"]["activated"] is True
+    assert "saved" not in result["wizardDraft"]
+    assert "activated" not in result["wizardDraft"]

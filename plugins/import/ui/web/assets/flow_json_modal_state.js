@@ -178,27 +178,25 @@
 		driver.stage(parsed);
 	}
 
+	function prettyCurrent(artifact) {
+		return pretty(driverFor(artifact).readCurrent());
+	}
+
 	function syncFromState() {
-		var current = currentDriver().readCurrent();
-		var text = pretty(current);
+		var text = prettyCurrent(currentDriver().key);
 		state.lastLoadedText = text;
 		dom.setValue(text);
 		return text;
 	}
 
-	function restoreModalSnapshot(snapshotState) {
-		var driver = null;
-		state.artifact = snapshotState.artifact || "";
-		state.lastLoadedText = snapshotState.lastLoadedText || "";
-		dom.setValue(snapshotState.value || "");
-		dom.clearFeedback();
-		if (snapshotState.artifact) {
-			driver = driverFor(snapshotState.artifact);
-			dom.setArtifactMeta(driver.title, driver.subtitle);
-		} else {
-			dom.setArtifactMeta("", "");
+	function commitLoadedArtifact(loaded, openState) {
+		state.artifact = loaded.artifact;
+		state.lastLoadedText = loaded.text;
+		dom.setArtifactMeta(loaded.title, loaded.subtitle);
+		dom.setValue(loaded.text);
+		if (typeof openState === "boolean") {
+			dom.setOpen(openState);
 		}
-		dom.setOpen(snapshotState.wasOpen === true);
 	}
 
 	function confirmRereadDiscards() {
@@ -224,26 +222,30 @@
 
 	async function reloadArtifact(artifact) {
 		var driver = driverFor(artifact);
-		state.artifact = artifact;
-		dom.setArtifactMeta(driver.title, driver.subtitle);
 		var ok = await driver.reload();
 		if (!ok) {
-			return false;
+			return null;
 		}
-		syncFromState();
-		return true;
+		return {
+			artifact: artifact,
+			title: driver.title,
+			subtitle: driver.subtitle,
+			text: prettyCurrent(artifact),
+		};
 	}
 
 	async function rereadFromServer() {
+		var loaded = null;
 		if (!confirmRereadDiscards()) {
 			return false;
 		}
 		dom.clearFeedback();
-		var ok = await reloadArtifact(currentDriver().key);
-		if (!ok) {
+		loaded = await reloadArtifact(currentDriver().key);
+		if (!loaded) {
 			setModalError("Re-read failed.");
 			return false;
 		}
+		commitLoadedArtifact(loaded);
 		setModalStatus("Draft re-read from server.");
 		return true;
 	}
@@ -363,33 +365,26 @@
 	}
 
 	async function openModal(artifact) {
-		var ok = false;
+		var loaded = null;
 		var nextArtifact = artifact === "wizard" ? "wizard" : "config";
-		var previous = {
-			artifact: state.artifact,
-			lastLoadedText: state.lastLoadedText,
-			value: dom.getValue(),
-			wasOpen: dom.isOpen(),
-		};
+		var wasOpen = dom.isOpen();
 		if (!confirmRereadDiscards()) {
 			return false;
 		}
 		dom.clearFeedback();
-		dom.setOpen(true);
 		try {
-			ok = await reloadArtifact(nextArtifact);
-			if (!ok) {
-				restoreModalSnapshot(previous);
-				if (previous.wasOpen === true) {
+			loaded = await reloadArtifact(nextArtifact);
+			if (!loaded) {
+				if (wasOpen === true) {
 					setModalError("Re-read failed.");
 				}
 				return false;
 			}
+			commitLoadedArtifact(loaded, true);
 			setModalStatus("Draft re-read from server.");
 			return true;
 		} catch (err) {
-			restoreModalSnapshot(previous);
-			if (previous.wasOpen === true) {
+			if (wasOpen === true) {
 				setModalError(String(err || "Re-read failed."));
 			}
 			return false;
