@@ -364,6 +364,7 @@ function renderJobsFromResponse(r) {
 	syncJobDurationTimer(jobs);
 	ensureAutoRefresh(jobs);
 
+	var trackedActiveId = String(phCall("getTrackedActiveJobId", jobs) || "");
 	var html = jobs
 		.map((j) => {
 			var jobId = String(j.job_id || "");
@@ -384,12 +385,23 @@ function renderJobsFromResponse(r) {
 			var pb = String(j.patch_basename || "").trim();
 			if (pb) metaParts.push(`patch=${pb}`);
 
-			var dur = PH.call(
-				"jobSummaryDurationSeconds",
-				j.started_utc,
-				j.ended_utc,
-			);
-			if (dur) metaParts.push(`dur=${dur}s`);
+			var showListDuration = !!(j.started_utc && j.ended_utc);
+			if (
+				!showListDuration &&
+				trackedActiveId &&
+				jobId === trackedActiveId &&
+				phCall("isNonTerminalJobStatus", j.status)
+			) {
+				showListDuration = true;
+			}
+			if (showListDuration) {
+				const dur = PH.call(
+					"jobSummaryDurationSeconds",
+					j.started_utc,
+					j.ended_utc,
+				);
+				if (dur) metaParts.push(`dur=${dur}s`);
+			}
 
 			var meta = metaParts.join(" | ");
 			var commit = String(j.commit_summary || "").trim();
