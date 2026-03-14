@@ -1,3 +1,19 @@
+/**
+ * @typedef {{ source?: string, text?: string }} InfoPoolLatestHint
+ * @typedef {{
+ *   upload?: string,
+ *   enqueue?: string,
+ *   fs?: string,
+ *   parse?: string,
+ * }} InfoPoolHints
+ * @typedef {{
+ *   degradedNotes?: string[],
+ *   statusLines?: string[],
+ *   hints?: InfoPoolHints,
+ *   latestHint?: InfoPoolLatestHint,
+ * }} InfoPoolSnapshot
+ */
+
 /** @type {any} */
 var PH = /** @type {any} */ (window).PH;
 
@@ -9,7 +25,9 @@ function infoPoolModalEl(id) {
 }
 
 function infoPoolSnapshot() {
-	if (typeof getInfoPoolSnapshot === "function") return getInfoPoolSnapshot();
+	if (typeof getInfoPoolSnapshot === "function") {
+		return /** @type {InfoPoolSnapshot} */ (getInfoPoolSnapshot());
+	}
 	return {
 		degradedNotes: [],
 		statusLines: [],
@@ -80,7 +98,9 @@ function renderInfoPoolModal() {
 	var modal = infoPoolModalEl("uiStatusModal");
 	var body = infoPoolModalEl("uiStatusModalBody");
 	if (!modal || !body) return;
+	/** @type {InfoPoolSnapshot} */
 	var snapshot = infoPoolSnapshot();
+	/** @type {InfoPoolHints} */
 	var hints = snapshot.hints || {};
 	var degraded = Array.isArray(snapshot.degradedNotes)
 		? snapshot.degradedNotes.slice(-1)
