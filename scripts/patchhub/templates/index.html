@@ -111,8 +111,6 @@
           <button type="button" id="gateOptionsBtn" class="btn btn-small">Gate options</button>
           <button type="button" id="browsePatch" class="btn btn-small hidden">From file manager</button>
         </div>
-        <div id="zipSubsetStrip" class="zip-subset-strip hidden"></div>
-
         <div class="row">
           <input
             id="issueId"
@@ -145,9 +143,9 @@
             <option value="debug_human">debug_human</option>
             <option value="debug_raw">debug_raw</option>
           </select>
-          <span class="spacer"></span>
-          <span id="liveStreamStatus" class="muted"></span>
+          <div id="zipSubsetStrip" class="zip-subset-strip hidden"></div>
           <span class="live-toolbar-right">
+            <span id="liveStreamStatus" class="muted"></span>
             <span class="muted live-autoscroll-label">Auto-scroll</span>
             <button
               type="button"

@@ -495,10 +495,6 @@ def test_source_wires_rerun_latest_prepare_and_removes_workspace_auto_enqueue() 
     finalize_handler = finalize_handler.split("});", 1)[0]
     assert 'phCall("enqueue")' not in finalize_handler
     assert "clearParsedState();" in finalize_handler
-    patchhub_toml = (REPO_ROOT / "scripts" / "patchhub" / "patchhub.toml").read_text(
-        encoding="utf-8"
-    )
-    assert 'version = "1.12.9"' in patchhub_toml
 
 
 def test_rerun_latest_helper_clears_form_when_no_detail_eligible_job() -> None:

@@ -130,8 +130,8 @@ select {
 	min-width: 0;
 }
 .live-log-level {
-	flex: 0 0 220px;
-	width: 220px;
+	flex: 0 0 110px;
+	width: 110px;
 }
 .live-toolbar-right {
 	display: flex;
@@ -762,18 +762,20 @@ input::placeholder {
 }
 
 .zip-subset-strip {
-	margin: 8px 0 10px;
-	padding: 10px 12px;
+	margin: 0;
+	padding: 6px 10px;
 	border: 1px solid #2a3550;
 	border-radius: 8px;
 	background: #10192c;
+	flex: 1 1 auto;
+	min-width: 0;
+	cursor: pointer;
 }
 
 .zip-subset-strip-inner {
-	display: flex;
-	align-items: center;
-	justify-content: space-between;
-	gap: 10px;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
 }
 
 .modal-backdrop {

@@ -183,67 +183,72 @@
 		return `Selected ${selected} / ${total}`;
 	}
 
+	function setStripAction(action, title) {
+		var box = el("zipSubsetStrip");
+		if (!box) return;
+		box.dataset.action = String(action || "");
+		box.title = String(title || "");
+		if (action) {
+			box.setAttribute("role", "button");
+			box.tabIndex = 0;
+			return;
+		}
+		box.removeAttribute("role");
+		box.removeAttribute("tabindex");
+	}
+
 	function renderStrip() {
 		var box = el("zipSubsetStrip");
 		if (!box) return;
 		if (!isPatchZipMode()) {
 			box.classList.add("hidden");
 			box.innerHTML = "";
+			setStripAction("", "");
 			return;
 		}
 
 		box.classList.remove("hidden");
 		if (state.loading) {
 			box.innerHTML =
-				'<div class="zip-subset-strip-inner">' +
-				"<div><b>ZIP patch detected</b>" +
-				'<div class="muted">Loading target files...</div></div>' +
-				'<button type="button" class="btn btn-small" disabled>Loading...</button>' +
-				"</div>";
+				'<div class="zip-subset-strip-inner"><b>ZIP patch detected</b>' +
+				'<span class="muted"> | Loading target files...</span></div>';
+			setStripAction("", "");
 			return;
 		}
 
 		if (state.error) {
 			box.innerHTML =
-				'<div class="zip-subset-strip-inner">' +
-				'<div><b>ZIP patch detected</b><div class="muted">' +
+				'<div class="zip-subset-strip-inner"><b>ZIP patch detected</b>' +
+				'<span class="muted"> | ' +
 				escapeHtml(state.error) +
-				"</div></div>" +
-				'<button type="button" class="btn btn-small" id="zipSubsetRetryBtn">Retry</button>' +
-				"</div>";
+				" | Retry</span></div>";
+			setStripAction("retry", state.error);
 			return;
 		}
 
 		var manifest = state.manifest || {};
 		var total = Number(manifest.patch_entry_count || 0);
 		var selectable = manifest.selectable === true;
+		var primary = `ZIP patch detected: ${String(total)} target files`;
+		var detail = "";
+		var note = "";
 		ensureSelectionDefaults("committed");
-		var detail = selectable
+		detail = selectable
 			? selectionStatusText()
 			: String(manifest.reason || "read only");
-		var buttonText =
-			selectable && !isRawLocked() ? "Select files to include" : "View files";
-		var note = "";
 		if (isRawLocked()) {
-			note =
-				'<div class="muted">Subset disabled while raw command is set.</div>';
+			note = "Subset disabled while raw command is set.";
 		} else if (!selectable) {
-			note =
-				'<div class="muted">Subset available only for PM per-file zip patches.</div>';
+			note = "Subset available only for PM per-file zip patches.";
 		}
 		box.innerHTML =
-			'<div class="zip-subset-strip-inner">' +
-			"<div><b>ZIP patch detected: " +
-			escapeHtml(String(total)) +
-			' target files</b><div class="muted">' +
+			'<div class="zip-subset-strip-inner"><b>' +
+			escapeHtml(primary) +
+			'</b><span class="muted"> | ' +
 			escapeHtml(detail) +
-			"</div>" +
-			note +
-			"</div>" +
-			'<button type="button" id="zipSubsetOpenBtn" class="btn btn-small">' +
-			escapeHtml(buttonText) +
-			"</button>" +
-			"</div>";
+			(note ? ` | ${escapeHtml(note)}` : "") +
+			"</span></div>";
+		setStripAction("open", [primary, detail, note].filter(Boolean).join(" | "));
 	}
 
 	function modalModel() {
@@ -388,17 +393,36 @@
 		return preview;
 	}
 
+	function handleStripAction(target) {
+		var box =
+			target && typeof target.closest === "function"
+				? target.closest("#zipSubsetStrip")
+				: null;
+		if (!box) return false;
+		var action = String(box.dataset.action || "");
+		if (action === "open") {
+			openModal();
+			return true;
+		}
+		if (action === "retry") {
+			fetchManifestForCurrentPath();
+			return true;
+		}
+		return false;
+	}
+
 	function bindEvents() {
 		document.addEventListener("click", (ev) => {
 			var t = /** @type {any} */ (ev && ev.target ? ev.target : null);
 			if (!t) return;
-			if (t.id === "zipSubsetOpenBtn") {
-				openModal();
-				return;
-			}
-			if (t.id === "zipSubsetRetryBtn") {
-				fetchManifestForCurrentPath();
-			}
+			handleStripAction(t);
+		});
+		document.addEventListener("keydown", (ev) => {
+			var t = /** @type {any} */ (ev && ev.target ? ev.target : null);
+			if (!t) return;
+			if (ev.key !== "Enter" && ev.key !== " ") return;
+			if (!handleStripAction(t)) return;
+			ev.preventDefault();
 		});
 	}
 
