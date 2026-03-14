@@ -12,6 +12,9 @@ var autoRefreshTimer = null;
 var UI_STATUS_LIMIT = 20;
 var uiStatusLines = [];
 var degradedNotes = [];
+var infoPoolHints = { upload: "", enqueue: "", fs: "", parse: "" };
+var infoPoolHintSeq = { upload: 0, enqueue: 0, fs: 0, parse: 0 };
+var infoPoolSeq = 0;
 
 var selectedJobId = null;
 var liveStreamJobId = null;
@@ -51,12 +54,11 @@ function rememberDegraded(message) {
 	if (degradedNotes.length > UI_STATUS_LIMIT) {
 		degradedNotes.splice(0, degradedNotes.length - UI_STATUS_LIMIT);
 	}
-	var node = el("uiDegradedBanner");
-	if (node) {
-		node.classList.remove("hidden");
-		node.textContent =
-			"DEGRADED MODE: " + degradedNotes[degradedNotes.length - 1];
+	if (PH && typeof PH.has === "function" && PH.has("renderInfoPoolUi")) {
+		PH.call("renderInfoPoolUi");
+		return;
 	}
+	setLegacyPooledNode("uiDegradedBanner", "DEGRADED MODE: " + msg);
 }
 
 __ph_w.PH_APP_SHOW_DEGRADED = rememberDegraded;
@@ -102,6 +104,10 @@ async function loadParts(rt) {
 			"app_part_workspaces",
 		),
 		"workspaces module missing",
+	);
+	noteLoad(
+		await PH.loadScript("/static/app_part_info_pool.js", "app_part_info_pool"),
+		"info pool module missing",
 	);
 	noteLoad(
 		await PH.loadScript(
@@ -201,7 +207,65 @@ function normalizeUiStatusLines(message) {
 		.filter((line) => !!line);
 }
 
+function setLegacyPooledNode(id, message) {
+	var node = el(id);
+	if (!node) return;
+	var text = String(message || "").trim();
+	node.textContent = text;
+	node.classList.toggle("hidden", !text);
+}
+
+function getInfoPoolLatestHint() {
+	var bestSource = "";
+	var bestSeq = 0;
+	Object.keys(infoPoolHints).forEach((source) => {
+		if (!infoPoolHints[source]) return;
+		var seq = Number(infoPoolHintSeq[source] || 0);
+		if (seq <= bestSeq) return;
+		bestSeq = seq;
+		bestSource = source;
+	});
+	if (!bestSource) return { source: "", text: "" };
+	return { source: bestSource, text: String(infoPoolHints[bestSource] || "") };
+}
+
+function getInfoPoolSnapshot() {
+	return {
+		degradedNotes: degradedNotes.slice(),
+		statusLines: uiStatusLines.slice(),
+		hints: {
+			upload: String(infoPoolHints.upload || ""),
+			enqueue: String(infoPoolHints.enqueue || ""),
+			fs: String(infoPoolHints.fs || ""),
+			parse: String(infoPoolHints.parse || ""),
+		},
+		latestHint: getInfoPoolLatestHint(),
+	};
+}
+
+function setInfoPoolHint(source, message) {
+	var key = String(source || "");
+	if (!Object.hasOwn(infoPoolHints, key)) return;
+	var text = String(message || "").trim();
+	infoPoolHints[key] = text;
+	infoPoolHintSeq[key] = text ? ++infoPoolSeq : 0;
+	if (PH && typeof PH.has === "function" && PH.has("renderInfoPoolUi")) {
+		PH.call("renderInfoPoolUi");
+		return;
+	}
+	var legacyId = "";
+	if (key === "upload") legacyId = "uploadHint";
+	else if (key === "enqueue") legacyId = "enqueueHint";
+	else if (key === "fs") legacyId = "fsHint";
+	else if (key === "parse") legacyId = "parseHint";
+	if (legacyId) setLegacyPooledNode(legacyId, text);
+}
+
 function renderUiStatusLines() {
+	if (PH && typeof PH.has === "function" && PH.has("renderInfoPoolUi")) {
+		PH.call("renderInfoPoolUi");
+		return;
+	}
 	var node = el("uiStatusBar");
 	if (!node) return;
 	node.textContent = uiStatusLines.join("\n");
@@ -542,8 +606,7 @@ function tickMissingPatchClear(opts) {
 }
 
 function setFsHint(msg) {
-	var h = el("fsHint");
-	if (h) h.textContent = msg || "";
+	setInfoPoolHint("fs", msg || "");
 }
 
 function fsUpdateSelCount() {
@@ -604,7 +667,7 @@ function fsDownloadSelected() {
 }
 
 function setParseHint(msg) {
-	setText("parseHint", msg || "");
+	setInfoPoolHint("parse", msg || "");
 }
 
 function getRawCommand() {

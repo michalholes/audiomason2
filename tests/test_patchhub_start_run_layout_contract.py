@@ -20,6 +20,13 @@ def test_start_run_layout_contract_matches_compact_layout() -> None:
     assert 'id="issueId"' in html
     assert 'class="input start-run-issue"' in html
     assert 'id="liveAutoscrollToggle"' in html
+    assert 'id="uiStatusBar"' in html
+    assert 'role="button"' in html
+    assert 'id="uiStatusModal"' in html
+    assert 'id="uploadHint" class="muted hidden"' in html
+    assert 'id="enqueueHint" class="muted hidden"' in html
+    assert 'id="fsHint" class="muted hidden"' in html
+    assert 'id="parseHint" class="muted hidden"' in html
     assert "Auto-scroll" in html
     top_row = html.split('<select id="mode" class="input start-run-mode">', 1)[1]
     top_row = top_row.split("</div>", 1)[0]

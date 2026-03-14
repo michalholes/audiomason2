@@ -117,28 +117,25 @@ function validateAndPreview() {
 	setPre("previewRight", preview);
 	el("enqueueBtn").disabled = !ok;
 
-	var hint2 = el("enqueueHint");
-	if (hint2) {
-		if (raw) {
-			hint2.textContent = "";
+	var enqueueHint = "";
+	if (!raw) {
+		if (ok) {
+			enqueueHint = "";
+		} else if (subsetState && subsetState.hint) {
+			enqueueHint = String(subsetState.hint || "");
+		} else if (mode === "finalize_live") {
+			enqueueHint = "missing message";
+		} else if (mode === "finalize_workspace") {
+			enqueueHint = "missing issue id";
+		} else if (mode === "rerun_latest") {
+			enqueueHint = "missing issue id or message";
+		} else if (mode === "patch") {
+			enqueueHint = "missing commit message or patch path";
 		} else {
-			if (ok) {
-				hint2.textContent = "";
-			} else if (subsetState && subsetState.hint) {
-				hint2.textContent = String(subsetState.hint || "");
-			} else if (mode === "finalize_live") {
-				hint2.textContent = "missing message";
-			} else if (mode === "finalize_workspace") {
-				hint2.textContent = "missing issue id";
-			} else if (mode === "rerun_latest") {
-				hint2.textContent = "missing issue id or message";
-			} else if (mode === "patch") {
-				hint2.textContent = "missing commit message or patch path";
-			} else {
-				hint2.textContent = "missing fields";
-			}
+			enqueueHint = "missing fields";
 		}
 	}
+	setInfoPoolHint("enqueue", enqueueHint);
 	tickMissingPatchClear({
 		mode:
 			document.hidden || !PH.call("hasTrackedActiveJob") ? "idle" : "active",
@@ -238,8 +235,8 @@ function uploadFile(file) {
 		)
 		.then((j) => {
 			pushApiStatus(j);
-			setText(
-				"uploadHint",
+			setInfoPoolHint(
+				"upload",
 				j && j.ok
 					? "Uploaded: " + String(j.stored_rel_path || "")
 					: "Upload failed: " + String((j && j.error) || ""),
@@ -267,6 +264,7 @@ function uploadFile(file) {
 		})
 		.catch((e) => {
 			setPre("uploadResult", String(e));
+			setInfoPoolHint("upload", "Upload failed: " + String(e));
 			setUiError(String(e));
 		});
 }

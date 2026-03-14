@@ -376,6 +376,24 @@ body.dragging .drop-overlay {
 	text-overflow: ellipsis;
 }
 
+.statusbar-clickable {
+	cursor: pointer;
+	user-select: none;
+}
+
+.statusbar-clickable:hover {
+	border-color: #355695;
+}
+
+.statusbar-clickable:focus-visible {
+	outline: 2px solid #7ba3ff;
+	outline-offset: 2px;
+}
+
+.statusbar-idle {
+	color: #94a0b6;
+}
+
 .hidden {
 	display: none;
 }
@@ -895,6 +913,85 @@ input::placeholder {
 	display: flex;
 	gap: 10px;
 	align-items: center;
+}
+
+.info-pool-modal-card {
+	width: min(720px, 100%);
+}
+
+.info-pool-modal-head {
+	display: flex;
+	align-items: flex-start;
+	justify-content: space-between;
+	gap: 16px;
+	margin-bottom: 12px;
+}
+
+.info-pool-modal-title {
+	margin: 0;
+}
+
+.info-pool-modal-body {
+	display: flex;
+	flex-direction: column;
+	gap: 12px;
+}
+
+.info-pool-section {
+	border: 1px solid rgba(116, 145, 205, 0.28);
+	border-radius: 8px;
+	background: rgba(15, 28, 51, 0.78);
+	padding: 12px;
+}
+
+.info-pool-section-title {
+	margin: 0 0 10px;
+	font-size: 14px;
+}
+
+.info-pool-empty {
+	color: #94a0b6;
+	font-size: 13px;
+}
+
+.info-pool-lines {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	max-height: 240px;
+	overflow: auto;
+}
+
+.info-pool-line {
+	font-family:
+		ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+		"Courier New", monospace;
+	font-size: 12px;
+	word-break: break-word;
+}
+
+.info-pool-hints {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+}
+
+.info-pool-hint-row {
+	display: grid;
+	grid-template-columns: 90px minmax(0, 1fr);
+	gap: 10px;
+	align-items: start;
+}
+
+.info-pool-hint-label {
+	color: #9db1d6;
+	font-weight: 700;
+	font-size: 12px;
+}
+
+.info-pool-hint-value {
+	font-size: 13px;
+	word-break: break-word;
 }
 
 .live-copy-row {

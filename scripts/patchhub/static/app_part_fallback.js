@@ -60,9 +60,7 @@ function fallbackValidateAndPreview() {
 	preview = PH.call("applyGatePreview", preview) || preview;
 	setPre("previewRight", preview);
 	if (el("enqueueBtn")) el("enqueueBtn").disabled = !ok;
-	if (el("enqueueHint")) {
-		el("enqueueHint").textContent = ok ? "" : "degraded mode: missing fields";
-	}
+	setInfoPoolHint("enqueue", ok ? "" : "degraded mode: missing fields");
 	return ok;
 }
 
@@ -87,8 +85,8 @@ function fallbackUploadFile(file) {
 		)
 		.then((payload) => {
 			pushApiStatus(payload);
-			setText(
-				"uploadHint",
+			setInfoPoolHint(
+				"upload",
 				payload && payload.ok
 					? "Uploaded: " + String(payload.stored_rel_path || "")
 					: "Upload failed: " + String((payload && payload.error) || ""),
@@ -100,6 +98,7 @@ function fallbackUploadFile(file) {
 			refreshFs();
 		})
 		.catch((err) => {
+			setInfoPoolHint("upload", "Upload failed: " + String(err));
 			setUiError(String(err));
 		});
 }

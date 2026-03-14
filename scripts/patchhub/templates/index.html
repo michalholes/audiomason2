@@ -34,7 +34,7 @@
           <span class="muted">You can also drag &amp; drop a file anywhere in this window.</span>
         </div>
         <input id="uploadInput" type="file" style="display:none" />
-        <span id="uploadHint" class="muted"></span>
+        <span id="uploadHint" class="muted hidden"></span>
       </section>
 
       <section class="card card-tight">
@@ -124,8 +124,15 @@
         </div>
 
         <div id="uiDegradedBanner" class="statusbar hidden" aria-live="polite"></div>
-        <div id="uiStatusBar" class="statusbar" aria-live="polite"></div>
-        <div id="enqueueHint" class="muted"></div>
+        <div
+          id="uiStatusBar"
+          class="statusbar"
+          aria-live="polite"
+          role="button"
+          tabindex="0"
+          aria-haspopup="dialog"
+        >(idle)</div>
+        <div id="enqueueHint" class="muted hidden"></div>
 
         <h3>Live log (events)</h3>
         <div class="row">
@@ -196,12 +203,12 @@
           <button type="button" id="fsRename" class="btn btn-small">Rename</button>
           <button type="button" id="fsDelete" class="btn btn-small">Delete</button>
           <button type="button" id="fsUnzip" class="btn btn-small">Unzip</button>
-          <span id="fsHint" class="muted"></span>
         </div>
         <div class="row">
           <button type="button" id="fsSelectAll" class="btn btn-small">Select all</button>
           <button type="button" id="fsClear" class="btn btn-small">Clear</button>
           <button type="button" id="fsDownloadSelected" class="btn btn-small">Download selected as zip</button>
+          <span id="fsHint" class="muted hidden"></span>
           <span id="fsSelCount" class="muted"></span>
         </div>
         <div id="fsList" class="scroll scroll-tall"></div>
@@ -273,7 +280,7 @@
           <button type="button" id="parseBtn" class="btn btn-small">Parse</button>
           <button type="button" id="previewToggle" class="btn btn-small">Preview</button>
         </div>
-        <div id="parseHint" class="muted"></div>
+        <div id="parseHint" class="muted hidden"></div>
       </section>
     </aside>
   </main>
@@ -338,6 +345,25 @@
           >Apply</button>
         </div>
       </div>
+    </div>
+  </div>
+
+
+  <div id="uiStatusModal" class="modal-backdrop hidden" aria-hidden="true">
+    <div class="modal-card info-pool-modal-card" role="dialog" aria-modal="true">
+      <div class="info-pool-modal-head">
+        <div>
+          <h2 class="info-pool-modal-title">Operator info</h2>
+          <div class="muted">Shared pooled status and hint detail</div>
+        </div>
+        <button
+          type="button"
+          id="uiStatusModalCloseBtn"
+          class="zip-subset-close"
+          aria-label="Close"
+        >&times;</button>
+      </div>
+      <div id="uiStatusModalBody" class="info-pool-modal-body"></div>
     </div>
   </div>
 

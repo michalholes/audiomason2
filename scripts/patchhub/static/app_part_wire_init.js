@@ -191,6 +191,7 @@ function wireButtons() {
 	}
 
 	phCall("initGateOptionsUi");
+	phCall("initInfoPoolUi");
 	phCall("initLiveCopyButtons");
 	phCall("initLiveAutoscrollToggle");
 
