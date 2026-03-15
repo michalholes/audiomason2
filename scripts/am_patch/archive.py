@@ -54,6 +54,38 @@ def pick_versioned_dest(dest: Path) -> Path:
         i += 1
 
 
+def _is_within(root: Path, candidate: Path) -> bool:
+    try:
+        candidate.relative_to(root)
+        return True
+    except ValueError:
+        return False
+
+
+def _should_move_to_archive(*, patch_script: Path, dest_dir: Path) -> bool:
+    """Move only for non-archived inputs under canonical patches/.
+
+    Keep copy semantics for reruns from patches/successful/ or
+    patches/unsuccessful/ so archived inputs remain in place.
+    """
+    try:
+        resolved_patch = patch_script.resolve()
+        resolved_dest = dest_dir.resolve()
+    except Exception:
+        resolved_patch = patch_script
+        resolved_dest = dest_dir
+
+    patches_dir = resolved_dest.parent
+    successful_dir = patches_dir / "successful"
+    unsuccessful_dir = patches_dir / "unsuccessful"
+
+    if not _is_within(patches_dir, resolved_patch):
+        return False
+    if _is_within(successful_dir, resolved_patch):
+        return False
+    return not _is_within(unsuccessful_dir, resolved_patch)
+
+
 def archive_patch(logger: Logger, patch_script: Path, dest_dir: Path) -> Path:
     dest_dir.mkdir(parents=True, exist_ok=True)
     dest = dest_dir / patch_script.name
@@ -61,18 +93,7 @@ def archive_patch(logger: Logger, patch_script: Path, dest_dir: Path) -> Path:
     # If exists, add suffix
     dest = pick_versioned_dest(dest)
 
-    # dest_dir is patches/successful or patches/unsuccessful; its parent is canonical patches/
-    try:
-        patches_dir = dest_dir.resolve().parent
-        src_dir = patch_script.resolve().parent
-    except Exception:
-        patches_dir = dest_dir.parent
-        src_dir = patch_script.parent
-
-    # If the patch script comes from the canonical patches/ directory, move it into
-    # successful/unsuccessful.
-    # Otherwise (e.g. already in unsuccessful/), keep the original and copy.
-    if src_dir == patches_dir:
+    if _should_move_to_archive(patch_script=patch_script, dest_dir=dest_dir):
         shutil.move(str(patch_script), str(dest))
         action = "moved"
     else:
