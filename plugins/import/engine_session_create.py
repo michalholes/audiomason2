@@ -8,6 +8,7 @@ ASCII-only.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from plugins.file_io.service.types import RootName
@@ -21,6 +22,7 @@ from .engine_util import (
     _derive_selection_items,
     _emit_required,
     _ensure_session_state_fields,
+    _exception_envelope,
     _inject_selection_items,
     _iso_utc_now,
 )
@@ -41,33 +43,53 @@ if TYPE_CHECKING:
     from .engine import ImportWizardEngine
 
 
+@dataclass(frozen=True)
+class SessionStartContext:
+    root: str
+    relative_path: str
+    mode: str
+    wizard_definition: dict[str, Any]
+    effective_model: dict[str, Any]
+    discovery: list[dict[str, Any]]
+    model_fingerprint: str
+    discovery_fingerprint: str
+    effective_config: dict[str, Any]
+    effective_config_fingerprint: str
+    session_id: str
+
+
+@dataclass(frozen=True)
+class SessionStartConflict:
+    root: str
+    relative_path: str
+    mode: str
+    session_id: str
+
+
 def _preferred_bootstrap_default_version(*, engine: ImportWizardEngine) -> int:
     del engine
     return 3
 
 
-def create_session_impl(
+def _build_session_start_context(
     *,
     engine: ImportWizardEngine,
     root: str,
     relative_path: str,
     mode: str,
     flow_overrides: dict[str, Any] | None,
-) -> dict[str, Any]:
+) -> SessionStartContext:
     v = validate_root_and_path(root, relative_path)
     if isinstance(v, dict):
-        return v
+        raise ValueError(str(v.get("error") or "invalid root/path"))
     root, relative_path = v
 
     mode = engine._validate_mode(mode)
 
-    # 1) Load models
     ensure_default_models(engine._fs)
     flow_cfg = read_json(engine._fs, RootName.WIZARDS, "import/config/flow_config.json")
-
     flow_cfg_norm = engine._normalize_flow_config(flow_cfg)
     if flow_overrides is not None:
-        # Legacy testing hook only. Overrides may only toggle optional steps.
         flow_cfg_norm = engine._merge_flow_config_overrides(flow_cfg_norm, flow_overrides)
 
     wizard_definition = load_or_bootstrap_wizard_definition(
@@ -81,7 +103,7 @@ def create_session_impl(
             wizard_definition=wizard_definition,
             flow_config=flow_cfg_norm,
         )
-    # 2) Discovery
+
     discovery = discovery_mod.run_discovery(engine._fs, root=root, relative_path=relative_path)
     discovery_fingerprint = fingerprint_json(discovery)
 
@@ -95,7 +117,6 @@ def create_session_impl(
 
     model_fingerprint = fingerprint_json(effective_model)
 
-    # 3) Effective config snapshot (only keys engine uses)
     effective_config: dict[str, Any] = {
         "version": 1,
         "flow_config": flow_cfg_norm,
@@ -105,7 +126,6 @@ def create_session_impl(
     }
     effective_config_fingerprint = fingerprint_json(effective_config)
 
-    # 4) Deterministic session_id
     sid_src = "|".join(
         [
             f"root:{root}",
@@ -117,102 +137,189 @@ def create_session_impl(
         ]
     )
     session_id = sha256_hex(sid_src.encode("utf-8"))[:16]
+    return SessionStartContext(
+        root=root,
+        relative_path=relative_path,
+        mode=mode,
+        wizard_definition=wizard_definition,
+        effective_model=effective_model,
+        discovery=discovery,
+        model_fingerprint=model_fingerprint,
+        discovery_fingerprint=discovery_fingerprint,
+        effective_config=effective_config,
+        effective_config_fingerprint=effective_config_fingerprint,
+        session_id=session_id,
+    )
 
-    diag = {
-        "session_id": session_id,
-        "model_fingerprint": model_fingerprint,
-        "discovery_fingerprint": discovery_fingerprint,
-        "effective_config_fingerprint": effective_config_fingerprint,
+
+def resolve_session_start_context(
+    *,
+    engine: ImportWizardEngine,
+    root: str,
+    relative_path: str,
+    mode: str,
+    flow_overrides: dict[str, Any] | None,
+) -> SessionStartContext | dict[str, Any]:
+    v = validate_root_and_path(root, relative_path)
+    if isinstance(v, dict):
+        return v
+    try:
+        return _build_session_start_context(
+            engine=engine,
+            root=root,
+            relative_path=relative_path,
+            mode=mode,
+            flow_overrides=flow_overrides,
+        )
+    except Exception as e:
+        return _exception_envelope(e)
+
+
+def resolve_session_start_conflict(
+    *,
+    engine: ImportWizardEngine,
+    root: str,
+    relative_path: str,
+    mode: str,
+    flow_overrides: dict[str, Any] | None,
+) -> SessionStartConflict | None:
+    ctx = _build_session_start_context(
+        engine=engine,
+        root=root,
+        relative_path=relative_path,
+        mode=mode,
+        flow_overrides=flow_overrides,
+    )
+    state_path = f"import/sessions/{ctx.session_id}/state.json"
+    if not engine._fs.exists(RootName.WIZARDS, state_path):
+        return None
+    return SessionStartConflict(
+        root=ctx.root,
+        relative_path=ctx.relative_path,
+        mode=ctx.mode,
+        session_id=ctx.session_id,
+    )
+
+
+def _session_diag(ctx: SessionStartContext) -> dict[str, Any]:
+    return {
+        "session_id": ctx.session_id,
+        "model_fingerprint": ctx.model_fingerprint,
+        "discovery_fingerprint": ctx.discovery_fingerprint,
+        "effective_config_fingerprint": ctx.effective_config_fingerprint,
     }
+
+
+def emit_session_start_diagnostics(*, ctx: SessionStartContext) -> None:
+    diag = _session_diag(ctx)
     _emit_required(
         "model.load",
         "model.load",
-        {**diag, "root": root, "relative_path": relative_path, "mode": mode},
+        {
+            **diag,
+            "root": ctx.root,
+            "relative_path": ctx.relative_path,
+            "mode": ctx.mode,
+        },
     )
     _emit_required(
         "model.validate",
         "model.validate",
-        {**diag, "root": root, "relative_path": relative_path, "mode": mode},
+        {
+            **diag,
+            "root": ctx.root,
+            "relative_path": ctx.relative_path,
+            "mode": ctx.mode,
+        },
     )
 
-    session_dir = f"import/sessions/{session_id}"
+
+def resume_session_from_context(
+    *,
+    engine: ImportWizardEngine,
+    ctx: SessionStartContext,
+) -> dict[str, Any]:
+    session_dir = f"import/sessions/{ctx.session_id}"
+    state_path = f"{session_dir}/state.json"
+    loaded_state = read_json(engine._fs, RootName.WIZARDS, state_path)
+    _emit_required(
+        "session.resume",
+        "session.resume",
+        {
+            "session_id": ctx.session_id,
+            "model_fingerprint": loaded_state.get("model_fingerprint"),
+            "discovery_fingerprint": loaded_state.get("derived", {}).get("discovery_fingerprint"),
+            "effective_config_fingerprint": loaded_state.get("derived", {}).get(
+                "effective_config_fingerprint"
+            ),
+        },
+    )
+    loaded_state = _ensure_session_state_fields(loaded_state)
+    loaded_source = loaded_state.get("source")
+    loaded_source_dict = dict(loaded_source) if isinstance(loaded_source, dict) else {}
+    loaded_source_dict["root_dir"] = str(engine._fs.root_dir(RootName(ctx.root)))
+    loaded_state["source"] = loaded_source_dict
+
+    runtime_fp = engine._runtime_effective_model_fingerprint(ctx.session_id)
+    if runtime_fp and loaded_state.get("model_fingerprint") != runtime_fp:
+        loaded_state["model_fingerprint"] = runtime_fp
+    if phase1_session_authority_applies(effective_model=ctx.effective_model):
+        loaded_state.setdefault("vars", {})["phase1"] = build_phase1_projection(
+            discovery=ctx.discovery,
+            state=loaded_state,
+        )
+    if ctx.effective_model.get("flowmodel_kind") == "dsl_step_graph_v3":
+        from .engine_step_submit import _sync_v3_legacy_state
+
+        loaded_state = _sync_v3_legacy_state(
+            engine=engine,
+            session_id=ctx.session_id,
+            state=loaded_state,
+        )
+    engine._persist_state(ctx.session_id, loaded_state)
+    return loaded_state
+
+
+def create_new_session_from_context(
+    *,
+    engine: ImportWizardEngine,
+    ctx: SessionStartContext,
+) -> dict[str, Any]:
+    session_dir = f"import/sessions/{ctx.session_id}"
     state_path = f"{session_dir}/state.json"
 
-    if engine._fs.exists(RootName.WIZARDS, state_path):
-        loaded_state = read_json(engine._fs, RootName.WIZARDS, state_path)
-        _emit_required(
-            "session.resume",
-            "session.resume",
-            {
-                "session_id": session_id,
-                "model_fingerprint": loaded_state.get("model_fingerprint"),
-                "discovery_fingerprint": loaded_state.get("derived", {}).get(
-                    "discovery_fingerprint"
-                ),
-                "effective_config_fingerprint": loaded_state.get("derived", {}).get(
-                    "effective_config_fingerprint"
-                ),
-            },
-        )
-        loaded_state = _ensure_session_state_fields(loaded_state)
-        loaded_source = loaded_state.get("source")
-        loaded_source_dict = dict(loaded_source) if isinstance(loaded_source, dict) else {}
-        loaded_source_dict["root_dir"] = str(engine._fs.root_dir(RootName(root)))
-        loaded_state["source"] = loaded_source_dict
-
-        # Snapshot artifacts are immutable (spec 10.9). Resume MUST NOT modify them.
-        # However, state.json is allowed to track the runtime-effective model fingerprint
-        # (selection items reinjected from discovery.json), even if an older snapshot
-        # on disk is missing those items.
-        runtime_fp = engine._runtime_effective_model_fingerprint(session_id)
-        if runtime_fp and loaded_state.get("model_fingerprint") != runtime_fp:
-            loaded_state["model_fingerprint"] = runtime_fp
-        if phase1_session_authority_applies(effective_model=effective_model):
-            loaded_state.setdefault("vars", {})["phase1"] = build_phase1_projection(
-                discovery=discovery,
-                state=loaded_state,
-            )
-        if effective_model.get("flowmodel_kind") == "dsl_step_graph_v3":
-            from .engine_step_submit import _sync_v3_legacy_state
-
-            loaded_state = _sync_v3_legacy_state(
-                engine=engine,
-                session_id=session_id,
-                state=loaded_state,
-            )
-        engine._persist_state(session_id, loaded_state)
-        return loaded_state
-
-    # 5) Persist frozen artifacts
     _emit_required(
         "session.start",
         "session.start",
         {
-            "session_id": session_id,
-            "root": root,
-            "relative_path": relative_path,
-            "mode": mode,
-            "model_fingerprint": model_fingerprint,
-            "discovery_fingerprint": discovery_fingerprint,
-            "effective_config_fingerprint": effective_config_fingerprint,
+            "session_id": ctx.session_id,
+            "root": ctx.root,
+            "relative_path": ctx.relative_path,
+            "mode": ctx.mode,
+            "model_fingerprint": ctx.model_fingerprint,
+            "discovery_fingerprint": ctx.discovery_fingerprint,
+            "effective_config_fingerprint": ctx.effective_config_fingerprint,
         },
     )
 
     atomic_write_json(
-        engine._fs, RootName.WIZARDS, f"{session_dir}/effective_model.json", effective_model
+        engine._fs, RootName.WIZARDS, f"{session_dir}/effective_model.json", ctx.effective_model
     )
     atomic_write_json(
         engine._fs,
         RootName.WIZARDS,
         f"{session_dir}/effective_workflow.json",
-        wizard_definition,
+        ctx.wizard_definition,
     )
     atomic_write_json(
-        engine._fs, RootName.WIZARDS, f"{session_dir}/effective_config.json", effective_config
+        engine._fs,
+        RootName.WIZARDS,
+        f"{session_dir}/effective_config.json",
+        ctx.effective_config,
     )
-    atomic_write_json(engine._fs, RootName.WIZARDS, f"{session_dir}/discovery.json", discovery)
+    atomic_write_json(engine._fs, RootName.WIZARDS, f"{session_dir}/discovery.json", ctx.discovery)
 
-    action_jobs = extract_action_job_requests(effective_model)
+    action_jobs = extract_action_job_requests(ctx.effective_model)
     if action_jobs is not None:
         atomic_write_json(
             engine._fs,
@@ -225,18 +332,17 @@ def create_session_impl(
         engine._fs,
         RootName.WIZARDS,
         f"{session_dir}/discovery_fingerprint.txt",
-        discovery_fingerprint + "\n",
+        ctx.discovery_fingerprint + "\n",
     )
     atomic_write_text(
         engine._fs,
         RootName.WIZARDS,
         f"{session_dir}/effective_config_fingerprint.txt",
-        effective_config_fingerprint + "\n",
+        ctx.effective_config_fingerprint + "\n",
     )
 
     created_at = _iso_utc_now()
-
-    steps_any = effective_model.get("steps")
+    steps_any = ctx.effective_model.get("steps")
     if not isinstance(steps_any, list) or not steps_any:
         raise FinalizeError("effective_model must contain at least one step")
     first = steps_any[0] if isinstance(steps_any[0], dict) else {}
@@ -245,17 +351,17 @@ def create_session_impl(
         raise FinalizeError("effective_model first step must have step_id")
 
     state: dict[str, Any] = {
-        "session_id": session_id,
+        "session_id": ctx.session_id,
         "session_state_version": 1,
         "created_at": created_at,
         "updated_at": created_at,
-        "model_fingerprint": model_fingerprint,
+        "model_fingerprint": ctx.model_fingerprint,
         "phase": 1,
-        "mode": mode,
+        "mode": ctx.mode,
         "source": {
-            "root": root,
-            "relative_path": relative_path,
-            "root_dir": str(engine._fs.root_dir(RootName(root))),
+            "root": ctx.root,
+            "relative_path": ctx.relative_path,
+            "root_dir": str(engine._fs.root_dir(RootName(ctx.root))),
         },
         "current_step_id": start_step_id,
         "cursor": {"step_id": start_step_id},
@@ -270,8 +376,8 @@ def create_session_impl(
         "selected_book_ids": [],
         "effective_author_title": {},
         "derived": {
-            "discovery_fingerprint": discovery_fingerprint,
-            "effective_config_fingerprint": effective_config_fingerprint,
+            "discovery_fingerprint": ctx.discovery_fingerprint,
+            "effective_config_fingerprint": ctx.effective_config_fingerprint,
             "conflict_fingerprint": "",
         },
         "conflicts": {
@@ -284,36 +390,65 @@ def create_session_impl(
         "errors": [],
     }
 
-    if phase1_session_authority_applies(effective_model=effective_model):
-        state["vars"] = {"phase1": build_phase1_projection(discovery=discovery, state=state)}
+    if phase1_session_authority_applies(effective_model=ctx.effective_model):
+        state["vars"] = {"phase1": build_phase1_projection(discovery=ctx.discovery, state=state)}
     if (
-        isinstance(effective_model, dict)
-        and effective_model.get("flowmodel_kind") == "dsl_step_graph_v3"
+        isinstance(ctx.effective_model, dict)
+        and ctx.effective_model.get("flowmodel_kind") == "dsl_step_graph_v3"
     ):
         from .engine_step_submit import _sync_v3_legacy_state
 
         state = initialize_state(
             state=state,
-            effective_model=effective_model,
-            session_id=session_id,
+            effective_model=ctx.effective_model,
+            session_id=ctx.session_id,
         )
-        if phase1_session_authority_applies(effective_model=effective_model):
+        if phase1_session_authority_applies(effective_model=ctx.effective_model):
             state.setdefault("vars", {})["phase1"] = build_phase1_projection(
-                discovery=discovery,
+                discovery=ctx.discovery,
                 state=state,
             )
         state = _sync_v3_legacy_state(
             engine=engine,
-            session_id=session_id,
+            session_id=ctx.session_id,
             state=state,
         )
     atomic_write_json(engine._fs, RootName.WIZARDS, state_path, state)
     engine._append_decision(
-        session_id,
+        ctx.session_id,
         step_id="__system__",
-        payload={"event": "session.created", "root": root, "relative_path": relative_path},
+        payload={
+            "event": "session.created",
+            "root": ctx.root,
+            "relative_path": ctx.relative_path,
+        },
         result="accepted",
         error=None,
     )
-
     return state
+
+
+def create_session_impl(
+    *,
+    engine: ImportWizardEngine,
+    root: str,
+    relative_path: str,
+    mode: str,
+    flow_overrides: dict[str, Any] | None,
+) -> dict[str, Any]:
+    ctx = resolve_session_start_context(
+        engine=engine,
+        root=root,
+        relative_path=relative_path,
+        mode=mode,
+        flow_overrides=flow_overrides,
+    )
+    if isinstance(ctx, dict):
+        return ctx
+
+    emit_session_start_diagnostics(ctx=ctx)
+
+    state_path = f"import/sessions/{ctx.session_id}/state.json"
+    if engine._fs.exists(RootName.WIZARDS, state_path):
+        return resume_session_from_context(engine=engine, ctx=ctx)
+    return create_new_session_from_context(engine=engine, ctx=ctx)

@@ -13,8 +13,13 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from .cli_launcher_facade import begin_phase2, resolve_launcher_inputs
+from .cli_launcher_facade import (
+    begin_phase2,
+    prompt_session_start_intent,
+    resolve_launcher_inputs,
+)
 from .engine import ImportWizardEngine
+from .engine_session_start_boundary import start_user_facing_session
 
 
 @dataclass(frozen=True)
@@ -105,10 +110,38 @@ def run_launcher(
         print_fn(err or "ERROR: unable to resolve launcher inputs")
         return 1
 
-    state = engine.create_session(root, rel_path)
+    state = start_user_facing_session(
+        engine=engine,
+        root=root,
+        relative_path=rel_path,
+        mode="stage",
+        intent=None,
+    )
+    if isinstance(state, dict) and state.get("error", {}).get("code") == "SESSION_START_CONFLICT":
+        if cfg.noninteractive:
+            print_fn(_json_dump({"state": state}))
+            return 1
+        details = state.get("error", {}).get("details")
+        meta = details[0].get("meta") if isinstance(details, list) and details else {}
+        session_id = str(meta.get("session_id") or "")
+        intent = prompt_session_start_intent(
+            session_id=session_id,
+            input_fn=input_fn,
+            print_fn=print_fn,
+        )
+        if intent is None:
+            print_fn("Canceled.")
+            return 1
+        state = start_user_facing_session(
+            engine=engine,
+            root=root,
+            relative_path=rel_path,
+            mode="stage",
+            intent=intent,
+        )
+
     session_id = str(state.get("session_id") or "")
     if not session_id:
-        # Engine returns error envelope.
         print_fn(_json_dump({"state": state}))
         return 1
 

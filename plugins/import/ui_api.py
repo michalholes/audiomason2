@@ -19,6 +19,7 @@ def build_router(*, engine: Any):
         raise RuntimeError("fastapi is required for import UI router") from e
 
     from .engine import _exception_envelope
+    from .engine_session_start_boundary import ALLOWED_USER_START_INTENTS, start_user_facing_session
     from .field_schema_validation import FieldSchemaValidationError
     from .session_effective_model import EffectiveModelJsonError
     from .ui_editor_api import bind_editor_routes
@@ -50,11 +51,11 @@ def build_router(*, engine: Any):
 
         return FileResponse(str(candidate))
 
-    session_start_allowed_keys = {"mode", "path", "root"}
+    session_start_allowed_keys = {"intent", "mode", "path", "root"}
     session_start_required_keys = {"mode", "path", "root"}
     session_start_allowed_modes = {"inplace", "stage"}
 
-    def _validate_session_start_body(body: Any) -> tuple[str, str, str]:
+    def _validate_session_start_body(body: Any) -> tuple[str, str, str, str | None]:
         if not isinstance(body, dict):
             raise FieldSchemaValidationError(
                 message="request body must be an object",
@@ -124,7 +125,24 @@ def build_router(*, engine: Any):
                 },
             )
 
-        return root, path, mode
+        intent = body.get("intent")
+        if intent is not None:
+            if not isinstance(intent, str) or not intent:
+                raise FieldSchemaValidationError(
+                    message="intent must be a non-empty string when provided",
+                    path="$.intent",
+                    reason="missing_or_invalid",
+                    meta={"allowed": sorted(ALLOWED_USER_START_INTENTS)},
+                )
+            if intent not in ALLOWED_USER_START_INTENTS:
+                raise FieldSchemaValidationError(
+                    message="intent must be one of the allowed values",
+                    path="$.intent",
+                    reason="invalid_enum",
+                    meta={"allowed": sorted(ALLOWED_USER_START_INTENTS), "value": intent},
+                )
+
+        return root, path, mode, intent
 
     def _status_code_for_envelope(envelope: dict[str, Any]) -> int:
         err = envelope.get("error")
@@ -133,6 +151,8 @@ def build_router(*, engine: Any):
         code = err.get("code")
         if code == "NOT_FOUND":
             return 404
+        if code == "SESSION_START_CONFLICT":
+            return 409
         if code in {"VALIDATION_ERROR", "INVARIANT_VIOLATION", "CONFLICTS_UNRESOLVED"}:
             return 400
         if code == "INTERNAL_ERROR":
@@ -207,8 +227,14 @@ def build_router(*, engine: Any):
     @router.post("/session/start")
     def session_start(body: dict[str, Any]):
         def _impl():
-            root, path, mode = _validate_session_start_body(body)
-            return engine.create_session(root, path, mode=mode)
+            root, path, mode, intent = _validate_session_start_body(body)
+            return start_user_facing_session(
+                engine=engine,
+                root=root,
+                relative_path=path,
+                mode=mode,
+                intent=intent,
+            )
 
         return _call(_impl)
 

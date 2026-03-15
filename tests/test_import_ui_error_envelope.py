@@ -103,6 +103,7 @@ def test_session_start_returns_invariant_violation_envelope(tmp_path: Path) -> N
 def test_cli_missing_model_envelope_references_wizard_definition_and_flow_config(
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     engine, _ = _make_engine(tmp_path)
     resolver = engine._resolver
@@ -110,7 +111,7 @@ def test_cli_missing_model_envelope_references_wizard_definition_and_flow_config
     def _boom(*args: object, **kwargs: object) -> object:
         raise FileNotFoundError("import/definitions/wizard_definition.json")
 
-    engine.create_session = _boom  # type: ignore[method-assign]
+    monkeypatch.setattr(import_module("plugins.import.cli"), "start_user_facing_session", _boom)
 
     with pytest.raises(SystemExit) as exc:
         import_cli_main(

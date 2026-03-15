@@ -130,6 +130,15 @@
 		start: /** @type {HTMLButtonElement|null} */ (
 			document.getElementById("start")
 		),
+		resumeExisting: /** @type {HTMLButtonElement|null} */ (
+			document.getElementById("resumeExisting")
+		),
+		startNew: /** @type {HTMLButtonElement|null} */ (
+			document.getElementById("startNew")
+		),
+		cancelPendingStart: /** @type {HTMLButtonElement|null} */ (
+			document.getElementById("cancelPendingStart")
+		),
 		reload: /** @type {HTMLButtonElement|null} */ (
 			document.getElementById("reload")
 		),
@@ -197,6 +206,7 @@
 	let state = null;
 	let sessionEffectiveModel = null;
 	let currentStep = null;
+	let pendingStartConflict = null;
 
 	initTabs();
 
@@ -531,7 +541,38 @@
 		setText("status", `session_id: ${sessionId}`);
 	}
 
-	async function startSession() {
+	function setPendingStartConflict(conflict) {
+		pendingStartConflict = conflict;
+		const hasPending = !!pendingStartConflict;
+		if (ui.resumeExisting)
+			ui.resumeExisting.classList.toggle("is-hidden", !hasPending);
+		if (ui.startNew) ui.startNew.classList.toggle("is-hidden", !hasPending);
+		if (ui.cancelPendingStart)
+			ui.cancelPendingStart.classList.toggle("is-hidden", !hasPending);
+	}
+
+	function readStartConflict(err) {
+		const data =
+			err && err.data && typeof err.data === "object" ? err.data : null;
+		const error =
+			data && data.error && typeof data.error === "object" ? data.error : null;
+		if (!error || String(error.code || "") !== "SESSION_START_CONFLICT")
+			return null;
+		const details = Array.isArray(error.details) ? error.details : [];
+		const meta =
+			details.length > 0 && details[0] && typeof details[0].meta === "object"
+				? details[0].meta
+				: null;
+		if (!meta) return null;
+		return {
+			session_id: String(meta.session_id || ""),
+			root: String(meta.root || ui.root.value || ""),
+			path: String(meta.relative_path || ui.path.value || ""),
+			mode: String(meta.mode || ui.mode.value || ""),
+		};
+	}
+
+	async function startSession(intent) {
 		const selectedMode = String(ui.mode.value || "").trim();
 		if (!selectedMode) throw new Error("Mode must be explicitly selected.");
 		const body = {
@@ -539,23 +580,66 @@
 			path: String(ui.path.value || ""),
 			mode: selectedMode,
 		};
-		const r = await fetchJSON("/import/ui/session/start", {
-			method: "POST",
-			headers: { "content-type": "application/json" },
-			body: JSON.stringify(body),
-		});
-		sessionId = r && typeof r.session_id === "string" ? r.session_id : null;
-		if (!sessionId) throw new Error("missing session_id");
+		if (typeof intent === "string" && intent) body.intent = intent;
+		try {
+			const r = await fetchJSON("/import/ui/session/start", {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify(body),
+			});
+			sessionId = r && typeof r.session_id === "string" ? r.session_id : null;
+			if (!sessionId) throw new Error("missing session_id");
+			setPendingStartConflict(null);
+			return;
+		} catch (e) {
+			const conflict = readStartConflict(e);
+			if (!conflict) throw e;
+			sessionId = null;
+			setPendingStartConflict(conflict);
+			const conflictMsg =
+				`Existing session detected: ${conflict.session_id}. ` +
+				"Choose Resume existing, Start new, or Cancel.";
+			setText("status", conflictMsg);
+		}
 	}
 
 	ui.start.addEventListener("click", async () => {
 		try {
 			await startSession();
-			await refresh();
+			if (sessionId) await refresh();
 		} catch (e) {
 			setText("status", String(e && e.message ? e.message : e));
 		}
 	});
+
+	if (ui.resumeExisting) {
+		ui.resumeExisting.addEventListener("click", async () => {
+			try {
+				await startSession("resume");
+				await refresh();
+			} catch (e) {
+				setText("status", String(e && e.message ? e.message : e));
+			}
+		});
+	}
+
+	if (ui.startNew) {
+		ui.startNew.addEventListener("click", async () => {
+			try {
+				await startSession("new");
+				await refresh();
+			} catch (e) {
+				setText("status", String(e && e.message ? e.message : e));
+			}
+		});
+	}
+
+	if (ui.cancelPendingStart) {
+		ui.cancelPendingStart.addEventListener("click", () => {
+			setPendingStartConflict(null);
+			setText("status", "Start canceled.");
+		});
+	}
 
 	ui.reload.addEventListener("click", async () => {
 		try {

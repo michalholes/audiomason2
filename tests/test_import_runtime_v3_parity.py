@@ -193,11 +193,12 @@ def test_cli_and_web_share_same_prompt_metadata_projection(tmp_path: Path) -> No
     model = _run_v3_renderer("buildPromptModel", step)
 
     printed: list[str] = []
+    responses = iter(["1", ""])
     rc = run_launcher(
         engine=engine,
         resolver=resolver,
         cli_overrides={},
-        input_fn=lambda _prompt: "",
+        input_fn=lambda _prompt: next(responses),
         print_fn=printed.append,
     )
 
@@ -224,14 +225,13 @@ def test_autofill_path_is_backend_driven_for_cli_and_web(tmp_path: Path) -> None
 
     printed: list[str] = []
 
-    def _input(_prompt: str) -> str:
-        raise AssertionError("CLI must not prompt when backend autofill already completed the flow")
+    responses = iter(["1"])
 
     rc = run_launcher(
         engine=engine,
         resolver=resolver,
         cli_overrides={},
-        input_fn=_input,
+        input_fn=lambda _prompt: next(responses),
         print_fn=printed.append,
     )
 

@@ -1,4 +1,4 @@
-"""CLI noninteractive mode must not prompt for input."""
+"""Interactive CLI launcher must prompt for resume/new on session conflict."""
 
 from __future__ import annotations
 
@@ -7,19 +7,17 @@ from pathlib import Path
 
 from audiomason.core.config import ConfigResolver
 
-run_launcher = import_module("plugins.import.cli_renderer").run_launcher
+cli_renderer = import_module("plugins.import.cli_renderer")
+run_launcher = cli_renderer.run_launcher
 ImportWizardEngine = import_module("plugins.import.engine").ImportWizardEngine
 
 
 def _make_engine(tmp_path: Path) -> tuple[ImportWizardEngine, ConfigResolver]:
     roots = {
-        "inbox": tmp_path / "inbox",
-        "stage": tmp_path / "stage",
-        "outbox": tmp_path / "outbox",
-        "jobs": tmp_path / "jobs",
-        "config": tmp_path / "config",
-        "wizards": tmp_path / "wizards",
+        name: tmp_path / name for name in ("inbox", "stage", "outbox", "jobs", "config", "wizards")
     }
+    for root in roots.values():
+        root.mkdir(parents=True, exist_ok=True)
     defaults = {
         "file_io": {
             "roots": {
@@ -37,9 +35,9 @@ def _make_engine(tmp_path: Path) -> tuple[ImportWizardEngine, ConfigResolver]:
             "import": {
                 "cli": {
                     "launcher_mode": "interactive",
-                    "default_root": "",
-                    "default_path": "",
-                    "noninteractive": True,
+                    "default_root": "inbox",
+                    "default_path": "src",
+                    "noninteractive": False,
                 }
             }
         },
@@ -53,52 +51,43 @@ def _make_engine(tmp_path: Path) -> tuple[ImportWizardEngine, ConfigResolver]:
     return ImportWizardEngine(resolver=resolver), resolver
 
 
-def test_noninteractive_requires_root_and_path_and_does_not_prompt(tmp_path: Path) -> None:
+def test_interactive_launcher_prompts_for_new_when_session_exists(
+    tmp_path: Path, monkeypatch
+) -> None:
     engine, resolver = _make_engine(tmp_path)
+    src_dir = tmp_path / "inbox" / "src"
+    src_dir.mkdir(parents=True, exist_ok=True)
+    (src_dir / "file.txt").write_text("x", encoding="utf-8")
 
-    def _input(_prompt: str) -> str:
-        raise AssertionError("input() must not be called in noninteractive mode")
+    created = engine.create_session("inbox", "src", mode="stage")
+    session_dir = tmp_path / "wizards" / "import" / "sessions" / str(created["session_id"])
+    marker = session_dir / "marker.txt"
+    marker.write_text("old", encoding="utf-8")
 
+    seen: dict[str, str] = {}
+
+    def _fake_render_loop(**kwargs):
+        seen["session_id"] = kwargs["session_id"]
+        state = engine.get_state(kwargs["session_id"])
+        seen["created_at"] = str(state.get("created_at") or "")
+        return 0
+
+    monkeypatch.setattr(cli_renderer, "_render_loop", _fake_render_loop)
+
+    inputs = iter(["", "", "2"])
     printed: list[str] = []
 
     rc = run_launcher(
         engine=engine,
         resolver=resolver,
         cli_overrides={},
-        input_fn=_input,
+        input_fn=lambda _prompt: next(inputs),
         print_fn=printed.append,
     )
 
-    assert rc == 1
-    assert any("noninteractive" in line for line in printed)
-
-
-def test_noninteractive_conflict_requires_explicit_intent_and_does_not_prompt(
-    tmp_path: Path,
-) -> None:
-    engine, resolver = _make_engine(tmp_path)
-    roots = {
-        "inbox": tmp_path / "inbox",
-        "wizards": tmp_path / "wizards",
-    }
-    src_dir = roots["inbox"] / "src"
-    src_dir.mkdir(parents=True, exist_ok=True)
-    (src_dir / "file.txt").write_text("x", encoding="utf-8")
-    created = engine.create_session("inbox", "src", mode="stage")
-    assert created["session_id"]
-
-    def _input(_prompt: str) -> str:
-        raise AssertionError("input() must not be called in noninteractive mode")
-
-    printed: list[str] = []
-
-    rc = run_launcher(
-        engine=engine,
-        resolver=resolver,
-        cli_overrides={"root": "inbox", "path": "src"},
-        input_fn=_input,
-        print_fn=printed.append,
-    )
-
-    assert rc == 1
-    assert any("SESSION_START_CONFLICT" in line for line in printed)
+    assert rc == 0
+    assert seen["session_id"] == created["session_id"]
+    assert not marker.exists()
+    joined = "\n".join(printed)
+    assert "Existing session detected" in joined
+    assert "Start new session" in joined

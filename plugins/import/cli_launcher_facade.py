@@ -169,3 +169,22 @@ def _json_dump(obj: Any) -> str:
     import json
 
     return json.dumps(obj, indent=2, sort_keys=True)
+
+
+def prompt_session_start_intent(
+    *,
+    session_id: str,
+    input_fn: Callable[[str], str],
+    print_fn: Callable[[str], None],
+) -> str | None:
+    print_fn(f"Existing session detected: {session_id}")
+    print_fn("Choose start intent:")
+    print_fn("  1. Resume existing session")
+    print_fn("  2. Start new session")
+    print_fn("  3. Cancel")
+    raw = input_fn("Enter choice (1/2/3): ").strip().lower()
+    if raw in {"1", "r", "resume"}:
+        return "resume"
+    if raw in {"2", "n", "new"}:
+        return "new"
+    return None

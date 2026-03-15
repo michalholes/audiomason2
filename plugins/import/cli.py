@@ -35,6 +35,7 @@ from .editor import (
 )
 from .editor_storage import load_flow_config, save_flow_config
 from .engine import ImportWizardEngine
+from .engine_session_start_boundary import ALLOWED_USER_START_INTENTS, start_user_facing_session
 from .errors import ImportWizardError
 from .wizard_editor import (
     edit_wizard_definition_interactive,
@@ -54,6 +55,7 @@ def _build_parser() -> argparse.ArgumentParser:
     start = wiz_sub.add_parser("start", add_help=False)
     start.add_argument("--root", required=True)
     start.add_argument("--path", required=True)
+    start.add_argument("--intent", choices=sorted(ALLOWED_USER_START_INTENTS), default=None)
 
     resume = wiz_sub.add_parser("resume", add_help=False)
     resume.add_argument("session_id")
@@ -146,7 +148,10 @@ def _build_launcher_parser() -> argparse.ArgumentParser:
 
 def _print_help() -> None:
     print("Usage:")
-    print("  audiomason import wizard start --root <root> --path <relative_path>")
+    print(
+        "  audiomason import wizard start --root <root> --path <relative_path> "
+        "[--intent <new|resume>]"
+    )
     print("  audiomason import wizard resume <session_id>")
     print("  audiomason import wizard state <session_id>")
     print("  audiomason import wizard step <session_id> <step_id> --json <payload>")
@@ -422,7 +427,35 @@ def _run_legacy(argv: list[str], *, engine: ImportWizardEngine) -> int:
             raise SystemExit(1)
 
         if ns.wiz_cmd == "start":
-            state = engine.create_session(ns.root, ns.path)
+            state = start_user_facing_session(
+                engine=engine,
+                root=ns.root,
+                relative_path=ns.path,
+                mode="stage",
+                intent=ns.intent,
+            )
+            if (
+                isinstance(state, dict)
+                and state.get("error", {}).get("code") == "SESSION_START_CONFLICT"
+            ):
+                details = state.get("error", {}).get("details")
+                meta = details[0].get("meta") if isinstance(details, list) and details else {}
+                env = _error_envelope(
+                    code="session_start_conflict",
+                    message_id="cli.import.wizard.start_conflict",
+                    default_message="existing session requires explicit --intent new|resume",
+                    details={
+                        "session_id": str(meta.get("session_id") or ""),
+                        "root": str(meta.get("root") or ns.root),
+                        "relative_path": str(meta.get("relative_path") or ns.path),
+                        "mode": str(meta.get("mode") or "stage"),
+                    },
+                )
+                _dump(env)
+                raise SystemExit(1) from None
+            if isinstance(state, dict) and "error" in state:
+                _dump(state)
+                raise SystemExit(1) from None
             out = {
                 "session_id": state.get("session_id"),
                 "state": state,
