@@ -364,7 +364,7 @@ def build_phase1_source_projection(
             "ordered_ids": book_ids,
             "filtered_ids": filtered_book_ids,
             "selection_expr": _selection_expr(
-                ordered_ids=book_ids,
+                ordered_ids=filtered_book_ids,
                 selected_ids=selected_book_ids,
             ),
             "autofill_if": allow_autofill and len(filtered_book_ids) == 1,

@@ -79,13 +79,32 @@ def _load_v3_discovery(*, engine: Any, session_id: str) -> list[dict[str, Any]]:
     return [dict(item) for item in discovery_any]
 
 
+def _ordered_ids_from_state(*, state: dict[str, Any], step_id: str) -> list[str]:
+    phase1_any = dict(state.get("vars") or {}).get("phase1")
+    phase1 = dict(phase1_any) if isinstance(phase1_any, dict) else {}
+    prompt_any = phase1.get(step_id)
+    prompt = dict(prompt_any) if isinstance(prompt_any, dict) else {}
+    key = "filtered_ids" if step_id == "select_books" else "ordered_ids"
+    ordered_ids_any = prompt.get(key)
+    if not isinstance(ordered_ids_any, list):
+        return []
+    return [item for item in ordered_ids_any if isinstance(item, str)]
+
+
 def _derive_v3_selected_ids(
     *,
     engine: Any,
     session_id: str,
     step_id: str,
     selection: Any,
+    state: dict[str, Any] | None = None,
 ) -> list[str]:
+    ordered_ids = (
+        _ordered_ids_from_state(state=state, step_id=step_id) if isinstance(state, dict) else []
+    )
+    if ordered_ids:
+        return _selection_ids_from_value(ordered_ids=ordered_ids, selection=selection)
+
     discovery = _load_v3_discovery(engine=engine, session_id=session_id)
     if not discovery:
         return []
@@ -126,6 +145,7 @@ def _validate_v3_selection_payload(
         session_id=session_id,
         step_id=step_id,
         selection=selection,
+        state=state,
     )
     if selected_ids:
         return
@@ -155,6 +175,7 @@ def _sync_v3_legacy_state(*, engine: Any, session_id: str, state: dict[str, Any]
             session_id=session_id,
             step_id="select_authors",
             selection=authors_any.get("selection_expr"),
+            state=state,
         )
 
     books_any = inputs.get("select_books")
@@ -164,6 +185,7 @@ def _sync_v3_legacy_state(*, engine: Any, session_id: str, state: dict[str, Any]
             session_id=session_id,
             step_id="select_books",
             selection=books_any.get("selection_expr"),
+            state=state,
         )
 
     return state

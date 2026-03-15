@@ -216,3 +216,53 @@ def test_unicode_author_scoped_path_keeps_canonical_phase1_labels(tmp_path: Path
     assert books.get("selected_source_relative_paths") == [title]
     runtime = phase1.get("runtime", {}).get("effective_author_title", {})
     assert runtime == {"author": author, "title": title}
+
+
+def test_root_scoped_author_filter_keeps_local_book_ordinals(tmp_path: Path) -> None:
+    engine, roots = _make_engine(tmp_path)
+    fs = engine.get_file_service()
+
+    _write_inbox_tree(roots)
+    ensure_default_models(fs)
+
+    state = engine.create_session("inbox", "", mode="stage")
+    session_id = str(state["session_id"])
+    state = engine.submit_step(session_id, "select_authors", {"selection": "1"})
+    assert "error" not in state
+    assert state.get("current_step_id") == "select_books"
+
+    step = engine.get_step_definition(session_id, "select_books")
+    assert [item["display_label"] for item in step["ui"]["items"]] == [
+        "A / Book1",
+        "A / Book2",
+    ]
+
+    phase1 = state.get("vars", {}).get("phase1", {})
+    books = phase1.get("select_books", {})
+    assert books.get("selection_expr") == "all"
+
+    state = engine.submit_step(session_id, "select_books", {"selection": "2"})
+    assert "error" not in state
+
+    phase1 = state.get("vars", {}).get("phase1", {})
+    books = phase1.get("select_books", {})
+    selected_ids = books.get("selected_ids") or []
+    assert books.get("selection_expr") == "2"
+    assert books.get("selected_source_relative_paths") == ["A/Book2"]
+    assert isinstance(selected_ids, list) and len(selected_ids) == 1
+    assert state.get("selected_book_ids") == selected_ids
+    assert phase1.get("runtime", {}).get("effective_author_title") == {
+        "author": "A",
+        "title": "Book2",
+    }
+
+    plan = engine.compute_plan(session_id)
+    assert plan.get("summary", {}).get("selected_books") == 1
+    assert [item.get("source_relative_path") for item in plan.get("selected_books", [])] == [
+        "A/Book2"
+    ]
+
+    out = engine.submit_step(session_id, "select_books", {"selection": "3"})
+    err = out.get("error") if isinstance(out, dict) else None
+    assert isinstance(err, dict)
+    assert err.get("code") == "VALIDATION_ERROR"

@@ -95,7 +95,7 @@ def test_select_authors_refreshes_filtered_book_defaults_for_two_pass_flow(tmp_p
     state = engine.submit_step(session_id, "select_authors", {"selection": "1"})
 
     assert state["current_step_id"] == "select_books"
-    assert state["vars"]["phase1"]["select_books"]["selection_expr"] == "1,2"
+    assert state["vars"]["phase1"]["select_books"]["selection_expr"] == "all"
     assert state["vars"]["phase1"]["select_books"]["selected_source_relative_paths"] == [
         "A/Book1",
         "A/Book2",

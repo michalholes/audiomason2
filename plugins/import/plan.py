@@ -12,6 +12,22 @@ from typing import Any
 from .fingerprints import sha256_hex
 
 
+def _normalize_rel_path(value: str) -> str:
+    rel = value.replace("\\", "/").strip("/")
+    return "/".join(part for part in rel.split("/") if part)
+
+
+def _strip_source_prefix(*, rel_path: str, source_prefix: str) -> str:
+    if not source_prefix:
+        return rel_path
+    if rel_path == source_prefix:
+        return ""
+    prefix = source_prefix + "/"
+    if rel_path.startswith(prefix):
+        return rel_path[len(prefix) :]
+    return rel_path
+
+
 class PlanSelectionError(ValueError):
     """Raised when a plan cannot be computed due to invalid selection."""
 
@@ -20,16 +36,25 @@ def _to_ascii(text: str) -> str:
     return text.encode("ascii", errors="replace").decode("ascii")
 
 
-def _derive_book_units(discovery: list[dict[str, Any]]) -> dict[str, dict[str, str]]:
-    """Return mapping: book_id -> unit data derived from discovery paths."""
+def _derive_book_units(
+    discovery: list[dict[str, Any]],
+    *,
+    source_relative_path: str,
+) -> dict[str, dict[str, str]]:
+    """Return mapping: book_id -> unit data derived from source-scoped discovery."""
 
+    source_prefix = _normalize_rel_path(source_relative_path)
     dirs: list[str] = []
     for it in discovery:
         if not (isinstance(it, dict) and it.get("kind") == "dir"):
             continue
         rel_any = it.get("relative_path")
         if isinstance(rel_any, str):
-            dirs.append(rel_any.replace("\\", "/"))
+            rel = _strip_source_prefix(
+                rel_path=_normalize_rel_path(rel_any),
+                source_prefix=source_prefix,
+            )
+            dirs.append(rel)
 
     pairs: set[tuple[str, str]] = set()
     for rel in dirs:
@@ -74,7 +99,10 @@ def _derive_book_units(discovery: list[dict[str, Any]]) -> dict[str, dict[str, s
 def _filter_discovery_for_books(
     discovery: list[dict[str, Any]],
     selected_units: list[dict[str, str]],
+    *,
+    source_relative_path: str,
 ) -> list[dict[str, Any]]:
+    source_prefix = _normalize_rel_path(source_relative_path)
     prefixes = []
     for u in selected_units:
         p = str(u.get("source_relative_path") or "")
@@ -93,7 +121,10 @@ def _filter_discovery_for_books(
         rel_any = it.get("relative_path")
         if not isinstance(rel_any, str):
             continue
-        rel = rel_any.replace("\\", "/")
+        rel = _strip_source_prefix(
+            rel_path=_normalize_rel_path(rel_any),
+            source_prefix=source_prefix,
+        )
         if any(rel == p[:-1] or rel.startswith(p) for p in prefixes if p):
             filtered.append(it)
     return filtered
@@ -108,7 +139,7 @@ def compute_plan(
     inputs: dict[str, Any],
     selected_book_ids: list[str],
 ) -> dict[str, Any]:
-    units_by_id = _derive_book_units(discovery)
+    units_by_id = _derive_book_units(discovery, source_relative_path=relative_path)
 
     selected_units: list[dict[str, str]] = []
     for bid in selected_book_ids:
@@ -122,7 +153,11 @@ def compute_plan(
     # Canonical order: preserve selectable item ordering (label,id).
     selected_units = sorted(selected_units, key=lambda x: (x["label"], x["book_id"]))
 
-    selected_discovery = _filter_discovery_for_books(discovery, selected_units)
+    selected_discovery = _filter_discovery_for_books(
+        discovery,
+        selected_units,
+        source_relative_path=relative_path,
+    )
     files = sum(1 for it in selected_discovery if it.get("kind") == "file")
     dirs = sum(1 for it in selected_discovery if it.get("kind") == "dir")
     bundles = sum(1 for it in selected_discovery if it.get("kind") == "bundle")
