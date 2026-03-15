@@ -2574,6 +2574,18 @@ UI:
   - int -> numeric input
   - enum -> dropdown
   - list[str] -> tag/chips editor
+    - From runtime version 1.12.12 onward, this editor MUST preserve list
+      fidelity end-to-end.
+    - Reload MUST preserve element order, duplicates, and empty-string items
+      exactly as returned by GET /api/amp/config.
+    - Validate and Save without user edits MUST roundtrip each list[str]
+      field without dropping empty-string items, removing duplicates, or
+      reordering elements.
+    - Chip deletion MUST be positional; deleting one duplicate MUST NOT remove
+      other equal-value items.
+    - The UI MUST provide an explicit action to append an empty-string item.
+    - Empty-string items MAY render as placeholder chips, but their payload
+      value MUST remain "".
 - Actions:
   - Reload: fetch schema + config
   - Validate: POST with dry_run=true
