@@ -213,9 +213,58 @@ process.stdout.write(
     assert "GATE_JS" in result["progressHtml"]
     assert "SKIPPED (no_js_touched)" in result["progressHtml"]
     assert result["summaryText"] == "SKIP: GATE_JS (no_js_touched)"
-    assert result["progressElapsed"] == "elapsed 5s"
+    assert result["progressElapsed"] == "elapsed 5.0s"
     assert "elapsed=" not in result["activeHtml"]
-    assert result["elapsed"] == "5"
+    assert result["elapsed"] == "5.0"
+
+
+def test_progress_non_skipped_gate_js_gets_duration_pill() -> None:
+    result = _run_node_scenario(
+        """
+let nowMs = new Date("2026-03-14T08:00:05Z").getTime();
+let perfNowMs = 0;
+Date.now = () => nowMs;
+performance.now = () => perfNowMs;
+ui.saveLiveJobId("job-42b");
+ui.liveEvents.push({
+  type: "log",
+  seq: 1,
+  ts_mono_ms: 1000,
+  kind: "DO",
+  stage: "GATE_JS",
+  msg: "DO: GATE_JS",
+});
+await ui.updateProgressPanelFromEvents({
+  jobs: [
+    {
+      job_id: "job-42b",
+      status: "running",
+      mode: "patch",
+      issue_id: "322",
+      started_utc: "2026-03-14T08:00:00Z",
+    },
+  ],
+});
+const firstHtml = document.getElementById("progressSteps").innerHTML;
+const timerIds = Array.from(global.__intervals.keys());
+nowMs += 3000;
+perfNowMs += 3000;
+if (timerIds.length) {
+  global.__intervals.get(timerIds[0])();
+}
+process.stdout.write(
+  JSON.stringify({
+    firstHtml,
+    secondHtml: document.getElementById("progressSteps").innerHTML,
+    tickerCount: window.PH.call("getVisibleDurationTickerCount"),
+  }),
+);
+""",
+    )
+    assert "GATE_JS" in result["firstHtml"]
+    assert "RUNNING (0.0s)" in result["firstHtml"]
+    assert "RUNNING (3.0s)" in result["secondHtml"]
+    assert result["tickerCount"] == 1
 
 
 def test_jobs_list_elapsed_only_for_tracked_active_row() -> None:
@@ -260,9 +309,9 @@ process.stdout.write(
 """,
     )
     assert "tracked" in result["jobsHtml"]
-    assert "dur=5s" in result["jobsHtml"]
+    assert "dur=5.0s" in result["jobsHtml"]
     assert "finished" in result["jobsHtml"]
-    assert "dur=3s" in result["jobsHtml"]
+    assert "dur=3.0s" in result["jobsHtml"]
     assert 'other</div><div class="job-meta">mode=patch</div>' in result["jobsHtml"]
 
 
@@ -294,8 +343,8 @@ process.stdout.write(
 );
 """,
     )
-    assert result["before"] == "elapsed 5s"
-    assert result["after"] == "elapsed 5s"
+    assert result["before"] == "elapsed 5.0s"
+    assert result["after"] == "elapsed 5.0s"
     assert result["hidden"] is False
 
 
@@ -357,11 +406,11 @@ process.stdout.write(
     )
     assert result["intervalCount"] == 1
     assert result["tickerCount"] == 1
-    assert result["firstElapsed"] == "elapsed 5s"
-    assert "RUNNING (0s)" in result["firstHtml"]
-    assert result["secondElapsed"] == "elapsed 8s"
-    assert "dur=8s" in result["jobsHtml"]
-    assert "RUNNING (3s)" in result["secondHtml"]
+    assert result["firstElapsed"] == "elapsed 5.0s"
+    assert "RUNNING (0.0s)" in result["firstHtml"]
+    assert result["secondElapsed"] == "elapsed 8.0s"
+    assert "dur=8.0s" in result["jobsHtml"]
+    assert "RUNNING (3.0s)" in result["secondHtml"]
 
 
 def test_progress_elapsed_clears_when_jobs_explicitly_empty() -> None:
@@ -451,8 +500,8 @@ process.stdout.write(
     assert result["runningIntervalCount"] == 1
     assert result["remainingIntervalCount"] == 0
     assert result["tickerCount"] == 0
-    assert ">3s<" in result["progressHtml"]
-    assert result["progressElapsed"] == "elapsed 6s"
+    assert ">3.5s<" in result["progressHtml"]
+    assert result["progressElapsed"] == "elapsed 6.0s"
 
 
 def test_progress_pytest_duration_freezes_after_finish_and_terminal_end() -> None:
@@ -508,8 +557,8 @@ process.stdout.write(
 );
 """,
     )
-    assert ">3s<" in result["firstHtml"]
-    assert ">3s<" in result["secondHtml"]
+    assert ">3.5s<" in result["firstHtml"]
+    assert ">3.5s<" in result["secondHtml"]
     assert result["summaryText"] == "RESULT: SUCCESS"
 
 
@@ -564,4 +613,4 @@ process.stdout.write(
     )
     assert "SKIPPED (no_matching_files)" in result["progressHtml"]
     assert "RUNNING (" not in result["progressHtml"]
-    assert ">1s<" not in result["progressHtml"]
+    assert ">1.0s<" not in result["progressHtml"]

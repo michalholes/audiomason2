@@ -108,9 +108,10 @@
 			PH && typeof PH.call === "function"
 				? PH.call("formatVisibleDurationMs", ms)
 				: "";
+		var tenths = Math.floor(ms / 100);
 		if (text || text === "0") return String(text);
 		if (!Number.isFinite(ms) || ms < 0) return "";
-		return String(Math.floor(ms / 1000));
+		return String((tenths / 10).toFixed(1));
 	}
 
 	function readVisibleRuntimeElapsedMs(clock, tickNowMs) {
@@ -135,8 +136,7 @@
 	}
 
 	function isTimedGateStage(name) {
-		name = normStepName(name);
-		return name === "GATE_PYTEST" || name === "GATE_MYPY";
+		return !!normStepName(name);
 	}
 
 	function parseMonoMs(value) {

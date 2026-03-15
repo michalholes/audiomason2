@@ -24,9 +24,11 @@
 	}
 
 	function formatVisibleDurationMs(ms) {
+		var tenths = 0;
 		if (!Number.isFinite(ms)) return "";
 		if (ms < 0) return "";
-		return String(Math.floor(ms / 1000));
+		tenths = Math.floor(ms / 100);
+		return String((tenths / 10).toFixed(1));
 	}
 
 	function makeVisibleRuntimeClock(baseElapsedMs) {

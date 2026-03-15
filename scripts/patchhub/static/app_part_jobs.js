@@ -18,9 +18,11 @@ function getVisibleDurationNowMs() {
 
 function formatVisibleDurationMs(ms) {
 	var text = phCall("formatVisibleDurationMs", ms);
+	var tenths = 0;
 	if (text || text === "0") return String(text);
 	if (!Number.isFinite(ms) || ms < 0) return "";
-	return String(Math.floor(ms / 1000));
+	tenths = Math.floor(ms / 100);
+	return String((tenths / 10).toFixed(1));
 }
 
 function syncTrackedJobDurationClock(jobs) {
