@@ -5,21 +5,23 @@ from pathlib import Path
 from typing import Any
 
 
-def default_config_path(scripts_dir: Path) -> Path:
-    """Return the default config path (runner-owned, deterministic)."""
-    return scripts_dir / "am_patch" / "am_patch.toml"
+def default_config_path(runner_root: Path, import_root: Path) -> Path:
+    """Return the runner-owned default config path for the detected layout."""
+    if import_root.name == "scripts" and (import_root / "am_patch").is_dir():
+        return import_root / "am_patch" / "am_patch.toml"
+    return runner_root / "am_patch.toml"
 
 
-def resolve_config_path(cli_config: str | None, runner_root: Path, scripts_dir: Path) -> Path:
+def resolve_config_path(cli_config: str | None, runner_root: Path, import_root: Path) -> Path:
     """Resolve the runner-owned config path.
 
     - If cli_config is provided, use it (relative paths are resolved against runner_root).
-    - Otherwise use the default config path under scripts/.
+    - Otherwise use the default config path for the detected runner layout.
     """
     if cli_config:
         p = Path(cli_config)
         return p if p.is_absolute() else (runner_root / p)
-    return default_config_path(scripts_dir)
+    return default_config_path(runner_root, import_root)
 
 
 def _flatten_sections(cfg: dict[str, object]) -> dict[str, object]:

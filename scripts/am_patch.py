@@ -8,7 +8,23 @@ import sys
 import threading
 from pathlib import Path
 
-_REPO_ROOT = Path(__file__).resolve().parents[1]
+
+def _detect_runner_layout(script_path: Path) -> tuple[Path, Path, Path]:
+    script_path = script_path.resolve()
+    import_root = script_path.parent
+    package_dir = import_root / "am_patch"
+    if not package_dir.is_dir():
+        raise SystemExit(f"[am_patch_v2] ERROR: missing am_patch package near {script_path}")
+    if import_root.name == "scripts":
+        runner_root = import_root.parent
+        default_config = package_dir / "am_patch.toml"
+    else:
+        runner_root = import_root
+        default_config = runner_root / "am_patch.toml"
+    return runner_root, import_root, default_config
+
+
+_RUNNER_ROOT, _IMPORT_ROOT, _DEFAULT_CONFIG_PATH = _detect_runner_layout(Path(__file__))
 
 
 def _bootstrap_read_cfg(cfg_path: Path) -> dict[str, object]:
@@ -40,9 +56,9 @@ def _bootstrap_venv_policy(argv: list[str]) -> tuple[str, str]:
 
     # CLI-only config selection for bootstrap.
     cfg_arg = _bootstrap_get_arg(argv, "--config")
-    cfg_path = Path(cfg_arg) if cfg_arg else (_REPO_ROOT / "scripts" / "am_patch" / "am_patch.toml")
+    cfg_path = Path(cfg_arg) if cfg_arg else _DEFAULT_CONFIG_PATH
     if cfg_path and not cfg_path.is_absolute():
-        cfg_path = _REPO_ROOT / cfg_path
+        cfg_path = _RUNNER_ROOT / cfg_path
 
     cfg = _bootstrap_read_cfg(cfg_path)
     flat: dict[str, object] = {}
@@ -84,7 +100,7 @@ def _maybe_bootstrap_venv(argv: list[str]) -> None:
         return
 
     venv_py = Path(py_rel)
-    venv_py = venv_py if venv_py.is_absolute() else (_REPO_ROOT / venv_py)
+    venv_py = venv_py if venv_py.is_absolute() else (_RUNNER_ROOT / venv_py)
 
     if not venv_py.exists():
         if mode == "always":
@@ -105,11 +121,10 @@ def _maybe_bootstrap_venv(argv: list[str]) -> None:
 
 
 _maybe_bootstrap_venv(sys.argv)
-_REPO_ROOT = Path(__file__).resolve().parents[1]
-_SCRIPTS_DIR = _REPO_ROOT / "scripts"
-if str(_SCRIPTS_DIR) not in sys.path:
-    sys.path.insert(0, str(_SCRIPTS_DIR))
+if str(_IMPORT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_IMPORT_ROOT))
 
+import am_patch.engine as _engine_mod
 from am_patch.config import (
     Policy,
 )
@@ -119,6 +134,9 @@ from am_patch.engine import (
     finalize_and_report,
     run_mode,
 )
+
+_engine_mod._REPO_ROOT = _RUNNER_ROOT
+_engine_mod._SCRIPTS_DIR = _IMPORT_ROOT
 from am_patch.errors import RunnerError
 from am_patch.fs_junk import fs_junk_ignore_partition
 from am_patch.log import Logger
@@ -259,10 +277,11 @@ def main(argv: list[str]) -> int:
         exit_code = finalize_and_report(ctx, result)
         return exit_code
     finally:
-        if ctx is not None and getattr(ctx, "ipc", None) is not None:
+        ipc = getattr(ctx, "ipc", None) if ctx is not None else None
+        if ctx is not None and ipc is not None:
             shutdown_handshake_active = False
             with contextlib.suppress(Exception):
-                if ctx.ipc.startup_handshake_completed():
+                if ipc.startup_handshake_completed():
                     ctx.logger.emit(
                         severity="DEBUG",
                         channel="DETAIL",
@@ -272,16 +291,14 @@ def main(argv: list[str]) -> int:
 
                     def _arm_shutdown_handshake(eos_seq: int) -> None:
                         nonlocal shutdown_handshake_active
-                        shutdown_handshake_active = ctx.ipc.begin_shutdown_handshake(
-                            eos_seq=eos_seq
-                        )
+                        shutdown_handshake_active = ipc.begin_shutdown_handshake(eos_seq=eos_seq)
 
                     ctx.logger.emit_control_event(
                         {"type": "control", "event": "eos"},
                         before_publish=_arm_shutdown_handshake,
                     )
                     if shutdown_handshake_active:
-                        ctx.ipc.wait_for_drain_ack()
+                        ipc.wait_for_drain_ack()
             if not shutdown_handshake_active:
                 delay = (
                     int(getattr(policy, "ipc_socket_cleanup_delay_success_s", 0) or 0)
@@ -291,7 +308,7 @@ def main(argv: list[str]) -> int:
                 if delay > 0:
                     threading.Event().wait(float(delay))
             with contextlib.suppress(Exception):
-                ctx.ipc.stop()
+                ipc.stop()
         if ctx is not None:
             with contextlib.suppress(Exception):
                 ctx.logger.close()
