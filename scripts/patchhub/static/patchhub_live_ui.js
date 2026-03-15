@@ -842,14 +842,19 @@
 	}
 
 	function jobSummaryDurationSeconds(startUtc, endUtc) {
+		var a = null;
+		var b = null;
+		var deltaMs = 0;
 		if (!startUtc) return "";
-		var a = new Date(String(startUtc));
-		var b = endUtc ? new Date(String(endUtc)) : new Date(Date.now());
+		a = new Date(String(startUtc));
+		b = endUtc ? new Date(String(endUtc)) : new Date(Date.now());
 		if (isNaN(a.getTime()) || isNaN(b.getTime())) return "";
-		var sec = (b.getTime() - a.getTime()) / 1000;
-		if (sec < 0) return "";
-		var s = Math.round(sec * 10) / 10;
-		return String(s);
+		deltaMs = b.getTime() - a.getTime();
+		if (deltaMs < 0) return "";
+		if (PH && typeof PH.call === "function") {
+			return String(PH.call("formatVisibleDurationMs", deltaMs) || "");
+		}
+		return String(Math.floor(deltaMs / 1000));
 	}
 
 	// Exports

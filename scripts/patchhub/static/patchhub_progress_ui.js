@@ -84,13 +84,55 @@
 		);
 	}
 
-	var progressTimer = null;
 	var lastProgressModel = null;
+	var lastProgressJobs = [];
 	var progressClock = {
 		eventKey: "",
 		monoMs: 0,
-		clientMs: 0,
+		perfMs: 0,
 	};
+	var progressElapsedClock = null;
+	var progressElapsedJobId = "";
+
+	function getVisibleDurationNowMs() {
+		var value = Number(
+			PH && typeof PH.call === "function"
+				? PH.call("getVisibleDurationNowMs")
+				: NaN,
+		);
+		return Number.isFinite(value) ? value : Date.now();
+	}
+
+	function formatVisibleDurationMs(ms) {
+		var text =
+			PH && typeof PH.call === "function"
+				? PH.call("formatVisibleDurationMs", ms)
+				: "";
+		if (text || text === "0") return String(text);
+		if (!Number.isFinite(ms) || ms < 0) return "";
+		return String(Math.floor(ms / 1000));
+	}
+
+	function readVisibleRuntimeElapsedMs(clock, tickNowMs) {
+		var value =
+			PH && typeof PH.call === "function"
+				? PH.call("readVisibleRuntimeElapsedMs", clock, tickNowMs)
+				: null;
+		if (Number.isFinite(value)) return value;
+		if (
+			!clock ||
+			!Number.isFinite(clock.anchorElapsedMs) ||
+			!Number.isFinite(clock.anchorNowMs)
+		) {
+			return null;
+		}
+		var currentNowMs = Number.isFinite(tickNowMs)
+			? tickNowMs
+			: getVisibleDurationNowMs();
+		var deltaMs = currentNowMs - Number(clock.anchorNowMs);
+		if (!Number.isFinite(deltaMs) || deltaMs < 0) deltaMs = 0;
+		return Number(clock.anchorElapsedMs) + deltaMs;
+	}
 
 	function isTimedGateStage(name) {
 		name = normStepName(name);
@@ -100,6 +142,43 @@
 	function parseMonoMs(value) {
 		var num = Number(value);
 		return Number.isFinite(num) ? num : null;
+	}
+
+	function getProgressElapsedJob(jobs) {
+		var list = Array.isArray(jobs) ? jobs : [];
+		var liveJobId = getCurrentLiveJobId();
+		var liveMatch = null;
+		if (liveJobId) {
+			liveMatch =
+				list.find((job) => String((job && job.job_id) || "") === liveJobId) ||
+				null;
+			if (liveMatch && liveMatch.started_utc) return liveMatch;
+		}
+		return getTrackedActiveJob(list);
+	}
+
+	function syncProgressElapsedClock(jobs) {
+		var job = getProgressElapsedJob(jobs);
+		var startMs = NaN;
+		if (
+			job &&
+			job.started_utc &&
+			PH &&
+			typeof PH.call === "function" &&
+			PH.call("isNonTerminalJobStatus", job.status)
+		) {
+			startMs = Date.parse(String(job.started_utc || ""));
+			if (Number.isFinite(startMs)) {
+				progressElapsedJobId = String(job.job_id || "");
+				progressElapsedClock = PH.call(
+					"makeVisibleRuntimeClock",
+					Math.max(0, Date.now() - startMs),
+				);
+				return;
+			}
+		}
+		progressElapsedJobId = "";
+		progressElapsedClock = null;
 	}
 
 	function syncProgressClock(events) {
@@ -114,14 +193,14 @@
 			lastKey = `${String(ev.seq || "")}:${String(ev.type || "")}:${String(i)}`;
 		}
 		if (!lastKey || lastMonoMs === null) {
-			progressClock = { eventKey: "", monoMs: 0, clientMs: 0 };
+			progressClock = { eventKey: "", monoMs: 0, perfMs: 0 };
 			return progressClock;
 		}
 		if (progressClock.eventKey !== lastKey) {
 			progressClock = {
 				eventKey: lastKey,
 				monoMs: lastMonoMs,
-				clientMs: Date.now(),
+				perfMs: getVisibleDurationNowMs(),
 			};
 		}
 		return progressClock;
@@ -129,24 +208,25 @@
 
 	function formatDurationSeconds(startMonoMs, endMonoMs) {
 		if (!Number.isFinite(startMonoMs) || !Number.isFinite(endMonoMs)) return "";
-		var sec = (endMonoMs - startMonoMs) / 1000;
-		if (sec < 0) return "";
-		return String(Math.round(sec * 10) / 10);
+		return formatVisibleDurationMs(endMonoMs - startMonoMs);
 	}
 
-	function getStepDurationLabel(progress, name, st) {
+	function getStepDurationLabel(progress, name, st, tickNowMs) {
 		if (!progress || st === "skip") return "";
 		var timing = progress.timing && progress.timing[name];
 		var endMonoMs = null;
 		var clock = null;
 		var deltaMs = 0;
+		var currentNowMs = Number.isFinite(tickNowMs)
+			? tickNowMs
+			: getVisibleDurationNowMs();
 		if (!timing || !Number.isFinite(timing.startMonoMs)) return "";
 		if (st !== "running" && st !== "ok" && st !== "fail") return "";
 		endMonoMs = Number.isFinite(timing.stopMonoMs) ? timing.stopMonoMs : null;
 		if (endMonoMs === null && st === "running") {
-			clock = progress.clock || { monoMs: 0, clientMs: 0 };
-			if (Number.isFinite(clock.monoMs) && Number.isFinite(clock.clientMs)) {
-				deltaMs = Date.now() - clock.clientMs;
+			clock = progress.clock || { monoMs: 0, perfMs: 0 };
+			if (Number.isFinite(clock.monoMs) && Number.isFinite(clock.perfMs)) {
+				deltaMs = currentNowMs - clock.perfMs;
 				if (deltaMs < 0) deltaMs = 0;
 				endMonoMs = clock.monoMs + deltaMs;
 			}
@@ -155,14 +235,14 @@
 		return formatDurationSeconds(timing.startMonoMs, endMonoMs);
 	}
 
-	function hasRunningTimedGate(progress) {
+	function hasRunningTimedGate(progress, tickNowMs) {
 		var order = progress && progress.order ? progress.order : [];
 		var state = progress && progress.state ? progress.state : {};
 		for (let i = 0; i < order.length; i++) {
 			const name = order[i];
 			if (
 				state[name] === "running" &&
-				getStepDurationLabel(progress, name, "running")
+				getStepDurationLabel(progress, name, "running", tickNowMs)
 			) {
 				return true;
 			}
@@ -170,45 +250,128 @@
 		return false;
 	}
 
-	function syncProgressTimer(progress) {
-		lastProgressModel = progress || null;
-		if (hasRunningTimedGate(progress)) {
-			if (!progressTimer) {
-				progressTimer = setInterval(() => {
-					if (!lastProgressModel || !hasRunningTimedGate(lastProgressModel)) {
-						syncProgressTimer(null);
-						return;
-					}
-					renderProgressSteps(lastProgressModel);
-				}, 1000);
+	function getProgressElapsedLabel(job, tickNowMs) {
+		var runningElapsedMs = null;
+		var currentNowMs = Number.isFinite(tickNowMs)
+			? tickNowMs
+			: getVisibleDurationNowMs();
+		if (!job || !job.started_utc) return "";
+		if (job.started_utc && job.ended_utc) {
+			return String(
+				PH && typeof PH.call === "function"
+					? PH.call(
+							"jobSummaryDurationSeconds",
+							job.started_utc,
+							job.ended_utc,
+						) || ""
+					: "",
+			);
+		}
+		if (
+			String(job.job_id || "") === progressElapsedJobId &&
+			progressElapsedClock &&
+			PH &&
+			typeof PH.call === "function" &&
+			PH.call("isNonTerminalJobStatus", job.status)
+		) {
+			runningElapsedMs = readVisibleRuntimeElapsedMs(
+				progressElapsedClock,
+				currentNowMs,
+			);
+			if (Number.isFinite(runningElapsedMs)) {
+				return formatVisibleDurationMs(runningElapsedMs);
 			}
-			return;
 		}
-		if (progressTimer) {
-			clearInterval(progressTimer);
-			progressTimer = null;
-		}
+		return String(
+			PH && typeof PH.call === "function"
+				? PH.call(
+						"jobSummaryDurationSeconds",
+						job.started_utc,
+						job.ended_utc,
+					) || ""
+				: "",
+		);
 	}
 
-	function renderProgressSteps(progress) {
-		var box = el("progressSteps");
-		if (!box) return;
+	function renderProgressElapsed(jobs, tickNowMs) {
+		var node = el("progressElapsed");
+		var job = null;
+		var label = "";
+		if (!node) return;
+		job = getProgressElapsedJob(jobs);
+		label = getProgressElapsedLabel(job, tickNowMs);
+		node.classList.toggle("hidden", !label);
+		node.textContent = label ? `elapsed ${label}s` : "";
+	}
 
+	function getProgressDurationSignature(tickNowMs) {
+		var parts = [];
+		var job = getProgressElapsedJob(lastProgressJobs);
+		var label = "";
+		var order =
+			lastProgressModel && lastProgressModel.order
+				? lastProgressModel.order
+				: [];
+		var state =
+			lastProgressModel && lastProgressModel.state
+				? lastProgressModel.state
+				: {};
+		if (
+			job &&
+			job.started_utc &&
+			PH &&
+			typeof PH.call === "function" &&
+			PH.call("isNonTerminalJobStatus", job.status)
+		) {
+			label = getProgressElapsedLabel(job, tickNowMs);
+			if (label) parts.push(`overall=${label}`);
+		}
+		for (let i = 0; i < order.length; i++) {
+			const name = order[i];
+			if (state[name] !== "running" || !isTimedGateStage(name)) continue;
+			label = getStepDurationLabel(
+				lastProgressModel,
+				name,
+				"running",
+				tickNowMs,
+			);
+			if (label) parts.push(`${name}=${label}`);
+		}
+		return parts.join("|");
+	}
+
+	function syncProgressDurationSurface() {
+		if (!PH || typeof PH.call !== "function") return;
+		if (getProgressDurationSignature(getVisibleDurationNowMs())) {
+			PH.call("setVisibleDurationSurface", "progress_card_duration", {
+				getSignature: getProgressDurationSignature,
+				render: () =>
+					renderProgressSurface(lastProgressModel, lastProgressJobs),
+			});
+			return;
+		}
+		PH.call("clearVisibleDurationSurface", "progress_card_duration");
+	}
+
+	function renderProgressSteps(progress, tickNowMs) {
+		var box = el("progressSteps");
 		var order = progress && progress.order ? progress.order : [];
 		var state = progress && progress.state ? progress.state : {};
 		var details = progress && progress.details ? progress.details : {};
-
+		var currentNowMs = Number.isFinite(tickNowMs)
+			? tickNowMs
+			: getVisibleDurationNowMs();
+		if (!box) return;
 		if (!order.length) {
 			box.innerHTML = "";
 			return;
 		}
-
 		var html = "";
 		for (let i = 0; i < order.length; i++) {
 			const name = order[i];
 			const st = state[name] || "pending";
 			const dotState = st === "skip" ? "pending" : st;
-			const duration = getStepDurationLabel(progress, name, st);
+			const duration = getStepDurationLabel(progress, name, st, currentNowMs);
 			html += '<div class="step">';
 			html += `<span class="dot ${escapeHtml(dotState)}"></span>`;
 			html += `<span class="step-name">${escapeHtml(name)}</span>`;
@@ -227,8 +390,13 @@
 			}
 			html += "</div>";
 		}
-
 		box.innerHTML = html;
+	}
+
+	function renderProgressSurface(progress, jobs) {
+		var tickNowMs = getVisibleDurationNowMs();
+		renderProgressElapsed(jobs, tickNowMs);
+		renderProgressSteps(progress, tickNowMs);
 	}
 
 	function renderProgressSummary(summaryLine) {
@@ -639,8 +807,11 @@
 		var events = ui.liveEvents || [];
 		var active = getTrackedActiveJob(jobs);
 		var progress = deriveProgressFromEvents(events);
-		renderProgressSteps(progress);
-		syncProgressTimer(progress);
+		lastProgressJobs = Array.isArray(jobs) ? jobs.slice() : [];
+		lastProgressModel = progress;
+		syncProgressElapsedClock(jobs);
+		renderProgressSurface(progress, jobs);
+		syncProgressDurationSurface();
 		renderActiveJob(jobs);
 		var summary = deriveProgressSummaryFromEvents(events, progress, active);
 		renderProgressSummary(summary.text);
@@ -702,23 +873,12 @@
 		if (active) {
 			activeStatus = String(active.status || "running").toLowerCase();
 			jidEnc = encodeURIComponent(active.job_id || "");
-			let elapsed = "";
-			if (PH && typeof PH.call === "function") {
-				elapsed = String(
-					PH.call(
-						"jobSummaryDurationSeconds",
-						active.started_utc,
-						active.ended_utc,
-					) || "",
-				);
-			}
 			html +=
 				`<div><b>${escapeHtml(activeStatus)}</b> ` +
 				`${escapeHtml(active.job_id || "")}</div>`;
 			html +=
 				`<div class="muted">mode=${escapeHtml(active.mode || "")} ` +
 				`issue=${escapeHtml(active.issue_id || "")}` +
-				(elapsed ? ` elapsed=${escapeHtml(elapsed)}s` : "") +
 				"</div>";
 			html +=
 				'<div class="row"><button class="btn btn-small" id="cancelActive">Cancel</button>';

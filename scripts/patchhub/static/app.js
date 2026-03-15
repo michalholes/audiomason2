@@ -77,6 +77,13 @@ async function loadParts(rt) {
 
 	// Optional modules (degraded mode if missing).
 	noteLoad(
+		await PH.loadScript(
+			"/static/patchhub_visible_duration.js",
+			"visible_duration",
+		),
+		"visible duration module missing",
+	);
+	noteLoad(
 		await PH.loadScript("/static/patchhub_progress_ui.js", "progress"),
 		"progress module missing",
 	);

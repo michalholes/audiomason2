@@ -41,8 +41,15 @@ def test_hidden_active_keeps_active_orchestration_paths() -> None:
 
 def test_live_progress_stays_on_structured_stream_sources() -> None:
     progress_src = _read("scripts/patchhub/static/patchhub_progress_ui.js")
+    jobs_src = _read("scripts/patchhub/static/app_part_jobs.js")
+    duration_src = _read("scripts/patchhub/static/patchhub_visible_duration.js")
+    app_src = _read("scripts/patchhub/static/app.js")
     assert 'String(ev.event || "") === "stream_end"' in progress_src
     assert "function updateProgressPanelFromTailText(text, opts)" not in progress_src
+    assert 'PH.call("setVisibleDurationSurface", "progress_card_duration"' in progress_src
+    assert 'phCall("setVisibleDurationSurface", "jobs_list_duration"' in jobs_src
+    assert 'PH.register("visible_duration"' in duration_src
+    assert '"/static/patchhub_visible_duration.js"' in app_src
 
     runs_src = _read("scripts/patchhub/static/app_part_runs.js")
     assert 'phCall("updateProgressPanelFromTailText", t);' not in runs_src

@@ -13,12 +13,14 @@ def _run_node_scenario(body: str) -> dict[str, object]:
     if not node:
         pytest.skip("node not installed")
     repo_root = Path(__file__).resolve().parents[1]
+    duration_path = repo_root / "scripts" / "patchhub" / "static" / "patchhub_visible_duration.js"
     progress_path = repo_root / "scripts" / "patchhub" / "static" / "patchhub_progress_ui.js"
     live_path = repo_root / "scripts" / "patchhub" / "static" / "patchhub_live_ui.js"
     jobs_path = repo_root / "scripts" / "patchhub" / "static" / "app_part_jobs.js"
     script = f"""
 const fs = require("fs");
 const vm = require("vm");
+const durationSrc = fs.readFileSync({json.dumps(str(duration_path))}, "utf8");
 const progressSrc = fs.readFileSync({json.dumps(str(progress_path))}, "utf8");
 const liveSrc = fs.readFileSync({json.dumps(str(live_path))}, "utf8");
 const jobsSrc = fs.readFileSync({json.dumps(str(jobs_path))}, "utf8");
@@ -53,8 +55,10 @@ function makeNode(id) {{
     focus() {{}},
   }};
 }}
-const fixedNow = new Date("2026-03-14T08:00:05Z").getTime();
-Date.now = () => fixedNow;
+let nowMs = new Date("2026-03-14T08:00:05Z").getTime();
+let perfNowMs = 5000;
+Date.now = () => nowMs;
+global.performance = {{ now: () => perfNowMs }};
 global.window = {{
   AMP_PATCHHUB_UI: {{}},
   __ph_last_enqueued_mode: "",
@@ -142,6 +146,7 @@ global.EventSource = function() {{
   this.addEventListener = () => {{}};
   this.close = () => {{}};
 }};
+vm.runInThisContext(durationSrc, {{ filename: {json.dumps(str(duration_path))} }});
 vm.runInThisContext(progressSrc, {{ filename: {json.dumps(str(progress_path))} }});
 vm.runInThisContext(liveSrc, {{ filename: {json.dumps(str(live_path))} }});
 vm.runInThisContext(jobsSrc, {{ filename: {json.dumps(str(jobs_path))} }});
@@ -197,6 +202,7 @@ await ui.updateProgressPanelFromEvents({ jobs });
 process.stdout.write(
   JSON.stringify({
     progressHtml: document.getElementById("progressSteps").innerHTML,
+    progressElapsed: document.getElementById("progressElapsed").textContent,
     summaryText: document.getElementById("progressSummary").textContent,
     activeHtml: document.getElementById("activeJob").innerHTML,
     elapsed: ui.jobSummaryDurationSeconds("2026-03-14T08:00:00Z", ""),
@@ -207,7 +213,8 @@ process.stdout.write(
     assert "GATE_JS" in result["progressHtml"]
     assert "SKIPPED (no_js_touched)" in result["progressHtml"]
     assert result["summaryText"] == "SKIP: GATE_JS (no_js_touched)"
-    assert "elapsed=5s" in result["activeHtml"]
+    assert result["progressElapsed"] == "elapsed 5s"
+    assert "elapsed=" not in result["activeHtml"]
     assert result["elapsed"] == "5"
 
 
@@ -262,9 +269,20 @@ process.stdout.write(
 def test_progress_pytest_timer_advances_without_new_log_lines() -> None:
     result = _run_node_scenario(
         """
-let nowMs = new Date("2026-03-14T08:00:05Z").getTime();
-Date.now = () => nowMs;
 ui.saveLiveJobId("job-55");
+window.PH.call("renderJobsFromResponse", {
+  ok: true,
+  jobs: [
+    {
+      job_id: "job-55",
+      status: "running",
+      mode: "patch",
+      issue_id: "328",
+      commit_summary: "tracked",
+      started_utc: "2026-03-14T08:00:00Z",
+    },
+  ],
+});
 ui.liveEvents.push({
   type: "log",
   seq: 1,
@@ -284,30 +302,38 @@ const jobs = [
 ];
 await ui.updateProgressPanelFromEvents({ jobs });
 const firstHtml = document.getElementById("progressSteps").innerHTML;
+const firstElapsed = document.getElementById("progressElapsed").textContent;
 const timerIds = Array.from(global.__intervals.keys());
 nowMs += 3000;
+perfNowMs += 3000;
 if (timerIds.length) {{
   global.__intervals.get(timerIds[0])();
 }}
 process.stdout.write(
   JSON.stringify({
     firstHtml,
+    firstElapsed,
     secondHtml: document.getElementById("progressSteps").innerHTML,
+    secondElapsed: document.getElementById("progressElapsed").textContent,
+    jobsHtml: document.getElementById("jobsList").innerHTML,
     intervalCount: timerIds.length,
+    tickerCount: window.PH.call("getVisibleDurationTickerCount"),
   }),
 );
 """,
     )
     assert result["intervalCount"] == 1
+    assert result["tickerCount"] == 1
+    assert result["firstElapsed"] == "elapsed 5s"
     assert "RUNNING (0s)" in result["firstHtml"]
+    assert result["secondElapsed"] == "elapsed 8s"
+    assert "dur=8s" in result["jobsHtml"]
     assert "RUNNING (3s)" in result["secondHtml"]
 
 
 def test_progress_pytest_timer_cleans_up_after_finish() -> None:
     result = _run_node_scenario(
         """
-let nowMs = new Date("2026-03-14T08:00:05Z").getTime();
-Date.now = () => nowMs;
 ui.saveLiveJobId("job-58");
 const jobs = [
   {
@@ -353,13 +379,17 @@ process.stdout.write(
     runningIntervalCount: runningIntervals.length,
     remainingIntervalCount: global.__intervals.size,
     progressHtml: document.getElementById("progressSteps").innerHTML,
+    progressElapsed: document.getElementById("progressElapsed").textContent,
+    tickerCount: window.PH.call("getVisibleDurationTickerCount"),
   }),
 );
 """,
     )
     assert result["runningIntervalCount"] == 1
     assert result["remainingIntervalCount"] == 0
-    assert ">3.5s<" in result["progressHtml"]
+    assert result["tickerCount"] == 0
+    assert ">3s<" in result["progressHtml"]
+    assert result["progressElapsed"] == "elapsed 6s"
 
 
 def test_progress_pytest_duration_freezes_after_finish_and_terminal_end() -> None:
@@ -415,8 +445,8 @@ process.stdout.write(
 );
 """,
     )
-    assert ">3.5s<" in result["firstHtml"]
-    assert ">3.5s<" in result["secondHtml"]
+    assert ">3s<" in result["firstHtml"]
+    assert ">3s<" in result["secondHtml"]
     assert result["summaryText"] == "RESULT: SUCCESS"
 
 

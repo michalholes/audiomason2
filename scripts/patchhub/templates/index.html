@@ -231,7 +231,11 @@
 
     <aside class="panel panel-right">
       <section class="card card-tight">
-        <h2>Progress</h2>
+        <div class="row">
+          <h2 style="margin:0">Progress</h2>
+          <span class="spacer"></span>
+          <span id="progressElapsed" class="muted hidden">elapsed 0s</span>
+        </div>
         <div id="progressSteps" class="progress-steps"></div>
         <div id="progressSummary" class="progress-summary muted">(idle)</div>
         <div id="progressApplied" class="progress-applied hidden"></div>

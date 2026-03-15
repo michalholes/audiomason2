@@ -3,36 +3,104 @@ var __ph_w = /** @type {any} */ (window);
 var PH = /** @type {any} */ (window).PH;
 var jobsCache = [];
 var rerunPrepareSeq = 0;
-var jobDurationTimer = null;
+var trackedJobDurationClock = null;
+var trackedJobDurationJobId = "";
 
 function phCall(name, ...args) {
 	if (!PH || typeof PH.call !== "function") return undefined;
 	return PH.call(name, ...args);
 }
 
-function syncJobDurationTimer(jobs) {
+function getVisibleDurationNowMs() {
+	var value = Number(phCall("getVisibleDurationNowMs"));
+	return Number.isFinite(value) ? value : Date.now();
+}
+
+function formatVisibleDurationMs(ms) {
+	var text = phCall("formatVisibleDurationMs", ms);
+	if (text || text === "0") return String(text);
+	if (!Number.isFinite(ms) || ms < 0) return "";
+	return String(Math.floor(ms / 1000));
+}
+
+function syncTrackedJobDurationClock(jobs) {
 	var tracked = phCall("getTrackedActiveJob", jobs || []);
-	var needTimer = !!(
+	var startMs = NaN;
+	if (
 		tracked &&
 		tracked.started_utc &&
 		phCall("isNonTerminalJobStatus", tracked.status)
-	);
-	if (needTimer) {
-		if (!jobDurationTimer) {
-			jobDurationTimer = setInterval(() => {
-				if (!phCall("hasTrackedActiveJob", jobsCache)) {
-					syncJobDurationTimer([]);
-					return;
-				}
-				renderJobsFromResponse({ ok: true, jobs: jobsCache });
-			}, 1000);
+	) {
+		startMs = Date.parse(String(tracked.started_utc || ""));
+		if (Number.isFinite(startMs)) {
+			trackedJobDurationJobId = String(tracked.job_id || "");
+			trackedJobDurationClock = phCall(
+				"makeVisibleRuntimeClock",
+				Math.max(0, Date.now() - startMs),
+			);
+			return;
 		}
+	}
+	trackedJobDurationJobId = "";
+	trackedJobDurationClock = null;
+}
+
+function getTrackedJobDurationLabel(job, tickNowMs) {
+	var jobId = "";
+	var runningElapsedMs = null;
+	if (!job) return "";
+	if (job.started_utc && job.ended_utc) {
+		return String(
+			phCall("jobSummaryDurationSeconds", job.started_utc, job.ended_utc) || "",
+		);
+	}
+	jobId = String(job.job_id || "");
+	if (
+		job.started_utc &&
+		jobId &&
+		jobId === trackedJobDurationJobId &&
+		trackedJobDurationClock &&
+		phCall("isNonTerminalJobStatus", job.status)
+	) {
+		runningElapsedMs = phCall(
+			"readVisibleRuntimeElapsedMs",
+			trackedJobDurationClock,
+			Number.isFinite(tickNowMs) ? tickNowMs : getVisibleDurationNowMs(),
+		);
+		if (Number.isFinite(runningElapsedMs)) {
+			return formatVisibleDurationMs(runningElapsedMs);
+		}
+	}
+	return String(
+		phCall("jobSummaryDurationSeconds", job.started_utc, job.ended_utc) || "",
+	);
+}
+
+function getJobsDurationSignature(tickNowMs) {
+	var tracked = phCall("getTrackedActiveJob", jobsCache || []);
+	var label = "";
+	if (
+		!tracked ||
+		!tracked.started_utc ||
+		!phCall("isNonTerminalJobStatus", tracked.status)
+	) {
+		return "";
+	}
+	label = getTrackedJobDurationLabel(tracked, tickNowMs);
+	if (!label) return "";
+	return `${String(tracked.job_id || "")}=${label}`;
+}
+
+function syncJobsDurationSurface() {
+	if (!PH || typeof PH.call !== "function") return;
+	if (getJobsDurationSignature(getVisibleDurationNowMs())) {
+		phCall("setVisibleDurationSurface", "jobs_list_duration", {
+			getSignature: getJobsDurationSignature,
+			render: renderJobsList,
+		});
 		return;
 	}
-	if (jobDurationTimer) {
-		clearInterval(jobDurationTimer);
-		jobDurationTimer = null;
-	}
+	phCall("clearVisibleDurationSurface", "jobs_list_duration");
 }
 
 function isRerunLatestListCandidate(job) {
@@ -289,82 +357,10 @@ function prepareRerunLatestFromLatestJob() {
 	});
 }
 
-function renderJobsFromResponse(r) {
-	var jobs = r.jobs || [];
-	jobsCache = Array.isArray(jobs) ? jobs.slice() : [];
-
-	// If the most recently enqueued job reached a terminal state, reset mode to patch.
-	try {
-		const lastId = String(window.__ph_last_enqueued_job_id || "");
-		if (lastId) {
-			const j =
-				(jobs || []).find((x) => String(x.job_id || "") === lastId) || null;
-			const st = j
-				? String(j.status || "")
-						.trim()
-						.toLowerCase()
-				: "";
-			if (st && st !== "running" && st !== "queued") {
-				const m = el("mode");
-				if (m) m.value = "patch";
-				// Clear transient inputs from the completed non-patch job.
-				try {
-					const iid = el("issueId");
-					if (iid) iid.value = "";
-					const cm = el("commitMsg");
-					if (cm) cm.value = "";
-					const pp = el("patchPath");
-					if (pp) pp.value = "";
-					const rc = el("rawCommand");
-					if (rc) rc.value = "";
-				} catch (_) {}
-				try {
-					dirty.issueId = false;
-					dirty.commitMsg = false;
-					dirty.patchPath = false;
-				} catch (_) {}
-				// Ensure the rest of the form state is updated.
-				PH.call("clearGateOverrides");
-				try {
-					if (phCall("validateAndPreview") == null && m) {
-						m.dispatchEvent(new Event("change"));
-					}
-				} catch (_) {}
-				window.__ph_last_enqueued_job_id = "";
-				window.__ph_last_enqueued_mode = "";
-			}
-		}
-	} catch (_) {}
-
-	var active = jobs.find((j) => j.status === "running") || null;
-	var activeId = active ? String(active.job_id || "") : "";
-
-	var idleAutoSelect = !!(cfg && cfg.ui && cfg.ui.idle_auto_select_last_job);
-
-	if (!selectedJobId) {
-		const saved = PH.call("loadLiveJobId");
-		if (saved) selectedJobId = saved;
-	}
-
-	if (!selectedJobId && activeId) {
-		selectedJobId = activeId;
-		AMP_UI.saveLiveJobId(selectedJobId);
-		suppressIdleOutput = false;
-	}
-
-	if (!selectedJobId && jobs.length && idleAutoSelect) {
-		jobs.sort((a, b) =>
-			String(a.created_utc || "").localeCompare(String(b.created_utc || "")),
-		);
-		selectedJobId = String(jobs[jobs.length - 1].job_id || "");
-		if (selectedJobId) AMP_UI.saveLiveJobId(selectedJobId);
-		suppressIdleOutput = false;
-	}
-	PH.call("renderActiveJob", jobs);
-	syncJobDurationTimer(jobs);
-	ensureAutoRefresh(jobs);
-
+function renderJobsList() {
+	var jobs = Array.isArray(jobsCache) ? jobsCache.slice() : [];
 	var trackedActiveId = String(phCall("getTrackedActiveJobId", jobs) || "");
+	var tickNowMs = getVisibleDurationNowMs();
 	var html = jobs
 		.map((j) => {
 			var jobId = String(j.job_id || "");
@@ -395,11 +391,7 @@ function renderJobsFromResponse(r) {
 				showListDuration = true;
 			}
 			if (showListDuration) {
-				const dur = PH.call(
-					"jobSummaryDurationSeconds",
-					j.started_utc,
-					j.ended_utc,
-				);
+				const dur = getTrackedJobDurationLabel(j, tickNowMs);
 				if (dur) metaParts.push(`dur=${dur}s`);
 			}
 
@@ -438,6 +430,81 @@ function renderJobsFromResponse(r) {
 		})
 		.join("");
 	el("jobsList").innerHTML = html || '<div class="muted">(none)</div>';
+}
+
+function renderJobsFromResponse(r) {
+	var jobs = r.jobs || [];
+	jobsCache = Array.isArray(jobs) ? jobs.slice() : [];
+
+	// If the most recently enqueued job reached a terminal state, reset mode to patch.
+	try {
+		const lastId = String(window.__ph_last_enqueued_job_id || "");
+		if (lastId) {
+			const j =
+				(jobs || []).find((x) => String(x.job_id || "") === lastId) || null;
+			const st = j
+				? String(j.status || "")
+						.trim()
+						.toLowerCase()
+				: "";
+			if (st && st !== "running" && st !== "queued") {
+				const m = el("mode");
+				if (m) m.value = "patch";
+				try {
+					const iid = el("issueId");
+					if (iid) iid.value = "";
+					const cm = el("commitMsg");
+					if (cm) cm.value = "";
+					const pp = el("patchPath");
+					if (pp) pp.value = "";
+					const rc = el("rawCommand");
+					if (rc) rc.value = "";
+				} catch (_) {}
+				try {
+					dirty.issueId = false;
+					dirty.commitMsg = false;
+					dirty.patchPath = false;
+				} catch (_) {}
+				PH.call("clearGateOverrides");
+				try {
+					if (phCall("validateAndPreview") == null && m) {
+						m.dispatchEvent(new Event("change"));
+					}
+				} catch (_) {}
+				window.__ph_last_enqueued_job_id = "";
+				window.__ph_last_enqueued_mode = "";
+			}
+		}
+	} catch (_) {}
+
+	var active = jobs.find((j) => j.status === "running") || null;
+	var activeId = active ? String(active.job_id || "") : "";
+	var idleAutoSelect = !!(cfg && cfg.ui && cfg.ui.idle_auto_select_last_job);
+
+	if (!selectedJobId) {
+		const saved = PH.call("loadLiveJobId");
+		if (saved) selectedJobId = saved;
+	}
+
+	if (!selectedJobId && activeId) {
+		selectedJobId = activeId;
+		AMP_UI.saveLiveJobId(selectedJobId);
+		suppressIdleOutput = false;
+	}
+
+	if (!selectedJobId && jobs.length && idleAutoSelect) {
+		jobs.sort((a, b) =>
+			String(a.created_utc || "").localeCompare(String(b.created_utc || "")),
+		);
+		selectedJobId = String(jobs[jobs.length - 1].job_id || "");
+		if (selectedJobId) AMP_UI.saveLiveJobId(selectedJobId);
+		suppressIdleOutput = false;
+	}
+	PH.call("renderActiveJob", jobs);
+	syncTrackedJobDurationClock(jobs);
+	ensureAutoRefresh(jobs);
+	renderJobsList();
+	syncJobsDurationSurface();
 }
 
 function refreshJobsIdle() {
@@ -526,9 +593,11 @@ function refreshJobs(opts) {
 	apiGetETag("jobs_list", "/api/jobs", { mode: mode, single_flight: sf }).then(
 		(r) => {
 			if (!r || r.ok === false) {
+				jobsCache = [];
+				syncTrackedJobDurationClock([]);
+				syncJobsDurationSurface();
 				setPre("jobsList", r);
 				PH.call("renderActiveJob", []);
-				syncJobDurationTimer([]);
 				return;
 			}
 			if (r.unchanged) return;
