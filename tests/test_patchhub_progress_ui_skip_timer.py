@@ -266,6 +266,36 @@ process.stdout.write(
     assert 'other</div><div class="job-meta">mode=patch</div>' in result["jobsHtml"]
 
 
+def test_progress_elapsed_keeps_last_jobs_snapshot_when_jobs_omitted() -> None:
+    result = _run_node_scenario(
+        """
+ui.saveLiveJobId("job-55");
+const jobs = [
+  {
+    job_id: "job-55",
+    status: "running",
+    mode: "patch",
+    issue_id: "328",
+    started_utc: "2026-03-14T08:00:00Z",
+  },
+];
+await ui.updateProgressPanelFromEvents({ jobs });
+const before = document.getElementById("progressElapsed").textContent;
+await ui.updateProgressPanelFromEvents();
+process.stdout.write(
+  JSON.stringify({
+    before,
+    after: document.getElementById("progressElapsed").textContent,
+    hidden: document.getElementById("progressElapsed").classList.contains("hidden"),
+  }),
+);
+""",
+    )
+    assert result["before"] == "elapsed 5s"
+    assert result["after"] == "elapsed 5s"
+    assert result["hidden"] is False
+
+
 def test_progress_pytest_timer_advances_without_new_log_lines() -> None:
     result = _run_node_scenario(
         """
@@ -329,6 +359,33 @@ process.stdout.write(
     assert result["secondElapsed"] == "elapsed 8s"
     assert "dur=8s" in result["jobsHtml"]
     assert "RUNNING (3s)" in result["secondHtml"]
+
+
+def test_progress_elapsed_clears_when_jobs_explicitly_empty() -> None:
+    result = _run_node_scenario(
+        """
+ui.saveLiveJobId("job-55");
+const jobs = [
+  {
+    job_id: "job-55",
+    status: "running",
+    mode: "patch",
+    issue_id: "328",
+    started_utc: "2026-03-14T08:00:00Z",
+  },
+];
+await ui.updateProgressPanelFromEvents({ jobs });
+await ui.updateProgressPanelFromEvents({ jobs: [] });
+process.stdout.write(
+  JSON.stringify({
+    elapsed: document.getElementById("progressElapsed").textContent,
+    hidden: document.getElementById("progressElapsed").classList.contains("hidden"),
+  }),
+);
+""",
+    )
+    assert result["elapsed"] == ""
+    assert result["hidden"] is True
 
 
 def test_progress_pytest_timer_cleans_up_after_finish() -> None:

@@ -803,7 +803,14 @@
 	}
 
 	function updateProgressPanelFromEvents(opts) {
-		var jobs = opts && Array.isArray(opts.jobs) ? opts.jobs : [];
+		var hasJobs = !!opts && Object.prototype.hasOwnProperty.call(opts, "jobs");
+		var jobs = hasJobs
+			? Array.isArray(opts.jobs)
+				? opts.jobs
+				: []
+			: Array.isArray(lastProgressJobs)
+				? lastProgressJobs.slice()
+				: [];
 		var events = ui.liveEvents || [];
 		var active = getTrackedActiveJob(jobs);
 		var progress = deriveProgressFromEvents(events);
