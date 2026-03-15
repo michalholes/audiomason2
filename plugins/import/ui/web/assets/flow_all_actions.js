@@ -1,6 +1,8 @@
 (function () {
 	"use strict";
 
+	const W = /** @type {any} */ (window);
+
 	function $(id) {
 		return document.getElementById(id);
 	}
@@ -20,12 +22,12 @@
 		ui.status.classList.toggle("is-bad", kind === "bad");
 	}
 
-	if (!window.AM2FlowEditorState && window.FlowEditorState) {
-		window.AM2FlowEditorState = new window.FlowEditorState();
+	if (!W.AM2FlowEditorState && W.FlowEditorState) {
+		W.AM2FlowEditorState = new W.FlowEditorState();
 	}
 
-	window.AM2FlowEditor = window.AM2FlowEditor || {};
-	const AM2 = window.AM2FlowEditor;
+	W.AM2FlowEditor = W.AM2FlowEditor || {};
+	const AM2 = W.AM2FlowEditor;
 	AM2.__allValid = false;
 
 	function setAllValid(ok) {
@@ -43,14 +45,29 @@
 		setAllValid(false);
 	}
 
+	function stepModalOpen() {
+		const modal = W.AM2FlowStepModalState;
+		return !!(modal && modal.isOpen && modal.isOpen() === true);
+	}
+
+	function blockIfStepModalOpen(actionName) {
+		if (stepModalOpen()) {
+			setStatus(
+				"Close the open step modal before running " + actionName + ".",
+				"bad",
+			);
+			return true;
+		}
+		return false;
+	}
 	function getAdapters() {
-		const cfg = AM2.config || window.AM2FlowConfigEditor;
-		const wiz = AM2.wizard || window.AM2WizardDefinitionEditor;
+		const cfg = AM2.config || W.AM2FlowConfigEditor;
+		const wiz = AM2.wizard || W.AM2WizardDefinitionEditor;
 		return { cfg: cfg, wiz: wiz };
 	}
 
 	function getWizardFailureDetail() {
-		const FE = window.AM2FlowEditorState;
+		const FE = W.AM2FlowEditorState;
 		const snap = FE && FE.getSnapshot ? FE.getSnapshot() : null;
 		const wd = snap && snap.wizardDraft ? snap.wizardDraft : null;
 		const uiState = wd && wd._am2_ui ? wd._am2_ui : null;
@@ -62,6 +79,7 @@
 	}
 
 	async function doReloadAll() {
+		if (blockIfStepModalOpen("Reload All")) return;
 		invalidateValidation();
 		setStatus("", "");
 		const { cfg, wiz } = getAdapters();
@@ -71,6 +89,7 @@
 	}
 
 	async function doResetAll() {
+		if (blockIfStepModalOpen("Reset All")) return;
 		invalidateValidation();
 		setStatus("Resetting...", "");
 		const { cfg, wiz } = getAdapters();
@@ -87,6 +106,7 @@
 	}
 
 	async function doValidateAll() {
+		if (blockIfStepModalOpen("Validate All")) return false;
 		invalidateValidation();
 		setStatus("Validating...", "");
 		const { cfg, wiz } = getAdapters();
@@ -127,7 +147,7 @@
 				`Validate All: FAILED (${failed.join(", ")}): ${detail}`,
 				"bad",
 			);
-			window.alert(detail);
+			W.alert(detail);
 		} else {
 			setStatus(`Validate All: FAILED (${failed.join(", ")})`, "bad");
 		}
@@ -135,6 +155,7 @@
 	}
 
 	async function doSaveAll() {
+		if (blockIfStepModalOpen("Save All")) return;
 		if (AM2.__allValid !== true) {
 			setStatus("Save blocked: run Validate All first.", "bad");
 			setSaveEnabled();
@@ -142,7 +163,7 @@
 		}
 		setStatus("Saving...", "");
 
-		const H = window.AM2EditorHTTP;
+		const H = W.AM2EditorHTTP;
 		if (!H || !H.requestJSON) {
 			setStatus("Save failed: missing HTTP client.", "bad");
 			return;
@@ -164,7 +185,7 @@
 			return;
 		}
 
-		const FE2 = window.AM2FlowEditorState;
+		const FE2 = W.AM2FlowEditorState;
 		if (FE2 && typeof FE2.clearDirty === "function") {
 			FE2.clearDirty();
 		} else if (FE2) {
@@ -179,7 +200,7 @@
 	window.AM2UI = window.AM2UI || {};
 	window.AM2UI.doReloadAll = doReloadAll;
 
-	const FE = window.AM2FlowEditorState;
+	const FE = W.AM2FlowEditorState;
 	if (FE && FE.on) {
 		FE.on("wizard_changed", invalidateValidation);
 		FE.on("config_changed", invalidateValidation);

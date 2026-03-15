@@ -368,6 +368,13 @@
 		var loaded = null;
 		var nextArtifact = artifact === "wizard" ? "wizard" : "config";
 		var wasOpen = dom.isOpen();
+		var stepModal = root.AM2FlowStepModalState;
+		if (stepModal && stepModal.isOpen && stepModal.isOpen() === true) {
+			setModalError(
+				"Close the open step modal before opening whole-artifact JSON.",
+			);
+			return false;
+		}
 		if (!confirmRereadDiscards()) {
 			return false;
 		}
@@ -412,6 +419,9 @@
 
 	root.AM2FlowJSONModalState = {
 		abortChanges: abortChanges,
+		isOpen: function isOpen() {
+			return dom.isOpen();
+		},
 		applyForFutureRuns: applyForFutureRuns,
 		cancelModal: cancelModal,
 		copyAll: copyAll,

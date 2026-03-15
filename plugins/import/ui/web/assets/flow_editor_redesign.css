@@ -59,6 +59,10 @@ body {
 	margin-bottom: 12px;
 }
 
+.flowEditorPrimaryActions {
+	justify-content: flex-end;
+}
+
 #flowAllStatus {
 	margin-top: 0;
 	margin-bottom: 16px;
@@ -74,14 +78,13 @@ body {
 }
 
 .flow-editor-layout {
-	grid-template-columns: 250px minmax(0, 1fr) 420px;
+	grid-template-columns: 250px minmax(0, 1fr);
 	gap: 16px;
 	align-items: stretch;
 }
 
 .flow-editor-palette,
-.flow-editor-main,
-.flow-editor-sidebar {
+.flow-editor-main {
 	min-width: 0;
 }
 
@@ -416,5 +419,172 @@ body {
 
 	.flowStepBody {
 		max-height: none;
+	}
+}
+
+.flowCanvasShellHint {
+	margin-top: 4px;
+	font-size: 13px;
+	font-weight: 500;
+	color: rgba(220, 230, 255, 0.78);
+}
+
+.flowAdvancedActions,
+.flowTransitionsDetails {
+	margin-top: 16px;
+	padding: 12px 14px;
+	border: 1px solid rgba(120, 152, 226, 0.16);
+	border-radius: 14px;
+	background: rgba(10, 24, 48, 0.92);
+}
+
+.flowAdvancedActions summary,
+.flowTransitionsDetails summary {
+	cursor: pointer;
+	font-weight: 700;
+}
+
+.flowAdvancedActionsRow {
+	margin-top: 12px;
+}
+
+.flowAdvancedActionsNote {
+	margin-top: 10px;
+	font-size: 13px;
+	color: rgba(220, 230, 255, 0.8);
+}
+
+.flowStepModal {
+	position: fixed;
+	inset: 0;
+	z-index: 80;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 24px;
+	background: rgba(3, 8, 19, 0.72);
+}
+
+.flowStepModalDialog {
+	width: min(960px, calc(100vw - 48px));
+	max-height: calc(100vh - 48px);
+	padding: 18px;
+	overflow: auto;
+	border: 1px solid rgba(120, 152, 226, 0.2);
+	border-radius: 18px;
+	background: rgba(8, 20, 41, 0.98);
+	box-shadow: 0 28px 90px rgba(0, 0, 0, 0.45);
+}
+
+.flowStepModalHead {
+	display: flex;
+	justify-content: space-between;
+	gap: 16px;
+	align-items: flex-start;
+	margin-bottom: 14px;
+}
+
+.flowStepModalTitle {
+	font-size: 20px;
+	font-weight: 800;
+}
+
+.flowStepModalSubtitle {
+	margin-top: 4px;
+	font-size: 14px;
+	color: rgba(220, 230, 255, 0.78);
+}
+
+.flowStepModalTabs {
+	display: flex;
+	gap: 10px;
+	margin-bottom: 12px;
+}
+
+.flowStepModalDirtySummary {
+	margin-bottom: 10px;
+	font-size: 13px;
+	color: rgba(220, 230, 255, 0.76);
+}
+
+.flowStepModalDirtySummary.is-dirty {
+	color: #f1bc5b;
+	font-weight: 700;
+}
+
+.flowStepModalBody {
+	display: grid;
+	gap: 12px;
+}
+
+.flowStepModalField {
+	padding: 12px;
+	border: 1px solid rgba(120, 152, 226, 0.14);
+	border-radius: 14px;
+	background: rgba(8, 20, 41, 0.82);
+}
+
+.flowStepModalField.is-dirty {
+	border-color: rgba(241, 188, 91, 0.58);
+	box-shadow: 0 0 0 1px rgba(241, 188, 91, 0.14);
+}
+
+.flowStepModalFieldHead,
+.flowStepModalFieldFooter {
+	display: flex;
+	justify-content: space-between;
+	gap: 10px;
+	align-items: center;
+}
+
+.flowStepModalFieldHead {
+	margin-bottom: 8px;
+}
+
+.flowStepModalFieldLabel {
+	font-weight: 700;
+}
+
+.flowStepModalFieldBadge {
+	padding: 2px 8px;
+	border-radius: 999px;
+	font-size: 11px;
+	font-weight: 800;
+	text-transform: uppercase;
+	color: #081225;
+	background: #f1bc5b;
+}
+
+.flowStepModalFieldInput {
+	width: 100%;
+	box-sizing: border-box;
+	background: rgba(11, 24, 46, 0.96);
+}
+
+.flowStepModalFieldFooter {
+	margin-top: 8px;
+	justify-content: flex-end;
+}
+
+.flowStepModalFormNote {
+	font-size: 13px;
+	color: rgba(220, 230, 255, 0.78);
+}
+
+.flowStepModalJsonEditor {
+	margin-top: 10px;
+	min-height: 360px;
+}
+
+.flowStepModalFooter {
+	margin-top: 16px;
+	justify-content: flex-end;
+}
+
+@media (max-width: 1260px) {
+	.flowStepModalDialog {
+		width: calc(100vw - 24px);
+		max-height: calc(100vh - 24px);
+		padding: 14px;
 	}
 }

@@ -258,20 +258,26 @@
 	function renderCanvasPanel(definition) {
 		const renderer = W.AM2FlowCanvasPanel;
 		if (!renderer || !renderer.renderCanvas) return;
+		const stepModal = W.AM2FlowStepModalState;
 		renderer.renderCanvas({
 			mount: $("flowCanvasPanel"),
 			metaMount: $("flowCanvasMeta"),
 			nodes: Array.isArray(definition.nodes) ? definition.nodes : [],
 			edges: Array.isArray(definition.edges) ? definition.edges : [],
 			selectedStepId: graphOps.selectedStepId(),
-			onSelectStep: graphOps.setSelectedStep,
+			onSelectStep: function (stepId) {
+				graphOps.setSelectedStep(stepId);
+				if (stepModal && stepModal.openStep) {
+					void stepModal.openStep(stepId);
+				}
+			},
 		});
 	}
 
 	function renderSummary(definition, meta) {
 		const header = $("flowStepHeader");
 		if (header) {
-			header.textContent = "WizardDefinition v3";
+			header.textContent = "Flow editor - step modal";
 		}
 		const behavior = $("flowStepBehavior");
 		if (behavior) {

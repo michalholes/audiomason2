@@ -63,15 +63,12 @@
 
     <div class="tabPanel" data-panel="flow">
       <div class="card">
-        <div class="buttonRow">
-          <button type="button" id="flowReloadAll" class="btn">Reload All</button>
-          <button type="button" id="flowValidateAll" class="btn">Validate All</button>
-          <button type="button" id="flowSaveAll" class="btn">Save All</button>
-          <button type="button" id="flowResetAll" class="btn">Reset All</button>
+        <div class="buttonRow flowEditorPrimaryActions">
           <button type="button" id="flowOpenWizardJson" class="btn">Wizard JSON</button>
           <button type="button" id="flowOpenConfigJson" class="btn">FlowConfig JSON</button>
         </div>
         <div id="flowAllStatus" class="status"></div>
+        <div class="flowStepHeader" id="flowStepHeader">Flow editor - step modal</div>
 
         <div class="flow-editor-layout" id="flowEditorLayout">
           <div class="flow-editor-palette" id="flowPaletteRail">
@@ -84,77 +81,41 @@
           <div class="flow-editor-main">
             <div class="flowCanvasShell">
               <div class="flowCanvasShellHead">
-                <div class="flowCanvasShellTitle">Flow Canvas</div>
+                <div>
+                  <div class="flowCanvasShellTitle">Flow Canvas</div>
+                  <div class="flowCanvasShellHint">
+                    Click any step to open the step editor modal.
+                  </div>
+                </div>
                 <div class="flowCanvasShellMeta" id="flowCanvasMeta"></div>
               </div>
               <div class="flowCanvasPanel" id="flowCanvasPanel"></div>
             </div>
             <textarea id="wdJson" class="jsonEditor is-hidden" rows="22"></textarea>
             <div id="wdError" class="error"></div>
-          </div>
 
-          <div class="flow-editor-sidebar" id="flowEditorSidebar">
-            <div class="flowStepPanel" id="flowStepPanel">
-              <div class="flowStepHeader" id="flowStepHeader"></div>
-              <div class="buttonRow">
-                <button type="button" id="flowStepValidate" class="btn">Validate</button>
-                <button type="button" id="flowStepSave" class="btn">Save</button>
-                <button type="button" id="flowStepActivate" class="btn">Activate</button>
-                <button type="button" id="flowStepApplyNow" class="btn">Apply</button>
+            <details class="flowAdvancedActions" open>
+              <summary>Advanced whole-artifact actions</summary>
+              <div class="buttonRow flowAdvancedActionsRow">
+                <button type="button" id="flowReloadAll" class="btn">
+                  Reload All
+                </button>
+                <button type="button" id="flowValidateAll" class="btn">
+                  Validate All
+                </button>
+                <button type="button" id="flowSaveAll" class="btn">Save All</button>
+                <button type="button" id="flowResetAll" class="btn">Reset All</button>
               </div>
-              <div class="flowStepBody">
-                <div class="flowStepSection">
-                  <div class="flowStepSectionTitle">Behavioral Summary</div>
-                  <div class="flowStepDesc" id="flowStepBehavior"></div>
-                </div>
-
-                <div class="flowStepSection">
-                  <div class="flowStepSectionTitle">Input Contract</div>
-                  <pre class="flowStepContract" id="flowStepInput"></pre>
-                </div>
-
-                <div class="flowStepSection">
-                  <div class="flowStepSectionTitle">Output Contract</div>
-                  <pre class="flowStepContract" id="flowStepOutput"></pre>
-                </div>
-
-                <div class="flowStepSection">
-                  <div class="flowStepSectionTitle">Side Effects</div>
-                  <div class="flowStepDesc" id="flowStepSideEffects"></div>
-                </div>
-
-                <div class="flowStepSection">
-                  <div class="flowStepSectionTitle">Settings</div>
-                  <div class="flowStepForm" id="flowStepForm"></div>
-                </div>
-
-                <div class="flowStepSection">
-                  <div class="flowStepSectionTitle">Draft diff</div>
-                  <div class="flowStepDesc" id="flowStepDiff"></div>
-                </div>
-
-                <div class="flowStepSection">
-                  <div class="flowStepSectionTitle">History</div>
-                  <div class="flowStepRow">
-                    <button type="button" id="flowStepShowHistory"
-                            class="btn btnSmall">Show history</button>
-                  </div>
-                  <div class="flowStepHistory" id="flowStepHistory"></div>
-                </div>
-
-                <div class="flowStepSection">
-                  <div class="flowStepSectionTitle">Apply status</div>
-                  <div class="flowStepApply" id="flowStepApply"></div>
-                  <div class="buttonRow">
-                    <button type="button" id="flowClearStep" class="btn">Clear Settings</button>
-                  </div>
-                </div>
-
-                <div class="flowStepError error" id="flowStepError"></div>
+              <div class="flowAdvancedActionsNote">
+                These buttons operate on whole-artifact drafts, not the per-step
+                modal workflow.
               </div>
-            </div>
+            </details>
 
-            <div id="flowTransitionsPanel"></div>
+            <details class="flowTransitionsDetails" open>
+              <summary>Advanced transition editing</summary>
+              <div id="flowTransitionsPanel"></div>
+            </details>
           </div>
         </div>
 
@@ -181,6 +142,36 @@
       <div class="card">
         <div class="cardTitle">History - FlowConfig</div>
         <div id="cfgHistory" class="history"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="flowStepModal" class="flowStepModal is-hidden" aria-hidden="true">
+    <div class="flowStepModalDialog">
+      <div class="flowStepModalHead">
+        <div>
+          <div id="flowStepModalTitle" class="flowStepModalTitle"></div>
+          <div id="flowStepModalSubtitle" class="flowStepModalSubtitle"></div>
+        </div>
+        <button type="button" id="flowStepModalClose" class="btn">Close</button>
+      </div>
+      <div class="flowStepModalTabs" role="tablist" aria-label="Step editor view">
+        <button type="button" id="flowStepModalTabForm" class="btn">
+          Form
+        </button>
+        <button type="button" id="flowStepModalTabJson" class="btn">JSON</button>
+      </div>
+      <div id="flowStepModalDirtySummary" class="flowStepModalDirtySummary"></div>
+      <div id="flowStepModalStatus" class="status"></div>
+      <div id="flowStepModalError" class="error"></div>
+      <div id="flowStepModalBody" class="flowStepModalBody"></div>
+      <textarea id="flowStepModalJsonEditor"
+                class="jsonEditor flowStepModalJsonEditor is-hidden"
+                rows="16"></textarea>
+      <div class="buttonRow flowStepModalFooter">
+        <button type="button" id="flowStepModalValidate" class="btn">Validate</button>
+        <button type="button" id="flowStepModalSave" class="btn">Save</button>
+        <button type="button" id="flowStepModalRestore" class="btn">Restore</button>
       </div>
     </div>
   </div>
@@ -240,6 +231,10 @@
   <script src="/import/ui/assets/dsl_editor/graph_ops.js"></script>
   <script src="/import/ui/assets/dsl_editor/library_panel.js"></script>
   <script src="/import/ui/assets/dsl_editor/capability_forms.js"></script>
+  <script src="/import/ui/assets/flow_step_modal_form.js"></script>
+  <script src="/import/ui/assets/flow_step_modal_json.js"></script>
+  <script src="/import/ui/assets/flow_step_modal_model.js"></script>
+  <script src="/import/ui/assets/flow_step_modal_state.js"></script>
   <script src="/import/ui/assets/dsl_editor/boot_v3.js"></script>
   <script src="/import/ui/assets/wizard_definition_editor.js"></script>
   <script src="/import/ui/assets/flow_all_actions.js"></script>
