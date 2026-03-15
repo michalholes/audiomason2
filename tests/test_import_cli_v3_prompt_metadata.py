@@ -121,3 +121,16 @@ def test_cli_renderer_renders_v3_prompt_metadata_and_accepts_prefill(tmp_path: P
     assert "Prefill: Ada" in joined
     assert '"status": "completed"' in joined
     assert '"value": "Ada"' in joined
+
+
+def test_cli_renderer_prefill_dict_preserves_unicode_rendering() -> None:
+    rendered = import_module("plugins.import.cli_renderer")._stringify_prompt_value(
+        {
+            "author": "Meyrink, Gustav",
+            "title": "Obrazy vepsan\u00e9 do vzduchu",
+        }
+    )
+
+    assert '"title": "Obrazy vepsan\u00e9 do vzduchu"' in rendered
+    assert "\\u00e1" not in rendered
+    assert "\\u00e9" not in rendered

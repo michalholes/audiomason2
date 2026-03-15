@@ -440,7 +440,7 @@ def _stringify_prompt_value(value: Any) -> str:
         return "true" if value else "false"
     if isinstance(value, (int, float, str)):
         return str(value)
-    return json.dumps(value, ensure_ascii=True, indent=2, sort_keys=True)
+    return json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True)
 
 
 def _parse_prompt_value(raw: str) -> Any:
