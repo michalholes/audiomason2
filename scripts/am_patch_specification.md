@@ -46,6 +46,7 @@ Normative semantics:
 - active_target_repo_root selects the git repository patched by the current run.
 - If active_target_repo_root is null, the default active target repository root is runner_root.
 - active_target_repo_root MUST resolve either to runner_root or to one entry from target_repo_roots.
+- repo_root is a legacy backward-compatibility alias for active_target_repo_root. If repo_root selects a non-runner target, it is subject to the same registry rules as active_target_repo_root.
 - A single runner invocation MUST use exactly one active_target_repo_root.
 - Multi-target execution in a single run is forbidden.
 - Non-git targets are out of scope.
@@ -368,7 +369,7 @@ Patch dir isolation:
 -   When test_mode is enabled, test_mode_isolate_patch_dir=true, patch_dir is not set,
     and ISSUE_ID is provided, the runner sets effective patch_dir to:
     <patch_root>/_test_mode/issue_<ID>_pid_<PID>
--   patch_root remains the patch script root (repo_root/patch_dir_name unless patch_dir overrides).
+-   patch_root remains the runner-owned patch root (artifacts_root/patch_dir_name unless patch_dir overrides).
 -   The runner creates patch layout directories under the isolated patch_dir:
     logs, logs_json, workspaces, successful, unsuccessful,
     artifacts, lock, and current-log symlink.
@@ -385,7 +386,9 @@ mode. - `delete_workspace_on_success` does not apply in test mode.
 
 ### 3.1 Config file
 
--   Path: `scripts/am_patch/am_patch.toml`
+-   Runner-owned config path depends on layout:
+    -   Legacy embedded layout: `scripts/am_patch/am_patch.toml`
+    -   Root layout: `am_patch.toml` in `runner_root`
 -   Loaded on every run.
 -   Source of each effective value is logged.
 
@@ -397,6 +400,8 @@ Root resolution contract:
 - Relative target_repo_roots entries are resolved against runner_root.
 - Relative active_target_repo_root values are resolved against runner_root.
 - The config file path itself remains CLI-only and is not a Policy key.
+- The runner MUST support both legacy embedded layout and root layout without changing Policy semantics.
+- In both layouts, relative config paths and root-model values are resolved against runner_root.
 
 ### 3.2 CLI (normative)
 
@@ -814,9 +819,14 @@ These flags MUST override any config file values for the mapped keys.
     -   `gate_badguys_runner = "auto" | "on" | "off"` (default:
         `"auto"`)
         -   `auto`: run only when the current run touches runner files:
-            -   `scripts/am_patch.py`
-            -   `scripts/am_patch/**`
-            -   `scripts/am_patch*.md` (runner docs)
+            -   Legacy embedded layout:
+                -   `scripts/am_patch.py`
+                -   `scripts/am_patch/**`
+                -   `scripts/am_patch*.md` (runner docs)
+            -   Root layout:
+                -   `am_patch.py`
+                -   `am_patch/**`
+                -   `am_patch*.md` (runner docs)
         -   `on`: always run
         -   `off`: never run
     -   `gate_badguys_command = list[str] | str` (default:
@@ -894,7 +904,7 @@ finalizeworkspace
     -   workspace: deterministic scan under ownership roots listed in gate_monolith_areas_prefixes,
         filtering by suffix.
 -   JS support: .js uses deterministic heuristics (no external parsers) for exports and internal relative imports.
--   Baseline model (no git): compare new text (cwd/relpath) vs old text (repo_root/relpath).
+-   Baseline model (no git): compare new text (cwd/relpath) vs old text (active target repo root/relpath).
 -   Metrics (old vs new): LOC (non-empty lines), EXPORTS (public export surface; for .js counted via export/module.exports/exports.<name> heuristics), INTERNAL_IMPORTS (distinct internal modules), optional FANIN/FANOUT graph deltas.
 -   Parse errors: violation MONO.PARSE; severity controlled by gate_monolith_on_parse_error.
 -   Rule IDs (stable API): MONO.PARSE, MONO.GROWTH, MONO.NEWFILE, MONO.HUB, MONO.CORE, MONO.CROSSAREA, MONO.CATCHALL.
@@ -1402,7 +1412,7 @@ This appendix is resolved by the authoritative policy glossary:
 -   `default_branch` doplnkov policy k
 -   `live_repo_guard` doplnkov policy k
 -   `live_repo_guard_scope` doplnkov policy k
--   `repo_root` doplnkov policy k
+-   `repo_root` is a legacy backward-compatibility alias for selecting the active target repository
 -   `ruff_autofix` doplnkov policy k
 -   `ruff_autofix_legalize_outside` doplnkov policy k
 -   `ruff_format` doplnkov policy k
@@ -1635,11 +1645,15 @@ Constant socket names:
 ## PatchHub Config Editor Contract
 
 PatchHub may edit the runner configuration file:
-- scripts/am_patch/am_patch.toml
+- Legacy embedded layout: scripts/am_patch/am_patch.toml
+- Root layout: am_patch.toml in runner_root
 
 The normative meaning of Policy keys is defined by the runner-owned glossary file:
 - scripts/am_patch_policy_glossary.md
 Schema export "help" strings MUST be consistent with that glossary.
+The effective runner-owned config file path is layout-dependent:
+- Legacy embedded layout: `scripts/am_patch/am_patch.toml`
+- Root layout: `am_patch.toml` in `runner_root`
 
 The runner provides an authoritative schema export describing the Policy surface and
 PatchHub-safe editing rules.

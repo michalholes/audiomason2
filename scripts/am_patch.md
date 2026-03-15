@@ -8,6 +8,9 @@ This manual describes how *you* use the new runner day-to-day so that runs are d
 
 - The runner may live in one git repository while patching a different git repository.
 - The runner repository is the runner_root.
+- The runner-owned config file lives under runner_root:
+  - Legacy embedded layout: `scripts/am_patch/am_patch.toml`
+  - Root layout: `am_patch.toml`
 - Runner-owned artifacts live under artifacts_root.
 - The repository being patched for the current run is active_target_repo_root.
 - The configuration may list multiple candidate target repositories via target_repo_roots.
@@ -44,7 +47,7 @@ Pytest routing:
 - `--pytest-mode {auto,always}` controls when the pytest gate runs.
 - `gate_pytest_py_prefixes` defines the Python trigger surface for `gate_pytest_mode=auto`.
   - The shipped default is `tests`, `src`, `plugins`, and `scripts`.
-  - Configure it via `scripts/am_patch/am_patch.toml` or `--override gate_pytest_py_prefixes=...`.
+  - Configure it via the runner-owned config file (`scripts/am_patch/am_patch.toml` in legacy embedded layout, `am_patch.toml` in root layout) or `--override gate_pytest_py_prefixes=...`.
 - `--pytest-routing-mode {legacy,bucketed}` controls how the pytest gate selects targets after it has been triggered.
 - `legacy` passes `pytest_targets` directly.
 - `bucketed` uses namespace routing plus discovery:
@@ -202,7 +205,9 @@ If you used `-o` (allow no-op), SUCCESS does **not** imply a code change.
 
 - Repo root: `/home/pi/audiomason2`
 - Patches root: `/home/pi/audiomason2/patches`
-- Runner config (persistent): `scripts/am_patch/am_patch.toml`
+- Runner config (persistent):
+  - Legacy embedded layout: `scripts/am_patch/am_patch.toml`
+  - Root layout: `am_patch.toml` in the runner root
 - Workspaces (persistent until success): under `patches/workspaces/issue_<ID>/`
   - Finalize-workspace cleanup: on SUCCESS, the workspace is deleted if `delete_workspace_on_success=true`; use `-k` to keep it.
 - Logs: under `patches/logs/` plus `patches/am_patch.log` symlink to latest log
@@ -243,7 +248,8 @@ It MUST declare a `FILES = [...]` list (repo-relative paths).
 ### 2) Run the patch (workspace mode)
 Recommended invocation:
 
-- `python3 scripts/am_patch.py ISSUE_ID "message" [PATCH_SCRIPT]`
+- Legacy embedded layout: `python3 scripts/am_patch.py ISSUE_ID "message" [PATCH_SCRIPT]`
+- Root layout: `python3 am_patch.py ISSUE_ID "message" [PATCH_SCRIPT]`
 
 Patch script location rules:
 - `PATCH_SCRIPT` may be `patches/<name>.py` or just `<name>.py` (resolved under `patches/`).
@@ -383,7 +389,8 @@ Fix:
 Use finalize mode only when you intentionally want direct live repo operations.
 
 Typical invocation:
-- `python3 scripts/am_patch.py -r -f "message"`
+- Legacy embedded layout: `python3 scripts/am_patch.py -r -f "message"`
+- Root layout: `python3 am_patch.py -r -f "message"`
 
 Note:
 - In finalize mode, positional args (ISSUE_ID / PATCH_SCRIPT) are not accepted.
@@ -397,7 +404,9 @@ It should still obey logging and gate policies, but it does not use a workspace.
 
 - Avoid running two instances at once (runner has a lock).
 - Treat SUCCESS as the only safe signal to close issues.
-- Keep `scripts/am_patch/am_patch.toml` under version control if you want consistent behavior across machines.
+- Keep the runner-owned config file under version control if you want consistent behavior across machines.
+  - Legacy embedded layout: `scripts/am_patch/am_patch.toml`
+  - Root layout: `am_patch.toml` in the runner root
 
 
 ## Patch execution safety (v4.1.38+)

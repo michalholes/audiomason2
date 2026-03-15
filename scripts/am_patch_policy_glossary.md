@@ -296,10 +296,12 @@ Related: live_repo_guard
 Key: repo_root
 Type: optional[str]
 Default: null
-Meaning: Optional override for the repository root path.
+Meaning: Legacy backward-compatibility alias for selecting the active target repository root.
 Notes:
-- If null, the runner infers the repo root from the invocation context.
-Related: patch_dir
+- If null, the runner uses active_target_repo_root or defaults to runner_root.
+- If repo_root selects a non-runner target, it is subject to the same registry rules as active_target_repo_root.
+- New configurations should prefer active_target_repo_root.
+Related: active_target_repo_root, target_repo_roots
 
 ## Key: ruff_autofix
 Key: ruff_autofix
