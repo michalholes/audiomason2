@@ -6,7 +6,16 @@ from functools import cache
 from pathlib import Path
 from typing import Any
 
+from badguys.bdg_loader import BdgTest
+
 _BASE_CFG_KEYS = ("suite", "lock", "guard", "filters", "runner")
+_BUILD_CFG_STEP_RECIPE_KEYS = {
+    "commit_limit",
+    "console_verbosity",
+    "log_verbosity",
+    "runner_verbosity",
+}
+_RUN_RUNNER_STEP_RECIPE_KEYS = {"args"}
 
 
 def _config_relpath(config_path: Path | str) -> str:
@@ -57,80 +66,6 @@ def base_cfg_sections(*, repo_root: Path, config_path: Path | str) -> dict[str, 
     return {key: _copy_dict(raw.get(key, {})) for key in _BASE_CFG_KEYS}
 
 
-def subject_relpaths(
-    *,
-    repo_root: Path,
-    config_path: Path | str,
-    test_id: str,
-) -> dict[str, str]:
-    raw = _raw(repo_root=repo_root, config_path=config_path)
-    tests = _tests_table(raw, "subjects")
-    table = tests.get(test_id, {})
-    if not isinstance(table, dict):
-        return {}
-    out: dict[str, str] = {}
-    for name, item in table.items():
-        if not isinstance(item, dict):
-            raise SystemExit(f"FAIL: bdg recipe: subjects.tests.{test_id}.{name} must be a table")
-        ensure_allowed_keys(
-            table=item,
-            allowed={"relpath"},
-            label=f"subjects.tests.{test_id}.{name}",
-        )
-        relpath = item.get("relpath")
-        if not isinstance(relpath, str) or not relpath:
-            raise SystemExit(
-                f"FAIL: bdg recipe: subjects.tests.{test_id}.{name}.relpath must be a string"
-            )
-        out[str(name)] = relpath
-    return out
-
-
-def asset_recipe(
-    *,
-    repo_root: Path,
-    config_path: Path | str,
-    test_id: str,
-    asset_id: str,
-) -> dict[str, Any]:
-    recipe = _test_recipe(_raw(repo_root=repo_root, config_path=config_path), test_id)
-    assets = recipe.get("assets", {})
-    if not isinstance(assets, dict):
-        return {}
-    out = _copy_dict(assets.get(asset_id, {}))
-    if not isinstance(out, dict):
-        raise SystemExit(
-            f"FAIL: bdg recipe: recipes.tests.{test_id}.assets.{asset_id} must be a table"
-        )
-    return out
-
-
-def entry_recipe(
-    *,
-    repo_root: Path,
-    config_path: Path | str,
-    test_id: str,
-    asset_id: str,
-    entry_id: str,
-) -> dict[str, Any]:
-    asset = asset_recipe(
-        repo_root=repo_root,
-        config_path=config_path,
-        test_id=test_id,
-        asset_id=asset_id,
-    )
-    entries = asset.get("entries", {})
-    if not isinstance(entries, dict):
-        return {}
-    out = _copy_dict(entries.get(entry_id, {}))
-    if not isinstance(out, dict):
-        raise SystemExit(
-            "FAIL: bdg recipe: recipes.tests."
-            f"{test_id}.assets.{asset_id}.entries.{entry_id} must be a table"
-        )
-    return out
-
-
 def step_recipe(
     *,
     repo_root: Path,
@@ -142,12 +77,100 @@ def step_recipe(
     steps = recipe.get("steps", {})
     if not isinstance(steps, dict):
         return {}
-    if str(step_index) in steps:
-        out = _copy_dict(steps[str(step_index)])
-    else:
-        out = _copy_dict(steps.get(step_index, {}))
-    if not isinstance(out, dict):
+    item = steps.get(str(step_index)) if str(step_index) in steps else steps.get(step_index)
+    if item is None:
+        return {}
+    if not isinstance(item, dict):
         raise SystemExit(
             f"FAIL: bdg recipe: recipes.tests.{test_id}.steps.{step_index} must be a table"
         )
-    return out
+    return _copy_dict(item)
+
+
+def _legacy_subjects(raw: dict[str, Any], test_id: str) -> dict[str, Any]:
+    table = _tests_table(raw, "subjects").get(test_id, {})
+    if table is None:
+        return {}
+    if not isinstance(table, dict):
+        raise SystemExit(f"FAIL: bdg recipe: subjects.tests.{test_id} must be a table")
+    return _copy_dict(table)
+
+
+def _legacy_assets(raw: dict[str, Any], test_id: str) -> dict[str, Any]:
+    recipe = _test_recipe(raw, test_id)
+    assets = recipe.get("assets", {})
+    if assets is None:
+        return {}
+    if not isinstance(assets, dict):
+        raise SystemExit(f"FAIL: bdg recipe: recipes.tests.{test_id}.assets must be a table")
+    return _copy_dict(assets)
+
+
+def _allowed_step_recipe_keys_for_op(op: str) -> set[str]:
+    if op == "RUN_RUNNER":
+        return set(_RUN_RUNNER_STEP_RECIPE_KEYS)
+    if op == "BUILD_CFG":
+        return set(_BUILD_CFG_STEP_RECIPE_KEYS)
+    return set()
+
+
+def validate_test_config_boundary(
+    *,
+    repo_root: Path,
+    config_path: Path | str,
+    bdg: BdgTest,
+) -> None:
+    raw = _raw(repo_root=repo_root, config_path=config_path)
+    test_id = bdg.test_id
+
+    legacy_subjects = _legacy_subjects(raw, test_id)
+    if legacy_subjects:
+        raise SystemExit(
+            f"FAIL: bdg recipe: per-test [subjects] moved to .bdg; remove subjects.tests.{test_id}"
+        )
+
+    legacy_assets = _legacy_assets(raw, test_id)
+    if legacy_assets:
+        raise SystemExit(
+            "FAIL: bdg recipe: per-test asset materialization moved to .bdg; "
+            f"remove recipes.tests.{test_id}.assets"
+        )
+
+    recipe = _test_recipe(raw, test_id)
+    ensure_allowed_keys(
+        table=recipe,
+        allowed={"steps"},
+        label=f"recipes.tests.{test_id}",
+    )
+    steps = recipe.get("steps", {})
+    if not isinstance(steps, dict):
+        raise SystemExit(f"FAIL: bdg recipe: recipes.tests.{test_id}.steps must be a table")
+
+    for key, item in steps.items():
+        if isinstance(key, str) and key.isdigit():
+            step_index = int(key)
+        elif isinstance(key, int):
+            step_index = key
+        else:
+            raise SystemExit(
+                f"FAIL: bdg recipe: recipes.tests.{test_id}.steps keys must be integers"
+            )
+        if step_index < 0 or step_index >= len(bdg.steps):
+            raise SystemExit(
+                f"FAIL: bdg recipe: stale step recipe entry for {test_id} step {step_index}"
+            )
+        if not isinstance(item, dict):
+            raise SystemExit(
+                f"FAIL: bdg recipe: recipes.tests.{test_id}.steps.{step_index} must be a table"
+            )
+        allowed = _allowed_step_recipe_keys_for_op(bdg.steps[step_index].op)
+        ensure_allowed_keys(
+            table=item,
+            allowed=allowed,
+            label=f"recipes.tests.{test_id}.steps.{step_index}",
+        )
+        if not allowed and item:
+            raise SystemExit(
+                "FAIL: bdg recipe: non-runner step recipe moved to .bdg; "
+                f"remove recipes.tests.{test_id}.steps.{step_index}"
+            )

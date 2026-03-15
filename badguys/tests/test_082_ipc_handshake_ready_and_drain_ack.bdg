@@ -2,10 +2,16 @@
 makes_commit = false
 is_guard = false
 
+[subjects.handshake_marker]
+relpath = "docs/badguys_batch3/ipc_handshake_marker.txt"
+
 [[asset]]
 id = "patch"
 kind = "git_patch_text"
-content = "ipc handshake marker\n"
+subject = "handshake_marker"
+content = """ipc handshake marker
+"""
+
 [[step]]
 op = "IPC_SEND_COMMAND"
 cmd = "ready"
@@ -25,15 +31,25 @@ input_asset = "patch"
 
 [[step]]
 op = "READ_TEXT_FILE"
+scope = "artifacts"
+relpath = "ipc_request.step0.json"
 
 [[step]]
 op = "READ_TEXT_FILE"
+scope = "artifacts"
+relpath = "ipc_reply.step0.json"
 
 [[step]]
 op = "READ_TEXT_FILE"
+scope = "artifacts"
+relpath = "ipc_request.step1.json"
 
 [[step]]
 op = "READ_TEXT_FILE"
+scope = "artifacts"
+relpath = "ipc_reply.step1.json"
 
 [[step]]
 op = "READ_TEXT_FILE"
+scope = "artifacts"
+relpath = "runner.ipc.step2.jsonl"

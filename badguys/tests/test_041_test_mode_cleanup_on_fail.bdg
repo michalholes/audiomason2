@@ -2,9 +2,13 @@
 makes_commit = false
 is_guard = false
 
+[subjects.compile_fail_script]
+relpath = "scripts/badguys_batch1_compile_fail.py"
+
 [[asset]]
 id = "patch"
 kind = "git_patch_text"
+subject = "compile_fail_script"
 content = """def oops(:
     pass
 """

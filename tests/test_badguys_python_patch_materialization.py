@@ -37,17 +37,6 @@ exclude = []
 
 [runner]
 full_runner_tests = []
-
-[subjects.tests.test_py.declared]
-relpath = "docs/declared.txt"
-
-[recipes.tests.test_py.assets.patch]
-declared_subjects = ["declared"]
-
-[recipes.tests.test_py.assets.bundle.entries.script_entry]
-kind = "python_patch_script"
-zip_name = "evil.py"
-declared_subjects = ["declared"]
 """.strip()
         + "\n",
         encoding="utf-8",
@@ -62,12 +51,14 @@ def test_python_patch_script_materializes_to_valid_python(tmp_path: Path) -> Non
         test_id="test_py",
         makes_commit=False,
         is_guard=False,
+        subjects={"declared": "docs/declared.txt"},
         assets={
             "patch": BdgAsset(
                 asset_id="patch",
                 kind="python_patch_script",
                 content='ctx.write_text("declared", "declared\n")\n',
                 entries=[],
+                declared_subjects=["declared"],
             )
         },
         steps=[],
@@ -93,6 +84,7 @@ def test_zip_python_entry_materializes_to_valid_python(tmp_path: Path) -> None:
         test_id="test_py",
         makes_commit=False,
         is_guard=False,
+        subjects={"declared": "docs/declared.txt"},
         assets={
             "bundle": BdgAsset(
                 asset_id="bundle",
@@ -101,6 +93,9 @@ def test_zip_python_entry_materializes_to_valid_python(tmp_path: Path) -> None:
                 entries=[
                     BdgAssetEntry(
                         name="script_entry",
+                        kind="python_patch_script",
+                        zip_name="evil.py",
+                        declared_subjects=["declared"],
                         content='ctx.write_text("declared", "zip\n")\n',
                     )
                 ],

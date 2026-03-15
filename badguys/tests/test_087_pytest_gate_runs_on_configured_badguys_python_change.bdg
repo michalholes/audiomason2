@@ -2,18 +2,30 @@
 makes_commit = false
 is_guard = false
 
+[subjects.pytest_gate_badguys_trigger]
+relpath = "badguys/pytest_gate_trigger_marker.py"
+
+[subjects.pytest_gate_target]
+relpath = "tests/test_badguys_pytest_gate_target.py"
+
 [[asset]]
 id = "pytest_badguys_patch"
 kind = "patch_zip_manifest"
 
-  [[asset.entry]]
-  name = "trigger_entry"
-  content = """BADGUYS_PYTEST_TRIGGER_MARKER = "issue_704"
+[[asset.entry]]
+name = "trigger_entry"
+kind = "git_patch_text"
+subject = "pytest_gate_badguys_trigger"
+zip_name = "trigger.patch"
+content = """BADGUYS_PYTEST_TRIGGER_MARKER = "issue_704"
 """
 
-  [[asset.entry]]
-  name = "target_entry"
-  content = """def test_badguys_pytest_gate_target() -> None:
+[[asset.entry]]
+name = "target_entry"
+kind = "git_patch_text"
+subject = "pytest_gate_target"
+zip_name = "target.patch"
+content = """def test_badguys_pytest_gate_target() -> None:
     assert True
 """
 

@@ -2,9 +2,13 @@
 makes_commit = false
 is_guard = false
 
+[subjects.test_mode_marker]
+relpath = "docs/badguys_batch1/test_mode_hard_stop_marker.txt"
+
 [[asset]]
 id = "patch"
 kind = "git_patch_text"
+subject = "test_mode_marker"
 content = """marker
 """
 

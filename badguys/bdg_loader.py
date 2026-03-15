@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 import tomllib
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -41,12 +41,11 @@ _FORBIDDEN_TOML_KEYS = {
 }
 
 _FORBIDDEN_STEP_RECIPE_KEYS = {
-    "extra_args",
-    "marker_rel",
-    "cli_runner_verbosity",
-    "cli_console_verbosity",
-    "cli_log_verbosity",
-    "cli_commit_limit",
+    "args",
+    "runner_verbosity",
+    "console_verbosity",
+    "log_verbosity",
+    "commit_limit",
 }
 
 _PATH_LITERAL_RE = re.compile(r"['\"][^'\"\n]*[\\/][^'\"\n]*['\"]")
@@ -56,6 +55,10 @@ _PATH_LITERAL_RE = re.compile(r"['\"][^'\"\n]*[\\/][^'\"\n]*['\"]")
 class BdgAssetEntry:
     name: str
     content: str
+    kind: str | None = None
+    subject: str | None = None
+    zip_name: str | None = None
+    declared_subjects: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -64,6 +67,8 @@ class BdgAsset:
     kind: str
     content: str | None
     entries: list[BdgAssetEntry]
+    subject: str | None = None
+    declared_subjects: list[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -79,20 +84,40 @@ class BdgTest:
     is_guard: bool
     assets: dict[str, BdgAsset]
     steps: list[BdgStep]
+    subjects: dict[str, str] = field(default_factory=dict)
 
 
-def _as_str(d: dict, key: str, default: str = "") -> str:
+def _as_str(d: dict[str, Any], key: str, default: str = "") -> str:
     v = d.get(key, default)
     if not isinstance(v, str):
         raise SystemExit(f"FAIL: bdg: key '{key}' must be a string")
     return v
 
 
-def _as_bool(d: dict, key: str, default: bool = False) -> bool:
+def _as_bool(d: dict[str, Any], key: str, default: bool = False) -> bool:
     v = d.get(key, default)
     if not isinstance(v, bool):
         raise SystemExit(f"FAIL: bdg: key '{key}' must be a bool")
     return v
+
+
+def _as_string_list(*, value: object, label: str) -> list[str]:
+    if value is None:
+        return []
+    if not (isinstance(value, list) and all(isinstance(item, str) for item in value)):
+        raise SystemExit(f"FAIL: bdg: {label} must be list[str]")
+    return list(value)
+
+
+def _validate_relpath(*, relpath: str, label: str) -> str:
+    if not relpath.strip():
+        raise SystemExit(f"FAIL: bdg: {label} relpath must be non-empty")
+    path = Path(relpath)
+    if path.is_absolute():
+        raise SystemExit(f"FAIL: bdg: {label} relpath must be repo-relative")
+    if any(part == ".." for part in path.parts):
+        raise SystemExit(f"FAIL: bdg: {label} relpath must not contain '..'")
+    return relpath
 
 
 def _validate_python_payload(*, label: str, content: str) -> None:
@@ -142,7 +167,7 @@ def _validate_zip_entry(*, asset_id: str, entry_id: str, content: str) -> None:
         _validate_python_payload(label=label, content=content)
 
 
-def _validate_asset(item: dict, *, asset_id: str, kind: str) -> None:
+def _validate_asset(item: dict[str, Any], *, asset_id: str, kind: str) -> None:
     content = item.get("content")
     if content is not None and not isinstance(content, str):
         raise SystemExit("FAIL: bdg: asset content must be string or omitted")
@@ -171,6 +196,27 @@ def load_bdg_test(path: Path) -> BdgTest:
     makes_commit = _as_bool(meta, "makes_commit", False)
     is_guard = _as_bool(meta, "is_guard", False)
 
+    raw_subjects = raw.get("subjects", {})
+    if raw_subjects is None:
+        raw_subjects = {}
+    if not isinstance(raw_subjects, dict):
+        raise SystemExit("FAIL: bdg: [subjects] must be a table")
+    subjects: dict[str, str] = {}
+    for subject_id, item in raw_subjects.items():
+        if not isinstance(item, dict):
+            raise SystemExit(f"FAIL: bdg: [subjects.{subject_id}] must be a table")
+        extra = sorted(set(item) - {"relpath"})
+        if extra:
+            joined = ", ".join(extra)
+            raise SystemExit(f"FAIL: bdg: [subjects.{subject_id}] has unknown keys: {joined}")
+        relpath = item.get("relpath")
+        if not isinstance(relpath, str):
+            raise SystemExit(f"FAIL: bdg: [subjects.{subject_id}].relpath must be string")
+        subjects[str(subject_id)] = _validate_relpath(
+            relpath=relpath,
+            label=f"subjects.{subject_id}",
+        )
+
     assets: dict[str, BdgAsset] = {}
     for item in raw.get("asset", []):
         if not isinstance(item, dict):
@@ -179,6 +225,13 @@ def load_bdg_test(path: Path) -> BdgTest:
         kind = _as_str(item, "kind")
         _validate_asset(item, asset_id=asset_id, kind=kind)
         content = item.get("content")
+        subject = item.get("subject")
+        if subject is not None and not isinstance(subject, str):
+            raise SystemExit(f"FAIL: bdg: asset '{asset_id}' subject must be string")
+        declared_subjects = _as_string_list(
+            value=item.get("declared_subjects", []),
+            label=f"asset '{asset_id}' declared_subjects",
+        )
 
         entries: list[BdgAssetEntry] = []
         for ent in item.get("entry", []):
@@ -198,11 +251,43 @@ def load_bdg_test(path: Path) -> BdgTest:
                 raise SystemExit("FAIL: bdg: asset.entry content must be string")
             if kind == "patch_zip_manifest":
                 _validate_zip_entry(asset_id=asset_id, entry_id=name, content=econtent)
-            entries.append(BdgAssetEntry(name=name, content=econtent))
+            entry_kind = ent.get("kind")
+            if entry_kind is not None and not isinstance(entry_kind, str):
+                raise SystemExit(f"FAIL: bdg: asset.entry '{asset_id}.{name}' kind must be string")
+            entry_subject = ent.get("subject")
+            if entry_subject is not None and not isinstance(entry_subject, str):
+                raise SystemExit(
+                    f"FAIL: bdg: asset.entry '{asset_id}.{name}' subject must be string"
+                )
+            zip_name = ent.get("zip_name")
+            if zip_name is not None and not isinstance(zip_name, str):
+                raise SystemExit(
+                    f"FAIL: bdg: asset.entry '{asset_id}.{name}' zip_name must be string"
+                )
+            entries.append(
+                BdgAssetEntry(
+                    name=name,
+                    content=econtent,
+                    kind=entry_kind,
+                    subject=entry_subject,
+                    zip_name=zip_name,
+                    declared_subjects=_as_string_list(
+                        value=ent.get("declared_subjects", []),
+                        label=f"asset.entry '{asset_id}.{name}' declared_subjects",
+                    ),
+                )
+            )
 
         if asset_id in assets:
             raise SystemExit(f"FAIL: bdg: duplicate asset id: {asset_id}")
-        assets[asset_id] = BdgAsset(asset_id=asset_id, kind=kind, content=content, entries=entries)
+        assets[asset_id] = BdgAsset(
+            asset_id=asset_id,
+            kind=kind,
+            content=content,
+            entries=entries,
+            subject=subject,
+            declared_subjects=declared_subjects,
+        )
 
     steps: list[BdgStep] = []
     for item in raw.get("step", []):
@@ -215,7 +300,7 @@ def load_bdg_test(path: Path) -> BdgTest:
         if bad_recipe_keys:
             joined = ", ".join(bad_recipe_keys)
             raise SystemExit(
-                "FAIL: bdg: step-level recipe moved to badguys/config.toml recipes; "
+                "FAIL: bdg: runner-start recipe stays in badguys/config.toml recipes; "
                 f"remove: {joined}"
             )
         bad_keys = sorted(_FORBIDDEN_EVAL_KEYS.intersection(params))
@@ -234,4 +319,5 @@ def load_bdg_test(path: Path) -> BdgTest:
         is_guard=is_guard,
         assets=assets,
         steps=steps,
+        subjects=subjects,
     )

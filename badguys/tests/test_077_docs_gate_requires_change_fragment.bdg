@@ -2,9 +2,13 @@
 makes_commit = false
 is_guard = false
 
+[subjects.docs_marker]
+relpath = "plugins/import/badguys_batch2/docs_gate_marker.txt"
+
 [[asset]]
 id = "patch"
 kind = "git_patch_text"
+subject = "docs_marker"
 content = """docs gate marker
 """
 

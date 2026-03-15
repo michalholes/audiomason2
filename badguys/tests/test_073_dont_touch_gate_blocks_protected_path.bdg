@@ -2,13 +2,17 @@
 makes_commit = false
 is_guard = false
 
+[subjects.protected]
+relpath = "biome.json"
+
 [[asset]]
 id = "script"
 kind = "python_patch_script"
+declared_subjects = ["protected"]
 content = """text = ctx.path("protected").read_text(encoding="utf-8")
 ctx.write_text(
     "protected",
-    text.replace('\"enabled\": true', '\"enabled\": false', 1),
+    text.replace('"enabled": true', '"enabled": false', 1),
 )
 """
 

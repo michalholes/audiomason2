@@ -2,13 +2,18 @@
 makes_commit = true
 is_guard = false
 
+[subjects.archive_marker]
+relpath = "docs/badguys_batch4/success_archive_hygiene_issue_664_marker.txt"
+
 [[asset]]
 id = "patch"
 kind = "git_patch_text"
+subject = "archive_marker"
 content = "success archive marker ${now_stamp}"
 
 [[step]]
 op = "DELETE_SUBJECT"
+subject = "archive_marker"
 
 [[step]]
 op = "RUN_RUNNER"
@@ -16,3 +21,5 @@ input_asset = "patch"
 
 [[step]]
 op = "ZIP_LIST"
+scope = "repo"
+relpath = "patches/${repo_name}-main_${issue_id}.zip"

@@ -18,7 +18,7 @@ from badguys.bdg_ops_ipc import (
     runner_socket_name,
     runner_socket_path,
 )
-from badguys.bdg_recipe import ensure_allowed_keys, step_recipe, subject_relpaths
+from badguys.bdg_recipe import ensure_allowed_keys, step_recipe
 from badguys.bdg_subst import SubstCtx, subst_text
 
 
@@ -486,9 +486,7 @@ def _exec_one(
     if op == "READ_TEXT_FILE":
         return execute_read_text_file(
             repo_root=repo_root,
-            config_path=config_path,
-            test_id=test_id,
-            step_index=step_index,
+            step=p,
             artifacts_dir=_artifacts_dir(step_runner_cfg),
             issue_id=subst.issue_id,
         )
@@ -496,9 +494,7 @@ def _exec_one(
     if op == "ZIP_LIST":
         return execute_zip_list(
             repo_root=repo_root,
-            config_path=config_path,
-            test_id=test_id,
-            step_index=step_index,
+            step=p,
             artifacts_dir=_artifacts_dir(step_runner_cfg),
             issue_id=subst.issue_id,
         )
@@ -587,30 +583,14 @@ def _exec_one(
         return StepResult(rc=0, stdout=None, stderr=None, value=str(patched_zip))
 
     if op == "DELETE_SUBJECT":
-        recipe = step_recipe(
-            repo_root=repo_root,
-            config_path=config_path,
-            test_id=test_id,
-            step_index=step_index,
-        )
-        ensure_allowed_keys(
-            table=recipe,
-            allowed={"subject"},
-            label=f"recipes.tests.{test_id}.steps.{step_index}",
-        )
-        subjects = subject_relpaths(
-            repo_root=repo_root,
-            config_path=config_path,
-            test_id=test_id,
-        )
-        subject = recipe.get("subject")
+        subject = p.get("subject")
         if not isinstance(subject, str) or not subject:
             raise SystemExit(
-                f"FAIL: bdg recipe: DELETE_SUBJECT subject missing for {test_id} step {step_index}"
+                f"FAIL: bdg: DELETE_SUBJECT subject missing for {test_id} step {step_index}"
             )
-        target_rel = subjects.get(subject)
+        target_rel = mats.subjects.get(subject)
         if target_rel is None:
-            raise SystemExit(f"FAIL: bdg recipe: unknown subject '{subject}' for {test_id}")
+            raise SystemExit(f"FAIL: bdg: unknown subject '{subject}' for {test_id}")
         patches_dir = _patches_dir(step_runner_cfg)
         step_runner_cfg["runner_patch_dir"] = patches_dir
         workspace_repo = _ensure_runner_workspace_repo(
@@ -670,33 +650,15 @@ def _exec_one(
         )
 
     if op == "PREPARE_UNSUCCESSFUL_PATCH":
-        recipe = step_recipe(
-            repo_root=repo_root,
-            config_path=config_path,
-            test_id=test_id,
-            step_index=step_index,
-        )
-        ensure_allowed_keys(
-            table=recipe,
-            allowed={"marker_subject"},
-            label=f"recipes.tests.{test_id}.steps.{step_index}",
-        )
-        subjects = subject_relpaths(
-            repo_root=repo_root,
-            config_path=config_path,
-            test_id=test_id,
-        )
-        marker_subject = recipe.get("marker_subject")
+        marker_subject = p.get("marker_subject")
         if not isinstance(marker_subject, str) or not marker_subject:
             raise SystemExit(
-                "FAIL: bdg recipe: PREPARE_UNSUCCESSFUL_PATCH marker_subject "
+                "FAIL: bdg: PREPARE_UNSUCCESSFUL_PATCH marker_subject "
                 f"missing for {test_id} step {step_index}"
             )
-        marker_rel = subjects.get(marker_subject)
+        marker_rel = mats.subjects.get(marker_subject)
         if marker_rel is None:
-            raise SystemExit(
-                f"FAIL: bdg recipe: unknown marker_subject '{marker_subject}' for {test_id}"
-            )
+            raise SystemExit(f"FAIL: bdg: unknown marker_subject '{marker_subject}' for {test_id}")
         marker_text = p.get("marker_text", "")
         if not isinstance(marker_text, str):
             raise SystemExit("FAIL: bdg: marker_text must be string")
@@ -728,35 +690,18 @@ def _exec_one(
         patches_dir = repo_root / "patches"
         patches_dir.mkdir(parents=True, exist_ok=True)
         ws_repo = patches_dir / "workspaces" / f"issue_{issue}" / "repo"
-        recipe = step_recipe(
-            repo_root=repo_root,
-            config_path=config_path,
-            test_id=test_id,
-            step_index=step_index,
-        )
-        ensure_allowed_keys(
-            table=recipe,
-            allowed={"marker_subject", "seed_subject"},
-            label=f"recipes.tests.{test_id}.steps.{step_index}",
-        )
-        subjects = subject_relpaths(
-            repo_root=repo_root,
-            config_path=config_path,
-            test_id=test_id,
-        )
-        marker_subject = recipe.get("marker_subject")
-        seed_subject = recipe.get("seed_subject")
+        marker_subject = p.get("marker_subject")
+        seed_subject = p.get("seed_subject")
         if not isinstance(marker_subject, str) or not isinstance(seed_subject, str):
             raise SystemExit(
-                "FAIL: bdg recipe: PREPARE_LATEST_BUNDLE_900 subjects missing "
+                "FAIL: bdg: PREPARE_LATEST_BUNDLE_900 subjects missing "
                 f"for {test_id} step {step_index}"
             )
-        marker_rel = subjects.get(marker_subject)
-        seed_rel = subjects.get(seed_subject)
+        marker_rel = mats.subjects.get(marker_subject)
+        seed_rel = mats.subjects.get(seed_subject)
         if marker_rel is None or seed_rel is None:
             raise SystemExit(
-                "FAIL: bdg recipe: PREPARE_LATEST_BUNDLE_900 references "
-                f"unknown subjects for {test_id}"
+                f"FAIL: bdg: PREPARE_LATEST_BUNDLE_900 references unknown subjects for {test_id}"
             )
         ws_marker = ws_repo / marker_rel
         ws_marker.parent.mkdir(parents=True, exist_ok=True)

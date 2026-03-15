@@ -42,36 +42,6 @@ exclude = []
 
 [runner]
 full_runner_tests = []
-
-[subjects.tests.test_ops.delete_marker]
-relpath = "docs/delete_me.txt"
-
-[subjects.tests.test_ops.delete_dir]
-relpath = "docs/delete_dir"
-
-[recipes.tests.test_ops.steps.0]
-scope = "repo"
-relpath = "docs/repo_note.txt"
-
-[recipes.tests.test_ops.steps.1]
-scope = "artifacts"
-relpath = "bundle.zip"
-
-[recipes.tests.test_ops.steps.2]
-scope = "workspace"
-relpath = "docs/workspace_note.txt"
-
-[recipes.tests.test_ops.steps.3]
-subject = "delete_marker"
-
-[recipes.tests.test_ops.steps.4]
-subject = "delete_marker"
-
-[recipes.tests.test_ops.steps.5]
-subject = "missing_subject"
-
-[recipes.tests.test_ops.steps.6]
-subject = "delete_dir"
 """.strip()
         + "\n",
         encoding="utf-8",
@@ -89,7 +59,18 @@ def _step_runner_cfg(repo_root: Path, *, artifacts_dir: Path) -> dict[str, objec
     }
 
 
-def test_read_text_file_and_zip_list_use_recipe_scopes(tmp_path: Path) -> None:
+def _mats(repo_root: Path) -> MaterializedAssets:
+    return MaterializedAssets(
+        root=repo_root / "patches" / "mats",
+        files={},
+        subjects={
+            "delete_marker": "docs/delete_me.txt",
+            "delete_dir": "docs/delete_dir",
+        },
+    )
+
+
+def test_read_text_file_and_zip_list_use_step_scopes(tmp_path: Path) -> None:
     repo_root = tmp_path
     cfg_path = _write_config(repo_root)
     (repo_root / "docs").mkdir(parents=True, exist_ok=True)
@@ -103,7 +84,7 @@ def test_read_text_file_and_zip_list_use_recipe_scopes(tmp_path: Path) -> None:
         zf.writestr("a/file.txt", "a")
 
     subst = SubstCtx(issue_id="777", now_stamp="20260308_090000")
-    mats = MaterializedAssets(root=repo_root / "patches" / "mats", files={})
+    mats = _mats(repo_root)
 
     read_result = execute_bdg_step(
         repo_root=repo_root,
@@ -111,7 +92,10 @@ def test_read_text_file_and_zip_list_use_recipe_scopes(tmp_path: Path) -> None:
         cfg_runner_cmd=["python3", "scripts/am_patch.py"],
         subst=subst,
         full_runner_tests=set(),
-        step=BdgStep(op="READ_TEXT_FILE", params={}),
+        step=BdgStep(
+            op="READ_TEXT_FILE",
+            params={"scope": "repo", "relpath": "docs/repo_note.txt"},
+        ),
         mats=mats,
         test_id="test_ops",
         step_index=0,
@@ -123,7 +107,7 @@ def test_read_text_file_and_zip_list_use_recipe_scopes(tmp_path: Path) -> None:
         cfg_runner_cmd=["python3", "scripts/am_patch.py"],
         subst=subst,
         full_runner_tests=set(),
-        step=BdgStep(op="ZIP_LIST", params={}),
+        step=BdgStep(op="ZIP_LIST", params={"scope": "artifacts", "relpath": "bundle.zip"}),
         mats=mats,
         test_id="test_ops",
         step_index=1,
@@ -151,8 +135,11 @@ def test_read_text_file_workspace_scope_reads_workspace_repo(tmp_path: Path) -> 
         cfg_runner_cmd=["python3", "scripts/am_patch.py"],
         subst=SubstCtx(issue_id="777", now_stamp="20260308_090000"),
         full_runner_tests=set(),
-        step=BdgStep(op="READ_TEXT_FILE", params={}),
-        mats=MaterializedAssets(root=repo_root / "patches" / "mats", files={}),
+        step=BdgStep(
+            op="READ_TEXT_FILE",
+            params={"scope": "workspace", "relpath": "docs/workspace_note.txt"},
+        ),
+        mats=_mats(repo_root),
         test_id="test_ops",
         step_index=2,
         step_runner_cfg=_step_runner_cfg(
@@ -181,7 +168,7 @@ def test_git_status_porcelain_supports_workspace_scope(tmp_path: Path) -> None:
         subst=SubstCtx(issue_id="777", now_stamp="20260308_090000"),
         full_runner_tests=set(),
         step=BdgStep(op="GIT_STATUS_PORCELAIN", params={"scope": "workspace"}),
-        mats=MaterializedAssets(root=repo_root / "patches" / "mats", files={}),
+        mats=_mats(repo_root),
         test_id="test_ops",
         step_index=0,
         step_runner_cfg=_step_runner_cfg(
@@ -207,8 +194,8 @@ def test_delete_subject_removes_existing_file_subject(tmp_path: Path) -> None:
         cfg_runner_cmd=["python3", "scripts/am_patch.py"],
         subst=SubstCtx(issue_id="777", now_stamp="20260308_090000"),
         full_runner_tests=set(),
-        step=BdgStep(op="DELETE_SUBJECT", params={}),
-        mats=MaterializedAssets(root=repo_root / "patches" / "mats", files={}),
+        step=BdgStep(op="DELETE_SUBJECT", params={"subject": "delete_marker"}),
+        mats=_mats(repo_root),
         test_id="test_ops",
         step_index=3,
         step_runner_cfg=_step_runner_cfg(
@@ -234,8 +221,8 @@ def test_delete_subject_is_idempotent_when_file_missing(tmp_path: Path) -> None:
         cfg_runner_cmd=["python3", "scripts/am_patch.py"],
         subst=SubstCtx(issue_id="777", now_stamp="20260308_090000"),
         full_runner_tests=set(),
-        step=BdgStep(op="DELETE_SUBJECT", params={}),
-        mats=MaterializedAssets(root=repo_root / "patches" / "mats", files={}),
+        step=BdgStep(op="DELETE_SUBJECT", params={"subject": "delete_marker"}),
+        mats=_mats(repo_root),
         test_id="test_ops",
         step_index=4,
         step_runner_cfg=_step_runner_cfg(
@@ -260,8 +247,8 @@ def test_delete_subject_fails_for_unknown_subject(tmp_path: Path) -> None:
             cfg_runner_cmd=["python3", "scripts/am_patch.py"],
             subst=SubstCtx(issue_id="777", now_stamp="20260308_090000"),
             full_runner_tests=set(),
-            step=BdgStep(op="DELETE_SUBJECT", params={}),
-            mats=MaterializedAssets(root=repo_root / "patches" / "mats", files={}),
+            step=BdgStep(op="DELETE_SUBJECT", params={"subject": "missing_subject"}),
+            mats=_mats(repo_root),
             test_id="test_ops",
             step_index=5,
             step_runner_cfg=_step_runner_cfg(
@@ -283,8 +270,8 @@ def test_delete_subject_fails_for_directory_target(tmp_path: Path) -> None:
         cfg_runner_cmd=["python3", "scripts/am_patch.py"],
         subst=SubstCtx(issue_id="777", now_stamp="20260308_090000"),
         full_runner_tests=set(),
-        step=BdgStep(op="DELETE_SUBJECT", params={}),
-        mats=MaterializedAssets(root=repo_root / "patches" / "mats", files={}),
+        step=BdgStep(op="DELETE_SUBJECT", params={"subject": "delete_dir"}),
+        mats=_mats(repo_root),
         test_id="test_ops",
         step_index=6,
         step_runner_cfg=_step_runner_cfg(

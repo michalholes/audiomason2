@@ -3,9 +3,9 @@ from __future__ import annotations
 import tomllib
 import zipfile
 from pathlib import Path
+from typing import Any
 
 from badguys.bdg_evaluator import StepResult
-from badguys.bdg_recipe import ensure_allowed_keys, step_recipe
 
 
 def logs_dir(*, repo_root: Path, config_path: Path) -> Path:
@@ -28,12 +28,12 @@ def _expand_relpath_vars(*, relpath: str, repo_root: Path, issue_id: str) -> str
 
 def _normalize_relpath(*, relpath: str, label: str) -> Path:
     if not relpath.strip():
-        raise SystemExit(f"FAIL: bdg recipe: {label} must be non-empty")
+        raise SystemExit(f"FAIL: bdg: {label} must be non-empty")
     path = Path(relpath)
     if path.is_absolute():
-        raise SystemExit(f"FAIL: bdg recipe: {label} must be repo-relative")
+        raise SystemExit(f"FAIL: bdg: {label} must be repo-relative")
     if any(part == ".." for part in path.parts):
-        raise SystemExit(f"FAIL: bdg recipe: {label} must not contain '..'")
+        raise SystemExit(f"FAIL: bdg: {label} must not contain '..'")
     return path
 
 
@@ -53,36 +53,22 @@ def _resolve_scope_root(
         if not ws_root.exists():
             return None, f"missing workspace repo: {ws_root}"
         return ws_root, None
-    raise SystemExit("FAIL: bdg recipe: scope must be repo|artifacts|workspace")
+    raise SystemExit("FAIL: bdg: scope must be repo|artifacts|workspace")
 
 
-def _resolve_recipe_path(
+def _resolve_step_path(
     *,
     repo_root: Path,
-    config_path: Path,
-    test_id: str,
-    step_index: int,
+    step: dict[str, Any],
     artifacts_dir: Path,
     issue_id: str,
-    allowed: set[str],
 ) -> tuple[Path | None, str | None]:
-    recipe = step_recipe(
-        repo_root=repo_root,
-        config_path=config_path,
-        test_id=test_id,
-        step_index=step_index,
-    )
-    ensure_allowed_keys(
-        table=recipe,
-        allowed=allowed,
-        label=f"recipes.tests.{test_id}.steps.{step_index}",
-    )
-    scope = recipe.get("scope", "repo")
-    relpath = recipe.get("relpath")
+    scope = step.get("scope", "repo")
+    relpath = step.get("relpath")
     if not isinstance(scope, str):
-        raise SystemExit("FAIL: bdg recipe: scope must be string")
+        raise SystemExit("FAIL: bdg: scope must be string")
     if not isinstance(relpath, str):
-        raise SystemExit("FAIL: bdg recipe: relpath must be string")
+        raise SystemExit("FAIL: bdg: relpath must be string")
     root, err = _resolve_scope_root(
         repo_root=repo_root,
         issue_id=issue_id,
@@ -93,7 +79,7 @@ def _resolve_recipe_path(
         return None, err
     path = root / _normalize_relpath(
         relpath=_expand_relpath_vars(relpath=relpath, repo_root=repo_root, issue_id=issue_id),
-        label=f"recipes.tests.{test_id}.steps.{step_index}.relpath",
+        label="relpath",
     )
     return path, None
 
@@ -101,20 +87,15 @@ def _resolve_recipe_path(
 def execute_read_text_file(
     *,
     repo_root: Path,
-    config_path: Path,
-    test_id: str,
-    step_index: int,
+    step: dict[str, Any],
     artifacts_dir: Path,
     issue_id: str,
 ) -> StepResult:
-    path, err = _resolve_recipe_path(
+    path, err = _resolve_step_path(
         repo_root=repo_root,
-        config_path=config_path,
-        test_id=test_id,
-        step_index=step_index,
+        step=step,
         artifacts_dir=artifacts_dir,
         issue_id=issue_id,
-        allowed={"relpath", "scope"},
     )
     if path is None:
         return StepResult(rc=1, stdout=None, stderr=err, value="")
@@ -131,20 +112,15 @@ def execute_read_text_file(
 def execute_zip_list(
     *,
     repo_root: Path,
-    config_path: Path,
-    test_id: str,
-    step_index: int,
+    step: dict[str, Any],
     artifacts_dir: Path,
     issue_id: str,
 ) -> StepResult:
-    path, err = _resolve_recipe_path(
+    path, err = _resolve_step_path(
         repo_root=repo_root,
-        config_path=config_path,
-        test_id=test_id,
-        step_index=step_index,
+        step=step,
         artifacts_dir=artifacts_dir,
         issue_id=issue_id,
-        allowed={"relpath", "scope"},
     )
     if path is None:
         return StepResult(rc=1, stdout=None, stderr=err, value=[])
