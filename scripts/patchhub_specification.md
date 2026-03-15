@@ -3,7 +3,7 @@ Status: AUTHORITATIVE SPECIFICATION
 Applies to: scripts/patchhub/*
 Language: ENGLISH (ASCII ONLY)
 
-Specification Version: 1.12.10-spec
+Specification Version: 1.12.11-spec
 Code Baseline: audiomason2-main.zip (as provided in this chat)
 
 -------------------------------------------------------------------------------
@@ -94,8 +94,15 @@ The runtime version MUST NOT be hardcoded in code.
   - overview invalidation
   - progress reconstruction
   - selected-job state
-- Timer creation MUST be centralized to prevent duplicated timers across multiple
-  hide/show cycles.
+- Visible duration timer creation MUST be centralized to prevent duplicated
+  timers across multiple hide/show cycles.
+- Visible duration timers are limited to user-visible elapsed/duration surfaces:
+  - the Progress header overall elapsed timer,
+  - the Jobs list tracked-row elapsed timer,
+  - the Progress per-gate duration pills.
+- Polling, refresh, autofill, debug, and missing-patch backoff intervals are
+  outside the visible duration timer scope and MUST NOT be folded into the shared
+  visible duration controller.
 
 2.3 Client Fault Tolerance (HARD)
 
@@ -158,7 +165,7 @@ The runtime version MUST NOT be hardcoded in code.
   - live logs,
   - job state/progress (top-right),
   - stop/cancel responsiveness,
-  - the tracked active-job elapsed timer.
+  - the tracked active-job elapsed timer in the Progress card header.
 - During ACTIVE, the Active job controls MUST be derived from the tracked
   non-terminal job identity together with PatchHub queue/runner actionability
   signals. The UI MUST NOT use current `/api/jobs` list membership as the sole
@@ -956,9 +963,23 @@ The main UI includes a Progress card (right sidebar) that renders per-step statu
 for the tracked active job.
 
 HTML elements (templates/index.html):
+- <span id="progressElapsed" class="muted hidden"></span>
 - <div id="progressSteps" class="progress-steps"></div>
 - <div id="progressSummary" class="progress-summary muted"></div>
 - <div id="progressApplied" class="progress-applied hidden"></div>
+
+Visible duration timer rules:
+- PatchHub MUST use exactly one shared client-side visible duration controller for
+  all visible duration timers in scope.
+- The shared visible duration controller MUST use `performance.now()` only as a
+  local render clock between authoritative updates.
+- The shared visible duration controller MUST NOT use tail text or human-readable
+  log lines as elapsed-time authority.
+- Visible timer text MUST use whole-second `floor` formatting for both running and
+  terminal states.
+- Visible timer DOM updates MUST occur only when the visible whole-second value
+  changes, when a timer enters/exits running state, or when tracked-job selection
+  changes.
 
 Primary parsing source (static client modules):
 - During ACTIVE, the UI MUST use the persisted job event SSE stream as the canonical
@@ -989,9 +1010,19 @@ Rendering rules:
   - skip: gray dot and a SKIPPED pill that includes the skip reason
   - ok: green dot
   - fail: red dot
+- Progress header overall elapsed rule:
+  - The Progress card header MUST render the tracked-job overall elapsed timer on
+    the right side while a tracked job with `started_utc` exists.
+  - The overall elapsed timer MUST use `started_utc` and `ended_utc` as the
+    authoritative start/stop timestamps.
+  - While the tracked job is non-terminal, the shared visible duration controller
+    MAY interpolate between authoritative updates using `performance.now()`.
+  - After the tracked job becomes terminal, the header MUST render the frozen
+    elapsed value derived from `ended_utc - started_utc` until a newer tracked
+    job or explicit user selection replaces it.
 - Per-gate duration pill rule for GATE_PYTEST and GATE_MYPY:
-  - The Progress card MUST derive the gate duration only from structured event
-    payload fields `stage`, `kind`, and `ts_mono_ms`.
+  - The Progress card MUST derive the gate duration only from structured
+    persisted AMP gate start/stop events and their authoritative timestamps.
   - Tail text and human-readable log lines MUST NOT start, stop, advance or
     reconstruct the duration pill.
   - Start is the first persisted event for that stage with `kind="DO"`.
@@ -999,10 +1030,16 @@ Rendering rules:
     `kind="OK"` or `kind="FAIL"`.
   - A skip marker for that stage MUST suppress the duration pill and MUST
     annul any running duration for that stage.
-  - While the gate is running, the UI MUST render `RUNNING (<elapsed>s)`.
+  - While the gate is running, the shared visible duration controller MAY
+    interpolate between authoritative updates using `performance.now()`, but the
+    visible label MUST remain `RUNNING (<elapsed>s)` with whole-second `floor`
+    formatting.
   - After the gate reaches OK or FAIL, the UI MUST render `<elapsed>s` and
     MUST retain that frozen duration until the tracked job is replaced by a
     newer tracked job or explicit user selection.
+  - After reload/reconnect, the gate duration pill MUST be reconstructible from
+    the persisted structured gate start/stop events without relying on any
+    session-local stopwatch state.
   - A skipped gate MUST render only the existing `SKIPPED (...)` pill and
     MUST NOT render a duration pill.
 - A step that emitted a skip marker MUST remain visually skipped even if the
@@ -1072,6 +1109,8 @@ Shared pool placement and local-surface rules:
 - The Start run card MUST NOT render separate visible rows for uiDegradedBanner
   or enqueueHint.
 - The Active job card MUST NOT render a separate visible uploadHint line.
+- The Active job card MUST NOT render a separate visible elapsed line; the
+  canonical tracked-job elapsed surface is the Progress card header.
 - The Files card MUST NOT render a separate visible fsHint line.
 - The Advanced card MUST NOT render a separate visible parseHint line.
 - The pooled sources listed in 7.1.1 MUST remain available through the shared
@@ -1185,16 +1224,19 @@ Required visible fields per item:
 - mode
 - patch basename (filename only)
 - duration in seconds when both started_utc and ended_utc are available
-- for the tracked active job, a client-side elapsed duration derived from
-  started_utc and current wall-clock time while the job remains non-terminal
+- for the tracked active job row, a client-side elapsed duration derived from
+  started_utc while the job remains non-terminal
 
 Layout requirements:
 - First line MUST show: issue id and status.
 - Commit summary MUST be on its own line.
 - Meta line MUST include: mode, patch basename (when present), and duration
   (when present).
-- The elapsed duration for the tracked active job MUST update client-side without
-  requiring an additional backend fetch cycle.
+- The elapsed duration for the tracked active job row MUST update client-side
+  without requiring an additional backend fetch cycle.
+- The Jobs list tracked-row elapsed timer MUST use the same shared visible
+  duration controller and the same whole-second `floor` formatter as the
+  Progress header overall elapsed timer.
 - A quick action row MAY appear below the meta line.
 - The quick action label MUST be: Use for -l
 
