@@ -127,10 +127,21 @@ def api_amp_schema(self) -> tuple[int, bytes]:
     policy = schema.get("policy")
     if not isinstance(policy, dict):
         return _err("amp_schema_invalid: policy missing")
-    props = policy.get("properties")
-    if isinstance(props, dict):
-        props.pop("json_out", None)
 
+    allowed_types = {"bool", "int", "str", "optional[str]", "list[str]"}
+    editable: dict[str, Any] = {}
+    for key, item in policy.items():
+        if key == "json_out":
+            continue
+        if not isinstance(item, dict):
+            return _err(f"amp_schema_invalid: invalid item for {key}")
+        if item.get("read_only") is True:
+            continue
+        if str(item.get("type") or "") not in allowed_types:
+            continue
+        editable[key] = item
+
+    schema["policy"] = editable
     return _ok({"schema": schema})
 
 

@@ -56,8 +56,14 @@ class TestAmpSchema(unittest.TestCase):
             self.assertIn("verbosity", policy)
             self.assertIn("console_color", policy)
             self.assertIn("pytest_routing_mode", policy)
-            self.assertIn("pytest_roots", policy)
-            self.assertIn("pytest_dependencies", policy)
+            self.assertIn("pytest_full_suite_prefixes", policy)
+
+            self.assertNotIn("json_out", policy)
+            self.assertNotIn("pytest_roots", policy)
+            self.assertNotIn("pytest_tree", policy)
+            self.assertNotIn("pytest_namespace_modules", policy)
+            self.assertNotIn("pytest_dependencies", policy)
+            self.assertNotIn("pytest_external_dependencies", policy)
 
             # Variant B file-scoped gates
             self.assertIn("gates_skip_biome", policy)
