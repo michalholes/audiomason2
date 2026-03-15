@@ -266,20 +266,23 @@ process.stdout.write(
     assert 'other</div><div class="job-meta">mode=patch</div>' in result["jobsHtml"]
 
 
-def test_progress_elapsed_keeps_last_jobs_snapshot_when_jobs_omitted() -> None:
+def test_progress_elapsed_primes_from_jobs_response_and_survives_omitted_refresh() -> None:
     result = _run_node_scenario(
         """
 ui.saveLiveJobId("job-55");
-const jobs = [
-  {
-    job_id: "job-55",
-    status: "running",
-    mode: "patch",
-    issue_id: "328",
-    started_utc: "2026-03-14T08:00:00Z",
-  },
-];
-await ui.updateProgressPanelFromEvents({ jobs });
+window.PH.call("renderJobsFromResponse", {
+  ok: true,
+  jobs: [
+    {
+      job_id: "job-55",
+      status: "running",
+      mode: "patch",
+      issue_id: "328",
+      commit_summary: "tracked",
+      started_utc: "2026-03-14T08:00:00Z",
+    },
+  ],
+});
 const before = document.getElementById("progressElapsed").textContent;
 await ui.updateProgressPanelFromEvents();
 process.stdout.write(
@@ -365,16 +368,19 @@ def test_progress_elapsed_clears_when_jobs_explicitly_empty() -> None:
     result = _run_node_scenario(
         """
 ui.saveLiveJobId("job-55");
-const jobs = [
-  {
-    job_id: "job-55",
-    status: "running",
-    mode: "patch",
-    issue_id: "328",
-    started_utc: "2026-03-14T08:00:00Z",
-  },
-];
-await ui.updateProgressPanelFromEvents({ jobs });
+window.PH.call("renderJobsFromResponse", {
+  ok: true,
+  jobs: [
+    {
+      job_id: "job-55",
+      status: "running",
+      mode: "patch",
+      issue_id: "328",
+      commit_summary: "tracked",
+      started_utc: "2026-03-14T08:00:00Z",
+    },
+  ],
+});
 await ui.updateProgressPanelFromEvents({ jobs: [] });
 process.stdout.write(
   JSON.stringify({

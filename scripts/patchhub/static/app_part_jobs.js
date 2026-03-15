@@ -500,7 +500,14 @@ function renderJobsFromResponse(r) {
 		if (selectedJobId) AMP_UI.saveLiveJobId(selectedJobId);
 		suppressIdleOutput = false;
 	}
-	PH.call("renderActiveJob", jobs);
+	if (
+		__ph_w.AMP_PATCHHUB_UI &&
+		typeof __ph_w.AMP_PATCHHUB_UI.updateProgressPanelFromEvents === "function"
+	) {
+		__ph_w.AMP_PATCHHUB_UI.updateProgressPanelFromEvents({ jobs });
+	} else {
+		PH.call("renderActiveJob", jobs);
+	}
 	syncTrackedJobDurationClock(jobs);
 	ensureAutoRefresh(jobs);
 	renderJobsList();
