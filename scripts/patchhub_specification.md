@@ -975,11 +975,11 @@ Visible duration timer rules:
   local render clock between authoritative updates.
 - The shared visible duration controller MUST NOT use tail text or human-readable
   log lines as elapsed-time authority.
-- Visible timer text MUST use whole-second `floor` formatting for both running and
-  terminal states.
-- Visible timer DOM updates MUST occur only when the visible whole-second value
-  changes, when a timer enters/exits running state, or when tracked-job selection
-  changes.
+- Visible timer text MUST use one-decimal-second `floor` formatting for both
+  running and terminal states, always including the trailing `.0` when needed.
+- Visible timer DOM updates MUST occur only when the visible one-decimal-second
+  value changes, when a timer enters/exits running state, or when tracked-job
+  selection changes.
 
 Primary parsing source (static client modules):
 - During ACTIVE, the UI MUST use the persisted job event SSE stream as the canonical
@@ -1020,27 +1020,27 @@ Rendering rules:
   - After the tracked job becomes terminal, the header MUST render the frozen
     elapsed value derived from `ended_utc - started_utc` until a newer tracked
     job or explicit user selection replaces it.
-- Per-gate duration pill rule for GATE_PYTEST and GATE_MYPY:
-  - The Progress card MUST derive the gate duration only from structured
-    persisted AMP gate start/stop events and their authoritative timestamps.
+- Per-step duration pill rule for non-skipped progress steps:
+  - The Progress card MUST derive the step duration only from structured
+    persisted AMP stage start/stop events and their authoritative timestamps.
   - Tail text and human-readable log lines MUST NOT start, stop, advance or
-    reconstruct the duration pill.
+    reconstruct any step duration pill.
   - Start is the first persisted event for that stage with `kind="DO"`.
   - Stop is the first later persisted event for that stage with
     `kind="OK"` or `kind="FAIL"`.
   - A skip marker for that stage MUST suppress the duration pill and MUST
     annul any running duration for that stage.
-  - While the gate is running, the shared visible duration controller MAY
+  - While the step is running, the shared visible duration controller MAY
     interpolate between authoritative updates using `performance.now()`, but the
-    visible label MUST remain `RUNNING (<elapsed>s)` with whole-second `floor`
-    formatting.
-  - After the gate reaches OK or FAIL, the UI MUST render `<elapsed>s` and
+    visible label MUST remain `RUNNING (<elapsed>s)` with one-decimal-second
+    `floor` formatting.
+  - After the step reaches OK or FAIL, the UI MUST render `<elapsed>s` and
     MUST retain that frozen duration until the tracked job is replaced by a
     newer tracked job or explicit user selection.
-  - After reload/reconnect, the gate duration pill MUST be reconstructible from
-    the persisted structured gate start/stop events without relying on any
+  - After reload/reconnect, the step duration pill MUST be reconstructible from
+    the persisted structured stage start/stop events without relying on any
     session-local stopwatch state.
-  - A skipped gate MUST render only the existing `SKIPPED (...)` pill and
+  - A skipped step MUST render only the existing `SKIPPED (...)` pill and
     MUST NOT render a duration pill.
 - A step that emitted a skip marker MUST remain visually skipped even if the
   surrounding runner wrapper later emits OK for that same step.
@@ -1235,7 +1235,7 @@ Layout requirements:
 - The elapsed duration for the tracked active job row MUST update client-side
   without requiring an additional backend fetch cycle.
 - The Jobs list tracked-row elapsed timer MUST use the same shared visible
-  duration controller and the same whole-second `floor` formatter as the
+  duration controller and the same one-decimal-second `floor` formatter as the
   Progress header overall elapsed timer.
 - A quick action row MAY appear below the meta line.
 - The quick action label MUST be: Use for -l
