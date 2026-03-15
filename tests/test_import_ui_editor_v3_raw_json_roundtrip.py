@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
+from pathlib import Path
+
+import pytest
 
 _NODE_FORM_SCRIPT = r"""
 const fs = require("fs");
@@ -358,3 +362,246 @@ def test_raw_json_mode_stays_authoritative_and_applies_exact_text() -> None:
         {"kind": "apply", "value": raw_text},
         {"kind": "mode", "value": False},
     ]
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+ASSET_BASE = REPO_ROOT / "plugins" / "import" / "ui" / "web" / "assets"
+
+
+def _run_step_modal_picker_scenario(body: str) -> dict[str, object]:
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node not installed")
+    script_paths = {
+        "file_io": ASSET_BASE / "flow_json_file_io.js",
+        "state": ASSET_BASE / "flow_step_modal_state.js",
+    }
+    script = f"""
+const fs = require("fs");
+const vm = require("vm");
+const src = {{
+  fileIo: fs.readFileSync({json.dumps(str(script_paths["file_io"]))}, "utf8"),
+  state: fs.readFileSync({json.dumps(str(script_paths["state"]))}, "utf8"),
+}};
+const elements = new Map();
+const bodyChildren = [];
+const windowListeners = new Map();
+const graphState = {{
+  step: {{
+    step_id: "effective_author_title",
+    op: {{ primitive_id: "ui.prompt_text", primitive_version: 1 }},
+  }},
+}};
+function addWindowListener(type, fn) {{
+  const key = String(type);
+  const items = windowListeners.get(key) || [];
+  items.push(fn);
+  windowListeners.set(key, items);
+}}
+function removeWindowListener(type, fn) {{
+  const key = String(type);
+  const items = windowListeners.get(key) || [];
+  windowListeners.set(key, items.filter((item) => item !== fn));
+}}
+function dispatchWindowEvent(type) {{
+  const items = (windowListeners.get(String(type)) || []).slice();
+  items.forEach((fn) => fn({{ type }}));
+}}
+function makeClassList() {{
+  const items = new Set(["is-hidden"]);
+  return {{
+    add: (...names) => names.forEach((name) => items.add(String(name))),
+    remove: (...names) => names.forEach((name) => items.delete(String(name))),
+    contains: (name) => items.has(String(name)),
+    toggle: (name, force) => {{
+      const key = String(name);
+      if (force === true) {{ items.add(key); return true; }}
+      if (force === false) {{ items.delete(key); return false; }}
+      if (items.has(key)) {{ items.delete(key); return false; }}
+      items.add(key);
+      return true;
+    }},
+  }};
+}}
+function makeNode(id) {{
+  const listeners = new Map();
+  return {{
+    id,
+    nodeType: 1,
+    textContent: "",
+    value: "",
+    selectionStart: 0,
+    selectionEnd: 0,
+    attributes: {{}},
+    style: {{}},
+    classList: makeClassList(),
+    parentNode: null,
+    setAttribute(name, value) {{ this.attributes[String(name)] = String(value); }},
+    addEventListener(type, fn) {{
+      const key = String(type);
+      const items = listeners.get(key) || [];
+      items.push(fn);
+      listeners.set(key, items);
+    }},
+    removeEventListener(type, fn) {{
+      const key = String(type);
+      const items = listeners.get(key) || [];
+      listeners.set(key, items.filter((item) => item !== fn));
+    }},
+    dispatch(type) {{
+      const items = (listeners.get(String(type)) || []).slice();
+      items.forEach((fn) => fn({{ preventDefault() {{}}, stopImmediatePropagation() {{}} }}));
+    }},
+    focus() {{}},
+    replaceChildren() {{}},
+  }};
+}}
+function makeInputNode() {{
+  const input = makeNode("input");
+  input.files = null;
+  input.click = function () {{
+    const behavior = global.__pickerBehavior || {{}};
+    if (behavior.focusFirst === true) {{
+      dispatchWindowEvent("focus");
+    }}
+    if (behavior.mode === "select") {{
+      setTimeout(() => {{
+        this.files = [{{ text: async () => String(behavior.text || "") }}];
+        this.dispatch("change");
+      }}, Number(behavior.changeDelay || 0));
+    }}
+  }};
+  return input;
+}}
+function ensureNode(id) {{
+  const key = String(id);
+  if (!elements.has(key)) elements.set(key, makeNode(key));
+  return elements.get(key);
+}}
+[
+  "flowStepModal",
+  "flowStepModalTitle",
+  "flowStepModalSubtitle",
+  "flowStepModalDirtySummary",
+  "flowStepModalStatus",
+  "flowStepModalError",
+  "flowStepModalBody",
+  "flowStepModalJsonPanel",
+  "flowStepModalActionStatus",
+  "flowStepModalJsonEditor",
+  "flowStepModalJsonReread",
+  "flowStepModalJsonAbort",
+  "flowStepModalJsonSave",
+  "flowStepModalJsonOpenFromFile",
+  "flowStepModalJsonSaveToFile",
+  "flowStepModalJsonCopySelected",
+  "flowStepModalJsonCopyAll",
+  "flowStepModalTabForm",
+  "flowStepModalTabJson",
+  "flowStepModalValidate",
+  "flowStepModalSave",
+  "flowStepModalRestore",
+  "flowStepModalClose",
+].forEach(ensureNode);
+global.window = {{
+  AM2DSLEditorGraphOps: {{
+    currentNode: () => graphState.step,
+    selectedLibraryId: () => "library_1",
+    setSelectedLibrary: () => {{}},
+    setSelectedStep: (stepId) => {{ graphState.step.step_id = String(stepId || ""); }},
+  }},
+  AM2DSLEditorRegistryAPI: {{
+    validateWizardDefinition: async () => ({{ ok: true, data: {{ definition: {{}} }} }}),
+    saveWizardDefinition: async () => ({{ ok: true, data: {{}} }}),
+    activateWizardDefinition: async () => ({{ ok: true, data: {{}} }}),
+  }},
+  AM2FlowStepModalForm: {{ renderForm: () => {{}} }},
+  AM2FlowStepModalJSON: {{
+    renderJSON: (cfg) => {{ cfg.textarea.value = String(cfg.value || ""); }},
+  }},
+  AM2FlowStepModalModel: {{
+    pendingBufferCount: () => 0,
+    workingStateDirty: (state) => state.jsonDirty === true,
+    rebuildJsonBuffer: (state) => {{
+      state.jsonBuffer = JSON.stringify(state.workingStep || {{}}, null, 2);
+      state.jsonDirty = false;
+    }},
+    flushPendingEdits: () => true,
+    flushField: () => true,
+    isFieldDirty: () => false,
+    readFieldValue: () => "",
+    buildCandidateDefinition: () => ({{
+      definition: {{}},
+      nextStepId: "effective_author_title",
+    }}),
+    syncFromSavedStep: () => {{}},
+  }},
+  AM2FlowJSONClipboard: {{ copyText: () => Promise.resolve() }},
+  addEventListener: addWindowListener,
+  removeEventListener: removeWindowListener,
+  setTimeout,
+  clearTimeout,
+  confirm: () => true,
+  alert: () => undefined,
+}};
+global.document = {{
+  body: {{
+    appendChild(node) {{ node.parentNode = this; bodyChildren.push(node); return node; }},
+    removeChild(node) {{
+      const index = bodyChildren.indexOf(node);
+      if (index >= 0) bodyChildren.splice(index, 1);
+      node.parentNode = null;
+      return node;
+    }},
+  }},
+  getElementById(id) {{ return ensureNode(id); }},
+  createElement(tag) {{
+    return String(tag) === "input" ? makeInputNode() : makeNode(String(tag));
+  }},
+}};
+vm.runInThisContext(src.fileIo);
+vm.runInThisContext(src.state);
+(async () => {{
+{body}
+}})().catch((err) => {{
+  console.error(err && err.stack ? err.stack : String(err));
+  process.exit(1);
+}});
+"""
+    proc = subprocess.run([node, "-e", script], capture_output=True, text=True, check=False)
+    if proc.returncode != 0:
+        raise AssertionError(proc.stderr or proc.stdout)
+    return json.loads(proc.stdout)
+
+
+def test_flow_step_modal_open_from_file_survives_focus_before_change() -> None:
+    result = _run_step_modal_picker_scenario(
+        """
+await window.AM2FlowStepModalState.openStep("effective_author_title");
+window.AM2FlowStepModalState.setView("json");
+global.__pickerBehavior = {
+  mode: "select",
+  focusFirst: true,
+  changeDelay: 0,
+  text: (
+    `
+{
+  "step_id": "effective_title",
+` +
+    `  "op": {"primitive_id": "ui.prompt_text"}
+}
+`
+  ),
+};
+document.getElementById("flowStepModalJsonOpenFromFile").dispatch("click");
+await new Promise((resolve) => setTimeout(resolve, 25));
+process.stdout.write(JSON.stringify({
+  jsonValue: document.getElementById("flowStepModalJsonEditor").value,
+  statusText: document.getElementById("flowStepModalStatus").textContent,
+  errorText: document.getElementById("flowStepModalError").textContent,
+}));
+"""
+    )
+    assert '"step_id": "effective_title"' in str(result["jsonValue"])
+    assert result["statusText"] == "JSON loaded from file."
+    assert result["errorText"] == ""

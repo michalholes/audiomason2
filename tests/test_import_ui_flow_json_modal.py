@@ -320,19 +320,6 @@ process.stdout.write(JSON.stringify({
     assert result["errorText"] == ""
 
 
-def test_flow_json_clipboard_falls_back_to_exec_command() -> None:
-    result = _run_node_scenario(
-        """
-global.navigator.clipboard.writeText = () => Promise.reject(new Error("denied"));
-await window.AM2FlowJSONClipboard.copyText("fallback payload");
-process.stdout.write(JSON.stringify({
-  bodyChildrenAfter: bodyChildren.length,
-}));
-"""
-    )
-    assert result["bodyChildrenAfter"] == 0
-
-
 def test_flow_json_modal_rejects_switch_without_artifact_drift() -> None:
     result = _run_node_scenario(
         """

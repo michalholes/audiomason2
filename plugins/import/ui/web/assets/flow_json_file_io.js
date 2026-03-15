@@ -100,10 +100,16 @@
 			var input = document.createElement("input");
 			var settled = false;
 			var focusHandler = null;
+			var focusChecksRemaining = 4;
+			var focusCheckPending = false;
 			var schedule =
 				typeof root.setTimeout === "function"
 					? root.setTimeout.bind(root)
 					: null;
+
+			function hasSelectedFile() {
+				return !!(input.files && input.files[0]);
+			}
 
 			function finish(result, err) {
 				if (settled) {
@@ -123,11 +129,40 @@
 				resolve(result);
 			}
 
+			function scheduleFocusCancelCheck() {
+				if (focusCheckPending || settled) {
+					return;
+				}
+				focusCheckPending = true;
+				function runCheck() {
+					if (settled) {
+						focusCheckPending = false;
+						return;
+					}
+					if (hasSelectedFile()) {
+						focusCheckPending = false;
+						return;
+					}
+					if (focusChecksRemaining > 0 && schedule) {
+						focusChecksRemaining -= 1;
+						schedule(runCheck, 0);
+						return;
+					}
+					focusCheckPending = false;
+					finish({ cancelled: true, text: "" });
+				}
+				if (schedule) {
+					schedule(runCheck, 0);
+					return;
+				}
+				runCheck();
+			}
+
 			input.type = "file";
 			input.accept = ".json,application/json,text/plain,.jsonl,.txt";
 			input.style.display = "none";
 			input.addEventListener("change", async () => {
-				var file = input.files && input.files[0] ? input.files[0] : null;
+				var file = hasSelectedFile() ? input.files[0] : null;
 				if (!file) {
 					finish({ cancelled: true, text: "" });
 					return;
@@ -146,13 +181,7 @@
 			});
 			if (typeof root.addEventListener === "function") {
 				focusHandler = () => {
-					if (schedule) {
-						schedule(() => {
-							finish({ cancelled: true, text: "" });
-						}, 0);
-						return;
-					}
-					finish({ cancelled: true, text: "" });
+					scheduleFocusCancelCheck();
 				};
 				root.addEventListener("focus", focusHandler, true);
 			}

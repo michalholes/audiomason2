@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import json
+import shutil
+import subprocess
 from importlib import import_module
 from pathlib import Path
 
@@ -182,3 +185,287 @@ def test_import_ui_serves_flow_json_modal_layout_contract(tmp_path: Path) -> Non
     html = html_response.text
     assert 'class="buttonRow flowJsonModalActionsBottom"' in html
     assert 'rows="16"' in html
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
+ASSET_BASE = REPO_ROOT / "plugins" / "import" / "ui" / "web" / "assets"
+
+
+def _run_flow_json_modal_picker_scenario(body: str) -> dict[str, object]:
+    node = shutil.which("node")
+    if not node:
+        pytest.skip("node not installed")
+    script_paths = {
+        "clipboard": ASSET_BASE / "flow_json_clipboard.js",
+        "dom": ASSET_BASE / "flow_json_modal_dom.js",
+        "file_io": ASSET_BASE / "flow_json_file_io.js",
+        "state": ASSET_BASE / "flow_json_modal_state.js",
+        "entrypoints": ASSET_BASE / "flow_json_modal_entrypoints.js",
+    }
+    script = f"""
+const fs = require("fs");
+const vm = require("vm");
+const src = {{
+  clipboard: fs.readFileSync({json.dumps(str(script_paths["clipboard"]))}, "utf8"),
+  dom: fs.readFileSync({json.dumps(str(script_paths["dom"]))}, "utf8"),
+  fileIo: fs.readFileSync({json.dumps(str(script_paths["file_io"]))}, "utf8"),
+  state: fs.readFileSync({json.dumps(str(script_paths["state"]))}, "utf8"),
+  entrypoints: fs.readFileSync({json.dumps(str(script_paths["entrypoints"]))}, "utf8"),
+}};
+const elements = new Map();
+const bodyChildren = [];
+const windowListeners = new Map();
+function addWindowListener(type, fn) {{
+  const key = String(type);
+  const items = windowListeners.get(key) || [];
+  items.push(fn);
+  windowListeners.set(key, items);
+}}
+function removeWindowListener(type, fn) {{
+  const key = String(type);
+  const items = windowListeners.get(key) || [];
+  windowListeners.set(key, items.filter((item) => item !== fn));
+}}
+function dispatchWindowEvent(type) {{
+  const items = (windowListeners.get(String(type)) || []).slice();
+  items.forEach((fn) => fn({{ type }}));
+}}
+function makeClassList() {{
+  const items = new Set(["is-hidden"]);
+  return {{
+    add: (...names) => names.forEach((name) => items.add(String(name))),
+    remove: (...names) => names.forEach((name) => items.delete(String(name))),
+    contains: (name) => items.has(String(name)),
+    toggle: (name, force) => {{
+      const key = String(name);
+      if (force === true) {{ items.add(key); return true; }}
+      if (force === false) {{ items.delete(key); return false; }}
+      if (items.has(key)) {{ items.delete(key); return false; }}
+      items.add(key);
+      return true;
+    }},
+  }};
+}}
+function makeNode(id) {{
+  const listeners = new Map();
+  return {{
+    id,
+    nodeType: 1,
+    textContent: "",
+    value: "",
+    selectionStart: 0,
+    selectionEnd: 0,
+    attributes: {{}},
+    style: {{}},
+    classList: makeClassList(),
+    parentNode: null,
+    setAttribute(name, value) {{ this.attributes[String(name)] = String(value); }},
+    getAttribute(name) {{ return this.attributes[String(name)] || ""; }},
+    addEventListener(type, fn) {{
+      const key = String(type);
+      const items = listeners.get(key) || [];
+      items.push(fn);
+      listeners.set(key, items);
+    }},
+    removeEventListener(type, fn) {{
+      const key = String(type);
+      const items = listeners.get(key) || [];
+      listeners.set(key, items.filter((item) => item !== fn));
+    }},
+    dispatch(type) {{
+      const items = (listeners.get(String(type)) || []).slice();
+      items.forEach((fn) => fn({{ preventDefault() {{}}, stopImmediatePropagation() {{}} }}));
+    }},
+    focus() {{}},
+    select() {{
+      this.selectionStart = 0;
+      this.selectionEnd = String(this.value || "").length;
+    }},
+  }};
+}}
+function makeInputNode() {{
+  const input = makeNode("input");
+  input.files = null;
+  input.click = function () {{
+    const behavior = global.__pickerBehavior || {{}};
+    if (behavior.focusFirst === true) {{
+      dispatchWindowEvent("focus");
+    }}
+    if (behavior.mode === "select") {{
+      setTimeout(() => {{
+        this.files = [{{ text: async () => String(behavior.text || "") }}];
+        this.dispatch("change");
+      }}, Number(behavior.changeDelay || 0));
+      return;
+    }}
+    if (behavior.mode === "cancel") {{
+      setTimeout(() => this.dispatch("cancel"), Number(behavior.cancelDelay || 0));
+    }}
+  }};
+  return input;
+}}
+function ensureNode(id) {{
+  const key = String(id);
+  if (!elements.has(key)) elements.set(key, makeNode(key));
+  return elements.get(key);
+}}
+[
+  "flowJsonModal",
+  "flowJsonModalTitle",
+  "flowJsonModalSubtitle",
+  "flowJsonModalEditor",
+  "flowJsonModalStatus",
+  "flowJsonModalError",
+  "flowJsonReread",
+  "flowJsonAbort",
+  "flowJsonSave",
+  "flowJsonOpenFromFile",
+  "flowJsonSaveToFile",
+  "flowJsonCancel",
+  "flowJsonCopySelected",
+  "flowJsonCopyAll",
+  "flowJsonApply",
+  "flowOpenWizardJson",
+  "flowOpenConfigJson",
+].forEach(ensureNode);
+ensureNode("flowJsonModal").classList.add("is-hidden");
+const state = {{
+  wizardDraft: {{ version: 3, nodes: [{{ step_id: "s1" }}], _am2_ui: {{ keep: true }} }},
+  configDraft: {{ version: 1, defaults: {{ marker: 1 }} }},
+  selectedStepId: "s1",
+  draftDirty: false,
+}};
+const flowEditor = {{
+  getSnapshot() {{ return state; }},
+  mutateConfig(mutator) {{ mutator(state.configDraft); state.draftDirty = true; }},
+  mutateWizard(mutator) {{ mutator(state.wizardDraft); state.draftDirty = true; }},
+}};
+global.window = {{
+  navigator: null,
+  AM2EditorHTTP: {{ pretty: (obj) => JSON.stringify(obj, null, 2) }},
+  AM2FlowEditorState: flowEditor,
+  AM2FlowEditor: {{
+    config: {{ reload: async () => true, save: async () => true, activate: async () => true }},
+    wizard: {{ reload: async () => true, save: async () => true }},
+  }},
+  AM2DSLEditorV3: {{ reloadAll: async () => true, activateDefinition: async () => true }},
+  confirm: () => true,
+  addEventListener: addWindowListener,
+  removeEventListener: removeWindowListener,
+  setTimeout,
+  clearTimeout,
+}};
+Object.defineProperty(global, "navigator", {{
+  value: {{ clipboard: {{ writeText: () => Promise.resolve() }} }},
+  configurable: true,
+  writable: true,
+}});
+global.window.navigator = global.navigator;
+global.document = {{
+  body: {{
+    appendChild(node) {{ node.parentNode = this; bodyChildren.push(node); return node; }},
+    removeChild(node) {{
+      const index = bodyChildren.indexOf(node);
+      if (index >= 0) bodyChildren.splice(index, 1);
+      node.parentNode = null;
+      return node;
+    }},
+  }},
+  getElementById(id) {{ return ensureNode(id); }},
+  createElement(tag) {{
+    return String(tag) === "input" ? makeInputNode() : makeNode(String(tag));
+  }},
+  execCommand(name) {{ return name === "copy"; }},
+}};
+global.CustomEvent = function(name, init) {{
+  return {{ type: name, detail: init && init.detail }};
+}};
+vm.runInThisContext(src.clipboard);
+vm.runInThisContext(src.dom);
+vm.runInThisContext(src.fileIo);
+vm.runInThisContext(src.state);
+vm.runInThisContext(src.entrypoints);
+(async () => {{
+{body}
+}})().catch((err) => {{
+  console.error(err && err.stack ? err.stack : String(err));
+  process.exit(1);
+}});
+"""
+    proc = subprocess.run([node, "-e", script], cwd=REPO_ROOT, capture_output=True, text=True)
+    if proc.returncode != 0:
+        raise AssertionError(proc.stderr or proc.stdout)
+    return json.loads(proc.stdout)
+
+
+@pytest.mark.skipif((not _HAS_FASTAPI) or (not _HAS_HTTPX), reason="fastapi+httpx required")
+def test_flow_json_modal_open_from_file_survives_focus_before_change(tmp_path: Path) -> None:
+    _make_engine(tmp_path)
+    result = _run_flow_json_modal_picker_scenario(
+        """
+await window.AM2FlowJSONModalState.openModal("wizard");
+global.__pickerBehavior = {
+  mode: "select",
+  focusFirst: true,
+  changeDelay: 0,
+  text: `
+{
+  "version": 3,
+  "nodes": [{"step_id": "from_file"}]
+}
+`,
+};
+const opened = await window.AM2FlowJSONModalState.openFromFile();
+process.stdout.write(JSON.stringify({
+  opened,
+  editorValue: document.getElementById("flowJsonModalEditor").value,
+  statusText: document.getElementById("flowJsonModalStatus").textContent,
+  errorText: document.getElementById("flowJsonModalError").textContent,
+}));
+"""
+    )
+    assert result["opened"] is True
+    assert '"step_id": "from_file"' in str(result["editorValue"])
+    assert result["statusText"] == "JSON loaded from file."
+    assert result["errorText"] == ""
+
+
+@pytest.mark.skipif((not _HAS_FASTAPI) or (not _HAS_HTTPX), reason="fastapi+httpx required")
+def test_flow_json_modal_open_from_file_cancel_still_returns_without_loading(
+    tmp_path: Path,
+) -> None:
+    _make_engine(tmp_path)
+    result = _run_flow_json_modal_picker_scenario(
+        """
+await window.AM2FlowJSONModalState.openModal("config");
+const before = document.getElementById("flowJsonModalEditor").value;
+global.__pickerBehavior = {
+  focusFirst: true,
+};
+const statusBefore = document.getElementById("flowJsonModalStatus").textContent;
+const opened = await window.AM2FlowJSONModalState.openFromFile();
+process.stdout.write(JSON.stringify({
+  opened,
+  before,
+  after: document.getElementById("flowJsonModalEditor").value,
+  statusBefore,
+  statusText: document.getElementById("flowJsonModalStatus").textContent,
+  errorText: document.getElementById("flowJsonModalError").textContent,
+}));
+"""
+    )
+    assert result["opened"] is False
+    assert result["after"] == result["before"]
+    assert result["statusText"] == result["statusBefore"]
+    assert result["errorText"] == ""
+
+
+def test_flow_json_clipboard_falls_back_to_exec_command() -> None:
+    result = _run_flow_json_modal_picker_scenario(
+        """
+global.navigator.clipboard.writeText = () => Promise.reject(new Error("denied"));
+await window.AM2FlowJSONClipboard.copyText("fallback payload");
+process.stdout.write(JSON.stringify({ bodyChildrenAfter: bodyChildren.length }));
+"""
+    )
+    assert result["bodyChildrenAfter"] == 0
