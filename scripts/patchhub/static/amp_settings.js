@@ -62,21 +62,27 @@
 		return n;
 	}
 
-	function normalizeList(v) {
-		if (Array.isArray(v)) {
-			const out = [];
-			v.forEach((x) => {
-				var s = String(x || "").trim();
-				if (s && out.indexOf(s) < 0) out.push(s);
-			});
-			return out;
+	function cloneListValue(v) {
+		if (!Array.isArray(v)) return [];
+		return v.map((x) => String(x == null ? "" : x));
+	}
+
+	function parseListToken(v) {
+		return String(v == null ? "" : v).trim();
+	}
+
+	function listValuesEqual(a, b) {
+		const aa = cloneListValue(a);
+		const bb = cloneListValue(b);
+		if (aa.length !== bb.length) return false;
+		for (let i = 0; i < aa.length; i++) {
+			if (aa[i] !== bb[i]) return false;
 		}
-		var s2 = String(v || "").trim();
-		if (!s2) return [];
-		return s2
-			.split(",")
-			.map((x) => String(x || "").trim())
-			.filter(Boolean);
+		return true;
+	}
+
+	function listDisplayValue(v) {
+		return v === "" ? "(empty)" : String(v);
 	}
 
 	function humanizeKey(key) {
@@ -180,19 +186,31 @@
 
 		function redraw(list) {
 			chips.textContent = "";
-			list.forEach((v) => {
+			list.forEach((v, idx) => {
 				var chip = mk("span", "chip", null);
-				chip.appendChild(mk("span", "chip-text", v));
+				chip.appendChild(mk("span", "chip-text", listDisplayValue(v)));
+				if (v === "") chip.title = "Empty string item";
 				var x = mk("button", "chip-x", "x");
 				x.type = "button";
 				x.addEventListener("click", () => {
-					var next = list.filter((t) => t !== v);
+					var next = list.slice();
+					next.splice(idx, 1);
 					onChange(key, next);
+					values = next;
 					redraw(next);
 				});
 				chip.appendChild(x);
 				chips.appendChild(chip);
 			});
+		}
+
+		function addValue(v) {
+			var cur = cloneListValue(values);
+			cur.push(v);
+			inp.value = "";
+			onChange(key, cur);
+			values = cur;
+			redraw(cur);
 		}
 
 		var row = mk("div", "row", null);
@@ -201,18 +219,20 @@
 		inp.addEventListener("keydown", (ev) => {
 			if (ev.key !== "Enter") return;
 			ev.preventDefault();
-			var v = String(inp.value || "").trim();
+			var v = parseListToken(inp.value);
 			if (!v) return;
-			var cur = normalizeList(values);
-			if (cur.indexOf(v) < 0) cur.push(v);
-			inp.value = "";
-			onChange(key, cur);
-			redraw(cur);
+			addValue(v);
 		});
 		row.appendChild(inp);
+		var addEmpty = mk("button", "input", "Add empty item");
+		addEmpty.type = "button";
+		addEmpty.addEventListener("click", () => {
+			addValue("");
+		});
+		row.appendChild(addEmpty);
 		container.appendChild(row);
 
-		redraw(normalizeList(values));
+		redraw(cloneListValue(values));
 	}
 
 	function renderFields(
@@ -256,7 +276,8 @@
 
 			if (readOnly) {
 				let ro = "";
-				if (kind === "list_str") ro = normalizeList(values[key]).join(", ");
+				if (kind === "list_str")
+					ro = cloneListValue(values[key]).map(listDisplayValue).join(", ");
 				else if (kind === "bool") ro = !!values[key] ? "true" : "false";
 				else ro = String(values[key] == null ? "" : values[key]);
 				ctl.appendChild(mk("span", "amp-readonly-value", ro));
@@ -319,18 +340,7 @@
 				const curV = values[key];
 				let dirty = false;
 				if (kind === "list_str") {
-					const a = normalizeList(baseV);
-					const b = normalizeList(curV);
-					if (a.length !== b.length) {
-						dirty = true;
-					} else {
-						for (let i = 0; i < a.length; i++) {
-							if (a[i] !== b[i]) {
-								dirty = true;
-								break;
-							}
-						}
-					}
+					dirty = !listValuesEqual(baseV, curV);
 				} else if (kind === "bool") {
 					dirty = !!baseV !== !!curV;
 				} else if (kind === "int") {
@@ -370,7 +380,7 @@
 						? src[k]
 						: undefined;
 				if (kind === "list_str") {
-					out[k] = normalizeList(v);
+					out[k] = cloneListValue(v);
 				} else if (kind === "bool") {
 					out[k] = !!v;
 				} else if (kind === "int") {
@@ -386,15 +396,7 @@
 			var kind = fieldKinds[k] || "str";
 			var a = baseValues ? baseValues[k] : undefined;
 			var b = curValues[k];
-			if (kind === "list_str") {
-				const aa = normalizeList(a);
-				const bb = normalizeList(b);
-				if (aa.length !== bb.length) return true;
-				for (let i = 0; i < aa.length; i++) {
-					if (aa[i] !== bb[i]) return true;
-				}
-				return false;
-			}
+			if (kind === "list_str") return !listValuesEqual(a, b);
 			if (kind === "bool") return !!a !== !!b;
 			return a !== b;
 		}

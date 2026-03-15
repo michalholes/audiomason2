@@ -65,6 +65,10 @@ class TestAmpSchema(unittest.TestCase):
             self.assertNotIn("pytest_dependencies", policy)
             self.assertNotIn("pytest_external_dependencies", policy)
 
+            self.assertIn("gate_monolith_areas_prefixes", policy)
+            self.assertIn("gate_monolith_areas_names", policy)
+            self.assertIn("gate_monolith_areas_dynamic", policy)
+
             # Variant B file-scoped gates
             self.assertIn("gates_skip_biome", policy)
             self.assertIn("gate_biome_extensions", policy)

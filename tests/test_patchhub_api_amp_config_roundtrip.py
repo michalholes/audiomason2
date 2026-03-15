@@ -39,7 +39,10 @@ class TestAmpConfigRoundtrip(unittest.TestCase):
             type_name = str(item.get("type") or "")
             value = values.get(key)
             if type_name == "list[str]":
-                payload[key] = list(value or [])
+                payload[key] = [
+                    "" if part is None else str(part)
+                    for part in (value if isinstance(value, list) else [])
+                ]
             elif type_name == "bool":
                 payload[key] = bool(value)
             elif type_name == "int":
@@ -72,6 +75,9 @@ class TestAmpConfigRoundtrip(unittest.TestCase):
             self.assertNotIn("json_out", policy)
             self.assertNotIn("pytest_roots", policy)
             self.assertNotIn("pytest_dependencies", policy)
+            self.assertIn("gate_monolith_areas_prefixes", policy)
+            self.assertIn("gate_monolith_areas_names", policy)
+            self.assertIn("gate_monolith_areas_dynamic", policy)
 
             st1, data1 = api_amp_config_get(dummy)
             self.assertEqual(st1, 200)
@@ -80,23 +86,24 @@ class TestAmpConfigRoundtrip(unittest.TestCase):
             self.assertEqual(obj1.get("values", {}).get("verbosity"), "normal")
 
             payload = self._ui_payload(schema, obj1.get("values", {}))
-            payload["verbosity"] = "quiet"
-            payload["pytest_routing_mode"] = "legacy"
-            payload["pytest_full_suite_prefixes"] = ["tests/conftest.py"]
+            self.assertEqual(
+                payload.get("gate_monolith_areas_dynamic"),
+                ["", "", "plugins.<name>", "", ""],
+            )
 
             st2, data2 = api_amp_config_post(dummy, {"values": payload, "dry_run": True})
             self.assertEqual(st2, 200)
             obj2 = json.loads(data2.decode("utf-8"))
             self.assertTrue(obj2.get("ok"))
             self.assertTrue(obj2.get("dry_run"))
-            self.assertEqual(obj2.get("values", {}).get("verbosity"), "quiet")
-            self.assertEqual(obj2.get("values", {}).get("pytest_routing_mode"), "legacy")
             self.assertEqual(
-                obj2.get("values", {}).get("pytest_full_suite_prefixes"),
-                ["tests/conftest.py"],
+                obj2.get("values", {}).get("gate_monolith_areas_dynamic"),
+                ["", "", "plugins.<name>", "", ""],
             )
             self.assertIn('verbosity = "normal"', cfg_path.read_text(encoding="utf-8"))
 
+            payload["verbosity"] = "quiet"
+            payload["pytest_routing_mode"] = "legacy"
             payload["pytest_full_suite_prefixes"] = ["pyproject.toml"]
             st3, data3 = api_amp_config_post(dummy, {"values": payload, "dry_run": False})
             self.assertEqual(st3, 200)
@@ -113,4 +120,8 @@ class TestAmpConfigRoundtrip(unittest.TestCase):
             self.assertEqual(
                 obj4.get("values", {}).get("pytest_full_suite_prefixes"),
                 ["pyproject.toml"],
+            )
+            self.assertEqual(
+                obj4.get("values", {}).get("gate_monolith_areas_dynamic"),
+                ["", "", "plugins.<name>", "", ""],
             )
