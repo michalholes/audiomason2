@@ -29,6 +29,7 @@
 		status: $("flowStepModalStatus"),
 		error: $("flowStepModalError"),
 		body: $("flowStepModalBody"),
+		actionStatus: $("flowStepModalActionStatus"),
 		json: /** @type {HTMLTextAreaElement|null} */ (
 			$("flowStepModalJsonEditor")
 		),
@@ -73,11 +74,16 @@
 			: "Selected step";
 	}
 
+	function updateStatusElement(element, text, kind) {
+		if (!element) return;
+		element.textContent = String(text || "");
+		element.classList.toggle("is-ok", kind === "ok");
+		element.classList.toggle("is-bad", kind === "bad");
+	}
+
 	function setStatus(text, kind) {
-		if (!ui.status) return;
-		ui.status.textContent = String(text || "");
-		ui.status.classList.toggle("is-ok", kind === "ok");
-		ui.status.classList.toggle("is-bad", kind === "bad");
+		updateStatusElement(ui.status, text, kind);
+		updateStatusElement(ui.actionStatus, text, kind);
 	}
 
 	function setError(text) {
@@ -135,6 +141,7 @@
 		ui.body.replaceChildren();
 		ui.tabForm && ui.tabForm.classList.toggle("active", state.view === "form");
 		ui.tabJson && ui.tabJson.classList.toggle("active", state.view === "json");
+		ui.body.classList.toggle("is-hidden", state.view !== "form");
 		ui.json.classList.toggle("is-hidden", state.view !== "json");
 		if (state.view === "form") {
 			formApi.renderForm({

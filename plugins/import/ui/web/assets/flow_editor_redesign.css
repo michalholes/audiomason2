@@ -466,10 +466,12 @@ body {
 }
 
 .flowStepModalDialog {
+	display: flex;
+	flex-direction: column;
 	width: min(960px, calc(100vw - 48px));
 	max-height: calc(100vh - 48px);
 	padding: 18px;
-	overflow: auto;
+	overflow: hidden;
 	border: 1px solid rgba(120, 152, 226, 0.2);
 	border-radius: 18px;
 	background: rgba(8, 20, 41, 0.98);
@@ -514,7 +516,11 @@ body {
 
 .flowStepModalBody {
 	display: grid;
+	flex: 1 1 auto;
 	gap: 12px;
+	min-height: 0;
+	overflow: auto;
+	padding-right: 4px;
 }
 
 .flowStepModalField {
@@ -572,13 +578,30 @@ body {
 }
 
 .flowStepModalJsonEditor {
+	flex: 1 1 auto;
 	margin-top: 10px;
-	min-height: 360px;
+	min-height: 0;
 }
 
 .flowStepModalFooter {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
 	margin-top: 16px;
+	padding-top: 12px;
+	border-top: 1px solid rgba(120, 152, 226, 0.14);
+}
+
+.flowStepModalFooterActions {
 	justify-content: flex-end;
+	margin-left: auto;
+}
+
+.flowStepModalActionStatus {
+	margin: 0;
+	min-height: 20px;
+	flex: 1 1 auto;
 }
 
 @media (max-width: 1260px) {
@@ -586,5 +609,15 @@ body {
 		width: calc(100vw - 24px);
 		max-height: calc(100vh - 24px);
 		padding: 14px;
+	}
+
+	.flowStepModalFooter {
+		align-items: stretch;
+		flex-direction: column;
+	}
+
+	.flowStepModalFooterActions {
+		justify-content: flex-start;
+		margin-left: 0;
 	}
 }

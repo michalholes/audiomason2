@@ -168,10 +168,15 @@
       <textarea id="flowStepModalJsonEditor"
                 class="jsonEditor flowStepModalJsonEditor is-hidden"
                 rows="16"></textarea>
-      <div class="buttonRow flowStepModalFooter">
-        <button type="button" id="flowStepModalValidate" class="btn">Validate</button>
-        <button type="button" id="flowStepModalSave" class="btn">Save</button>
-        <button type="button" id="flowStepModalRestore" class="btn">Restore</button>
+      <div class="flowStepModalFooter">
+        <div id="flowStepModalActionStatus"
+             class="status flowStepModalActionStatus"
+             aria-live="polite"></div>
+        <div class="buttonRow flowStepModalFooterActions">
+          <button type="button" id="flowStepModalValidate" class="btn">Validate</button>
+          <button type="button" id="flowStepModalSave" class="btn">Save</button>
+          <button type="button" id="flowStepModalRestore" class="btn">Restore</button>
+        </div>
       </div>
     </div>
   </div>
