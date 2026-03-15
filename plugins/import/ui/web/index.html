@@ -165,9 +165,20 @@
       <div id="flowStepModalStatus" class="status"></div>
       <div id="flowStepModalError" class="error"></div>
       <div id="flowStepModalBody" class="flowStepModalBody"></div>
-      <textarea id="flowStepModalJsonEditor"
-                class="jsonEditor flowStepModalJsonEditor is-hidden"
-                rows="16"></textarea>
+      <div id="flowStepModalJsonPanel" class="flowStepModalJsonPanel is-hidden">
+        <div class="buttonRow flowStepModalJsonActions">
+          <button type="button" id="flowStepModalJsonReread" class="btn">Re-read</button>
+          <button type="button" id="flowStepModalJsonAbort" class="btn">Abort changes</button>
+          <button type="button" id="flowStepModalJsonSave" class="btn">Save</button>
+          <button type="button" id="flowStepModalJsonOpenFromFile" class="btn">Open from file</button>
+          <button type="button" id="flowStepModalJsonSaveToFile" class="btn">Save to file</button>
+          <button type="button" id="flowStepModalJsonCopySelected" class="btn">Copy selected</button>
+          <button type="button" id="flowStepModalJsonCopyAll" class="btn">Copy all</button>
+        </div>
+        <textarea id="flowStepModalJsonEditor"
+                  class="jsonEditor flowStepModalJsonEditor"
+                  rows="16"></textarea>
+      </div>
       <div class="flowStepModalFooter">
         <div id="flowStepModalActionStatus"
              class="status flowStepModalActionStatus"

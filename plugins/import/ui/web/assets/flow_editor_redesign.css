@@ -577,9 +577,21 @@ body {
 	color: rgba(220, 230, 255, 0.78);
 }
 
+.flowStepModalJsonPanel {
+	display: flex;
+	flex: 1 1 auto;
+	flex-direction: column;
+	gap: 12px;
+	min-height: 0;
+}
+
+.flowStepModalJsonActions {
+	gap: 10px;
+}
+
 .flowStepModalJsonEditor {
 	flex: 1 1 auto;
-	margin-top: 10px;
+	margin-top: 0;
 	min-height: 0;
 }
 

@@ -7,6 +7,8 @@
 	const formApi = W.AM2FlowStepModalForm;
 	const jsonApi = W.AM2FlowStepModalJSON;
 	const model = W.AM2FlowStepModalModel;
+	const clip = W.AM2FlowJSONClipboard;
+	const fileIO = W.AM2FlowJSONFileIO;
 	if (!graphOps || !registryApi || !formApi || !jsonApi || !model) return;
 
 	function $(id) {
@@ -29,10 +31,18 @@
 		status: $("flowStepModalStatus"),
 		error: $("flowStepModalError"),
 		body: $("flowStepModalBody"),
+		jsonPanel: $("flowStepModalJsonPanel"),
 		actionStatus: $("flowStepModalActionStatus"),
 		json: /** @type {HTMLTextAreaElement|null} */ (
 			$("flowStepModalJsonEditor")
 		),
+		jsonReread: button("flowStepModalJsonReread"),
+		jsonAbort: button("flowStepModalJsonAbort"),
+		jsonSave: button("flowStepModalJsonSave"),
+		jsonOpenFromFile: button("flowStepModalJsonOpenFromFile"),
+		jsonSaveToFile: button("flowStepModalJsonSaveToFile"),
+		jsonCopySelected: button("flowStepModalJsonCopySelected"),
+		jsonCopyAll: button("flowStepModalJsonCopyAll"),
 		tabForm: button("flowStepModalTabForm"),
 		tabJson: button("flowStepModalTabJson"),
 		validate: button("flowStepModalValidate"),
@@ -98,6 +108,100 @@
 		);
 	}
 
+	function confirmDiscard(message) {
+		if (typeof window.confirm !== "function") return true;
+		return window.confirm(message);
+	}
+
+	function stepFileName() {
+		const raw = String(
+			(state.workingStep && state.workingStep.step_id) || "selected_step",
+		);
+		const safe = raw.replace(/[^A-Za-z0-9._-]+/g, "_");
+		return safe ? safe + ".json" : "selected_step.json";
+	}
+
+	function jsonEditorValue() {
+		if (ui.json) {
+			return String(ui.json.value || "");
+		}
+		return state.jsonDirty
+			? String(state.jsonBuffer || "")
+			: JSON.stringify(state.workingStep || {}, null, 2);
+	}
+
+	function selectedJSONText() {
+		if (!ui.json) return "";
+		const start = ui.json.selectionStart || 0;
+		const end = ui.json.selectionEnd || 0;
+		if (start === end) return "";
+		return String(ui.json.value || "").slice(start, end);
+	}
+
+	function writeJSONBuffer(nextText) {
+		state.jsonBuffer = String(nextText || "");
+		state.jsonDirty = true;
+		if (ui.json) {
+			ui.json.value = state.jsonBuffer;
+		}
+		updateDirtySummary();
+	}
+
+	function downloadJSONFile(fileName, text) {
+		const blobCtor = typeof window.Blob === "function" ? window.Blob : null;
+		const urlApi = window.URL;
+		if (!blobCtor || !urlApi || typeof urlApi.createObjectURL !== "function") {
+			throw new Error("Save to file unavailable in this browser.");
+		}
+		const link = document.createElement("a");
+		const href = urlApi.createObjectURL(
+			new blobCtor([String(text || "")], { type: "application/json" }),
+		);
+		try {
+			link.href = href;
+			link.download = fileName;
+			link.style.display = "none";
+			document.body && document.body.appendChild(link);
+			if (typeof link.click !== "function") {
+				throw new Error("Save to file unavailable in this browser.");
+			}
+			link.click();
+		} finally {
+			if (document.body && link.parentNode === document.body) {
+				document.body.removeChild(link);
+			}
+			if (typeof urlApi.revokeObjectURL === "function") {
+				urlApi.revokeObjectURL(href);
+			}
+		}
+	}
+
+	function confirmRereadDiscards() {
+		if (hasUnsavedModalChanges()) {
+			if (
+				!confirmDiscard(
+					"Discard modal changes and re-read the step from server?",
+				)
+			) {
+				return false;
+			}
+		}
+		const flowEditor = W.AM2FlowEditorState;
+		const snap =
+			flowEditor && flowEditor.getSnapshot ? flowEditor.getSnapshot() : null;
+		if (snap && snap.draftDirty === true) {
+			if (
+				!confirmDiscard(
+					"Discard current unsaved Flow Editor changes " +
+						"and re-read the step from server?",
+				)
+			) {
+				return false;
+			}
+		}
+		return true;
+	}
+
 	function updateDirtySummary() {
 		if (!ui.dirty) return;
 		const pending = model.pendingBufferCount(state);
@@ -142,7 +246,8 @@
 		ui.tabForm && ui.tabForm.classList.toggle("active", state.view === "form");
 		ui.tabJson && ui.tabJson.classList.toggle("active", state.view === "json");
 		ui.body.classList.toggle("is-hidden", state.view !== "form");
-		ui.json.classList.toggle("is-hidden", state.view !== "json");
+		ui.jsonPanel &&
+			ui.jsonPanel.classList.toggle("is-hidden", state.view !== "json");
 		if (state.view === "form") {
 			formApi.renderForm({
 				mount: ui.body,
@@ -187,6 +292,142 @@
 	function canDiscardModalChanges() {
 		if (!hasUnsavedModalChanges()) return true;
 		return window.confirm("Discard unsaved modal changes?");
+	}
+
+	async function rereadStepFromServer() {
+		let ok = false;
+		let next = null;
+		setError("");
+		setStatus("", "");
+		if (!confirmRereadDiscards()) return false;
+		try {
+			if (!W.AM2DSLEditorV3 || !W.AM2DSLEditorV3.reloadAll) {
+				throw new Error("Step re-read unavailable.");
+			}
+			ok = await W.AM2DSLEditorV3.reloadAll({ skipConfirm: true });
+			if (!ok) {
+				setError("Re-read failed.");
+				return false;
+			}
+			if (state.selectedLibraryId && graphOps.setSelectedLibrary) {
+				graphOps.setSelectedLibrary(state.selectedLibraryId);
+			}
+			if (graphOps.setSelectedStep) {
+				graphOps.setSelectedStep(state.originalStepId);
+			}
+			next = currentStep();
+			if (!next) {
+				setError("Selected step is unavailable after re-read.");
+				return false;
+			}
+			state.baselineStep = deepClone(next);
+			state.workingStep = deepClone(next);
+			state.fieldBuffers = {};
+			model.rebuildJsonBuffer(state);
+			setStatus("Step re-read from server.", "ok");
+			refreshTitle();
+			updateDirtySummary();
+			renderView();
+			return true;
+		} catch (err) {
+			setError(String(err || "Re-read failed."));
+			return false;
+		}
+	}
+
+	function abortJSONChanges() {
+		state.jsonBuffer = JSON.stringify(state.workingStep || {}, null, 2);
+		state.jsonDirty = false;
+		setError("");
+		setStatus("JSON changes discarded.", "ok");
+		updateDirtySummary();
+		renderView();
+		return true;
+	}
+
+	async function openJSONFromFile() {
+		let result = null;
+		setError("");
+		setStatus("", "");
+		if (!fileIO || !fileIO.openTextFile) {
+			setError("Open from file unavailable.");
+			return false;
+		}
+		if (hasUnsavedModalChanges()) {
+			if (
+				!confirmDiscard(
+					"Discard current modal changes and open JSON from file?",
+				)
+			) {
+				return false;
+			}
+		}
+		try {
+			result = await fileIO.openTextFile("wizard");
+			if (!result || result.cancelled === true) {
+				return false;
+			}
+			writeJSONBuffer(String(result.text || ""));
+			setStatus("JSON loaded from file.", "ok");
+			return true;
+		} catch (err) {
+			setError(String(err || "Open from file failed."));
+			return false;
+		}
+	}
+
+	async function saveJSONToFile() {
+		setError("");
+		setStatus("", "");
+		try {
+			downloadJSONFile(stepFileName(), jsonEditorValue());
+			setStatus("JSON saved to file.", "ok");
+			return true;
+		} catch (err) {
+			setError(String(err || "Save to file failed."));
+			return false;
+		}
+	}
+
+	function copySelectedJSON() {
+		const text = selectedJSONText();
+		setError("");
+		setStatus("", "");
+		if (!text) {
+			setError("No text selected.");
+			return false;
+		}
+		if (!clip || !clip.copyText) {
+			setError("Copy selected unavailable.");
+			return false;
+		}
+		void clip.copyText(text).then(
+			function () {
+				setStatus("Selected JSON copied.", "ok");
+			},
+			function (err) {
+				setError(String(err || "Copy selected failed."));
+			},
+		);
+		return true;
+	}
+
+	function copyAllJSON() {
+		setError("");
+		setStatus("", "");
+		if (!clip || !clip.copyText) {
+			setError("Copy all unavailable.");
+			return false;
+		}
+		void clip.copyText(jsonEditorValue()).then(
+			function () {
+				setStatus("Full JSON copied.", "ok");
+			},
+			function (err) {
+				setError(String(err || "Copy all failed."));
+			},
+		);
+		return true;
 	}
 
 	async function openStep(stepId) {
@@ -384,6 +625,34 @@
 		ui.save.addEventListener("click", function () {
 			void saveStep();
 		});
+	ui.jsonReread &&
+		ui.jsonReread.addEventListener("click", function () {
+			void rereadStepFromServer();
+		});
+	ui.jsonAbort &&
+		ui.jsonAbort.addEventListener("click", function () {
+			abortJSONChanges();
+		});
+	ui.jsonSave &&
+		ui.jsonSave.addEventListener("click", function () {
+			void saveStep();
+		});
+	ui.jsonOpenFromFile &&
+		ui.jsonOpenFromFile.addEventListener("click", function () {
+			void openJSONFromFile();
+		});
+	ui.jsonSaveToFile &&
+		ui.jsonSaveToFile.addEventListener("click", function () {
+			void saveJSONToFile();
+		});
+	ui.jsonCopySelected &&
+		ui.jsonCopySelected.addEventListener("click", function () {
+			copySelectedJSON();
+		});
+	ui.jsonCopyAll &&
+		ui.jsonCopyAll.addEventListener("click", function () {
+			copyAllJSON();
+		});
 
 	W.AM2FlowStepModalState = {
 		closeModal: closeModal,
@@ -392,6 +661,7 @@
 		},
 		openStep: openStep,
 		restoreBaseline: restoreBaseline,
+		reReadStep: rereadStepFromServer,
 		setView: setView,
 		validateStep: validateStep,
 	};
