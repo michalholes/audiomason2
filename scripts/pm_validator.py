@@ -648,9 +648,14 @@ def _monolith(root: Path, baseline: dict[str, bytes], decision_paths: list[str])
         imports_delta = new_metrics.internal_imports - old_metrics.internal_imports
         exports_delta = new_metrics.exports - old_metrics.exports
         grew = any(value > 0 for value in (loc_delta, imports_delta, exports_delta))
-        if old_metrics.loc >= 1300 and grew:
+        tier = None
+        if new_metrics.loc >= 1300:
+            tier = "huge"
+        elif new_metrics.loc >= 900:
+            tier = "large"
+        if tier == "huge" and grew:
             return RuleResult("MONOLITH", "FAIL", f"huge_file_growth:{path}")
-        if old_metrics.loc >= 900 and (loc_delta > 20 or exports_delta > 2 or imports_delta > 1):
+        if tier == "large" and (loc_delta > 20 or exports_delta > 2 or imports_delta > 1):
             return RuleResult("MONOLITH", "FAIL", f"large_file_growth:{path}")
         hub_failure = _hub_failure(
             path=path,

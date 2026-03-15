@@ -135,6 +135,22 @@ def _fragment_member(
     return member, patch
 
 
+def _module_text(*, exports: int, values: int) -> str:
+    lines: list[str] = []
+    for idx in range(1, exports + 1):
+        lines.extend(
+            [
+                f"def export_{idx}() -> int:",
+                f"    return {idx}",
+                "",
+            ]
+        )
+    for idx in range(1, values + 1):
+        lines.append(f"VALUE_{idx} = {idx}")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def test_valid_patch_passes(tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     _write(repo_root / "docs/readme.txt", "old\n")
@@ -337,6 +353,25 @@ def test_line_length_failure_is_reported_for_js(tmp_path: Path) -> None:
     proc = _run_validator(repo_root, "223", COMMIT_MESSAGE)
     assert proc.returncode == 1
     assert "RULE LINE_LENGTH: FAIL" in proc.stdout
+
+
+def test_monolith_threshold_crossing_failure_is_reported(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    relpath = "scripts/threshold_large.py"
+    before = _module_text(exports=10, values=633)
+    after = _module_text(exports=13, values=987)
+    _write(repo_root / relpath, before)
+    patch = _git_patch(relpath, before, after)
+    _write_patch_zip(
+        repo_root,
+        issue_id="223",
+        commit_message=COMMIT_MESSAGE,
+        members={"patches/per_file/scripts__threshold_large.py.patch": patch},
+    )
+
+    proc = _run_validator(repo_root, "223", COMMIT_MESSAGE)
+    assert proc.returncode == 1
+    assert "RULE MONOLITH: FAIL" in proc.stdout
 
 
 def test_monolith_failure_is_reported(tmp_path: Path) -> None:

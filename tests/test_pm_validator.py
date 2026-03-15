@@ -94,6 +94,22 @@ def _run(*args: str) -> subprocess.CompletedProcess[str]:
     )
 
 
+def _module_text(*, exports: int, values: int) -> str:
+    lines: list[str] = []
+    for idx in range(1, exports + 1):
+        lines.extend(
+            [
+                f"def export_{idx}() -> int:",
+                f"    return {idx}",
+                "",
+            ]
+        )
+    for idx in range(1, values + 1):
+        lines.append(f"VALUE_{idx} = {idx}")
+    lines.append("")
+    return "\n".join(lines)
+
+
 def test_initial_mode_passes(tmp_path: Path) -> None:
     relpath = "scripts/sample.py"
     before = "def value():\n    return 1\n"
@@ -297,3 +313,63 @@ def test_initial_mode_fails_on_non_ascii_patch_member_path(tmp_path: Path) -> No
     proc = _run("601", COMMIT, str(patch_zip), "--workspace-snapshot", str(snapshot))
     assert proc.returncode == 1
     assert "RULE PATCH_MEMBER_PATHS: FAIL - non_ascii_member:" in proc.stdout
+
+
+def test_monolith_threshold_crossing_to_large_fails(tmp_path: Path) -> None:
+    relpath = "scripts/threshold_large.py"
+    before = _module_text(exports=10, values=633)
+    after = _module_text(exports=13, values=987)
+    snapshot = tmp_path / "workspace.zip"
+    patch_zip = tmp_path / "issue_601_v2.zip"
+    _write_zip(snapshot, {relpath: before.encode("utf-8")})
+    _patch_zip(patch_zip, {_safe_member(relpath): _git_patch(relpath, before, after)})
+
+    proc = _run("601", COMMIT, str(patch_zip), "--workspace-snapshot", str(snapshot))
+    assert proc.returncode == 1
+    assert "RULE MONOLITH: FAIL" in proc.stdout
+    assert "large_file_growth:scripts/threshold_large.py" in proc.stdout
+
+
+def test_monolith_threshold_crossing_to_large_within_allowance_passes(tmp_path: Path) -> None:
+    relpath = "scripts/threshold_large.py"
+    before = _module_text(exports=10, values=878)
+    after = _module_text(exports=12, values=880)
+    snapshot = tmp_path / "workspace.zip"
+    patch_zip = tmp_path / "issue_601_v2.zip"
+    _write_zip(snapshot, {relpath: before.encode("utf-8")})
+    _patch_zip(patch_zip, {_safe_member(relpath): _git_patch(relpath, before, after)})
+
+    proc = _run("601", COMMIT, str(patch_zip), "--workspace-snapshot", str(snapshot))
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "RESULT: PASS" in proc.stdout
+    assert "RULE MONOLITH: PASS" in proc.stdout
+
+
+def test_monolith_threshold_crossing_to_huge_fails_on_growth(tmp_path: Path) -> None:
+    relpath = "scripts/threshold_huge.py"
+    before = _module_text(exports=10, values=1279)
+    after = _module_text(exports=10, values=1280)
+    snapshot = tmp_path / "workspace.zip"
+    patch_zip = tmp_path / "issue_601_v2.zip"
+    _write_zip(snapshot, {relpath: before.encode("utf-8")})
+    _patch_zip(patch_zip, {_safe_member(relpath): _git_patch(relpath, before, after)})
+
+    proc = _run("601", COMMIT, str(patch_zip), "--workspace-snapshot", str(snapshot))
+    assert proc.returncode == 1
+    assert "RULE MONOLITH: FAIL" in proc.stdout
+    assert "huge_file_growth:scripts/threshold_huge.py" in proc.stdout
+
+
+def test_monolith_drop_below_large_threshold_passes(tmp_path: Path) -> None:
+    relpath = "scripts/threshold_drop.py"
+    before = _module_text(exports=10, values=880)
+    after = _module_text(exports=12, values=872)
+    snapshot = tmp_path / "workspace.zip"
+    patch_zip = tmp_path / "issue_601_v2.zip"
+    _write_zip(snapshot, {relpath: before.encode("utf-8")})
+    _patch_zip(patch_zip, {_safe_member(relpath): _git_patch(relpath, before, after)})
+
+    proc = _run("601", COMMIT, str(patch_zip), "--workspace-snapshot", str(snapshot))
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "RESULT: PASS" in proc.stdout
+    assert "RULE MONOLITH: PASS" in proc.stdout
