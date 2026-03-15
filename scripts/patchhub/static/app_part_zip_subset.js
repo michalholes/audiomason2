@@ -163,6 +163,7 @@
 		state.draftSelected = {};
 		state.modalOpen = false;
 		state.error = "";
+		phCall("clearPmValidationPayload");
 		hideModal();
 		renderStrip();
 	}
@@ -314,6 +315,7 @@
 		state.manifest = null;
 		state.committedSelected = {};
 		state.draftSelected = {};
+		phCall("clearPmValidationPayload");
 		renderStrip();
 		apiGet(
 			"/api/patches/zip_manifest?path=" + encodeURIComponent(patchPath),
@@ -322,11 +324,13 @@
 			if (!r || r.ok === false || !r.manifest) {
 				state.error = String((r && r.error) || "cannot inspect zip patch");
 				state.manifest = null;
+				phCall("clearPmValidationPayload");
 				renderStrip();
 				phCall("validateAndPreview");
 				return;
 			}
 			state.manifest = r.manifest;
+			phCall("setPmValidationPayload", r.pm_validation || null);
 			resetSelectionToAll("committed");
 			state.draftSelected = {};
 			renderStrip();

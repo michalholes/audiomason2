@@ -164,3 +164,66 @@ process.stdout.write(JSON.stringify({
     result = _run_node(script)
     assert result["open"] is True
     assert "Uploaded: patches/incoming/issue_320.zip" in result["body"]
+
+
+def test_info_pool_strip_prefers_pm_validation_summary_over_hints() -> None:
+    app_path = REPO_ROOT / "scripts" / "patchhub" / "static" / "app.js"
+    pm_path = REPO_ROOT / "scripts" / "patchhub" / "static" / "app_part_pm_validation.js"
+    pool_path = REPO_ROOT / "scripts" / "patchhub" / "static" / "app_part_info_pool.js"
+    raw_output = json.dumps("RESULT: FAIL\nRULE PATCH_BASENAME: FAIL - issue_mismatch")
+    script = (
+        _node_prelude(app_path, pm_path, pool_path)
+        + f"""
+window.PH.call("initInfoPoolUi");
+setInfoPoolHint("enqueue", "missing commit message or patch path");
+window.PH.call("setPmValidationPayload", {{
+  status: "fail",
+  effective_mode: "initial",
+  issue_id: "330",
+  commit_message: "Use PM validator at zip load",
+  patch_path: "issue_330_v1.zip",
+  authority_sources: ["audiomason2-main_20260315.zip"],
+  supplemental_files: [],
+  raw_output: {raw_output},
+}});
+window.PH.call("renderInfoPoolUi");
+process.stdout.write(JSON.stringify({{
+  summary: document.getElementById("uiStatusBar").textContent,
+}}));
+"""
+    )
+    result = _run_node(script)
+    assert result["summary"] == "PM validation: FAIL"
+
+
+def test_info_pool_modal_shows_pm_validation_section_and_raw_output() -> None:
+    app_path = REPO_ROOT / "scripts" / "patchhub" / "static" / "app.js"
+    pm_path = REPO_ROOT / "scripts" / "patchhub" / "static" / "app_part_pm_validation.js"
+    pool_path = REPO_ROOT / "scripts" / "patchhub" / "static" / "app_part_info_pool.js"
+    raw_output = json.dumps("RESULT: PASS\nRULE MONOLITH: PASS - gate_passed")
+    script = (
+        _node_prelude(app_path, pm_path, pool_path)
+        + f"""
+window.PH.call("initInfoPoolUi");
+window.PH.call("setPmValidationPayload", {{
+  status: "pass",
+  effective_mode: "repair-supplemental",
+  issue_id: "330",
+  commit_message: "Use PM validator at zip load",
+  patch_path: "issue_330_v1.zip",
+  authority_sources: ["patched_issue330_v01.zip", "live_workspace_snapshot"],
+  supplemental_files: ["tests/test_sample.txt"],
+  raw_output: {raw_output},
+}});
+window.PH.call("renderInfoPoolUi");
+document.getElementById("uiStatusBar").dispatch("click");
+process.stdout.write(JSON.stringify({{
+  body: document.getElementById("uiStatusModalBody").innerHTML,
+}}));
+"""
+    )
+    result = _run_node(script)
+    assert "PM validation" in result["body"]
+    assert "repair-supplemental" in result["body"]
+    assert "RESULT: PASS" in result["body"]
+    assert "tests/test_sample.txt" in result["body"]

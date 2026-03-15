@@ -37,6 +37,16 @@ function infoPoolSnapshot() {
 	};
 }
 
+function infoPoolPmSummary() {
+	if (!PH || typeof PH.call !== "function") return "";
+	return String(PH.call("getPmValidationSummary") || "");
+}
+
+function infoPoolPmSnapshot() {
+	if (!PH || typeof PH.call !== "function") return null;
+	return PH.call("getPmValidationSnapshot") || null;
+}
+
 function infoPoolSummary(snapshot) {
 	var degraded = Array.isArray(snapshot.degradedNotes)
 		? snapshot.degradedNotes
@@ -44,6 +54,8 @@ function infoPoolSummary(snapshot) {
 	if (degraded.length) {
 		return "DEGRADED MODE: " + String(degraded[degraded.length - 1] || "");
 	}
+	var pmSummary = infoPoolPmSummary();
+	if (pmSummary) return pmSummary;
 	if (snapshot.latestHint && snapshot.latestHint.text) {
 		return String(snapshot.latestHint.text || "");
 	}
@@ -95,6 +107,47 @@ function infoPoolList(lines, emptyText) {
 	);
 }
 
+function infoPoolPre(text, emptyText) {
+	var value = String(text || "");
+	if (!value) {
+		return '<div class="info-pool-empty">' + escapeHtml(emptyText) + "</div>";
+	}
+	return '<pre class="info-pool-pre">' + escapeHtml(value) + "</pre>";
+}
+
+function infoPoolPmSection(snapshot) {
+	if (!snapshot || typeof snapshot !== "object") return "";
+	var metaHtml = [
+		infoPoolHintValue("Status", String(snapshot.status || "")),
+		infoPoolHintValue("Mode", String(snapshot.effective_mode || "")),
+		infoPoolHintValue("Issue", String(snapshot.issue_id || "")),
+		infoPoolHintValue("Message", String(snapshot.commit_message || "")),
+		infoPoolHintValue("Patch", String(snapshot.patch_path || "")),
+		infoPoolHintValue(
+			"Authority",
+			Array.isArray(snapshot.authority_sources)
+				? snapshot.authority_sources.join(", ")
+				: "",
+		),
+		infoPoolHintValue(
+			"Supplemental",
+			Array.isArray(snapshot.supplemental_files)
+				? snapshot.supplemental_files.join(", ")
+				: "",
+		),
+	].join("");
+	return infoPoolSection(
+		"PM validation",
+		'<div class="info-pool-hints">' +
+			metaHtml +
+			"</div>" +
+			infoPoolSection(
+				"Raw validator output",
+				infoPoolPre(String(snapshot.raw_output || ""), "(empty)"),
+			),
+	);
+}
+
 function renderInfoPoolModal() {
 	var modal = infoPoolModalEl("uiStatusModal");
 	var body = infoPoolModalEl("uiStatusModalBody");
@@ -112,17 +165,21 @@ function renderInfoPoolModal() {
 		infoPoolHintValue("Files", String(hints.fs || "")),
 		infoPoolHintValue("Advanced", String(hints.parse || "")),
 	].join("");
+	var pmHtml = infoPoolPmSection(infoPoolPmSnapshot());
 	body.innerHTML = [
 		infoPoolSection("Degraded mode", infoPoolList(degraded, "(empty)")),
 		infoPoolSection(
 			"Current hints",
 			'<div class="info-pool-hints">' + hintHtml + "</div>",
 		),
+		pmHtml,
 		infoPoolSection(
 			"Recent status",
 			infoPoolList(snapshot.statusLines || [], "(empty)"),
 		),
-	].join("");
+	]
+		.filter(Boolean)
+		.join("");
 	modal.classList.toggle("hidden", !infoPoolOpen);
 	modal.setAttribute("aria-hidden", infoPoolOpen ? "false" : "true");
 }

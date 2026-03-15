@@ -21,6 +21,7 @@ from .models import (
     compute_patch_basename,
     job_to_list_item_json,
 )
+from .pm_validation_runtime import build_patch_zip_pm_validation
 from .run_applied_files import collect_job_applied_files
 from .web_jobs_db import WebJobsDatabase
 from .web_jobs_derived import read_effective_log_tail
@@ -288,11 +289,12 @@ def api_patch_zip_manifest(self, qs: dict[str, str]) -> tuple[int, bytes]:
             patch_path=patch_path,
         )
         manifest = build_zip_patch_manifest(patch_path=patch_path, zpath=zpath)
+        pm_validation = build_patch_zip_pm_validation(self, patch_path)
     except ValueError as e:
         return _err(str(e), status=400)
     except Exception:
         return _err("Cannot inspect patch zip", status=500)
-    return _ok({"manifest": manifest})
+    return _ok({"manifest": manifest, "pm_validation": pm_validation})
 
 
 def _queue_block_reason(self) -> str | None:

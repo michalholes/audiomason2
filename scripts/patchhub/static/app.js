@@ -106,6 +106,13 @@ async function loadParts(rt) {
 		"workspaces module missing",
 	);
 	noteLoad(
+		await PH.loadScript(
+			"/static/app_part_pm_validation.js",
+			"app_part_pm_validation",
+		),
+		"pm validation module missing",
+	);
+	noteLoad(
 		await PH.loadScript("/static/app_part_info_pool.js", "app_part_info_pool"),
 		"info pool module missing",
 	);
