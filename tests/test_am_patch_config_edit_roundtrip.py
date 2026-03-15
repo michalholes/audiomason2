@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import tomllib
+
 
 def test_config_edit_roundtrip_preserves_comments_and_builds_policy():
     from pathlib import Path
@@ -21,10 +23,7 @@ def test_config_edit_roundtrip_preserves_comments_and_builds_policy():
         schema,
     )
 
-    # Inline comment on verbosity line must remain.
     assert "# debug | verbose | normal | quiet" in updated
-
-    # Updated values must be present.
     assert 'verbosity = "quiet"' in updated
     assert "ipc_socket_enabled = false" in updated
     assert 'success_archive_name = "{repo}-{branch}.zip"' in updated
@@ -86,3 +85,14 @@ def test_config_edit_roundtrip_handles_root_model_keys() -> None:
     assert 'artifacts_root = "/tmp/am_patch_artifacts"' in updated
     assert 'target_repo_roots = ["/tmp/target_a", "/tmp/target_b"]' in updated
     assert 'active_target_repo_root = "/tmp/target_b"' in updated
+
+    data = tomllib.loads(updated)
+    paths = data["paths"]
+    top_level_keys = {k for k, v in data.items() if not isinstance(v, dict)}
+
+    assert paths["artifacts_root"] == "/tmp/am_patch_artifacts"
+    assert paths["target_repo_roots"] == ["/tmp/target_a", "/tmp/target_b"]
+    assert paths["active_target_repo_root"] == "/tmp/target_b"
+    assert "artifacts_root" not in top_level_keys
+    assert "target_repo_roots" not in top_level_keys
+    assert "active_target_repo_root" not in top_level_keys

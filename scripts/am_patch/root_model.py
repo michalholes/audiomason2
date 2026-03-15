@@ -62,9 +62,7 @@ def resolve_root_model(policy: object, *, runner_root: Path) -> RootModel:
     if active_target is None:
         active_target = runner_root
 
-    enforce_registry = active_target_source == "active_target_repo_root" or (
-        active_target_source == "repo_root" and bool(registry)
-    )
+    enforce_registry = active_target_source in {"active_target_repo_root", "repo_root"}
     if enforce_registry and active_target != runner_root and active_target not in registry:
         raise RunnerError(
             "CONFIG",

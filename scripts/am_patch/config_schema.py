@@ -19,17 +19,17 @@ from typing import Any, get_args, get_origin, get_type_hints
 
 from am_patch.config import Policy
 
-SCHEMA_VERSION = "4"
+SCHEMA_VERSION = "5"
 
 
 # Explicit mapping of policy keys to TOML sections.
 # Section "" means top-level (no [section] header).
 _SECTION_BY_KEY: dict[str, str] = {
     # top-level
-    "repo_root": "",
-    "artifacts_root": "",
-    "target_repo_roots": "",
-    "active_target_repo_root": "",
+    "repo_root": "paths",
+    "artifacts_root": "paths",
+    "target_repo_roots": "paths",
+    "active_target_repo_root": "paths",
     "patch_dir": "",
     "verbosity": "",
     "log_level": "",
@@ -97,9 +97,9 @@ _SECTION_BY_KEY: dict[str, str] = {
     "pytest_routing_mode": "",
     "pytest_roots": "pytest_roots",
     "pytest_tree": "pytest_tree",
-    "pytest_namespace_modules": "pytest_dependencies",
+    "pytest_namespace_modules": "pytest_namespace_modules",
     "pytest_dependencies": "pytest_dependencies",
-    "pytest_external_dependencies": "pytest_dependencies",
+    "pytest_external_dependencies": "pytest_external_dependencies",
     "pytest_full_suite_prefixes": "",
     "gate_docs_include": "",
     "gate_docs_exclude": "",

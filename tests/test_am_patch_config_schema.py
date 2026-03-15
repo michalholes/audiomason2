@@ -18,8 +18,8 @@ def test_policy_schema_exposes_bucketed_pytest_routing_keys() -> None:
     schema = get_policy_schema()
     policy = schema["policy"]
 
-    assert SCHEMA_VERSION == "4"
-    assert schema["schema_version"] == "4"
+    assert SCHEMA_VERSION == "5"
+    assert schema["schema_version"] == "5"
     assert policy["gate_pytest_py_prefixes"]["type"] == "list[str]"
     assert policy["pytest_routing_mode"]["enum"] == ["legacy", "bucketed"]
     assert policy["pytest_roots"]["type"] == "dict[str,str]"
@@ -34,6 +34,10 @@ def test_policy_schema_exposes_root_model_keys() -> None:
     schema = get_policy_schema()
     policy = schema["policy"]
 
+    assert policy["repo_root"]["section"] == "paths"
+    assert policy["artifacts_root"]["section"] == "paths"
+    assert policy["target_repo_roots"]["section"] == "paths"
+    assert policy["active_target_repo_root"]["section"] == "paths"
     assert policy["artifacts_root"]["type"] == "optional[str]"
     assert policy["target_repo_roots"]["type"] == "list[str]"
     assert policy["active_target_repo_root"]["type"] == "optional[str]"

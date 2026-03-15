@@ -21,14 +21,15 @@ ipc_handshake_wait_s = 0
 # repo_root = "/home/pi/audiomason2"
 # patch_dir = "/home/pi/audiomason2/patches"
 
-# Root model (runner-owned)
+# Root model (runner-owned; all keys below belong to [paths])
 # Relative values are resolved against runner_root.
 # In legacy embedded layout, the default config file is scripts/am_patch/am_patch.toml.
 # In root layout, the default config file is am_patch.toml in runner_root.
 # artifacts_root = "/home/pi/am_patch_artifacts"
 target_repo_roots = []
 # active_target_repo_root = "/home/pi/target_repo"
-# Legacy alias for active_target_repo_root:
+# Legacy alias for active_target_repo_root.
+# Non-runner values must resolve to an entry from target_repo_roots.
 # repo_root = "/home/pi/target_repo"
 
 # Canonical (supported by runner; missing in your file)
@@ -172,7 +173,6 @@ dont_touch_paths = [
   "biome.json",
   "pytest.ini",
   "pyproject.toml",
-  "scripts/am_patch/am_patch.toml",
   ".github/workflows/ci.yml"
 ]
 apply_failure_partial_gates_policy = "repair_only"

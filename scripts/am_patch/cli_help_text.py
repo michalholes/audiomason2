@@ -17,7 +17,10 @@ Options:
 
   --config PATH
       Use PATH as config file (CLI only; not a config key).
-      [default: scripts/am_patch/am_patch.toml]
+      Relative paths are resolved against runner_root.
+      Default depends on detected runner layout.
+      Embedded default: scripts/am_patch/am_patch.toml
+      Root-layout default: am_patch.toml in runner_root
 
   -q, -v, -n, -d, --verbosity {{debug, verbose, normal, warning, quiet}}
       Control screen output amount. [default: verbose]
@@ -78,8 +81,10 @@ CORE / INFO
 
   --config PATH
       Use PATH as config file (CLI only; not a config key).
-      Relative paths are resolved against repo root.
-      [default: scripts/am_patch/am_patch.toml]
+      Relative paths are resolved against runner_root.
+      Default depends on detected runner layout.
+      Embedded default: scripts/am_patch/am_patch.toml
+      Root-layout default: am_patch.toml in runner_root
 
   --version
       Print runner version and exit.

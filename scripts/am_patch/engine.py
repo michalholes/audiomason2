@@ -52,6 +52,20 @@ from am_patch.workspace_promotion_pipeline import (
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SCRIPTS_DIR = Path(__file__).resolve().parents[1]
 
+
+def _detect_engine_roots(module_file: str | Path | None = None) -> tuple[Path, Path]:
+    module_path = Path(module_file) if module_file is not None else Path(__file__)
+    package_dir = module_path.resolve().parent
+    if package_dir.name != "am_patch":
+        raise RunnerError("CONFIG", "INVALID", f"unexpected am_patch package path: {package_dir}")
+    import_root = package_dir.parent
+    if import_root.name == "scripts" and (import_root / "am_patch").is_dir():
+        runner_root = import_root.parent
+    else:
+        runner_root = import_root
+    return runner_root, import_root
+
+
 __all__ = [
     "RunContext",
     "build_effective_policy",
@@ -73,7 +87,8 @@ def build_effective_policy(argv: list[str]) -> int | tuple[Any, Policy, Path, st
     cli = parse_args(argv)
 
     defaults = Policy()
-    config_path = resolve_config_path(cli.config_path, _REPO_ROOT, _SCRIPTS_DIR)
+    runner_root, import_root = _detect_engine_roots()
+    config_path = resolve_config_path(cli.config_path, runner_root, import_root)
     cfg, used_cfg = load_config(config_path)
     policy = build_policy(defaults, cfg)
 

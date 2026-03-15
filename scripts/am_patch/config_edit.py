@@ -250,7 +250,10 @@ def _scan_sections(lines: list[str]) -> dict[str, _Span]:
 
 
 def _find_assignment(lines: list[str], span: _Span, key: str) -> int | None:
-    for i in range(span.start, span.end):
+    start = span.start
+    if start < span.end and lines[start].lstrip().startswith("["):
+        start += 1
+    for i in range(start, span.end):
         line = lines[i]
         stripped = line.lstrip()
         if not stripped or stripped.startswith("#"):
@@ -285,8 +288,11 @@ def _replace_rhs(line: str, rhs: str) -> str:
 
 def _find_insertion_index(lines: list[str], span: _Span) -> int:
     # Insert before the next section header or at EOF. Prefer after last assignment in span.
+    start = span.start
+    if start < span.end and lines[start].lstrip().startswith("["):
+        start += 1
     last_assign = None
-    for i in range(span.start, span.end):
+    for i in range(start, span.end):
         stripped = lines[i].lstrip()
         if stripped.startswith("["):
             break

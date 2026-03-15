@@ -409,6 +409,7 @@ def test_build_paths_and_logger_breaks_active_tty_status_before_failure_dump(
     ctx = None
     try:
         policy = policy_cls()
+        policy.target_repo_roots = [str(tmp_path)]
         policy.repo_root = str(tmp_path)
         policy.current_log_symlink_enabled = False
         policy.verbosity = "normal"
@@ -427,7 +428,7 @@ def test_build_paths_and_logger_breaks_active_tty_status_before_failure_dump(
         def _write_screen(s: str) -> None:
             events.append(("screen", s))
 
-        ctx.logger._write_screen = _write_screen  # type: ignore[method-assign]
+        ctx.logger._write_screen = _write_screen
         ctx.logger.run_logged(
             [
                 sys.executable,
@@ -491,7 +492,7 @@ def test_ipc_cancel_interrupts_active_subprocess(tmp_path: Path) -> None:
 
     policy = Policy()
     policy.current_log_symlink_enabled = False
-    policy.ipc_enabled = True
+    policy.ipc_socket_enabled = True
     status = StatusReporter(enabled=False)
     ctx = build_startup_logger_and_ipc(
         cli=SimpleNamespace(issue_id="1001", mode="workspace"),
@@ -561,7 +562,12 @@ def test_finalize_and_report_emits_canceled_result(tmp_path: Path) -> None:
     import am_patch.engine as engine_mod
 
     original = engine_mod.run_post_run_pipeline
-    engine_mod.run_post_run_pipeline = lambda ctx, result: cancel_exit_code
+
+    def _fake_run_post_run_pipeline(*, ctx: object, result: object) -> int:
+        del ctx, result
+        return cancel_exit_code
+
+    engine_mod.run_post_run_pipeline = _fake_run_post_run_pipeline
     try:
         rc = finalize_and_report(ctx, result)
     finally:

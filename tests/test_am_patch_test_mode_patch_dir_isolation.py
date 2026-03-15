@@ -34,6 +34,7 @@ def test_test_mode_isolates_patch_dir_layout(tmp_path: Path) -> None:
     ctx = None
     try:
         policy = policy_cls()
+        policy.target_repo_roots = [str(tmp_path)]
         policy.repo_root = str(tmp_path)
         policy.test_mode = True
         policy.test_mode_isolate_patch_dir = True
