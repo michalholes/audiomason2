@@ -565,3 +565,37 @@ Interactions:
 - Applies only when biome_format=true.
 - Legalized files must match gate_biome_extensions (case-insensitive suffix match).
 Related: biome_format, gate_biome_extensions
+
+## Key: artifacts_root
+Key: artifacts_root
+Type: str|null
+Default: null
+Meaning: Selects the root directory used for runner-owned artifacts.
+Notes:
+- If null, artifacts_root defaults to runner_root.
+- Relative values are resolved against runner_root.
+- This key does not select the patched git repository.
+Related: patch_dir_name, patch_layout_logs_dir, patch_layout_json_dir, patch_layout_workspaces_dir, patch_layout_successful_dir, patch_layout_unsuccessful_dir, active_target_repo_root
+
+## Key: target_repo_roots
+Key: target_repo_roots
+Type: list[str]
+Default: []
+Meaning: Optional registry of allowed git target repository roots.
+Notes:
+- Relative entries are resolved against runner_root.
+- Entries identify candidate repositories that may be selected by active_target_repo_root.
+- This key does not enable multi-target execution in a single run.
+Related: active_target_repo_root, repo_root
+
+## Key: active_target_repo_root
+Key: active_target_repo_root
+Type: str|null
+Default: null
+Meaning: Selects the git repository patched by the current run.
+Notes:
+- If null, active_target_repo_root defaults to runner_root.
+- Relative values are resolved against runner_root.
+- The effective value must resolve either to runner_root or to one entry from target_repo_roots.
+- Exactly one active target repository is allowed per run.
+Related: target_repo_roots, artifacts_root, repo_root

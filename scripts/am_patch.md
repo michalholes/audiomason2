@@ -4,6 +4,15 @@ This manual describes how *you* use the new runner day-to-day so that runs are d
 
 ## Concepts (minimal)
 
+### Root model
+
+- The runner may live in one git repository while patching a different git repository.
+- The runner repository is the runner_root.
+- Runner-owned artifacts live under artifacts_root.
+- The repository being patched for the current run is active_target_repo_root.
+- The configuration may list multiple candidate target repositories via target_repo_roots.
+- A single run always uses exactly one active target repository.
+- Multi-target execution in one run is not supported.
 
 ### Gates and COMPILE
 - After the patch is applied, the runner executes gates.

@@ -30,6 +30,27 @@ The config file path itself is CLI-only and must not be a config key.
 
 The following keys are normative (defaults shown):
 
+Additional normative root model keys:
+
+- artifacts_root = null|string
+- target_repo_roots = []|list[str]
+- active_target_repo_root = null|string
+
+Normative semantics:
+
+- runner_root is the repository root that contains the runner entrypoint being executed.
+- runner_root is a runtime concept, not a Policy key.
+- artifacts_root selects where runner-owned artifacts live. These include patch inputs, logs, JSON logs, workspaces, lockfiles, successful archives, unsuccessful archives, issue diff bundles, and patch-dir IPC assets.
+- If artifacts_root is null, the default artifacts root is runner_root.
+- target_repo_roots is an optional registry of allowed git target repository roots.
+- active_target_repo_root selects the git repository patched by the current run.
+- If active_target_repo_root is null, the default active target repository root is runner_root.
+- active_target_repo_root MUST resolve either to runner_root or to one entry from target_repo_roots.
+- A single runner invocation MUST use exactly one active_target_repo_root.
+- Multi-target execution in a single run is forbidden.
+- Non-git targets are out of scope.
+
+
 -   patch_dir_name = "patches"
 -   patch_layout_logs_dir = "logs"
 -   patch_layout_json_dir = "logs_json"
@@ -368,6 +389,15 @@ mode. - `delete_workspace_on_success` does not apply in test mode.
 -   Loaded on every run.
 -   Source of each effective value is logged.
 
+Root resolution contract:
+
+- The config file remains runner-owned.
+- Relative config paths passed via CLI are resolved against runner_root.
+- Relative artifacts_root values are resolved against runner_root.
+- Relative target_repo_roots entries are resolved against runner_root.
+- Relative active_target_repo_root values are resolved against runner_root.
+- The config file path itself remains CLI-only and is not a Policy key.
+
 ### 3.2 CLI (normative)
 
 ### 3.2.1 Help contract
@@ -416,6 +446,10 @@ Every behavior has a config key and is overridable via CLI, primarily
 via:
 
 -   `--override KEY=VALUE` (repeatable)
+
+The root-model keys artifacts_root, target_repo_roots, and active_target_repo_root
+are part of the override symmetry contract and MUST be controllable via
+--override KEY=VALUE.
 
 ------------------------------------------------------------------------
 
@@ -940,6 +974,15 @@ Fan delta semantics:
     with the literal value `n/a`.
 ## 7. Promotion Rules
 
+Root-binding rule:
+
+- Workspace creation, workspace refresh, scope evaluation, promotion planning,
+  promotion execution, live-repo guards, finalize-live behavior, commit, and push
+  are all bound to active_target_repo_root.
+- Runner-owned artifacts are bound to artifacts_root.
+- The runner MUST NOT implicitly treat runner_root and active_target_repo_root as
+  the same repository.
+
 ### 7.1 Workspace live
 
 Promotion set includes: - Declared & touched files - Blessed gate
@@ -1233,6 +1276,12 @@ Precedence: NO_COLOR \> CLI \> config \> default.
 ------------------------------------------------------------------------
 
 ## Appendix A. Implemented CLI Surface and Policy Coverage
+
+### root-model
+
+- `artifacts_root` changes artifact placement and workspace/log/archive location semantics
+- `target_repo_roots` changes allowed target-repository selection semantics
+- `active_target_repo_root` changes which git repository is patched by the run
 
 Tento dodatok enumeruje poloky, ktor existuj v implementcii
 (`scripts/am_patch/cli.py`, `scripts/am_patch/config.py`), ale neboli
@@ -1602,6 +1651,15 @@ Schema export:
 - The implementation constant SCHEMA_VERSION MUST be bumped when the schema shape changes.
 
 Editing engine:
+
+Schema/glossary requirements for the root model:
+
+- The Policy surface MUST describe artifacts_root, target_repo_roots, and
+  active_target_repo_root.
+- Schema export help text for these keys MUST match the glossary.
+- A schema shape change for these keys requires a SCHEMA_VERSION bump in the
+  implementation issue.
+
 - Module: scripts/am_patch/config_edit.py
 - validate_patchhub_update(values: dict, schema: dict) -> dict
   - Reject unknown keys.
