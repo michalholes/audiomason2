@@ -1300,6 +1300,45 @@ Idle auto-select:
 Running job exception:
 - If a job is running and no job is selected, the UI selects the running job.
 
+7.1.6A PM Validation Summary Strip and Operator Info Modal (UI)
+
+When a patch zip is loaded through the zip-manifest flow:
+- PatchHub MUST run the same `pm_validator.py` used by chat delivery for
+  diagnostic parity.
+- This PM validation run is load-time only. Enqueue MUST NOT trigger a second PM
+  validator run and PM FAIL MUST NOT block patch job creation.
+- The shared `uiStatusBar` MUST show a short PM validation summary after load.
+  Required labels are:
+  - `PM validation: PASS`
+  - `PM validation: FAIL`
+  - `PM validation: ERROR`
+  - `PM validation: MISSING CONTEXT`
+- PM validation summary priority in the strip is:
+  1. degraded mode
+  2. PM validation summary
+  3. latest pooled hint
+  4. recent status line
+- Clicking the status bar MUST open the existing `Operator info` modal.
+- The modal MUST expose a dedicated `PM validation` section containing:
+  - PM status
+  - effective mode
+  - issue id
+  - commit message
+  - patch path
+  - authority sources
+  - supplemental files, if any
+  - full raw validator output in a preformatted block
+- Raw PM validator output MUST NOT be merged into `Recent status`.
+
+Authority chain for load-time PM validation:
+- Initial validation prefers the latest repo snapshot success archive zip.
+- If no success archive exists, PatchHub falls back to a live workspace snapshot
+  zip created at load time.
+- Repair validation uses the latest `patched_issue<issue>_*.zip` overlay first.
+- If the validator requests supplemental files, PatchHub reruns repair
+  validation only with the exact listed `--supplemental-file` paths and a
+  workspace snapshot.
+
 7.1.7 Missing patchPath Clears Run Fields (UI) (HARD)
 
 Rule:
@@ -1636,7 +1675,11 @@ these fields are detail-only and MUST NOT be added to list items.
 
 7.2.9A GET /api/patches/zip_manifest?path=<string>
 Output:
-{ "ok": true, "manifest": <ZipPatchManifest JSON> }
+{
+  "ok": true,
+  "manifest": <ZipPatchManifest JSON>,
+  "pm_validation": <PatchPmValidation JSON>
+}
 Error 400 if path missing, path is not a zip, or the zip cannot be resolved.
 
 ZipPatchManifest JSON:
@@ -1656,7 +1699,24 @@ ZipPatchManifest JSON:
   "root_metadata_present": ["COMMIT_MESSAGE.txt", "ISSUE_NUMBER.txt", ...]
 }
 
-Subset selection is available only when selectable is true.
+PatchPmValidation JSON:
+{
+  "status": "pass|fail|error|missing_context",
+  "effective_mode": "initial|repair-overlay-only|repair-supplemental",
+  "issue_id": "<string>",
+  "commit_message": "<string>",
+  "patch_path": "<string>",
+  "authority_sources": ["<string>", ...],
+  "supplemental_files": ["<string>", ...],
+  "raw_output": "<string>"
+}
+
+Rules:
+- PM validation is computed exactly once for the loaded zip patch.
+- The endpoint MUST use zip-derived issue/message inputs with the same autofill
+  precedence used by PatchHub patch intake.
+- The endpoint MUST NOT trigger enqueue or any patch execution side effects.
+- Subset selection remains available only when selectable is true.
 
 7.2.10 GET /api/jobs/<job_id>/log_tail?lines=<int>
 Output:
