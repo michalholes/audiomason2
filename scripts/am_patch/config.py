@@ -1,12 +1,11 @@
 from __future__ import annotations
 
 import re
-import tomllib
 from copy import deepcopy
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Any
 
+from .config_file import _flatten_sections, load_config
 from .config_gate_execution import apply_gate_execution_cfg
 from .config_ipc_surface import apply_ipc_cfg_surface
 from .errors import RunnerError
@@ -21,22 +20,7 @@ from .pytest_namespace_config import (
 )
 from .success_archive_retention import validate_success_archive_retention
 
-
-def default_config_path(scripts_dir: Path) -> Path:
-    """Return the default config path (repo-relative, deterministic)."""
-    return scripts_dir / "am_patch" / "am_patch.toml"
-
-
-def resolve_config_path(cli_config: str | None, repo_root: Path, scripts_dir: Path) -> Path:
-    """Resolve config path.
-
-    - If cli_config is provided, use it (relative paths are resolved against repo_root).
-    - Otherwise use the default config path under scripts/.
-    """
-    if cli_config:
-        p = Path(cli_config)
-        return p if p.is_absolute() else (repo_root / p)
-    return default_config_path(scripts_dir)
+__all__ = ["Policy", "build_policy", "load_config", "_flatten_sections"]
 
 
 @dataclass
@@ -52,6 +36,9 @@ class Policy(PolicyMonolithMixin):
             self._src.setdefault(f.name, "default")
 
     repo_root: str | None = None
+    artifacts_root: str | None = None
+    target_repo_roots: list[str] = field(default_factory=list)
+    active_target_repo_root: str | None = None
     patch_dir: str | None = None
     patch_dir_name: str = "patches"
 
@@ -429,51 +416,6 @@ def _coerce_override_value(cur: object, raw: object) -> object:
     return raw
 
 
-def _flatten_sections(cfg: dict[str, object]) -> dict[str, object]:
-    if not isinstance(cfg, dict):
-        return {}
-    out: dict[str, object] = dict(cfg)
-    for section in (
-        "git",
-        "paths",
-        "workspace",
-        "patch",
-        "scope",
-        "gates",
-        "promotion",
-        "security",
-        "logging",
-        "audit",
-    ):
-        sec = cfg.get(section)
-        if isinstance(sec, dict):
-            for k, v in sec.items():
-                if isinstance(k, str):
-                    out.setdefault(k, v)
-
-    if "order" in out and "gates_order" not in out:
-        out["gates_order"] = out["order"]
-    if "enforce_files_only" in out and "enforce_allowed_files" not in out:
-        out["enforce_allowed_files"] = out["enforce_files_only"]
-    if "rollback_on_failure" in out and "no_rollback" not in out:
-        out["no_rollback"] = not bool(out["rollback_on_failure"])
-    if "delete_on_success" in out and "delete_workspace_on_success" not in out:
-        out["delete_workspace_on_success"] = out["delete_on_success"]
-    if "fetch_always" in out:
-        pass
-    if "enforce_files_only" in out:
-        pass
-
-    return out
-
-
-def load_config(path: Path) -> tuple[dict[str, Any], bool]:
-    if not path.exists():
-        return {}, False
-    data = tomllib.loads(path.read_text(encoding="utf-8"))
-    return _flatten_sections(data), True
-
-
 def _mark_cfg(p: Policy, cfg: dict[str, Any], key: str) -> None:
     if key in cfg:
         p._src[key] = "config"
@@ -490,6 +432,12 @@ def build_policy(defaults: Policy, cfg: dict[str, Any]) -> Policy:
 
     p.repo_root = _as_str(cfg, "repo_root", p.repo_root)
     _mark_cfg(p, cfg, "repo_root")
+    p.artifacts_root = _as_str(cfg, "artifacts_root", p.artifacts_root)
+    _mark_cfg(p, cfg, "artifacts_root")
+    p.target_repo_roots = _as_list_str(cfg, "target_repo_roots", p.target_repo_roots)
+    _mark_cfg(p, cfg, "target_repo_roots")
+    p.active_target_repo_root = _as_str(cfg, "active_target_repo_root", p.active_target_repo_root)
+    _mark_cfg(p, cfg, "active_target_repo_root")
     p.patch_dir = _as_str(cfg, "patch_dir", p.patch_dir)
     _mark_cfg(p, cfg, "patch_dir")
     p.patch_dir_name = str(cfg.get("patch_dir_name", p.patch_dir_name))

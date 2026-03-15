@@ -19,7 +19,7 @@ from typing import Any, get_args, get_origin, get_type_hints
 
 from am_patch.config import Policy
 
-SCHEMA_VERSION = "3"
+SCHEMA_VERSION = "4"
 
 
 # Explicit mapping of policy keys to TOML sections.
@@ -27,6 +27,9 @@ SCHEMA_VERSION = "3"
 _SECTION_BY_KEY: dict[str, str] = {
     # top-level
     "repo_root": "",
+    "artifacts_root": "",
+    "target_repo_roots": "",
+    "active_target_repo_root": "",
     "patch_dir": "",
     "verbosity": "",
     "log_level": "",
@@ -231,6 +234,9 @@ _LABEL_BY_KEY: dict[str, str] = {
     "live_repo_guard": "Git safety: live repo guard",
     "live_repo_guard_scope": "Git safety: live repo guard scope",
     "repo_root": "Paths: repo root",
+    "artifacts_root": "Paths: artifacts root",
+    "target_repo_roots": "Paths: target repo roots",
+    "active_target_repo_root": "Paths: active target repo root",
     "runner_subprocess_timeout_s": "Runner: subprocess timeout (s)",
     "ruff_autofix": "Ruff: autofix",
     "ruff_autofix_legalize_outside": "Ruff: autofix legalize outside",
@@ -380,8 +386,20 @@ _HELP_BY_KEY: dict[str, str] = {
         "See: scripts/am_patch_policy_glossary.md## Key: live_repo_guard_scope"
     ),
     "repo_root": (
-        "Optional override for the repository root path. "
+        "Optional legacy override for the active target repository root path. "
         "See: scripts/am_patch_policy_glossary.md## Key: repo_root"
+    ),
+    "artifacts_root": (
+        "Optional override for the runner-owned artifacts root path. "
+        "See: scripts/am_patch_policy_glossary.md## Key: artifacts_root"
+    ),
+    "target_repo_roots": (
+        "Optional registry of allowed target repository roots. "
+        "See: scripts/am_patch_policy_glossary.md## Key: target_repo_roots"
+    ),
+    "active_target_repo_root": (
+        "Optional override for the active target repository root path. "
+        "See: scripts/am_patch_policy_glossary.md## Key: active_target_repo_root"
     ),
     "runner_subprocess_timeout_s": (
         "Hard timeout for runner subprocesses in seconds; 0 disables it. "

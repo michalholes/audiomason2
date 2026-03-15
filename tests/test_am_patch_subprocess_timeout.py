@@ -299,7 +299,7 @@ def test_resolve_repo_root_timeout_falls_back_to_cwd(
     assert "TimeoutExpired" in diagnostic
 
 
-def test_build_paths_and_logger_surfaces_repo_root_fallback_stderr(
+def test_build_paths_and_logger_defaults_target_to_runner_root(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     (
@@ -318,8 +318,6 @@ def test_build_paths_and_logger_surfaces_repo_root_fallback_stderr(
 
     scripts_dir = Path(__file__).parent.parent / "scripts"
     sys.path.insert(0, str(scripts_dir))
-    import subprocess
-
     import am_patch.runtime as runtime_mod
 
     old = {
@@ -335,35 +333,25 @@ def test_build_paths_and_logger_surfaces_repo_root_fallback_stderr(
 
     ctx = None
     try:
-        consume_resolve_repo_root_diagnostic()
-
-        def _boom(*args, **kwargs):
-            raise subprocess.CalledProcessError(
-                returncode=128,
-                cmd=["git", "rev-parse", "--show-toplevel"],
-                stderr="fatal: not a git repository\n",
-            )
-
-        monkeypatch.setattr("am_patch.repo_root.subprocess.run", _boom)
-        monkeypatch.chdir(tmp_path)
-
         policy = policy_cls()
         policy.repo_root = None
         policy.current_log_symlink_enabled = False
         policy.verbosity = "quiet"
         policy.log_level = "warning"
         policy.json_out = False
+        policy.ipc_socket_enabled = False
 
         cli = SimpleNamespace(issue_id="1000", mode="workspace")
         cfg = tmp_path / "am_patch_test.toml"
         cfg.write_text("", encoding="utf-8")
 
         ctx = build_paths_and_logger(cli, policy, cfg, "test")
-        assert ctx.repo_root == tmp_path
+        expected_runner_root = Path(__file__).resolve().parent.parent
+        assert ctx.runner_root == expected_runner_root
+        assert ctx.repo_root == expected_runner_root
+        assert ctx.artifacts_root == expected_runner_root
         log_data = ctx.log_path.read_text(encoding="utf-8")
-        assert "repo-root fallback to Path.cwd()" in log_data
-        assert "fatal: not a git repository" in log_data
-        assert "using Path.cwd() fallback" in log_data
+        assert "repo-root fallback to Path.cwd()" not in log_data
         assert consume_resolve_repo_root_diagnostic() is None
     finally:
         if ctx is not None:
@@ -426,6 +414,7 @@ def test_build_paths_and_logger_breaks_active_tty_status_before_failure_dump(
         policy.verbosity = "normal"
         policy.log_level = "quiet"
         policy.json_out = False
+        policy.ipc_socket_enabled = False
 
         cli = SimpleNamespace(issue_id="1000", mode="workspace")
         cfg = tmp_path / "am_patch_test.toml"
@@ -647,3 +636,60 @@ def test_status_heartbeat_and_result_event_keep_ndjson_valid(tmp_path: Path) -> 
     assert result_evt["final_stage"] is None
     assert result_evt["final_reason"] is None
     assert result_evt["json_path"] == str(tmp_path / "am_patch.jsonl")
+
+
+def test_build_paths_and_logger_supports_cross_repo_target_and_artifacts_root(
+    tmp_path: Path,
+) -> None:
+    (_, policy_cls, _, _, _, _, _, _, build_paths_and_logger, _, _) = _import_am_patch()
+
+    scripts_dir = Path(__file__).parent.parent / "scripts"
+    sys.path.insert(0, str(scripts_dir))
+    import am_patch.runtime as runtime_mod
+
+    old = {
+        "status": runtime_mod.status,
+        "logger": runtime_mod.logger,
+        "policy": runtime_mod.policy,
+        "repo_root": runtime_mod.repo_root,
+        "paths": runtime_mod.paths,
+        "cli": runtime_mod.cli,
+        "run_badguys": runtime_mod.run_badguys,
+        "RunnerError": runtime_mod.RunnerError,
+    }
+
+    ctx = None
+    try:
+        target_a = tmp_path / "target_a"
+        target_b = tmp_path / "target_b"
+        artifacts = tmp_path / "artifacts"
+        target_a.mkdir()
+        target_b.mkdir()
+        artifacts.mkdir()
+
+        policy = policy_cls()
+        policy.target_repo_roots = [str(target_a), str(target_b)]
+        policy.active_target_repo_root = str(target_b)
+        policy.artifacts_root = str(artifacts)
+        policy.current_log_symlink_enabled = False
+        policy.verbosity = "quiet"
+        policy.log_level = "quiet"
+
+        cli = SimpleNamespace(issue_id="1001", mode="workspace")
+        cfg = tmp_path / "am_patch_test.toml"
+        cfg.write_text("", encoding="utf-8")
+
+        ctx = build_paths_and_logger(cli, policy, cfg, "test")
+        assert ctx.repo_root == target_b.resolve()
+        assert ctx.artifacts_root == artifacts.resolve()
+        assert ctx.patch_root == artifacts.resolve() / policy.patch_dir_name
+        assert ctx.paths.patch_dir == ctx.patch_root
+        assert ctx.paths.workspaces_dir.parent == ctx.patch_root
+    finally:
+        if ctx is not None:
+            if ctx.ipc is not None:
+                ctx.ipc.stop()
+            ctx.status.stop()
+            ctx.logger.close()
+        for key, value in old.items():
+            setattr(runtime_mod, key, value)

@@ -1,44 +1,28 @@
 from __future__ import annotations
 
-import os
 import shutil
 from contextlib import suppress
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from am_patch import git_ops, runtime
+from am_patch import git_ops
 from am_patch.apply_failure_gates_policy import evaluate_apply_failure_gates_policy_audited
 from am_patch.archive import archive_patch
 from am_patch.audit_rubric_check import check_audit_rubric_coverage
 from am_patch.cli import parse_args
-from am_patch.config import (
-    Policy,
-    apply_cli_overrides,
-    build_policy,
-    load_config,
-    policy_for_log,
-    resolve_config_path,
-)
+from am_patch.config import Policy, apply_cli_overrides, build_policy, policy_for_log
+from am_patch.config_file import load_config, resolve_config_path
 from am_patch.engine_run_gates import run_finalize_gates
-from am_patch.engine_startup_runtime import build_startup_logger_and_ipc
 from am_patch.errors import CANCEL_EXIT_CODE, RunnerCancelledError, RunnerError, fingerprint
 from am_patch.execution_context import open_execution_context
 from am_patch.final_summary import build_terminal_summary, emit_final_summary
-from am_patch.gates import run_badguys
-from am_patch.ipc_socket import IpcController
 from am_patch.lock import FileLock
-from am_patch.log import Logger, new_log_file
 from am_patch.patch_archive_select import select_latest_issue_patch
 from am_patch.patch_exec import run_patch, run_unified_patch_bundle
 from am_patch.patch_input import resolve_patch_plan
-from am_patch.paths import (
-    _workspace_store_current_patch,
-    default_paths,
-    ensure_dirs,
-)
+from am_patch.paths import _workspace_store_current_patch
 from am_patch.post_run_pipeline import run_post_run_pipeline
-from am_patch.repo_root import consume_resolve_repo_root_diagnostic, is_under, resolve_repo_root
+from am_patch.repo_root import is_under
 from am_patch.run_result import RunResult, _normalize_failure_summary, build_run_result
 from am_patch.runner_failure_detail import (
     render_runner_error_detail,
@@ -55,8 +39,8 @@ from am_patch.runtime import (
     _under_targets,
 )
 from am_patch.scope import changed_paths, enforce_scope_delta
+from am_patch.startup_context import RunContext, build_paths_and_logger
 from am_patch.state import save_state, update_union
-from am_patch.status import StatusReporter
 from am_patch.validation import run_validation
 from am_patch.version import RUNNER_VERSION
 from am_patch.workspace import drop_checkpoint
@@ -68,30 +52,13 @@ from am_patch.workspace_promotion_pipeline import (
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 _SCRIPTS_DIR = Path(__file__).resolve().parents[1]
 
-
-@dataclass
-class RunContext:
-    cli: Any
-    policy: Policy
-    config_path: Path
-    used_cfg: str
-    repo_root: Path
-    patch_root: Path
-    patch_dir: Path
-    isolated_work_patch_dir: Path | None
-    paths: Any
-    log_path: Path
-    json_path: Path | None
-    logger: Logger
-    status: StatusReporter
-    verbosity: str
-    log_level: str
-    ipc: IpcController | None
-    lock: FileLock | None = None
-
-
-def _resolve_repo_root(timeout_s: int = 0) -> Path:
-    return resolve_repo_root(timeout_s=timeout_s)
+__all__ = [
+    "RunContext",
+    "build_effective_policy",
+    "build_paths_and_logger",
+    "run_mode",
+    "finalize_and_report",
+]
 
 
 def _is_under(child: Path, parent: Path) -> bool:
@@ -221,111 +188,12 @@ def build_effective_policy(argv: list[str]) -> int | tuple[Any, Policy, Path, st
     return cli, policy, Path(config_path), str(used_cfg)
 
 
-def build_paths_and_logger(
-    cli: Any, policy: Policy, config_path: Path, used_cfg: str
-) -> RunContext:
-    repo_root = (
-        Path(policy.repo_root)
-        if policy.repo_root
-        else _resolve_repo_root(policy.runner_subprocess_timeout_s)
-    )
-    patch_root = Path(policy.patch_dir) if policy.patch_dir else (repo_root / policy.patch_dir_name)
-    isolated_work_patch_dir: Path | None = None
-    patch_dir = patch_root
-    if (
-        policy.test_mode
-        and getattr(policy, "test_mode_isolate_patch_dir", True)
-        and policy.patch_dir is None
-        and cli.issue_id is not None
-    ):
-        isolated_work_patch_dir = (
-            patch_root / "_test_mode" / f"issue_{cli.issue_id}_pid_{os.getpid()}"
-        )
-        patch_dir = isolated_work_patch_dir
-    paths = default_paths(
-        repo_root=repo_root,
-        patch_dir=patch_dir,
-        logs_dir_name=policy.patch_layout_logs_dir,
-        json_dir_name=policy.patch_layout_json_dir,
-        workspaces_dir_name=policy.patch_layout_workspaces_dir,
-        successful_dir_name=policy.patch_layout_successful_dir,
-        unsuccessful_dir_name=policy.patch_layout_unsuccessful_dir,
-        lockfile_name=policy.lockfile_name,
-        current_log_symlink_name=policy.current_log_symlink_name,
-    )
-    ensure_dirs(paths)
-
-    log_path = new_log_file(
-        paths.logs_dir,
-        issue_id=cli.issue_id,
-        ts_format=policy.log_ts_format,
-        issue_template=policy.log_template_issue,
-        finalize_template=policy.log_template_finalize,
-    )
-    verbosity = getattr(policy, "verbosity", "verbose")
-    log_level = getattr(policy, "log_level", "verbose")
-    status = StatusReporter(enabled=(verbosity != "quiet"))
-    json_path: Path | None = None
-    if getattr(policy, "json_out", False):
-        if cli.issue_id is not None:
-            json_name = f"am_patch_issue_{cli.issue_id}.jsonl"
-        else:
-            json_name = "am_patch_finalize.jsonl"
-        json_path = paths.json_dir / json_name
-
-    startup = build_startup_logger_and_ipc(
-        cli=cli,
-        policy=policy,
-        patch_dir=patch_dir,
-        log_path=log_path,
-        json_path=json_path,
-        status=status,
-        verbosity=verbosity,
-        log_level=log_level,
-        symlink_path=paths.symlink_path,
-    )
-    logger = startup.logger
-    ipc = startup.ipc
-
-    repo_root_diagnostic = consume_resolve_repo_root_diagnostic()
-    if repo_root_diagnostic:
-        logger.emit_warning_detail(repo_root_diagnostic)
-
-    status.start()
-
-    runtime.status = status
-    runtime.logger = logger
-    runtime.policy = policy
-    runtime.repo_root = repo_root
-    runtime.paths = paths
-    runtime.cli = cli
-    runtime.run_badguys = run_badguys
-    runtime.RunnerError = RunnerError
-
-    return RunContext(
-        cli=cli,
-        policy=policy,
-        config_path=config_path,
-        used_cfg=str(used_cfg),
-        repo_root=repo_root,
-        patch_root=patch_root,
-        patch_dir=patch_dir,
-        isolated_work_patch_dir=isolated_work_patch_dir,
-        paths=paths,
-        log_path=log_path,
-        json_path=json_path,
-        logger=logger,
-        status=status,
-        verbosity=verbosity,
-        log_level=log_level,
-        ipc=ipc,
-    )
-
-
 def run_mode(ctx: RunContext) -> RunResult:
     cli = ctx.cli
     policy = ctx.policy
     repo_root = ctx.repo_root
+    runner_root = ctx.runner_root or repo_root
+    artifacts_root = ctx.artifacts_root or ctx.patch_root
     patch_root = ctx.patch_root
     patch_dir = ctx.patch_dir
     config_path = ctx.config_path
@@ -394,6 +262,9 @@ def run_mode(ctx: RunContext) -> RunResult:
     try:
         logger.section("AM_PATCH START")
         logger.line(f"RUNNER_VERSION={RUNNER_VERSION}")
+        logger.line(f"runner_root={runner_root}")
+        logger.line(f"artifacts_root={artifacts_root}")
+        logger.line(f"active_target_repo_root={repo_root}")
         logger.line(f"repo_root={repo_root}")
         logger.line(f"patch_dir={patch_dir}")
         if patch_dir != patch_root:

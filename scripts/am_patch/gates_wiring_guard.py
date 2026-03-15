@@ -5,18 +5,11 @@ from pathlib import Path
 
 from .errors import RunnerError
 
-_ALLOWED_CALLSITE = "scripts/am_patch/gates_policy_wiring.py"
+_ALLOWED_CALLSITE = "gates_policy_wiring.py"
 
 
-def _repo_root_from_here() -> Path:
-    here = Path(__file__).resolve()
-    # Expected layout: <repo>/scripts/am_patch/gates_wiring_guard.py
-    # parents[0] = <repo>/scripts/am_patch
-    # parents[1] = <repo>/scripts
-    # parents[2] = <repo>
-    if len(here.parents) >= 3:
-        return here.parents[2]
-    raise RunnerError("PREFLIGHT", "INTERNAL", "unable to resolve repo root")
+def _am_patch_dir_from_here() -> Path:
+    return Path(__file__).resolve().parent
 
 
 def _iter_py_files(am_patch_dir: Path) -> list[Path]:
@@ -59,35 +52,31 @@ def _find_run_gates_calls(path: Path) -> list[int]:
 
 
 def assert_single_run_gates_callsite() -> None:
-    repo_root = _repo_root_from_here()
-    am_patch_dir = repo_root / "scripts" / "am_patch"
+    am_patch_dir = _am_patch_dir_from_here()
     if not am_patch_dir.is_dir():
         raise RunnerError(
             "PREFLIGHT",
             "INTERNAL",
-            f"missing scripts/am_patch directory at: {am_patch_dir}",
+            f"missing am_patch directory at: {am_patch_dir}",
         )
 
     violations: list[tuple[str, int]] = []
     for py in _iter_py_files(am_patch_dir):
-        rel = py.relative_to(repo_root).as_posix()
+        rel = py.relative_to(am_patch_dir).as_posix()
         lines = _find_run_gates_calls(py)
         if not lines:
             continue
         if rel == _ALLOWED_CALLSITE:
             continue
         for ln in lines:
-            if ln > 0:
-                violations.append((rel, ln))
-            else:
-                violations.append((rel, 0))
+            violations.append((rel, ln if ln > 0 else 0))
 
     if violations:
         violations.sort(key=lambda t: (t[0], t[1]))
-        detail = "\n".join([f"- {p}:{ln}" for (p, ln) in violations])
+        detail = "\n".join([f"- am_patch/{p}:{ln}" for (p, ln) in violations])
         raise RunnerError(
             "PREFLIGHT",
             "INTERNAL",
-            "run_gates call-sites must be centralized in scripts/am_patch/gates_policy_wiring.py\n"
+            "run_gates call-sites must be centralized in am_patch/gates_policy_wiring.py\n"
             + detail,
         )

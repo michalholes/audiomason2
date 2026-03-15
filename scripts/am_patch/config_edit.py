@@ -13,7 +13,8 @@ import tomllib
 from dataclasses import dataclass
 from typing import Any
 
-from am_patch.config import Policy, _flatten_sections, build_policy
+from am_patch.config import Policy, build_policy
+from am_patch.config_file import _flatten_sections
 from am_patch.errors import RunnerError
 
 

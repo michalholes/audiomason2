@@ -62,3 +62,27 @@ def test_config_edit_roundtrip_handles_bucketed_pytest_routing_keys() -> None:
     assert '"amp.phb" = ["amp"]' in updated
     assert "[pytest_external_dependencies]" in updated
     assert '"amp.phb" = ["amp.badguys"]' in updated
+
+
+def test_config_edit_roundtrip_handles_root_model_keys() -> None:
+    from pathlib import Path
+
+    from am_patch.config_edit import apply_update_to_config_text
+    from am_patch.config_schema import get_policy_schema
+
+    cfg_path = Path(__file__).parent.parent / "scripts" / "am_patch" / "am_patch.toml"
+    schema = get_policy_schema()
+
+    updated = apply_update_to_config_text(
+        cfg_path.read_text(encoding="utf-8"),
+        {
+            "artifacts_root": "/tmp/am_patch_artifacts",
+            "target_repo_roots": ["/tmp/target_a", "/tmp/target_b"],
+            "active_target_repo_root": "/tmp/target_b",
+        },
+        schema,
+    )
+
+    assert 'artifacts_root = "/tmp/am_patch_artifacts"' in updated
+    assert 'target_repo_roots = ["/tmp/target_a", "/tmp/target_b"]' in updated
+    assert 'active_target_repo_root = "/tmp/target_b"' in updated
