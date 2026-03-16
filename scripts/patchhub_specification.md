@@ -3,7 +3,7 @@ Status: AUTHORITATIVE SPECIFICATION
 Applies to: scripts/patchhub/*
 Language: ENGLISH (ASCII ONLY)
 
-Specification Version: 1.12.11-spec
+Specification Version: 1.13.0-spec
 Code Baseline: audiomason2-main.zip (as provided in this chat)
 
 -------------------------------------------------------------------------------
@@ -19,6 +19,7 @@ PatchHub provides:
 - Live observation of runner output and runner jsonl stream
 - Browsing of runner artifacts (logs, successful/unsuccessful archives, web job artifacts)
 - Limited filesystem operations within a patches-root jail (config gated)
+- Read root-level target.txt from uploaded patch zips for display and target prefill
 
 PatchHub does NOT:
 - Generate patches
@@ -1488,6 +1489,11 @@ Output schema (success):
     "commit_ascii_only": <bool>,
     "issue_default_if_no_match": "<string|null>",
     "commit_default_if_no_match": "<string|null>"
+  },
+  "targeting": {
+    "options": ["<string>", ...],
+    "default_target_repo": "<string>",
+    "zip_target_prefill_enabled": <bool>
   }
 }
 
@@ -1617,7 +1623,8 @@ Output (found):
   "mtime_ns": <int>,
   "token": "<mtime_ns>:<stored_rel_path>",
   "derived_issue": "<string|null>",                 (only if derive_enabled)
-  "derived_commit_message": "<string|null>"        (only if derive_enabled)
+  "derived_commit_message": "<string|null>",        (only if derive_enabled)
+  "derived_target_repo": "<string|null>"            (only for zip inputs)
 }
 
 7.2.6 GET /api/runs?issue_id=<int>&result=<string>&limit=<int>
@@ -1698,6 +1705,10 @@ Detail-only additive fields for patch/repair jobs:
 - original_patch_path: "<string|null>"
 - effective_patch_path: "<string|null>"
 - effective_patch_kind: "original|derived_subset|null"
+- zip_target_repo: "<string|null>"
+- selected_target_repo: "<string|null>"
+- effective_runner_target_repo: "<string|null>"
+- target_mismatch: <bool>
 - selected_patch_entries: ["<zip member>", ...]
 - selected_repo_paths: ["<repo path>", ...]
 - applied_files: ["<repo path>", ...]
@@ -1720,7 +1731,8 @@ Output:
 {
   "ok": true,
   "manifest": <ZipPatchManifest JSON>,
-  "pm_validation": <PatchPmValidation JSON>
+  "pm_validation": <PatchPmValidation JSON>,
+  "derived_target_repo": "<string|null>"
 }
 Error 400 if path missing, path is not a zip, or the zip cannot be resolved.
 
@@ -1987,6 +1999,7 @@ Input JSON fields (minimum accepted by app_api_jobs.py):
 - patch_path: "<string>"         (required for patch/repair unless raw_command provides)
 - raw_command: "<string>"        (optional; if provided, it is parsed and canonicalized)
 - gate_argv: ["<flag>", ...]     (optional; patch/finalize_live/finalize_workspace/rerun_latest only)
+- target_repo: "<string>"        (optional; structured patch/rerun_latest only)
 - selected_patch_entries: ["<zip member>", ...] (optional; patch/repair zip subset only)
 
 Behavior:
@@ -1996,18 +2009,30 @@ Behavior:
   - missing fields may be filled from body fields as fallback
   - raw_command MUST NOT be combined with selected_patch_entries
   - raw_command MUST NOT be combined with gate_argv
+  - raw_command MUST NOT be combined with target_repo
 - If raw_command is absent:
   - finalize_live requires commit_message and builds:
     runner_prefix + ['-f', commit_message] + gate_argv
   - finalize_workspace requires issue_id (digits) and builds:
     runner_prefix + ['-w', issue_id] + gate_argv
   - rerun_latest requires issue_id (digits) and commit_message and builds:
-    runner_prefix + [issue_id, commit_message, optional patch_path, '-l'] + gate_argv
+    runner_prefix + [issue_id, commit_message, optional patch_path, '-l']
+    + optional ['--override', 'active_target_repo_root=<target_repo>']
+    + gate_argv
   - patch/repair requires commit_message and patch_path
-  - patch builds: runner_prefix + [issue_id, commit_message, patch_path] + gate_argv
+  - patch builds: runner_prefix + [issue_id, commit_message, patch_path]
+    + optional ['--override', 'active_target_repo_root=<target_repo>']
+    + gate_argv
+  - finalize_live and finalize_workspace MUST ignore target_repo
   - if issue_id missing, PatchHub auto-allocates it (see Section 11)
 - Gate options in the main UI are transient only; they feed gate_argv for the
   current enqueue request and MUST NOT mutate AMP config.
+- target_repo is operator-selected execution context only.
+  PatchHub MUST read root-level target.txt from zip inputs for display and prefill,
+  but MUST NOT rewrite the uploaded zip when target_repo differs.
+- target mismatch between zip target.txt and target_repo is informational only.
+  PatchHub MAY surface PM validation FAIL for the uploaded zip, but MUST NOT turn
+  that mismatch into a new enqueue gate on its own.
 - Zip subset semantics for patch/repair:
   - No-subset branch is unchanged: if selected_patch_entries is absent, empty, or
     selects all selectable entries, PatchHub runs the original zip path.
@@ -2017,7 +2042,7 @@ Behavior:
   - When a proper subset is selected, PatchHub MAY create a derived zip under the
     root patches directory and use that derived zip as the effective runner input.
   - The derived zip preserves root metadata files used by the runner contract
-    (COMMIT_MESSAGE.txt and ISSUE_NUMBER.txt when present).
+    (COMMIT_MESSAGE.txt, ISSUE_NUMBER.txt, and target.txt when present).
   - selected target files and applied files are different concepts: selected_* comes
     from the UI request; applied_files comes only from runner artifacts after success.
 
@@ -2157,7 +2182,8 @@ Output (success):
   "stored_rel_path": "<string>",
   "bytes": <int>,
   "derived_issue": "<string|null>",             (only if cfg.autofill.derive_enabled)
-  "derived_commit_message": "<string|null>"    (only if cfg.autofill.derive_enabled)
+  "derived_commit_message": "<string|null>",    (only if cfg.autofill.derive_enabled)
+  "derived_target_repo": "<string|null>"        (only for zip inputs)
 }
 
 7.3.5 POST /api/fs/mkdir
