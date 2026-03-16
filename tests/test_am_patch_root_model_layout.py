@@ -114,6 +114,6 @@ def test_build_effective_policy_uses_root_layout_default_config(tmp_path: Path) 
 
 def test_shipped_toml_surfaces_root_model_keys() -> None:
     text = Path("scripts/am_patch/am_patch.toml").read_text(encoding="utf-8")
-    assert "target_repo_roots =" in text
+    assert "target_repo_roots = []" in text
     assert "artifacts_root" in text
     assert "active_target_repo_root" in text

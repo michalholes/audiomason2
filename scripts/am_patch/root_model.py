@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -39,41 +38,13 @@ def _resolved_registry(raw_values: list[str], *, runner_root: Path) -> tuple[Pat
     return tuple(out)
 
 
-def resolve_artifacts_root(policy: object, *, runner_root: Path) -> Path:
+def resolve_root_model(policy: object, *, runner_root: Path) -> RootModel:
     runner_root = runner_root.resolve()
     artifacts_root = _resolve_runner_relative(
         getattr(policy, "artifacts_root", None), runner_root=runner_root
     )
     if artifacts_root is None:
-        return runner_root
-    return artifacts_root
-
-
-def resolve_patch_root(policy: object, *, runner_root: Path) -> Path:
-    runner_root = runner_root.resolve()
-    artifacts_root = resolve_artifacts_root(policy, runner_root=runner_root)
-    patch_dir = _resolve_runner_relative(
-        getattr(policy, "patch_dir", None), runner_root=runner_root
-    )
-    patch_dir_name = str(getattr(policy, "patch_dir_name", "patches"))
-    return patch_dir if patch_dir is not None else (artifacts_root / patch_dir_name)
-
-
-def format_target_selector(*, runner_root: Path, active_target_repo_root: Path) -> str:
-    runner_root = runner_root.resolve()
-    target_root = active_target_repo_root.resolve()
-    if target_root == runner_root:
-        return "."
-    try:
-        rel = os.path.relpath(target_root, runner_root)
-    except ValueError:
-        return str(target_root)
-    return rel if rel else "."
-
-
-def resolve_root_model(policy: object, *, runner_root: Path) -> RootModel:
-    runner_root = runner_root.resolve()
-    artifacts_root = resolve_artifacts_root(policy, runner_root=runner_root)
+        artifacts_root = runner_root
 
     registry = _resolved_registry(
         list(getattr(policy, "target_repo_roots", []) or []), runner_root=runner_root
@@ -100,7 +71,11 @@ def resolve_root_model(policy: object, *, runner_root: Path) -> RootModel:
             "or an entry from target_repo_roots",
         )
 
-    patch_root = resolve_patch_root(policy, runner_root=runner_root)
+    patch_dir = _resolve_runner_relative(
+        getattr(policy, "patch_dir", None), runner_root=runner_root
+    )
+    patch_dir_name = str(getattr(policy, "patch_dir_name", "patches"))
+    patch_root = patch_dir if patch_dir is not None else (artifacts_root / patch_dir_name)
 
     return RootModel(
         runner_root=runner_root,

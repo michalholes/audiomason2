@@ -22,7 +22,6 @@ from am_patch.issue_diff import (
     derive_finalize_pseudo_issue_id,
     make_issue_diff_zip,
 )
-from am_patch.root_model import format_target_selector
 
 
 @dataclass(frozen=True)
@@ -39,7 +38,6 @@ def build_artifacts(
     policy: Any,
     paths: Any,
     repo_root: Path,
-    runner_root: Path,
     log_path: Path,
     exit_code: int,
     unified_mode: bool,
@@ -182,10 +180,6 @@ def build_artifacts(
             include_repo_files=files_for_fail_zip,
             include_patch_blobs=include_patch_blobs,
             include_patch_paths=include_patch_paths,
-            target_selector=format_target_selector(
-                runner_root=runner_root,
-                active_target_repo_root=repo_root,
-            ),
             log_dir_name=policy.failure_zip_log_dir,
             patch_dir_name=policy.failure_zip_patch_dir,
         )

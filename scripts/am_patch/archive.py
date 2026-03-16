@@ -115,7 +115,6 @@ def make_failure_zip(
     include_repo_files: list[str],
     include_patch_blobs: list[tuple[str, bytes]] | None = None,
     include_patch_paths: list[Path] | None = None,
-    target_selector: str,
     log_dir_name: str = "logs",
     patch_dir_name: str = "patches",
 ) -> None:
@@ -144,7 +143,6 @@ def make_failure_zip(
 
     patch_blobs = include_patch_blobs or []
     patch_paths = include_patch_paths or []
-    target_payload = target_selector.encode("ascii") + b"\n"
 
     # De-dup patch entries by archive name.
     seen_patch: set[str] = set()
@@ -155,7 +153,6 @@ def make_failure_zip(
 
     try:
         with zipfile.ZipFile(tmp_path, "w", compression=zipfile.ZIP_DEFLATED) as z:
-            z.writestr("target.txt", target_payload)
             if log_path.exists():
                 z.write(log_path, arcname=f"{log_dir_name}/{log_path.name}")
 
