@@ -6,6 +6,7 @@ import json
 import shutil
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -292,7 +293,7 @@ process.stdout.write(
 """
 
 
-def _run_node(script: str, payload: dict[str, object]) -> object:
+def _run_node(script: str, payload: dict[str, Any]) -> Any:
     try:
         proc = subprocess.run(
             ["node", "-e", script],
@@ -368,7 +369,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 ASSET_BASE = REPO_ROOT / "plugins" / "import" / "ui" / "web" / "assets"
 
 
-def _run_step_modal_picker_scenario(body: str) -> dict[str, object]:
+def _run_step_modal_picker_scenario(body: str) -> dict[str, Any]:
     node = shutil.which("node")
     if not node:
         pytest.skip("node not installed")
@@ -582,7 +583,7 @@ window.AM2FlowStepModalState.setView("json");
 global.__pickerBehavior = {
   mode: "select",
   focusFirst: true,
-  changeDelay: 0,
+  changeDelay: 25,
   text: (
     `
 {
@@ -594,7 +595,7 @@ global.__pickerBehavior = {
   ),
 };
 document.getElementById("flowStepModalJsonOpenFromFile").dispatch("click");
-await new Promise((resolve) => setTimeout(resolve, 25));
+await new Promise((resolve) => setTimeout(resolve, 80));
 process.stdout.write(JSON.stringify({
   jsonValue: document.getElementById("flowStepModalJsonEditor").value,
   statusText: document.getElementById("flowStepModalStatus").textContent,

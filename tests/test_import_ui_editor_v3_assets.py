@@ -7,6 +7,7 @@ import shutil
 import subprocess
 from importlib import import_module
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -45,7 +46,7 @@ ASSET_PATHS = [
 ]
 
 
-def _make_engine(tmp_path: Path) -> ImportWizardEngine:
+def _make_engine(tmp_path: Path) -> Any:
     roots = {
         name: tmp_path / name for name in ("inbox", "stage", "outbox", "jobs", "config", "wizards")
     }
@@ -148,6 +149,7 @@ def test_import_ui_index_exposes_flow_json_modal_controls(tmp_path: Path) -> Non
     assert 'id="flowJsonModal"' in html
     assert 'id="flowJsonOpenFromFile"' in html
     assert 'id="flowJsonSaveToFile"' in html
+    assert 'id="flowJsonModalClose"' in html
     assert 'id="flowJsonCopySelected"' in html
     assert 'id="flowJsonCopyAll"' in html
     assert 'id="flowJsonApply"' in html
@@ -191,7 +193,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 ASSET_BASE = REPO_ROOT / "plugins" / "import" / "ui" / "web" / "assets"
 
 
-def _run_flow_json_modal_picker_scenario(body: str) -> dict[str, object]:
+def _run_flow_json_modal_picker_scenario(body: str) -> dict[str, Any]:
     node = shutil.which("node")
     if not node:
         pytest.skip("node not installed")
@@ -321,6 +323,7 @@ function ensureNode(id) {{
   "flowJsonSave",
   "flowJsonOpenFromFile",
   "flowJsonSaveToFile",
+  "flowJsonModalClose",
   "flowJsonCancel",
   "flowJsonCopySelected",
   "flowJsonCopyAll",
@@ -407,7 +410,7 @@ await window.AM2FlowJSONModalState.openModal("wizard");
 global.__pickerBehavior = {
   mode: "select",
   focusFirst: true,
-  changeDelay: 0,
+  changeDelay: 25,
   text: `
 {
   "version": 3,

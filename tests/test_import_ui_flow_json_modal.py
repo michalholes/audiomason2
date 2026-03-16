@@ -4,6 +4,7 @@ import json
 import shutil
 import subprocess
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -11,7 +12,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 ASSET_BASE = REPO_ROOT / "plugins" / "import" / "ui" / "web" / "assets"
 
 
-def _run_node_scenario(body: str) -> dict[str, object]:
+def _run_node_scenario(body: str) -> dict[str, Any]:
     node = shutil.which("node")
     if not node:
         pytest.skip("node not installed")
@@ -34,6 +35,35 @@ const src = {{
 }};
 const elements = new Map();
 const bodyChildren = [];
+const windowListeners = new Map();
+function addWindowListener(type, fn) {{
+  const key = String(type);
+  const items = windowListeners.get(key) || [];
+  items.push(fn);
+  windowListeners.set(key, items);
+}}
+function removeWindowListener(type, fn) {{
+  const key = String(type);
+  const items = windowListeners.get(key) || [];
+  windowListeners.set(
+    key,
+    items.filter((item) => item !== fn),
+  );
+}}
+function dispatchWindowEvent(type, extra) {{
+  const items = (windowListeners.get(String(type)) || []).slice();
+  const event = Object.assign(
+    {{
+      type,
+      key: "",
+      target: null,
+      preventDefault() {{}},
+      stopImmediatePropagation() {{}},
+    }},
+    extra || {{}},
+  );
+  items.forEach((fn) => fn(event));
+}}
 function makeClassList() {{
   const items = new Set(["is-hidden"]);
   return {{
@@ -67,10 +97,21 @@ function makeNode(id) {{
     getAttribute(name) {{ return this.attributes[String(name)] || ""; }},
     addEventListener(type, fn) {{ listeners.set(String(type), fn); }},
     removeEventListener(type) {{ listeners.delete(String(type)); }},
-    dispatch(type) {{
+    dispatch(type, extra) {{
       const fn = listeners.get(String(type));
       if (!fn) return undefined;
-      return fn({{ preventDefault() {{}}, stopImmediatePropagation() {{}} }});
+      return fn(
+        Object.assign(
+          {{
+            type,
+            key: "",
+            target: this,
+            preventDefault() {{}},
+            stopImmediatePropagation() {{}},
+          }},
+          extra || {{}},
+        ),
+      );
     }},
     focus() {{}},
     select() {{
@@ -96,6 +137,7 @@ function ensureNode(id) {{
   "flowJsonSave",
   "flowJsonOpenFromFile",
   "flowJsonSaveToFile",
+  "flowJsonModalClose",
   "flowJsonCancel",
   "flowJsonCopySelected",
   "flowJsonCopyAll",
@@ -190,6 +232,8 @@ global.window = {{
     }},
   }},
   confirm(message) {{ confirmCalls.push(String(message)); return true; }},
+  addEventListener: addWindowListener,
+  removeEventListener: removeWindowListener,
 }};
 Object.defineProperty(global, "navigator", {{
   value: {{
@@ -236,6 +280,32 @@ vm.runInThisContext(
     if proc.returncode != 0:
         raise AssertionError(proc.stderr or proc.stdout)
     return json.loads(proc.stdout)
+
+
+def test_flow_json_modal_close_affordance_and_escape_match_cancel() -> None:
+    result = _run_node_scenario(
+        """
+await window.AM2FlowJSONModalState.openModal("config");
+document.getElementById("flowJsonModalClose").dispatch("click");
+const hiddenAfterHeaderClose = document.getElementById("flowJsonModal").classList.contains(
+  "is-hidden",
+);
+await window.AM2FlowJSONModalState.openModal("wizard");
+dispatchWindowEvent("keydown", { key: "Escape" });
+process.stdout.write(JSON.stringify({
+  hiddenAfterHeaderClose,
+  hiddenAfterEscape: document.getElementById("flowJsonModal").classList.contains(
+    "is-hidden",
+  ),
+  statusText: document.getElementById("flowJsonModalStatus").textContent,
+  errorText: document.getElementById("flowJsonModalError").textContent,
+}));
+"""
+    )
+    assert result["hiddenAfterHeaderClose"] is True
+    assert result["hiddenAfterEscape"] is True
+    assert result["statusText"] == ""
+    assert result["errorText"] == ""
 
 
 def test_flow_json_modal_open_abort_cancel_and_reread() -> None:

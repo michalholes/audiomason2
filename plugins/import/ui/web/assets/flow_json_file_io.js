@@ -100,15 +100,29 @@
 			var input = document.createElement("input");
 			var settled = false;
 			var focusHandler = null;
-			var focusChecksRemaining = 4;
-			var focusCheckPending = false;
+			var focusCancelTimer = null;
 			var schedule =
 				typeof root.setTimeout === "function"
 					? root.setTimeout.bind(root)
 					: null;
+			var cancelScheduled =
+				typeof root.clearTimeout === "function"
+					? root.clearTimeout.bind(root)
+					: null;
+			var focusCancelDelayMs = 150;
 
 			function hasSelectedFile() {
 				return !!(input.files && input.files[0]);
+			}
+
+			function clearFocusCancelTimer() {
+				if (focusCancelTimer == null) {
+					return;
+				}
+				if (cancelScheduled) {
+					cancelScheduled(focusCancelTimer);
+				}
+				focusCancelTimer = null;
 			}
 
 			function finish(result, err) {
@@ -116,6 +130,7 @@
 					return;
 				}
 				settled = true;
+				clearFocusCancelTimer();
 				if (focusHandler && typeof root.removeEventListener === "function") {
 					root.removeEventListener("focus", focusHandler, true);
 				}
@@ -130,38 +145,28 @@
 			}
 
 			function scheduleFocusCancelCheck() {
-				if (focusCheckPending || settled) {
+				if (settled || hasSelectedFile()) {
 					return;
 				}
-				focusCheckPending = true;
-				function runCheck() {
-					if (settled) {
-						focusCheckPending = false;
-						return;
-					}
-					if (hasSelectedFile()) {
-						focusCheckPending = false;
-						return;
-					}
-					if (focusChecksRemaining > 0 && schedule) {
-						focusChecksRemaining -= 1;
-						schedule(runCheck, 0);
-						return;
-					}
-					focusCheckPending = false;
+				clearFocusCancelTimer();
+				if (!schedule) {
 					finish({ cancelled: true, text: "" });
-				}
-				if (schedule) {
-					schedule(runCheck, 0);
 					return;
 				}
-				runCheck();
+				focusCancelTimer = schedule(() => {
+					focusCancelTimer = null;
+					if (settled || hasSelectedFile()) {
+						return;
+					}
+					finish({ cancelled: true, text: "" });
+				}, focusCancelDelayMs);
 			}
 
 			input.type = "file";
 			input.accept = ".json,application/json,text/plain,.jsonl,.txt";
 			input.style.display = "none";
 			input.addEventListener("change", async () => {
+				clearFocusCancelTimer();
 				var file = hasSelectedFile() ? input.files[0] : null;
 				if (!file) {
 					finish({ cancelled: true, text: "" });
@@ -177,6 +182,7 @@
 				}
 			});
 			input.addEventListener("cancel", () => {
+				clearFocusCancelTimer();
 				finish({ cancelled: true, text: "" });
 			});
 			if (typeof root.addEventListener === "function") {

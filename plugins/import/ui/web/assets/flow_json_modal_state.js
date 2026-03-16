@@ -300,6 +300,13 @@
 		return true;
 	}
 
+	function closeViaEscape(event) {
+		if (!event || event.key !== "Escape" || !dom.isOpen()) {
+			return;
+		}
+		cancelModal();
+	}
+
 	function copySelected() {
 		var text = dom.getSelectedText();
 		if (!text) {
@@ -412,10 +419,14 @@
 	bind(dom.ui.save, saveDraft);
 	bind(dom.ui.openFromFile, openFromFile);
 	bind(dom.ui.saveToFile, saveToFile);
+	bind(dom.ui.close, cancelModal);
 	bind(dom.ui.cancel, cancelModal);
 	bind(dom.ui.copySelected, copySelected);
 	bind(dom.ui.copyAll, copyAll);
 	bind(dom.ui.apply, applyForFutureRuns);
+	if (typeof root.addEventListener === "function") {
+		root.addEventListener("keydown", closeViaEscape);
+	}
 
 	root.AM2FlowJSONModalState = {
 		abortChanges: abortChanges,
