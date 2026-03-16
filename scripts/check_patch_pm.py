@@ -181,10 +181,10 @@ def _validate_target_text(text: str) -> str | None:
     return None
 
 
-def _target_rule(zip_data: dict[str, bytes]) -> RuleResult | None:
+def _target_rule(zip_data: dict[str, bytes]) -> RuleResult:
     raw = zip_data.get(TARGET_FILE_NAME)
     if raw is None:
-        return None
+        return RuleResult("TARGET_FILE", "FAIL", "missing_target_file")
     try:
         text = raw.decode("ascii")
     except UnicodeDecodeError as exc:
@@ -251,10 +251,9 @@ def _build_members(
         return results, members, decision_paths
 
     target_rule = _target_rule(zip_data)
-    if target_rule is not None:
-        results.append(target_rule)
-        if target_rule.status != "PASS":
-            return results, members, decision_paths
+    results.append(target_rule)
+    if target_rule.status != "PASS":
+        return results, members, decision_paths
 
     allowed = {"COMMIT_MESSAGE.txt", "ISSUE_NUMBER.txt", TARGET_FILE_NAME}
     allowed.update(str(item["zip_member"]) for item in manifest["entries"])

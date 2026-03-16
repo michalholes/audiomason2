@@ -77,6 +77,7 @@ def _write_patch_zip(
     include_issue: bool = True,
     extra_files: dict[str, bytes] | None = None,
     patch_rel: Path = PATCH_REL,
+    target: str | None = ".",
 ) -> Path:
     patch_path = repo_root / patch_rel
     patch_path.parent.mkdir(parents=True, exist_ok=True)
@@ -85,6 +86,8 @@ def _write_patch_zip(
             zf.writestr("COMMIT_MESSAGE.txt", commit_message + "\n")
         if include_issue:
             zf.writestr("ISSUE_NUMBER.txt", issue_id + "\n")
+        if target is not None and "target.txt" not in (extra_files or {}):
+            zf.writestr("target.txt", target + "\n")
         for name, data in members.items():
             zf.writestr(name, data)
         for name, data in (extra_files or {}).items():
@@ -164,13 +167,36 @@ def test_valid_patch_passes(tmp_path: Path) -> None:
             "patches/per_file/docs__readme.txt.patch": patch,
             fragment_member: fragment_patch,
         },
+        extra_files={"target.txt": b".\n"},
     )
 
     proc = _run_validator(repo_root, "223", COMMIT_MESSAGE)
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert "RESULT: PASS" in proc.stdout
+    assert "RULE TARGET_FILE: PASS - ." in proc.stdout
     assert "RULE PER_FILE_LAYOUT: PASS" in proc.stdout
     assert "RULE GIT_APPLY_CHECK:patches/per_file/docs__readme.txt.patch: PASS" in proc.stdout
+
+
+def test_missing_target_file_fails(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    _write(repo_root / "docs/readme.txt", "old\n")
+    patch = _git_patch("docs/readme.txt", "old\n", "new\n")
+    fragment_member, fragment_patch = _fragment_member()
+    _write_patch_zip(
+        repo_root,
+        issue_id="223",
+        commit_message=COMMIT_MESSAGE,
+        members={
+            "patches/per_file/docs__readme.txt.patch": patch,
+            fragment_member: fragment_patch,
+        },
+        target=None,
+    )
+
+    proc = _run_validator(repo_root, "223", COMMIT_MESSAGE)
+    assert proc.returncode == 1
+    assert "RULE TARGET_FILE: FAIL - missing_target_file" in proc.stdout
 
 
 def test_valid_patch_passes_with_target_file(tmp_path: Path) -> None:

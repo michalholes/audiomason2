@@ -84,10 +84,10 @@ def _validate_target_text(text: str) -> str | None:
     return None
 
 
-def _target_rule(items: dict[str, bytes]) -> RuleResult | None:
+def _target_rule(items: dict[str, bytes]) -> RuleResult:
     text = _zip_text(items, TARGET_FILE_NAME)
     if text is None:
-        return None
+        return RuleResult("TARGET_FILE", "FAIL", "missing_target_file")
     err = _validate_target_text(text)
     if err is not None:
         return RuleResult("TARGET_FILE", "FAIL", err)
@@ -183,10 +183,9 @@ def _collect_patch_members(
     if zmsg != commit_message or zid != issue_id:
         return results, [], []
     target_rule = _target_rule(items)
-    if target_rule is not None:
-        results.append(target_rule)
-        if target_rule.status != "PASS":
-            return results, [], []
+    results.append(target_rule)
+    if target_rule.status != "PASS":
+        return results, [], []
     non_dirs = [name for name in names if not name.endswith("/")]
     members = [
         name for name in non_dirs if name.startswith(PATCH_PREFIX) and name.endswith(PATCH_SUFFIX)
