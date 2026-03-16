@@ -432,6 +432,19 @@ Root resolution contract:
 - If the active target defaults to runner_root and no explicit target
   selector exists, a runner-generated `target.txt` MUST use `.`.
 
+### 3.1.2 Failure-zip target repo name
+
+- The Policy key `target_repo_name` defines the word written to failure
+  overlay `target.txt`.
+- `target_repo_name` MUST be an ASCII-only string containing exactly one
+  non-empty line and no embedded newline characters.
+- The default value of `target_repo_name` is `audiomason2`.
+- The effective `target_repo_name` source follows the normal precedence:
+  dedicated CLI key > config file value > default value.
+- `target_repo_name` is metadata only. It does not participate in root
+  binding, workspace creation, scope evaluation, promotion planning,
+  promotion execution, commit, or push.
+
 ### 3.2 CLI (normative)
 
 ### 3.2.1 Help contract
@@ -474,6 +487,15 @@ the easiest re-run path while the live repo has uncommitted changes.
 This toggle affects only commit/push behavior. It does not change patch
 execution, gates, or workspace promotion semantics.
 
+### 3.2.3 Failure-zip target repo name
+
+- The runner MUST expose a dedicated CLI key
+  `--target-repo-name VALUE`.
+- `--target-repo-name VALUE` sets the effective `target_repo_name`.
+- `--target-repo-name VALUE` affects failure overlay metadata only.
+  It does not change root binding, workspace creation, scope
+  evaluation, promotion planning, promotion execution, commit, or push.
+
 ### 3.2.4 Overrides symmetry
 
 Every behavior has a config key and is overridable via CLI, primarily
@@ -484,6 +506,11 @@ via:
 The root-model keys artifacts_root, target_repo_roots, and active_target_repo_root
 are part of the override symmetry contract and MUST be controllable via
 --override KEY=VALUE.
+
+The metadata key `target_repo_name` is also part of the override
+symmetry contract and MUST be controllable via both:
+- the dedicated CLI key `--target-repo-name VALUE`
+- `--override target_repo_name=VALUE`
 
 ------------------------------------------------------------------------
 
@@ -1069,12 +1096,13 @@ gates, or promotion semantics.
 Failure zip target metadata:
 
 - The failure zip MUST include a root-level `target.txt`.
-- The file MUST be ASCII-only text with exactly one non-empty path
-  value and optional trailing LF.
-- The file content MUST be the effective target selector for the failed
-  run, using `active_target_repo_root` syntax.
-- If the failed run used the default runner_root target, the failure zip
-  MUST write `.` to `target.txt`.
+- The file MUST be ASCII-only text with exactly one non-empty line and
+  optional trailing LF.
+- The file content MUST be the effective `target_repo_name` for the
+  failed run.
+- The file content MUST preserve the exact effective `target_repo_name`
+  value. The runner MUST NOT normalize it, translate it, or derive it
+  from filesystem names.
 - `target.txt` is metadata only. It does not change failure-zip naming,
   retention, or subset selection rules.
 
