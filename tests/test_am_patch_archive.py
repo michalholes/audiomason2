@@ -113,11 +113,11 @@ def test_make_failure_zip_includes_root_target_metadata(tmp_path: Path) -> None:
         workspace_repo=workspace_repo,
         log_path=log_path,
         include_repo_files=["alpha.py"],
-        target_selector=".",
+        target_selector="repo",
     )
 
     with zipfile.ZipFile(zip_path, "r") as zf:
-        assert zf.read("target.txt") == b".\n"
+        assert zf.read("target.txt") == b"repo\n"
         assert zf.read("logs/run.log") == b"log\n"
         assert zf.read("alpha.py") == b"print(1)\n"
 

@@ -49,7 +49,7 @@ def test_patch_carried_target_overrides_config_target_before_root_binding(
     patch_dir = tmp_path / "patches"
     _write_patch_zip(
         patch_dir / "issue_999.zip",
-        target_text=f"{target_repo.as_posix()}\n",
+        target_text="target-repo\n",
     )
 
     policy = policy_cls()
@@ -77,7 +77,7 @@ def test_patch_carried_target_overrides_config_target_before_root_binding(
         issue_id=999,
         runner_root=Path(__file__).resolve().parent.parent,
     )
-    assert policy.active_target_repo_root == target_repo.as_posix()
+    assert policy.active_target_repo_root == "target-repo"
     assert policy._src["active_target_repo_root"] == "patch-carried"
 
     ctx = build_paths_and_logger(cli, policy, cfg, "test")
@@ -85,7 +85,7 @@ def test_patch_carried_target_overrides_config_target_before_root_binding(
         assert ctx.repo_root == target_repo.resolve()
         policy_text = policy_for_log(policy)
         assert "src=patch-carried" in policy_text
-        assert f"active_target_repo_root='{target_repo.as_posix()}'" in policy_text
+        assert "active_target_repo_root='target-repo'" in policy_text
     finally:
         ctx.status.stop()
         ctx.logger.close()
@@ -105,7 +105,7 @@ def test_patch_carried_target_respects_explicit_cli_target(tmp_path: Path) -> No
     patch_dir = tmp_path / "patches"
     _write_patch_zip(
         patch_dir / "issue_999.zip",
-        target_text=f"{target_repo.as_posix()}\n",
+        target_text="target-repo\n",
     )
 
     policy = policy_cls()
@@ -129,6 +129,57 @@ def test_patch_carried_target_respects_explicit_cli_target(tmp_path: Path) -> No
 
     assert policy.active_target_repo_root == "/tmp/cli-target"
     assert policy._src["active_target_repo_root"] == "cli"
+
+
+def test_patch_carried_runner_target_name_maps_to_runner_root(tmp_path: Path) -> None:
+    (
+        policy_cls,
+        _,
+        apply_patch_carried_target_selector_for_startup,
+        build_paths_and_logger,
+        _,
+    ) = _import_target_selection()
+
+    runner_root = Path(__file__).resolve().parent.parent
+    patch_dir = tmp_path / "patches"
+    _write_patch_zip(
+        patch_dir / "issue_999.zip",
+        target_text=f"{runner_root.name}\n",
+    )
+
+    policy = policy_cls()
+    policy.patch_dir = str(patch_dir)
+    policy.current_log_symlink_enabled = False
+    policy.verbosity = "quiet"
+    policy.log_level = "warning"
+    policy.json_out = False
+    policy.ipc_socket_enabled = False
+
+    cli = SimpleNamespace(
+        issue_id="999",
+        mode="workspace",
+        patch_script=None,
+        load_latest_patch=None,
+    )
+    cfg = tmp_path / "am_patch_test.toml"
+    cfg.write_text("", encoding="utf-8")
+
+    apply_patch_carried_target_selector_for_startup(
+        cli=cli,
+        policy=policy,
+        issue_id=999,
+        runner_root=runner_root,
+    )
+
+    assert policy.active_target_repo_root == runner_root.name
+    assert policy._src["active_target_repo_root"] == "patch-carried"
+
+    ctx = build_paths_and_logger(cli, policy, cfg, "test")
+    try:
+        assert ctx.repo_root == runner_root.resolve()
+    finally:
+        ctx.status.stop()
+        ctx.logger.close()
 
 
 def test_patch_carried_target_rejects_multiline_target_metadata(tmp_path: Path) -> None:

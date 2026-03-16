@@ -675,7 +675,7 @@ def test_build_paths_and_logger_supports_cross_repo_target_and_artifacts_root(
 
         policy = policy_cls()
         policy.target_repo_roots = [str(target_a), str(target_b)]
-        policy.active_target_repo_root = str(target_b)
+        policy.active_target_repo_root = "target_b"
         policy.artifacts_root = str(artifacts)
         policy.current_log_symlink_enabled = False
         policy.verbosity = "quiet"

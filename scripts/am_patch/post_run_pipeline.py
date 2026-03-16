@@ -219,6 +219,7 @@ def run_post_run_pipeline(*, ctx: Any, result: RunResult) -> int:
                 failure_target_selector=render_target_selector(
                     runner_root=getattr(ctx, "runner_root", repo_root) or repo_root,
                     active_target_repo_root=repo_root,
+                    target_repo_roots=list(getattr(policy, "target_repo_roots", []) or []),
                 ),
                 ws_attempt=(
                     result.ws_for_posthook.attempt if result.ws_for_posthook is not None else None
