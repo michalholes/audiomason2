@@ -12,6 +12,7 @@ from pathlib import Path, PurePosixPath
 from zipfile import ZipFile
 
 PATCH_RE = re.compile(r"^issue_(?P<issue>\d+)_v(?P<version>[1-9]\d*)\.zip$")
+SNAPSHOT_TARGET_RE = re.compile(r"^(?P<target>.+)-main_[^/]+\.zip$")
 PATCH_PREFIX = "patches/per_file/"
 PATCH_SUFFIX = ".patch"
 TARGET_FILE_NAME = "target.txt"
@@ -69,29 +70,41 @@ def _decode_ascii_text(raw: bytes) -> str | None:
     return text[:-1] if text.endswith("\n") else text
 
 
+def _decode_ascii_raw(raw: bytes) -> str | None:
+    try:
+        return raw.decode("ascii")
+    except UnicodeDecodeError:
+        return None
+
+
 def _zip_text(items: dict[str, bytes], name: str) -> str | None:
     raw = items.get(name)
     return None if raw is None else _decode_ascii_text(raw)
 
 
-def _validate_target_text(text: str) -> str | None:
-    lines = text.splitlines()
-    if len(lines) != 1:
-        return "target_must_have_exactly_one_line"
-    value = lines[0].strip()
-    if not value:
-        return "target_must_be_non_empty"
-    return None
-
-
-def _target_rule(items: dict[str, bytes]) -> RuleResult:
-    text = _zip_text(items, TARGET_FILE_NAME)
+def _validate_target_bytes(raw: bytes) -> tuple[str | None, str | None]:
+    text = _decode_ascii_raw(raw)
     if text is None:
-        return RuleResult("TARGET_FILE", "FAIL", "missing_target_file")
-    err = _validate_target_text(text)
+        return None, "target_must_be_ascii"
+    if "\r" in text:
+        return None, "target_must_use_lf_newlines"
+    value = text[:-1] if text.endswith("\n") else text
+    if "\n" in value:
+        return None, "target_must_have_exactly_one_line"
+    if value == "":
+        return None, "target_must_be_non_empty"
+    return value, None
+
+
+def _target_rule(items: dict[str, bytes]) -> tuple[RuleResult, str | None]:
+    raw = items.get(TARGET_FILE_NAME)
+    if raw is None:
+        return RuleResult("TARGET_FILE", "FAIL", "missing_target_file"), None
+    value, err = _validate_target_bytes(raw)
     if err is not None:
-        return RuleResult("TARGET_FILE", "FAIL", err)
-    return RuleResult("TARGET_FILE", "PASS", text)
+        return RuleResult("TARGET_FILE", "FAIL", err), None
+    assert value is not None
+    return RuleResult("TARGET_FILE", "PASS", value), value
 
 
 def _is_ascii_text(text: str) -> bool:
@@ -99,7 +112,7 @@ def _is_ascii_text(text: str) -> bool:
 
 
 def _is_ascii_bytes(raw: bytes) -> bool:
-    return _decode_ascii_text(raw) is not None
+    return _decode_ascii_raw(raw) is not None
 
 
 def _validate_basename(path: Path, issue_id: str) -> RuleResult:
@@ -111,6 +124,45 @@ def _validate_basename(path: Path, issue_id: str) -> RuleResult:
         detail = f"issue_mismatch:expected={issue_id}:actual={actual}:name={path.name}"
         return RuleResult("PATCH_BASENAME", "FAIL", detail)
     return RuleResult("PATCH_BASENAME", "PASS", path.name)
+
+
+def _snapshot_target(path: Path) -> str | None:
+    match = SNAPSHOT_TARGET_RE.fullmatch(path.name)
+    return None if match is None else match.group("target")
+
+
+def _initial_target_source_rule(path: Path) -> tuple[RuleResult, str | None]:
+    target = _snapshot_target(path)
+    if target is None:
+        detail = f"invalid_workspace_snapshot_basename:{path.name}"
+        return RuleResult("INITIAL_TARGET_SOURCE", "FAIL", detail), None
+    return RuleResult("INITIAL_TARGET_SOURCE", "PASS", target), target
+
+
+def _repair_overlay_target_rule(path: Path) -> tuple[RuleResult, str | None]:
+    raw = _iter_zip_files(path).get(TARGET_FILE_NAME)
+    if raw is None:
+        return RuleResult("REPAIR_TARGET_SOURCE", "FAIL", "missing_target_file"), None
+    value, err = _validate_target_bytes(raw)
+    if err is not None:
+        return RuleResult("REPAIR_TARGET_SOURCE", "FAIL", err), None
+    assert value is not None
+    return RuleResult("REPAIR_TARGET_SOURCE", "PASS", value), value
+
+
+def _target_match_rule(rule_id: str, expected: str, actual: str) -> RuleResult:
+    detail = f"expected={expected}:actual={actual}"
+    return RuleResult(rule_id, "PASS" if actual == expected else "FAIL", detail)
+
+
+def _repair_snapshot_consistency_rule(path: Path, overlay_target: str) -> RuleResult:
+    snapshot_target = _snapshot_target(path)
+    if snapshot_target is None:
+        detail = f"snapshot_basename_not_matching_contract:{path.name}"
+        return RuleResult("REPAIR_TARGET_SNAPSHOT_CONSISTENCY", "SKIP", detail)
+    detail = f"overlay={overlay_target}:snapshot={snapshot_target}"
+    status = "PASS" if overlay_target == snapshot_target else "FAIL"
+    return RuleResult("REPAIR_TARGET_SNAPSHOT_CONSISTENCY", status, detail)
 
 
 def _member_repo_path(member: str) -> str | None:
@@ -158,11 +210,11 @@ def _collect_patch_members(
     path: Path,
     issue_id: str,
     commit_message: str,
-) -> tuple[list[RuleResult], list[tuple[str, bytes]], list[str]]:
+) -> tuple[list[RuleResult], list[tuple[str, bytes]], list[str], str | None]:
     status = "PASS" if path.suffix == ".zip" else "FAIL"
     results = [RuleResult("PATCH_EXTENSION", status, str(path))]
     if path.suffix != ".zip":
-        return results, [], []
+        return results, [], [], None
     names, items = _read_zip(path)
     zmsg = _zip_text(items, "COMMIT_MESSAGE.txt")
     zid = _zip_text(items, "ISSUE_NUMBER.txt")
@@ -181,22 +233,22 @@ def _collect_patch_members(
         )
     )
     if zmsg != commit_message or zid != issue_id:
-        return results, [], []
-    target_rule = _target_rule(items)
+        return results, [], [], None
+    target_rule, patch_target = _target_rule(items)
     results.append(target_rule)
     if target_rule.status != "PASS":
-        return results, [], []
+        return results, [], [], None
     non_dirs = [name for name in names if not name.endswith("/")]
     members = [
         name for name in non_dirs if name.startswith(PATCH_PREFIX) and name.endswith(PATCH_SUFFIX)
     ]
     if not members:
-        return results + [RuleResult("PER_FILE_LAYOUT", "FAIL", "entries=0")], [], []
+        return results + [RuleResult("PER_FILE_LAYOUT", "FAIL", "entries=0")], [], [], None
     allowed = {"COMMIT_MESSAGE.txt", "ISSUE_NUMBER.txt", TARGET_FILE_NAME, *members}
     extras = sorted(name for name in non_dirs if name not in allowed)
     if extras:
         detail = f"extra_entries={extras}"
-        return results + [RuleResult("PER_FILE_LAYOUT", "FAIL", detail)], [], []
+        return results + [RuleResult("PER_FILE_LAYOUT", "FAIL", detail)], [], [], None
     results.append(RuleResult("PER_FILE_LAYOUT", "PASS", f"entries={len(members)}"))
     patch_members: list[tuple[str, bytes]] = []
     decision_paths: list[str] = []
@@ -205,36 +257,36 @@ def _collect_patch_members(
         repo_path = _member_repo_path(member)
         if repo_path is None:
             detail = f"invalid_member:{member}"
-            return results + [RuleResult("PATCH_MEMBER_PATHS", "FAIL", detail)], [], []
+            return results + [RuleResult("PATCH_MEMBER_PATHS", "FAIL", detail)], [], [], None
         if not _is_ascii_text(member):
             detail = f"non_ascii_member:{member}"
-            return results + [RuleResult("PATCH_MEMBER_PATHS", "FAIL", detail)], [], []
+            return results + [RuleResult("PATCH_MEMBER_PATHS", "FAIL", detail)], [], [], None
         if not _is_ascii_text(repo_path):
             detail = f"non_ascii_repo_path:{repo_path}"
-            return results + [RuleResult("PATCH_MEMBER_PATHS", "FAIL", detail)], [], []
+            return results + [RuleResult("PATCH_MEMBER_PATHS", "FAIL", detail)], [], [], None
         if repo_path in seen:
             detail = f"duplicate_repo_path:{repo_path}"
-            return results + [RuleResult("PATCH_MEMBER_PATHS", "FAIL", detail)], [], []
+            return results + [RuleResult("PATCH_MEMBER_PATHS", "FAIL", detail)], [], [], None
         seen.add(repo_path)
         if not _is_ascii_bytes(items[member]):
             detail = f"{member}:non_ascii_patch_text"
-            return results + [RuleResult("PATCH_ASCII", "FAIL", detail)], [], []
+            return results + [RuleResult("PATCH_ASCII", "FAIL", detail)], [], [], None
         text = items[member].decode("ascii")
         header_err = _validate_patch_headers(repo_path, text)
         if header_err is not None:
             detail = f"{member}:{header_err}"
-            return results + [RuleResult("PATCH_MEMBER_PATHS", "FAIL", detail)], [], []
+            return results + [RuleResult("PATCH_MEMBER_PATHS", "FAIL", detail)], [], [], None
         if Path(repo_path).suffix in LINE_EXTS:
             line_err = _check_line_lengths(text)
             if line_err is not None:
                 detail = f"{member}:{line_err}"
-                return results + [RuleResult("LINE_LENGTH", "FAIL", detail)], [], []
+                return results + [RuleResult("LINE_LENGTH", "FAIL", detail)], [], [], None
         patch_members.append((member, items[member]))
         decision_paths.append(repo_path)
     results.append(RuleResult("PATCH_MEMBER_PATHS", "PASS", f"paths={len(decision_paths)}"))
     results.append(RuleResult("PATCH_ASCII", "PASS", "patch_members_ascii_only"))
     results.append(RuleResult("LINE_LENGTH", "PASS", "py_js_added_lines<=100"))
-    return results, patch_members, decision_paths
+    return results, patch_members, decision_paths, patch_target
 
 
 def _docs_gate(decision_paths: list[str]) -> RuleResult:
@@ -733,16 +785,50 @@ def main(argv: list[str] | None = None) -> int:
                 raise ValidationError("repair_overlay_not_found")
         elif not args.workspace_snapshot:
             raise ValidationError("workspace_snapshot_required_for_initial_mode")
+        if args.workspace_snapshot and not Path(args.workspace_snapshot).is_file():
+            raise ValidationError("workspace_snapshot_not_found")
         if args.supplemental_file and not args.repair_overlay:
             raise ValidationError("supplemental_file_requires_repair_mode")
         patch_path = Path(args.patch).resolve()
         results = [_validate_basename(patch_path, args.issue_id)]
-        more, patch_members, decision_paths = _collect_patch_members(
+        more, patch_members, decision_paths, patch_target = _collect_patch_members(
             patch_path,
             args.issue_id,
             args.commit_message,
         )
         results.extend(more)
+        if any(item.status == "FAIL" for item in results):
+            sys.stdout.write(_format(results))
+            return 1
+        if patch_target is None:
+            raise ValidationError("patch_target_missing_after_validation")
+        if args.repair_overlay:
+            repair_rule, overlay_target = _repair_overlay_target_rule(Path(args.repair_overlay))
+            results.append(repair_rule)
+            if overlay_target is not None:
+                results.append(
+                    _target_match_rule(
+                        "REPAIR_TARGET_MATCH",
+                        overlay_target,
+                        patch_target,
+                    )
+                )
+                if args.workspace_snapshot:
+                    results.append(
+                        _repair_snapshot_consistency_rule(
+                            Path(args.workspace_snapshot),
+                            overlay_target,
+                        )
+                    )
+        else:
+            initial_rule, initial_target = _initial_target_source_rule(
+                Path(args.workspace_snapshot)
+            )
+            results.append(initial_rule)
+            if initial_target is not None:
+                results.append(
+                    _target_match_rule("INITIAL_TARGET_MATCH", initial_target, patch_target)
+                )
         if any(item.status == "FAIL" for item in results):
             sys.stdout.write(_format(results))
             return 1

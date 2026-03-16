@@ -8,6 +8,8 @@ from zipfile import ZIP_DEFLATED, ZipFile
 
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts/pm_validator.py"
 COMMIT = "Align PM validator monolith checks"
+DEFAULT_TARGET = "audiomason2"
+ALT_TARGET = "patchhub"
 
 
 def _write(path: Path, text: str) -> None:
@@ -79,7 +81,7 @@ def _patch_zip(
     members: dict[str, bytes],
     *,
     issue: str = "601",
-    target: str | None = ".",
+    target: str | None = DEFAULT_TARGET,
 ) -> None:
     files = {
         "COMMIT_MESSAGE.txt": (COMMIT + "\n").encode("utf-8"),
@@ -89,6 +91,15 @@ def _patch_zip(
     if target is not None:
         files["target.txt"] = (target + "\n").encode("utf-8")
     _write_zip(path, files)
+
+
+def _overlay_zip(
+    path: Path,
+    members: dict[str, bytes],
+    *,
+    target: str = DEFAULT_TARGET,
+) -> None:
+    _write_zip(path, {**members, "target.txt": (target + "\n").encode("utf-8")})
 
 
 def _run(*args: str) -> subprocess.CompletedProcess[str]:
@@ -120,7 +131,7 @@ def test_initial_mode_passes(tmp_path: Path) -> None:
     relpath = "scripts/sample.py"
     before = "def value():\n    return 1\n"
     after = "def value():\n    return 2\n"
-    snapshot = tmp_path / "workspace.zip"
+    snapshot = tmp_path / f"{DEFAULT_TARGET}-main_666.zip"
     patch_zip = tmp_path / "issue_601_v2.zip"
     _write_zip(snapshot, {relpath: before.encode("utf-8")})
     _patch_zip(patch_zip, {_safe_member(relpath): _git_patch(relpath, before, after)})
@@ -135,25 +146,24 @@ def test_initial_mode_passes_with_target_file(tmp_path: Path) -> None:
     relpath = "scripts/sample.py"
     before = "def value():\n    return 1\n"
     after = "def value():\n    return 2\n"
-    snapshot = tmp_path / "workspace.zip"
+    snapshot = tmp_path / f"{DEFAULT_TARGET}-main_666.zip"
     patch_zip = tmp_path / "issue_601_v2.zip"
     _write_zip(snapshot, {relpath: before.encode("utf-8")})
     _patch_zip(
         patch_zip,
         {_safe_member(relpath): _git_patch(relpath, before, after)},
-        target="../patchhub",
     )
 
     proc = _run("601", COMMIT, str(patch_zip), "--workspace-snapshot", str(snapshot))
     assert proc.returncode == 0, proc.stdout + proc.stderr
-    assert "RULE TARGET_FILE: PASS - ../patchhub" in proc.stdout
+    assert f"RULE TARGET_FILE: PASS - {DEFAULT_TARGET}" in proc.stdout
 
 
 def test_initial_mode_without_target_file_fails(tmp_path: Path) -> None:
     relpath = "scripts/sample.py"
     before = "def value():\n    return 1\n"
     after = "def value():\n    return 2\n"
-    snapshot = tmp_path / "workspace.zip"
+    snapshot = tmp_path / f"{DEFAULT_TARGET}-main_666.zip"
     patch_zip = tmp_path / "issue_601_v2.zip"
     _write_zip(snapshot, {relpath: before.encode("utf-8")})
     _patch_zip(
@@ -167,13 +177,95 @@ def test_initial_mode_without_target_file_fails(tmp_path: Path) -> None:
     assert "RULE TARGET_FILE: FAIL - missing_target_file" in proc.stdout
 
 
+def test_initial_mode_rejects_invalid_snapshot_basename(tmp_path: Path) -> None:
+    relpath = "scripts/sample.py"
+    before = "def value():\n    return 1\n"
+    after = "def value():\n    return 2\n"
+    snapshot = tmp_path / "workspace.zip"
+    patch_zip = tmp_path / "issue_601_v2.zip"
+    _write_zip(snapshot, {relpath: before.encode("utf-8")})
+    _patch_zip(patch_zip, {_safe_member(relpath): _git_patch(relpath, before, after)})
+
+    proc = _run("601", COMMIT, str(patch_zip), "--workspace-snapshot", str(snapshot))
+    assert proc.returncode == 1
+    assert (
+        "RULE INITIAL_TARGET_SOURCE: FAIL - "
+        "invalid_workspace_snapshot_basename:workspace.zip" in proc.stdout
+    )
+
+
+def test_initial_mode_rejects_target_mismatch(tmp_path: Path) -> None:
+    relpath = "scripts/sample.py"
+    before = "def value():\n    return 1\n"
+    after = "def value():\n    return 2\n"
+    snapshot = tmp_path / f"{ALT_TARGET}-main_666.zip"
+    patch_zip = tmp_path / "issue_601_v2.zip"
+    _write_zip(snapshot, {relpath: before.encode("utf-8")})
+    _patch_zip(
+        patch_zip,
+        {_safe_member(relpath): _git_patch(relpath, before, after)},
+        target=DEFAULT_TARGET,
+    )
+
+    proc = _run("601", COMMIT, str(patch_zip), "--workspace-snapshot", str(snapshot))
+    assert proc.returncode == 1
+    assert (
+        f"RULE INITIAL_TARGET_MATCH: FAIL - expected={ALT_TARGET}:actual={DEFAULT_TARGET}"
+        in proc.stdout
+    )
+
+
+def test_target_file_rejects_crlf_newlines(tmp_path: Path) -> None:
+    relpath = "scripts/sample.py"
+    before = "def value():\n    return 1\n"
+    after = "def value():\n    return 2\n"
+    snapshot = tmp_path / f"{DEFAULT_TARGET}-main_666.zip"
+    patch_zip = tmp_path / "issue_601_v2.zip"
+    _write_zip(snapshot, {relpath: before.encode("utf-8")})
+    _write_zip(
+        patch_zip,
+        {
+            "COMMIT_MESSAGE.txt": (COMMIT + "\n").encode("utf-8"),
+            "ISSUE_NUMBER.txt": b"601\n",
+            "target.txt": (DEFAULT_TARGET + "\r\n").encode("utf-8"),
+            _safe_member(relpath): _git_patch(relpath, before, after),
+        },
+    )
+
+    proc = _run("601", COMMIT, str(patch_zip), "--workspace-snapshot", str(snapshot))
+    assert proc.returncode == 1
+    assert "RULE TARGET_FILE: FAIL - target_must_use_lf_newlines" in proc.stdout
+
+
+def test_target_file_rejects_multiple_lines(tmp_path: Path) -> None:
+    relpath = "scripts/sample.py"
+    before = "def value():\n    return 1\n"
+    after = "def value():\n    return 2\n"
+    snapshot = tmp_path / f"{DEFAULT_TARGET}-main_666.zip"
+    patch_zip = tmp_path / "issue_601_v2.zip"
+    _write_zip(snapshot, {relpath: before.encode("utf-8")})
+    _write_zip(
+        patch_zip,
+        {
+            "COMMIT_MESSAGE.txt": (COMMIT + "\n").encode("utf-8"),
+            "ISSUE_NUMBER.txt": b"601\n",
+            "target.txt": f"{DEFAULT_TARGET}\nextra\n".encode(),
+            _safe_member(relpath): _git_patch(relpath, before, after),
+        },
+    )
+
+    proc = _run("601", COMMIT, str(patch_zip), "--workspace-snapshot", str(snapshot))
+    assert proc.returncode == 1
+    assert "RULE TARGET_FILE: FAIL - target_must_have_exactly_one_line" in proc.stdout
+
+
 def test_repair_overlay_only_passes(tmp_path: Path) -> None:
     relpath = "scripts/sample.py"
     before = "def value():\n    return 2\n"
     after = "def value():\n    return 3\n"
     overlay = tmp_path / "patched_issue601_v1.zip"
     patch_zip = tmp_path / "issue_601_v2.zip"
-    _write_zip(overlay, {relpath: before.encode("utf-8")})
+    _overlay_zip(overlay, {relpath: before.encode("utf-8")})
     _patch_zip(patch_zip, {_safe_member(relpath): _git_patch(relpath, before, after)})
 
     proc = _run("601", COMMIT, str(patch_zip), "--repair-overlay", str(overlay))
@@ -186,11 +278,11 @@ def test_repair_supplemental_file_is_supported(tmp_path: Path) -> None:
     relpath = "tests/test_sample.txt"
     before = "a\n"
     after = "b\n"
-    snapshot = tmp_path / "workspace.zip"
+    snapshot = tmp_path / f"{DEFAULT_TARGET}-main_666.zip"
     overlay = tmp_path / "patched_issue601_v1.zip"
     patch_zip = tmp_path / "issue_601_v2.zip"
     _write_zip(snapshot, {relpath: before.encode("utf-8")})
-    _write_zip(overlay, {"scripts/sample.py": b"def value():\n    return 2\n"})
+    _overlay_zip(overlay, {"scripts/sample.py": b"def value():\n    return 2\n"})
     _patch_zip(patch_zip, {_safe_member(relpath): _git_patch(relpath, before, after)})
 
     proc = _run(
@@ -212,11 +304,11 @@ def test_repair_without_required_supplemental_file_fails(tmp_path: Path) -> None
     relpath = "tests/test_sample.txt"
     before = "a\n"
     after = "b\n"
-    snapshot = tmp_path / "workspace.zip"
+    snapshot = tmp_path / f"{DEFAULT_TARGET}-main_666.zip"
     overlay = tmp_path / "patched_issue601_v1.zip"
     patch_zip = tmp_path / "issue_601_v2.zip"
     _write_zip(snapshot, {relpath: before.encode("utf-8")})
-    _write_zip(overlay, {})
+    _overlay_zip(overlay, {})
     _patch_zip(patch_zip, {_safe_member(relpath): _git_patch(relpath, before, after)})
 
     proc = _run(
@@ -235,8 +327,62 @@ def test_repair_without_required_supplemental_file_fails(tmp_path: Path) -> None
     assert expected in proc.stdout
 
 
+def test_repair_rejects_target_mismatch(tmp_path: Path) -> None:
+    relpath = "scripts/sample.py"
+    before = "def value():\n    return 2\n"
+    after = "def value():\n    return 3\n"
+    overlay = tmp_path / "patched_issue601_v1.zip"
+    patch_zip = tmp_path / "issue_601_v2.zip"
+    _overlay_zip(overlay, {relpath: before.encode("utf-8")}, target=ALT_TARGET)
+    _patch_zip(
+        patch_zip,
+        {_safe_member(relpath): _git_patch(relpath, before, after)},
+        target=DEFAULT_TARGET,
+    )
+
+    proc = _run("601", COMMIT, str(patch_zip), "--repair-overlay", str(overlay))
+    assert proc.returncode == 1
+    assert (
+        f"RULE REPAIR_TARGET_MATCH: FAIL - expected={ALT_TARGET}:actual={DEFAULT_TARGET}"
+        in proc.stdout
+    )
+
+
+def test_repair_rejects_overlay_snapshot_target_mismatch(tmp_path: Path) -> None:
+    relpath = "tests/test_sample.txt"
+    before = "a\n"
+    after = "b\n"
+    snapshot = tmp_path / f"{DEFAULT_TARGET}-main_666.zip"
+    overlay = tmp_path / "patched_issue601_v1.zip"
+    patch_zip = tmp_path / "issue_601_v2.zip"
+    _write_zip(snapshot, {relpath: before.encode("utf-8")})
+    _overlay_zip(overlay, {}, target=ALT_TARGET)
+    _patch_zip(
+        patch_zip,
+        {_safe_member(relpath): _git_patch(relpath, before, after)},
+        target=ALT_TARGET,
+    )
+
+    proc = _run(
+        "601",
+        COMMIT,
+        str(patch_zip),
+        "--repair-overlay",
+        str(overlay),
+        "--workspace-snapshot",
+        str(snapshot),
+        "--supplemental-file",
+        relpath,
+    )
+    assert proc.returncode == 1
+    assert (
+        f"RULE REPAIR_TARGET_SNAPSHOT_CONSISTENCY: FAIL - "
+        f"overlay={ALT_TARGET}:snapshot={DEFAULT_TARGET}" in proc.stdout
+    )
+
+
 def test_monolith_hub_growth_is_reported(tmp_path: Path) -> None:
-    snapshot = tmp_path / "workspace.zip"
+    snapshot = tmp_path / f"{DEFAULT_TARGET}-main_666.zip"
     patch_zip = tmp_path / "issue_601_v2.zip"
     base_files = {
         "scripts/am_patch/importer_a.py": "def run() -> None:\n    return None\n",
@@ -305,7 +451,7 @@ def test_initial_mode_fails_on_non_ascii_commit_message(tmp_path: Path) -> None:
     relpath = "scripts/sample.py"
     before = "def value():\n    return 1\n"
     after = "def value():\n    return 2\n"
-    snapshot = tmp_path / "workspace.zip"
+    snapshot = tmp_path / f"{DEFAULT_TARGET}-main_666.zip"
     patch_zip = tmp_path / "issue_601_v2.zip"
     _write_zip(snapshot, {relpath: before.encode("utf-8")})
     _write_zip(
@@ -326,7 +472,7 @@ def test_initial_mode_fails_on_non_ascii_patch_text(tmp_path: Path) -> None:
     relpath = "scripts/sample.py"
     before = "def value():\n    return 1\n"
     after = 'def value():\n    return "e\u0301"\n'
-    snapshot = tmp_path / "workspace.zip"
+    snapshot = tmp_path / f"{DEFAULT_TARGET}-main_666.zip"
     patch_zip = tmp_path / "issue_601_v2.zip"
     _write_zip(snapshot, {relpath: before.encode("utf-8")})
     _patch_zip(patch_zip, {_safe_member(relpath): _git_patch(relpath, before, after)})
@@ -339,7 +485,7 @@ def test_initial_mode_fails_on_non_ascii_patch_text(tmp_path: Path) -> None:
 
 def test_initial_mode_fails_on_non_ascii_patch_member_path(tmp_path: Path) -> None:
     relpath = "scripts/sample.py"
-    snapshot = tmp_path / "workspace.zip"
+    snapshot = tmp_path / f"{DEFAULT_TARGET}-main_666.zip"
     patch_zip = tmp_path / "issue_601_v2.zip"
     _write_zip(snapshot, {relpath: b"def value():\n    return 1\n"})
     _patch_zip(
@@ -361,7 +507,7 @@ def test_monolith_threshold_crossing_to_large_fails(tmp_path: Path) -> None:
     relpath = "scripts/threshold_large.py"
     before = _module_text(exports=10, values=633)
     after = _module_text(exports=13, values=987)
-    snapshot = tmp_path / "workspace.zip"
+    snapshot = tmp_path / f"{DEFAULT_TARGET}-main_666.zip"
     patch_zip = tmp_path / "issue_601_v2.zip"
     _write_zip(snapshot, {relpath: before.encode("utf-8")})
     _patch_zip(patch_zip, {_safe_member(relpath): _git_patch(relpath, before, after)})
@@ -376,7 +522,7 @@ def test_monolith_threshold_crossing_to_large_within_allowance_passes(tmp_path: 
     relpath = "scripts/threshold_large.py"
     before = _module_text(exports=10, values=878)
     after = _module_text(exports=12, values=880)
-    snapshot = tmp_path / "workspace.zip"
+    snapshot = tmp_path / f"{DEFAULT_TARGET}-main_666.zip"
     patch_zip = tmp_path / "issue_601_v2.zip"
     _write_zip(snapshot, {relpath: before.encode("utf-8")})
     _patch_zip(patch_zip, {_safe_member(relpath): _git_patch(relpath, before, after)})
@@ -391,7 +537,7 @@ def test_monolith_threshold_crossing_to_huge_fails_on_growth(tmp_path: Path) -> 
     relpath = "scripts/threshold_huge.py"
     before = _module_text(exports=10, values=1279)
     after = _module_text(exports=10, values=1280)
-    snapshot = tmp_path / "workspace.zip"
+    snapshot = tmp_path / f"{DEFAULT_TARGET}-main_666.zip"
     patch_zip = tmp_path / "issue_601_v2.zip"
     _write_zip(snapshot, {relpath: before.encode("utf-8")})
     _patch_zip(patch_zip, {_safe_member(relpath): _git_patch(relpath, before, after)})
@@ -406,7 +552,7 @@ def test_monolith_drop_below_large_threshold_passes(tmp_path: Path) -> None:
     relpath = "scripts/threshold_drop.py"
     before = _module_text(exports=10, values=880)
     after = _module_text(exports=12, values=872)
-    snapshot = tmp_path / "workspace.zip"
+    snapshot = tmp_path / f"{DEFAULT_TARGET}-main_666.zip"
     patch_zip = tmp_path / "issue_601_v2.zip"
     _write_zip(snapshot, {relpath: before.encode("utf-8")})
     _patch_zip(patch_zip, {_safe_member(relpath): _git_patch(relpath, before, after)})
@@ -421,15 +567,15 @@ def test_initial_mode_rejects_unexpected_root_entry(tmp_path: Path) -> None:
     relpath = "scripts/sample.py"
     before = "def value():\n    return 1\n"
     after = "def value():\n    return 2\n"
-    snapshot = tmp_path / "workspace.zip"
+    snapshot = tmp_path / f"{DEFAULT_TARGET}-main_666.zip"
     patch_zip = tmp_path / "issue_601_v2.zip"
     _write_zip(snapshot, {relpath: before.encode("utf-8")})
     _patch_zip(patch_zip, {_safe_member(relpath): _git_patch(relpath, before, after)})
     with ZipFile(patch_zip, "a", compression=ZIP_DEFLATED) as zf:
-        zf.writestr("target.txt", b"../patchhub\n")
+        zf.writestr("target.txt", (DEFAULT_TARGET + "\n").encode("utf-8"))
         zf.writestr("notes.txt", b"x\n")
 
     proc = _run("601", COMMIT, str(patch_zip), "--workspace-snapshot", str(snapshot))
     assert proc.returncode == 1
-    assert "RULE TARGET_FILE: PASS - ../patchhub" in proc.stdout
+    assert f"RULE TARGET_FILE: PASS - {DEFAULT_TARGET}" in proc.stdout
     assert "RULE PER_FILE_LAYOUT: FAIL - extra_entries=['notes.txt']" in proc.stdout
