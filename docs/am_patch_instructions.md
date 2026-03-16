@@ -2,7 +2,7 @@
 
 # Patch Authoring Manual (PM)
 
-AUTHORITATIVE -- AudioMason2 Status: active Version: v2.42
+AUTHORITATIVE -- AudioMason2 Status: active Version: v2.43
 
 This manual defines what a chat must produce so that the user can run
 the patch successfully and close the issue.
@@ -102,8 +102,9 @@ Rules:
 5.  Each patch file MUST pass: `git apply --check <that_file.patch>`.
 6.  The zip MUST NOT contain any additional files except:
     - per-file patch files under patches/per_file/ as defined above,
-    - the required COMMIT_MESSAGE.txt at the zip root, and
-    - the required ISSUE_NUMBER.txt at the zip root.
+    - the required COMMIT_MESSAGE.txt at the zip root,
+    - the required ISSUE_NUMBER.txt at the zip root, and
+    - the optional target.txt at the zip root.
 7.  The patch zip basename MUST be exactly `issue_<ISSUE>_v<N>.zip`, where:
     - `<ISSUE>` exactly matches `ISSUE_NUMBER.txt`, and
     - `<N>` is a positive integer written in ASCII digits.
@@ -126,6 +127,17 @@ Rules:
 3. The file content MUST be non-empty. 
 4. The issue number  used in the canonical invocation command MUST match the file content exactly after stripping exactly one trailing LF if present (no other trimming). 
 ------------------------------------------------------------------------ 
+## Target file (HARD)
+
+1. The patch zip MAY include at most one optional target file at the zip root named:
+   target.txt
+2. If present, target.txt MUST be ASCII-only and use LF newlines.
+3. If present, target.txt MUST contain exactly one non-empty line.
+4. If present, target.txt carries the patch target value in the same path syntax
+   used by the runner target-root policy surface.
+
+------------------------------------------------------------------------
+
 ## Patch requirements (HARD)
 
 1.   Paths are repo-relative.
