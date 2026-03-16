@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import sys
-import zipfile
 from pathlib import Path
 
 
@@ -25,7 +24,7 @@ repo_root = Path(__file__).resolve().parents[1]
 scripts_dir = repo_root / "scripts"
 sys.path.insert(0, str(scripts_dir))
 
-from am_patch.archive import archive_patch, make_failure_zip  # noqa: E402
+from am_patch.archive import archive_patch  # noqa: E402
 
 
 def test_archive_patch_moves_incoming_source(tmp_path: Path) -> None:
@@ -96,49 +95,3 @@ def test_archive_patch_copies_from_unsuccessful_archive(tmp_path: Path) -> None:
     assert source.read_text(encoding="utf-8") == "patch"
     assert dest.read_text(encoding="utf-8") == "patch"
     assert "archived patch script (copied)" in logger.lines[-1]
-
-
-def test_make_failure_zip_includes_root_target_metadata(tmp_path: Path) -> None:
-    logger = _FakeLogger()
-    workspace_repo = tmp_path / "repo"
-    workspace_repo.mkdir()
-    (workspace_repo / "alpha.py").write_text("print(1)\n", encoding="utf-8")
-    log_path = tmp_path / "run.log"
-    log_path.write_text("log\n", encoding="utf-8")
-    zip_path = tmp_path / "patched.zip"
-
-    make_failure_zip(
-        logger,
-        zip_path,
-        workspace_repo=workspace_repo,
-        log_path=log_path,
-        include_repo_files=["alpha.py"],
-        target_selector="repo",
-    )
-
-    with zipfile.ZipFile(zip_path, "r") as zf:
-        assert zf.read("target.txt") == b"repo\n"
-        assert zf.read("logs/run.log") == b"log\n"
-        assert zf.read("alpha.py") == b"print(1)\n"
-
-
-def test_make_failure_zip_rejects_non_ascii_target_selector(tmp_path: Path) -> None:
-    logger = _FakeLogger()
-    workspace_repo = tmp_path / "repo"
-    workspace_repo.mkdir()
-    log_path = tmp_path / "run.log"
-    log_path.write_text("log\n", encoding="utf-8")
-
-    try:
-        make_failure_zip(
-            logger,
-            tmp_path / "patched.zip",
-            workspace_repo=workspace_repo,
-            log_path=log_path,
-            include_repo_files=[],
-            target_selector="neascii_\u010d",
-        )
-    except ValueError as exc:
-        assert str(exc) == "failure zip target_selector must be ASCII-only"
-    else:
-        raise AssertionError("expected ValueError for non-ASCII target selector")

@@ -1,4 +1,4 @@
-# AM Patch Runner - Functional Specification v9 (UPDATED)
+# AM Patch Runner - Functional Specification v7 (UPDATED)
 
 This document is **authoritative** for the AM Patch Runner contract.
 
@@ -166,7 +166,7 @@ The runner prints its version: - on every invocation - in `--help`
 
 Example:
 
-    am_patch RUNNER_VERSION=4.4.8
+    am_patch RUNNER_VERSION=4.4.4
 
 Version discipline: - Any change that alters runner behavior MUST bump
 `RUNNER_VERSION`. - Any change that alters runner behavior MUST update

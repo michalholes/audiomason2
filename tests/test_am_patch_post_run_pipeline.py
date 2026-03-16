@@ -112,7 +112,6 @@ def test_workspace_audit_runs_once_after_workspace_delete(tmp_path: Path) -> Non
     def _build_artifacts(**kwargs):
         events.append("artifacts")
         assert kwargs["ws_repo_for_fail_zip"] == ctx.repo_root
-        assert kwargs["failure_target_selector"] == "repo"
 
     post_run_mod.build_artifacts = _build_artifacts
 

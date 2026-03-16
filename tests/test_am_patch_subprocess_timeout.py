@@ -675,7 +675,7 @@ def test_build_paths_and_logger_supports_cross_repo_target_and_artifacts_root(
 
         policy = policy_cls()
         policy.target_repo_roots = [str(target_a), str(target_b)]
-        policy.active_target_repo_root = "target_b"
+        policy.active_target_repo_root = str(target_b)
         policy.artifacts_root = str(artifacts)
         policy.current_log_symlink_enabled = False
         policy.verbosity = "quiet"
@@ -699,28 +699,3 @@ def test_build_paths_and_logger_supports_cross_repo_target_and_artifacts_root(
             ctx.logger.close()
         for key, value in old.items():
             setattr(runtime_mod, key, value)
-
-
-def test_build_paths_and_logger_rejects_legacy_repo_root_outside_registry(
-    tmp_path: Path,
-) -> None:
-    (_, policy_cls, _, runner_error_cls, *_, build_paths_and_logger, _, _) = _import_am_patch()
-
-    policy = policy_cls()
-    policy.repo_root = str(tmp_path / "target")
-    policy.current_log_symlink_enabled = False
-    policy.verbosity = "quiet"
-    policy.log_level = "warning"
-    policy.json_out = False
-    policy.ipc_socket_enabled = False
-
-    cli = SimpleNamespace(issue_id="1000", mode="workspace")
-    cfg = tmp_path / "am_patch_test.toml"
-    cfg.write_text("", encoding="utf-8")
-
-    with pytest.raises(runner_error_cls) as excinfo:
-        build_paths_and_logger(cli, policy, cfg, "test")
-
-    assert excinfo.value.stage == "CONFIG"
-    assert excinfo.value.category == "INVALID"
-    assert "active_target_repo_root must resolve to runner_root" in excinfo.value.message

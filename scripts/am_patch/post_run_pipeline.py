@@ -7,7 +7,6 @@ from am_patch.archive import archive_patch
 from am_patch.artifacts import build_artifacts
 from am_patch.errors import RunnerError
 from am_patch.post_success_audit import run_post_success_audit
-from am_patch.root_model import render_target_selector
 from am_patch.run_result import RunResult, _normalize_failure_summary
 from am_patch.runtime import _parse_gate_list, _stage_rank
 from am_patch.scope import changed_paths
@@ -216,11 +215,6 @@ def run_post_run_pipeline(*, ctx: Any, result: RunResult) -> int:
                 failed_patch_blobs_for_zip=result.failed_patch_blobs_for_zip,
                 files_for_fail_zip=files_for_fail_zip,
                 ws_repo_for_fail_zip=ws_repo_for_fail_zip,
-                failure_target_selector=render_target_selector(
-                    runner_root=getattr(ctx, "runner_root", repo_root) or repo_root,
-                    active_target_repo_root=repo_root,
-                    target_repo_roots=list(getattr(policy, "target_repo_roots", []) or []),
-                ),
                 ws_attempt=(
                     result.ws_for_posthook.attempt if result.ws_for_posthook is not None else None
                 ),
