@@ -52,22 +52,23 @@ def resolve_root_model(policy: object, *, runner_root: Path) -> RootModel:
     active_target = _resolve_runner_relative(
         getattr(policy, "active_target_repo_root", None), runner_root=runner_root
     )
-    active_target_source = "active_target_repo_root" if active_target is not None else None
+    active_target_from_registry = active_target is not None
     if active_target is None:
         active_target = _resolve_runner_relative(
             getattr(policy, "repo_root", None), runner_root=runner_root
         )
-        if active_target is not None:
-            active_target_source = "repo_root"
     if active_target is None:
         active_target = runner_root
 
-    enforce_registry = active_target_source in {"active_target_repo_root", "repo_root"}
-    if enforce_registry and active_target != runner_root and active_target not in registry:
+    if (
+        active_target_from_registry
+        and active_target != runner_root
+        and active_target not in registry
+    ):
         raise RunnerError(
             "CONFIG",
             "INVALID",
-            f"{active_target_source} must resolve to runner_root "
+            "active_target_repo_root must resolve to runner_root "
             "or an entry from target_repo_roots",
         )
 

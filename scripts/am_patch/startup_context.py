@@ -40,18 +40,8 @@ class RunContext:
     artifacts_root: Path | None = None
 
 
-def _detect_runner_root(module_file: str | Path | None = None) -> Path:
-    module_path = Path(module_file) if module_file is not None else Path(__file__)
-    package_dir = module_path.resolve().parent
-    if package_dir.name != "am_patch":
-        raise RunnerError("CONFIG", "INVALID", f"unexpected am_patch package path: {package_dir}")
-    if package_dir.parent.name == "scripts":
-        return package_dir.parent.parent
-    return package_dir.parent
-
-
 def build_paths_and_logger(cli: Any, policy: Any, config_path: Path, used_cfg: str) -> RunContext:
-    root_model = resolve_root_model(policy, runner_root=_detect_runner_root())
+    root_model = resolve_root_model(policy, runner_root=Path(__file__).resolve().parents[2])
     repo_root = root_model.active_target_repo_root
     patch_root = root_model.patch_root
     isolated_work_patch_dir: Path | None = None
