@@ -99,8 +99,10 @@
 		return new Promise((resolve, reject) => {
 			var input = document.createElement("input");
 			var settled = false;
+			var reading = false;
 			var focusHandler = null;
-			var focusCancelTimer = null;
+			var focusSettleTimer = null;
+			var focusSettleDeadline = 0;
 			var schedule =
 				typeof root.setTimeout === "function"
 					? root.setTimeout.bind(root)
@@ -109,20 +111,25 @@
 				typeof root.clearTimeout === "function"
 					? root.clearTimeout.bind(root)
 					: null;
-			var focusCancelDelayMs = 150;
+			var now =
+				root.Date && typeof root.Date.now === "function"
+					? root.Date.now.bind(root.Date)
+					: Date.now;
+			var focusSettleWindowMs = 1000;
+			var focusSettlePollMs = 25;
 
 			function hasSelectedFile() {
 				return !!(input.files && input.files[0]);
 			}
 
-			function clearFocusCancelTimer() {
-				if (focusCancelTimer == null) {
+			function clearFocusSettleTimer() {
+				if (focusSettleTimer == null) {
 					return;
 				}
 				if (cancelScheduled) {
-					cancelScheduled(focusCancelTimer);
+					cancelScheduled(focusSettleTimer);
 				}
-				focusCancelTimer = null;
+				focusSettleTimer = null;
 			}
 
 			function finish(result, err) {
@@ -130,7 +137,7 @@
 					return;
 				}
 				settled = true;
-				clearFocusCancelTimer();
+				clearFocusSettleTimer();
 				if (focusHandler && typeof root.removeEventListener === "function") {
 					root.removeEventListener("focus", focusHandler, true);
 				}
@@ -144,50 +151,87 @@
 				resolve(result);
 			}
 
-			function scheduleFocusCancelCheck() {
-				if (settled || hasSelectedFile()) {
+			function finishFallbackExhausted() {
+				finish(
+					null,
+					new Error(
+						"Open from file failed after dialog close without a selected file.",
+					),
+				);
+			}
+
+			function consumeSelectedFile() {
+				var file = null;
+				if (settled || reading) {
+					return true;
+				}
+				file = hasSelectedFile() ? input.files[0] : null;
+				if (!file) {
+					return false;
+				}
+				reading = true;
+				clearFocusSettleTimer();
+				Promise.resolve(readFileAsText(file)).then(
+					(text) => {
+						finish({
+							cancelled: false,
+							text: String(text || ""),
+						});
+					},
+					(err) => {
+						finish(null, err || new Error("Open from file failed."));
+					},
+				);
+				return true;
+			}
+
+			function scheduleFocusSettleCheck() {
+				var remaining = 0;
+				if (settled || consumeSelectedFile()) {
 					return;
 				}
-				clearFocusCancelTimer();
+				clearFocusSettleTimer();
+				remaining = focusSettleDeadline - now();
+				if (remaining <= 0) {
+					finishFallbackExhausted();
+					return;
+				}
 				if (!schedule) {
-					finish({ cancelled: true, text: "" });
+					finishFallbackExhausted();
 					return;
 				}
-				focusCancelTimer = schedule(() => {
-					focusCancelTimer = null;
-					if (settled || hasSelectedFile()) {
-						return;
-					}
-					finish({ cancelled: true, text: "" });
-				}, focusCancelDelayMs);
+				focusSettleTimer = schedule(
+					() => {
+						focusSettleTimer = null;
+						scheduleFocusSettleCheck();
+					},
+					Math.min(focusSettlePollMs, remaining),
+				);
+			}
+
+			function startFocusSettleWindow() {
+				if (settled || reading) {
+					return;
+				}
+				focusSettleDeadline = now() + focusSettleWindowMs;
+				scheduleFocusSettleCheck();
 			}
 
 			input.type = "file";
 			input.accept = ".json,application/json,text/plain,.jsonl,.txt";
 			input.style.display = "none";
-			input.addEventListener("change", async () => {
-				clearFocusCancelTimer();
-				var file = hasSelectedFile() ? input.files[0] : null;
-				if (!file) {
-					finish({ cancelled: true, text: "" });
-					return;
-				}
-				try {
-					finish({
-						cancelled: false,
-						text: await readFileAsText(file),
-					});
-				} catch (err) {
-					finish(null, err || new Error("Open from file failed."));
+			input.addEventListener("change", () => {
+				if (!consumeSelectedFile()) {
+					finishFallbackExhausted();
 				}
 			});
 			input.addEventListener("cancel", () => {
-				clearFocusCancelTimer();
+				clearFocusSettleTimer();
 				finish({ cancelled: true, text: "" });
 			});
 			if (typeof root.addEventListener === "function") {
 				focusHandler = () => {
-					scheduleFocusCancelCheck();
+					startFocusSettleWindow();
 				};
 				root.addEventListener("focus", focusHandler, true);
 			}

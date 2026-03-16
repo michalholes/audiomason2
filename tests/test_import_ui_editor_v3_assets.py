@@ -410,7 +410,7 @@ await window.AM2FlowJSONModalState.openModal("wizard");
 global.__pickerBehavior = {
   mode: "select",
   focusFirst: true,
-  changeDelay: 25,
+  changeDelay: 250,
   text: `
 {
   "version": 3,
@@ -443,7 +443,9 @@ def test_flow_json_modal_open_from_file_cancel_still_returns_without_loading(
 await window.AM2FlowJSONModalState.openModal("config");
 const before = document.getElementById("flowJsonModalEditor").value;
 global.__pickerBehavior = {
+  mode: "cancel",
   focusFirst: true,
+  cancelDelay: 0,
 };
 const statusBefore = document.getElementById("flowJsonModalStatus").textContent;
 const opened = await window.AM2FlowJSONModalState.openFromFile();
@@ -461,6 +463,36 @@ process.stdout.write(JSON.stringify({
     assert result["after"] == result["before"]
     assert result["statusText"] == result["statusBefore"]
     assert result["errorText"] == ""
+
+
+@pytest.mark.skipif((not _HAS_FASTAPI) or (not _HAS_HTTPX), reason="fastapi+httpx required")
+def test_flow_json_modal_open_from_file_surfaces_fallback_exhaustion_error(
+    tmp_path: Path,
+) -> None:
+    _make_engine(tmp_path)
+    result = _run_flow_json_modal_picker_scenario(
+        """
+await window.AM2FlowJSONModalState.openModal("config");
+const before = document.getElementById("flowJsonModalEditor").value;
+global.__pickerBehavior = {
+  focusFirst: true,
+};
+const opened = await window.AM2FlowJSONModalState.openFromFile();
+process.stdout.write(JSON.stringify({
+  opened,
+  before,
+  after: document.getElementById("flowJsonModalEditor").value,
+  statusText: document.getElementById("flowJsonModalStatus").textContent,
+  errorText: document.getElementById("flowJsonModalError").textContent,
+}));
+"""
+    )
+    assert result["opened"] is False
+    assert result["after"] == result["before"]
+    assert result["statusText"] == ""
+    assert result["errorText"] == (
+        "Error: Open from file failed after dialog close without a selected file."
+    )
 
 
 def test_flow_json_clipboard_falls_back_to_exec_command() -> None:

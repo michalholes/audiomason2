@@ -470,6 +470,10 @@ function makeInputNode() {{
         this.files = [{{ text: async () => String(behavior.text || "") }}];
         this.dispatch("change");
       }}, Number(behavior.changeDelay || 0));
+      return;
+    }}
+    if (behavior.mode === "cancel") {{
+      setTimeout(() => this.dispatch("cancel"), Number(behavior.cancelDelay || 0));
     }}
   }};
   return input;
@@ -583,7 +587,7 @@ window.AM2FlowStepModalState.setView("json");
 global.__pickerBehavior = {
   mode: "select",
   focusFirst: true,
-  changeDelay: 25,
+  changeDelay: 250,
   text: (
     `
 {
@@ -595,7 +599,7 @@ global.__pickerBehavior = {
   ),
 };
 document.getElementById("flowStepModalJsonOpenFromFile").dispatch("click");
-await new Promise((resolve) => setTimeout(resolve, 80));
+await new Promise((resolve) => setTimeout(resolve, 350));
 process.stdout.write(JSON.stringify({
   jsonValue: document.getElementById("flowStepModalJsonEditor").value,
   statusText: document.getElementById("flowStepModalStatus").textContent,
@@ -606,3 +610,29 @@ process.stdout.write(JSON.stringify({
     assert '"step_id": "effective_title"' in str(result["jsonValue"])
     assert result["statusText"] == "JSON loaded from file."
     assert result["errorText"] == ""
+
+
+def test_flow_step_modal_open_from_file_surfaces_fallback_exhaustion_error() -> None:
+    result = _run_step_modal_picker_scenario(
+        """
+await window.AM2FlowStepModalState.openStep("effective_author_title");
+window.AM2FlowStepModalState.setView("json");
+const before = document.getElementById("flowStepModalJsonEditor").value;
+global.__pickerBehavior = {
+  focusFirst: true,
+};
+document.getElementById("flowStepModalJsonOpenFromFile").dispatch("click");
+await new Promise((resolve) => setTimeout(resolve, 1100));
+process.stdout.write(JSON.stringify({
+  before,
+  after: document.getElementById("flowStepModalJsonEditor").value,
+  statusText: document.getElementById("flowStepModalStatus").textContent,
+  errorText: document.getElementById("flowStepModalError").textContent,
+}));
+"""
+    )
+    assert result["after"] == result["before"]
+    assert result["statusText"] == ""
+    assert result["errorText"] == (
+        "Error: Open from file failed after dialog close without a selected file."
+    )
