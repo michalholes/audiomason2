@@ -182,7 +182,7 @@ allow_declared_untouched = false
 # In legacy embedded layout, the default config file is scripts/am_patch/am_patch.toml.
 # In root layout, the default config file is am_patch.toml in runner_root.
 # artifacts_root = "/home/pi/am_patch_artifacts"
-target_repo_roots = []
+target_repo_roots = ["/home/pi/audiomason2", "/home/pi/patchhub"]
 # active_target_repo_root = "/home/pi/target_repo"
 # Legacy alias for active_target_repo_root.
 # Non-runner values must resolve to an entry from target_repo_roots.
