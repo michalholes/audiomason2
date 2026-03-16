@@ -101,7 +101,7 @@ def test_post_wizard_definition_rejects_unknown_primitive(tmp_path: Path) -> Non
     assert payload["error"]["details"][0]["reason"] == "unknown_primitive"
 
 
-def test_load_or_bootstrap_replaces_unknown_v3_primitive_with_bootstrap_default(
+def test_load_or_bootstrap_rejects_unknown_v3_primitive_with_visible_error(
     tmp_path: Path,
 ) -> None:
     engine = _make_engine(tmp_path)
@@ -129,12 +129,8 @@ def test_load_or_bootstrap_replaces_unknown_v3_primitive_with_bootstrap_default(
         },
     )
 
-    loaded = load_or_bootstrap_wizard_definition(fs, bootstrap_default_version=3)
+    with pytest.raises(Exception) as excinfo:
+        load_or_bootstrap_wizard_definition(fs, bootstrap_default_version=3)
 
-    assert loaded["version"] == 3
-    assert loaded["entry_step_id"] == "select_authors"
-    assert loaded["nodes"][0]["op"]["primitive_id"] != "ui.prompt_missing"
-    phase1_node = next(
-        node for node in loaded["nodes"] if node["step_id"] == "phase1_runtime_defaults"
-    )
-    assert phase1_node["op"]["primitive_id"] == "import.phase1_runtime"
+    assert "wizard_definition runtime artifact is invalid" in str(excinfo.value)
+    assert "fix or replace wizards/import/definitions/wizard_definition.json" in str(excinfo.value)

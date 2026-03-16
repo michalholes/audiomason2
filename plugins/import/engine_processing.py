@@ -32,7 +32,10 @@ def start_processing_impl(
 ) -> dict[str, Any]:
     try:
         state = engine._load_state(session_id)
-        if int(state.get("phase") or 1) == 2:
+        phase = int(state.get("phase") or 1)
+        session_dir = f"import/sessions/{session_id}"
+        job_path = f"{session_dir}/job_requests.json"
+        if phase == 2 and engine._fs.exists(RootName.WIZARDS, job_path):
             return engine._start_processing_idempotent(session_id, state, body)
         if state.get("status") != "in_progress":
             raise FinalizeError("session is not active")
@@ -115,7 +118,6 @@ def start_processing_impl(
             "resolved": resolved,
             "policy": str((state.get("conflicts") or {}).get("policy") or "ask"),
         }
-        session_dir = f"import/sessions/{session_id}"
         atomic_write_json(
             engine._fs,
             RootName.WIZARDS,

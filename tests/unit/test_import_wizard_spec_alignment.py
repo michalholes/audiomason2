@@ -86,12 +86,14 @@ def test_flow_model_contains_resolve_conflicts_before_processing(tmp_path: Path)
     _write_inbox_source_dir(roots, "book1")
 
     flow_model = engine.get_flow_model()
-    step_ids = [s.get("step_id") for s in flow_model.get("steps", [])]
+    steps = {s.get("step_id"): s for s in flow_model.get("steps", []) if isinstance(s, dict)}
+    step_ids = list(steps)
 
     assert step_ids.count("phase1_runtime_defaults") == 1
     assert step_ids.count("resolve_conflicts_batch") == 1
     assert step_ids.count("processing") == 1
     assert step_ids.index("resolve_conflicts_batch") < step_ids.index("processing")
+    assert steps["processing"].get("phase") == 2
 
 
 def test_step_schemas_match_spec_field_names(tmp_path: Path) -> None:
@@ -138,7 +140,7 @@ def test_select_books_ok_auto_advances_past_plan_preview(tmp_path: Path) -> None
     assert state.get("current_step_id") == "select_books"
 
     state = engine.submit_step(session_id, "select_books", {"selection": "1"})
-    assert state.get("current_step_id") == "effective_author_title"
+    assert state.get("current_step_id") == "effective_author"
 
 
 def test_final_summary_confirm_uses_confirm_start_gate(tmp_path: Path) -> None:

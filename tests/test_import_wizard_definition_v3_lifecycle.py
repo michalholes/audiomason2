@@ -1,4 +1,4 @@
-"""Issue 102: WizardDefinition v3 lifecycle and bootstrap fallback."""
+"""Issue 102: WizardDefinition v3 lifecycle and authored artifact failures."""
 
 from __future__ import annotations
 
@@ -129,7 +129,7 @@ def test_wizard_definition_v3_draft_activate_history_and_rollback(tmp_path: Path
     assert active2 == active0
 
 
-def test_load_or_bootstrap_replaces_invalid_v3_with_v3_default(tmp_path: Path) -> None:
+def test_load_or_bootstrap_rejects_invalid_v3_with_visible_error(tmp_path: Path) -> None:
     engine = _make_engine(tmp_path)
     fs = engine.get_file_service()
 
@@ -155,7 +155,29 @@ def test_load_or_bootstrap_replaces_invalid_v3_with_v3_default(tmp_path: Path) -
         },
     )
 
-    out = load_or_bootstrap_wizard_definition(fs)
+    with pytest.raises(Exception) as exc_info:
+        load_or_bootstrap_wizard_definition(fs)
 
-    assert out["version"] == 3
-    assert out["entry_step_id"] == "select_authors"
+    message = str(exc_info.value)
+    assert "wizard_definition runtime artifact is invalid" in message
+    assert "wizard_definition.json" in message
+
+
+def test_create_session_surfaces_hint_when_authored_definition_is_invalid(tmp_path: Path) -> None:
+    engine = _make_engine(tmp_path)
+    fs = engine.get_file_service()
+
+    atomic_write_json(
+        fs,
+        RootName.WIZARDS,
+        WIZARD_DEFINITION_REL_PATH,
+        {"version": 3, "entry_step_id": "Bad.Step", "nodes": [], "edges": []},
+    )
+
+    result = engine.create_session("inbox", "")
+
+    assert result["error"]["code"] == "VALIDATION_ERROR"
+    detail = result["error"]["details"][0]
+    assert detail["reason"] == "invalid_authored_wizard_definition"
+    assert detail["meta"]["artifact_path"] == "wizards/import/definitions/wizard_definition.json"
+    assert "Fix or replace" in detail["meta"]["hint"]

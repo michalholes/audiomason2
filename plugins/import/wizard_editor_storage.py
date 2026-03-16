@@ -35,6 +35,7 @@ from .wizard_definition_model import (
     validate_wizard_definition_constraints_v2,
     validate_wizard_definition_structure,
 )
+from .wizard_definition_runtime_errors import invalid_authored_wizard_definition_error
 
 WIZARD_DEFINITION_DRAFT_REL_PATH = "import/definitions/wizard_definition.draft.json"
 WIZARD_DEFINITION_DRAFT_META_REL_PATH = "import/definitions/wizard_definition.draft.meta.json"
@@ -95,17 +96,11 @@ def ensure_wizard_definition_active_exists(fs: FileService) -> dict[str, Any]:
     active = read_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_REL_PATH)
     try:
         canon_active = canonicalize_to_supported(fs, active)
-        if canon_active.get("version") == 3:
-            return canon_active
-        _store_history_entry(
-            fs,
-            fingerprint=fingerprint_json(canon_active),
-            obj=canon_active,
-        )
-    except Exception:
-        pass
-    atomic_write_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_REL_PATH, canon_default)
-    return canon_default
+    except Exception as exc:
+        raise invalid_authored_wizard_definition_error(exc) from exc
+    if canon_active.get("version") != 3:
+        raise ValueError("wizard_definition editor authority must be version 3")
+    return canon_active
 
 
 def get_wizard_definition_draft(fs: FileService) -> dict[str, Any]:

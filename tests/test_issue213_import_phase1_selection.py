@@ -188,7 +188,7 @@ def test_book_scoped_path_skips_duplicate_author_and_book_prompts(tmp_path: Path
 
     state = engine.create_session("inbox", "A/Book1", mode="stage")
     assert "error" not in state
-    assert state.get("current_step_id") == "effective_author_title"
+    assert state.get("current_step_id") == "effective_author"
 
     phase1 = state.get("vars", {}).get("phase1", {})
     authors = phase1.get("select_authors", {})
@@ -209,7 +209,7 @@ def test_unicode_author_scoped_path_keeps_canonical_phase1_labels(tmp_path: Path
     title = "Obrazy vep\u00edsan\u00e9 do vzduchu"
     state = engine.create_session("inbox", author, mode="stage")
     assert "error" not in state
-    assert state.get("current_step_id") == "effective_author_title"
+    assert state.get("current_step_id") == "effective_author"
 
     phase1 = state.get("vars", {}).get("phase1", {})
     books = phase1.get("select_books", {})

@@ -110,7 +110,7 @@ def test_selection_expr_grammar_and_stable_ordering(tmp_path: Path) -> None:
 
     # Whitespace + duplicates + reverse order in expression must not affect output order.
     state = engine.submit_step(session_id, "select_books", {"selection": " 2, 1, 1 "})
-    assert state.get("current_step_id") == "effective_author_title"
+    assert state.get("current_step_id") == "effective_author"
     assert state.get("selected_book_ids") == item_ids
 
 
@@ -245,6 +245,46 @@ def test_job_requests_derived_from_plan_batch_size_and_idempotency(
     planned_ids = [b.get("book_id") for b in plan.get("selected_books", [])]
     action_ids = [a.get("book_id") for a in actions if isinstance(a, dict)]
     assert action_ids == planned_ids
+
+
+def test_final_summary_confirm_enters_phase2_boundary_without_processing_stop(
+    tmp_path: Path,
+) -> None:
+    engine, roots = _make_engine(tmp_path)
+    rel = ""
+    _write_inbox_books(roots, rel)
+
+    state = engine.create_session(
+        "inbox",
+        rel,
+        mode="stage",
+        flow_overrides=_disable_optional_steps(),
+    )
+    session_id = str(state.get("session_id") or "")
+    assert session_id
+    assert state.get("current_step_id") == "select_books"
+
+    state = engine.submit_step(session_id, "select_books", {"selection": "1"})
+    assert "error" not in state
+
+    state_path = roots["wizards"] / "import" / "sessions" / session_id / "state.json"
+    state_json = json.loads(state_path.read_text(encoding="utf-8"))
+    state_json["phase"] = 1
+    state_json["status"] = "in_progress"
+    state_json["current_step_id"] = "final_summary_confirm"
+    state_json.setdefault("cursor", {})["step_id"] = "final_summary_confirm"
+    state_json.setdefault("answers", {})["conflict_policy"] = {"mode": "auto"}
+    runtime = state_json.setdefault("vars", {}).setdefault("phase1", {}).setdefault("runtime", {})
+    runtime.setdefault("resolve_conflicts_batch", {})["has_conflicts"] = False
+    state_path.write_text(json.dumps(state_json), encoding="utf-8")
+
+    out = engine.submit_step(session_id, "final_summary_confirm", {"confirmed": True})
+
+    assert out.get("phase") == 2
+    assert out.get("status") == "in_progress"
+    assert out.get("current_step_id") == "processing"
+    assert out.get("trace")[-1]["step_id"] == "final_summary_confirm"
+    assert "processing" not in [entry["step_id"] for entry in out.get("trace", [])]
 
 
 def test_cli_renderer_has_no_step_id_branching() -> None:

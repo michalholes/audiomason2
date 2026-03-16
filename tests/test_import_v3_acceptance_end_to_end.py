@@ -84,9 +84,12 @@ def test_default_v3_cli_acceptance_keeps_selection_and_plan_state(tmp_path: Path
     effective_model = json.loads((session_dir / "effective_model.json").read_text(encoding="utf-8"))
     state = json.loads((session_dir / "state.json").read_text(encoding="utf-8"))
     plan = json.loads((session_dir / "plan.json").read_text(encoding="utf-8"))
+    job_requests = json.loads((session_dir / "job_requests.json").read_text(encoding="utf-8"))
 
     assert effective_model["flowmodel_kind"] == "dsl_step_graph_v3"
-    assert state["status"] == "completed"
+    assert state["phase"] == 2
+    assert state["status"] == "processing"
+    assert state["current_step_id"] == "processing"
     assert state["selected_author_ids"]
     assert state["selected_book_ids"]
     assert state["answers"]["final_summary_confirm"]["confirm_start"] is True
@@ -101,27 +104,44 @@ def test_default_v3_cli_acceptance_keeps_selection_and_plan_state(tmp_path: Path
     assert state["vars"]["phase1"]["policy"]["clean_inbox"] == "ask"
     assert state["vars"]["phase1"]["policy"]["root_audio_baseline"]["author"] == "__ROOT_AUDIO__"
     assert state["vars"]["phase1"]["policy"]["root_audio_baseline"]["title"] == "Untitled"
+    assert job_requests["actions"][0]["source"] == {
+        "relative_path": "Author A/Book A",
+        "root": "inbox",
+    }
     assert [entry["step_id"] for entry in state["trace"]] == [
         "select_authors",
         "select_books",
         "plan_preview_batch",
         "phase1_runtime_defaults",
+        "effective_author",
+        "effective_title",
         "effective_author_title",
+        "filename_policy_author",
+        "filename_policy_title",
         "filename_policy",
+        "covers_policy_mode",
         "covers_policy",
+        "id3_policy_intro",
+        "id3_policy_title",
+        "id3_policy_artist",
+        "id3_policy_album",
+        "id3_policy_album_artist",
         "id3_policy",
+        "audio_processing_bitrate",
+        "audio_processing_loudnorm",
+        "audio_processing_split_chapters",
         "audio_processing",
         "publish_policy",
         "delete_source_policy",
         "conflict_policy",
         "parallelism",
         "final_summary_confirm",
-        "processing",
     ]
 
     joined = "\n".join(printed)
     assert "Step: select_authors" in joined
     assert "Step: select_books" in joined
-    assert "Step: effective_author_title" in joined
+    assert "Step: effective_author" in joined
     assert "Step: final_summary_confirm" in joined
-    assert '"status": "completed"' in joined
+    assert "job_ids:" in joined
+    assert '"batch_size": 1' in joined

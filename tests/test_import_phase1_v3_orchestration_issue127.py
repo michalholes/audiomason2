@@ -67,7 +67,7 @@ def test_create_session_autofills_single_author_and_single_book(tmp_path: Path) 
 
     state = engine.create_session("inbox", "", mode="stage")
 
-    assert state["current_step_id"] == "effective_author_title"
+    assert state["current_step_id"] == "effective_author"
     assert state["answers"]["select_authors"]["selection_expr"] == "1"
     assert state["answers"]["select_books"]["selection_expr"] == "1"
     assert state["vars"]["phase1"]["metadata"]["values"] == {

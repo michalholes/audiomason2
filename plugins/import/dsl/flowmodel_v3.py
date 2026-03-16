@@ -30,6 +30,12 @@ def _step_projection_title(step_id: str, primitive_id: str, ui: dict[str, Any] |
     return step_id
 
 
+def _step_phase(step_id: str) -> int:
+    if step_id == "processing":
+        return 2
+    return 1
+
+
 def _project_phase2_fields(step: dict[str, Any], inputs: dict[str, Any]) -> None:
     primitive_id = str(step.get("primitive_id") or "")
     primitive_version = int(step.get("primitive_version") or 0)
@@ -77,7 +83,7 @@ def _project_step(node_any: Any) -> dict[str, Any]:
 
     step: dict[str, Any] = {
         "step_id": step_id,
-        "phase": 1,
+        "phase": _step_phase(step_id),
         "title": _step_projection_title(step_id, primitive_id, ui),
         "kind": _step_projection_kind(primitive_id, primitive_version),
         "primitive_id": primitive_id,

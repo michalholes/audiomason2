@@ -41,7 +41,7 @@ def _make_engine(tmp_path: Path) -> tuple[ImportWizardEngine, ConfigResolver, Pa
                 "cli": {
                     "launcher_mode": "fixed",
                     "default_root": "inbox",
-                    "default_path": "",
+                    "default_path": "src",
                     "noninteractive": False,
                     "render": {"confirm_defaults": True, "nav_ui": "prompt"},
                 }
@@ -57,7 +57,14 @@ def _make_engine(tmp_path: Path) -> tuple[ImportWizardEngine, ConfigResolver, Pa
     return ImportWizardEngine(resolver=resolver), resolver, roots["wizards"]
 
 
+def _write_source_tree(tmp_path: Path) -> None:
+    book_dir = tmp_path / "inbox" / "src" / "Author A" / "Book A"
+    book_dir.mkdir(parents=True, exist_ok=True)
+    (book_dir / "track01.mp3").write_text("x", encoding="utf-8")
+
+
 def test_cli_import_uses_bootstrapped_v3_default_program(tmp_path: Path) -> None:
+    _write_source_tree(tmp_path)
     engine, resolver, wizards_root = _make_engine(tmp_path)
     fs = engine.get_file_service()
 
@@ -82,21 +89,28 @@ def test_cli_import_uses_bootstrapped_v3_default_program(tmp_path: Path) -> None
 
     session_dirs = sorted((wizards_root / "import" / "sessions").iterdir())
     assert len(session_dirs) == 1
-    effective_model = json.loads((session_dirs[0] / "effective_model.json").read_text())
+    session_dir = session_dirs[0]
+    effective_model = json.loads((session_dir / "effective_model.json").read_text())
+    state = json.loads((session_dir / "state.json").read_text(encoding="utf-8"))
     assert effective_model["flowmodel_kind"] == "dsl_step_graph_v3"
     assert effective_model["entry_step_id"] == "select_authors"
+    assert state["phase"] == 2
+    assert state["status"] == "processing"
+    assert (session_dir / "job_requests.json").exists()
 
     joined = "\n".join(printed)
     assert "Step: select_authors" in joined
     assert "Label: Authors" in joined
     assert "Step: select_books" in joined
-    assert "Step: effective_author_title" in joined
+    assert "Step: effective_author" in joined
     assert "Step: covers_policy" in joined
     assert "Step: final_summary_confirm" in joined
-    assert '"status": "completed"' in joined
+    assert "job_ids:" in joined
+    assert '"batch_size": 1' in joined
 
 
 def test_cli_import_validation_error_does_not_loop(tmp_path: Path) -> None:
+    _write_source_tree(tmp_path)
     engine, resolver, _wizards_root = _make_engine(tmp_path)
 
     prompts: list[str] = []

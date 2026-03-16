@@ -5,6 +5,8 @@ from __future__ import annotations
 from importlib import import_module
 from pathlib import Path
 
+import pytest
+
 from audiomason.core.config import ConfigResolver
 
 ImportWizardEngine = import_module("plugins.import.engine").ImportWizardEngine
@@ -74,7 +76,7 @@ def _write_source_tree(roots: dict[str, Path]) -> None:
     (book_dir / "track01.mp3").write_text("x", encoding="utf-8")
 
 
-def test_load_or_bootstrap_can_create_python_defined_v3_default(tmp_path: Path) -> None:
+def test_load_or_bootstrap_can_create_shipped_v3_default(tmp_path: Path) -> None:
     engine, _ = _make_engine(tmp_path)
     fs = engine.get_file_service()
 
@@ -88,23 +90,32 @@ def test_load_or_bootstrap_can_create_python_defined_v3_default(tmp_path: Path) 
         node for node in out["nodes"] if node["step_id"] == "phase1_runtime_defaults"
     )
     assert phase1_node["op"]["primitive_id"] == "import.phase1_runtime"
+    assert any(node["step_id"] == "effective_author" for node in out["nodes"])
+    assert any(node["step_id"] == "covers_policy_override_prepare" for node in out["nodes"])
     assert out == expected
 
 
-def test_load_or_bootstrap_replaces_invalid_artifact_with_v3_default(tmp_path: Path) -> None:
+def test_load_or_bootstrap_rejects_invalid_authored_artifact_without_overwrite(
+    tmp_path: Path,
+) -> None:
     engine, _ = _make_engine(tmp_path)
     fs = engine.get_file_service()
+    authored = {"version": 3, "entry_step_id": "Bad.Step", "nodes": [], "edges": []}
     atomic_write_json(
         fs,
         RootName.WIZARDS,
         WIZARD_DEFINITION_REL_PATH,
-        {"version": 3, "entry_step_id": "Bad.Step", "nodes": [], "edges": []},
+        authored,
     )
 
-    out = load_or_bootstrap_wizard_definition(fs, bootstrap_default_version=3)
+    with pytest.raises(Exception) as exc_info:
+        load_or_bootstrap_wizard_definition(fs, bootstrap_default_version=3)
 
-    assert out == canonicalize_wizard_definition(out)
-    assert out["version"] == 3
+    message = str(exc_info.value)
+    assert "wizard_definition runtime artifact is invalid" in message
+    active = Path(tmp_path / "wizards" / WIZARD_DEFINITION_REL_PATH)
+    assert active.exists()
+    assert "Bad.Step" in active.read_text(encoding="utf-8")
 
 
 def test_create_session_bootstraps_v3_for_all_import_entry_modes(tmp_path: Path) -> None:

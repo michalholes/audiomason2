@@ -67,13 +67,31 @@ def _write_inbox_source_dir(roots: dict[str, Path], rel_dir: str) -> None:
     (d / "b.txt").write_text("y", encoding="utf-8")
 
 
+def _submit_runtime_default(engine: object, session_id: str, step_id: str) -> dict[str, object]:
+    state = engine.get_state(session_id)
+    runtime = state.get("vars", {}).get("phase1", {}).get("runtime", {})
+    if step_id == "effective_author":
+        author = runtime.get("effective_author_title", {}).get("author")
+        return engine.submit_step(session_id, step_id, {"value": author})
+    if step_id == "effective_title":
+        title = runtime.get("effective_author_title", {}).get("title")
+        return engine.submit_step(session_id, step_id, {"value": title})
+    if step_id == "filename_policy_author":
+        author = runtime.get("filename_policy", {}).get("author")
+        return engine.submit_step(session_id, step_id, {"value": author})
+    if step_id == "filename_policy_title":
+        title = runtime.get("filename_policy", {}).get("title")
+        return engine.submit_step(session_id, step_id, {"value": title})
+    return engine.apply_action(session_id, "next")
+
+
 def _advance_to(engine: object, session_id: str, target_step_id: str) -> None:
     for _ in range(100):
         state = engine.get_state(session_id)
         cur = str(state.get("current_step_id") or "")
         if cur == target_step_id:
             return
-        state2 = engine.apply_action(session_id, "next")
+        state2 = _submit_runtime_default(engine, session_id, cur)
         cur2 = str(state2.get("current_step_id") or "")
         if cur2 == target_step_id:
             return
@@ -132,27 +150,13 @@ def test_compute_plan_populates_state_computed_plan_summary(tmp_path: Path) -> N
     if str(state.get("current_step_id") or "") == "select_books":
         state = engine.submit_step(session_id, "select_books", {"selection": "1"})
         assert "error" not in state
-    if str(state.get("current_step_id") or "") == "effective_author_title":
-        state = engine.submit_step(
-            session_id,
-            "effective_author_title",
-            {"value": {"author": "src", "title": "src"}},
-        )
+    if str(state.get("current_step_id") or "") == "effective_author":
+        state = engine.submit_step(session_id, "effective_author", {"value": "src"})
         assert "error" not in state
-    _advance_to(engine, session_id, "filename_policy")
-    res = engine.submit_step(
-        session_id,
-        "filename_policy",
-        {
-            "value": {
-                "author": "src",
-                "mode": "keep",
-                "template": "{author}/{title}",
-                "title": "src",
-            }
-        },
-    )
-    assert "error" not in res
+    if str(state.get("current_step_id") or "") == "effective_title":
+        state = engine.submit_step(session_id, "effective_title", {"value": "src"})
+        assert "error" not in state
+    _advance_to(engine, session_id, "covers_policy_mode")
 
     plan = engine.compute_plan(session_id)
     assert isinstance(plan, dict)
@@ -168,7 +172,8 @@ def test_compute_plan_populates_state_computed_plan_summary(tmp_path: Path) -> N
 
     sp = ps.get("selected_policies")
     assert isinstance(sp, dict)
-    assert sp.get("filename_policy", {}).get("mode") == "keep"
+    assert sp.get("filename_policy") == {"author": "src", "title": "src"}
+    assert state2["vars"]["phase1"]["runtime"]["filename_policy"]["mode"] == "keep"
 
 
 @pytest.mark.skipif((not _HAS_FASTAPI) or (not _HAS_HTTPX), reason="fastapi+httpx required")

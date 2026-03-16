@@ -334,6 +334,13 @@ def _emit_runtime_boundary(
     )
 
 
+def _enter_phase2_boundary(*, state: dict[str, Any], step_id: str) -> dict[str, Any]:
+    state["phase"] = 2
+    state["current_step_id"] = step_id
+    sync_session_cursor(state, step_id=step_id)
+    return state
+
+
 def prompt_ui_from_resolved_inputs(inputs: dict[str, Any]) -> dict[str, Any]:
     return {key: inputs[key] for key in PROMPT_METADATA_KEYS if key in inputs}
 
@@ -355,6 +362,8 @@ def run_automatic_steps(
     current = str((state.get("cursor") or {}).get("step_id") or state.get("current_step_id") or "")
     while current and state.get("status") == "in_progress":
         step = get_step(effective_model, current)
+        if int(step.get("phase") or 1) == 2:
+            return _enter_phase2_boundary(state=state, step_id=current)
         primitive_id = str(step.get("primitive_id") or "")
         primitive_version = int(step.get("primitive_version") or 0)
         if is_prompt_primitive(primitive_id, primitive_version):

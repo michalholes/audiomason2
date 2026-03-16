@@ -32,7 +32,8 @@ from .flow_runtime import (
     build_flow_model,
 )
 from .models import CatalogModel, FlowModel, validate_models
-from .storage import atomic_write_json, atomic_write_json_if_missing, read_json
+from .storage import atomic_write_json_if_missing, read_json
+from .wizard_definition_runtime_errors import invalid_authored_wizard_definition_error
 
 WIZARD_DEFINITION_REL_PATH = "import/definitions/wizard_definition.json"
 
@@ -149,9 +150,8 @@ def load_or_bootstrap_wizard_definition(
             return wd
 
         raise ValueError("WizardDefinition must be version 2 or 3")
-    except (FieldSchemaValidationError, FinalizeError, ValueError, TypeError):
-        atomic_write_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_REL_PATH, default_definition)
-        return default_definition
+    except (FieldSchemaValidationError, FinalizeError, ValueError, TypeError) as exc:
+        raise invalid_authored_wizard_definition_error(exc) from exc
 
 
 def _assert_exact_keys(
