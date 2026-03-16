@@ -180,6 +180,7 @@ def build_artifacts(
             include_repo_files=files_for_fail_zip,
             include_patch_blobs=include_patch_blobs,
             include_patch_paths=include_patch_paths,
+            target_repo_name=policy.target_repo_name,
             log_dir_name=policy.failure_zip_log_dir,
             patch_dir_name=policy.failure_zip_patch_dir,
         )

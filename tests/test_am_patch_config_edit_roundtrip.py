@@ -19,6 +19,7 @@ def test_config_edit_roundtrip_preserves_comments_and_builds_policy():
             "ipc_socket_enabled": False,
             "verbosity": "quiet",
             "success_archive_name": "{repo}-{branch}.zip",
+            "target_repo_name": "patchhub",
         },
         schema,
     )
@@ -27,6 +28,7 @@ def test_config_edit_roundtrip_preserves_comments_and_builds_policy():
     assert 'verbosity = "quiet"' in updated
     assert "ipc_socket_enabled = false" in updated
     assert 'success_archive_name = "{repo}-{branch}.zip"' in updated
+    assert 'target_repo_name = "patchhub"' in updated
 
 
 def test_config_edit_roundtrip_handles_bucketed_pytest_routing_keys() -> None:

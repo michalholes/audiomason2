@@ -9,6 +9,19 @@ from pathlib import Path
 from .log import Logger
 
 
+def _target_repo_name_payload(target_repo_name: str) -> bytes:
+    text = str(target_repo_name).strip()
+    if not text:
+        raise ValueError("target_repo_name must be non-empty")
+    if "\n" in text or "\r" in text:
+        raise ValueError("target_repo_name must be a single line")
+    try:
+        payload = text.encode("ascii")
+    except UnicodeEncodeError as e:
+        raise ValueError("target_repo_name must be ASCII-only") from e
+    return payload + b"\n"
+
+
 def _tmp_path_for_atomic_write(target: Path) -> Path:
     # Deterministic within process, avoids time/random.
     return target.with_name(f".{target.name}.tmp.{os.getpid()}")
@@ -115,6 +128,7 @@ def make_failure_zip(
     include_repo_files: list[str],
     include_patch_blobs: list[tuple[str, bytes]] | None = None,
     include_patch_paths: list[Path] | None = None,
+    target_repo_name: str = "audiomason2",
     log_dir_name: str = "logs",
     patch_dir_name: str = "patches",
 ) -> None:
@@ -153,6 +167,7 @@ def make_failure_zip(
 
     try:
         with zipfile.ZipFile(tmp_path, "w", compression=zipfile.ZIP_DEFLATED) as z:
+            z.writestr("target.txt", _target_repo_name_payload(target_repo_name))
             if log_path.exists():
                 z.write(log_path, arcname=f"{log_dir_name}/{log_path.name}")
 

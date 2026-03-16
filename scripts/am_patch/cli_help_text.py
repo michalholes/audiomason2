@@ -22,6 +22,10 @@ Options:
       Embedded default: scripts/am_patch/am_patch.toml
       Root-layout default: am_patch.toml in runner_root
 
+  --target-repo-name NAME
+      Set failure-overlay target metadata written to target.txt.
+      [default: audiomason2]
+
   -q, -v, -n, -d, --verbosity {{debug, verbose, normal, warning, quiet}}
       Control screen output amount. [default: verbose]
 
@@ -85,6 +89,10 @@ CORE / INFO
       Default depends on detected runner layout.
       Embedded default: scripts/am_patch/am_patch.toml
       Root-layout default: am_patch.toml in runner_root
+
+  --target-repo-name NAME
+      Set failure-overlay target metadata written to target.txt.
+      [default: audiomason2]
 
   --version
       Print runner version and exit.

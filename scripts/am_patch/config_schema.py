@@ -19,7 +19,7 @@ from typing import Any, get_args, get_origin, get_type_hints
 
 from am_patch.config import Policy
 
-SCHEMA_VERSION = "5"
+SCHEMA_VERSION = "6"
 
 
 # Explicit mapping of policy keys to TOML sections.
@@ -31,6 +31,7 @@ _SECTION_BY_KEY: dict[str, str] = {
     "target_repo_roots": "paths",
     "active_target_repo_root": "paths",
     "patch_dir": "",
+    "target_repo_name": "",
     "verbosity": "",
     "log_level": "",
     "runner_subprocess_timeout_s": "",
@@ -235,6 +236,7 @@ _LABEL_BY_KEY: dict[str, str] = {
     "live_repo_guard_scope": "Git safety: live repo guard scope",
     "repo_root": "Paths: repo root",
     "artifacts_root": "Paths: artifacts root",
+    "target_repo_name": "Failure zip: target repo name",
     "target_repo_roots": "Paths: target repo roots",
     "active_target_repo_root": "Paths: active target repo root",
     "runner_subprocess_timeout_s": "Runner: subprocess timeout (s)",
@@ -392,6 +394,9 @@ _HELP_BY_KEY: dict[str, str] = {
     "artifacts_root": (
         "Optional override for the runner-owned artifacts root path. "
         "See: scripts/am_patch_policy_glossary.md## Key: artifacts_root"
+    ),
+    "target_repo_name": (
+        "ASCII-only failure-overlay target word written to target.txt. Default: audiomason2."
     ),
     "target_repo_roots": (
         "Optional registry of allowed target repository roots. "

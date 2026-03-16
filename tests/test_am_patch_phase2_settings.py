@@ -45,6 +45,7 @@ def test_phase2_cfg_keys_apply() -> None:
         "venv_bootstrap_mode": "never",
         "venv_bootstrap_python": ".venv/bin/python3",
         "gate_pytest_py_prefixes": ["badguys", "scripts/am_patch"],
+        "target_repo_name": "patchhub",
     }
     p = build_policy(defaults, cfg)
 
@@ -72,6 +73,7 @@ def test_phase2_cfg_keys_apply() -> None:
     assert p.venv_bootstrap_mode == "never"
     assert p.venv_bootstrap_python == ".venv/bin/python3"
     assert p.gate_pytest_py_prefixes == ["badguys", "scripts/am_patch"]
+    assert p.target_repo_name == "patchhub"
 
 
 def test_phase2_cli_flags_set_overrides() -> None:
@@ -165,6 +167,23 @@ def test_phase2_cli_flags_set_overrides() -> None:
     assert p.venv_bootstrap_python == ".venv/bin/python"
 
 
+def test_target_repo_name_cli_flag_sets_override() -> None:
+    policy_cls, apply_cli_overrides, _build_policy, parse_args = _import_am_patch()
+    cli = parse_args(["--target-repo-name", "patchhub", "123", "patch.py"])
+
+    p = policy_cls()
+    apply_cli_overrides(
+        p,
+        {
+            "overrides": cli.overrides,
+        },
+    )
+
+    assert cli.overrides is not None
+    assert "target_repo_name=patchhub" in cli.overrides
+    assert p.target_repo_name == "patchhub"
+
+
 def test_parse_args_workspace_carries_json_out_to_cli_args() -> None:
     _, _, _, parse_args = _import_am_patch()
 
@@ -253,3 +272,22 @@ def test_phase2_cli_override_replaces_gate_pytest_py_prefixes() -> None:
     )
 
     assert p.gate_pytest_py_prefixes == ["badguys", "scripts/custom"]
+
+
+def test_target_repo_name_rejects_non_ascii_override() -> None:
+    policy_cls, apply_cli_overrides, _build_policy, _parse_args = _import_am_patch()
+    p = policy_cls()
+
+    try:
+        apply_cli_overrides(
+            p,
+            {
+                "overrides": [
+                    r"target_repo_name=naive-\u017e".encode("ascii").decode("unicode_escape")
+                ],
+            },
+        )
+    except Exception as e:
+        assert "ASCII-only" in str(e)
+    else:
+        raise AssertionError("expected failure")

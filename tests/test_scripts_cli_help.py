@@ -135,3 +135,52 @@ def test_am_patch_help_all_mentions_dual_layout_config_contract() -> None:
     assert "Embedded default: scripts/am_patch/am_patch.toml" in out
     assert "Root-layout default: am_patch.toml in runner_root" in out
     assert "Relative paths are resolved against repo root." not in out
+
+
+def test_am_patch_help_all_mentions_target_repo_name() -> None:
+    repo_root = _repo_root()
+    script_path = repo_root / "scripts" / "am_patch.py"
+
+    env = os.environ.copy()
+    env["AM_PATCH_VENV_BOOTSTRAPPED"] = "1"
+
+    p = subprocess.run(
+        [sys.executable, str(script_path), "--help-all"],
+        cwd=str(repo_root),
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    out = (p.stdout or "") + (p.stderr or "")
+    assert p.returncode == 0, out
+    assert "--target-repo-name NAME" in out
+
+
+def test_am_patch_show_config_prints_target_repo_name_default_and_cli_override() -> None:
+    repo_root = _repo_root()
+    script_path = repo_root / "scripts" / "am_patch.py"
+
+    env = os.environ.copy()
+    env["AM_PATCH_VENV_BOOTSTRAPPED"] = "1"
+
+    p_default = subprocess.run(
+        [sys.executable, str(script_path), "--show-config"],
+        cwd=str(repo_root),
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    out_default = (p_default.stdout or "") + (p_default.stderr or "")
+    assert p_default.returncode == 0, out_default
+    assert "target_repo_name='audiomason2' (src=config)" in out_default
+
+    p_cli = subprocess.run(
+        [sys.executable, str(script_path), "--show-config", "--target-repo-name", "patchhub"],
+        cwd=str(repo_root),
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    out_cli = (p_cli.stdout or "") + (p_cli.stderr or "")
+    assert p_cli.returncode == 0, out_cli
+    assert "target_repo_name='patchhub' (src=cli)" in out_cli

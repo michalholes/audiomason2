@@ -202,6 +202,13 @@ def parse_args(argv: list[str]) -> CliArgs:
 
     p.add_argument("--config", dest="config_path", metavar="PATH", default=None)
     p.add_argument(
+        "--target-repo-name",
+        action=AppendOverride,
+        key="target_repo_name",
+        dest="overrides",
+        metavar="NAME",
+    )
+    p.add_argument(
         "--override", dest="overrides", action="append", default=None, metavar="KEY=VALUE"
     )
     p.add_argument(

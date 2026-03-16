@@ -40,6 +40,7 @@ class Policy(PolicyMonolithMixin):
     target_repo_roots: list[str] = field(default_factory=list)
     active_target_repo_root: str | None = None
     patch_dir: str | None = None
+    target_repo_name: str = "audiomason2"
     patch_dir_name: str = "patches"
 
     patch_layout_logs_dir: str = "logs"
@@ -363,6 +364,19 @@ def _validate_basename(v: str, *, field: str) -> str:
     return s
 
 
+def _validate_ascii_single_line(v: str, *, field: str) -> str:
+    s = str(v).strip()
+    if not s:
+        raise RunnerError("CONFIG", "INVALID", f"{field} must be non-empty")
+    if "\n" in s or "\r" in s:
+        raise RunnerError("CONFIG", "INVALID", f"{field} must be a single line")
+    try:
+        s.encode("ascii")
+    except UnicodeEncodeError as e:
+        raise RunnerError("CONFIG", "INVALID", f"{field} must be ASCII-only") from e
+    return s
+
+
 def _parse_override_kv(s: str) -> tuple[str, object]:
     if "=" not in s:
         raise ValueError("override must be KEY=VALUE")
@@ -440,6 +454,8 @@ def build_policy(defaults: Policy, cfg: dict[str, Any]) -> Policy:
     _mark_cfg(p, cfg, "active_target_repo_root")
     p.patch_dir = _as_str(cfg, "patch_dir", p.patch_dir)
     _mark_cfg(p, cfg, "patch_dir")
+    p.target_repo_name = str(cfg.get("target_repo_name", p.target_repo_name))
+    _mark_cfg(p, cfg, "target_repo_name")
     p.patch_dir_name = str(cfg.get("patch_dir_name", p.patch_dir_name))
     _mark_cfg(p, cfg, "patch_dir_name")
 
@@ -620,6 +636,7 @@ def build_policy(defaults: Policy, cfg: dict[str, Any]) -> Policy:
         mark_cfg=_mark_cfg,
     )
 
+    p.target_repo_name = _validate_ascii_single_line(p.target_repo_name, field="target_repo_name")
     p.patch_dir_name = _validate_basename(p.patch_dir_name, field="patch_dir_name")
     p.patch_layout_logs_dir = _validate_basename(
         p.patch_layout_logs_dir, field="patch_layout_logs_dir"
@@ -796,6 +813,8 @@ def apply_cli_overrides(p: Policy, mapping: dict[str, object | None]) -> None:
             continue
         if not hasattr(p, k):
             continue
+        if k == "target_repo_name":
+            v = _validate_ascii_single_line(str(v), field="target_repo_name")
         setattr(p, k, v)
         p._src[k] = "cli"
 
@@ -822,6 +841,8 @@ def apply_cli_overrides(p: Policy, mapping: dict[str, object | None]) -> None:
             else:
                 cur.extend(coerced)
         else:
+            if k == "target_repo_name":
+                coerced = _validate_ascii_single_line(str(coerced), field="target_repo_name")
             setattr(p, k, coerced)
         p._src[k] = "cli"
 
