@@ -175,6 +175,10 @@ class SqliteWebJobsStore:
         with self._connect() as conn:
             conn.execute("PRAGMA auto_vacuum=INCREMENTAL")
             conn.executescript(_SCHEMA)
+            auto_vacuum = int(conn.execute("PRAGMA auto_vacuum").fetchone()[0])
+            if auto_vacuum != 2:
+                conn.execute("PRAGMA auto_vacuum=INCREMENTAL")
+                conn.execute("VACUUM")
             now_ms = _utc_now_ms()
             conn.execute(
                 """

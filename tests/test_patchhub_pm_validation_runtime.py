@@ -23,6 +23,7 @@ from scripts.patchhub.fs_jail import FsJail
 from scripts.patchhub.pm_validation_runtime import build_patch_zip_pm_validation
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+DEFAULT_TARGET = "audiomason2"
 
 
 def _write(path: Path, text: str) -> None:
@@ -81,15 +82,16 @@ def _patch_zip(
     issue: str,
     commit: str,
     members: dict[str, bytes],
+    target: str | None = DEFAULT_TARGET,
 ) -> None:
-    _write_zip(
-        path,
-        {
-            "COMMIT_MESSAGE.txt": (commit + "\n").encode("ascii"),
-            "ISSUE_NUMBER.txt": (issue + "\n").encode("ascii"),
-            **members,
-        },
-    )
+    files = {
+        "COMMIT_MESSAGE.txt": (commit + "\n").encode("ascii"),
+        "ISSUE_NUMBER.txt": (issue + "\n").encode("ascii"),
+        **members,
+    }
+    if target is not None:
+        files["target.txt"] = (target + "\n").encode("ascii")
+    _write_zip(path, files)
 
 
 def _cfg() -> AppConfig:
@@ -227,7 +229,10 @@ def test_build_pm_validation_uses_repair_overlay_only_when_available(tmp_path: P
     )
     _write_zip(
         s.patches_root / "patched_issue601_v01.zip",
-        {relpath: before.encode("utf-8")},
+        {
+            relpath: before.encode("utf-8"),
+            "target.txt": (DEFAULT_TARGET + "\n").encode("ascii"),
+        },
     )
 
     payload = build_patch_zip_pm_validation(s, "issue_601_v1.zip")
@@ -249,7 +254,10 @@ def test_build_pm_validation_repair_escalates_with_exact_supplemental_files(tmp_
         commit="Use PM validator at zip load",
         members={_safe_member(relpath): _git_patch(relpath, before, after)},
     )
-    _write_zip(s.patches_root / "patched_issue601_v01.zip", {})
+    _write_zip(
+        s.patches_root / "patched_issue601_v01.zip",
+        {"target.txt": (DEFAULT_TARGET + "\n").encode("ascii")},
+    )
 
     payload = build_patch_zip_pm_validation(s, "issue_601_v1.zip")
     assert payload["status"] == "pass"
