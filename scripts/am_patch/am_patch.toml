@@ -20,9 +20,9 @@ ipc_handshake_wait_s = 0
 # Canonical (optional; runner may infer)
 # repo_root = "/home/pi/audiomason2"
 # patch_dir = "/home/pi/audiomason2/patches"
-artifacts_root = "/home/pi/audiomason2"
-target_repo_roots = ["/home/pi/audiomason2", "/home/pi/patchhub"]
-active_target_repo_root = "audiomason2"
+# artifacts_root = "/home/pi/audiomason2"
+# target_repo_roots = ["/home/pi/audiomason2", "/home/pi/patchhub"]
+# active_target_repo_root = "audiomason2"
 
 # Canonical (supported by runner; missing in your file)
 # success_archive_name = "{repo}-{branch}.zip"
