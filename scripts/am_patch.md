@@ -1,4 +1,4 @@
-# AM Patch Runner v5 - User Manual
+# AM Patch Runner v6 - User Manual
 
 This manual describes how *you* use the new runner day-to-day so that runs are deterministic and issues can be safely closed.
 
@@ -16,6 +16,10 @@ This manual describes how *you* use the new runner day-to-day so that runs are d
 - The configuration may list multiple candidate target repositories via target_repo_roots.
 - A single run always uses exactly one active target repository.
 - Multi-target execution in one run is not supported.
+- Zip patch inputs may carry a root-level `target.txt` that uses the
+  same syntax as `active_target_repo_root`.
+- Target selection precedence is: explicit CLI target > patch-carried
+  `target.txt` > config target > defaults.
 
 ### Gates and COMPILE
 - After the patch is applied, the runner executes gates.
@@ -227,6 +231,10 @@ The runner excludes the following from the archived changed/touched subset when 
 - `*.pyc`
 
 This reduces archive size without changing patch semantics or gates behavior.
+
+Each failure zip also carries a root-level `target.txt` with the
+effective target selector for that failed run. The file uses the same
+syntax as `active_target_repo_root`; `.` means runner_root.
 
 -
 Note on failure subsets:

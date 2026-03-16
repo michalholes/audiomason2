@@ -1,4 +1,4 @@
-# AM Patch Runner - Functional Specification v6 (UPDATED)
+# AM Patch Runner - Functional Specification v7 (UPDATED)
 
 This document is **authoritative** for the AM Patch Runner contract.
 
@@ -14,6 +14,16 @@ even when implementation updates land in a later issue.
 Every runner behavior is controllable via: - CLI flags **or** -
 `--override KEY=VALUE` overrides, with precedence: **CLI \> config \>
 defaults**.
+
+Target-selection extension:
+- Explicit CLI target selection takes precedence over every other target source.
+- When the selected patch input is a zip archive and it contains a
+  root-level `target.txt`, the runner treats that file as patch-carried
+  target metadata.
+- Target selection precedence is: explicit CLI target > patch-carried
+  `target.txt` > config target > defaults.
+- Patch-carried `target.txt` does not create a new Policy key. It is a
+  transport form of the existing `active_target_repo_root` semantics.
 
 #
 
@@ -160,7 +170,9 @@ Example:
 
 Version discipline: - Any change that alters runner behavior MUST bump
 `RUNNER_VERSION`. - Any change that alters runner behavior MUST update
-this specification under `scripts/`.
+this specification under `scripts/`. - Implementation of the
+patch-carried target and failure-zip `target.txt` contract defined in
+this version MUST bump `RUNNER_VERSION`.
 
 ------------------------------------------------------------------------
 
@@ -402,6 +414,23 @@ Root resolution contract:
 - The config file path itself remains CLI-only and is not a Policy key.
 - The runner MUST support both legacy embedded layout and root layout without changing Policy semantics.
 - In both layouts, relative config paths and root-model values are resolved against runner_root.
+
+### 3.1.1 Patch-carried target metadata
+
+- When the selected patch input is a zip archive, the runner MAY read a
+  root-level `target.txt`.
+- `target.txt` MUST be ASCII-only text with exactly one non-empty path
+  value and optional trailing LF.
+- The `target.txt` value uses the same syntax and semantics as
+  `active_target_repo_root`.
+- Relative `target.txt` values are resolved against runner_root.
+- The resulting effective target MUST satisfy the same registry rules as
+  `active_target_repo_root`.
+- Patch-carried `target.txt` participates in target selection before
+  root binding, workspace creation, scope evaluation, promotion
+  planning, promotion execution, commit, and push.
+- If the active target defaults to runner_root and no explicit target
+  selector exists, a runner-generated `target.txt` MUST use `.`.
 
 ### 3.2 CLI (normative)
 
@@ -1036,6 +1065,18 @@ and tool/runtime caches from the archived
 
 This is independent of scope logic and does not affect patch execution,
 gates, or promotion semantics.
+
+Failure zip target metadata:
+
+- The failure zip MUST include a root-level `target.txt`.
+- The file MUST be ASCII-only text with exactly one non-empty path
+  value and optional trailing LF.
+- The file content MUST be the effective target selector for the failed
+  run, using `active_target_repo_root` syntax.
+- If the failed run used the default runner_root target, the failure zip
+  MUST write `.` to `target.txt`.
+- `target.txt` is metadata only. It does not change failure-zip naming,
+  retention, or subset selection rules.
 
 Failure zip naming and retention:
 
