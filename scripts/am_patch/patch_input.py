@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import zipfile
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from am_patch.errors import RunnerError
@@ -10,6 +11,7 @@ from am_patch.patch_archive_select import select_latest_issue_patch
 from am_patch.patch_exec import precheck_patch_script
 from am_patch.patch_select import PatchSelectError, choose_default_patch_input, decide_unified_mode
 from am_patch.repo_root import is_under
+from am_patch.root_model import resolve_patch_root
 
 
 @dataclass(frozen=True)
@@ -19,15 +21,12 @@ class PatchPlan:
     files_declared: list[str]
 
 
-def resolve_patch_plan(
+def _resolve_patch_input_path(
     *,
-    logger: Any,
     cli: Any,
-    policy: Any,
     issue_id: int,
-    repo_root: Path,
     patch_root: Path,
-) -> PatchPlan:
+) -> Path:
     patch_script: Path | None = None
 
     if getattr(cli, "load_latest_patch", None):
@@ -42,9 +41,6 @@ def resolve_patch_plan(
         if raw.is_absolute():
             patch_script = raw
         else:
-            # Accept either:
-            #  - a path relative to CWD (e.g. patches/issue_999.py), OR
-            #  - a bare filename resolved under patch_dir (e.g. issue_999.py).
             cand_cwd = (Path.cwd() / raw).resolve()
             cand_patchdir = (patch_root / raw).resolve()
             if cand_cwd.exists() and is_under(cand_cwd, patch_root):
@@ -74,6 +70,98 @@ def resolve_patch_plan(
             "PATCH_PATH",
             f"patch script must be under {patch_root} (got {patch_script})",
         )
+    return patch_script
+
+
+def _read_patch_carried_target_selector(patch_script: Path) -> str | None:
+    if patch_script.suffix.lower() != ".zip":
+        return None
+    try:
+        with zipfile.ZipFile(patch_script, "r") as zf:
+            matches = [
+                info.filename
+                for info in zf.infolist()
+                if not info.is_dir() and PurePosixPath(info.filename).parts == ("target.txt",)
+            ]
+            if not matches:
+                return None
+            if len(matches) != 1:
+                raise RunnerError(
+                    "PREFLIGHT",
+                    "PATCH_PATH",
+                    "zip patch input contains multiple root-level target.txt entries",
+                )
+            raw = zf.read(matches[0])
+    except zipfile.BadZipFile as exc:
+        raise RunnerError(
+            "PREFLIGHT",
+            "PATCH_PATH",
+            f"invalid zip file: {patch_script} ({exc})",
+        ) from exc
+    try:
+        text = raw.decode("ascii")
+    except UnicodeDecodeError as exc:
+        raise RunnerError(
+            "PREFLIGHT",
+            "PATCH_PATH",
+            "zip patch input target.txt must be ASCII-only",
+        ) from exc
+    if "\r" in text:
+        raise RunnerError(
+            "PREFLIGHT",
+            "PATCH_PATH",
+            "zip patch input target.txt must use LF newlines",
+        )
+    selector = text[:-1] if text.endswith("\n") else text
+    if not selector or "\n" in selector:
+        raise RunnerError(
+            "PREFLIGHT",
+            "PATCH_PATH",
+            "zip patch input target.txt must contain exactly one non-empty line",
+        )
+    return selector
+
+
+def _has_explicit_cli_target(policy: Any) -> bool:
+    for key in ("active_target_repo_root", "repo_root"):
+        if getattr(policy, "_src", {}).get(key) != "cli":
+            continue
+        return True
+    return False
+
+
+def apply_patch_carried_target_selector_for_startup(
+    *,
+    cli: Any,
+    policy: Any,
+    issue_id: int,
+    runner_root: Path,
+) -> None:
+    if _has_explicit_cli_target(policy):
+        return
+    patch_root = resolve_patch_root(policy, runner_root=runner_root)
+    patch_script = _resolve_patch_input_path(cli=cli, issue_id=issue_id, patch_root=patch_root)
+    selector = _read_patch_carried_target_selector(patch_script)
+    if selector is None:
+        return
+    policy.active_target_repo_root = selector
+    policy._src["active_target_repo_root"] = "patch-carried"
+
+
+def resolve_patch_plan(
+    *,
+    logger: Any,
+    cli: Any,
+    policy: Any,
+    issue_id: int,
+    repo_root: Path,
+    patch_root: Path,
+) -> PatchPlan:
+    patch_script = _resolve_patch_input_path(
+        cli=cli,
+        issue_id=issue_id,
+        patch_root=patch_root,
+    )
 
     try:
         unified_mode = decide_unified_mode(

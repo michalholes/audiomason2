@@ -19,7 +19,10 @@ from am_patch.final_summary import build_terminal_summary, emit_final_summary
 from am_patch.lock import FileLock
 from am_patch.patch_archive_select import select_latest_issue_patch
 from am_patch.patch_exec import run_patch, run_unified_patch_bundle
-from am_patch.patch_input import resolve_patch_plan
+from am_patch.patch_input import (
+    apply_patch_carried_target_selector_for_startup,
+    resolve_patch_plan,
+)
 from am_patch.paths import _workspace_store_current_patch
 from am_patch.post_run_pipeline import run_post_run_pipeline
 from am_patch.repo_root import is_under
@@ -189,6 +192,14 @@ def build_effective_policy(argv: list[str]) -> int | tuple[Any, Policy, Path, st
     if getattr(cli, "allow_declared_untouched", None):
         policy.allow_declared_untouched = True
         policy._src["allow_declared_untouched"] = "cli"
+
+    if cli.mode in ("workspace", "show_config") and cli.issue_id is not None:
+        apply_patch_carried_target_selector_for_startup(
+            cli=cli,
+            policy=policy,
+            issue_id=int(cli.issue_id),
+            runner_root=runner_root,
+        )
 
     if cli.mode == "show_config":
         # Print the same effective config/policy that is normally logged at the start of a run.

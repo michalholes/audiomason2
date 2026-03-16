@@ -113,6 +113,7 @@ def make_failure_zip(
     workspace_repo: Path,
     log_path: Path,
     include_repo_files: list[str],
+    target_selector: str,
     include_patch_blobs: list[tuple[str, bytes]] | None = None,
     include_patch_paths: list[Path] | None = None,
     log_dir_name: str = "logs",
@@ -151,8 +152,16 @@ def make_failure_zip(
     with contextlib.suppress(FileNotFoundError):
         tmp_path.unlink()
 
+    if not target_selector or "\n" in target_selector or "\r" in target_selector:
+        raise ValueError("failure zip target_selector must be a single non-empty line")
+    try:
+        target_payload = f"{target_selector}\n".encode("ascii")
+    except UnicodeEncodeError as exc:
+        raise ValueError("failure zip target_selector must be ASCII-only") from exc
+
     try:
         with zipfile.ZipFile(tmp_path, "w", compression=zipfile.ZIP_DEFLATED) as z:
+            z.writestr("target.txt", target_payload)
             if log_path.exists():
                 z.write(log_path, arcname=f"{log_dir_name}/{log_path.name}")
 
