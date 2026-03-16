@@ -43,6 +43,46 @@ The physical form of the snapshot (compressed archive vs. pre-unzipped directory
 
 Refusal to proceed solely on the basis that the snapshot is provided as a `.zip` archive constitutes a PRE-FLIGHT violation.
 
+3a. Workspace Snapshot Target Derivation (HARD)
+
+For initial patch preflight, the chat MUST deterministically derive
+TARGET from the basename of the authoritative workspace snapshot zip.
+
+The authoritative workspace snapshot basename MUST match:
+
+    <TARGET>-main_<OPAQUE>.zip
+
+Where:
+
+- <TARGET> is the exact patch target value.
+- <OPAQUE> is an opaque suffix and MUST be ignored for target derivation.
+
+Examples:
+
+- audiomason2-main_666.zip -> TARGET = audiomason2
+- patchhub-main_XXX.zip -> TARGET = patchhub
+
+The derived TARGET MUST be treated as authoritative for initial patch mode.
+The chat MUST NOT guess, normalize, translate, or heuristically reinterpret
+the derived TARGET.
+
+If the authoritative workspace snapshot basename does not match this
+contract, PRE-FLIGHT MUST STOP and request a compliant authoritative input.
+
+3b. Preflight target evidence (HARD)
+
+Before proposing, generating, or validating any patch, the chat MUST
+record the authoritative TARGET and its derivation source in preflight
+evidence.
+
+In initial patch mode, the derivation source is the authoritative
+workspace snapshot basename.
+
+In repair patch mode, the derivation source is target.txt contained in
+the authoritative repair overlay, as defined in Repair patch rules (HARD).
+
+Missing authoritative TARGET evidence = PRE-FLIGHT violation.
+
 4. If any required input is missing → STOP and request missing input.
 
 
@@ -133,9 +173,14 @@ Rules:
    target.txt
 2. target.txt MUST be ASCII-only and use LF newlines.
 3. target.txt MUST contain exactly one non-empty line.
-4. target.txt carries the patch target value in the same path syntax
-   used by the runner target-root policy surface.
+4. target.txt carries the patch target value in the same path syntax used by the runner target-root policy surface.
+5. In initial patch mode, target.txt MUST exactly equal the TARGET derived in PRE-FLIGHT from the authoritative workspace snapshot basename.
 
+6. In repair patch mode, target.txt MUST exactly equal the TARGET read from target.txt contained in the authoritative latest patched_issue{ISSUE}_*.zip overlay artifact.
+
+7. The chat MUST NOT invent, normalize, translate, or otherwise alter the authoritative TARGET value when writing target.txt.
+
+8. Any mismatch between target.txt and the authoritative target source is NON-COMPLIANT.
 ------------------------------------------------------------------------
 
 ## Patch requirements (HARD)
@@ -240,6 +285,8 @@ For every initial patch, the chat MUST include an INSPECTION PROOF block contain
 1. AUTHORITATIVE INPUTS
    - workspace snapshot identifier
    - overlay archive identifier (if applicable)
+   - authoritative TARGET value
+   - TARGET derivation source
 
 2. FILES TOUCHED (MANIFEST)
    - full list of repo-relative modified files
@@ -362,7 +409,25 @@ Rules:
     requirements are also independently evidenced.
 7.  The validator evidence block is additive. The runner remains the
     authority for apply and runtime results.
-8.  pm_validator.py is in project files, or in repo folder scripts/. 
+8.  pm_validator.py is in project files, or in repo folder scripts/.
+9.  For initial patch validation, the validator MUST derive the expected
+    target from the authoritative workspace snapshot basename using the
+    contract <TARGET>-main_<OPAQUE>.zip and verify exact equality with
+    target.txt in PATCH.
+
+10. If the authoritative workspace snapshot basename does not match that
+    contract, the validator MUST fail.
+
+11. For repair patch validation, the validator MUST read target.txt from
+    the authoritative latest patched_issue{ISSUE}_*.zip overlay artifact
+    and verify exact equality with target.txt in PATCH.
+
+12. If repair validation also uses a workspace snapshot and its basename
+    matches the initial snapshot naming contract, the validator MUST
+    verify that the basename-derived target exactly equals the overlay
+    target.txt value.
+
+13. Any target mismatch detected by the validator is a FAIL. 
 ------------------------------------------------------------------------
 
 # REPAIR PATCH RULES (HARD)
@@ -383,6 +448,18 @@ Authoritative artifacts for repair validator workflow:
 2.  Optional full workspace snapshot, but only as per-file supplemental
     authority for files outside the overlay when escalation is allowed
     by these rules.
+
+Repair target authority:
+
+-   For repair patch preflight, TARGET MUST be read from target.txt
+    contained in the most recent patched_issue{ISSUE}_*.zip.
+-   Overlay target.txt is authoritative for repair mode.
+-   If overlay target.txt is missing, empty, multi-line, or non-ASCII,
+    PRE-FLIGHT MUST STOP.
+-   If a full workspace snapshot is also provided and its basename
+    matches <TARGET>-main_<OPAQUE>.zip, the basename-derived TARGET
+    MUST exactly equal the overlay target.txt value.
+-   Any mismatch is NON-COMPLIANT.
 
 Per-file authority:
 
@@ -537,6 +614,13 @@ Before generating repair patch, the chat MUST output:
 3.  At least one structural anchor per file proving inspection.
 4.  If any file uses supplemental authority, the manifest MUST also list
     the exact log-backed reason that required each such file.
+
+5.  The manifest MUST include the authoritative TARGET value used for
+    repair mode.
+6.  The manifest MUST state whether TARGET was established from:
+    - overlay target.txt only, or
+    - overlay target.txt plus matching workspace snapshot basename
+      consistency check.
 
 Missing manifest = NON-COMPLIANT.
 
