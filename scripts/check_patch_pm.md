@@ -32,6 +32,7 @@ The validator covers only machine-verifiable PM requirements:
 - `.zip` artifact shape
 - `COMMIT_MESSAGE.txt`
 - `ISSUE_NUMBER.txt`
+- optional root-level `target.txt` (ASCII, exactly one non-empty line)
 - PM per-file patch layout
 - patch-member path/header consistency
 - added-line length limit for `.py` and `.js` patch members only

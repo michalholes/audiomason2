@@ -7,7 +7,7 @@ from typing import Any
 
 _PATCH_ENTRY_PREFIX = "patches/per_file/"
 _PATCH_SUFFIX = ".patch"
-_ROOT_METADATA_NAMES = ("COMMIT_MESSAGE.txt", "ISSUE_NUMBER.txt")
+_ROOT_METADATA_NAMES = ("COMMIT_MESSAGE.txt", "ISSUE_NUMBER.txt", "target.txt")
 _SAFE_NAME_RE = re.compile(r"[^A-Za-z0-9._-]+")
 
 

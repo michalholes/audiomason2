@@ -14,6 +14,7 @@ from zipfile import ZipFile
 PATCH_RE = re.compile(r"^issue_(?P<issue>\d+)_v(?P<version>[1-9]\d*)\.zip$")
 PATCH_PREFIX = "patches/per_file/"
 PATCH_SUFFIX = ".patch"
+TARGET_FILE_NAME = "target.txt"
 LINE_EXTS = {".py", ".js"}
 JS_EXTS = {".js", ".mjs", ".cjs"}
 CATCHALL_BASENAMES = {"utils.py", "common.py", "helpers.py", "misc.py"}
@@ -71,6 +72,26 @@ def _decode_ascii_text(raw: bytes) -> str | None:
 def _zip_text(items: dict[str, bytes], name: str) -> str | None:
     raw = items.get(name)
     return None if raw is None else _decode_ascii_text(raw)
+
+
+def _validate_target_text(text: str) -> str | None:
+    lines = text.splitlines()
+    if len(lines) != 1:
+        return "target_must_have_exactly_one_line"
+    value = lines[0].strip()
+    if not value:
+        return "target_must_be_non_empty"
+    return None
+
+
+def _target_rule(items: dict[str, bytes]) -> RuleResult | None:
+    text = _zip_text(items, TARGET_FILE_NAME)
+    if text is None:
+        return None
+    err = _validate_target_text(text)
+    if err is not None:
+        return RuleResult("TARGET_FILE", "FAIL", err)
+    return RuleResult("TARGET_FILE", "PASS", text)
 
 
 def _is_ascii_text(text: str) -> bool:
@@ -161,13 +182,18 @@ def _collect_patch_members(
     )
     if zmsg != commit_message or zid != issue_id:
         return results, [], []
+    target_rule = _target_rule(items)
+    if target_rule is not None:
+        results.append(target_rule)
+        if target_rule.status != "PASS":
+            return results, [], []
     non_dirs = [name for name in names if not name.endswith("/")]
     members = [
         name for name in non_dirs if name.startswith(PATCH_PREFIX) and name.endswith(PATCH_SUFFIX)
     ]
     if not members:
         return results + [RuleResult("PER_FILE_LAYOUT", "FAIL", "entries=0")], [], []
-    allowed = {"COMMIT_MESSAGE.txt", "ISSUE_NUMBER.txt", *members}
+    allowed = {"COMMIT_MESSAGE.txt", "ISSUE_NUMBER.txt", TARGET_FILE_NAME, *members}
     extras = sorted(name for name in non_dirs if name not in allowed)
     if extras:
         detail = f"extra_entries={extras}"

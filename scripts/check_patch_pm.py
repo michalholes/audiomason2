@@ -30,6 +30,7 @@ from patchhub.zip_commit_message import (
 from patchhub.zip_patch_subset import build_zip_patch_manifest
 
 PATCH_DIR_NAME = "patches"
+TARGET_FILE_NAME = "target.txt"
 
 PATCH_BASENAME_RE = re.compile(r"^issue_(?P<issue>\d+)_v(?P<version>[1-9]\d*)\.zip$")
 
@@ -170,6 +171,32 @@ def _check_line_lengths(text: str) -> str | None:
     return None
 
 
+def _validate_target_text(text: str) -> str | None:
+    lines = text.splitlines()
+    if len(lines) != 1:
+        return "target_must_have_exactly_one_line"
+    value = lines[0].strip()
+    if not value:
+        return "target_must_be_non_empty"
+    return None
+
+
+def _target_rule(zip_data: dict[str, bytes]) -> RuleResult | None:
+    raw = zip_data.get(TARGET_FILE_NAME)
+    if raw is None:
+        return None
+    try:
+        text = raw.decode("ascii")
+    except UnicodeDecodeError as exc:
+        return RuleResult("TARGET_FILE", "FAIL", f"ascii_decode_failed:{exc}")
+    if text.endswith("\n"):
+        text = text[:-1]
+    err = _validate_target_text(text)
+    if err is not None:
+        return RuleResult("TARGET_FILE", "FAIL", err)
+    return RuleResult("TARGET_FILE", "PASS", text)
+
+
 def _line_length_scope_for_repo_path(repo_path: str) -> bool:
     return Path(repo_path).suffix.lower() in {".py", ".js"}
 
@@ -223,7 +250,13 @@ def _build_members(
         results.append(RuleResult("ZIP_ENTRY_SET", "FAIL", "duplicate_zip_member"))
         return results, members, decision_paths
 
-    allowed = {"COMMIT_MESSAGE.txt", "ISSUE_NUMBER.txt"}
+    target_rule = _target_rule(zip_data)
+    if target_rule is not None:
+        results.append(target_rule)
+        if target_rule.status != "PASS":
+            return results, members, decision_paths
+
+    allowed = {"COMMIT_MESSAGE.txt", "ISSUE_NUMBER.txt", TARGET_FILE_NAME}
     allowed.update(str(item["zip_member"]) for item in manifest["entries"])
     extras = sorted(name for name in names if not name.endswith("/") and name not in allowed)
     if extras:

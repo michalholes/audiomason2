@@ -173,6 +173,27 @@ def test_valid_patch_passes(tmp_path: Path) -> None:
     assert "RULE GIT_APPLY_CHECK:patches/per_file/docs__readme.txt.patch: PASS" in proc.stdout
 
 
+def test_valid_patch_passes_with_target_file(tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    _write(repo_root / "docs/readme.txt", "old\n")
+    patch = _git_patch("docs/readme.txt", "old\n", "new\n")
+    fragment_member, fragment_patch = _fragment_member()
+    _write_patch_zip(
+        repo_root,
+        issue_id="223",
+        commit_message=COMMIT_MESSAGE,
+        members={
+            "patches/per_file/docs__readme.txt.patch": patch,
+            fragment_member: fragment_patch,
+        },
+        extra_files={"target.txt": b"../patchhub\n"},
+    )
+
+    proc = _run_validator(repo_root, "223", COMMIT_MESSAGE)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "RULE TARGET_FILE: PASS - ../patchhub" in proc.stdout
+
+
 def test_patch_basename_failure_is_reported(tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     _write(repo_root / "docs/readme.txt", "old\n")
@@ -268,11 +289,12 @@ def test_extra_zip_entry_fails(tmp_path: Path) -> None:
         issue_id="223",
         commit_message=COMMIT_MESSAGE,
         members={"patches/per_file/docs__readme.txt.patch": patch},
-        extra_files={"notes.txt": b"x\n"},
+        extra_files={"target.txt": b"../patchhub\n", "notes.txt": b"x\n"},
     )
 
     proc = _run_validator(repo_root, "223", COMMIT_MESSAGE)
     assert proc.returncode == 1
+    assert "RULE TARGET_FILE: PASS - ../patchhub" in proc.stdout
     assert "RULE ZIP_ENTRY_SET: FAIL" in proc.stdout
 
 

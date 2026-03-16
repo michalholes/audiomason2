@@ -125,6 +125,22 @@ def test_initial_mode_passes(tmp_path: Path) -> None:
     assert "RULE MONOLITH: PASS" in proc.stdout
 
 
+def test_initial_mode_passes_with_target_file(tmp_path: Path) -> None:
+    relpath = "scripts/sample.py"
+    before = "def value():\n    return 1\n"
+    after = "def value():\n    return 2\n"
+    snapshot = tmp_path / "workspace.zip"
+    patch_zip = tmp_path / "issue_601_v2.zip"
+    _write_zip(snapshot, {relpath: before.encode("utf-8")})
+    _patch_zip(patch_zip, {_safe_member(relpath): _git_patch(relpath, before, after)})
+    with ZipFile(patch_zip, "a", compression=ZIP_DEFLATED) as zf:
+        zf.writestr("target.txt", b"../patchhub\n")
+
+    proc = _run("601", COMMIT, str(patch_zip), "--workspace-snapshot", str(snapshot))
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "RULE TARGET_FILE: PASS - ../patchhub" in proc.stdout
+
+
 def test_repair_overlay_only_passes(tmp_path: Path) -> None:
     relpath = "scripts/sample.py"
     before = "def value():\n    return 2\n"
@@ -373,3 +389,21 @@ def test_monolith_drop_below_large_threshold_passes(tmp_path: Path) -> None:
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert "RESULT: PASS" in proc.stdout
     assert "RULE MONOLITH: PASS" in proc.stdout
+
+
+def test_initial_mode_rejects_unexpected_root_entry(tmp_path: Path) -> None:
+    relpath = "scripts/sample.py"
+    before = "def value():\n    return 1\n"
+    after = "def value():\n    return 2\n"
+    snapshot = tmp_path / "workspace.zip"
+    patch_zip = tmp_path / "issue_601_v2.zip"
+    _write_zip(snapshot, {relpath: before.encode("utf-8")})
+    _patch_zip(patch_zip, {_safe_member(relpath): _git_patch(relpath, before, after)})
+    with ZipFile(patch_zip, "a", compression=ZIP_DEFLATED) as zf:
+        zf.writestr("target.txt", b"../patchhub\n")
+        zf.writestr("notes.txt", b"x\n")
+
+    proc = _run("601", COMMIT, str(patch_zip), "--workspace-snapshot", str(snapshot))
+    assert proc.returncode == 1
+    assert "RULE TARGET_FILE: PASS - ../patchhub" in proc.stdout
+    assert "RULE PER_FILE_LAYOUT: FAIL - extra_entries=['notes.txt']" in proc.stdout

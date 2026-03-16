@@ -30,11 +30,14 @@ def _make_pm_zip(
     commit: str = "Subset test",
     issue: str = "506",
     patch_entries: list[str],
+    target: str | None = None,
 ) -> None:
     bio = BytesIO()
     with ZipFile(bio, "w") as zf:
         zf.writestr("COMMIT_MESSAGE.txt", (commit + "\n").encode("ascii"))
         zf.writestr("ISSUE_NUMBER.txt", (issue + "\n").encode("ascii"))
+        if target is not None:
+            zf.writestr("target.txt", (target + "\n").encode("ascii"))
         for name in patch_entries:
             zf.writestr(name, b"--- a/x\n+++ b/x\n")
     path.write_bytes(bio.getvalue())
@@ -261,3 +264,30 @@ def test_collect_job_applied_files_prefers_logged_job_diff_manifest(tmp_path: Pa
     )
     assert files == ["scripts/patchhub/app_api_jobs.py"]
     assert source == "diff_manifest"
+
+
+def test_api_jobs_enqueue_subset_preserves_target_metadata(tmp_path: Path) -> None:
+    s = _mk_self(tmp_path)
+    zpath = s.patches_root / "issue_506_demo.zip"
+    entries = [
+        "patches/per_file/scripts__patchhub__app_api_jobs.py.patch",
+        "patches/per_file/scripts__patchhub__models.py.patch",
+    ]
+    _make_pm_zip(zpath, patch_entries=entries, target="../patchhub")
+
+    body = {
+        "mode": "patch",
+        "issue_id": "506",
+        "commit_message": "Subset test",
+        "patch_path": "issue_506_demo.zip",
+        "selected_patch_entries": [entries[0]],
+    }
+    status, raw = api_jobs_enqueue(s, body)
+    assert status == 200
+    payload = json.loads(raw.decode("utf-8"))
+    derived_path = s.repo_root / payload["job"]["effective_patch_path"]
+
+    with ZipFile(derived_path, "r") as zf:
+        names = sorted(zf.namelist())
+        assert "target.txt" in names
+        assert zf.read("target.txt") == b"../patchhub\n"
