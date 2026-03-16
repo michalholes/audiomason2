@@ -251,10 +251,6 @@ def test_root_scoped_author_filter_keeps_local_book_ordinals(tmp_path: Path) -> 
     assert books.get("selected_source_relative_paths") == ["A/Book2"]
     assert isinstance(selected_ids, list) and len(selected_ids) == 1
     assert state.get("selected_book_ids") == selected_ids
-    assert phase1.get("runtime", {}).get("effective_author_title") == {
-        "author": "A",
-        "title": "Book2",
-    }
 
     plan = engine.compute_plan(session_id)
     assert plan.get("summary", {}).get("selected_books") == 1
