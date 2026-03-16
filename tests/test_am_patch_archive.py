@@ -24,7 +24,7 @@ repo_root = Path(__file__).resolve().parents[1]
 scripts_dir = repo_root / "scripts"
 sys.path.insert(0, str(scripts_dir))
 
-from am_patch.archive import archive_patch  # noqa: E402
+from am_patch.archive import archive_patch, make_failure_zip  # noqa: E402
 
 
 def test_archive_patch_moves_incoming_source(tmp_path: Path) -> None:
@@ -95,3 +95,29 @@ def test_archive_patch_copies_from_unsuccessful_archive(tmp_path: Path) -> None:
     assert source.read_text(encoding="utf-8") == "patch"
     assert dest.read_text(encoding="utf-8") == "patch"
     assert "archived patch script (copied)" in logger.lines[-1]
+
+
+def test_make_failure_zip_writes_root_level_target_file(tmp_path: Path) -> None:
+    logger = _FakeLogger()
+    workspace_repo = tmp_path / "repo"
+    workspace_repo.mkdir()
+    (workspace_repo / "src").mkdir()
+    (workspace_repo / "src" / "module.py").write_text("print(1)\n", encoding="utf-8")
+    log_path = tmp_path / "run.log"
+    log_path.write_text("log\n", encoding="utf-8")
+    zip_path = tmp_path / "patched.zip"
+
+    make_failure_zip(
+        logger,
+        zip_path,
+        workspace_repo=workspace_repo,
+        log_path=log_path,
+        include_repo_files=["src/module.py"],
+        target_selector="../patchhub",
+    )
+
+    import zipfile
+
+    with zipfile.ZipFile(zip_path, "r") as zf:
+        assert zf.read("target.txt") == b"../patchhub\n"
+        assert zf.read("src/module.py") == b"print(1)\n"

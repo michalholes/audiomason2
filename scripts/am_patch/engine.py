@@ -19,10 +19,15 @@ from am_patch.final_summary import build_terminal_summary, emit_final_summary
 from am_patch.lock import FileLock
 from am_patch.patch_archive_select import select_latest_issue_patch
 from am_patch.patch_exec import run_patch, run_unified_patch_bundle
-from am_patch.patch_input import resolve_patch_plan
+from am_patch.patch_input import (
+    read_patch_carried_target,
+    resolve_patch_plan,
+    resolve_patch_script_path,
+)
 from am_patch.paths import _workspace_store_current_patch
 from am_patch.post_run_pipeline import run_post_run_pipeline
 from am_patch.repo_root import is_under
+from am_patch.root_model import resolve_patch_root
 from am_patch.run_result import RunResult, _normalize_failure_summary, build_run_result
 from am_patch.runner_failure_detail import (
     render_runner_error_detail,
@@ -199,6 +204,29 @@ def build_effective_policy(argv: list[str]) -> int | tuple[Any, Policy, Path, st
 
     if policy.test_mode and cli.mode != "workspace":
         raise SystemExit("test-mode is supported only in workspace mode")
+
+    if cli.mode == "workspace" and cli.issue_id is not None:
+        explicit_target = (
+            policy._src.get("active_target_repo_root") == "cli"
+            or policy._src.get("repo_root") == "cli"
+        )
+        if not explicit_target:
+            patch_root = resolve_patch_root(policy, runner_root=runner_root)
+            patch_script = resolve_patch_script_path(
+                cli=cli,
+                issue_id=int(cli.issue_id),
+                patch_root=patch_root,
+                require_exists=False,
+            )
+            if (
+                patch_script.exists()
+                and patch_script.is_file()
+                and is_under(patch_script, patch_root)
+            ):
+                patch_target = read_patch_carried_target(patch_script)
+                if patch_target is not None:
+                    policy.active_target_repo_root = patch_target
+                    policy._src["active_target_repo_root"] = "patch"
 
     return cli, policy, Path(config_path), str(used_cfg)
 

@@ -201,12 +201,14 @@ def run_post_run_pipeline(*, ctx: Any, result: RunResult) -> int:
                 workspace_deleted_before_audit=workspace_deleted_before_audit,
             )
 
+            runner_root = getattr(ctx, "runner_root", None) or repo_root
             build_artifacts(
                 logger=logger,
                 cli=cli,
                 policy=policy,
                 paths=paths,
                 repo_root=repo_root,
+                runner_root=runner_root,
                 log_path=log_path,
                 exit_code=result.exit_code,
                 unified_mode=result.unified_mode,
