@@ -16,6 +16,7 @@ import time
 from collections.abc import Coroutine
 from datetime import UTC, datetime
 from pathlib import Path
+from threading import Lock
 from typing import Any
 
 from audiomason.core.config import ConfigResolver
@@ -35,6 +36,7 @@ from audiomason.core.logging import (
 from audiomason.core.orchestration_models import ProcessContractRequest, ProcessRequest
 from audiomason.core.phase import PhaseContractError, PhaseGuard
 from audiomason.core.pipeline import PipelineExecutor
+from audiomason.core.process_contract_runtime import get_process_contract_runtime
 from audiomason.core.process_job_contracts import resolve_process_job_contract
 
 
@@ -49,6 +51,9 @@ COMPONENT = "orchestration"
 OP_RUN_JOB = "run_job"
 OP_CTX = "context_lifecycle"
 OP_EXECUTE_PIPELINE = "execute_pipeline"
+
+
+_PROCESS_CONTRACT_CLAIM_LOCK = Lock()
 
 
 def _emit_diag(event: str, *, operation: str, data: dict[str, Any]) -> None:
@@ -194,35 +199,15 @@ class Orchestrator:
             if contract is not None:
                 job.meta["verbosity_override"] = str(int(verbosity))
                 try:
-                    contract_job_meta = contract.bind_job_meta(job.meta)
+                    contract.bind_job_meta(job.meta)
                 except ValueError as e:
                     job.meta.pop("verbosity_override", None)
                     raise RuntimeError("unsupported or incomplete process contract") from e
-
-                job.transition(JobState.RUNNING)
-                job.started_at = _utcnow_iso()
-                self._jobs.store.save_job(job)
-                request = ProcessContractRequest(
-                    contract_id=contract.contract_id,
-                    plugin_name=contract.plugin_name,
-                    entrypoint_name=contract.entrypoint_name,
+                self._submit_process_contract_job(
+                    job_id=job_id,
                     plugin_loader=plugin_loader,
-                    job_meta=contract_job_meta,
+                    verbosity=verbosity,
                 )
-
-                prev_sink = get_log_sink()
-                set_log_sink(lambda line: self._jobs.append_log_line(job.job_id, line))
-                try:
-                    _LOGGER.info("started")
-                finally:
-                    set_log_sink(prev_sink)
-
-                try:
-                    loop = asyncio.get_running_loop()
-                except RuntimeError:
-                    _run_coro_sync(self._run_process_contract_job(job.job_id, request))
-                else:
-                    loop.create_task(self._run_process_contract_job(job.job_id, request))
                 return
 
             pipeline_path = job.meta.get("pipeline_path")
@@ -267,6 +252,75 @@ class Orchestrator:
             return
 
         raise RuntimeError(f"unsupported job type: {job.type}")
+
+    def start_process_runtime(self, *, plugin_loader: Any, verbosity: int = 1) -> None:
+        runtime = get_process_contract_runtime()
+        runtime.start()
+        for job in self._jobs.list_jobs():
+            self._submit_process_contract_job(
+                job_id=job.job_id,
+                plugin_loader=plugin_loader,
+                verbosity=verbosity,
+            )
+
+    def _submit_process_contract_job(
+        self,
+        *,
+        job_id: str,
+        plugin_loader: Any,
+        verbosity: int,
+    ) -> None:
+        with _PROCESS_CONTRACT_CLAIM_LOCK:
+            job = self._jobs.get_job(job_id)
+            if job.type != JobType.PROCESS or job.state != JobState.PENDING:
+                return
+            contract = resolve_process_job_contract(job.meta)
+            if contract is None:
+                return
+
+            job.meta["verbosity_override"] = str(int(verbosity))
+            try:
+                contract_job_meta = contract.bind_job_meta(job.meta)
+            except ValueError:
+                return
+
+            request = ProcessContractRequest(
+                contract_id=contract.contract_id,
+                plugin_name=contract.plugin_name,
+                entrypoint_name=contract.entrypoint_name,
+                plugin_loader=plugin_loader,
+                job_meta=contract_job_meta,
+            )
+            job.transition(JobState.RUNNING)
+            job.started_at = _utcnow_iso()
+            self._jobs.store.save_job(job)
+
+            prev_sink = get_log_sink()
+            set_log_sink(lambda line: self._jobs.append_log_line(job.job_id, line))
+            try:
+                _LOGGER.info("started")
+            finally:
+                set_log_sink(prev_sink)
+
+            runtime = get_process_contract_runtime()
+            try:
+                scheduled = runtime.submit(
+                    job.job_id,
+                    lambda: self._run_process_contract_job(job.job_id, request),
+                )
+            except Exception:
+                restored = self._jobs.get_job(job.job_id)
+                if restored.state == JobState.RUNNING:
+                    restored.state = JobState.PENDING
+                    restored.started_at = None
+                    self._jobs.store.save_job(restored)
+                raise
+            if not scheduled:
+                restored = self._jobs.get_job(job.job_id)
+                if restored.state == JobState.RUNNING:
+                    restored.state = JobState.PENDING
+                    restored.started_at = None
+                    self._jobs.store.save_job(restored)
 
     def cancel(self, job_id: str) -> None:
         self._jobs.cancel_job(job_id)

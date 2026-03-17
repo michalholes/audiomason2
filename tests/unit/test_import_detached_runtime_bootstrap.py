@@ -6,12 +6,35 @@ from importlib import import_module
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from audiomason.core.config import ConfigResolver
 from audiomason.core.jobs.model import JobState
 from audiomason.core.orchestration import Orchestrator
+from audiomason.core.process_contract_runtime import reset_process_contract_runtime_for_tests
 
 ImportPlugin = import_module("plugins.import.plugin").ImportPlugin
 RootName = import_module("plugins.file_io.service").RootName
+
+
+@pytest.fixture(autouse=True)
+def _reset_process_contract_runtime() -> None:
+    reset_process_contract_runtime_for_tests()
+    yield
+    reset_process_contract_runtime_for_tests()
+
+
+def _wait_for_terminal_job(job_id: str) -> JobState:
+    orch = Orchestrator()
+    import time
+
+    deadline = time.monotonic() + 3.0
+    while time.monotonic() < deadline:
+        job = orch.get_job(job_id)
+        if job.state in {JobState.SUCCEEDED, JobState.FAILED, JobState.CANCELLED}:
+            return job.state
+        time.sleep(0.02)
+    raise AssertionError(f"timed out waiting for terminal state: {job_id}")
 
 
 class _FakeAudioProcessor:
@@ -255,8 +278,7 @@ def test_pending_process_job_adopts_detached_runtime_without_original_host_engin
     finally:
         os.chdir(old_cwd)
 
-    stored = Orchestrator().get_job(job_id)
-    assert stored.state == JobState.SUCCEEDED
+    assert _wait_for_terminal_job(job_id) == JobState.SUCCEEDED
 
     first_action = dict(job_requests["actions"][0])
     target = dict(first_action["target"])
