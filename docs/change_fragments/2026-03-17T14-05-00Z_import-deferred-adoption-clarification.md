@@ -1,0 +1,1 @@
+2026-03-17T14:05:00Z Clarified import deferred execution semantics so that a persisted canonical PROCESS job stays non-terminal when no Core-owned execution authority is running and MUST be automatically adopted and executed after later authority startup with exactly-once processing semantics.
