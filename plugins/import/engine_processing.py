@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 from plugins.file_io.service.types import RootName
 
+from . import engine_diagnostics_required as diagnostics_required
 from .engine_util import _emit_required, _exception_envelope, _iso_utc_now
 from .errors import FinalizeError, error_envelope, invariant_violation, validation_error
 from .fingerprints import fingerprint_json
@@ -22,6 +23,120 @@ from .storage import atomic_write_json, read_json
 
 if TYPE_CHECKING:
     from .engine import ImportWizardEngine
+
+
+def _validate_start_processing_body(body: dict[str, Any]) -> dict[str, Any] | None:
+    if not isinstance(body, dict):
+        raise ValueError("body must be an object")
+    confirm = body.get("confirm")
+    if confirm is not True:
+        return validation_error(
+            message="confirm must be true",
+            path="$.confirm",
+            reason="missing_or_false",
+            meta={},
+        )
+    return None
+
+
+def _record_session_job_state(
+    *,
+    engine: ImportWizardEngine,
+    session_id: str,
+    state: dict[str, Any],
+    job_id: str,
+    mark_submitted: bool,
+) -> None:
+    jobs_any = state.get("jobs")
+    jobs = dict(jobs_any) if isinstance(jobs_any, dict) else {}
+
+    emitted_any = jobs.get("emitted")
+    emitted = list(emitted_any) if isinstance(emitted_any, list) else []
+    if job_id not in emitted:
+        emitted.append(job_id)
+
+    submitted_any = jobs.get("submitted")
+    submitted = list(submitted_any) if isinstance(submitted_any, list) else []
+    if mark_submitted and job_id not in submitted:
+        submitted.append(job_id)
+
+    jobs["emitted"] = emitted
+    jobs["submitted"] = submitted
+    state["jobs"] = jobs
+    state["updated_at"] = _iso_utc_now()
+    engine._persist_state(session_id, state)
+
+
+def _build_start_processing_result(
+    *,
+    state: dict[str, Any],
+    job_id: str,
+    plan: dict[str, Any],
+) -> dict[str, Any]:
+    result = {"job_ids": [job_id], "batch_size": planned_units_count(plan)}
+    finalize_any = (state.get("computed") or {}).get("finalize")
+    if isinstance(finalize_any, dict):
+        result["finalize"] = dict(finalize_any)
+    return result
+
+
+def _load_job_requests_idempotent(
+    *,
+    engine: ImportWizardEngine,
+    session_id: str,
+    state: dict[str, Any],
+    body: dict[str, Any],
+) -> dict[str, Any]:
+    validation = _validate_start_processing_body(body)
+    if validation is not None:
+        return validation
+
+    session_dir = f"import/sessions/{session_id}"
+    job_path = f"{session_dir}/job_requests.json"
+    if not engine._fs.exists(RootName.WIZARDS, job_path):
+        raise FinalizeError("job_requests.json is missing")
+
+    job_requests_any = read_json(engine._fs, RootName.WIZARDS, job_path)
+    if not isinstance(job_requests_any, dict):
+        raise FinalizeError("job_requests.json is invalid")
+    idem_key = str(job_requests_any.get("idempotency_key") or "")
+    if not idem_key:
+        raise FinalizeError("job_requests.json missing idempotency_key")
+
+    job_id = engine._get_or_create_job(session_id, state, idem_key)
+    _record_session_job_state(
+        engine=engine,
+        session_id=session_id,
+        state=state,
+        job_id=job_id,
+        mark_submitted=False,
+    )
+
+    jobs_any = state.get("jobs")
+    jobs = jobs_any if isinstance(jobs_any, dict) else {}
+    submitted_any = jobs.get("submitted")
+    submitted = submitted_any if isinstance(submitted_any, list) else []
+    if job_id not in submitted:
+        try:
+            diagnostics_required.submit_process_job(job_id=job_id, verbosity=1)
+        except Exception as e:
+            return _exception_envelope(e)
+        _record_session_job_state(
+            engine=engine,
+            session_id=session_id,
+            state=state,
+            job_id=job_id,
+            mark_submitted=True,
+        )
+
+    plan_path = f"{session_dir}/plan.json"
+    plan_any = (
+        read_json(engine._fs, RootName.WIZARDS, plan_path)
+        if engine._fs.exists(RootName.WIZARDS, plan_path)
+        else {}
+    )
+    plan = plan_any if isinstance(plan_any, dict) else {}
+    return _build_start_processing_result(state=state, job_id=job_id, plan=plan)
 
 
 def start_processing_impl(
@@ -36,20 +151,18 @@ def start_processing_impl(
         session_dir = f"import/sessions/{session_id}"
         job_path = f"{session_dir}/job_requests.json"
         if phase == 2 and engine._fs.exists(RootName.WIZARDS, job_path):
-            return engine._start_processing_idempotent(session_id, state, body)
+            return _load_job_requests_idempotent(
+                engine=engine,
+                session_id=session_id,
+                state=state,
+                body=body,
+            )
         if state.get("status") != "in_progress":
             raise FinalizeError("session is not active")
 
-        if not isinstance(body, dict):
-            raise ValueError("body must be an object")
-        confirm = body.get("confirm")
-        if confirm is not True:
-            return validation_error(
-                message="confirm must be true",
-                path="$.confirm",
-                reason="missing_or_false",
-                meta={},
-            )
+        validation = _validate_start_processing_body(body)
+        if validation is not None:
+            return validation
 
         effective_model = engine._load_effective_model(session_id)
         if phase1_session_authority_applies(effective_model=effective_model):
@@ -219,6 +332,13 @@ def start_processing_impl(
         state = engine._load_state(session_id)
 
         job_id = engine._get_or_create_job(session_id, state, idem_key)
+        _record_session_job_state(
+            engine=engine,
+            session_id=session_id,
+            state=state,
+            job_id=job_id,
+            mark_submitted=False,
+        )
 
         _emit_required(
             "job.create",
@@ -241,6 +361,23 @@ def start_processing_impl(
             },
         )
 
-        return {"job_ids": [job_id], "batch_size": planned_units_count(plan)}
+        jobs_any = state.get("jobs")
+        jobs = jobs_any if isinstance(jobs_any, dict) else {}
+        submitted_any = jobs.get("submitted")
+        submitted = submitted_any if isinstance(submitted_any, list) else []
+        if job_id not in submitted:
+            try:
+                diagnostics_required.submit_process_job(job_id=job_id, verbosity=1)
+            except Exception as e:
+                return _exception_envelope(e)
+            _record_session_job_state(
+                engine=engine,
+                session_id=session_id,
+                state=state,
+                job_id=job_id,
+                mark_submitted=True,
+            )
+
+        return _build_start_processing_result(state=state, job_id=job_id, plan=plan)
     except Exception as e:
         return _exception_envelope(e)

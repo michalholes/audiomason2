@@ -6,6 +6,7 @@ import json
 from dataclasses import dataclass
 from importlib import import_module
 from pathlib import Path
+from typing import Any
 
 from audiomason.core.config import ConfigResolver
 
@@ -17,7 +18,7 @@ class _Job:
     job_id: str
 
 
-def _make_engine(tmp_path: Path) -> tuple[ImportWizardEngine, dict[str, Path]]:
+def _make_engine(tmp_path: Path) -> tuple[Any, dict[str, Path]]:
     roots = {
         "inbox": tmp_path / "inbox",
         "stage": tmp_path / "stage",
@@ -77,10 +78,12 @@ def test_job_requests_json_is_byte_stable(monkeypatch, tmp_path: Path) -> None:
 
     from audiomason.core.jobs import api as jobs_api
 
-    def _create_job(self, job_type, *, meta):  # type: ignore[no-untyped-def]
+    def _create_job(self, job_type, *, meta):
         return _Job(job_id="job-456")
 
     monkeypatch.setattr(jobs_api.JobService, "create_job", _create_job)
+    diag_mod = import_module("plugins.import.engine_diagnostics_required")
+    monkeypatch.setattr(diag_mod, "submit_process_job", lambda **_kw: None)
 
     session_dir = roots["wizards"] / "import" / "sessions" / session_id
     job_path = session_dir / "job_requests.json"

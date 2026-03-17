@@ -6,6 +6,7 @@ import json
 import subprocess
 from importlib import import_module
 from pathlib import Path
+from typing import Any
 
 from audiomason.core.config import ConfigResolver
 
@@ -120,7 +121,7 @@ AUTOFILL_FLOW = {
 }
 
 
-def _make_engine(tmp_path: Path) -> tuple[ImportWizardEngine, ConfigResolver]:
+def _make_engine(tmp_path: Path) -> tuple[Any, ConfigResolver]:
     roots = {
         name: tmp_path / name for name in ("inbox", "stage", "outbox", "jobs", "config", "wizards")
     }
@@ -160,7 +161,7 @@ def _make_engine(tmp_path: Path) -> tuple[ImportWizardEngine, ConfigResolver]:
     return ImportWizardEngine(resolver=resolver), resolver
 
 
-def _run_v3_renderer(function_name: str, payload: dict) -> dict | bool | None:
+def _run_v3_renderer(function_name: str, payload: dict[str, Any]) -> Any:
     script = """
 const fs = require("fs");
 const vm = require("vm");
@@ -334,3 +335,9 @@ def test_cli_and_web_share_scoped_author_prompt_select_display_items(
     assert "Options:" in joined
     assert "  1. A / Book1" in joined
     assert "  2. A / Book2" in joined
+
+
+def test_web_start_processing_posts_canonical_confirm_payload() -> None:
+    js = Path("plugins/import/ui/web/assets/import_wizard.js").read_text(encoding="utf-8")
+    assert "body: JSON.stringify({ confirm: true })" in js
+    assert 'body: "{}"' not in js

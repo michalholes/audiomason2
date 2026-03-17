@@ -5,6 +5,7 @@ from __future__ import annotations
 import json
 from importlib import import_module
 from pathlib import Path
+from typing import Any
 
 from audiomason.core.config import ConfigResolver
 
@@ -14,7 +15,7 @@ atomic_write_json = import_module("plugins.import.storage").atomic_write_json
 read_json = import_module("plugins.import.storage").read_json
 
 
-def _make_engine(tmp_path: Path) -> ImportWizardEngine:
+def _make_engine(tmp_path: Path) -> Any:
     roots = {
         "inbox": tmp_path / "inbox",
         "stage": tmp_path / "stage",
@@ -113,6 +114,8 @@ def test_start_processing_uses_persisted_idempotency_key(tmp_path: Path, monkeyp
         return "job123"
 
     monkeypatch.setattr(engine, "_get_or_create_job", _capture)
+    diag_mod = import_module("plugins.import.engine_diagnostics_required")
+    monkeypatch.setattr(diag_mod, "submit_process_job", lambda **_kw: None)
 
     eng_mod = import_module("plugins.import.engine")
     orig_atomic_write_text = eng_mod.atomic_write_text

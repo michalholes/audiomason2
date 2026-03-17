@@ -6,6 +6,7 @@ import json
 from dataclasses import dataclass
 from importlib import import_module
 from pathlib import Path
+from typing import Any
 
 from audiomason.core.config import ConfigResolver
 
@@ -25,7 +26,7 @@ class _Bus:
         self.events.append((event, payload))
 
 
-def _make_engine(tmp_path: Path) -> tuple[ImportWizardEngine, dict[str, Path]]:
+def _make_engine(tmp_path: Path) -> tuple[Any, dict[str, Path]]:
     roots = {
         "inbox": tmp_path / "inbox",
         "stage": tmp_path / "stage",
@@ -94,10 +95,12 @@ def test_emits_finalize_request_and_job_create(monkeypatch, tmp_path: Path) -> N
 
     from audiomason.core.jobs import api as jobs_api
 
-    def _create_job(self, job_type, *, meta):  # type: ignore[no-untyped-def]
+    def _create_job(self, job_type, *, meta):
         return _Job(job_id="job-789")
 
     monkeypatch.setattr(jobs_api.JobService, "create_job", _create_job)
+    diag_mod = import_module("plugins.import.engine_diagnostics_required")
+    monkeypatch.setattr(diag_mod, "submit_process_job", lambda **_kw: None)
 
     out = engine.start_processing(session_id, {"confirm": True})
     assert out == {"job_ids": ["job-789"], "batch_size": 0}

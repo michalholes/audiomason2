@@ -467,7 +467,7 @@
 		const r = await fetchJSON(`/import/ui/session/${sid}/start_processing`, {
 			method: "POST",
 			headers: { "content-type": "application/json" },
-			body: "{}",
+			body: JSON.stringify({ confirm: true }),
 		});
 		const ids = r && Array.isArray(r.job_ids) ? r.job_ids.join(", ") : "";
 		setText("status", `job_ids: ${ids}`);

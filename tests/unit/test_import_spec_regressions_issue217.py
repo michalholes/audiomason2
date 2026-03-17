@@ -14,6 +14,7 @@ import json
 from dataclasses import dataclass
 from importlib import import_module
 from pathlib import Path
+from typing import Any
 
 from audiomason.core.config import ConfigResolver
 
@@ -25,7 +26,7 @@ class _Job:
     job_id: str
 
 
-def _make_engine(tmp_path: Path) -> tuple[ImportWizardEngine, dict[str, Path]]:
+def _make_engine(tmp_path: Path) -> tuple[Any, dict[str, Path]]:
     roots = {
         "inbox": tmp_path / "inbox",
         "stage": tmp_path / "stage",
@@ -135,7 +136,7 @@ def test_selection_expr_out_of_range_returns_validation_error(tmp_path: Path) ->
 
 
 def test_plan_is_derived_from_selected_books(tmp_path: Path) -> None:
-    def _select(expr: str) -> tuple[str, dict[str, object]]:
+    def _select(expr: str) -> tuple[str, dict[str, Any]]:
         base = tmp_path / f"case_{expr.replace(',', '_').replace(' ', '')}"
         base.mkdir(parents=True, exist_ok=True)
         engine, roots = _make_engine(base)
@@ -155,6 +156,7 @@ def test_plan_is_derived_from_selected_books(tmp_path: Path) -> None:
         st2 = engine.submit_step(sid, "select_books", {"selection": expr})
         assert "error" not in st2
         plan = engine.compute_plan(sid)
+        assert isinstance(plan, dict)
         return sid, plan
 
     _sid_all, plan_all = _select("all")
@@ -222,10 +224,18 @@ def test_job_requests_derived_from_plan_batch_size_and_idempotency(
 
     from audiomason.core.jobs import api as jobs_api
 
-    def _create_job(self, job_type, *, meta):  # type: ignore[no-untyped-def]
+    def _create_job(self, job_type, *, meta):
         return _Job(job_id="job-217")
 
     monkeypatch.setattr(jobs_api.JobService, "create_job", _create_job)
+
+    submit_calls: list[tuple[str, int]] = []
+
+    def _submit_process_job(*, job_id: str, verbosity: int = 1) -> None:
+        submit_calls.append((job_id, verbosity))
+
+    diag_mod = import_module("plugins.import.engine_diagnostics_required")
+    monkeypatch.setattr(diag_mod, "submit_process_job", _submit_process_job)
 
     _mutate_state_for_finalize(roots, session_id, policy="auto")
     out1 = engine.start_processing(session_id, {"confirm": True})
@@ -235,6 +245,7 @@ def test_job_requests_derived_from_plan_batch_size_and_idempotency(
     assert out2.get("batch_size") == 2
     assert out1.get("job_ids") == ["job-217"]
     assert out2.get("job_ids") == ["job-217"]
+    assert submit_calls == [("job-217", 1)]
 
     session_dir = roots["wizards"] / "import" / "sessions" / session_id
     job_doc = json.loads((session_dir / "job_requests.json").read_text(encoding="utf-8"))

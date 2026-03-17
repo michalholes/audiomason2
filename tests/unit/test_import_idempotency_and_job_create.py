@@ -6,6 +6,7 @@ import json
 from dataclasses import dataclass
 from importlib import import_module
 from pathlib import Path
+from typing import Any
 
 from audiomason.core.config import ConfigResolver
 
@@ -17,7 +18,7 @@ class _Job:
     job_id: str
 
 
-def _make_engine(tmp_path: Path) -> tuple[ImportWizardEngine, dict[str, Path]]:
+def _make_engine(tmp_path: Path) -> tuple[Any, dict[str, Path]]:
     roots = {
         "inbox": tmp_path / "inbox",
         "stage": tmp_path / "stage",
@@ -80,11 +81,19 @@ def test_start_processing_is_idempotent(monkeypatch, tmp_path: Path) -> None:
 
     calls: list[dict[str, object]] = []
 
-    def _create_job(self, job_type, *, meta):  # type: ignore[no-untyped-def]
+    def _create_job(self, job_type, *, meta):
         calls.append({"job_type": job_type, "meta": meta})
         return _Job(job_id="job-123")
 
     monkeypatch.setattr(jobs_api.JobService, "create_job", _create_job)
+
+    submit_calls: list[tuple[str, int]] = []
+
+    def _submit_process_job(*, job_id: str, verbosity: int = 1) -> None:
+        submit_calls.append((job_id, verbosity))
+
+    diag_mod = import_module("plugins.import.engine_diagnostics_required")
+    monkeypatch.setattr(diag_mod, "submit_process_job", _submit_process_job)
 
     out1 = engine.start_processing(session_id, {"confirm": True})
     out2 = engine.start_processing(session_id, {"confirm": True})
@@ -92,6 +101,12 @@ def test_start_processing_is_idempotent(monkeypatch, tmp_path: Path) -> None:
     assert out1 == {"job_ids": ["job-123"], "batch_size": 0}
     assert out2 == {"job_ids": ["job-123"], "batch_size": 0}
     assert len(calls) == 1
+    assert submit_calls == [("job-123", 1)]
+
+    state_path = roots["wizards"] / "import" / "sessions" / session_id / "state.json"
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    assert state["jobs"]["emitted"] == ["job-123"]
+    assert state["jobs"]["submitted"] == ["job-123"]
 
     idem_path = roots["wizards"] / "import" / "sessions" / session_id / "idempotency.json"
     assert idem_path.exists()
