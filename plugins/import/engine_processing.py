@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any
 from plugins.file_io.service.types import RootName
 
 from . import engine_diagnostics_required as diagnostics_required
+from .detached_runtime import build_detached_runtime_bootstrap
 from .engine_util import _emit_required, _exception_envelope, _iso_utc_now
 from .errors import FinalizeError, error_envelope, invariant_violation, validation_error
 from .fingerprints import fingerprint_json
@@ -324,6 +325,7 @@ def start_processing_impl(
             ),
             plan=plan,
             inputs=policy_inputs,
+            detached_runtime=build_detached_runtime_bootstrap(fs=engine.get_file_service()),
             session_authority=phase1,
         )
 

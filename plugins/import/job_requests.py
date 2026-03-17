@@ -265,6 +265,7 @@ def build_job_requests(
     config_fingerprint: str,
     plan: dict[str, Any],
     inputs: dict[str, Any],
+    detached_runtime: dict[str, Any] | None = None,
     session_authority: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     mode = str(mode)
@@ -352,6 +353,7 @@ def build_job_requests(
         },
         "diagnostics_context": dict(diagnostics_context),
         "plan_fingerprint": plan_fingerprint,
+        "detached_runtime": (dict(detached_runtime) if isinstance(detached_runtime, dict) else {}),
     }
 
     idem_payload = {

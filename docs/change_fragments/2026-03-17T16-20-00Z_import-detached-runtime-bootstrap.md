@@ -1,0 +1,1 @@
+2026-03-17T16:20:00Z Persisted detached import phase-2 bootstrap data inside canonical job_requests.json and rehydrated phase-2 execution from that canonical artifact so pending PROCESS jobs can be adopted later without relying on the original live import engine runtime. Backward-compatible callers may omit detached_runtime and will serialize an empty detached runtime map.
