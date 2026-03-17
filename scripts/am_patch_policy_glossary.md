@@ -586,18 +586,33 @@ Default: []
 Meaning: Optional registry of allowed git target repository roots.
 Notes:
 - Relative entries are resolved against runner_root.
-- Entries identify candidate repositories that may be selected by active_target_repo_root.
+- Entries constrain explicit path selection and name-derived target paths.
 - This key does not enable multi-target execution in a single run.
-Related: active_target_repo_root, repo_root
+- See: scripts/am_patch_specification.md section 3.1.1
+Related: active_target_repo_root, target_repo_name, repo_root
 
 ## Key: active_target_repo_root
 Key: active_target_repo_root
 Type: str|null
 Default: null
-Meaning: Selects the git repository patched by the current run.
+Meaning: Explicit path selector for the git repository patched by the current run.
 Notes:
-- If null, active_target_repo_root defaults to runner_root.
 - Relative values are resolved against runner_root.
+- If null, target selection continues via scripts/am_patch_specification.md section 3.1.1.
 - The effective value must resolve either to runner_root or to one entry from target_repo_roots.
-- Exactly one active target repository is allowed per run.
-Related: target_repo_roots, artifacts_root, repo_root
+- The selected effective target root is the single authoritative runtime truth.
+Related: target_repo_roots, target_repo_name, artifacts_root, repo_root
+
+## Key: target_repo_name
+Key: target_repo_name
+Type: str
+Default: audiomason2
+Meaning: Bare repo-token selector input for the `/home/pi/<name>` target family.
+Notes:
+- This key is not a path.
+- Valid values are ASCII-only, exactly one non-empty token, with no whitespace,
+  no `/`, no `\`, and no embedded newline.
+- When selected, the candidate target path is `/home/pi/<target_repo_name>`.
+- After target selection resolves, the effective metadata value is derived from the selected effective target root.
+- See: scripts/am_patch_specification.md section 3.1.1
+Related: active_target_repo_root, target_repo_roots

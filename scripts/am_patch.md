@@ -1,4 +1,4 @@
-# AM Patch Runner v6 - User Manual
+# AM Patch Runner v7 - User Manual
 
 This manual describes how *you* use the new runner day-to-day so that runs are deterministic and issues can be safely closed.
 
@@ -12,19 +12,14 @@ This manual describes how *you* use the new runner day-to-day so that runs are d
   - Legacy embedded layout: `scripts/am_patch/am_patch.toml`
   - Root layout: `am_patch.toml`
 - Runner-owned artifacts live under artifacts_root.
-- The repository being patched for the current run is active_target_repo_root.
-- The configuration may list multiple candidate target repositories via target_repo_roots.
-- A single run always uses exactly one active target repository.
-- Multi-target execution in one run is not supported.
-- Zip patch inputs may carry a root-level `target.txt` that uses the
-  same syntax as `active_target_repo_root`.
-- Target selection precedence is: explicit CLI target > patch-carried
-  `target.txt` > config target > defaults.
-- Failure overlays also carry a root-level `target.txt`, but that file
-  uses the metadata key `target_repo_name`.
+- The target surface consists of `target_repo_roots`, `active_target_repo_root`, and `target_repo_name`.
+- Zip patch inputs may carry a root-level `target.txt`.
+- The normative target-selection contract is defined in `scripts/am_patch_specification.md` section 3.1.1.
+- The dedicated target CLI keys are:
+  - `--target-repo-name NAME`
+  - `--active-target-repo-root PATH`
+  - `--target-repo-roots CSV`
 - `target_repo_name` defaults to `audiomason2`.
-- You may set `target_repo_name` in config or with
-  `--target-repo-name VALUE`.
 
 ### Gates and COMPILE
 - After the patch is applied, the runner executes gates.
@@ -238,9 +233,9 @@ The runner excludes the following from the archived changed/touched subset when 
 This reduces archive size without changing patch semantics or gates behavior.
 
 Each failure zip also carries a root-level `target.txt` with the
-effective `target_repo_name` for that failed run. The file is ASCII-only,
-contains exactly one non-empty line, and preserves the exact effective
-word selected from default/config/CLI without filesystem-name derivation.
+effective `target_repo_name` derived by the normative target-selection
+contract in `scripts/am_patch_specification.md` section 3.1.1. The file
+uses the token format defined in section 3.1.2.
 
 -
 Note on failure subsets:

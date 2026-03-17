@@ -1,4 +1,4 @@
-# AM Patch Runner - Functional Specification v7 (UPDATED)
+# AM Patch Runner - Functional Specification v8 (UPDATED)
 
 This document is **authoritative** for the AM Patch Runner contract.
 
@@ -16,14 +16,7 @@ Every runner behavior is controllable via: - CLI flags **or** -
 defaults**.
 
 Target-selection extension:
-- Explicit CLI target selection takes precedence over every other target source.
-- When the selected patch input is a zip archive and it contains a
-  root-level `target.txt`, the runner treats that file as patch-carried
-  target metadata.
-- Target selection precedence is: explicit CLI target > patch-carried
-  `target.txt` > config target > defaults.
-- Patch-carried `target.txt` does not create a new Policy key. It is a
-  transport form of the existing `active_target_repo_root` semantics.
+- Target selection is defined normatively only in section 3.1.1.
 
 #
 
@@ -53,11 +46,11 @@ Normative semantics:
 - artifacts_root selects where runner-owned artifacts live. These include patch inputs, logs, JSON logs, workspaces, lockfiles, successful archives, unsuccessful archives, issue diff bundles, and patch-dir IPC assets.
 - If artifacts_root is null, the default artifacts root is runner_root.
 - target_repo_roots is an optional registry of allowed git target repository roots.
-- active_target_repo_root selects the git repository patched by the current run.
-- If active_target_repo_root is null, the default active target repository root is runner_root.
-- active_target_repo_root MUST resolve either to runner_root or to one entry from target_repo_roots.
+- active_target_repo_root is the explicit path selector for the git repository patched by the current run.
+- If active_target_repo_root is null, target selection follows section 3.1.1.
+- The effective target root MUST resolve either to runner_root or to one entry from target_repo_roots.
 - repo_root is a legacy backward-compatibility alias for active_target_repo_root. If repo_root selects a non-runner target, it is subject to the same registry rules as active_target_repo_root.
-- A single runner invocation MUST use exactly one active_target_repo_root.
+- A single runner invocation MUST resolve exactly one authoritative effective target root.
 - Multi-target execution in a single run is forbidden.
 - Non-git targets are out of scope.
 
@@ -415,35 +408,51 @@ Root resolution contract:
 - The runner MUST support both legacy embedded layout and root layout without changing Policy semantics.
 - In both layouts, relative config paths and root-model values are resolved against runner_root.
 
-### 3.1.1 Patch-carried target metadata
+### 3.1.1 Target-selection contract
 
-- When the selected patch input is a zip archive, the runner MAY read a
-  root-level `target.txt`.
-- `target.txt` MUST be ASCII-only text with exactly one non-empty path
-  value and optional trailing LF.
-- The `target.txt` value uses the same syntax and semantics as
-  `active_target_repo_root`.
-- Relative `target.txt` values are resolved against runner_root.
-- The resulting effective target MUST satisfy the same registry rules as
-  `active_target_repo_root`.
-- Patch-carried `target.txt` participates in target selection before
-  root binding, workspace creation, scope evaluation, promotion
-  planning, promotion execution, commit, and push.
-- If the active target defaults to runner_root and no explicit target
-  selector exists, a runner-generated `target.txt` MUST use `.`.
+This section is the single normative source of truth for target selection.
 
-### 3.1.2 Failure-zip target repo name
+Target-selection inputs:
+- Policy key `target_repo_roots`
+- Policy key `active_target_repo_root`
+- Policy key `target_repo_name`
+- patch-carried root-level `target.txt`
+- dedicated CLI keys `--target-repo-name NAME`, `--active-target-repo-root PATH`, and `--target-repo-roots CSV`
+- `--override` for those same keys
 
-- The Policy key `target_repo_name` defines the word written to failure
-  overlay `target.txt`.
-- `target_repo_name` MUST be an ASCII-only string containing exactly one
-  non-empty line and no embedded newline characters.
+Normative meanings:
+- `target_repo_roots` is the allowlist of permitted target repository root paths.
+- `active_target_repo_root` is the explicit path selector.
+- `target_repo_name` is the bare repo-token selector input for the `/home/pi/<name>` target family.
+- Legacy `repo_root` remains a backward-compatibility alias for `active_target_repo_root` and is normalized to that key before this contract is applied.
+- For target-selection keys, dedicated CLI keys and `--override` are the same CLI precedence tier. For the same effective key, the last argv occurrence wins.
+- The effective `target_repo_roots` value follows normal precedence: CLI > config > defaults.
+
+Authoritative target-resolution rule:
+1. If CLI `active_target_repo_root` is selected, it wins.
+2. Else if CLI `target_repo_name` is selected, derive candidate target path as `/home/pi/<target_repo_name>`.
+3. Else if patch-carried root-level `target.txt` is present, treat it as `target_repo_name` and derive candidate target path as `/home/pi/<target_repo_name>`.
+4. Else if config `active_target_repo_root` is selected, it wins.
+5. Else if config `target_repo_name` is selected, derive candidate target path as `/home/pi/<target_repo_name>`.
+6. Else derive candidate target path from default `target_repo_name`.
+
+The run MUST resolve exactly one authoritative effective target root.
+The effective target root MUST resolve either to `runner_root` or to one entry from the effective `target_repo_roots`.
+
+After the effective target root is selected, the effective `target_repo_name` is derived from that selected root by canonical inversion `/home/pi/<name>` -> `<name>`.
+
+If the selected effective target root cannot be canonically represented as `/home/pi/<name>`, the run is CONFIG INVALID.
+
+Patch-carried root-level `target.txt` participates in target selection before root binding, workspace creation, scope evaluation, promotion planning, promotion execution, commit, and push.
+
+### 3.1.2 `target_repo_name` token and failure metadata
+
+- `target_repo_name` MUST be an ASCII-only bare repo token:
+  exactly one non-empty token, no whitespace, no `/`, no `\`, and no
+  embedded newline.
 - The default value of `target_repo_name` is `audiomason2`.
-- The effective `target_repo_name` source follows the normal precedence:
-  dedicated CLI key > config file value > default value.
-- `target_repo_name` is metadata only. It does not participate in root
-  binding, workspace creation, scope evaluation, promotion planning,
-  promotion execution, commit, or push.
+- Patch-carried root-level `target.txt` uses the same token format and MAY include an optional trailing LF.
+- Failure-zip root-level `target.txt` MUST contain the effective `target_repo_name` derived by section 3.1.1.
 
 ### 3.2 CLI (normative)
 
@@ -487,14 +496,17 @@ the easiest re-run path while the live repo has uncommitted changes.
 This toggle affects only commit/push behavior. It does not change patch
 execution, gates, or workspace promotion semantics.
 
-### 3.2.3 Failure-zip target repo name
+### 3.2.3 Target-selection dedicated CLI keys
 
-- The runner MUST expose a dedicated CLI key
-  `--target-repo-name VALUE`.
-- `--target-repo-name VALUE` sets the effective `target_repo_name`.
-- `--target-repo-name VALUE` affects failure overlay metadata only.
-  It does not change root binding, workspace creation, scope
-  evaluation, promotion planning, promotion execution, commit, or push.
+- The runner MUST expose these dedicated CLI keys for the target surface:
+  - `--target-repo-name NAME`
+  - `--active-target-repo-root PATH`
+  - `--target-repo-roots CSV`
+- `--target-repo-name NAME` sets the `target_repo_name` selector input.
+- `--active-target-repo-root PATH` sets the explicit path selector `active_target_repo_root`.
+- `--target-repo-roots CSV` replaces the entire `target_repo_roots` value.
+- `CSV` means a comma-separated list of path values.
+- The semantics of these keys are defined only in section 3.1.1.
 
 ### 3.2.4 Overrides symmetry
 
@@ -507,10 +519,13 @@ The root-model keys artifacts_root, target_repo_roots, and active_target_repo_ro
 are part of the override symmetry contract and MUST be controllable via
 --override KEY=VALUE.
 
-The metadata key `target_repo_name` is also part of the override
-symmetry contract and MUST be controllable via both:
-- the dedicated CLI key `--target-repo-name VALUE`
-- `--override target_repo_name=VALUE`
+The target-selection keys `target_repo_name`, `active_target_repo_root`, and
+`target_repo_roots` are part of the override symmetry contract and MUST be
+controllable via both:
+- their dedicated CLI keys
+- `--override KEY=VALUE`
+
+Their target-selection semantics are defined only in section 3.1.1.
 
 ------------------------------------------------------------------------
 
@@ -839,6 +854,9 @@ Precedence is fixed: CLI flags > config file (am_patch.toml) > defaults.
 Dedicated UX flags are provided so users do not need to use `--override KEY=VALUE` for the
 most common mode switches. The flags map to policy keys as follows:
 
+- `--target-repo-name NAME` -> target_repo_name
+- `--active-target-repo-root PATH` -> active_target_repo_root
+- `--target-repo-roots CSV` -> target_repo_roots
 - `--ruff-mode {auto,always}` -> gate_ruff_mode
 - `--mypy-mode {auto,always}` -> gate_mypy_mode
 - `--pytest-mode {auto,always}` -> gate_pytest_mode
@@ -847,6 +865,8 @@ most common mode switches. The flags map to policy keys as follows:
 
 Policy keys without a dedicated UX flag remain fully controllable through
 `--override KEY=VALUE`. This includes `gate_pytest_py_prefixes`.
+
+Target-selection semantics are defined only in section 3.1.1.
 
 `--pytest-js-prefixes` semantics:
 - CSV is a comma-separated list of directory prefixes (example:
@@ -1096,15 +1116,9 @@ gates, or promotion semantics.
 Failure zip target metadata:
 
 - The failure zip MUST include a root-level `target.txt`.
-- The file MUST be ASCII-only text with exactly one non-empty line and
-  optional trailing LF.
-- The file content MUST be the effective `target_repo_name` for the
-  failed run.
-- The file content MUST preserve the exact effective `target_repo_name`
-  value. The runner MUST NOT normalize it, translate it, or derive it
-  from filesystem names.
-- `target.txt` is metadata only. It does not change failure-zip naming,
-  retention, or subset selection rules.
+- The file MUST contain the effective `target_repo_name` derived by section 3.1.1.
+- The file uses the token format defined in section 3.1.2 and MAY include an optional trailing LF.
+- `target.txt` does not change failure-zip naming, retention, or subset selection rules.
 
 Failure zip naming and retention:
 
@@ -1359,8 +1373,9 @@ Precedence: NO_COLOR \> CLI \> config \> default.
 ### root-model
 
 - `artifacts_root` changes artifact placement and workspace/log/archive location semantics
-- `target_repo_roots` changes allowed target-repository selection semantics
-- `active_target_repo_root` changes which git repository is patched by the run
+- `target_repo_roots` changes target allowlist semantics
+- `active_target_repo_root` changes explicit target-root path selection semantics
+- `target_repo_name` changes target-repository token selection input semantics; see section 3.1.1
 
 Tento dodatok enumeruje poloky, ktor existuj v implementcii
 (`scripts/am_patch/cli.py`, `scripts/am_patch/config.py`), ale neboli
@@ -1735,10 +1750,10 @@ Schema export:
 
 Editing engine:
 
-Schema/glossary requirements for the root model:
+Schema/glossary requirements for the target surface:
 
-- The Policy surface MUST describe artifacts_root, target_repo_roots, and
-  active_target_repo_root.
+- The Policy surface MUST describe `artifacts_root`, `target_repo_roots`,
+  `active_target_repo_root`, and `target_repo_name`.
 - Schema export help text for these keys MUST match the glossary.
 - A schema shape change for these keys requires a SCHEMA_VERSION bump in the
   implementation issue.
