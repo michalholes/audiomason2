@@ -394,6 +394,14 @@ body.dragging .drop-overlay {
 	color: #94a0b6;
 }
 
+.statusbar-pm-pass {
+	color: #69d08c;
+}
+
+.statusbar-pm-fail {
+	color: #ff6b6b;
+}
+
 .hidden {
 	display: none;
 }

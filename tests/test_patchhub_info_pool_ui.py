@@ -166,6 +166,56 @@ process.stdout.write(JSON.stringify({
     assert "Uploaded: patches/incoming/issue_320.zip" in result["body"]
 
 
+def test_info_pool_strip_sets_pm_validation_state_classes_only_when_visible() -> None:
+    app_path = REPO_ROOT / "scripts" / "patchhub" / "static" / "app.js"
+    pm_path = REPO_ROOT / "scripts" / "patchhub" / "static" / "app_part_pm_validation.js"
+    pool_path = REPO_ROOT / "scripts" / "patchhub" / "static" / "app_part_info_pool.js"
+    script = (
+        _node_prelude(app_path, pm_path, pool_path)
+        + """
+window.PH.call("initInfoPoolUi");
+window.PH.call("setPmValidationPayload", { status: "pass" });
+window.PH.call("renderInfoPoolUi");
+const strip = document.getElementById("uiStatusBar");
+const passState = {
+  summary: strip.textContent,
+  pass: strip.classList.contains("statusbar-pm-pass"),
+  fail: strip.classList.contains("statusbar-pm-fail"),
+};
+window.PH.call("setPmValidationPayload", { status: "fail" });
+window.PH.call("renderInfoPoolUi");
+const failState = {
+  summary: strip.textContent,
+  pass: strip.classList.contains("statusbar-pm-pass"),
+  fail: strip.classList.contains("statusbar-pm-fail"),
+};
+rememberDegraded("bootstrap fault");
+const degradedState = {
+  summary: strip.textContent,
+  pass: strip.classList.contains("statusbar-pm-pass"),
+  fail: strip.classList.contains("statusbar-pm-fail"),
+};
+process.stdout.write(JSON.stringify({ passState, failState, degradedState }));
+"""
+    )
+    result = _run_node(script)
+    assert result["passState"] == {
+        "summary": "PM validation: PASS",
+        "pass": True,
+        "fail": False,
+    }
+    assert result["failState"] == {
+        "summary": "PM validation: FAIL",
+        "pass": False,
+        "fail": True,
+    }
+    assert result["degradedState"] == {
+        "summary": "DEGRADED MODE: bootstrap fault",
+        "pass": False,
+        "fail": False,
+    }
+
+
 def test_info_pool_strip_prefers_pm_validation_summary_over_hints() -> None:
     app_path = REPO_ROOT / "scripts" / "patchhub" / "static" / "app.js"
     pm_path = REPO_ROOT / "scripts" / "patchhub" / "static" / "app_part_pm_validation.js"

@@ -184,13 +184,28 @@ function renderInfoPoolModal() {
 	modal.setAttribute("aria-hidden", infoPoolOpen ? "false" : "true");
 }
 
+function infoPoolVisiblePmSummary(summary) {
+	var pmSummary = infoPoolPmSummary();
+	if (!pmSummary || summary !== pmSummary) return "";
+	return pmSummary;
+}
+
 function renderInfoPoolUi() {
 	var strip = infoPoolModalEl("uiStatusBar");
 	if (!strip) return;
 	var summary = infoPoolSummary(infoPoolSnapshot());
+	var visiblePmSummary = infoPoolVisiblePmSummary(summary);
 	strip.textContent = summary;
 	strip.classList.add("statusbar-clickable");
 	strip.classList.toggle("statusbar-idle", summary === "(idle)");
+	strip.classList.toggle(
+		"statusbar-pm-pass",
+		visiblePmSummary === "PM validation: PASS",
+	);
+	strip.classList.toggle(
+		"statusbar-pm-fail",
+		visiblePmSummary === "PM validation: FAIL",
+	);
 	if (infoPoolOpen) renderInfoPoolModal();
 }
 
