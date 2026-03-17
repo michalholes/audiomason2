@@ -748,7 +748,12 @@ Rules:
 
 7. HTTP Surface (Routes, Inputs, Outputs)
 
-All routes are handled in server.py.
+HTTP route registration and ASGI request/response entrypoints are owned by
+`asgi/asgi_app.py`.
+
+Route-specific handling MAY be delegated to responsibility-specific helper
+modules, but PatchHub MUST NOT describe `server.py` as the HTTP route
+authority.
 
 7.1 UI routes (GET)
 - GET /
@@ -1142,7 +1147,7 @@ Advanced card requirements:
 This is a layout-only requirement. Existing element ids and existing client
 behavior remain unchanged.
 
-7.1.4 Sidebar Collapsible Lists (Runs, Jobs)
+7.1.6A Sidebar Collapsible Lists (Runs, Jobs)
 
 The main UI includes three sidebar lists that are operator convenience only:
 - Workspaces list (left sidebar; above Stats and Runs)
@@ -1262,7 +1267,7 @@ Quick action rules:
 Forbidden in visible item text:
 - job_id (may exist only as an internal data attribute for selection)
 
-7.1.5A rerun_latest Autofill Authority (UI)
+7.1.6B rerun_latest Autofill Authority (UI)
 
 Definitions:
 - detail-eligible rerun job = a JobRecord that satisfies all of the following:
@@ -1309,7 +1314,7 @@ Global mode-switch behavior:
   - show an explicit operator-visible status indicating that no start-form-usable
     previous job exists for rerun_latest
 
-7.1.6 Autofill Token Change Output Clearing (UI)
+7.1.6C Autofill Token Change Output Clearing (UI)
 
 When autofill is enabled and the UI detects that /api/patches/latest returns a new
 token value, the UI may clear output from the previous patch run.
@@ -1343,7 +1348,7 @@ Idle auto-select:
 Running job exception:
 - If a job is running and no job is selected, the UI selects the running job.
 
-7.1.6A PM Validation Summary Strip and Operator Info Modal (UI)
+7.1.6D PM Validation Summary Strip and Operator Info Modal (UI)
 
 When a patch zip is loaded through the zip-manifest flow:
 - PatchHub MUST run the same `pm_validator.py` used by chat delivery for
@@ -1374,13 +1379,25 @@ When a patch zip is loaded through the zip-manifest flow:
 - Raw PM validator output MUST NOT be merged into `Recent status`.
 
 Authority chain for load-time PM validation:
-- Initial validation prefers the latest repo snapshot success archive zip.
-- If no success archive exists, PatchHub falls back to a live workspace snapshot
-  zip created at load time.
-- Repair validation uses the latest `patched_issue<issue>_*.zip` overlay first.
-- If the validator requests supplemental files, PatchHub reruns repair
-  validation only with the exact listed `--supplemental-file` paths and a
-  workspace snapshot.
+- Initial validation MUST derive TARGET from the basename of the workspace
+  snapshot artifact explicitly selected as the authority input for that
+  validation run, using the PM contract `<TARGET>-main_<OPAQUE>.zip`.
+- `<OPAQUE>` MUST be ignored for TARGET derivation.
+- PatchHub MUST NOT silently replace a missing or unspecified initial
+  authority input with its own alternative authority hierarchy.
+- If PatchHub does not have one explicit workspace snapshot authority
+  input for the current initial validation run, the PM status MUST be
+  `MISSING CONTEXT`.
+- Repair validation MUST use the latest `patched_issue<issue>_*.zip`
+  overlay as the authority input for TARGET.
+- In repair mode, overlay `target.txt` is authoritative for TARGET.
+- A workspace snapshot MAY be used in repair mode only for:
+  - basename-versus-overlay TARGET consistency check, and
+  - exact per-file supplemental authority requested by the validator via
+    explicit `--supplemental-file` paths.
+- Implicit bulk or full-tree fallback is forbidden.
+- The `authority sources` field in Operator info MUST list exactly the
+  artifact paths actually passed to the validator for that run.
 
 7.1.7 Missing patchPath Clears Run Fields (UI) (HARD)
 
@@ -1583,7 +1600,7 @@ Rules:
   running job in PatchHub.
 - The endpoint MUST support ETag/304 using sig.
 
-7.2.6 GET /api/patches/latest
+7.2.5b GET /api/patches/latest
 Purpose:
 - Used by UI autofill/polling to find latest matching file in scan_dir.
 
