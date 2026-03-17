@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from zipfile import BadZipFile, ZipFile
 
 from am_patch.errors import RunnerError
 from am_patch.manifest import load_files
@@ -17,6 +18,47 @@ class PatchPlan:
     patch_script: Path
     unified_mode: bool
     files_declared: list[str]
+    patch_target_repo_name: str | None = None
+
+
+def _validate_repo_token(text: str) -> str:
+    value = str(text).strip()
+    if not value:
+        raise RunnerError("PREFLIGHT", "PATCH_PATH", "target.txt must be non-empty")
+    if "\n" in value or "\r" in value:
+        raise RunnerError("PREFLIGHT", "PATCH_PATH", "target.txt must be a single line")
+    if any(ch.isspace() for ch in value):
+        raise RunnerError("PREFLIGHT", "PATCH_PATH", "target.txt must not contain whitespace")
+    if "/" in value or "\\" in value:
+        raise RunnerError(
+            "PREFLIGHT",
+            "PATCH_PATH",
+            "target.txt must be a bare token (no path separators)",
+        )
+    try:
+        value.encode("ascii")
+    except UnicodeEncodeError as e:
+        raise RunnerError("PREFLIGHT", "PATCH_PATH", "target.txt must be ASCII-only") from e
+    return value
+
+
+def _read_zip_target_repo_name(zip_path: Path) -> str | None:
+    try:
+        with ZipFile(zip_path, "r") as zf:
+            try:
+                raw = zf.read("target.txt")
+            except KeyError:
+                return None
+    except BadZipFile as e:
+        raise RunnerError("PREFLIGHT", "PATCH_PATH", f"invalid zip file: {zip_path} ({e})") from e
+    try:
+        text = raw.decode("ascii")
+    except UnicodeDecodeError as e:
+        raise RunnerError("PREFLIGHT", "PATCH_PATH", "target.txt must be ASCII-only") from e
+    if "\r" in text:
+        raise RunnerError("PREFLIGHT", "PATCH_PATH", "target.txt must use LF newlines")
+    value = text[:-1] if text.endswith("\n") else text
+    return _validate_repo_token(value)
 
 
 def resolve_patch_plan(
@@ -30,21 +72,20 @@ def resolve_patch_plan(
 ) -> PatchPlan:
     patch_script: Path | None = None
 
+    patch_script_arg = getattr(cli, "patch_script", None)
+
     if getattr(cli, "load_latest_patch", None):
-        hint_name = Path(cli.patch_script).name if cli.patch_script else None
+        hint_name = Path(patch_script_arg).name if patch_script_arg else None
         patch_script = select_latest_issue_patch(
             patch_dir=patch_root,
             issue_id=str(issue_id),
             hint_name=hint_name,
         )
-    elif cli.patch_script:
-        raw = Path(cli.patch_script)
+    elif patch_script_arg:
+        raw = Path(patch_script_arg)
         if raw.is_absolute():
             patch_script = raw
         else:
-            # Accept either:
-            #  - a path relative to CWD (e.g. patches/issue_999.py), OR
-            #  - a bare filename resolved under patch_dir (e.g. issue_999.py).
             cand_cwd = (Path.cwd() / raw).resolve()
             cand_patchdir = (patch_root / raw).resolve()
             if cand_cwd.exists() and is_under(cand_cwd, patch_root):
@@ -87,9 +128,13 @@ def resolve_patch_plan(
         precheck_patch_script(patch_script, ascii_only=policy.ascii_only_patch)
 
     files_declared: list[str] = [] if unified_mode else load_files(patch_script)
+    patch_target_repo_name = (
+        _read_zip_target_repo_name(patch_script) if patch_script.suffix == ".zip" else None
+    )
 
     return PatchPlan(
         patch_script=patch_script,
         unified_mode=unified_mode,
         files_declared=files_declared,
+        patch_target_repo_name=patch_target_repo_name,
     )

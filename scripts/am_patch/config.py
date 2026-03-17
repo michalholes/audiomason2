@@ -377,6 +377,19 @@ def _validate_ascii_single_line(v: str, *, field: str) -> str:
     return s
 
 
+def _validate_repo_token(v: str, *, field: str) -> str:
+    s = _validate_ascii_single_line(v, field=field)
+    if any(ch.isspace() for ch in s):
+        raise RunnerError("CONFIG", "INVALID", f"{field} must not contain whitespace")
+    if "/" in s or "\\" in s:
+        raise RunnerError(
+            "CONFIG",
+            "INVALID",
+            f"{field} must be a bare token (no path separators): {s!r}",
+        )
+    return s
+
+
 def _parse_override_kv(s: str) -> tuple[str, object]:
     if "=" not in s:
         raise ValueError("override must be KEY=VALUE")
@@ -636,7 +649,7 @@ def build_policy(defaults: Policy, cfg: dict[str, Any]) -> Policy:
         mark_cfg=_mark_cfg,
     )
 
-    p.target_repo_name = _validate_ascii_single_line(p.target_repo_name, field="target_repo_name")
+    p.target_repo_name = _validate_repo_token(p.target_repo_name, field="target_repo_name")
     p.patch_dir_name = _validate_basename(p.patch_dir_name, field="patch_dir_name")
     p.patch_layout_logs_dir = _validate_basename(
         p.patch_layout_logs_dir, field="patch_layout_logs_dir"
@@ -814,7 +827,7 @@ def apply_cli_overrides(p: Policy, mapping: dict[str, object | None]) -> None:
         if not hasattr(p, k):
             continue
         if k == "target_repo_name":
-            v = _validate_ascii_single_line(str(v), field="target_repo_name")
+            v = _validate_repo_token(str(v), field="target_repo_name")
         setattr(p, k, v)
         p._src[k] = "cli"
 
@@ -836,13 +849,13 @@ def apply_cli_overrides(p: Policy, mapping: dict[str, object | None]) -> None:
         if isinstance(cur, list):
             if not isinstance(coerced, list):
                 raise RunnerError("CONFIG", "INVALID", f"invalid list override: {coerced!r}")
-            if k == "gate_pytest_py_prefixes":
-                setattr(p, k, coerced)
+            if k in {"gate_pytest_py_prefixes", "target_repo_roots"}:
+                setattr(p, k, list(coerced))
             else:
                 cur.extend(coerced)
         else:
             if k == "target_repo_name":
-                coerced = _validate_ascii_single_line(str(coerced), field="target_repo_name")
+                coerced = _validate_repo_token(str(coerced), field="target_repo_name")
             setattr(p, k, coerced)
         p._src[k] = "cli"
 

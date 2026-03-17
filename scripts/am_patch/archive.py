@@ -15,6 +15,10 @@ def _target_repo_name_payload(target_repo_name: str) -> bytes:
         raise ValueError("target_repo_name must be non-empty")
     if "\n" in text or "\r" in text:
         raise ValueError("target_repo_name must be a single line")
+    if any(ch.isspace() for ch in text):
+        raise ValueError("target_repo_name must not contain whitespace")
+    if "/" in text or "\\" in text:
+        raise ValueError("target_repo_name must be a bare token (no path separators)")
     try:
         payload = text.encode("ascii")
     except UnicodeEncodeError as e:

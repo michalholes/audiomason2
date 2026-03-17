@@ -281,6 +281,8 @@ def run_mode(ctx: RunContext) -> RunResult:
         logger.line(f"artifacts_root={artifacts_root}")
         logger.line(f"active_target_repo_root={repo_root}")
         logger.line(f"repo_root={repo_root}")
+        if ctx.effective_target_repo_name is not None:
+            logger.line(f"effective_target_repo_name={ctx.effective_target_repo_name}")
         logger.line(f"patch_dir={patch_dir}")
         if patch_dir != patch_root:
             logger.line(f"patch_root={patch_root}")
@@ -363,14 +365,16 @@ def run_mode(ctx: RunContext) -> RunResult:
         issue_id = cli.issue_id
         assert issue_id is not None
 
-        plan = resolve_patch_plan(
-            logger=logger,
-            cli=cli,
-            policy=policy,
-            issue_id=issue_id,
-            repo_root=repo_root,
-            patch_root=patch_root,
-        )
+        plan = ctx.patch_plan
+        if plan is None:
+            plan = resolve_patch_plan(
+                logger=logger,
+                cli=cli,
+                policy=policy,
+                issue_id=issue_id,
+                repo_root=repo_root,
+                patch_root=patch_root,
+            )
         patch_script = plan.patch_script
         unified_mode = plan.unified_mode
         files_current = list(plan.files_declared)

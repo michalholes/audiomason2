@@ -1,7 +1,7 @@
 verbosity = "normal" # debug | verbose | normal | quiet
 console_color = "auto" # auto | always | never
 runner_subprocess_timeout_s = 1800
-target_repo_name = "audiomason2" # ASCII-only failure overlay target metadata
+target_repo_name = "audiomason2" # ASCII-only bare repo token selector for /home/pi/<name>
 
 # IPC (Unix domain socket)
 ipc_socket_enabled = true
@@ -20,6 +20,8 @@ ipc_handshake_wait_s = 0
 [paths]
 # Canonical (optional; runner may infer)
 # repo_root = "/home/pi/audiomason2"
+# active_target_repo_root = "/home/pi/audiomason2"
+target_repo_roots = ["/home/pi/audiomason2", "/home/pi/patchhub"]
 # patch_dir = "/home/pi/audiomason2/patches"
 
 # Canonical (supported by runner; missing in your file)
@@ -441,6 +443,7 @@ success_archive_cleanup_glob_template = ""
 success_archive_keep_count = 0
 # failure_zip_log_dir = "logs"
 # failure_zip_patch_dir = "patches"
+# failure zip target.txt is derived from the selected effective target root
 # workspace_issue_dir_template = "issue_{issue}"
 # workspace_repo_dir_name = "repo"
 # workspace_meta_filename = "meta.json"

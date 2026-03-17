@@ -22,6 +22,7 @@ from am_patch.issue_diff import (
     derive_finalize_pseudo_issue_id,
     make_issue_diff_zip,
 )
+from am_patch.root_model import canonical_target_repo_name_from_root
 
 
 @dataclass(frozen=True)
@@ -180,7 +181,7 @@ def build_artifacts(
             include_repo_files=files_for_fail_zip,
             include_patch_blobs=include_patch_blobs,
             include_patch_paths=include_patch_paths,
-            target_repo_name=policy.target_repo_name,
+            target_repo_name=canonical_target_repo_name_from_root(repo_root),
             log_dir_name=policy.failure_zip_log_dir,
             patch_dir_name=policy.failure_zip_patch_dir,
         )

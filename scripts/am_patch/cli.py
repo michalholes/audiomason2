@@ -209,6 +209,20 @@ def parse_args(argv: list[str]) -> CliArgs:
         metavar="NAME",
     )
     p.add_argument(
+        "--active-target-repo-root",
+        action=AppendOverride,
+        key="active_target_repo_root",
+        dest="overrides",
+        metavar="PATH",
+    )
+    p.add_argument(
+        "--target-repo-roots",
+        action=AppendOverride,
+        key="target_repo_roots",
+        dest="overrides",
+        metavar="CSV",
+    )
+    p.add_argument(
         "--override", dest="overrides", action="append", default=None, metavar="KEY=VALUE"
     )
     p.add_argument(

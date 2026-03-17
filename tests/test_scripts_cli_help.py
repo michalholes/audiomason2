@@ -137,7 +137,7 @@ def test_am_patch_help_all_mentions_dual_layout_config_contract() -> None:
     assert "Relative paths are resolved against repo root." not in out
 
 
-def test_am_patch_help_all_mentions_target_repo_name() -> None:
+def test_am_patch_help_all_mentions_target_cli_surface() -> None:
     repo_root = _repo_root()
     script_path = repo_root / "scripts" / "am_patch.py"
 
@@ -154,6 +154,8 @@ def test_am_patch_help_all_mentions_target_repo_name() -> None:
     out = (p.stdout or "") + (p.stderr or "")
     assert p.returncode == 0, out
     assert "--target-repo-name NAME" in out
+    assert "--active-target-repo-root PATH" in out
+    assert "--target-repo-roots CSV" in out
 
 
 def test_am_patch_show_config_prints_target_repo_name_default_and_cli_override() -> None:
@@ -184,3 +186,63 @@ def test_am_patch_show_config_prints_target_repo_name_default_and_cli_override()
     out_cli = (p_cli.stdout or "") + (p_cli.stderr or "")
     assert p_cli.returncode == 0, out_cli
     assert "target_repo_name='patchhub' (src=cli)" in out_cli
+
+
+def test_am_patch_show_config_prints_target_root_cli_overrides() -> None:
+    repo_root = _repo_root()
+    script_path = repo_root / "scripts" / "am_patch.py"
+
+    env = os.environ.copy()
+    env["AM_PATCH_VENV_BOOTSTRAPPED"] = "1"
+
+    p = subprocess.run(
+        [
+            sys.executable,
+            str(script_path),
+            "--show-config",
+            "--target-repo-roots",
+            "/tmp/target_a,/tmp/target_b",
+            "--active-target-repo-root",
+            "/tmp/target_b",
+        ],
+        cwd=str(repo_root),
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    out = (p.stdout or "") + (p.stderr or "")
+    assert p.returncode == 0, out
+    assert "target_repo_roots=['/tmp/target_a', '/tmp/target_b'] (src=cli)" in out
+    assert "active_target_repo_root='/tmp/target_b' (src=cli)" in out
+
+
+def test_am_patch_show_config_target_cli_last_occurrence_and_csv_replace() -> None:
+    repo_root = _repo_root()
+    script_path = repo_root / "scripts" / "am_patch.py"
+
+    env = os.environ.copy()
+    env["AM_PATCH_VENV_BOOTSTRAPPED"] = "1"
+
+    p = subprocess.run(
+        [
+            sys.executable,
+            str(script_path),
+            "--show-config",
+            "--target-repo-name",
+            "audiomason2",
+            "--override",
+            "target_repo_name=patchhub",
+            "--override",
+            "target_repo_roots=/tmp/one",
+            "--target-repo-roots",
+            "/tmp/two,/tmp/three",
+        ],
+        cwd=str(repo_root),
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    out = (p.stdout or "") + (p.stderr or "")
+    assert p.returncode == 0, out
+    assert "target_repo_name='patchhub' (src=cli)" in out
+    assert "target_repo_roots=['/tmp/two', '/tmp/three'] (src=cli)" in out

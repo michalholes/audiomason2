@@ -12,8 +12,9 @@ from am_patch.gates import run_badguys
 from am_patch.ipc_socket import IpcController
 from am_patch.lock import FileLock
 from am_patch.log import Logger, new_log_file
+from am_patch.patch_input import PatchPlan, resolve_patch_plan
 from am_patch.paths import default_paths, ensure_dirs
-from am_patch.root_model import resolve_root_model
+from am_patch.root_model import resolve_patch_root, resolve_root_model
 from am_patch.status import StatusReporter
 
 
@@ -38,12 +39,40 @@ class RunContext:
     lock: FileLock | None = None
     runner_root: Path | None = None
     artifacts_root: Path | None = None
+    effective_target_repo_name: str | None = None
+    patch_plan: PatchPlan | None = None
 
 
 def build_paths_and_logger(cli: Any, policy: Any, config_path: Path, used_cfg: str) -> RunContext:
-    root_model = resolve_root_model(policy, runner_root=Path(__file__).resolve().parents[2])
+    runner_root = Path(__file__).resolve().parents[2]
+    _, patch_root = resolve_patch_root(policy, runner_root=runner_root)
+    patch_plan: PatchPlan | None = None
+    if cli.mode == "workspace" and cli.issue_id is not None:
+        try:
+            patch_plan = resolve_patch_plan(
+                logger=None,
+                cli=cli,
+                policy=policy,
+                issue_id=int(cli.issue_id),
+                repo_root=runner_root,
+                patch_root=patch_root,
+            )
+        except RunnerError as exc:
+            if not (exc.stage == "PREFLIGHT" and exc.category == "MANIFEST"):
+                raise
+
+    root_model = resolve_root_model(
+        policy,
+        runner_root=runner_root,
+        patch_target_repo_name=(
+            patch_plan.patch_target_repo_name if patch_plan is not None else None
+        ),
+    )
     repo_root = root_model.active_target_repo_root
     patch_root = root_model.patch_root
+    effective_target_repo_name = root_model.effective_target_repo_name
+    root_runner_root = root_model.runner_root
+    root_artifacts_root = root_model.artifacts_root
     isolated_work_patch_dir: Path | None = None
     patch_dir = patch_root
     if (
@@ -129,6 +158,8 @@ def build_paths_and_logger(cli: Any, policy: Any, config_path: Path, used_cfg: s
         verbosity=verbosity,
         log_level=log_level,
         ipc=ipc,
-        runner_root=root_model.runner_root,
-        artifacts_root=root_model.artifacts_root,
+        runner_root=root_runner_root,
+        artifacts_root=root_artifacts_root,
+        effective_target_repo_name=effective_target_repo_name,
+        patch_plan=patch_plan,
     )

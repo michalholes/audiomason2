@@ -236,7 +236,7 @@ _LABEL_BY_KEY: dict[str, str] = {
     "live_repo_guard_scope": "Git safety: live repo guard scope",
     "repo_root": "Paths: repo root",
     "artifacts_root": "Paths: artifacts root",
-    "target_repo_name": "Failure zip: target repo name",
+    "target_repo_name": "Target selection: target repo name",
     "target_repo_roots": "Paths: target repo roots",
     "active_target_repo_root": "Paths: active target repo root",
     "runner_subprocess_timeout_s": "Runner: subprocess timeout (s)",
@@ -396,14 +396,16 @@ _HELP_BY_KEY: dict[str, str] = {
         "See: scripts/am_patch_policy_glossary.md## Key: artifacts_root"
     ),
     "target_repo_name": (
-        "ASCII-only failure-overlay target word written to target.txt. Default: audiomason2."
+        "ASCII-only bare repo token selector for the /home/pi/<name> target family. "
+        "Default: audiomason2. Failure zip target.txt is derived from the selected root."
     ),
     "target_repo_roots": (
         "Optional registry of allowed target repository roots. "
+        "Dedicated CLI and --override replace the whole list value. "
         "See: scripts/am_patch_policy_glossary.md## Key: target_repo_roots"
     ),
     "active_target_repo_root": (
-        "Optional override for the active target repository root path. "
+        "Optional explicit target repository root path selector. "
         "See: scripts/am_patch_policy_glossary.md## Key: active_target_repo_root"
     ),
     "runner_subprocess_timeout_s": (

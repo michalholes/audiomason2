@@ -1,3 +1,11 @@
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent / "scripts"))
+
+
 def test_policy_schema_includes_all_policy_fields():
     from dataclasses import fields
 
@@ -52,3 +60,4 @@ def test_policy_schema_exposes_target_repo_name() -> None:
     assert target["type"] == "str"
     assert target["section"] == ""
     assert target["default"] == "audiomason2"
+    assert "bare repo token selector" in target["help"]

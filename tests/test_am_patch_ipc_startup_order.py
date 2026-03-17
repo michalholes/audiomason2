@@ -93,8 +93,8 @@ def test_ipc_receives_start_and_hello_before_runtime_work(tmp_path: Path) -> Non
         startup_mod.IpcController = _FakeIpcController
 
         policy = policy_cls()
-        policy.target_repo_roots = [str(tmp_path)]
-        policy.repo_root = str(tmp_path)
+        policy.target_repo_roots = ["/home/pi/audiomason2"]
+        policy.patch_dir = str(tmp_path / "patches")
         policy.current_log_symlink_enabled = False
         policy.verbosity = "quiet"
         policy.log_level = "quiet"
@@ -155,8 +155,8 @@ def test_ipc_waits_for_ready_before_start_and_hello(tmp_path: Path) -> None:
         startup_mod.IpcController = _FakeIpcController
 
         policy = policy_cls()
-        policy.target_repo_roots = [str(tmp_path)]
-        policy.repo_root = str(tmp_path)
+        policy.target_repo_roots = ["/home/pi/audiomason2"]
+        policy.patch_dir = str(tmp_path / "patches")
         policy.current_log_symlink_enabled = False
         policy.verbosity = "quiet"
         policy.log_level = "quiet"
@@ -233,8 +233,8 @@ def test_ipc_handshake_timeout_is_fail_open_and_human_debug_only(
         startup_mod.IpcController = _FakeIpcController
 
         policy = policy_cls()
-        policy.target_repo_roots = [str(tmp_path)]
-        policy.repo_root = str(tmp_path)
+        policy.target_repo_roots = ["/home/pi/audiomason2"]
+        policy.patch_dir = str(tmp_path / "patches")
         policy.current_log_symlink_enabled = False
         policy.verbosity = verbosity
         policy.log_level = log_level

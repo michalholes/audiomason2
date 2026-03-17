@@ -23,8 +23,14 @@ Options:
       Root-layout default: am_patch.toml in runner_root
 
   --target-repo-name NAME
-      Set failure-overlay target metadata written to target.txt.
+      Set target_repo_name selector input for the /home/pi/<name> target family.
       [default: audiomason2]
+
+  --active-target-repo-root PATH
+      Set explicit target repository root path selector.
+
+  --target-repo-roots CSV
+      Replace the allowed target repository roots registry.
 
   -q, -v, -n, -d, --verbosity {{debug, verbose, normal, warning, quiet}}
       Control screen output amount. [default: verbose]
@@ -91,8 +97,14 @@ CORE / INFO
       Root-layout default: am_patch.toml in runner_root
 
   --target-repo-name NAME
-      Set failure-overlay target metadata written to target.txt.
+      Set target_repo_name selector input for the /home/pi/<name> target family.
       [default: audiomason2]
+
+  --active-target-repo-root PATH
+      Set explicit target repository root path selector.
+
+  --target-repo-roots CSV
+      Replace the allowed target repository roots registry.
 
   --version
       Print runner version and exit.
