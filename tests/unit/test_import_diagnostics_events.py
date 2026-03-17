@@ -3,10 +3,11 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 from importlib import import_module
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from audiomason.core.config import ConfigResolver
 
@@ -122,6 +123,37 @@ def test_emits_finalize_request_and_job_create(monkeypatch, tmp_path: Path) -> N
         assert str(data.get("effective_config_fingerprint") or "")
 
 
+def test_submit_process_job_uses_session_engine_outside_repo_cwd(
+    monkeypatch, tmp_path: Path
+) -> None:
+    diag_mod = import_module("plugins.import.engine_diagnostics_required")
+    engine, _roots = _make_engine(tmp_path)
+
+    from audiomason.core.orchestration import Orchestrator
+
+    seen: dict[str, object] = {}
+
+    def _run_job(self, job_id: str, *, plugin_loader: object, verbosity: int = 1) -> None:
+        seen["job_id"] = job_id
+        seen["plugin_loader"] = plugin_loader
+        seen["import_plugin"] = cast(Any, plugin_loader).get_plugin("import")
+        seen["verbosity"] = verbosity
+
+    monkeypatch.setattr(Orchestrator, "run_job", _run_job)
+
+    old_cwd = Path.cwd()
+    os.chdir(tmp_path)
+    try:
+        diag_mod.submit_process_job(engine=engine, job_id="job-ctx", verbosity=3)
+    finally:
+        os.chdir(old_cwd)
+
+    import_plugin = seen["import_plugin"]
+    assert seen["job_id"] == "job-ctx"
+    assert seen["verbosity"] == 3
+    assert cast(Any, import_plugin)._engine is engine
+
+
 def test_failure_does_not_emit_job_create(monkeypatch, tmp_path: Path) -> None:
     engine, roots = _make_engine(tmp_path)
     rel = "book8"
@@ -182,7 +214,6 @@ def _write_minimal_plugin(repo_root: Path, *, name: str, class_name: str) -> Non
 def test_submit_loader_autoloads_required_process_plugins(monkeypatch, tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
     for name, class_name in [
-        ("import", "ImportPlugin"),
         ("audio_processor", "AudioProcessorPlugin"),
         ("cover_handler", "CoverHandlerPlugin"),
         ("id3_tagger", "ID3TaggerPlugin"),
@@ -190,10 +221,11 @@ def test_submit_loader_autoloads_required_process_plugins(monkeypatch, tmp_path:
         _write_minimal_plugin(repo_root, name=name, class_name=class_name)
 
     diag_mod = import_module("plugins.import.engine_diagnostics_required")
-    monkeypatch.setattr(diag_mod, "_find_repo_root", lambda: repo_root)
+    monkeypatch.setattr(diag_mod, "_builtin_plugins_root", lambda: repo_root / "plugins")
     monkeypatch.setattr(diag_mod, "_user_plugins_root", lambda: tmp_path / "user_plugins")
 
-    loader = diag_mod._plugin_loader()
+    loader = diag_mod._plugin_loader(engine=object())
+    diag_mod._ensure_required_process_plugins(loader=loader)
 
     assert loader.list_plugins() == [
         "import",

@@ -89,7 +89,8 @@ def test_start_processing_is_idempotent(monkeypatch, tmp_path: Path) -> None:
 
     submit_calls: list[tuple[str, int]] = []
 
-    def _submit_process_job(*, job_id: str, verbosity: int = 1) -> None:
+    def _submit_process_job(*, engine: object, job_id: str, verbosity: int = 1) -> None:
+        assert engine is not None
         submit_calls.append((job_id, verbosity))
 
     diag_mod = import_module("plugins.import.engine_diagnostics_required")
@@ -141,7 +142,8 @@ def test_start_processing_preserves_sync_submit_state_updates(monkeypatch, tmp_p
     }
     state_path = roots["wizards"] / "import" / "sessions" / session_id / "state.json"
 
-    def _submit_process_job(*, job_id: str, verbosity: int = 1) -> None:
+    def _submit_process_job(*, engine: object, job_id: str, verbosity: int = 1) -> None:
+        assert engine is not None
         assert job_id == "job-124"
         state_doc = json.loads(state_path.read_text(encoding="utf-8"))
         state_doc["status"] = "succeeded"

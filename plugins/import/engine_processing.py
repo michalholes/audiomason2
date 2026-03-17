@@ -137,7 +137,7 @@ def _load_job_requests_idempotent(
     submitted = submitted_any if isinstance(submitted_any, list) else []
     if job_id not in submitted:
         try:
-            diagnostics_required.submit_process_job(job_id=job_id, verbosity=1)
+            diagnostics_required.submit_process_job(engine=engine, job_id=job_id, verbosity=1)
         except Exception as e:
             return _exception_envelope(e)
         state = _record_session_job_state(
@@ -387,7 +387,7 @@ def start_processing_impl(
         submitted = submitted_any if isinstance(submitted_any, list) else []
         if job_id not in submitted:
             try:
-                diagnostics_required.submit_process_job(job_id=job_id, verbosity=1)
+                diagnostics_required.submit_process_job(engine=engine, job_id=job_id, verbosity=1)
             except Exception as e:
                 return _exception_envelope(e)
             state = _record_session_job_state(

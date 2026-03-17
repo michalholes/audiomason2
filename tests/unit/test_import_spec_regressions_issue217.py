@@ -231,7 +231,8 @@ def test_job_requests_derived_from_plan_batch_size_and_idempotency(
 
     submit_calls: list[tuple[str, int]] = []
 
-    def _submit_process_job(*, job_id: str, verbosity: int = 1) -> None:
+    def _submit_process_job(*, engine: object, job_id: str, verbosity: int = 1) -> None:
+        assert engine is not None
         submit_calls.append((job_id, verbosity))
 
     diag_mod = import_module("plugins.import.engine_diagnostics_required")
