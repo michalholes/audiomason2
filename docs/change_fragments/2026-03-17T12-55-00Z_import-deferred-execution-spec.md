@@ -1,0 +1,1 @@
+2026-03-17T12:55:00Z Clarified import start_processing deferred execution and automatic adoption semantics when execution authority is unavailable, while preserving persisted jobs and exactly-once processing.
