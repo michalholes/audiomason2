@@ -17,6 +17,9 @@ defaults**.
 
 Target-selection extension:
 - Target selection is defined normatively only in section 3.1.1.
+- When the selected patch input is a zip archive and it contains a
+  root-level `target.txt`, that file participates in the target-selection
+  contract defined in section 3.1.1.
 
 #
 
@@ -424,7 +427,6 @@ Normative meanings:
 - `target_repo_roots` is the allowlist of permitted target repository root paths.
 - `active_target_repo_root` is the explicit path selector.
 - `target_repo_name` is the bare repo-token selector input for the `/home/pi/<name>` target family.
-- Legacy `repo_root` remains a backward-compatibility alias for `active_target_repo_root` and is normalized to that key before this contract is applied.
 - For target-selection keys, dedicated CLI keys and `--override` are the same CLI precedence tier. For the same effective key, the last argv occurrence wins.
 - The effective `target_repo_roots` value follows normal precedence: CLI > config > defaults.
 
@@ -1064,10 +1066,10 @@ Root-binding rule:
 
 - Workspace creation, workspace refresh, scope evaluation, promotion planning,
   promotion execution, live-repo guards, finalize-live behavior, commit, and push
-  are all bound to active_target_repo_root.
+  are all bound to the authoritative effective target root selected by section 3.1.1.
 - Runner-owned artifacts are bound to artifacts_root.
-- The runner MUST NOT implicitly treat runner_root and active_target_repo_root as
-  the same repository.
+- The runner MUST NOT implicitly treat runner_root and the authoritative effective
+  target root as the same repository.
 
 ### 7.1 Workspace live
 
