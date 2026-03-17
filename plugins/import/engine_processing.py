@@ -39,14 +39,12 @@ def _validate_start_processing_body(body: dict[str, Any]) -> dict[str, Any] | No
     return None
 
 
-def _record_session_job_state(
+def _merge_session_job_state(
     *,
-    engine: ImportWizardEngine,
-    session_id: str,
     state: dict[str, Any],
     job_id: str,
     mark_submitted: bool,
-) -> None:
+) -> dict[str, Any]:
     jobs_any = state.get("jobs")
     jobs = dict(jobs_any) if isinstance(jobs_any, dict) else {}
 
@@ -64,7 +62,28 @@ def _record_session_job_state(
     jobs["submitted"] = submitted
     state["jobs"] = jobs
     state["updated_at"] = _iso_utc_now()
-    engine._persist_state(session_id, state)
+    return state
+
+
+def _record_session_job_state(
+    *,
+    engine: ImportWizardEngine,
+    session_id: str,
+    state: dict[str, Any],
+    job_id: str,
+    mark_submitted: bool,
+    reload_state: bool = False,
+) -> dict[str, Any]:
+    latest_state = state
+    if reload_state:
+        latest_state = engine._load_state(session_id)
+    latest_state = _merge_session_job_state(
+        state=latest_state,
+        job_id=job_id,
+        mark_submitted=mark_submitted,
+    )
+    engine._persist_state(session_id, latest_state)
+    return latest_state
 
 
 def _build_start_processing_result(
@@ -104,7 +123,7 @@ def _load_job_requests_idempotent(
         raise FinalizeError("job_requests.json missing idempotency_key")
 
     job_id = engine._get_or_create_job(session_id, state, idem_key)
-    _record_session_job_state(
+    state = _record_session_job_state(
         engine=engine,
         session_id=session_id,
         state=state,
@@ -121,12 +140,13 @@ def _load_job_requests_idempotent(
             diagnostics_required.submit_process_job(job_id=job_id, verbosity=1)
         except Exception as e:
             return _exception_envelope(e)
-        _record_session_job_state(
+        state = _record_session_job_state(
             engine=engine,
             session_id=session_id,
             state=state,
             job_id=job_id,
             mark_submitted=True,
+            reload_state=True,
         )
 
     plan_path = f"{session_dir}/plan.json"
@@ -332,7 +352,7 @@ def start_processing_impl(
         state = engine._load_state(session_id)
 
         job_id = engine._get_or_create_job(session_id, state, idem_key)
-        _record_session_job_state(
+        state = _record_session_job_state(
             engine=engine,
             session_id=session_id,
             state=state,
@@ -370,12 +390,13 @@ def start_processing_impl(
                 diagnostics_required.submit_process_job(job_id=job_id, verbosity=1)
             except Exception as e:
                 return _exception_envelope(e)
-            _record_session_job_state(
+            state = _record_session_job_state(
                 engine=engine,
                 session_id=session_id,
                 state=state,
                 job_id=job_id,
                 mark_submitted=True,
+                reload_state=True,
             )
 
         return _build_start_processing_result(state=state, job_id=job_id, plan=plan)

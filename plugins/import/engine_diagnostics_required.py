@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from audiomason.core.diagnostics import build_envelope
+from audiomason.core.errors import PluginNotFoundError
 from audiomason.core.events import get_event_bus as _core_get_event_bus
 from audiomason.core.jobs.api import JobService
 from audiomason.core.jobs.model import JobType
@@ -90,11 +91,44 @@ def _user_plugins_root() -> Path:
 
 def _plugin_loader() -> PluginLoader:
     repo = _find_repo_root()
-    return PluginLoader(
+    loader = PluginLoader(
         builtin_plugins_dir=repo / "plugins",
         user_plugins_dir=_user_plugins_root(),
         registry=None,
     )
+    return _ensure_required_process_plugins(loader)
+
+
+_REQUIRED_PROCESS_PLUGINS = (
+    "import",
+    "audio_processor",
+    "cover_handler",
+    "id3_tagger",
+)
+
+
+def _load_builtin_plugin(loader: PluginLoader, name: str) -> None:
+    try:
+        loader.get_plugin(name)
+        return
+    except PluginNotFoundError:
+        pass
+
+    builtin_dir = loader.builtin_plugins_dir
+    if builtin_dir is None:
+        raise RuntimeError(f"builtin plugins dir unavailable for {name}")
+
+    plugin_dir = builtin_dir / name
+    if not (plugin_dir / "plugin.yaml").exists():
+        raise RuntimeError(f"required plugin not found: {name}")
+
+    loader.load_plugin(plugin_dir, validate=False)
+
+
+def _ensure_required_process_plugins(loader: PluginLoader) -> PluginLoader:
+    for name in _REQUIRED_PROCESS_PLUGINS:
+        _load_builtin_plugin(loader, name)
+    return loader
 
 
 def create_process_job(*, meta: dict[str, Any]) -> str:

@@ -146,3 +146,58 @@ def test_failure_does_not_emit_job_create(monkeypatch, tmp_path: Path) -> None:
     names = [e for (e, _p) in bus.events]
     assert "finalize.request" in names
     assert "job.create" not in names
+
+
+def _write_minimal_plugin(repo_root: Path, *, name: str, class_name: str) -> None:
+    plugins_root = repo_root / "plugins"
+    plugins_root.mkdir(parents=True, exist_ok=True)
+    (plugins_root / "__init__.py").write_text("", encoding="utf-8")
+    plugin_dir = plugins_root / name
+    plugin_dir.mkdir(parents=True, exist_ok=True)
+    (plugin_dir / "plugin.py").write_text(
+        f"class {class_name}:\n    pass\n",
+        encoding="utf-8",
+    )
+    (plugin_dir / "plugin.yaml").write_text(
+        "\n".join(
+            [
+                f"name: {name}",
+                'version: "1.0.0"',
+                "description: test plugin",
+                "author: tests",
+                "license: MIT",
+                f"entrypoint: plugin:{class_name}",
+                "interfaces: []",
+                "hooks: []",
+                "dependencies: {}",
+                "config_schema: {}",
+                "test_level: none",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+
+def test_submit_loader_autoloads_required_process_plugins(monkeypatch, tmp_path: Path) -> None:
+    repo_root = tmp_path / "repo"
+    for name, class_name in [
+        ("import", "ImportPlugin"),
+        ("audio_processor", "AudioProcessorPlugin"),
+        ("cover_handler", "CoverHandlerPlugin"),
+        ("id3_tagger", "ID3TaggerPlugin"),
+    ]:
+        _write_minimal_plugin(repo_root, name=name, class_name=class_name)
+
+    diag_mod = import_module("plugins.import.engine_diagnostics_required")
+    monkeypatch.setattr(diag_mod, "_find_repo_root", lambda: repo_root)
+    monkeypatch.setattr(diag_mod, "_user_plugins_root", lambda: tmp_path / "user_plugins")
+
+    loader = diag_mod._plugin_loader()
+
+    assert loader.list_plugins() == [
+        "import",
+        "audio_processor",
+        "cover_handler",
+        "id3_tagger",
+    ]

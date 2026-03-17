@@ -113,3 +113,50 @@ def test_start_processing_is_idempotent(monkeypatch, tmp_path: Path) -> None:
     mapping = json.loads(idem_path.read_text(encoding="utf-8"))
     assert isinstance(mapping, dict)
     assert "job-123" in set(mapping.values())
+
+
+def test_start_processing_preserves_sync_submit_state_updates(monkeypatch, tmp_path: Path) -> None:
+    engine, roots = _make_engine(tmp_path)
+    rel = "book5_sync"
+    _write_inbox_source_dir(roots, rel)
+
+    state = engine.create_session("inbox", rel, mode="stage")
+    session_id = str(state.get("session_id") or "")
+    assert session_id
+    _mutate_state_for_finalize(roots, session_id)
+
+    from audiomason.core.jobs import api as jobs_api
+
+    def _create_job(self, job_type, *, meta):
+        return _Job(job_id="job-124")
+
+    monkeypatch.setattr(jobs_api.JobService, "create_job", _create_job)
+
+    finalize = {
+        "job_id": "job-124",
+        "report_path": f"wizards:import/sessions/{session_id}/finalize/report.json",
+        "artifacts": {"report": f"wizards:import/sessions/{session_id}/finalize/report.json"},
+        "counts": {"books": 1},
+        "status": "succeeded",
+    }
+    state_path = roots["wizards"] / "import" / "sessions" / session_id / "state.json"
+
+    def _submit_process_job(*, job_id: str, verbosity: int = 1) -> None:
+        assert job_id == "job-124"
+        state_doc = json.loads(state_path.read_text(encoding="utf-8"))
+        state_doc["status"] = "succeeded"
+        state_doc.setdefault("computed", {})["finalize"] = finalize
+        state_path.write_text(json.dumps(state_doc), encoding="utf-8")
+
+    diag_mod = import_module("plugins.import.engine_diagnostics_required")
+    monkeypatch.setattr(diag_mod, "submit_process_job", _submit_process_job)
+
+    out = engine.start_processing(session_id, {"confirm": True})
+
+    assert out == {"job_ids": ["job-124"], "batch_size": 0, "finalize": finalize}
+
+    state_doc = json.loads(state_path.read_text(encoding="utf-8"))
+    assert state_doc["status"] == "succeeded"
+    assert state_doc["computed"]["finalize"] == finalize
+    assert state_doc["jobs"]["emitted"] == ["job-124"]
+    assert state_doc["jobs"]["submitted"] == ["job-124"]
