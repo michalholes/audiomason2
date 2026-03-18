@@ -161,9 +161,9 @@ class _ImportProcessRuntimePlugin:
     async def run_process_contract(
         self, *, job_id: str, job_meta: dict[str, object], plugin_loader: object
     ) -> None:
-        from .phase2_job_runner import run_phase2_job_requests
+        from .process_contract_completion import run_process_contract_completion
 
-        await run_phase2_job_requests(
+        await run_process_contract_completion(
             engine=self._engine,
             job_id=job_id,
             job_meta=dict(job_meta),

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from importlib import import_module
 from pathlib import Path
 from typing import Any
 
@@ -65,6 +66,78 @@ def _wait_for_terminal_state(orchestrator: Orchestrator, job_id: str) -> Any:
             return job
         time.sleep(0.02)
     raise AssertionError(f"timed out waiting for terminal state: {job_id}")
+
+
+def test_import_live_and_detached_entrypoints_share_completion_authority(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plugin_mod = import_module("plugins.import.plugin")
+    diag_mod = import_module("plugins.import.engine_diagnostics_required")
+    completion_mod = import_module("plugins.import.process_contract_completion")
+
+    calls: list[dict[str, Any]] = []
+
+    async def _fake_completion(**kwargs: Any) -> None:
+        calls.append(dict(kwargs))
+
+    monkeypatch.setattr(
+        completion_mod,
+        "run_process_contract_completion",
+        _fake_completion,
+    )
+    monkeypatch.setattr(
+        plugin_mod,
+        "run_process_contract_completion",
+        _fake_completion,
+    )
+    monkeypatch.setattr(
+        plugin_mod,
+        "resolve_phase2_runtime",
+        lambda *, live_engine, job_meta: {
+            "kind": "live",
+            "engine": live_engine,
+            "job_meta": dict(job_meta),
+        },
+    )
+
+    plugin = plugin_mod.ImportPlugin.__new__(plugin_mod.ImportPlugin)
+    plugin.engine = object()
+
+    asyncio.run(
+        plugin.run_process_contract(
+            job_id="job-live",
+            job_meta={"session_id": "s-live"},
+            plugin_loader="loader-live",
+        )
+    )
+
+    runtime_plugin = diag_mod._ImportProcessRuntimePlugin(engine={"kind": "detached"})
+    asyncio.run(
+        runtime_plugin.run_process_contract(
+            job_id="job-detached",
+            job_meta={"session_id": "s-detached"},
+            plugin_loader="loader-detached",
+        )
+    )
+
+    assert calls == [
+        {
+            "engine": {
+                "kind": "live",
+                "engine": plugin.engine,
+                "job_meta": {"session_id": "s-live"},
+            },
+            "job_id": "job-live",
+            "job_meta": {"session_id": "s-live"},
+            "plugin_loader": "loader-live",
+        },
+        {
+            "engine": {"kind": "detached"},
+            "job_id": "job-detached",
+            "job_meta": {"session_id": "s-detached"},
+            "plugin_loader": "loader-detached",
+        },
+    ]
 
 
 def test_run_job_dispatches_contract_process_to_plugin_entrypoint(

@@ -9,6 +9,7 @@ from typing import Any
 import pytest
 
 from audiomason.core.config import ConfigResolver
+from audiomason.core.events import get_event_bus
 from audiomason.core.jobs.model import JobState
 from audiomason.core.orchestration import Orchestrator
 from audiomason.core.process_contract_runtime import reset_process_contract_runtime_for_tests
@@ -298,3 +299,77 @@ def test_pending_process_job_adopts_detached_runtime_without_original_host_engin
         "tags.write:track01.mp3:Book1",
     ]
     assert session_id == str(job_requests.get("session_id") or "")
+
+
+def test_detached_process_loader_completes_finalize_without_parent_subscriber(
+    tmp_path: Path, monkeypatch
+) -> None:
+    processed_required = import_module("plugins.import.processed_registry_required")
+    diag_mod = import_module("plugins.import.engine_diagnostics_required")
+
+    bus = get_event_bus()
+    bus.clear()
+    monkeypatch.setattr(
+        processed_required,
+        "_install_processed_registry_subscriber",
+        lambda **_kw: None,
+    )
+
+    _host_plugin, roots, session_id, job_id, job_requests = _prepare_pending_process_job(
+        tmp_path, monkeypatch
+    )
+    assert bus._all_subscribers == []
+
+    runtime_plugin_cls = diag_mod._ImportProcessRuntimePlugin
+    calls: list[str] = []
+
+    def _fake_loader_factory(*, engine: Any) -> _FakeLoader:
+        return _FakeLoader(runtime_plugin_cls(engine=engine), calls)
+
+    monkeypatch.setattr(diag_mod, "_plugin_loader", _fake_loader_factory)
+    monkeypatch.setattr(diag_mod, "_ensure_required_process_plugins", lambda *, loader: None)
+
+    job = Orchestrator().get_job(job_id)
+    loader = diag_mod.build_process_contract_plugin_loader(job_meta=dict(job.meta))
+    Orchestrator().run_job(job_id, plugin_loader=loader)
+
+    assert _wait_for_terminal_job(job_id) == JobState.SUCCEEDED
+
+    state_path = roots["wizards"] / "import" / "sessions" / session_id / "state.json"
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    finalize = dict(state.get("computed", {}).get("finalize") or {})
+    assert state["status"] == "succeeded"
+    assert finalize["job_id"] == job_id
+    assert finalize["status"] == "succeeded"
+    assert finalize["counts"] == {"books": 1, "capabilities": 4}
+
+    report_ref = str(finalize["report_path"])
+    assert report_ref == f"wizards:import/sessions/{session_id}/finalize/report.json"
+    report_path = roots["wizards"] / report_ref.removeprefix("wizards:")
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report["job_id"] == job_id
+    assert report["status"] == "succeeded"
+
+    processing_log_ref = next(iter(report["artifacts"]["processing_logs"].values()))
+    dry_run_ref = next(iter(report["artifacts"]["dry_run_texts"].values()))
+    processing_log_path = roots["wizards"] / processing_log_ref.removeprefix("wizards:")
+    dry_run_path = roots["wizards"] / dry_run_ref.removeprefix("wizards:")
+    assert processing_log_path.exists()
+    assert dry_run_path.exists()
+
+    processed_registry_path = roots["wizards"] / "import" / "processed" / "processed_registry.json"
+    ignore_registry_path = roots["wizards"] / "import" / "processed" / "ignore_registry.json"
+    processed_registry = json.loads(processed_registry_path.read_text(encoding="utf-8"))
+    ignore_registry = json.loads(ignore_registry_path.read_text(encoding="utf-8"))
+
+    book_id = str(job_requests["actions"][0]["book_id"])
+    assert processed_registry["books"][book_id]["target_relative_path"] == "AuthorA/Book1"
+    assert ignore_registry["sources"] == [{"root": "inbox", "relative_path": "AuthorA/Book1"}]
+    assert calls == [
+        "audio.plan:track01.m4a",
+        "audio.exec:track01.mp3",
+        "cover.apply:embedded:track01.m4a",
+        "cover.convert",
+        "cover.embed",
+        "tags.write:track01.mp3:Book1",
+    ]

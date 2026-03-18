@@ -13,7 +13,7 @@ from . import processed_registry_required
 from .cli import import_cli_main
 from .detached_runtime import resolve_phase2_runtime
 from .engine import ImportWizardEngine
-from .phase2_job_runner import run_phase2_job_requests
+from .process_contract_completion import run_process_contract_completion
 from .ui_api import build_router
 
 
@@ -30,7 +30,7 @@ class ImportPlugin:
         self, *, job_id: str, job_meta: dict[str, object], plugin_loader: object
     ) -> None:
         runtime = resolve_phase2_runtime(live_engine=self.engine, job_meta=dict(job_meta))
-        await run_phase2_job_requests(
+        await run_process_contract_completion(
             engine=runtime,
             job_id=job_id,
             job_meta=dict(job_meta),
