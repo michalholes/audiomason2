@@ -22,6 +22,11 @@ read_json = import_module("plugins.import.storage").read_json
 processed_required = import_module("plugins.import.processed_registry_required")
 
 
+def _reset_subscriber_state() -> None:
+    processed_required._INSTALLED = False
+    processed_required._REGISTERED_FILE_SERVICES.clear()
+
+
 def _make_resolver(tmp_path: Path) -> ConfigResolver:
     roots = {
         "inbox": tmp_path / "inbox",
@@ -57,7 +62,7 @@ def _make_resolver(tmp_path: Path) -> ConfigResolver:
 
 def test_processed_registry_updates_on_succeeded_diag_event(tmp_path: Path) -> None:
     # Reset globals to keep tests isolated.
-    processed_required._INSTALLED = False
+    _reset_subscriber_state()
     bus = get_event_bus()
     bus.clear()
 
@@ -147,7 +152,7 @@ def test_processed_registry_updates_on_succeeded_diag_event(tmp_path: Path) -> N
 def test_subscriber_skips_shared_helper_owned_completion(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    processed_required._INSTALLED = False
+    _reset_subscriber_state()
     bus = get_event_bus()
     bus.clear()
 
@@ -230,7 +235,7 @@ def test_subscriber_skips_shared_helper_owned_completion(
 def test_live_completion_and_success_event_stay_exact_once(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    processed_required._INSTALLED = False
+    _reset_subscriber_state()
     bus = get_event_bus()
     bus.clear()
 
@@ -317,3 +322,198 @@ def test_live_completion_and_success_event_stay_exact_once(
     )
 
     assert calls == [str(job.job_id)]
+
+
+def test_subscriber_skips_ambiguous_duplicate_paths_without_bootstrap_metadata(
+    tmp_path: Path,
+) -> None:
+    _reset_subscriber_state()
+    bus = get_event_bus()
+    bus.clear()
+
+    resolver_one = _make_resolver(tmp_path / "one")
+    resolver_two = _make_resolver(tmp_path / "two")
+    _ = ImportPlugin(resolver=resolver_one)
+    _ = ImportPlugin(resolver=resolver_two)
+
+    fs_mod = import_module("plugins.file_io.service")
+    fs_one = fs_mod.FileService.from_resolver(resolver_one)
+    fs_two = fs_mod.FileService.from_resolver(resolver_two)
+    job_requests_path = "import/sessions/same/job_requests.json"
+
+    job_requests_one = {
+        "job_type": "import.process",
+        "job_version": 1,
+        "session_id": "same",
+        "mode": "stage",
+        "config_fingerprint": "cfg-one",
+        "actions": [
+            {
+                "type": "import.book",
+                "book_id": "book-one",
+                "source": {"root": "inbox", "relative_path": "src/book-one"},
+                "target": {"root": "stage", "relative_path": "dst/book-one"},
+                "authority": {"metadata_tags": {"field_map": {}, "values": {}}},
+            }
+        ],
+        "idempotency_key": "idem-one",
+        "diagnostics_context": {
+            "model_fingerprint": "model-one",
+            "discovery_fingerprint": "discovery-one",
+            "effective_config_fingerprint": "cfg-one",
+        },
+    }
+    job_requests_two = {
+        "job_type": "import.process",
+        "job_version": 1,
+        "session_id": "same",
+        "mode": "stage",
+        "config_fingerprint": "cfg-two",
+        "actions": [
+            {
+                "type": "import.book",
+                "book_id": "book-two",
+                "source": {"root": "inbox", "relative_path": "src/book-two"},
+                "target": {"root": "stage", "relative_path": "dst/book-two"},
+                "authority": {"metadata_tags": {"field_map": {}, "values": {}}},
+            }
+        ],
+        "idempotency_key": "idem-two",
+        "diagnostics_context": {
+            "model_fingerprint": "model-two",
+            "discovery_fingerprint": "discovery-two",
+            "effective_config_fingerprint": "cfg-two",
+        },
+    }
+
+    atomic_write_json(fs_one, RootName.WIZARDS, job_requests_path, job_requests_one)
+    atomic_write_json(fs_two, RootName.WIZARDS, job_requests_path, job_requests_two)
+
+    job = JobService().create_job(
+        JobType.PROCESS,
+        meta={
+            "source": "import",
+            "job_requests_path": f"wizards:{job_requests_path}",
+        },
+    )
+
+    bus.publish(
+        "diag.job.end",
+        build_envelope(
+            event="diag.job.end",
+            component="jobs",
+            operation="run_job",
+            data={
+                "job_id": str(job.job_id),
+                "job_type": "process",
+                "status": "succeeded",
+                "duration_ms": 1,
+            },
+        ),
+    )
+
+    reg_path = "import/processed/processed_registry.json"
+    assert not fs_one.exists(RootName.WIZARDS, reg_path)
+    assert not fs_two.exists(RootName.WIZARDS, reg_path)
+
+
+def test_subscriber_uses_job_meta_signature_to_pick_matching_duplicate_path(
+    tmp_path: Path,
+) -> None:
+    _reset_subscriber_state()
+    bus = get_event_bus()
+    bus.clear()
+
+    resolver_one = _make_resolver(tmp_path / "one")
+    resolver_two = _make_resolver(tmp_path / "two")
+    _ = ImportPlugin(resolver=resolver_one)
+    _ = ImportPlugin(resolver=resolver_two)
+
+    fs_mod = import_module("plugins.file_io.service")
+    fs_one = fs_mod.FileService.from_resolver(resolver_one)
+    fs_two = fs_mod.FileService.from_resolver(resolver_two)
+    job_requests_path = "import/sessions/same/job_requests.json"
+
+    job_requests_one = {
+        "job_type": "import.process",
+        "job_version": 1,
+        "session_id": "same",
+        "mode": "stage",
+        "config_fingerprint": "cfg-one",
+        "actions": [
+            {
+                "type": "import.book",
+                "book_id": "book-one",
+                "source": {"root": "inbox", "relative_path": "src/book-one"},
+                "target": {"root": "stage", "relative_path": "dst/book-one"},
+                "authority": {"metadata_tags": {"field_map": {}, "values": {}}},
+            }
+        ],
+        "idempotency_key": "idem-one",
+        "diagnostics_context": {
+            "model_fingerprint": "model-one",
+            "discovery_fingerprint": "discovery-one",
+            "effective_config_fingerprint": "cfg-one",
+        },
+    }
+    job_requests_two = {
+        "job_type": "import.process",
+        "job_version": 1,
+        "session_id": "same",
+        "mode": "stage",
+        "config_fingerprint": "cfg-two",
+        "actions": [
+            {
+                "type": "import.book",
+                "book_id": "book-two",
+                "source": {"root": "inbox", "relative_path": "src/book-two"},
+                "target": {"root": "stage", "relative_path": "dst/book-two"},
+                "authority": {"metadata_tags": {"field_map": {}, "values": {}}},
+            }
+        ],
+        "idempotency_key": "idem-two",
+        "diagnostics_context": {
+            "model_fingerprint": "model-two",
+            "discovery_fingerprint": "discovery-two",
+            "effective_config_fingerprint": "cfg-two",
+        },
+    }
+
+    atomic_write_json(fs_one, RootName.WIZARDS, job_requests_path, job_requests_one)
+    atomic_write_json(fs_two, RootName.WIZARDS, job_requests_path, job_requests_two)
+
+    job = JobService().create_job(
+        JobType.PROCESS,
+        meta={
+            "source": "import",
+            "job_requests_path": f"wizards:{job_requests_path}",
+            "session_id": "same",
+            "idempotency_key": "idem-two",
+            "effective_config_fingerprint": "cfg-two",
+            "model_fingerprint": "model-two",
+            "discovery_fingerprint": "discovery-two",
+        },
+    )
+
+    bus.publish(
+        "diag.job.end",
+        build_envelope(
+            event="diag.job.end",
+            component="jobs",
+            operation="run_job",
+            data={
+                "job_id": str(job.job_id),
+                "job_type": "process",
+                "status": "succeeded",
+                "duration_ms": 1,
+            },
+        ),
+    )
+
+    reg_path = "import/processed/processed_registry.json"
+    assert not fs_one.exists(RootName.WIZARDS, reg_path)
+    reg = read_json(fs_two, RootName.WIZARDS, reg_path)
+    assert isinstance(reg, dict)
+    books = reg.get("books")
+    assert isinstance(books, dict)
+    assert set(books.keys()) == {"book-two"}
