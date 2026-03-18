@@ -14,7 +14,10 @@ import contextlib
 from typing import Any
 
 from . import core_facade, file_io_facade
-from .process_contract_completion import apply_successful_process_completion
+from .process_contract_completion import (
+    apply_successful_process_completion,
+    successful_process_completion_already_applied,
+)
 from .storage import read_json
 
 _INSTALLED = False
@@ -71,6 +74,13 @@ def install_processed_registry_subscriber(*, resolver: Any) -> None:
 
             job_requests_any = read_json(fs, root, rel_path)
             if not isinstance(job_requests_any, dict):
+                return
+
+            if successful_process_completion_already_applied(
+                fs=fs,
+                job_id=job_id,
+                job_requests=job_requests_any,
+            ):
                 return
 
             apply_successful_process_completion(

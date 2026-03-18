@@ -329,6 +329,16 @@ def test_detached_process_loader_completes_finalize_without_parent_subscriber(
     monkeypatch.setattr(diag_mod, "_plugin_loader", _fake_loader_factory)
     monkeypatch.setattr(diag_mod, "_ensure_required_process_plugins", lambda *, loader: None)
 
+    completion_mod = import_module("plugins.import.process_contract_completion")
+    real_apply = completion_mod.apply_successful_process_completion
+    completion_calls: list[str] = []
+
+    def _count_apply(**kwargs: Any) -> dict[str, Any] | None:
+        completion_calls.append(str(kwargs.get("job_id") or ""))
+        return real_apply(**kwargs)
+
+    monkeypatch.setattr(completion_mod, "apply_successful_process_completion", _count_apply)
+
     job = Orchestrator().get_job(job_id)
     loader = diag_mod.build_process_contract_plugin_loader(job_meta=dict(job.meta))
     Orchestrator().run_job(job_id, plugin_loader=loader)
@@ -365,6 +375,7 @@ def test_detached_process_loader_completes_finalize_without_parent_subscriber(
     book_id = str(job_requests["actions"][0]["book_id"])
     assert processed_registry["books"][book_id]["target_relative_path"] == "AuthorA/Book1"
     assert ignore_registry["sources"] == [{"root": "inbox", "relative_path": "AuthorA/Book1"}]
+    assert completion_calls == [job_id]
     assert calls == [
         "audio.plan:track01.m4a",
         "audio.exec:track01.mp3",
