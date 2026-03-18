@@ -5,6 +5,7 @@ ASCII-only.
 
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -45,6 +46,15 @@ def build_detached_runtime_bootstrap(*, fs: FileService) -> dict[str, Any]:
             "roots": roots,
         },
     }
+
+
+def serialize_detached_runtime_bootstrap(*, fs: FileService) -> str:
+    return json.dumps(
+        build_detached_runtime_bootstrap(fs=fs),
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+    )
 
 
 def _parse_job_requests_path(text: str) -> tuple[RootName, str]:
@@ -96,11 +106,29 @@ def _bootstrap_roots(job_requests: dict[str, Any]) -> dict[RootName, Path] | Non
     return roots
 
 
-def rehydrate_detached_runtime(*, job_requests: dict[str, Any]) -> DetachedImportRuntime | None:
-    roots = _bootstrap_roots(job_requests)
+def rehydrate_detached_runtime_from_bootstrap(
+    *, bootstrap: dict[str, Any]
+) -> DetachedImportRuntime | None:
+    roots = _bootstrap_roots({"detached_runtime": bootstrap})
     if roots is None:
         return None
     return DetachedImportRuntime(FileService(roots))
+
+
+def rehydrate_detached_runtime(*, job_requests: dict[str, Any]) -> DetachedImportRuntime | None:
+    runtime_any = job_requests.get("detached_runtime")
+    runtime = dict(runtime_any) if isinstance(runtime_any, dict) else {}
+    return rehydrate_detached_runtime_from_bootstrap(bootstrap=runtime)
+
+
+def load_detached_runtime_bootstrap_from_meta(*, job_meta: dict[str, Any]) -> dict[str, Any]:
+    raw = str(job_meta.get("detached_runtime_json") or "")
+    if not raw:
+        raise ValueError("detached_runtime_json is required")
+    loaded = json.loads(raw)
+    if not isinstance(loaded, dict):
+        raise ValueError("detached_runtime_json is invalid")
+    return loaded
 
 
 def resolve_phase2_runtime(*, live_engine: Any, job_meta: dict[str, Any]) -> Any:

@@ -17,6 +17,7 @@ from plugins.file_io.service.types import RootName
 
 from . import flow_config_api
 from .defaults import ensure_default_models
+from .detached_runtime import serialize_detached_runtime_bootstrap
 from .engine_actions_v3 import apply_action_v3, build_runtime_flow_model, is_v3_effective_model
 from .engine_diagnostics_required import create_process_job
 from .engine_processing import start_processing_impl
@@ -935,6 +936,7 @@ class ImportWizardEngine:
                 state.get("derived", {}).get("discovery_fingerprint") or ""
             ),
             "job_requests_path": f"wizards:{session_dir}/job_requests.json",
+            "detached_runtime_json": serialize_detached_runtime_bootstrap(fs=self._fs),
         }
         job_id = create_process_job(meta=meta)
         mapping[idem_key] = job_id

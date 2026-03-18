@@ -1,102 +1,124 @@
-"""Detached Core-owned runtime for PROCESS contract execution.
+"""Detached process runtime launcher for PROCESS contract execution.
 
 ASCII-only.
 """
 
 from __future__ import annotations
 
-import asyncio
+import os
+import signal
+import sys
 import threading
-from collections.abc import Callable, Coroutine
-from typing import Any
-
-_ProcessCoroutineFactory = Callable[[], Coroutine[Any, Any, None]]
+import time
+from pathlib import Path
 
 
 class ProcessContractRuntime:
-    """Own a detached event loop for durable PROCESS contract execution."""
+    """Launch detached Core-owned authority processes for PROCESS contract jobs."""
 
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._ready = threading.Event()
-        self._loop: asyncio.AbstractEventLoop | None = None
-        self._thread: threading.Thread | None = None
-        self._submitted: set[str] = set()
+        self._children: list[int] = []
 
-    def start(self) -> None:
-        with self._lock:
-            thread = self._thread
-            if thread is not None and thread.is_alive():
-                return
-            self._ready.clear()
-            self._thread = threading.Thread(
-                target=self._run_loop,
-                name="audiomason-process-contract-runtime",
-                daemon=True,
-            )
-            self._thread.start()
-        self._ready.wait(timeout=5.0)
-        if not self._ready.is_set():
-            raise RuntimeError("process contract runtime failed to start")
+    def start(self, *, jobs_root: Path) -> None:
+        self._spawn(jobs_root=jobs_root, adopt_all=True, job_id=None)
 
-    def submit(self, job_id: str, factory: _ProcessCoroutineFactory) -> bool:
-        self.start()
-        with self._lock:
-            loop = self._loop
-            if loop is None or not loop.is_running():
-                raise RuntimeError("process contract runtime loop is unavailable")
-            if job_id in self._submitted:
-                return False
-            self._submitted.add(job_id)
-        try:
-            loop.call_soon_threadsafe(self._create_task, job_id, factory)
-        except Exception:
-            self._release(job_id)
-            raise
-        return True
+    def submit(self, *, job_id: str, jobs_root: Path) -> None:
+        self._spawn(jobs_root=jobs_root, adopt_all=False, job_id=job_id)
 
     def shutdown(self) -> None:
         with self._lock:
-            loop = self._loop
-            thread = self._thread
-        if loop is not None:
-            loop.call_soon_threadsafe(loop.stop)
-        if thread is not None:
-            thread.join(timeout=2.0)
-        with self._lock:
-            self._loop = None
-            self._thread = None
-            self._submitted.clear()
-            self._ready.clear()
+            children = self._children[:]
+            self._children.clear()
+        for pid in children:
+            self._terminate(pid, sig=signal.SIGTERM)
+        for pid in children:
+            self._reap_until_gone(pid)
+        for pid in children:
+            if self._is_alive(pid):
+                self._terminate(pid, sig=signal.SIGKILL)
+                self._reap_until_gone(pid)
 
-    def _run_loop(self) -> None:
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        with self._lock:
-            self._loop = loop
-        self._ready.set()
+    def _spawn(self, *, jobs_root: Path, adopt_all: bool, job_id: str | None) -> None:
+        command = [sys.executable, "-m", "audiomason.core.process_contract_authority"]
+        command.extend(["--jobs-root", str(jobs_root)])
+        if adopt_all:
+            command.append("--adopt-all")
+        if job_id is not None:
+            command.extend(["--job-id", job_id])
+
+        env = dict(os.environ)
+        src_root = Path(__file__).resolve().parents[2]
+        repo_root = src_root.parent
+        pythonpath = [str(repo_root), str(src_root)]
+        existing = env.get("PYTHONPATH", "")
+        if existing:
+            pythonpath.append(existing)
+        env["PYTHONPATH"] = os.pathsep.join(pythonpath)
+
+        devnull_fd = os.open(os.devnull, os.O_RDWR)
         try:
-            loop.run_forever()
-            loop.run_until_complete(loop.shutdown_asyncgens())
+            pid = os.posix_spawn(
+                sys.executable,
+                command,
+                env,
+                file_actions=(
+                    (os.POSIX_SPAWN_DUP2, devnull_fd, 0),
+                    (os.POSIX_SPAWN_DUP2, devnull_fd, 1),
+                    (os.POSIX_SPAWN_DUP2, devnull_fd, 2),
+                ),
+                setsid=True,
+            )
         finally:
-            with self._lock:
-                self._loop = None
-                self._thread = None
-                self._submitted.clear()
-            asyncio.set_event_loop(None)
-            loop.close()
+            os.close(devnull_fd)
 
-    def _create_task(self, job_id: str, factory: _ProcessCoroutineFactory) -> None:
-        try:
-            task = asyncio.create_task(factory())
-        except Exception:
-            self._release(job_id)
-            raise
-        task.add_done_callback(lambda _task: self._release(job_id))
-
-    def _release(self, job_id: str) -> None:
         with self._lock:
-            self._submitted.discard(job_id)
+            self._children = [child for child in self._children if self._refresh_child(child)]
+            self._children.append(pid)
+
+    def _refresh_child(self, pid: int) -> bool:
+        self._reap_child(pid)
+        return self._is_alive(pid)
+
+    def _reap_child(self, pid: int) -> None:
+        with OSErrorGuard():
+            os.waitpid(pid, os.WNOHANG)
+
+    def _reap_until_gone(self, pid: int) -> None:
+        deadline = time.monotonic() + 2.0
+        while time.monotonic() < deadline:
+            try:
+                waited_pid, _status = os.waitpid(pid, os.WNOHANG)
+            except ChildProcessError:
+                return
+            except OSError:
+                return
+            if waited_pid != 0:
+                return
+            if not self._is_alive(pid):
+                return
+            time.sleep(0.02)
+
+    def _terminate(self, pid: int, *, sig: signal.Signals) -> None:
+        with OSErrorGuard():
+            os.killpg(pid, sig)
+
+    def _is_alive(self, pid: int) -> bool:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True
+        return True
+
+
+class OSErrorGuard:
+    def __enter__(self) -> None:
+        return None
+
+    def __exit__(self, exc_type, exc, tb) -> bool:
+        return exc_type is not None and issubclass(exc_type, OSError)
 
 
 _RUNTIME = ProcessContractRuntime()

@@ -19,11 +19,13 @@ def build_router(*, engine: Any):
         raise RuntimeError("fastapi is required for import UI router") from e
 
     from .engine import _exception_envelope
+    from .engine_diagnostics_required import start_process_runtime
     from .engine_session_start_boundary import ALLOWED_USER_START_INTENTS, start_user_facing_session
     from .field_schema_validation import FieldSchemaValidationError
     from .session_effective_model import EffectiveModelJsonError
     from .ui_editor_api import bind_editor_routes
 
+    start_process_runtime(engine=engine)
     router = APIRouter(prefix="/import/ui")
 
     base_dir = Path(__file__).resolve().parent

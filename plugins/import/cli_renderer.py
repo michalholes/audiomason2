@@ -19,6 +19,7 @@ from .cli_launcher_facade import (
     resolve_launcher_inputs,
 )
 from .engine import ImportWizardEngine
+from .engine_diagnostics_required import start_process_runtime
 from .engine_session_start_boundary import start_user_facing_session
 
 
@@ -95,6 +96,7 @@ def run_launcher(
     input_fn: Callable[[str], str] = input,
     print_fn: Callable[[str], None] = print,
 ) -> int:
+    start_process_runtime(engine=engine)
     cfg = load_renderer_config(resolver)
     cfg = _apply_overrides(cfg, cli_overrides)
     if cfg.launcher_mode == "disabled":

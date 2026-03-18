@@ -12,11 +12,11 @@ from __future__ import annotations
 
 import asyncio
 import json
+import threading
 import time
 from collections.abc import Coroutine
 from datetime import UTC, datetime
 from pathlib import Path
-from threading import Lock
 from typing import Any
 
 from audiomason.core.config import ConfigResolver
@@ -51,9 +51,6 @@ COMPONENT = "orchestration"
 OP_RUN_JOB = "run_job"
 OP_CTX = "context_lifecycle"
 OP_EXECUTE_PIPELINE = "execute_pipeline"
-
-
-_PROCESS_CONTRACT_CLAIM_LOCK = Lock()
 
 
 def _emit_diag(event: str, *, operation: str, data: dict[str, Any]) -> None:
@@ -180,16 +177,7 @@ class Orchestrator:
         return job.job_id
 
     def run_job(self, job_id: str, *, plugin_loader: Any, verbosity: int = 1) -> None:
-        """Run an existing PENDING job.
-
-        UI layers may create jobs first (PENDING) and then request execution.
-        This method owns the job state transitions and request construction.
-
-        Args:
-            job_id: Existing job id in PENDING state.
-            plugin_loader: Plugin loader instance.
-            verbosity: Verbosity override (see docs/specification.md).
-        """
+        """Run an existing PENDING job."""
         job = self._jobs.get_job(job_id)
         if job.state != JobState.PENDING:
             raise RuntimeError("job is not pending")
@@ -197,15 +185,16 @@ class Orchestrator:
         if job.type == JobType.PROCESS:
             contract = resolve_process_job_contract(job.meta)
             if contract is not None:
-                job.meta["verbosity_override"] = str(int(verbosity))
-                try:
-                    contract.bind_job_meta(job.meta)
-                except ValueError as e:
-                    job.meta.pop("verbosity_override", None)
-                    raise RuntimeError("unsupported or incomplete process contract") from e
-                self._submit_process_contract_job(
-                    job_id=job_id,
+                if plugin_loader is None:
+                    raise RuntimeError("plugin_loader is required for process contract jobs")
+                request = self._build_process_contract_request(
+                    job,
                     plugin_loader=plugin_loader,
+                    verbosity=verbosity,
+                )
+                self._run_local_process_contract_job(
+                    job=job,
+                    request=request,
                     verbosity=verbosity,
                 )
                 return
@@ -253,74 +242,112 @@ class Orchestrator:
 
         raise RuntimeError(f"unsupported job type: {job.type}")
 
-    def start_process_runtime(self, *, plugin_loader: Any, verbosity: int = 1) -> None:
-        runtime = get_process_contract_runtime()
-        runtime.start()
-        for job in self._jobs.list_jobs():
-            self._submit_process_contract_job(
-                job_id=job.job_id,
-                plugin_loader=plugin_loader,
-                verbosity=verbosity,
-            )
-
-    def _submit_process_contract_job(
+    def _run_local_process_contract_job(
         self,
         *,
-        job_id: str,
-        plugin_loader: Any,
+        job: Job,
+        request: ProcessContractRequest,
         verbosity: int,
     ) -> None:
-        with _PROCESS_CONTRACT_CLAIM_LOCK:
-            job = self._jobs.get_job(job_id)
-            if job.type != JobType.PROCESS or job.state != JobState.PENDING:
-                return
-            contract = resolve_process_job_contract(job.meta)
-            if contract is None:
-                return
+        job.transition(JobState.RUNNING)
+        job.started_at = _utcnow_iso()
+        job.meta["verbosity_override"] = str(int(verbosity))
+        self._jobs.store.save_job(job)
+        _emit_diag(
+            "diag.job.start",
+            operation=OP_RUN_JOB,
+            data={"job_id": job.job_id, "job_type": "process", "status": "running"},
+        )
 
-            job.meta["verbosity_override"] = str(int(verbosity))
-            try:
-                contract_job_meta = contract.bind_job_meta(job.meta)
-            except ValueError:
-                return
+        prev_sink = get_log_sink()
+        set_log_sink(lambda line: self._jobs.append_log_line(job.job_id, line))
+        try:
+            _LOGGER.info("started")
+        finally:
+            set_log_sink(prev_sink)
 
-            request = ProcessContractRequest(
-                contract_id=contract.contract_id,
-                plugin_name=contract.plugin_name,
-                entrypoint_name=contract.entrypoint_name,
-                plugin_loader=plugin_loader,
-                job_meta=contract_job_meta,
-            )
-            job.transition(JobState.RUNNING)
-            job.started_at = _utcnow_iso()
-            self._jobs.store.save_job(job)
+        def runner() -> None:
+            _run_coro_sync(self._run_process_contract_job(job.job_id, request))
 
-            prev_sink = get_log_sink()
-            set_log_sink(lambda line: self._jobs.append_log_line(job.job_id, line))
-            try:
-                _LOGGER.info("started")
-            finally:
-                set_log_sink(prev_sink)
+        try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            runner()
+        else:
+            thread = threading.Thread(target=runner, name=f"job-{job.job_id}-contract")
+            thread.start()
 
-            runtime = get_process_contract_runtime()
-            try:
-                scheduled = runtime.submit(
-                    job.job_id,
-                    lambda: self._run_process_contract_job(job.job_id, request),
+    def _build_process_contract_request(
+        self,
+        job: Job,
+        *,
+        plugin_loader: Any,
+        verbosity: int,
+    ) -> ProcessContractRequest:
+        contract = resolve_process_job_contract(job.meta)
+        if contract is None:
+            raise RuntimeError("unsupported process contract")
+        meta = dict(job.meta)
+        meta["verbosity_override"] = str(int(verbosity))
+        try:
+            request_meta = contract.bind_job_meta(meta)
+        except ValueError as e:
+            raise RuntimeError("unsupported or incomplete process contract") from e
+        return ProcessContractRequest(
+            contract_id=contract.contract_id,
+            plugin_name=contract.plugin_name,
+            entrypoint_name=contract.entrypoint_name,
+            plugin_loader=plugin_loader,
+            job_meta=request_meta,
+        )
+
+    def submit_process_contract_job(self, job_id: str, *, verbosity: int = 1) -> None:
+        job = self._jobs.get_job(job_id)
+        if job.state != JobState.PENDING:
+            raise RuntimeError("job is not pending")
+        if job.type != JobType.PROCESS:
+            raise RuntimeError(f"unsupported job type: {job.type}")
+        contract = resolve_process_job_contract(job.meta)
+        if contract is None:
+            raise RuntimeError("unsupported process contract")
+
+        job.meta["verbosity_override"] = str(int(verbosity))
+        try:
+            contract.bind_job_meta(job.meta)
+        except ValueError as e:
+            job.meta.pop("verbosity_override", None)
+            raise RuntimeError("unsupported or incomplete process contract") from e
+        self._jobs.store.save_job(job)
+
+        get_process_contract_runtime().submit(
+            job_id=job.job_id,
+            jobs_root=self._jobs.store.root,
+        )
+
+    def start_process_runtime(
+        self, *, plugin_loader: Any | None = None, verbosity: int = 1
+    ) -> None:
+        if plugin_loader is not None:
+            for job in self._jobs.list_jobs():
+                if job.type != JobType.PROCESS:
+                    continue
+                if job.state != JobState.PENDING:
+                    continue
+                if resolve_process_job_contract(job.meta) is None:
+                    continue
+                if str(job.meta.get("detached_runtime_json") or ""):
+                    continue
+                request = self._build_process_contract_request(
+                    job,
+                    plugin_loader=plugin_loader,
+                    verbosity=verbosity,
                 )
-            except Exception:
-                restored = self._jobs.get_job(job.job_id)
-                if restored.state == JobState.RUNNING:
-                    restored.state = JobState.PENDING
-                    restored.started_at = None
-                    self._jobs.store.save_job(restored)
-                raise
-            if not scheduled:
-                restored = self._jobs.get_job(job.job_id)
-                if restored.state == JobState.RUNNING:
-                    restored.state = JobState.PENDING
-                    restored.started_at = None
-                    self._jobs.store.save_job(restored)
+                self._run_local_process_contract_job(
+                    job=job,
+                    request=request,
+                    verbosity=verbosity,
+                )
+        get_process_contract_runtime().start(jobs_root=self._jobs.store.root)
 
     def cancel(self, job_id: str) -> None:
         self._jobs.cancel_job(job_id)
