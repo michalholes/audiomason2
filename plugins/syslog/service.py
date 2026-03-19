@@ -79,7 +79,11 @@ class SyslogService:
         """
         offset = 0
         while True:
-            with self._fs.open_read(RootName.STAGE, self._filename) as f:
+            with self._fs.open_read(
+                RootName.STAGE,
+                self._filename,
+                silent_polling_read=True,
+            ) as f:
                 data = f.read()
 
             if not isinstance(data, (bytes, bytearray)):
