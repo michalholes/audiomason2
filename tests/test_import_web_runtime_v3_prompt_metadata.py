@@ -161,10 +161,14 @@ def test_import_wizard_v3_builds_prompt_model_from_step_ui(tmp_path: Path) -> No
 
 
 def _write_selection_tree(tmp_path: Path) -> None:
-    for rel_path in ("A/Book1/a.txt", "B/Book2/b.txt"):
+    for rel_path, content in (
+        ("A/Book1/a.txt", "x"),
+        ("A/Book2/b.txt", "y"),
+        ("B/Book3/c.txt", "z"),
+    ):
         path = tmp_path / "inbox" / rel_path
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("x", encoding="utf-8")
+        path.write_text(content, encoding="utf-8")
 
 
 def test_import_wizard_v3_builds_prompt_model_with_display_items(tmp_path: Path) -> None:
@@ -254,15 +258,29 @@ setTimeout(() => {
     assert "Options:" in flattened
 
 
+@pytest.mark.skipif((not _HAS_FASTAPI) or (not _HAS_HTTPX), reason="fastapi+httpx required")
 def test_import_wizard_v3_fetches_current_step_projection_for_display_items(
     tmp_path: Path,
 ) -> None:
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
     engine = _make_engine(tmp_path)
     _write_selection_tree(tmp_path)
 
+    app = FastAPI()
+    app.include_router(build_router(engine=engine))
+    client = TestClient(app)
+
     state = engine.create_session("inbox", "")
-    state_view = engine.get_state(str(state["session_id"]))
-    projected_step = engine.get_step_definition(str(state["session_id"]), "select_authors")
+    session_id = str(state["session_id"])
+    state_response = client.get(f"/import/ui/session/{session_id}/state")
+    assert state_response.status_code == 200
+    state_view = state_response.json()
+
+    projection_response = client.get(f"/import/ui/session/{session_id}/step/select_authors")
+    assert projection_response.status_code == 200
+    projected_step = projection_response.json()
 
     script = """
 const fs = require('fs');
@@ -290,7 +308,7 @@ function flatten(nodes) {
   return out;
 }
 const mount = {
-  children: [],
+  children: [makeEl('div', { text: 'Step: select_authors' })],
   appendChild(child) { this.children.push(child); },
   replaceChildren(...nodes) { this.children = nodes; },
 };
@@ -321,6 +339,7 @@ setTimeout(() => {
     )
 
     flattened = json.loads(proc.stdout)
+    assert "Step: select_authors" in flattened
     assert "Options:" in flattened
     assert "1. A" in flattened
     assert "2. B" in flattened

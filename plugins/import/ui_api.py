@@ -244,6 +244,10 @@ def build_router(*, engine: Any):
     def session_state(session_id: str):
         return _call(lambda: engine.get_state(session_id))
 
+    @router.get("/session/{session_id}/step/{step_id}")
+    def step_definition(session_id: str, step_id: str):
+        return _call(lambda: engine.get_step_definition(session_id, step_id))
+
     @router.post("/session/{session_id}/step/{step_id}")
     def step_submit(session_id: str, step_id: str, body: dict[str, Any]):
         return _call(lambda: engine.submit_step(session_id, step_id, body))
