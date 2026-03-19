@@ -106,7 +106,13 @@ def test_diag_tail_no_follow_formats_events(
             _ = root
             return rel_path == "diagnostics/diagnostics.jsonl"
 
-        def open_read(self, root, rel_path: str):  # type: ignore[no-untyped-def]
+        def open_read(
+            self,
+            root,
+            rel_path: str,
+            *,
+            silent_polling_read: bool = False,
+        ):  # type: ignore[no-untyped-def]
             _ = root
             assert rel_path == "diagnostics/diagnostics.jsonl"
             return _FakeCtx(io.BytesIO(self._data))
@@ -203,9 +209,19 @@ def test_waiting_message_prints_once_by_default(
             # Appear on 15th check (~3s at 0.2s sleep)
             return self._exists_calls >= 15
 
-        def open_read(self, root, rel_path: str):  # type: ignore[no-untyped-def]
+        def open_read(
+            self,
+            root,
+            rel_path: str,
+            *,
+            silent_polling_read: bool = False,
+        ):  # type: ignore[no-untyped-def]
             _ = root
             _ = rel_path
+            _ = silent_polling_read
+            self._exists_calls += 1
+            if self._exists_calls < 15:
+                raise FileNotFoundError(rel_path)
             return _FakeCtx(io.BytesIO(self._data))
 
     class _FakeCtx:
@@ -285,9 +301,19 @@ def test_waiting_message_repeats_when_enabled(
             # Appear after enough time for repeated notices.
             return self._exists_calls >= 35  # ~7s
 
-        def open_read(self, root, rel_path: str):  # type: ignore[no-untyped-def]
+        def open_read(
+            self,
+            root,
+            rel_path: str,
+            *,
+            silent_polling_read: bool = False,
+        ):  # type: ignore[no-untyped-def]
             _ = root
             _ = rel_path
+            _ = silent_polling_read
+            self._exists_calls += 1
+            if self._exists_calls < 35:
+                raise FileNotFoundError(rel_path)
             return _FakeCtx(io.BytesIO(self._data))
 
     class _FakeCtx:
@@ -358,7 +384,13 @@ def test_diag_mode_log_no_follow(
             _ = root
             return rel_path == "logs/system.log"
 
-        def open_read(self, root, rel_path: str):  # type: ignore[no-untyped-def]
+        def open_read(
+            self,
+            root,
+            rel_path: str,
+            *,
+            silent_polling_read: bool = False,
+        ):  # type: ignore[no-untyped-def]
             _ = root
             assert rel_path == "logs/system.log"
             return _FakeCtx(io.BytesIO(self._log))
@@ -433,7 +465,13 @@ def test_diag_mode_both_no_follow(
             _ = root
             return rel_path in ("diagnostics/diagnostics.jsonl", "logs/system.log")
 
-        def open_read(self, root, rel_path: str):  # type: ignore[no-untyped-def]
+        def open_read(
+            self,
+            root,
+            rel_path: str,
+            *,
+            silent_polling_read: bool = False,
+        ):  # type: ignore[no-untyped-def]
             _ = root
             if rel_path == "diagnostics/diagnostics.jsonl":
                 return _FakeCtx(io.BytesIO(self._events))

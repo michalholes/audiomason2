@@ -233,6 +233,18 @@ class DiagnosticsConsolePlugin:
 
         raise PluginError(f"Unknown mode: {mode!r}")
 
+    def _silent_polling_file_exists(
+        self,
+        fs: FileService,
+        root: RootName,
+        rel_path: str,
+    ) -> bool:
+        try:
+            with fs.open_read(root, rel_path, silent_polling_read=True):
+                return True
+        except FileNotFoundError:
+            return False
+
     def _tail_events(
         self,
         fs: FileService,
@@ -247,7 +259,7 @@ class DiagnosticsConsolePlugin:
             resolver, "diagnostics.console.wait_status_repeat", default=False
         )
 
-        if not fs.exists(RootName.STAGE, rel_path):
+        if not self._silent_polling_file_exists(fs, RootName.STAGE, rel_path):
             if not follow:
                 print("no events")
                 return 0
@@ -255,7 +267,7 @@ class DiagnosticsConsolePlugin:
             printed_wait = False
             last_notice = 0.0
 
-            while not fs.exists(RootName.STAGE, rel_path):
+            while not self._silent_polling_file_exists(fs, RootName.STAGE, rel_path):
                 if not printed_wait:
                     print("waiting for diagnostics sink...")
                     printed_wait = True
@@ -308,11 +320,11 @@ class DiagnosticsConsolePlugin:
         if disk_format not in ("plain", "jsonl"):
             disk_format = "jsonl"
 
-        if not fs.exists(RootName.CONFIG, filename):
+        if not self._silent_polling_file_exists(fs, RootName.STAGE, filename):
             if not follow:
                 print("missing syslog file")
                 return 2
-            while not fs.exists(RootName.CONFIG, filename):
+            while not self._silent_polling_file_exists(fs, RootName.STAGE, filename):
                 time.sleep(0.2)
 
         offset = 0
@@ -360,7 +372,7 @@ class DiagnosticsConsolePlugin:
         # For follow=false, attempt one read pass and exit (with non-zero
         # if log missing).
         if not follow:
-            if fs.exists(RootName.STAGE, rel_path):
+            if self._silent_polling_file_exists(fs, RootName.STAGE, rel_path):
                 printed, events_offset = self._read_events_once(
                     fs,
                     rel_path,
@@ -371,7 +383,7 @@ class DiagnosticsConsolePlugin:
             else:
                 print("no events")
 
-            if not fs.exists(RootName.CONFIG, filename):
+            if not self._silent_polling_file_exists(fs, RootName.STAGE, filename):
                 print("missing syslog file")
                 return 2
 
@@ -386,7 +398,7 @@ class DiagnosticsConsolePlugin:
         last_notice = 0.0
 
         while True:
-            if fs.exists(RootName.STAGE, rel_path):
+            if self._silent_polling_file_exists(fs, RootName.STAGE, rel_path):
                 printed, events_offset = self._read_events_once(
                     fs,
                     rel_path,
@@ -405,7 +417,7 @@ class DiagnosticsConsolePlugin:
                         print("waiting for diagnostics sink...")
                         last_notice = now
 
-            if fs.exists(RootName.CONFIG, filename):
+            if self._silent_polling_file_exists(fs, RootName.STAGE, filename):
                 log_offset = self._read_syslog_once(
                     fs, filename, offset=log_offset, disk_format=disk_format
                 )
@@ -470,7 +482,11 @@ class DiagnosticsConsolePlugin:
         offset: int,
         disk_format: str,
     ) -> int:
-        with fs.open_read(RootName.CONFIG, filename) as f:
+        with fs.open_read(
+            RootName.STAGE,
+            filename,
+            silent_polling_read=True,
+        ) as f:
             data = f.read()
 
         if not isinstance(data, (bytes, bytearray)):
@@ -535,7 +551,11 @@ class DiagnosticsConsolePlugin:
 
         # Read full file and print new lines past offset. This is deterministic and
         # avoids keeping a file handle open across iterations.
-        with fs.open_read(RootName.STAGE, rel_path) as f:
+        with fs.open_read(
+            RootName.STAGE,
+            rel_path,
+            silent_polling_read=True,
+        ) as f:
             data = f.read()
 
         if not isinstance(data, (bytes, bytearray)):
