@@ -35,19 +35,20 @@ def _get_file_service(resolver: ConfigResolver) -> FileService | None:
 
 
 def _tail_jsonl(fs: FileService, lines: int) -> str:
-    # Tail a JSONL file without reading it fully into memory.
-    # All filesystem access is routed via the file_io capability.
     n = max(0, int(lines))
     if n <= 0:
         return ""
 
     try:
-        with fs.open_read(root=RootName.STAGE, rel_path=DIAGNOSTICS_REL_PATH) as f:
+        with fs.open_read(
+            root=RootName.STAGE,
+            rel_path=DIAGNOSTICS_REL_PATH,
+            silent_polling_read=True,
+        ) as f:
             try:
                 f.seek(0, 2)
                 end = int(f.tell())
             except Exception:
-                # Non-seekable stream: fall back to reading linearly.
                 end = -1
 
             if end >= 0:
@@ -73,7 +74,6 @@ def _tail_jsonl(fs: FileService, lines: int) -> str:
 
                 text = bytes(buf).decode("utf-8", errors="replace")
             else:
-                # Linear fallback (bounded in practice by file size).
                 text = f.read().decode("utf-8", errors="replace")
 
     except FileNotFoundError:
