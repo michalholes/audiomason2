@@ -84,7 +84,27 @@ def normalize_rel_path(rel_path: str) -> PurePosixPath:
     return p
 
 
-def resolve_path(root_dir: Path, rel_path: str, *, root_name: RootName | None = None) -> Path:
+def _resolve_path_checked(root_dir: Path, rel_path: str) -> Path:
+    rel = normalize_rel_path(rel_path)
+
+    abs_path = (root_dir / Path(*rel.parts)).resolve()
+    root_resolved = root_dir.resolve()
+
+    try:
+        abs_path.relative_to(root_resolved)
+    except ValueError:
+        raise PathOutsideRootError("Path escapes configured root") from None
+
+    return abs_path
+
+
+def resolve_path(
+    root_dir: Path,
+    rel_path: str,
+    *,
+    root_name: RootName | None = None,
+    silent_polling_read: bool = False,
+) -> Path:
     """Resolve a relative path within a root directory.
 
     Raises:
@@ -92,6 +112,9 @@ def resolve_path(root_dir: Path, rel_path: str, *, root_name: RootName | None = 
         InvalidRelativePathError
     """
     root_value = root_name.value if isinstance(root_name, RootName) else "unknown"
+    if silent_polling_read:
+        return _resolve_path_checked(root_dir, rel_path)
+
     start = time.perf_counter()
 
     base = {"root": root_value, "rel_path": rel_path}
@@ -106,16 +129,7 @@ def resolve_path(root_dir: Path, rel_path: str, *, root_name: RootName | None = 
     )
 
     try:
-        rel = normalize_rel_path(rel_path)
-
-        abs_path = (root_dir / Path(*rel.parts)).resolve()
-        root_resolved = root_dir.resolve()
-
-        # Ensure abs_path is inside root_dir.
-        try:
-            abs_path.relative_to(root_resolved)
-        except ValueError:
-            raise PathOutsideRootError("Path escapes configured root") from None
+        abs_path = _resolve_path_checked(root_dir, rel_path)
 
         duration_ms = int((time.perf_counter() - start) * 1000)
         end_data = {
