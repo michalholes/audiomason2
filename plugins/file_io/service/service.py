@@ -494,7 +494,8 @@ class FileService:
             silent_polling_read=silent_polling_read,
         )
         base = {"root": root.value, "rel_path": rel_path, "resolved_path": str(abs_path)}
-        observe_context = nullcontext({})
+        empty_summary: dict[str, Any] = {}
+        observe_context = nullcontext(empty_summary)
         if not silent_polling_read:
             observe_context = _observe_operation(operation="file_io.open_read", base=base)
         with observe_context as summary, open_read(abs_path) as f_raw:
