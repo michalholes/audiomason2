@@ -10,7 +10,7 @@ import shutil
 import time
 import traceback
 from collections.abc import Iterable, Iterator
-from contextlib import contextmanager, nullcontext
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, BinaryIO, Protocol, cast, runtime_checkable
 
@@ -494,16 +494,18 @@ class FileService:
             silent_polling_read=silent_polling_read,
         )
         base = {"root": root.value, "rel_path": rel_path, "resolved_path": str(abs_path)}
-        empty_summary: dict[str, Any] = {}
-        observe_context = nullcontext(empty_summary)
-        if not silent_polling_read:
-            observe_context = _observe_operation(operation="file_io.open_read", base=base)
-        with observe_context as summary, open_read(abs_path) as f_raw:
-            f = _CountingBinaryIO(f_raw)
-            try:
+        if silent_polling_read:
+            with open_read(abs_path) as f_raw:
+                f = _CountingBinaryIO(f_raw)
                 yield cast(BinaryIO, f)
-            finally:
-                if not silent_polling_read:
+            return
+
+        with _observe_operation(operation="file_io.open_read", base=base) as summary:
+            with open_read(abs_path) as f_raw:
+                f = _CountingBinaryIO(f_raw)
+                try:
+                    yield cast(BinaryIO, f)
+                finally:
                     summary["bytes"] = int(f.bytes_read)
 
     @contextmanager
