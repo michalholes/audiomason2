@@ -1,924 +1,962 @@
 {
-	"edges": [
-		{
-			"from": "audio_processing",
-			"to": "publish_policy"
-		},
-		{
-			"from": "audio_processing_bitrate",
-			"to": "audio_processing_loudnorm"
-		},
-		{
-			"from": "audio_processing_loudnorm",
-			"to": "audio_processing_split_chapters"
-		},
-		{
-			"from": "audio_processing_split_chapters",
-			"to": "audio_processing"
-		},
-		{
-			"from": "conflict_policy",
-			"to": "parallelism"
-		},
-		{
-			"from": "covers_policy",
-			"to": "id3_policy_intro"
-		},
-		{
-			"from": "covers_policy_mode",
-			"to": "covers_policy"
-		},
-		{
-			"condition_expr": {
-				"expr": "$.state.vars.human.covers_policy.mode == 'skip' or $.state.vars.human.covers_policy.mode == 'url'"
-			},
-			"from": "covers_policy_mode",
-			"to": "covers_policy_override_prepare"
-		},
-		{
-			"from": "covers_policy_override_prepare",
-			"to": "covers_policy"
-		},
-		{
-			"condition_expr": {
-				"expr": "$.state.vars.human.covers_policy.mode == 'url'"
-			},
-			"from": "covers_policy_override_prepare",
-			"to": "covers_policy_url"
-		},
-		{
-			"from": "covers_policy_url",
-			"to": "covers_policy"
-		},
-		{
-			"from": "delete_source_policy",
-			"to": "conflict_policy"
-		},
-		{
-			"from": "effective_author",
-			"to": "effective_title"
-		},
-		{
-			"from": "effective_author_title",
-			"to": "filename_policy_author"
-		},
-		{
-			"from": "effective_title",
-			"to": "effective_author_title"
-		},
-		{
-			"from": "filename_policy",
-			"to": "covers_policy_mode"
-		},
-		{
-			"from": "filename_policy_author",
-			"to": "filename_policy_title"
-		},
-		{
-			"from": "filename_policy_title",
-			"to": "filename_policy"
-		},
-		{
-			"condition_expr": {
-				"expr": "$.state.answers.final_summary_confirm.confirm_start and not ($.state.answers.conflict_policy.mode == 'ask' and $.state.vars.phase1.runtime.resolve_conflicts_batch.has_conflicts)"
-			},
-			"from": "final_summary_confirm",
-			"to": "processing"
-		},
-		{
-			"condition_expr": {
-				"expr": "$.state.answers.final_summary_confirm.confirm_start and $.state.answers.conflict_policy.mode == 'ask' and $.state.vars.phase1.runtime.resolve_conflicts_batch.has_conflicts"
-			},
-			"from": "final_summary_confirm",
-			"to": "resolve_conflicts_batch"
-		},
-		{
-			"from": "id3_policy",
-			"to": "audio_processing_bitrate"
-		},
-		{
-			"from": "id3_policy_album",
-			"to": "id3_policy_album_artist"
-		},
-		{
-			"from": "id3_policy_album_artist",
-			"to": "id3_policy"
-		},
-		{
-			"from": "id3_policy_artist",
-			"to": "id3_policy_album"
-		},
-		{
-			"from": "id3_policy_intro",
-			"to": "id3_policy_title"
-		},
-		{
-			"from": "id3_policy_title",
-			"to": "id3_policy_artist"
-		},
-		{
-			"from": "parallelism",
-			"to": "final_summary_confirm"
-		},
-		{
-			"from": "phase1_runtime_defaults",
-			"to": "effective_author"
-		},
-		{
-			"from": "plan_preview_batch",
-			"to": "phase1_runtime_defaults"
-		},
-		{
-			"from": "publish_policy",
-			"to": "delete_source_policy"
-		},
-		{
-			"condition_expr": {
-				"expr": "$.state.answers.resolve_conflicts_batch.confirm"
-			},
-			"from": "resolve_conflicts_batch",
-			"to": "processing"
-		},
-		{
-			"from": "select_authors",
-			"to": "select_books"
-		},
-		{
-			"from": "select_books",
-			"to": "plan_preview_batch"
-		}
-	],
-	"entry_step_id": "select_authors",
-	"nodes": [
-		{
-			"op": {
-				"inputs": {
-					"autofill_if": {
-						"expr": "$.state.vars.phase1.select_authors.autofill_if"
-					},
-					"default_expr": {
-						"expr": "$.state.vars.phase1.select_authors.selection_expr"
-					},
-					"examples": ["all", "1", "1,2"],
-					"help": "Choose one or more authors. Press Enter to keep the default selection. You can type all, a number like 1, or a comma-separated list like 1,2.",
-					"label": "Authors",
-					"prefill_expr": {
-						"expr": "$.state.vars.phase1.select_authors.selection_expr"
-					},
-					"prompt": "Which authors do you want to import?"
-				},
-				"primitive_id": "ui.prompt_select",
-				"primitive_version": 1,
-				"writes": [
-					{
-						"to_path": "$.state.answers.select_authors.selection_expr",
-						"value": {
-							"expr": "$.op.outputs.selection"
-						}
-					}
-				]
-			},
-			"step_id": "select_authors"
-		},
-		{
-			"op": {
-				"inputs": {
-					"autofill_if": {
-						"expr": "$.state.vars.phase1.select_books.autofill_if"
-					},
-					"default_expr": {
-						"expr": "$.state.vars.phase1.select_books.selection_expr"
-					},
-					"examples": ["all", "1", "1,2"],
-					"help": "Choose one or more books. Press Enter to keep the default selection. You can type all, a number like 1, or a comma-separated list like 1,2.",
-					"label": "Books",
-					"prefill_expr": {
-						"expr": "$.state.vars.phase1.select_books.selection_expr"
-					},
-					"prompt": "Which books do you want to import?"
-				},
-				"primitive_id": "ui.prompt_select",
-				"primitive_version": 1,
-				"writes": [
-					{
-						"to_path": "$.state.answers.select_books.selection_expr",
-						"value": {
-							"expr": "$.op.outputs.selection"
-						}
-					}
-				]
-			},
-			"step_id": "select_books"
-		},
-		{
-			"op": {
-				"inputs": {
-					"text": "Preview the planned import batch before reviewing canonical metadata and policy defaults."
-				},
-				"primitive_id": "ui.message",
-				"primitive_version": 1,
-				"writes": []
-			},
-			"step_id": "plan_preview_batch"
-		},
-		{
-			"op": {
-				"inputs": {},
-				"primitive_id": "import.phase1_runtime",
-				"primitive_version": 1,
-				"writes": [
-					{
-						"to_path": "$.state.vars.phase1.runtime",
-						"value": {
-							"expr": "$.op.outputs.snapshot"
-						}
-					}
-				]
-			},
-			"step_id": "phase1_runtime_defaults"
-		},
-		{
-			"op": {
-				"inputs": {
-					"default_expr": {
-						"expr": "$.state.vars.phase1.runtime.effective_author_title.author"
-					},
-					"examples": ["Gustav Meyrink"],
-					"help": "If the suggested author name is correct, press Enter. Change it only if you want a better canonical form.",
-					"label": "Author name",
-					"prefill_expr": {
-						"expr": "$.state.vars.phase1.runtime.effective_author_title.author"
-					},
-					"prompt": "What author name should be used for this book?"
-				},
-				"primitive_id": "ui.prompt_text",
-				"primitive_version": 1,
-				"writes": [
-					{
-						"to_path": "$.state.answers.effective_author.author",
-						"value": {
-							"expr": "$.op.outputs.value"
-						}
-					}
-				]
-			},
-			"step_id": "effective_author"
-		},
-		{
-			"op": {
-				"inputs": {
-					"default_expr": {
-						"expr": "$.state.vars.phase1.runtime.effective_author_title.title"
-					},
-					"examples": [],
-					"help": "If the suggested title is correct, press Enter. Change it only if you want a better canonical form.",
-					"label": "Book title",
-					"prefill_expr": {
-						"expr": "$.state.vars.phase1.runtime.effective_author_title.title"
-					},
-					"prompt": "What title should be used for this book?"
-				},
-				"primitive_id": "ui.prompt_text",
-				"primitive_version": 1,
-				"writes": [
-					{
-						"to_path": "$.state.answers.effective_title.title",
-						"value": {
-							"expr": "$.op.outputs.value"
-						}
-					}
-				]
-			},
-			"step_id": "effective_title"
-		},
-		{
-			"op": {
-				"inputs": {
-					"value": {
-						"expr": "$.state.vars.phase1.runtime.effective_author_title"
-					}
-				},
-				"primitive_id": "data.set",
-				"primitive_version": 1,
-				"writes": [
-					{
-						"to_path": "$.state.answers.effective_author_title.author",
-						"value": {
-							"expr": "$.state.answers.effective_author.author"
-						}
-					},
-					{
-						"to_path": "$.state.answers.effective_author_title.title",
-						"value": {
-							"expr": "$.state.answers.effective_title.title"
-						}
-					}
-				]
-			},
-			"step_id": "effective_author_title"
-		},
-		{
-			"op": {
-				"inputs": {
-					"default_expr": {
-						"expr": "$.state.vars.phase1.runtime.filename_policy.author"
-					},
-					"examples": ["Gustav Meyrink"],
-					"help": "Press Enter to keep the suggested folder name.",
-					"label": "Author folder name",
-					"prefill_expr": {
-						"expr": "$.state.vars.phase1.runtime.filename_policy.author"
-					},
-					"prompt": "What author folder name should be used?"
-				},
-				"primitive_id": "ui.prompt_text",
-				"primitive_version": 1,
-				"writes": [
-					{
-						"to_path": "$.state.vars.human.filename_policy.author",
-						"value": {
-							"expr": "$.op.outputs.value"
-						}
-					}
-				]
-			},
-			"step_id": "filename_policy_author"
-		},
-		{
-			"op": {
-				"inputs": {
-					"default_expr": {
-						"expr": "$.state.vars.phase1.runtime.filename_policy.title"
-					},
-					"examples": ["Preparat a dalsi povidky"],
-					"help": "Press Enter to keep the suggested title.",
-					"label": "Book title in path",
-					"prefill_expr": {
-						"expr": "$.state.vars.phase1.runtime.filename_policy.title"
-					},
-					"prompt": "What book title should be used in the saved path?"
-				},
-				"primitive_id": "ui.prompt_text",
-				"primitive_version": 1,
-				"writes": [
-					{
-						"to_path": "$.state.vars.human.filename_policy.title",
-						"value": {
-							"expr": "$.op.outputs.value"
-						}
-					}
-				]
-			},
-			"step_id": "filename_policy_title"
-		},
-		{
-			"op": {
-				"inputs": {},
-				"primitive_id": "data.set",
-				"primitive_version": 1,
-				"writes": [
-					{
-						"to_path": "$.state.answers.filename_policy.author",
-						"value": {
-							"expr": "$.state.vars.human.filename_policy.author"
-						}
-					},
-					{
-						"to_path": "$.state.answers.filename_policy.title",
-						"value": {
-							"expr": "$.state.vars.human.filename_policy.title"
-						}
-					}
-				]
-			},
-			"step_id": "filename_policy"
-		},
-		{
-			"op": {
-				"inputs": {
-					"default_value": "",
-					"examples": ["skip", "url"],
-					"help": "Press Enter to keep the current automatic cover behavior. Enter skip to import without a cover, or url to provide a cover image URL.",
-					"label": "Cover image",
-					"prompt": "How should the cover image be handled?"
-				},
-				"primitive_id": "ui.prompt_select",
-				"primitive_version": 1,
-				"writes": [
-					{
-						"to_path": "$.state.vars.human.covers_policy.candidate_id",
-						"value": ""
-					},
-					{
-						"to_path": "$.state.vars.human.covers_policy.mode",
-						"value": {
-							"expr": "$.op.outputs.selection"
-						}
-					},
-					{
-						"to_path": "$.state.vars.human.covers_policy.source_relative_path",
-						"value": ""
-					},
-					{
-						"to_path": "$.state.vars.human.covers_policy.url",
-						"value": ""
-					}
-				]
-			},
-			"step_id": "covers_policy_mode"
-		},
-		{
-			"op": {
-				"inputs": {},
-				"primitive_id": "data.set",
-				"primitive_version": 1,
-				"writes": [
-					{
-						"to_path": "$.state.vars.human.covers_policy.candidate_id",
-						"value": "__human_override__"
-					},
-					{
-						"to_path": "$.state.vars.human.covers_policy.source_relative_path",
-						"value": "__human_override__"
-					}
-				]
-			},
-			"step_id": "covers_policy_override_prepare"
-		},
-		{
-			"op": {
-				"inputs": {
-					"default_expr": {
-						"expr": "$.state.vars.phase1.runtime.covers_policy.url"
-					},
-					"examples": ["https://example.com/cover.jpg"],
-					"help": "Paste a direct image URL. Press Enter to keep the suggested URL if one is already present.",
-					"label": "Cover image URL",
-					"prefill_expr": {
-						"expr": "$.state.vars.phase1.runtime.covers_policy.url"
-					},
-					"prompt": "What cover image URL should be used?"
-				},
-				"primitive_id": "ui.prompt_text",
-				"primitive_version": 1,
-				"writes": [
-					{
-						"to_path": "$.state.vars.human.covers_policy.url",
-						"value": {
-							"expr": "$.op.outputs.value"
-						}
-					}
-				]
-			},
-			"step_id": "covers_policy_url"
-		},
-		{
-			"op": {
-				"inputs": {},
-				"primitive_id": "data.set",
-				"primitive_version": 1,
-				"writes": [
-					{
-						"to_path": "$.state.answers.covers_policy.choice.candidate_id",
-						"value": {
-							"expr": "$.state.vars.human.covers_policy.candidate_id"
-						}
-					},
-					{
-						"to_path": "$.state.answers.covers_policy.choice.kind",
-						"value": {
-							"expr": "$.state.vars.human.covers_policy.mode"
-						}
-					},
-					{
-						"to_path": "$.state.answers.covers_policy.choice.source_relative_path",
-						"value": {
-							"expr": "$.state.vars.human.covers_policy.source_relative_path"
-						}
-					},
-					{
-						"to_path": "$.state.answers.covers_policy.url",
-						"value": {
-							"expr": "$.state.vars.human.covers_policy.url"
-						}
-					}
-				]
-			},
-			"step_id": "covers_policy"
-		},
-		{
-			"op": {
-				"inputs": {
-					"text": "Review the output audio tags."
-				},
-				"primitive_id": "ui.message",
-				"primitive_version": 1,
-				"writes": []
-			},
-			"step_id": "id3_policy_intro"
-		},
-		{
-			"op": {
-				"inputs": {
-					"default_expr": {
-						"expr": "$.state.vars.phase1.runtime.id3_policy.values.title"
-					},
-					"examples": [],
-					"help": "Press Enter to keep the suggested value.",
-					"label": "Title tag",
-					"prefill_expr": {
-						"expr": "$.state.vars.phase1.runtime.id3_policy.values.title"
-					},
-					"prompt": "What title tag should be written to the output files?"
-				},
-				"primitive_id": "ui.prompt_text",
-				"primitive_version": 1,
-				"writes": [
-					{
-						"to_path": "$.state.vars.human.id3_policy.values.title",
-						"value": {
-							"expr": "$.op.outputs.value"
-						}
-					}
-				]
-			},
-			"step_id": "id3_policy_title"
-		},
-		{
-			"op": {
-				"inputs": {
-					"default_expr": {
-						"expr": "$.state.vars.phase1.runtime.id3_policy.values.artist"
-					},
-					"examples": [],
-					"help": "Press Enter to keep the suggested value.",
-					"label": "Artist tag",
-					"prefill_expr": {
-						"expr": "$.state.vars.phase1.runtime.id3_policy.values.artist"
-					},
-					"prompt": "What artist tag should be written to the output files?"
-				},
-				"primitive_id": "ui.prompt_text",
-				"primitive_version": 1,
-				"writes": [
-					{
-						"to_path": "$.state.vars.human.id3_policy.values.artist",
-						"value": {
-							"expr": "$.op.outputs.value"
-						}
-					}
-				]
-			},
-			"step_id": "id3_policy_artist"
-		},
-		{
-			"op": {
-				"inputs": {
-					"default_expr": {
-						"expr": "$.state.vars.phase1.runtime.id3_policy.values.album"
-					},
-					"examples": [],
-					"help": "Press Enter to keep the suggested value.",
-					"label": "Album tag",
-					"prefill_expr": {
-						"expr": "$.state.vars.phase1.runtime.id3_policy.values.album"
-					},
-					"prompt": "What album tag should be written to the output files?"
-				},
-				"primitive_id": "ui.prompt_text",
-				"primitive_version": 1,
-				"writes": [
-					{
-						"to_path": "$.state.vars.human.id3_policy.values.album",
-						"value": {
-							"expr": "$.op.outputs.value"
-						}
-					}
-				]
-			},
-			"step_id": "id3_policy_album"
-		},
-		{
-			"op": {
-				"inputs": {
-					"default_expr": {
-						"expr": "$.state.vars.phase1.runtime.id3_policy.values.album_artist"
-					},
-					"examples": [],
-					"help": "Press Enter to keep the suggested value.",
-					"label": "Album artist tag",
-					"prefill_expr": {
-						"expr": "$.state.vars.phase1.runtime.id3_policy.values.album_artist"
-					},
-					"prompt": "What album artist tag should be written to the output files?"
-				},
-				"primitive_id": "ui.prompt_text",
-				"primitive_version": 1,
-				"writes": [
-					{
-						"to_path": "$.state.vars.human.id3_policy.values.album_artist",
-						"value": {
-							"expr": "$.op.outputs.value"
-						}
-					}
-				]
-			},
-			"step_id": "id3_policy_album_artist"
-		},
-		{
-			"op": {
-				"inputs": {},
-				"primitive_id": "data.set",
-				"primitive_version": 1,
-				"writes": [
-					{
-						"to_path": "$.state.answers.id3_policy.values.album",
-						"value": {
-							"expr": "$.state.vars.human.id3_policy.values.album"
-						}
-					},
-					{
-						"to_path": "$.state.answers.id3_policy.values.album_artist",
-						"value": {
-							"expr": "$.state.vars.human.id3_policy.values.album_artist"
-						}
-					},
-					{
-						"to_path": "$.state.answers.id3_policy.values.artist",
-						"value": {
-							"expr": "$.state.vars.human.id3_policy.values.artist"
-						}
-					},
-					{
-						"to_path": "$.state.answers.id3_policy.values.title",
-						"value": {
-							"expr": "$.state.vars.human.id3_policy.values.title"
-						}
-					}
-				]
-			},
-			"step_id": "id3_policy"
-		},
-		{
-			"op": {
-				"inputs": {
-					"default_expr": {
-						"expr": "$.state.vars.phase1.runtime.audio_processing.bitrate"
-					},
-					"examples": ["64k", "96k", "128k", "192k"],
-					"help": "Choose a bitrate value. Press Enter to keep the current default.",
-					"label": "Audio bitrate",
-					"prefill_expr": {
-						"expr": "$.state.vars.phase1.runtime.audio_processing.bitrate"
-					},
-					"prompt": "What bitrate should be used for the output audio?"
-				},
-				"primitive_id": "ui.prompt_select",
-				"primitive_version": 1,
-				"writes": [
-					{
-						"to_path": "$.state.vars.human.audio_processing.bitrate",
-						"value": {
-							"expr": "$.op.outputs.selection"
-						}
-					}
-				]
-			},
-			"step_id": "audio_processing_bitrate"
-		},
-		{
-			"op": {
-				"inputs": {
-					"default_expr": {
-						"expr": "$.state.vars.phase1.runtime.audio_processing.loudnorm"
-					},
-					"help": "Press Enter to keep the current default.",
-					"label": "Loudness normalization",
-					"prompt": "Normalize loudness?"
-				},
-				"primitive_id": "ui.prompt_confirm",
-				"primitive_version": 1,
-				"writes": [
-					{
-						"to_path": "$.state.vars.human.audio_processing.loudnorm",
-						"value": {
-							"expr": "$.op.outputs.confirmed"
-						}
-					}
-				]
-			},
-			"step_id": "audio_processing_loudnorm"
-		},
-		{
-			"op": {
-				"inputs": {
-					"default_expr": {
-						"expr": "$.state.vars.phase1.runtime.audio_processing.split_chapters"
-					},
-					"help": "Press Enter to keep the current default.",
-					"label": "Split by chapters",
-					"prompt": "Split audio by chapters when possible?"
-				},
-				"primitive_id": "ui.prompt_confirm",
-				"primitive_version": 1,
-				"writes": [
-					{
-						"to_path": "$.state.vars.human.audio_processing.split_chapters",
-						"value": {
-							"expr": "$.op.outputs.confirmed"
-						}
-					}
-				]
-			},
-			"step_id": "audio_processing_split_chapters"
-		},
-		{
-			"op": {
-				"inputs": {},
-				"primitive_id": "data.set",
-				"primitive_version": 1,
-				"writes": [
-					{
-						"to_path": "$.state.answers.audio_processing.bitrate",
-						"value": {
-							"expr": "$.state.vars.human.audio_processing.bitrate"
-						}
-					},
-					{
-						"to_path": "$.state.answers.audio_processing.loudnorm",
-						"value": {
-							"expr": "$.state.vars.human.audio_processing.loudnorm"
-						}
-					},
-					{
-						"to_path": "$.state.answers.audio_processing.split_chapters",
-						"value": {
-							"expr": "$.state.vars.human.audio_processing.split_chapters"
-						}
-					}
-				]
-			},
-			"step_id": "audio_processing"
-		},
-		{
-			"op": {
-				"inputs": {
-					"default_expr": {
-						"expr": "$.state.vars.phase1.runtime.publish_policy.target_root"
-					},
-					"examples": ["stage", "outbox"],
-					"help": "Enter stage or outbox. Press Enter to keep the current default.",
-					"label": "Destination",
-					"prefill_expr": {
-						"expr": "$.state.vars.phase1.runtime.publish_policy.target_root"
-					},
-					"prompt": "Where should the processed files be published?"
-				},
-				"primitive_id": "ui.prompt_select",
-				"primitive_version": 1,
-				"writes": [
-					{
-						"to_path": "$.state.answers.publish_policy.target_root",
-						"value": {
-							"expr": "$.op.outputs.selection"
-						}
-					}
-				]
-			},
-			"step_id": "publish_policy"
-		},
-		{
-			"op": {
-				"inputs": {
-					"default_expr": {
-						"expr": "$.state.vars.phase1.runtime.delete_source_policy.clean_inbox"
-					},
-					"examples": ["ask", "yes", "no"],
-					"help": "Press Enter to keep the current default. Enter ask to decide later, yes to delete source files, or no to keep them.",
-					"label": "Source cleanup",
-					"prefill_expr": {
-						"expr": "$.state.vars.phase1.runtime.delete_source_policy.clean_inbox"
-					},
-					"prompt": "What should happen to the source files after a successful import?"
-				},
-				"primitive_id": "ui.prompt_select",
-				"primitive_version": 1,
-				"writes": [
-					{
-						"to_path": "$.state.answers.delete_source_policy.clean_inbox",
-						"value": {
-							"expr": "$.op.outputs.selection"
-						}
-					}
-				]
-			},
-			"step_id": "delete_source_policy"
-		},
-		{
-			"op": {
-				"inputs": {
-					"default_expr": {
-						"expr": "$.state.vars.phase1.runtime.conflict_policy.mode"
-					},
-					"examples": ["ask", "skip", "overwrite"],
-					"help": "Choose ask, skip, or overwrite for destination conflicts.",
-					"label": "File conflicts",
-					"prefill_expr": {
-						"expr": "$.state.vars.phase1.runtime.conflict_policy.mode"
-					},
-					"prompt": "How should existing target files be handled?"
-				},
-				"primitive_id": "ui.prompt_select",
-				"primitive_version": 1,
-				"writes": [
-					{
-						"to_path": "$.state.answers.conflict_policy.mode",
-						"value": {
-							"expr": "$.op.outputs.selection"
-						}
-					}
-				]
-			},
-			"step_id": "conflict_policy"
-		},
-		{
-			"op": {
-				"inputs": {
-					"default_expr": {
-						"expr": "$.state.vars.phase1.runtime.parallelism.workers"
-					},
-					"examples": [1, 2, 3, 4],
-					"help": "Enter a whole number. Press Enter to keep the current default.",
-					"label": "Workers",
-					"prefill_expr": {
-						"expr": "$.state.vars.phase1.runtime.parallelism.workers"
-					},
-					"prompt": "How many workers should process the job?"
-				},
-				"primitive_id": "ui.prompt_text",
-				"primitive_version": 1,
-				"writes": [
-					{
-						"to_path": "$.state.answers.parallelism.workers",
-						"value": {
-							"expr": "$.op.outputs.value"
-						}
-					}
-				]
-			},
-			"step_id": "parallelism"
-		},
-		{
-			"op": {
-				"inputs": {
-					"default_value": false,
-					"label": "Start import",
-					"prompt": "Start processing with these settings?"
-				},
-				"primitive_id": "ui.prompt_confirm",
-				"primitive_version": 1,
-				"writes": [
-					{
-						"to_path": "$.state.answers.final_summary_confirm.confirm_start",
-						"value": {
-							"expr": "$.op.outputs.confirmed"
-						}
-					}
-				]
-			},
-			"step_id": "final_summary_confirm"
-		},
-		{
-			"op": {
-				"inputs": {
-					"default_value": false,
-					"label": "Conflicts found",
-					"prompt": "Conflicts were found. Continue with the selected conflict policy?"
-				},
-				"primitive_id": "ui.prompt_confirm",
-				"primitive_version": 1,
-				"writes": [
-					{
-						"to_path": "$.state.answers.resolve_conflicts_batch.confirm",
-						"value": {
-							"expr": "$.op.outputs.confirmed"
-						}
-					}
-				]
-			},
-			"step_id": "resolve_conflicts_batch"
-		},
-		{
-			"op": {
-				"inputs": {
-					"text": "Processing starts after final confirmation."
-				},
-				"primitive_id": "ui.message",
-				"primitive_version": 1,
-				"writes": []
-			},
-			"step_id": "processing"
-		}
-	],
-	"version": 3
+  "edges": [
+    {
+      "from": "audio_processing",
+      "to": "publish_policy"
+    },
+    {
+      "from": "audio_processing_bitrate",
+      "to": "audio_processing_loudnorm"
+    },
+    {
+      "from": "audio_processing_loudnorm",
+      "to": "audio_processing_split_chapters"
+    },
+    {
+      "from": "audio_processing_split_chapters",
+      "to": "audio_processing"
+    },
+    {
+      "from": "conflict_policy",
+      "to": "parallelism"
+    },
+    {
+      "from": "covers_policy",
+      "to": "id3_policy_intro"
+    },
+    {
+      "from": "covers_policy_mode",
+      "to": "covers_policy"
+    },
+    {
+      "condition_expr": {
+        "expr": "$.state.vars.human.covers_policy.mode == 'skip' or $.state.vars.human.covers_policy.mode == 'url'"
+      },
+      "from": "covers_policy_mode",
+      "to": "covers_policy_override_prepare"
+    },
+    {
+      "from": "covers_policy_override_prepare",
+      "to": "covers_policy"
+    },
+    {
+      "condition_expr": {
+        "expr": "$.state.vars.human.covers_policy.mode == 'url'"
+      },
+      "from": "covers_policy_override_prepare",
+      "to": "covers_policy_url"
+    },
+    {
+      "from": "covers_policy_url",
+      "to": "covers_policy"
+    },
+    {
+      "from": "delete_source_policy",
+      "to": "conflict_policy"
+    },
+    {
+      "from": "effective_author",
+      "to": "effective_title"
+    },
+    {
+      "from": "effective_author_title",
+      "to": "filename_policy_author"
+    },
+    {
+      "from": "effective_title",
+      "to": "effective_author_title"
+    },
+    {
+      "from": "filename_policy",
+      "to": "covers_policy_mode"
+    },
+    {
+      "from": "filename_policy_author",
+      "to": "filename_policy_title"
+    },
+    {
+      "from": "filename_policy_title",
+      "to": "filename_policy"
+    },
+    {
+      "condition_expr": {
+        "expr": "$.state.answers.final_summary_confirm.confirm_start and not ($.state.answers.conflict_policy.mode == 'ask' and $.state.vars.phase1.runtime.resolve_conflicts_batch.has_conflicts)"
+      },
+      "from": "final_summary_confirm",
+      "to": "processing"
+    },
+    {
+      "condition_expr": {
+        "expr": "$.state.answers.final_summary_confirm.confirm_start and $.state.answers.conflict_policy.mode == 'ask' and $.state.vars.phase1.runtime.resolve_conflicts_batch.has_conflicts"
+      },
+      "from": "final_summary_confirm",
+      "to": "resolve_conflicts_batch"
+    },
+    {
+      "from": "id3_policy",
+      "to": "audio_processing_bitrate"
+    },
+    {
+      "from": "id3_policy_album",
+      "to": "id3_policy_album_artist"
+    },
+    {
+      "from": "id3_policy_album_artist",
+      "to": "id3_policy"
+    },
+    {
+      "from": "id3_policy_artist",
+      "to": "id3_policy_album"
+    },
+    {
+      "from": "id3_policy_intro",
+      "to": "id3_policy_title"
+    },
+    {
+      "from": "id3_policy_title",
+      "to": "id3_policy_artist"
+    },
+    {
+      "from": "parallelism",
+      "to": "final_summary_confirm"
+    },
+    {
+      "from": "phase1_runtime_defaults",
+      "to": "effective_author"
+    },
+    {
+      "from": "plan_preview_batch",
+      "to": "phase1_runtime_defaults"
+    },
+    {
+      "from": "publish_policy",
+      "to": "delete_source_policy"
+    },
+    {
+      "condition_expr": {
+        "expr": "$.state.answers.resolve_conflicts_batch.confirm"
+      },
+      "from": "resolve_conflicts_batch",
+      "to": "processing"
+    },
+    {
+      "from": "select_authors",
+      "to": "select_books"
+    },
+    {
+      "from": "select_books",
+      "to": "plan_preview_batch"
+    }
+  ],
+  "entry_step_id": "select_authors",
+  "nodes": [
+    {
+      "op": {
+        "inputs": {
+          "autofill_if": {
+            "expr": "$.state.vars.phase1.select_authors.autofill_if"
+          },
+          "default_expr": {
+            "expr": "$.state.vars.phase1.select_authors.selection_expr"
+          },
+          "examples": [
+            "all",
+            "1",
+            "1,2"
+          ],
+          "help": "Choose one or more authors. Press Enter to keep the default selection. You can type all, a number like 1, or a comma-separated list like 1,2.",
+          "label": "Authors",
+          "prefill_expr": {
+            "expr": "$.state.vars.phase1.select_authors.selection_expr"
+          },
+          "prompt": "Which authors do you want to import?"
+        },
+        "primitive_id": "ui.prompt_select",
+        "primitive_version": 1,
+        "writes": [
+          {
+            "to_path": "$.state.answers.select_authors.selection_expr",
+            "value": {
+              "expr": "$.op.outputs.selection"
+            }
+          }
+        ]
+      },
+      "step_id": "select_authors"
+    },
+    {
+      "op": {
+        "inputs": {
+          "autofill_if": {
+            "expr": "$.state.vars.phase1.select_books.autofill_if"
+          },
+          "default_expr": {
+            "expr": "$.state.vars.phase1.select_books.selection_expr"
+          },
+          "examples": [
+            "all",
+            "1",
+            "1,2"
+          ],
+          "help": "Choose one or more books. Press Enter to keep the default selection. You can type all, a number like 1, or a comma-separated list like 1,2.",
+          "label": "Books",
+          "prefill_expr": {
+            "expr": "$.state.vars.phase1.select_books.selection_expr"
+          },
+          "prompt": "Which books do you want to import?"
+        },
+        "primitive_id": "ui.prompt_select",
+        "primitive_version": 1,
+        "writes": [
+          {
+            "to_path": "$.state.answers.select_books.selection_expr",
+            "value": {
+              "expr": "$.op.outputs.selection"
+            }
+          }
+        ]
+      },
+      "step_id": "select_books"
+    },
+    {
+      "op": {
+        "inputs": {
+          "text": "Preview the planned import batch before reviewing canonical metadata and policy defaults."
+        },
+        "primitive_id": "ui.message",
+        "primitive_version": 1,
+        "writes": []
+      },
+      "step_id": "plan_preview_batch"
+    },
+    {
+      "op": {
+        "inputs": {},
+        "primitive_id": "import.phase1_runtime",
+        "primitive_version": 1,
+        "writes": [
+          {
+            "to_path": "$.state.vars.phase1.runtime",
+            "value": {
+              "expr": "$.op.outputs.snapshot"
+            }
+          }
+        ]
+      },
+      "step_id": "phase1_runtime_defaults"
+    },
+    {
+      "op": {
+        "inputs": {
+          "default_expr": {
+            "expr": "$.state.vars.phase1.runtime.effective_author_title.author"
+          },
+          "examples": [
+            "Gustav Meyrink"
+          ],
+          "help": "If the suggested author name is correct, press Enter. Change it only if you want a better canonical form.",
+          "label": "Author name",
+          "prefill_expr": {
+            "expr": "$.state.vars.phase1.runtime.effective_author_title.author"
+          },
+          "prompt": "What author name should be used for this book?"
+        },
+        "primitive_id": "ui.prompt_text",
+        "primitive_version": 1,
+        "writes": [
+          {
+            "to_path": "$.state.answers.effective_author.author",
+            "value": {
+              "expr": "$.op.outputs.value"
+            }
+          }
+        ]
+      },
+      "step_id": "effective_author"
+    },
+    {
+      "op": {
+        "inputs": {
+          "default_expr": {
+            "expr": "$.state.vars.phase1.runtime.effective_author_title.title"
+          },
+          "examples": [],
+          "help": "If the suggested title is correct, press Enter. Change it only if you want a better canonical form.",
+          "label": "Book title",
+          "prefill_expr": {
+            "expr": "$.state.vars.phase1.runtime.effective_author_title.title"
+          },
+          "prompt": "What title should be used for this book?"
+        },
+        "primitive_id": "ui.prompt_text",
+        "primitive_version": 1,
+        "writes": [
+          {
+            "to_path": "$.state.answers.effective_title.title",
+            "value": {
+              "expr": "$.op.outputs.value"
+            }
+          }
+        ]
+      },
+      "step_id": "effective_title"
+    },
+    {
+      "op": {
+        "inputs": {
+          "value": {
+            "expr": "$.state.vars.phase1.runtime.effective_author_title"
+          }
+        },
+        "primitive_id": "data.set",
+        "primitive_version": 1,
+        "writes": [
+          {
+            "to_path": "$.state.answers.effective_author_title.author",
+            "value": {
+              "expr": "$.state.answers.effective_author.author"
+            }
+          },
+          {
+            "to_path": "$.state.answers.effective_author_title.title",
+            "value": {
+              "expr": "$.state.answers.effective_title.title"
+            }
+          }
+        ]
+      },
+      "step_id": "effective_author_title"
+    },
+    {
+      "op": {
+        "inputs": {
+          "default_expr": {
+            "expr": "$.state.vars.phase1.runtime.filename_policy.author"
+          },
+          "examples": [
+            "Gustav Meyrink"
+          ],
+          "help": "Press Enter to keep the suggested folder name.",
+          "label": "Author folder name",
+          "prefill_expr": {
+            "expr": "$.state.vars.phase1.runtime.filename_policy.author"
+          },
+          "prompt": "What author folder name should be used?"
+        },
+        "primitive_id": "ui.prompt_text",
+        "primitive_version": 1,
+        "writes": [
+          {
+            "to_path": "$.state.vars.human.filename_policy.author",
+            "value": {
+              "expr": "$.op.outputs.value"
+            }
+          }
+        ]
+      },
+      "step_id": "filename_policy_author"
+    },
+    {
+      "op": {
+        "inputs": {
+          "default_expr": {
+            "expr": "$.state.vars.phase1.runtime.filename_policy.title"
+          },
+          "examples": [
+            "Preparat a dalsi povidky"
+          ],
+          "help": "Press Enter to keep the suggested title.",
+          "label": "Book title in path",
+          "prefill_expr": {
+            "expr": "$.state.vars.phase1.runtime.filename_policy.title"
+          },
+          "prompt": "What book title should be used in the saved path?"
+        },
+        "primitive_id": "ui.prompt_text",
+        "primitive_version": 1,
+        "writes": [
+          {
+            "to_path": "$.state.vars.human.filename_policy.title",
+            "value": {
+              "expr": "$.op.outputs.value"
+            }
+          }
+        ]
+      },
+      "step_id": "filename_policy_title"
+    },
+    {
+      "op": {
+        "inputs": {},
+        "primitive_id": "data.set",
+        "primitive_version": 1,
+        "writes": [
+          {
+            "to_path": "$.state.answers.filename_policy.author",
+            "value": {
+              "expr": "$.state.vars.human.filename_policy.author"
+            }
+          },
+          {
+            "to_path": "$.state.answers.filename_policy.title",
+            "value": {
+              "expr": "$.state.vars.human.filename_policy.title"
+            }
+          }
+        ]
+      },
+      "step_id": "filename_policy"
+    },
+    {
+      "op": {
+        "inputs": {
+          "default_value": "",
+          "examples": [
+            "skip",
+            "url"
+          ],
+          "help": "Press Enter to keep the current automatic cover behavior. Enter skip to import without a cover, or url to provide a cover image URL.",
+          "label": "Cover image",
+          "prompt": "How should the cover image be handled?"
+        },
+        "primitive_id": "ui.prompt_select",
+        "primitive_version": 1,
+        "writes": [
+          {
+            "to_path": "$.state.vars.human.covers_policy.candidate_id",
+            "value": ""
+          },
+          {
+            "to_path": "$.state.vars.human.covers_policy.mode",
+            "value": {
+              "expr": "$.op.outputs.selection"
+            }
+          },
+          {
+            "to_path": "$.state.vars.human.covers_policy.source_relative_path",
+            "value": ""
+          },
+          {
+            "to_path": "$.state.vars.human.covers_policy.url",
+            "value": ""
+          }
+        ]
+      },
+      "step_id": "covers_policy_mode"
+    },
+    {
+      "op": {
+        "inputs": {},
+        "primitive_id": "data.set",
+        "primitive_version": 1,
+        "writes": [
+          {
+            "to_path": "$.state.vars.human.covers_policy.candidate_id",
+            "value": "__human_override__"
+          },
+          {
+            "to_path": "$.state.vars.human.covers_policy.source_relative_path",
+            "value": "__human_override__"
+          }
+        ]
+      },
+      "step_id": "covers_policy_override_prepare"
+    },
+    {
+      "op": {
+        "inputs": {
+          "default_expr": {
+            "expr": "$.state.vars.phase1.runtime.covers_policy.url"
+          },
+          "examples": [
+            "https://example.com/cover.jpg"
+          ],
+          "help": "Paste a direct image URL. Press Enter to keep the suggested URL if one is already present.",
+          "label": "Cover image URL",
+          "prefill_expr": {
+            "expr": "$.state.vars.phase1.runtime.covers_policy.url"
+          },
+          "prompt": "What cover image URL should be used?"
+        },
+        "primitive_id": "ui.prompt_text",
+        "primitive_version": 1,
+        "writes": [
+          {
+            "to_path": "$.state.vars.human.covers_policy.url",
+            "value": {
+              "expr": "$.op.outputs.value"
+            }
+          }
+        ]
+      },
+      "step_id": "covers_policy_url"
+    },
+    {
+      "op": {
+        "inputs": {},
+        "primitive_id": "data.set",
+        "primitive_version": 1,
+        "writes": [
+          {
+            "to_path": "$.state.answers.covers_policy.choice.candidate_id",
+            "value": {
+              "expr": "$.state.vars.human.covers_policy.candidate_id"
+            }
+          },
+          {
+            "to_path": "$.state.answers.covers_policy.choice.kind",
+            "value": {
+              "expr": "$.state.vars.human.covers_policy.mode"
+            }
+          },
+          {
+            "to_path": "$.state.answers.covers_policy.choice.source_relative_path",
+            "value": {
+              "expr": "$.state.vars.human.covers_policy.source_relative_path"
+            }
+          },
+          {
+            "to_path": "$.state.answers.covers_policy.url",
+            "value": {
+              "expr": "$.state.vars.human.covers_policy.url"
+            }
+          }
+        ]
+      },
+      "step_id": "covers_policy"
+    },
+    {
+      "op": {
+        "inputs": {
+          "text": "Review the output audio tags."
+        },
+        "primitive_id": "ui.message",
+        "primitive_version": 1,
+        "writes": []
+      },
+      "step_id": "id3_policy_intro"
+    },
+    {
+      "op": {
+        "inputs": {
+          "default_expr": {
+            "expr": "$.state.vars.phase1.runtime.id3_policy.values.title"
+          },
+          "examples": [],
+          "help": "Press Enter to keep the suggested value.",
+          "label": "Title tag",
+          "prefill_expr": {
+            "expr": "$.state.vars.phase1.runtime.id3_policy.values.title"
+          },
+          "prompt": "What title tag should be written to the output files?"
+        },
+        "primitive_id": "ui.prompt_text",
+        "primitive_version": 1,
+        "writes": [
+          {
+            "to_path": "$.state.vars.human.id3_policy.values.title",
+            "value": {
+              "expr": "$.op.outputs.value"
+            }
+          }
+        ]
+      },
+      "step_id": "id3_policy_title"
+    },
+    {
+      "op": {
+        "inputs": {
+          "default_expr": {
+            "expr": "$.state.vars.phase1.runtime.id3_policy.values.artist"
+          },
+          "examples": [],
+          "help": "Press Enter to keep the suggested value.",
+          "label": "Artist tag",
+          "prefill_expr": {
+            "expr": "$.state.vars.phase1.runtime.id3_policy.values.artist"
+          },
+          "prompt": "What artist tag should be written to the output files?"
+        },
+        "primitive_id": "ui.prompt_text",
+        "primitive_version": 1,
+        "writes": [
+          {
+            "to_path": "$.state.vars.human.id3_policy.values.artist",
+            "value": {
+              "expr": "$.op.outputs.value"
+            }
+          }
+        ]
+      },
+      "step_id": "id3_policy_artist"
+    },
+    {
+      "op": {
+        "inputs": {
+          "default_expr": {
+            "expr": "$.state.vars.phase1.runtime.id3_policy.values.album"
+          },
+          "examples": [],
+          "help": "Press Enter to keep the suggested value.",
+          "label": "Album tag",
+          "prefill_expr": {
+            "expr": "$.state.vars.phase1.runtime.id3_policy.values.album"
+          },
+          "prompt": "What album tag should be written to the output files?"
+        },
+        "primitive_id": "ui.prompt_text",
+        "primitive_version": 1,
+        "writes": [
+          {
+            "to_path": "$.state.vars.human.id3_policy.values.album",
+            "value": {
+              "expr": "$.op.outputs.value"
+            }
+          }
+        ]
+      },
+      "step_id": "id3_policy_album"
+    },
+    {
+      "op": {
+        "inputs": {
+          "default_expr": {
+            "expr": "$.state.vars.phase1.runtime.id3_policy.values.album_artist"
+          },
+          "examples": [],
+          "help": "Press Enter to keep the suggested value.",
+          "label": "Album artist tag",
+          "prefill_expr": {
+            "expr": "$.state.vars.phase1.runtime.id3_policy.values.album_artist"
+          },
+          "prompt": "What album artist tag should be written to the output files?"
+        },
+        "primitive_id": "ui.prompt_text",
+        "primitive_version": 1,
+        "writes": [
+          {
+            "to_path": "$.state.vars.human.id3_policy.values.album_artist",
+            "value": {
+              "expr": "$.op.outputs.value"
+            }
+          }
+        ]
+      },
+      "step_id": "id3_policy_album_artist"
+    },
+    {
+      "op": {
+        "inputs": {},
+        "primitive_id": "data.set",
+        "primitive_version": 1,
+        "writes": [
+          {
+            "to_path": "$.state.answers.id3_policy.values.album",
+            "value": {
+              "expr": "$.state.vars.human.id3_policy.values.album"
+            }
+          },
+          {
+            "to_path": "$.state.answers.id3_policy.values.album_artist",
+            "value": {
+              "expr": "$.state.vars.human.id3_policy.values.album_artist"
+            }
+          },
+          {
+            "to_path": "$.state.answers.id3_policy.values.artist",
+            "value": {
+              "expr": "$.state.vars.human.id3_policy.values.artist"
+            }
+          },
+          {
+            "to_path": "$.state.answers.id3_policy.values.title",
+            "value": {
+              "expr": "$.state.vars.human.id3_policy.values.title"
+            }
+          }
+        ]
+      },
+      "step_id": "id3_policy"
+    },
+    {
+      "op": {
+        "inputs": {
+          "default_expr": {
+            "expr": "$.state.vars.phase1.runtime.audio_processing.bitrate"
+          },
+          "examples": [
+            "64k",
+            "96k",
+            "128k",
+            "192k"
+          ],
+          "help": "Choose a bitrate value. Press Enter to keep the current default.",
+          "label": "Audio bitrate",
+          "prefill_expr": {
+            "expr": "$.state.vars.phase1.runtime.audio_processing.bitrate"
+          },
+          "prompt": "What bitrate should be used for the output audio?"
+        },
+        "primitive_id": "ui.prompt_select",
+        "primitive_version": 1,
+        "writes": [
+          {
+            "to_path": "$.state.vars.human.audio_processing.bitrate",
+            "value": {
+              "expr": "$.op.outputs.selection"
+            }
+          }
+        ]
+      },
+      "step_id": "audio_processing_bitrate"
+    },
+    {
+      "op": {
+        "inputs": {
+          "default_expr": {
+            "expr": "$.state.vars.phase1.runtime.audio_processing.loudnorm"
+          },
+          "help": "Press Enter to keep the current default.",
+          "label": "Loudness normalization",
+          "prompt": "Normalize loudness?"
+        },
+        "primitive_id": "ui.prompt_confirm",
+        "primitive_version": 1,
+        "writes": [
+          {
+            "to_path": "$.state.vars.human.audio_processing.loudnorm",
+            "value": {
+              "expr": "$.op.outputs.confirmed"
+            }
+          }
+        ]
+      },
+      "step_id": "audio_processing_loudnorm"
+    },
+    {
+      "op": {
+        "inputs": {
+          "default_expr": {
+            "expr": "$.state.vars.phase1.runtime.audio_processing.split_chapters"
+          },
+          "help": "Press Enter to keep the current default.",
+          "label": "Split by chapters",
+          "prompt": "Split audio by chapters when possible?"
+        },
+        "primitive_id": "ui.prompt_confirm",
+        "primitive_version": 1,
+        "writes": [
+          {
+            "to_path": "$.state.vars.human.audio_processing.split_chapters",
+            "value": {
+              "expr": "$.op.outputs.confirmed"
+            }
+          }
+        ]
+      },
+      "step_id": "audio_processing_split_chapters"
+    },
+    {
+      "op": {
+        "inputs": {},
+        "primitive_id": "data.set",
+        "primitive_version": 1,
+        "writes": [
+          {
+            "to_path": "$.state.answers.audio_processing.bitrate",
+            "value": {
+              "expr": "$.state.vars.human.audio_processing.bitrate"
+            }
+          },
+          {
+            "to_path": "$.state.answers.audio_processing.loudnorm",
+            "value": {
+              "expr": "$.state.vars.human.audio_processing.loudnorm"
+            }
+          },
+          {
+            "to_path": "$.state.answers.audio_processing.split_chapters",
+            "value": {
+              "expr": "$.state.vars.human.audio_processing.split_chapters"
+            }
+          }
+        ]
+      },
+      "step_id": "audio_processing"
+    },
+    {
+      "op": {
+        "inputs": {
+          "default_expr": {
+            "expr": "$.state.vars.phase1.runtime.publish_policy.target_root"
+          },
+          "examples": [
+            "stage",
+            "outbox"
+          ],
+          "help": "Enter stage or outbox. Press Enter to keep the current default.",
+          "label": "Destination",
+          "prefill_expr": {
+            "expr": "$.state.vars.phase1.runtime.publish_policy.target_root"
+          },
+          "prompt": "Where should the processed files be published?"
+        },
+        "primitive_id": "ui.prompt_select",
+        "primitive_version": 1,
+        "writes": [
+          {
+            "to_path": "$.state.answers.publish_policy.target_root",
+            "value": {
+              "expr": "$.op.outputs.selection"
+            }
+          }
+        ]
+      },
+      "step_id": "publish_policy"
+    },
+    {
+      "op": {
+        "inputs": {
+          "default_expr": {
+            "expr": "$.state.vars.phase1.runtime.delete_source_policy.clean_inbox"
+          },
+          "examples": [
+            "ask",
+            "yes",
+            "no"
+          ],
+          "help": "Press Enter to keep the current default. Enter ask to decide later, yes to delete source files, or no to keep them.",
+          "label": "Source cleanup",
+          "prefill_expr": {
+            "expr": "$.state.vars.phase1.runtime.delete_source_policy.clean_inbox"
+          },
+          "prompt": "What should happen to the source files after a successful import?"
+        },
+        "primitive_id": "ui.prompt_select",
+        "primitive_version": 1,
+        "writes": [
+          {
+            "to_path": "$.state.answers.delete_source_policy.clean_inbox",
+            "value": {
+              "expr": "$.op.outputs.selection"
+            }
+          }
+        ]
+      },
+      "step_id": "delete_source_policy"
+    },
+    {
+      "op": {
+        "inputs": {
+          "default_expr": {
+            "expr": "$.state.vars.phase1.runtime.conflict_policy.mode"
+          },
+          "examples": [
+            "ask",
+            "skip",
+            "overwrite"
+          ],
+          "help": "Choose ask, skip, or overwrite for destination conflicts.",
+          "label": "File conflicts",
+          "prefill_expr": {
+            "expr": "$.state.vars.phase1.runtime.conflict_policy.mode"
+          },
+          "prompt": "How should existing target files be handled?"
+        },
+        "primitive_id": "ui.prompt_select",
+        "primitive_version": 1,
+        "writes": [
+          {
+            "to_path": "$.state.answers.conflict_policy.mode",
+            "value": {
+              "expr": "$.op.outputs.selection"
+            }
+          }
+        ]
+      },
+      "step_id": "conflict_policy"
+    },
+    {
+      "op": {
+        "inputs": {
+          "default_expr": {
+            "expr": "$.state.vars.phase1.runtime.parallelism.workers"
+          },
+          "examples": [
+            1,
+            2,
+            3,
+            4
+          ],
+          "help": "Enter a whole number. Press Enter to keep the current default.",
+          "label": "Workers",
+          "prefill_expr": {
+            "expr": "$.state.vars.phase1.runtime.parallelism.workers"
+          },
+          "prompt": "How many workers should process the job?"
+        },
+        "primitive_id": "ui.prompt_text",
+        "primitive_version": 1,
+        "writes": [
+          {
+            "to_path": "$.state.answers.parallelism.workers",
+            "value": {
+              "expr": "$.op.outputs.value"
+            }
+          }
+        ]
+      },
+      "step_id": "parallelism"
+    },
+    {
+      "op": {
+        "inputs": {
+          "default_value": false,
+          "label": "Start import",
+          "prompt": "Start processing with these settings?"
+        },
+        "primitive_id": "ui.prompt_confirm",
+        "primitive_version": 1,
+        "writes": [
+          {
+            "to_path": "$.state.answers.final_summary_confirm.confirm_start",
+            "value": {
+              "expr": "$.op.outputs.confirmed"
+            }
+          }
+        ]
+      },
+      "step_id": "final_summary_confirm"
+    },
+    {
+      "op": {
+        "inputs": {
+          "default_value": false,
+          "label": "Conflicts found",
+          "prompt": "Conflicts were found. Continue with the selected conflict policy?"
+        },
+        "primitive_id": "ui.prompt_confirm",
+        "primitive_version": 1,
+        "writes": [
+          {
+            "to_path": "$.state.answers.resolve_conflicts_batch.confirm",
+            "value": {
+              "expr": "$.op.outputs.confirmed"
+            }
+          }
+        ]
+      },
+      "step_id": "resolve_conflicts_batch"
+    },
+    {
+      "op": {
+        "inputs": {},
+        "primitive_id": "ctrl.stop",
+        "primitive_version": 1,
+        "writes": []
+      },
+      "step_id": "processing"
+    }
+  ],
+  "version": 3
 }
