@@ -17,6 +17,7 @@ def _default_nav() -> list[dict[str, Any]]:
         {"title": "Stage", "route": "/stage", "page_id": "stage"},
         {"title": "Import", "route": "/import", "page_id": "import"},
         {"title": "Wizards", "route": "/wizards", "page_id": "wizards"},
+        {"title": "Jobs", "route": "/jobs", "page_id": "jobs"},
         {"title": "Logs", "route": "/logs", "page_id": "logs"},
         {"title": "UI Config", "route": "/ui-config", "page_id": "ui_config"},
     ]
@@ -95,6 +96,11 @@ def _default_pages() -> dict[str, dict[str, Any]]:
             "title": "Wizards",
             "layout": {"type": "grid", "children": [{"type": "wizard_manager"}]},
         },
+        "jobs": {
+            "id": "jobs",
+            "title": "Jobs",
+            "layout": {"type": "grid", "children": [{"type": "jobs_log_viewer"}]},
+        },
         "logs": {
             "id": "logs",
             "title": "Logs",
@@ -122,6 +128,7 @@ def _default_pages() -> dict[str, dict[str, Any]]:
                         "title": "EventBus (diagnostics)",
                         "content": {
                             "type": "log_stream",
+                            "stream_kind": "eventbus",
                             "tail_source": {
                                 "type": "api",
                                 "path": "/api/logs/tail?lines=200",
@@ -137,6 +144,7 @@ def _default_pages() -> dict[str, dict[str, Any]]:
                         "title": "LogBus (core logs)",
                         "content": {
                             "type": "log_stream",
+                            "stream_kind": "logbus",
                             "tail_source": {
                                 "type": "api",
                                 "path": "/api/logbus/tail?lines=200",
@@ -147,7 +155,6 @@ def _default_pages() -> dict[str, dict[str, Any]]:
                             },
                         },
                     },
-                    {"type": "jobs_log_viewer"},
                 ],
             },
         },

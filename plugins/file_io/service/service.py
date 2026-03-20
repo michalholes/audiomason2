@@ -500,13 +500,15 @@ class FileService:
                 yield cast(BinaryIO, f)
             return
 
-        with _observe_operation(operation="file_io.open_read", base=base) as summary:
-            with open_read(abs_path) as f_raw:
-                f = _CountingBinaryIO(f_raw)
-                try:
-                    yield cast(BinaryIO, f)
-                finally:
-                    summary["bytes"] = int(f.bytes_read)
+        with (
+            _observe_operation(operation="file_io.open_read", base=base) as summary,
+            open_read(abs_path) as f_raw,
+        ):
+            f = _CountingBinaryIO(f_raw)
+            try:
+                yield cast(BinaryIO, f)
+            finally:
+                summary["bytes"] = int(f.bytes_read)
 
     @contextmanager
     def open_write(

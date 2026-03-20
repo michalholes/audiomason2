@@ -574,36 +574,12 @@ window.onerror = (msg, src, line, col, err) => {
 		]);
 	}
 
-	async function renderLogStream(content) {
-		const wrap = el("div", { class: "logWrap" });
-		const pre = el("pre", { class: "logBox" });
-		wrap.appendChild(pre);
-
-		// Tail first
-		try {
-			if (content.tail_source && content.tail_source.type === "api") {
-				const t = await API.getJson(content.tail_source.path);
-				if (t && typeof t.text === "string") pre.textContent = t.text + "\n";
-			}
-		} catch {
-			// ignore
+	async function renderLogStream(content, notify) {
+		const surface = Reflect.get(window, "AMWebLogStreamSurface");
+		if (!surface || typeof surface.render !== "function") {
+			throw new Error("AMWebLogStreamSurface.render is not available");
 		}
-
-		const src = content.source;
-		if (src && src.type === "sse") {
-			const es = new EventSource(src.path);
-			es.onmessage = (ev) => {
-				pre.textContent += ev.data + "\n";
-				pre.scrollTop = pre.scrollHeight;
-			};
-			es.onerror = () => {
-				// keep box, EventSource retries automatically
-			};
-		} else {
-			pre.textContent += "(log stream source not configured)\n";
-		}
-
-		return wrap;
+		return await surface.render(content, notify, { API, el, clear });
 	}
 
 	async function renderJsErrorFeed(content, notify) {
@@ -984,125 +960,11 @@ window.onerror = (msg, src, line, col, err) => {
 	}
 
 	async function renderJobsLogViewer(content, notify) {
-		const root = el("div", { class: "jobsLog" });
-		const header = el("div", { class: "row" });
-		const refreshBtn = el("button", { class: "btn", text: "Refresh jobs" });
-		header.appendChild(refreshBtn);
-		root.appendChild(header);
-
-		const grid = el("div", { class: "jobsGrid" });
-		const left = el("div", { class: "jobsCol" });
-		const right = el("div", { class: "jobsColWide" });
-		grid.appendChild(left);
-		grid.appendChild(right);
-		root.appendChild(grid);
-
-		const jobsBox = el("div");
-		left.appendChild(jobsBox);
-
-		const logHeader = el("div", { class: "row" });
-		const followChk = el("input", { type: "checkbox" });
-		const followLbl = el("label", { class: "hint", text: "Follow" });
-		followLbl.prepend(followChk);
-		const clearBtn = el("button", { class: "btn", text: "Clear" });
-		logHeader.appendChild(followLbl);
-		logHeader.appendChild(clearBtn);
-		right.appendChild(logHeader);
-
-		const pre = el("pre", { class: "logBox", text: "Select a job." });
-		right.appendChild(pre);
-
-		let currentJobId = null;
-		let offset = 0;
-		let followTimer = null;
-
-		async function loadJobs() {
-			jobsBox.innerHTML = "";
-			let data;
-			try {
-				data = await API.getJson("/api/jobs");
-			} catch (e) {
-				jobsBox.appendChild(el("div", { class: "hint", text: String(e) }));
-				return;
-			}
-			const items = Array.isArray(data.items) ? data.items : [];
-			if (!items.length) {
-				jobsBox.appendChild(el("div", { class: "hint", text: "No jobs." }));
-				return;
-			}
-
-			const table = el("table", { class: "table" });
-			const thead = el("thead");
-			const trh = el("tr");
-			["job_id", "type", "state"].forEach((h) => {
-				trh.appendChild(el("th", { text: h }));
-			});
-			thead.appendChild(trh);
-			table.appendChild(thead);
-			const tbody = el("tbody");
-
-			for (const j of items) {
-				const jid = j.job_id || j.id || "";
-				const tr = el("tr");
-				tr.appendChild(el("td", { text: String(jid) }));
-				tr.appendChild(el("td", { text: String(j.type || "") }));
-				tr.appendChild(el("td", { text: String(j.state || "") }));
-				tr.addEventListener("click", async () => {
-					currentJobId = String(jid);
-					offset = 0;
-					pre.textContent = "";
-					await loadMore();
-				});
-				tbody.appendChild(tr);
-			}
-			table.appendChild(tbody);
-			jobsBox.appendChild(table);
+		const surface = Reflect.get(window, "AMWebJobsBrowserSurface");
+		if (!surface || typeof surface.render !== "function") {
+			throw new Error("AMWebJobsBrowserSurface.render is not available");
 		}
-
-		async function loadMore() {
-			if (!currentJobId) {
-				pre.textContent = "Select a job.";
-				return;
-			}
-			try {
-				const data = await API.getJson(
-					`/api/jobs/${encodeURIComponent(currentJobId)}/log?offset=${offset}`,
-				);
-				const txt = data && typeof data.text === "string" ? data.text : "";
-				pre.textContent += txt;
-				offset =
-					data && typeof data.next_offset === "number"
-						? data.next_offset
-						: offset;
-				pre.scrollTop = pre.scrollHeight;
-			} catch (e) {
-				notify(String(e));
-			}
-		}
-
-		function stopFollow() {
-			if (followTimer) {
-				clearInterval(followTimer);
-				followTimer = null;
-			}
-		}
-
-		followChk.addEventListener("change", () => {
-			stopFollow();
-			if (followChk.checked) {
-				followTimer = setInterval(loadMore, 1500);
-			}
-		});
-
-		clearBtn.addEventListener("click", () => {
-			pre.textContent = "";
-			offset = 0;
-		});
-
-		refreshBtn.addEventListener("click", loadJobs);
-
-		await loadJobs();
-		return root;
+		return await surface.render(content, notify, { API, el, clear });
 	}
 
 	async function renderPluginManager(content, notify) {
