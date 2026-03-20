@@ -1,3 +1,4 @@
+/// <reference path="../../../../../am2-globals.d.ts" />
 (() => {
 	async function fetchJSON(url, opts) {
 		const r = await fetch(url, opts || {});
@@ -512,6 +513,11 @@
 				state,
 				mount: ui.step,
 				el,
+				getLiveContext: () => ({
+					session_id: String(sessionId || ""),
+					current_step_id: String(currentStep || ""),
+					status: String((state && state.status) || ""),
+				}),
 			});
 			if (ui.submit) ui.submit.disabled = !rendered;
 			setText("status", `session_id: ${sessionId}`);
