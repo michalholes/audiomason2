@@ -1,10 +1,11 @@
 # KONTRAKT RIADIACICH CHATOV (RC) – RIADIACE A DISKUSNÉ CHATY (AM2) (HARD)
-Verzia 1.2.3
+Verzia 1.2.8
 
 HARD: Autoritativna verzia tohto dokumentu je vzdy ta, ktora ma navyssie cislo verzie. Ostatne dokumenty bez urcenej verzie alebo s nizsim cislom verzie sa preto stavaju neplatne a je zakazane ich pouzivat. V pripade, ze natrafis na dokument s rovnakym cislom verzie, ale s odlisnym obsahom = HARD STOP/invalid corpus.
 
 ## 0 Basic principles (HARD): 
 
+0. Highest authority rule = user ma vzdy najvyssiu autoritu. Mozes so mnou polemizovat, mozes mi oponovat. Ale ked poviem, ze nieco chcem, musis spravit vsetko preto, aby si to dodrzal uplne, spravne a korektne.
 1. Vzdy si precitaj vsetky subory v project files a riad sa nimi. 
 2. Ak je potrebna zmena specifikacie, je potrebne ju zmenit este pred implementaciou pomocou patchu v samostatnom issue. Riadiaci chat je povinny vyrobit patch (plati am patch authoring manual) a poskytnut ho spolu s implementacnym handoffom. 
 3. Ak ma prebehnut implementacia vo viac ako 1 casti systemu (napr. viac plugins, core+plugin, amp+patchhub,...) musi byt rozdelena na viac handoffov so samostatnymi issues. 
@@ -14,17 +15,30 @@ HARD: Autoritativna verzia tohto dokumentu je vzdy ta, ktora ma navyssie cislo v
 7. Specifikacia projektu AudioMason2 sa sklada zo suboru docs/specification.jsonl.
 8. Ak je potrebne updatnut specku, v uz vo freze musia byt presne anchors, medzi ktore maju implementacne chaty vlozit text. Text updatu musi byt v handoffe presne specifikovany.
 9. Ak vykonavas kontrolu patchu, ocakavam, ze bude hlboka a nie formalna. Musis si preto pprejst cely zmeneny kod a pochopit, ako funguje. Testy robi amp, tie nemusis robit. Chcem vediet, ci patch riesi vsetky problemy uplne, kvalitne a korektne a ci nevytvara nove.
+10. Pri hladani bugu alebo implementacii novej funkcie MUSIS vzdy precitat a pochopit celu dotknutu specifikaciu.
+11. Vzdy ma musis upozornit na riziko dvoch pravd a nikdy nesmies prispievat k zhorsovaniu rizika dvoch pravd.
+12. Riziko dvoch pravd moze vzniknut aj opakovanim jednej informacie vo viacerych miestach specky.
 
 Terminologia (HARD):
 PM = Patch authoring manual
 PC = Projektovy kontrakt (AudioMason2 Project Contract)
 RC = Kontrakt riadiacich chatov
+HAR = Highest authority rule
 
 ## 1. HARD CONTEXT RULES (HARD)
 
 1. Chat nesmie používať medzichatovú pamäť ako zdroj informácií.
 2. Pred odpoveďou je povinné prečítať všetky relevantné súbory v project files a riadiť sa nimi.
 3. Odpovede musia vychádzať z overenia v kóde aj v špecifikácii (docs/).
+3a. Kazdy normativny vystup riadiaceho chatu MUSI obsahovat presne tento blok a v presne tomto poradi:
+
+SPEC CONTEXT
+RC version used: <RC_VERSION>
+PM version used: <PM_VERSION>
+
+3b. Za normativny vystup sa povazuje plan, freeze, handoff, patch review, kontrola implementacie, navrh specifikacneho patchu a kazdy iny vystup, ktory uklada, hodnoti alebo autorizuje implementacne povinnosti.
+3c. Nazvy poli, poradie riadkov a kapitalizacia v bloku SPEC CONTEXT sa nesmu menit. Chybajuci blok, zmeneny tvar bloku alebo nepravdive verzie = neplatny vystup.
+
 4. Ak nie je dostatok informácií, je povinné si ich vyžiadať.
 5. Keď používateľ uvedie „am“, rozumie sa tým AudioMason2.
 6. Ak ziadam plan, chcem, aby bol kvalifikovany, kvalitny, verifikovany, bez podmienok, overeny v kode.
@@ -80,6 +94,14 @@ RC = Kontrakt riadiacich chatov
 ## 3. PRAVIDLÁ PRE IMPLEMENTAČNÉ HANDOFFY (HARD)
 
 1. Implementačný handoff sa poskytuje iba na výslovné požiadanie používateľa.
+
+1a. Kazdy implementacny handoff MUSI byt dodany ako downloadable artifact vo formate .md.
+1b. Downloadable .md artifact je autoritativny handoff payload.
+1c. Text v sprave mimo artifactu smie obsahovat iba nenormativne zhrnutie a odkaz na artifact; nesmie pridavat, uberat ani menit poziadavky handoffu.
+1d. Ak downloadable .md artifact chyba alebo sa inline text rozchadza s artifactom, handoff je neplatny.
+1e. Samotny downloadable .md handoff artifact MUSI obsahovat blok SPEC CONTEXT v presnom tvare definovanom v sekcii 1.
+1f. Ak SPEC CONTEXT blok chyba v samotnom artifacte, handoff je neplatny aj vtedy, ak je uvedeny iba v sprievodnej sprave.
+
 2. Ak sa handoff týka zmien v:
    - src/
    - plugins/
@@ -133,10 +155,17 @@ Každý handoff musí obsahovať:
 - Presný rozsah zmien (FILES MANIFEST)
 - Zakázané zásahy
 - Presnú definíciu výstupu
-- Gating pravidlá
-- Definíciu success criteria
+- Gating pravidla
+- Odkaz na success criteria definovane priamo pri jednotlivych bodoch Pi
+
 
 Handoff musí byť formulovaný tak, aby implementačný chat mohol vykonať iba implementáciu bez ďalšieho rozhodovania.
+
+Handoff MUSI obsahovat sekciu PLAN FREEZE, ktora prepise odsuhlaseny plan do ocislovanych bodov P1..Pn bez zmeny poctu bodov, ich hranic, rozsahu alebo vyznamu. Kazdy Pi MUSI predstavovat jednu samostatnu povinnost. Pri bugfixe musia byt koren problemu, kazdy samostatny symptom, kazdy znamy downstream dosledok a kazde pozadovane preventivne alebo ochranne spravanie uvedene ako samostatny Pi, ak predstavuju odlisne povinnosti. Handoff MUSI obsahovat aj PLAN COVERAGE MATRIX mapujuci kazdy Pi na konkretnu sekciu handoffu a SELF-CHECK potvrdzujuci, ze ziaden znamy symptom ani dosledok nezostal mimo PLAN FREEZE. Absencia PLAN FREEZE, PLAN COVERAGE MATRIX alebo SELF-CHECK = handoff je neplatny.
+
+Pre kazde Pi MUSI handoff uviest vlastny blok SUCCESS CRITERIA s identifikatormi SCi.1..SCi.n. Kazde SCi.j MUSI byt samostatne, overitelne a formulovane tak, aby sa pre neho dalo jednoznacne rozhodnut PASS alebo FAIL. SUCCESS CRITERIA sa nesmu duplicitne prepisovat mimo prislusneho Pi; inde sa na ne smie uz iba odkazovat ich identifikatorom. Ak ktorykolvek Pi nema aspon jedno SCi.j, handoff je neplatny.
+
+Kazda normativna poziadavka handoffu mimo PLAN FREEZE, ktora obmedzuje implementacny rozsah, FILES MANIFEST, zakazane zasahy, shape vystupu alebo gating, MUSI byt explicitne naviazana na aspon jedno Pi v PLAN COVERAGE MATRIX. Nenaviazana normativna poziadavka = handoff je neplatny.
 
 ---
 
@@ -150,6 +179,7 @@ Ak používateľ po implementácii poskytne zip s repo tree:
    - súlad so špecifikáciou
    - dodržanie rozsahu zmien
 2. O výsledkoch musí byť používateľ informovaný.
+3. Report vysledku kontroly MUSI explicitne vyhodnotit kazde Pi a kazde jeho SCi.j osobitne. Pri kazdom Pi MUSI uviest aj samostatny verdikt pre uplnost, spravnost a sulad. Agregovane tvrdenie typu "implementovane" bez tohto rozpisu je zakazane.
 
 ---
 

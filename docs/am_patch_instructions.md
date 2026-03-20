@@ -2,7 +2,17 @@
 
 # Patch Authoring Manual (PM)
 
-AUTHORITATIVE -- AudioMason2 Status: active Version: v2.44
+AUTHORITATIVE -- AudioMason2 Status: active Version: v2.49
+
+HARD: The authoritative version of this document is always the one with the highest version number. Any document without a stated version number, or with a lower version number, is invalid and MUST NOT be used. If two documents carry the same version number but differ in content, this is a HARD STOP / invalid corpus.
+
+HARD: Every PM-governed output that proposes, delivers, reviews, repairs, or evaluates implementation work MUST contain exactly this block and in exactly this order:
+
+SPEC CONTEXT
+PM version used: <PM_VERSION>
+
+HARD: Field names, row order, and capitalization in the SPEC CONTEXT block MUST NOT be changed.
+HARD: Missing SPEC CONTEXT block, altered block shape, or false PM version values = NON-COMPLIANT.
 
 This manual defines what a chat must produce so that the user can run
 the patch successfully and close the issue.
@@ -265,6 +275,7 @@ The chat MUST provide:
 2.  A canonical invocation command in a code block.
 3.  The exact PATCH argument used in invocation.
 4.  A validator evidence block as defined in PM patch validator (HARD).
+5.  An IMPLEMENTATION EVIDENCE MATRIX block and a RESIDUALS block as defined below.
 
 Canonical invocation format (NO VARIANTS):
 
@@ -277,6 +288,39 @@ Canonical invocation format (NO VARIANTS):
 
 If invocation command is missing or malformed, the patch is
 NON-COMPLIANT.
+
+## Implementation evidence matrix (HARD)
+
+For every initial patch and every repair patch, the chat MUST provide an IMPLEMENTATION EVIDENCE MATRIX mapping every authoritative PLAN FREEZE item identifier (P1..Pn) to implementation evidence.
+
+The matrix MUST reuse the exact authoritative PLAN FREEZE item identifiers (P1..Pn) from the handoff without renumbering, aliasing, merging, or omission.
+
+Required format:
+
+<item-id> -> implementation_status=<implemented|partial|no-op (already satisfied)> ; completeness=<full|partial> ; correctness=<pass|fail> ; conformance=<pass|fail> ; criteria=<SCx.y:pass,SCx.z:fail|none> ; criteria_evidence=<SCx.y:file@anchor,SCx.z:file@anchor|none> ; files=<paths> ; anchors=<anchors>
+
+
+Rules:
+- every authoritative PLAN FREEZE item identifier (P1..Pn) MUST appear exactly once
+- implicit coverage is forbidden
+- every `no-op (already satisfied)` claim MUST be backed by inspected evidence
+- `criteria` MUST enumerate every success criterion identifier attached to the authoritative PLAN FREEZE item identifier (P1..Pn) using exact identifiers and explicit verdicts in the form `SCx.y:<pass|fail>`
+- `criteria_evidence` MUST enumerate every success criterion identifier listed in `criteria` using exact identifiers and at least one concrete `file@anchor` pair per criterion
+- item-level `files` and `anchors` evidence is additive only and MUST NOT substitute for `criteria_evidence`
+- `criteria=none` is forbidden when the authoritative PLAN FREEZE item identifier (P1..Pn) defines success criterion identifiers
+- `criteria_evidence=none` is forbidden when `criteria` lists any success criterion identifier
+- `completeness=full` is forbidden unless the full authoritative scope of the item is implemented with no missing required behavior
+- `correctness=pass` is forbidden unless the implemented behavior for the full item is judged technically correct
+- `conformance=pass` is forbidden unless the implemented behavior for the full item is judged coherent with the handoff, specification, and contract constraints
+- `implementation_status=implemented` is forbidden unless `completeness=full`, `correctness=pass`, `conformance=pass`, and every listed success criterion has verdict `pass`
+- `implementation_status=partial` is mandatory whenever any required behavior is missing, any listed success criterion has verdict `fail`, or any of `completeness`, `correctness`, or `conformance` is not in the fully passing state required for `implemented`
+- `implementation_status=no-op (already satisfied)` is forbidden unless `completeness=full`, `correctness=pass`, `conformance=pass`, every listed success criterion has verdict `pass`, and inspected evidence shows the item was already satisfied before patch authoring
+- any item with `completeness=partial`, `correctness=fail`, `conformance=fail`, missing evidence, failed criterion, or deferred work MUST be listed in RESIDUALS using the same identifier, or `none`
+- if any listed criterion has verdict `fail`, the chat MUST NOT claim that item is fully implemented, complete, correct, conformant, or fully resolved
+- if RESIDUALS is non-empty, the chat MUST NOT claim full fix, complete implementation, correct implementation, conformant implementation, or issue fully resolved
+
+Missing IMPLEMENTATION EVIDENCE MATRIX or missing RESIDUALS = NON-COMPLIANT.
+
 
 ## Inspection Proof (HARD)
 
@@ -632,8 +676,9 @@ For repair patches, the chat MUST provide evidence of:
 
 1.  `git apply --check` success per file
 2.  `python -m compileall` success (at least modified files)
-2.  all pytest tests
+2a.  all pytest tests
 3.  validator evidence as defined in PM patch validator (HARD)
+4.  implementation evidence as defined above
 
 If evidence is not shown, the chat MUST NOT claim patch was tested.
 
