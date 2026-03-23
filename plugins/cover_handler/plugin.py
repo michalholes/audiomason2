@@ -250,17 +250,28 @@ class CoverHandlerPlugin:
             for name, count in Counter(path.name.lower() for _, path in ordered_files).items()
             if count > 1
         }
+        base_keys: list[str] = []
         for scope_name, candidate in ordered_files:
             name_key = candidate.name.lower()
             suffix = "@fallback" if scope_name == "fallback" and name_key in duplicate_names else ""
+            base_keys.append(f"file:{name_key}{suffix}")
+
+        duplicate_base_keys = {key for key, count in Counter(base_keys).items() if count > 1}
+        seen_base_keys: Counter[str] = Counter()
+        for (_scope_name, candidate), base_key in zip(ordered_files, base_keys, strict=True):
+            seen_base_keys[base_key] += 1
+            ordinal_suffix = ""
+            if base_key in duplicate_base_keys and seen_base_keys[base_key] > 1:
+                ordinal_suffix = f"#{seen_base_keys[base_key]}"
+            candidate_key = f"{base_key}{ordinal_suffix}"
             candidates.append(
                 {
                     "kind": "file",
-                    "candidate_id": f"file:{name_key}{suffix}",
+                    "candidate_id": candidate_key,
                     "apply_mode": "copy",
                     "path": str(candidate),
                     "mime_type": self.resolve_cover_mime(path=candidate),
-                    "cache_key": f"file:{name_key}{suffix}",
+                    "cache_key": candidate_key,
                     "root_name": resolved_root,
                 }
             )

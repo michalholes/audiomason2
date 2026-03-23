@@ -1,0 +1,1 @@
+2026-03-23T21:30:00Z Cover discovery now disambiguates same-scope file-cover candidate identities when basename normalization would otherwise collide, and the loop iteration is expressed in a Ruff-compliant form without changing runtime behavior.

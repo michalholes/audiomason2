@@ -131,6 +131,28 @@ def test_discover_cover_candidates_disambiguates_duplicate_basenames_across_scop
     ]
 
 
+def test_discover_cover_candidates_disambiguates_case_variant_duplicates_in_same_scope(
+    tmp_path: Path,
+) -> None:
+    plugin = CoverHandlerPlugin()
+    source_dir = tmp_path / "book"
+    source_dir.mkdir()
+    (source_dir / "cover.jpeg").write_bytes(b"lower")
+    (source_dir / "COVER.JPEG").write_bytes(b"upper")
+
+    candidates = plugin.discover_cover_candidates(source_dir)
+
+    assert [item["candidate_id"] for item in candidates] == [
+        "file:cover.jpeg",
+        "file:cover.jpeg#2",
+    ]
+    assert [item["cache_key"] for item in candidates] == [
+        "file:cover.jpeg",
+        "file:cover.jpeg#2",
+    ]
+    assert {Path(item["path"]).name for item in candidates} == {"COVER.JPEG", "cover.jpeg"}
+
+
 def test_build_embedded_extract_commands_for_m4a_has_fallback(tmp_path: Path) -> None:
     plugin = CoverHandlerPlugin()
     audio_file = tmp_path / "book.m4a"
