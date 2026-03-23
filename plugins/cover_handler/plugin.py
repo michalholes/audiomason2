@@ -14,9 +14,13 @@ import asyncio
 import hashlib
 import mimetypes
 import shutil
+from collections import Counter
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
+
+from mutagen.id3 import ID3
+from mutagen.mp4 import MP4
 
 from audiomason.core import CoverChoice, ProcessingContext
 from audiomason.core.errors import CoverError
@@ -42,6 +46,42 @@ _EMBEDDED_SUFFIXES = {".mp3", ".m4a", ".m4b"}
 
 def _cache_token(value: str) -> str:
     return hashlib.sha1(value.encode("utf-8")).hexdigest()[:12]
+
+
+def _ordered_file_candidates(directory: Path) -> list[Path]:
+    seen: set[str] = set()
+    ordered: list[Path] = []
+    for name in _FILE_COVER_NAMES:
+        candidate = directory / name
+        if candidate.exists() and candidate.is_file():
+            ordered.append(candidate)
+            seen.add(str(candidate))
+    ordered.extend(
+        sorted(
+            candidate
+            for candidate in directory.iterdir()
+            if candidate.is_file()
+            and candidate.suffix.lower() in _GENERIC_COVER_SUFFIXES
+            and str(candidate) not in seen
+        )
+    )
+    return ordered
+
+
+def _has_embedded_artwork(audio_file: Path) -> bool:
+    suffix = audio_file.suffix.lower()
+    try:
+        if suffix == ".mp3":
+            mp3_tags = ID3(str(audio_file))
+            apic_frames = mp3_tags.getall("APIC")
+            return any(bool(getattr(frame, "data", b"")) for frame in apic_frames)
+        if suffix in {".m4a", ".m4b"}:
+            mp4_tags: Any = MP4(str(audio_file)).tags
+            covers = mp4_tags.get("covr") if mp4_tags is not None else None
+            return any(bool(bytes(item)) for item in (covers or []))
+    except Exception:
+        return False
+    return False
 
 
 class CoverHandlerPlugin:
@@ -194,47 +234,42 @@ class CoverHandlerPlugin:
             return []
 
         candidates: list[dict[str, str]] = []
-        seen: set[str] = set()
         resolved_root = self._resolve_root_name(group_root=group_root, stage_root=stage_root)
+        scopes = [("primary", directory)]
+        fallback = directory.parent
+        if fallback.exists() and fallback.is_dir() and fallback != directory:
+            scopes.append(("fallback", fallback))
 
-        for name in _FILE_COVER_NAMES:
-            candidate = directory / name
-            if candidate.exists() and candidate.is_file():
-                path_text = str(candidate)
-                seen.add(path_text)
-                candidates.append(
-                    {
-                        "kind": "file",
-                        "candidate_id": f"file:{candidate.name.lower()}",
-                        "apply_mode": "copy",
-                        "path": path_text,
-                        "mime_type": self.resolve_cover_mime(path=candidate),
-                        "cache_key": f"file:{candidate.name.lower()}",
-                        "root_name": resolved_root,
-                    }
-                )
-
-        generic_candidates = sorted(
-            candidate
-            for candidate in directory.iterdir()
-            if candidate.is_file()
-            and candidate.suffix.lower() in _GENERIC_COVER_SUFFIXES
-            and str(candidate) not in seen
-        )
-        for candidate in generic_candidates:
+        ordered_files = [
+            (scope_name, candidate)
+            for scope_name, scope_dir in scopes
+            for candidate in _ordered_file_candidates(scope_dir)
+        ]
+        duplicate_names = {
+            name
+            for name, count in Counter(path.name.lower() for _, path in ordered_files).items()
+            if count > 1
+        }
+        for scope_name, candidate in ordered_files:
+            name_key = candidate.name.lower()
+            suffix = "@fallback" if scope_name == "fallback" and name_key in duplicate_names else ""
             candidates.append(
                 {
                     "kind": "file",
-                    "candidate_id": f"file:{candidate.name.lower()}",
+                    "candidate_id": f"file:{name_key}{suffix}",
                     "apply_mode": "copy",
                     "path": str(candidate),
                     "mime_type": self.resolve_cover_mime(path=candidate),
-                    "cache_key": f"file:{candidate.name.lower()}",
+                    "cache_key": f"file:{name_key}{suffix}",
                     "root_name": resolved_root,
                 }
             )
 
-        if audio_file is not None and audio_file.suffix.lower() in _EMBEDDED_SUFFIXES:
+        if (
+            audio_file is not None
+            and audio_file.suffix.lower() in _EMBEDDED_SUFFIXES
+            and _has_embedded_artwork(audio_file)
+        ):
             candidates.append(
                 {
                     "kind": "embedded",

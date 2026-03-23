@@ -5,24 +5,33 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 
+from mutagen.id3 import APIC, ID3
 from plugins.cover_handler.plugin import CoverHandlerPlugin
 
 
-def test_discover_cover_candidates_orders_named_generic_and_embedded(tmp_path: Path) -> None:
+def _write_mp3(path: Path, *, with_artwork: bool) -> None:
+    tags = ID3()
+    if with_artwork:
+        tags.add(
+            APIC(
+                encoding=3,
+                mime="image/jpeg",
+                type=3,
+                desc="cover",
+                data=b"jpeg-data",
+            )
+        )
+    tags.save(path)
+
+
+def test_discover_cover_candidates_primary_only_ordering(tmp_path: Path) -> None:
     plugin = CoverHandlerPlugin()
     source_dir = tmp_path / "book"
     source_dir.mkdir()
     for name in ["folder.png", "cover.jpeg", "zzz.jpg", "aaa.webp"]:
         (source_dir / name).write_bytes(name.encode("utf-8"))
-    audio_file = source_dir / "book.m4a"
-    audio_file.write_bytes(b"audio")
 
-    candidates = plugin.discover_cover_candidates(
-        source_dir,
-        audio_file=audio_file,
-        group_root="group",
-        stage_root="stage",
-    )
+    candidates = plugin.discover_cover_candidates(source_dir)
 
     ordered = [(item["kind"], Path(item["path"]).name, item["apply_mode"]) for item in candidates]
     assert ordered == [
@@ -30,30 +39,96 @@ def test_discover_cover_candidates_orders_named_generic_and_embedded(tmp_path: P
         ("file", "folder.png", "copy"),
         ("file", "aaa.webp", "copy"),
         ("file", "zzz.jpg", "copy"),
-        ("embedded", "book.m4a", "extract_embedded"),
     ]
-    assert candidates[0]["root_name"] == "group"
-    assert candidates[0]["mime_type"] == "image/jpeg"
-    assert candidates[1]["mime_type"] == "image/png"
-    assert candidates[2]["cache_key"] == "file:aaa.webp"
-    assert candidates[-1]["cache_key"] == "embedded:book.m4a"
 
 
-def test_discover_cover_candidates_embedded_only_when_no_file_cover(tmp_path: Path) -> None:
+def test_discover_cover_candidates_fallback_only_ordering(tmp_path: Path) -> None:
+    plugin = CoverHandlerPlugin()
+    source_dir = tmp_path / "Author" / "Book"
+    source_dir.mkdir(parents=True)
+    parent_dir = source_dir.parent
+    for name in ["folder.png", "cover.jpeg", "zzz.jpg", "aaa.webp"]:
+        (parent_dir / name).write_bytes(name.encode("utf-8"))
+
+    candidates = plugin.discover_cover_candidates(source_dir)
+
+    assert [Path(item["path"]).name for item in candidates] == [
+        "cover.jpeg",
+        "folder.png",
+        "aaa.webp",
+        "zzz.jpg",
+    ]
+
+
+def test_discover_cover_candidates_orders_primary_before_fallback(tmp_path: Path) -> None:
+    plugin = CoverHandlerPlugin()
+    source_dir = tmp_path / "Author" / "Book"
+    source_dir.mkdir(parents=True)
+    parent_dir = source_dir.parent
+    (source_dir / "folder.png").write_bytes(b"primary")
+    (parent_dir / "cover.jpeg").write_bytes(b"fallback-named")
+    (parent_dir / "zzz.jpg").write_bytes(b"fallback-generic")
+
+    candidates = plugin.discover_cover_candidates(source_dir)
+
+    assert [Path(item["path"]).name for item in candidates] == [
+        "folder.png",
+        "cover.jpeg",
+        "zzz.jpg",
+    ]
+
+
+def test_discover_cover_candidates_appends_embedded_only_after_positive_probe(
+    tmp_path: Path,
+) -> None:
+    plugin = CoverHandlerPlugin()
+    source_dir = tmp_path / "book"
+    source_dir.mkdir()
+    (source_dir / "cover.jpeg").write_bytes(b"cover")
+    audio_file = source_dir / "book.mp3"
+    _write_mp3(audio_file, with_artwork=True)
+
+    candidates = plugin.discover_cover_candidates(source_dir, audio_file=audio_file)
+
+    assert [(item["kind"], Path(item["path"]).name) for item in candidates] == [
+        ("file", "cover.jpeg"),
+        ("embedded", "book.mp3"),
+    ]
+    assert candidates[-1]["cache_key"] == "embedded:book.mp3"
+
+
+def test_discover_cover_candidates_skips_embedded_without_artwork(tmp_path: Path) -> None:
     plugin = CoverHandlerPlugin()
     source_dir = tmp_path / "book"
     source_dir.mkdir()
     audio_file = source_dir / "book.mp3"
-    audio_file.write_bytes(b"audio")
+    _write_mp3(audio_file, with_artwork=False)
 
     candidates = plugin.discover_cover_candidates(source_dir, audio_file=audio_file)
 
-    assert len(candidates) == 1
-    assert candidates[0]["kind"] == "embedded"
-    assert candidates[0]["candidate_id"] == "embedded:book.mp3"
-    assert candidates[0]["apply_mode"] == "extract_embedded"
-    assert candidates[0]["path"] == str(audio_file)
-    assert candidates[0]["mime_type"] == "image/jpeg"
+    assert candidates == []
+
+
+def test_discover_cover_candidates_disambiguates_duplicate_basenames_across_scopes(
+    tmp_path: Path,
+) -> None:
+    plugin = CoverHandlerPlugin()
+    source_dir = tmp_path / "Author" / "Book"
+    source_dir.mkdir(parents=True)
+    parent_dir = source_dir.parent
+    (source_dir / "cover.jpeg").write_bytes(b"primary")
+    (parent_dir / "cover.jpeg").write_bytes(b"fallback")
+
+    candidates = plugin.discover_cover_candidates(source_dir)
+
+    assert [item["candidate_id"] for item in candidates] == [
+        "file:cover.jpeg",
+        "file:cover.jpeg@fallback",
+    ]
+    assert [item["cache_key"] for item in candidates] == [
+        "file:cover.jpeg",
+        "file:cover.jpeg@fallback",
+    ]
 
 
 def test_build_embedded_extract_commands_for_m4a_has_fallback(tmp_path: Path) -> None:

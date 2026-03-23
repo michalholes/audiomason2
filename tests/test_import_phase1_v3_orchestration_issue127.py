@@ -76,7 +76,7 @@ def test_create_session_autofills_single_author_and_single_book(tmp_path: Path) 
         "album": "Book",
         "album_artist": "Author",
     }
-    assert state["vars"]["phase1"]["cover"]["mode"] == "embedded"
+    assert state["vars"]["phase1"]["cover"]["mode"] == "skip"
     assert state["vars"]["phase1"]["runtime"]["effective_author_title"] == {
         "author": "Author",
         "title": "Book",

@@ -293,9 +293,6 @@ def test_pending_process_job_adopts_detached_runtime_without_original_host_engin
     assert calls == [
         "audio.plan:track01.m4a",
         "audio.exec:track01.mp3",
-        "cover.apply:embedded:track01.m4a",
-        "cover.convert",
-        "cover.embed",
         "tags.write:track01.mp3:Book1",
     ]
     assert session_id == str(job_requests.get("session_id") or "")
@@ -351,7 +348,7 @@ def test_detached_process_loader_completes_finalize_without_parent_subscriber(
     assert state["status"] == "succeeded"
     assert finalize["job_id"] == job_id
     assert finalize["status"] == "succeeded"
-    assert finalize["counts"] == {"books": 1, "capabilities": 4}
+    assert finalize["counts"] == {"books": 1, "capabilities": 3}
 
     report_ref = str(finalize["report_path"])
     assert report_ref == f"wizards:import/sessions/{session_id}/finalize/report.json"
@@ -379,8 +376,5 @@ def test_detached_process_loader_completes_finalize_without_parent_subscriber(
     assert calls == [
         "audio.plan:track01.m4a",
         "audio.exec:track01.mp3",
-        "cover.apply:embedded:track01.m4a",
-        "cover.convert",
-        "cover.embed",
         "tags.write:track01.mp3:Book1",
     ]
