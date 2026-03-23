@@ -5,17 +5,20 @@ from importlib import import_module
 from pathlib import Path
 from typing import Any
 
+import pytest
+
 from audiomason.core.config import ConfigResolver
 
 ImportPlugin = import_module("plugins.import.plugin").ImportPlugin
 
 
 class _FakeAudioProcessor:
-    def __init__(self, calls: list[str]) -> None:
+    def __init__(self, calls: list[str], planned_outputs: list[str] | None = None) -> None:
         self.calls = calls
         self.bitrate = "128k"
         self.loudnorm = False
         self.split_chapters = False
+        self._planned_outputs = list(planned_outputs or [])
 
     def plan_import_conversion(
         self,
@@ -25,7 +28,11 @@ class _FakeAudioProcessor:
         chapters: list[dict[str, Any]] | None = None,
     ) -> list[dict[str, Any]]:
         self.calls.append(f"audio.plan:{source.name}")
-        return [{"source": source, "output": output_dir / f"{source.stem}.mp3", "order": 1}]
+        planned_outputs = self._planned_outputs or [f"{source.stem}.mp3"]
+        return [
+            {"source": source, "output": output_dir / name, "order": index}
+            for index, name in enumerate(planned_outputs, start=1)
+        ]
 
     async def _execute_plan(self, plan: list[dict[str, Any]]) -> list[Path]:
         outputs: list[Path] = []
@@ -99,9 +106,9 @@ class _FakeID3Tagger:
 
 
 class _FakeLoader:
-    def __init__(self, calls: list[str]) -> None:
+    def __init__(self, calls: list[str], planned_outputs: list[str] | None = None) -> None:
         self._plugins = {
-            "audio_processor": _FakeAudioProcessor(calls),
+            "audio_processor": _FakeAudioProcessor(calls, planned_outputs=planned_outputs),
             "cover_handler": _FakeCoverHandler(calls),
             "id3_tagger": _FakeID3Tagger(calls),
         }
@@ -183,6 +190,10 @@ async def test_import_plugin_runs_phase2_process_contract_from_job_requests(tmp_
                         "root": "stage",
                         "relative_path": "Published/Canonical",
                     },
+                    "rename": {
+                        "mode": "explicit_relative_paths",
+                        "outputs": ["Canonical Author - Canonical Book.mp3"],
+                    },
                 },
                 "capabilities": [
                     {"kind": "audio.import", "order": 10, "options": {}},
@@ -235,7 +246,9 @@ async def test_import_plugin_runs_phase2_process_contract_from_job_requests(tmp_
         plugin_loader=loader,
     )
 
-    output_file = roots["stage"] / "Published" / "Canonical" / "track01.mp3"
+    output_file = (
+        roots["stage"] / "Published" / "Canonical" / "Canonical Author - Canonical Book.mp3"
+    )
     assert output_file.exists()
     assert output_file.read_bytes().endswith(b"|cover|tags")
     assert calls == [
@@ -244,5 +257,68 @@ async def test_import_plugin_runs_phase2_process_contract_from_job_requests(tmp_
         "cover.apply:file:cover.jpg",
         "cover.convert",
         "cover.embed",
-        "tags.write:track01.mp3:Canonical Book:Canonical Author:7",
+        "tags.write:Canonical Author - Canonical Book.mp3:Canonical Book:Canonical Author:7",
+    ]
+
+
+async def test_import_plugin_keep_generated_fails_on_extension_mismatch(tmp_path: Path) -> None:
+    plugin, roots = _make_plugin(tmp_path)
+    calls: list[str] = []
+    loader = _FakeLoader(calls, planned_outputs=["track01.m4a"])
+
+    source_dir = roots["inbox"] / "Shelf" / "RawBook"
+    source_dir.mkdir(parents=True, exist_ok=True)
+    (source_dir / "track01.m4a").write_bytes(b"audio")
+
+    session_dir = roots["wizards"] / "import" / "sessions" / "s2"
+    session_dir.mkdir(parents=True, exist_ok=True)
+    job_requests = {
+        "job_type": "import.process",
+        "job_version": 1,
+        "session_id": "s2",
+        "mode": "stage",
+        "config_fingerprint": "cfg",
+        "diagnostics_context": {"session_id": "s2"},
+        "actions": [
+            {
+                "type": "import.book",
+                "book_id": "book:1",
+                "source": {"root": "inbox", "relative_path": "Shelf/RawBook"},
+                "target": {"root": "stage", "relative_path": "Published/Canonical"},
+                "authority": {
+                    "book": {
+                        "author_label": "Canonical Author",
+                        "book_label": "Canonical Book",
+                    },
+                    "metadata_tags": {
+                        "field_map": {},
+                        "values": {"title": "Canonical Book"},
+                    },
+                    "publish": {
+                        "root": "stage",
+                        "relative_path": "Published/Canonical",
+                    },
+                    "rename": {
+                        "mode": "keep_generated",
+                        "extension": ".mp3",
+                    },
+                },
+                "capabilities": [
+                    {"kind": "audio.import", "order": 10, "options": {"split_chapters": True}},
+                ],
+            }
+        ],
+    }
+    (session_dir / "job_requests.json").write_text(json.dumps(job_requests), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="keep_generated extension mismatch"):
+        await plugin.run_process_contract(
+            job_id="job-130",
+            job_meta={"job_requests_path": "wizards:import/sessions/s2/job_requests.json"},
+            plugin_loader=loader,
+        )
+
+    assert calls == [
+        "audio.plan:track01.m4a",
+        "audio.exec:track01.m4a",
     ]

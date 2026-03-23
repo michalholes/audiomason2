@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from plugins.file_io.import_runtime import normalize_relative_path
+
 from .fingerprints import fingerprint_json
 
 
@@ -126,6 +128,32 @@ def _cover_candidate_for_action(
     return None
 
 
+def _rename_authority_for_action(
+    *,
+    book_id: str,
+    inputs: dict[str, Any],
+    rename_by_book: dict[str, Any],
+) -> dict[str, Any]:
+    audio_processing = _policy_dict(inputs, "audio_processing")
+    if bool(audio_processing.get("split_chapters", False)):
+        return {"mode": "keep_generated", "extension": ".mp3"}
+
+    rename_any = rename_by_book.get(book_id)
+    rename = dict(rename_any) if isinstance(rename_any, dict) else {}
+    outputs_any = rename.get("outputs")
+    outputs_raw = outputs_any if isinstance(outputs_any, list) else []
+    outputs: list[str] = []
+    for item in outputs_raw:
+        if not isinstance(item, str):
+            continue
+        rel_path = normalize_relative_path(item)
+        if rel_path and rel_path not in outputs:
+            outputs.append(rel_path)
+    if not outputs:
+        raise ValueError(f"rename authority outputs missing for {book_id}")
+    return {"mode": "explicit_relative_paths", "outputs": outputs}
+
+
 def _track_start_value(inputs: dict[str, Any]) -> int | None:
     id3_policy = _policy_dict(inputs, "id3_policy")
     value = id3_policy.get("track_start")
@@ -143,6 +171,7 @@ def _action_authority(
     target_root: str,
     target_relative_path: str,
     track_start: int | None,
+    rename_authority: dict[str, Any],
 ) -> dict[str, Any]:
     book = dict(book_meta) if isinstance(book_meta, dict) else {}
     metadata_tags: dict[str, Any] = {
@@ -158,6 +187,7 @@ def _action_authority(
             "root": target_root,
             "relative_path": target_relative_path,
         },
+        "rename": dict(rename_authority),
     }
 
 
@@ -291,6 +321,8 @@ def build_job_requests(
     book_meta = dict(book_meta_any) if isinstance(book_meta_any, dict) else {}
     field_map = _metadata_field_map(phase2_inputs)
     track_start = _track_start_value(phase2_inputs)
+    rename_by_book_any = authority.get("rename_by_book")
+    rename_by_book = dict(rename_by_book_any) if isinstance(rename_by_book_any, dict) else {}
     selected_book_meta: dict[str, dict[str, Any]] = {}
     for it in selected_any:
         if not isinstance(it, dict):
@@ -307,6 +339,11 @@ def build_job_requests(
         if authority_meta:
             selected_book_meta[book_id] = dict(authority_meta)
         tag_values = _tag_values_for_action(inputs=phase2_inputs, authority_meta=authority_meta)
+        rename_authority = _rename_authority_for_action(
+            book_id=book_id,
+            inputs=phase2_inputs,
+            rename_by_book=rename_by_book,
+        )
         actions.append(
             {
                 "type": "import.book",
@@ -320,6 +357,7 @@ def build_job_requests(
                     target_root=target_root,
                     target_relative_path=tgt_rel,
                     track_start=track_start,
+                    rename_authority=rename_authority,
                 ),
                 "capabilities": _build_capabilities(
                     root=root,
@@ -349,6 +387,7 @@ def build_job_requests(
             "phase1": {
                 "runtime": dict(phase1_runtime),
                 "selected_books": selected_book_meta,
+                "rename_by_book": dict(rename_by_book),
             }
         },
         "diagnostics_context": dict(diagnostics_context),

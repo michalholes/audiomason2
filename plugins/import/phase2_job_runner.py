@@ -48,6 +48,78 @@ def _iter_audio_sources(source_path: Path) -> list[Path]:
     return files
 
 
+def _iter_work_files(work_path: Path) -> list[Path]:
+    if not work_path.exists():
+        return []
+    return [path for path in sorted(work_path.rglob("*")) if path.is_file()]
+
+
+def _rename_authority(action: dict[str, Any]) -> dict[str, Any]:
+    authority_any = action.get("authority")
+    authority = dict(authority_any) if isinstance(authority_any, dict) else {}
+    rename_any = authority.get("rename")
+    rename = dict(rename_any) if isinstance(rename_any, dict) else {}
+    mode = str(rename.get("mode") or "")
+    if mode == "keep_generated":
+        extension = str(rename.get("extension") or "").strip().lower()
+        if not extension.startswith(".") or len(extension) < 2:
+            raise ValueError("keep_generated extension is required")
+        return {"mode": mode, "extension": extension}
+    if mode == "explicit_relative_paths":
+        outputs_any = rename.get("outputs")
+        outputs_raw = outputs_any if isinstance(outputs_any, list) else []
+        outputs: list[str] = []
+        for item in outputs_raw:
+            if not isinstance(item, str):
+                continue
+            rel_path = normalize_relative_path(item)
+            if rel_path and rel_path not in outputs:
+                outputs.append(rel_path)
+        if not outputs:
+            raise ValueError("explicit_relative_paths outputs are required")
+        return {"mode": mode, "outputs": outputs}
+    raise ValueError("action authority.rename is required")
+
+
+def _apply_rename_authority(*, work_path: Path, action: dict[str, Any]) -> None:
+    rename = _rename_authority(action)
+    produced = _iter_work_files(work_path)
+    if not produced:
+        raise ValueError("audio.import produced no outputs")
+
+    if rename["mode"] == "keep_generated":
+        extension = str(rename["extension"])
+        mismatched = [
+            normalize_relative_path(str(path.relative_to(work_path)))
+            for path in produced
+            if path.suffix.lower() != extension
+        ]
+        if mismatched:
+            raise ValueError(
+                f"keep_generated extension mismatch: expected {extension}, got {mismatched}"
+            )
+        return
+
+    outputs = list(rename["outputs"])
+    if len(produced) != len(outputs):
+        raise ValueError(
+            f"explicit_relative_paths count mismatch: expected {len(outputs)}, got {len(produced)}"
+        )
+
+    temp_paths: list[tuple[Path, str]] = []
+    for index, source_path in enumerate(produced, start=1):
+        temp_path = work_path / f".am2_rename_tmp_{index:04d}{source_path.suffix.lower() or '.tmp'}"
+        if temp_path.exists():
+            raise ValueError(f"rename temp path already exists: {temp_path.name}")
+        source_path.rename(temp_path)
+        temp_paths.append((temp_path, outputs[index - 1]))
+
+    for temp_path, rel_path in temp_paths:
+        final_path = work_path / rel_path
+        final_path.parent.mkdir(parents=True, exist_ok=True)
+        temp_path.rename(final_path)
+
+
 def _iter_mp3_outputs(work_path: Path) -> list[Path]:
     if not work_path.exists():
         return []
@@ -329,6 +401,7 @@ async def run_phase2_job_requests(
                     work_path=work_path,
                     capability=capability,
                 )
+                _apply_rename_authority(work_path=work_path, action=action)
                 continue
             if kind == "cover.embed":
                 await _run_cover_embed(

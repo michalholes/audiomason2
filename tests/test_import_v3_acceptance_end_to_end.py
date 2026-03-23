@@ -108,6 +108,10 @@ def test_default_v3_cli_acceptance_keeps_selection_and_plan_state(tmp_path: Path
         "relative_path": "Author A/Book A",
         "root": "inbox",
     }
+    assert job_requests["actions"][0]["authority"]["rename"] == {
+        "mode": "explicit_relative_paths",
+        "outputs": ["track01.mp3"],
+    }
     assert [entry["step_id"] for entry in state["trace"]] == [
         "select_authors",
         "select_books",
@@ -143,5 +147,19 @@ def test_default_v3_cli_acceptance_keeps_selection_and_plan_state(tmp_path: Path
     assert "Step: select_books" in joined
     assert "Step: effective_author" in joined
     assert "Step: final_summary_confirm" in joined
+
+    for hidden_step in [
+        "filename_policy_author",
+        "filename_policy_title",
+        "id3_policy_title",
+        "id3_policy_artist",
+        "id3_policy_album",
+        "id3_policy_album_artist",
+        "audio_processing_bitrate",
+        "audio_processing_loudnorm",
+        "audio_processing_split_chapters",
+        "parallelism",
+    ]:
+        assert f"Step: {hidden_step}" not in joined
     assert "job_ids:" in joined
     assert '"batch_size": 1' in joined

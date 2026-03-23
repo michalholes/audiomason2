@@ -76,6 +76,12 @@ def test_build_job_requests_uses_phase1_authority_without_path_fallback() -> Non
                     "title": "Canonical Book",
                 }
             },
+            "rename_by_book": {
+                "book:1": {
+                    "mode": "explicit_relative_paths",
+                    "outputs": ["track01.mp3"],
+                }
+            },
         },
     )
 
@@ -130,6 +136,7 @@ def test_build_job_requests_uses_phase1_authority_without_path_fallback() -> Non
             "track_start": 7,
         },
         "publish": {"root": "outbox", "relative_path": "Stage/Disc-01"},
+        "rename": {"mode": "explicit_relative_paths", "outputs": ["track01.mp3"]},
     }
     assert capabilities[2]["track_start"] == 7
     assert doc["authority"]["phase1"]["selected_books"]["book:1"]["book_label"] == "Canonical Book"
@@ -154,3 +161,48 @@ def test_build_job_requests_requires_selected_books_for_planned_units() -> None:
     )
 
     assert doc["actions"] == []
+
+
+def test_build_job_requests_persists_keep_generated_for_split_chapters() -> None:
+    doc = build_job_requests(
+        session_id="s1",
+        root="inbox",
+        relative_path="Raw/Source",
+        mode="stage",
+        diagnostics_context={},
+        config_fingerprint="cfg1",
+        plan={
+            "selected_books": [
+                {
+                    "book_id": "book:1",
+                    "source_relative_path": "Shelf/Disc-01",
+                    "proposed_target_relative_path": "Stage/Disc-01",
+                }
+            ],
+            "summary": {"selected_books": 1},
+        },
+        inputs={},
+        session_authority={
+            "book_meta": {
+                "book:1": {
+                    "author_label": "Canonical Author",
+                    "book_label": "Canonical Book",
+                }
+            },
+            "phase2_inputs": {
+                "audio_processing": {"split_chapters": True},
+            },
+            "rename_by_book": {
+                "book:1": {
+                    "mode": "explicit_relative_paths",
+                    "outputs": ["track01.mp3"],
+                }
+            },
+        },
+    )
+
+    action = doc["actions"][0]
+    assert action["authority"]["rename"] == {
+        "mode": "keep_generated",
+        "extension": ".mp3",
+    }

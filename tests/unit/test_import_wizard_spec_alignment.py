@@ -154,3 +154,64 @@ def test_final_summary_confirm_uses_confirm_start_gate(tmp_path: Path) -> None:
     final_writes = [w.get("to_path") for w in final_step.get("writes", []) if isinstance(w, dict)]
     assert final_step.get("primitive_id") == "ui.prompt_confirm"
     assert final_writes == ["$.state.answers.final_summary_confirm.confirm_start"]
+
+
+def test_hidden_steps_remain_explicit_non_prompt_nodes(tmp_path: Path) -> None:
+    engine, roots = _make_engine(tmp_path)
+    _write_inbox_source_dir(roots, "book1")
+
+    flow_model = engine.get_flow_model()
+    steps = {s.get("step_id"): s for s in flow_model.get("steps", []) if isinstance(s, dict)}
+
+    hidden_steps = [
+        "filename_policy_author",
+        "filename_policy_title",
+        "id3_policy_title",
+        "id3_policy_artist",
+        "id3_policy_album",
+        "id3_policy_album_artist",
+        "audio_processing_bitrate",
+        "audio_processing_loudnorm",
+        "audio_processing_split_chapters",
+        "parallelism",
+    ]
+    for step_id in hidden_steps:
+        assert step_id in steps
+        assert steps[step_id].get("primitive_id") == "data.set"
+
+
+def test_hidden_steps_auto_advance_without_extra_submit_calls(tmp_path: Path) -> None:
+    engine, roots = _make_engine(tmp_path)
+    _write_inbox_source_dir(roots, "src/Author A/Book A")
+    (roots["inbox"] / "src" / "Author A" / "Book A" / "track01.mp3").write_text(
+        "x", encoding="utf-8"
+    )
+
+    state = engine.create_session("inbox", "src", mode="stage")
+    session_id = str(state.get("session_id") or "")
+
+    state = engine.submit_step(session_id, "select_authors", {"selection": "1"})
+    assert state.get("current_step_id") == "select_books"
+
+    state = engine.submit_step(session_id, "select_books", {"selection": "1"})
+    assert state.get("current_step_id") == "effective_author"
+
+    state = engine.submit_step(session_id, "effective_author", {"value": "Author A"})
+    assert state.get("current_step_id") == "effective_title"
+
+    state = engine.submit_step(session_id, "effective_title", {"value": "Book A"})
+    assert state.get("current_step_id") == "covers_policy_mode"
+
+    trace = [entry["step_id"] for entry in state["trace"]]
+    assert trace == [
+        "select_authors",
+        "select_books",
+        "plan_preview_batch",
+        "phase1_runtime_defaults",
+        "effective_author",
+        "effective_title",
+        "effective_author_title",
+        "filename_policy_author",
+        "filename_policy_title",
+        "filename_policy",
+    ]
