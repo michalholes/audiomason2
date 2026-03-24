@@ -1,7 +1,8 @@
 (function () {
 	"use strict";
 
-	const W = /** @type {any} */ (window);
+	/** @type {Window} */
+	const W = window;
 
 	function renderJSON(opts) {
 		const textarea = opts && opts.textarea;

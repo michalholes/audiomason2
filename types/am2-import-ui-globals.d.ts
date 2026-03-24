@@ -79,6 +79,139 @@ declare global {
 		reason?: string;
 	}
 
+	interface AM2FlowCanvasRenderOptions {
+		mount: HTMLElement | null;
+		metaMount?: HTMLElement | null;
+		nodes?: Array<AM2JsonObject | string | null>;
+		catalog?: Record<string, AM2JsonObject> | null;
+		edges?: AM2JsonObject[];
+		selectedStepId?: string | null;
+		onSelectStep?: (stepId: string) => void;
+	}
+
+	interface AM2FlowCanvasPanelApi {
+		renderCanvas(opts: AM2FlowCanvasRenderOptions): void;
+	}
+
+	interface AM2FlowStepFieldSpec {
+		fieldId: string;
+		editor?: string;
+		getValue(step: AM2JsonObject): AM2JsonValue;
+	}
+
+	interface AM2FlowStepModalFormHandlers {
+		isFieldDirty(fieldId: string): boolean;
+		readFieldValue(spec: AM2FlowStepFieldSpec): AM2JsonValue;
+		onFieldApply(spec: AM2FlowStepFieldSpec): void;
+		onFieldInput(spec: AM2FlowStepFieldSpec, value: string): void;
+	}
+
+	interface AM2FlowStepModalFormApi {
+		buildFieldSpecs(step: AM2JsonObject): AM2FlowStepFieldSpec[];
+		renderForm(opts: {
+			mount: HTMLElement;
+			step: AM2JsonObject;
+			handlers: AM2FlowStepModalFormHandlers;
+		}): void;
+	}
+
+	interface AM2FlowStepModalJSONApi {
+		renderJSON(opts: {
+			textarea: HTMLTextAreaElement | null;
+			value: string;
+			onInput?: (value: string) => void;
+		}): void;
+	}
+
+	interface AM2FlowStepModalStateShape {
+		open: boolean;
+		view: string;
+		selectedLibraryId: string;
+		originalStepId: string;
+		baselineStep: AM2JsonObject | null;
+		workingStep: AM2JsonObject | null;
+		fieldBuffers: Record<string, string>;
+		jsonBuffer: string;
+		jsonDirty: boolean;
+	}
+
+	interface AM2DSLEditorGraphOpsApi {
+		addEdge?(payload: AM2JsonObject): void;
+		addLibrary?(name: string): void;
+		addPrimitiveNode?(payload: AM2JsonObject): void;
+		addWrite?(payload: AM2JsonObject): void;
+		clearSelectedNode?(): void;
+		currentConfig?(): AM2JsonObject;
+		currentDefinition?(): AM2JsonObject;
+		currentGraphDefinition?(): AM2JsonObject;
+		currentGraphLabel?(): string;
+		currentNode?(): AM2JsonObject | null;
+		isV3Draft?(definition: AM2JsonObject): boolean;
+		loadAll?(definition: AM2JsonObject, opts?: AM2FlowLoadAllOptions): void;
+		markValidated?(definition: AM2JsonObject): void;
+		patchEdge?(payload: AM2JsonObject): void;
+		patchLibrary?(payload: AM2JsonObject): void;
+		patchNode?(payload: AM2JsonObject): void;
+		patchWrite?(payload: AM2JsonObject): void;
+		primitiveItems?(registry?: AM2JsonObject | null): AM2JsonObject[];
+		primitiveMeta?(nodeOrStepId: AM2JsonValue): AM2JsonObject | null;
+		removeEdge?(edgeId: string): void;
+		removeLibrary?(libraryId: string): void;
+		removeNode?(stepId: string): void;
+		removeWrite?(writeId: string): void;
+		selectedLibraryId?(): string | null;
+		selectedStepId?(): string | null;
+		setSelectedLibrary?(libraryId: string): void;
+		setSelectedStep?(stepId: string | null): void;
+	}
+
+	interface AM2DSLEditorRegistryApi {
+		activateWizardDefinition?(): Promise<AM2EditorHttpResponse>;
+		getPrimitiveRegistry?(): Promise<AM2EditorHttpResponse>;
+		getWizardDefinition?(): Promise<AM2EditorHttpResponse>;
+		listWizardDefinitionHistory?(): Promise<AM2EditorHttpResponse>;
+		resetWizardDefinition?(): Promise<AM2EditorHttpResponse>;
+		rollbackWizardDefinition?(id: string): Promise<AM2EditorHttpResponse>;
+		saveWizardDefinition?(
+			definition: AM2JsonObject,
+		): Promise<AM2EditorHttpResponse>;
+		validateWizardDefinition?(
+			definition: AM2JsonObject,
+		): Promise<AM2EditorHttpResponse>;
+	}
+
+	interface AM2FlowStepModalModelApi {
+		buildCandidateDefinition(
+			state: AM2FlowStepModalStateShape,
+			graphOps: AM2DSLEditorGraphOpsApi,
+		): { definition: AM2JsonObject; nextStepId: string };
+		flushField(
+			state: AM2FlowStepModalStateShape,
+			formApi: AM2FlowStepModalFormApi,
+			fieldId: string,
+			setError: (message: string) => void,
+		): boolean;
+		flushPendingEdits(
+			state: AM2FlowStepModalStateShape,
+			formApi: AM2FlowStepModalFormApi,
+			setError: (message: string) => void,
+			view: string,
+		): boolean;
+		isFieldDirty(state: AM2FlowStepModalStateShape, fieldId: string): boolean;
+		pendingBufferCount(state: AM2FlowStepModalStateShape): number;
+		readFieldValue(
+			state: AM2FlowStepModalStateShape,
+			spec: AM2FlowStepFieldSpec,
+		): AM2JsonValue;
+		rebuildJsonBuffer(state: AM2FlowStepModalStateShape): void;
+		syncFromSavedStep(
+			state: AM2FlowStepModalStateShape,
+			graphOps: AM2DSLEditorGraphOpsApi,
+			stepId: string,
+		): void;
+		workingStateDirty(state: AM2FlowStepModalStateShape): boolean;
+	}
+
 	interface AM2FlowJSONClipboardApi {
 		copyText(text: string): Promise<string>;
 	}
@@ -162,7 +295,13 @@ declare global {
 	}
 
 	interface AM2FlowStepModalStateApi {
+		closeModal(): boolean;
 		isOpen(): boolean;
+		openStep(stepId: string): Promise<boolean>;
+		reReadStep(): Promise<boolean>;
+		restoreBaseline(): boolean;
+		setView(nextView: string): void;
+		validateStep(): Promise<boolean>;
 	}
 
 	interface AM2DSLEditorV3Api {
@@ -177,6 +316,7 @@ declare global {
 	}
 
 	interface AM2FlowEditorStateApi {
+		draftDirty?: boolean;
 		on(
 			eventName: AM2FlowListenerEventName,
 			fn: (payload: AM2FlowListenerPayload) => void,
@@ -230,10 +370,14 @@ declare global {
 	}
 
 	interface AM2WizardDefinitionEditorApi {
+		reload?(): Promise<boolean | void>;
 		reloadAll(): Promise<boolean | void>;
-		validateDraft(): Promise<boolean | void>;
-		saveDraft(): Promise<boolean | void>;
+		reset?(): Promise<boolean | void>;
 		resetDefinition(): Promise<boolean | void>;
+		save?(): Promise<boolean | void>;
+		saveDraft(): Promise<boolean | void>;
+		validate?(): Promise<boolean | void>;
+		validateDraft(): Promise<boolean | void>;
 	}
 
 	interface AM2UiGlobalApi {
@@ -320,10 +464,14 @@ declare global {
 		AM2FlowEditorState: AM2FlowEditorStateApi;
 		FlowEditorState: AM2FlowEditorStateConstructor;
 		AM2FlowConfigEditor: AM2FlowConfigEditorApi;
+		AM2FlowCanvasPanel: AM2FlowCanvasPanelApi;
 		AM2FlowJSONClipboard: AM2FlowJSONClipboardApi;
 		AM2FlowJSONFileIO: AM2FlowJSONFileIOApi;
 		AM2FlowJSONModalDOM: AM2FlowJSONModalDOMApi;
 		AM2FlowJSONModalState: AM2FlowJSONModalStateApi;
+		AM2FlowStepModalForm: AM2FlowStepModalFormApi;
+		AM2FlowStepModalJSON: AM2FlowStepModalJSONApi;
+		AM2FlowStepModalModel: AM2FlowStepModalModelApi;
 		AM2FlowStepModalState: AM2FlowStepModalStateApi;
 		AM2WizardDefinitionEditor: AM2WizardDefinitionEditorApi;
 		AM2UI: AM2UiGlobalApi;

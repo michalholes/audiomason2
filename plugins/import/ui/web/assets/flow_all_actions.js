@@ -1,7 +1,19 @@
 (function () {
 	"use strict";
 
-	const W = /** @type {any} */ (window);
+	/** @typedef {{
+	 * 	reload?: () => Promise<boolean | void>,
+	 * 	reloadAll?: () => Promise<boolean | void>,
+	 * 	reset?: () => Promise<boolean | void>,
+	 * 	resetDefinition?: () => Promise<boolean | void>,
+	 * 	save?: () => Promise<boolean | void>,
+	 * 	saveDraft?: () => Promise<boolean | void>,
+	 * 	validate?: () => Promise<boolean | void>,
+	 * 	validateDraft?: () => Promise<boolean | void>,
+	 * }} AM2FlowAllWizardAdapter
+	 */
+	/** @type {Window} */
+	const W = window;
 
 	function $(id) {
 		return document.getElementById(id);
@@ -27,6 +39,7 @@
 	}
 
 	W.AM2FlowEditor = W.AM2FlowEditor || {};
+	/** @type {AM2FlowEditorGlobalApi & { __allValid?: boolean }} */
 	const AM2 = W.AM2FlowEditor;
 	AM2.__allValid = false;
 
@@ -61,8 +74,10 @@
 		return false;
 	}
 	function getAdapters() {
-		const cfg = AM2.config || W.AM2FlowConfigEditor;
-		const wiz = AM2.wizard || W.AM2WizardDefinitionEditor;
+		/** @type {AM2FlowEditorConfigApi | null} */
+		const cfg = AM2.config || W.AM2FlowConfigEditor || null;
+		/** @type {AM2FlowAllWizardAdapter | null} */
+		const wiz = AM2.wizard || W.AM2WizardDefinitionEditor || null;
 		return { cfg: cfg, wiz: wiz };
 	}
 
@@ -70,11 +85,25 @@
 		const FE = W.AM2FlowEditorState;
 		const snap = FE && FE.getSnapshot ? FE.getSnapshot() : null;
 		const wd = snap && snap.wizardDraft ? snap.wizardDraft : null;
-		const uiState = wd && wd._am2_ui ? wd._am2_ui : null;
-		const v = uiState && uiState.validation ? uiState.validation : null;
-		const server = v && Array.isArray(v.server) ? v.server : [];
-		const local = v && Array.isArray(v.local) ? v.local : [];
-		const msg = (server[0] || local[0] || "").trim();
+		/** @type {{ validation?: { server?: unknown[], local?: unknown[] } } | null} */
+		const uiState =
+			wd &&
+			typeof wd === "object" &&
+			!Array.isArray(wd) &&
+			wd._am2_ui &&
+			typeof wd._am2_ui === "object" &&
+			!Array.isArray(wd._am2_ui)
+				? wd._am2_ui
+				: null;
+		const validation =
+			uiState && uiState.validation && typeof uiState.validation === "object"
+				? uiState.validation
+				: null;
+		const server =
+			validation && Array.isArray(validation.server) ? validation.server : [];
+		const local =
+			validation && Array.isArray(validation.local) ? validation.local : [];
+		const msg = String(server[0] || local[0] || "").trim();
 		return msg ? msg : "";
 	}
 

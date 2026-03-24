@@ -1,7 +1,8 @@
 (function () {
 	"use strict";
 
-	const W = /** @type {any} */ (window);
+	/** @type {Window} */
+	const W = window;
 
 	function clear(node) {
 		while (node && node.firstChild) {

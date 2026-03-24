@@ -1,7 +1,13 @@
 (function () {
 	"use strict";
 
-	const W = /** @type {any} */ (window);
+	/** @typedef {Window & {
+	 * 	AM2DSLEditorGraphOps?: AM2DSLEditorGraphOpsApi,
+	 * 	AM2DSLEditorRegistryAPI?: AM2DSLEditorRegistryApi,
+	 * }} AM2FlowStepModalWindow
+	 */
+	/** @type {AM2FlowStepModalWindow} */
+	const W = window;
 	const graphOps = W.AM2DSLEditorGraphOps;
 	const registryApi = W.AM2DSLEditorRegistryAPI;
 	const formApi = W.AM2FlowStepModalForm;
@@ -94,6 +100,25 @@
 	function setStatus(text, kind) {
 		updateStatusElement(ui.status, text, kind);
 		updateStatusElement(ui.actionStatus, text, kind);
+	}
+
+	function extractErrorMessage(payload, fallback) {
+		const errorValue =
+			payload && typeof payload === "object" && payload.error
+				? payload.error
+				: null;
+		if (errorValue && typeof errorValue === "object" && errorValue.message) {
+			return String(errorValue.message || fallback);
+		}
+		return String(fallback);
+	}
+
+	function extractDefinitionPayload(payload, fallback) {
+		const next =
+			payload && typeof payload === "object" && payload.definition
+				? payload.definition
+				: null;
+		return next && typeof next === "object" ? next : fallback;
 	}
 
 	function setError(text) {
@@ -304,7 +329,7 @@
 			if (!W.AM2DSLEditorV3 || !W.AM2DSLEditorV3.reloadAll) {
 				throw new Error("Step re-read unavailable.");
 			}
-			ok = await W.AM2DSLEditorV3.reloadAll({ skipConfirm: true });
+			ok = (await W.AM2DSLEditorV3.reloadAll({ skipConfirm: true })) !== false;
 			if (!ok) {
 				setError("Re-read failed.");
 				return false;
@@ -505,12 +530,7 @@
 			return false;
 		}
 		if (!out || !out.ok) {
-			setError(
-				String(
-					(out && out.data && out.data.error && out.data.error.message) ||
-						"Validate failed.",
-				),
-			);
+			setError(extractErrorMessage(out && out.data, "Validate failed."));
 			setStatus("Validate failed.", "bad");
 			return false;
 		}
@@ -531,44 +551,21 @@
 				candidate.definition,
 			);
 			if (!validation.ok) {
-				setError(
-					String(
-						(validation.data &&
-							validation.data.error &&
-							validation.data.error.message) ||
-							"Validate failed.",
-					),
-				);
+				setError(extractErrorMessage(validation.data, "Validate failed."));
 				setStatus("Save failed during validation.", "bad");
 				return false;
 			}
 			const saveOut = await registryApi.saveWizardDefinition(
-				validation.data && validation.data.definition
-					? validation.data.definition
-					: candidate.definition,
+				extractDefinitionPayload(validation.data, candidate.definition),
 			);
 			if (!saveOut.ok) {
-				setError(
-					String(
-						(saveOut.data &&
-							saveOut.data.error &&
-							saveOut.data.error.message) ||
-							"Save failed.",
-					),
-				);
+				setError(extractErrorMessage(saveOut.data, "Save failed."));
 				setStatus("Save failed.", "bad");
 				return false;
 			}
 			const activateOut = await registryApi.activateWizardDefinition();
 			if (!activateOut.ok) {
-				setError(
-					String(
-						(activateOut.data &&
-							activateOut.data.error &&
-							activateOut.data.error.message) ||
-							"Activate failed.",
-					),
-				);
+				setError(extractErrorMessage(activateOut.data, "Activate failed."));
 				setStatus("Save failed during activation.", "bad");
 				return false;
 			}
