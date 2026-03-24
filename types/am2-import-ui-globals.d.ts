@@ -79,6 +79,144 @@ declare global {
 		reason?: string;
 	}
 
+	interface AM2FlowConfigFieldSchema extends AM2JsonObject {
+		key: string;
+		required?: boolean;
+		type?: string;
+		default?: AM2JsonValue;
+		options?: AM2JsonValue[];
+		choices?: AM2JsonValue[];
+		min?: number;
+		max?: number;
+		step?: number;
+		multiline?: boolean;
+		format?: string;
+	}
+
+	interface AM2FlowSettingsSchema extends AM2JsonObject {
+		fields?: AM2FlowConfigFieldSchema[];
+	}
+
+	interface AM2FlowStepDetailsPayload extends AM2JsonObject {
+		displayName?: string;
+		title?: string;
+		behavioralSummary?: string;
+		inputContract?: string;
+		outputContract?: string;
+		sideEffectsDescription?: string;
+		settings_schema?: AM2FlowSettingsSchema | AM2JsonObject | null;
+	}
+
+	interface AM2ImportWizardFieldOption extends AM2JsonObject {
+		item_id?: string;
+		value?: string;
+		label?: string;
+		display_label?: string;
+	}
+
+	interface AM2ImportWizardField extends AM2JsonObject {
+		name?: string;
+		type?: string;
+		items?: AM2ImportWizardFieldOption[];
+		options?: Array<AM2ImportWizardFieldOption | string>;
+		choices?: Array<AM2ImportWizardFieldOption | string>;
+		required?: boolean;
+		default?: AM2JsonValue;
+		multiline?: boolean;
+		format?: string;
+		min?: number;
+		max?: number;
+		step?: number;
+	}
+
+	interface AM2ImportWizardStep extends AM2JsonObject {
+		step_id?: string;
+		title?: string;
+		fields?: AM2ImportWizardField[];
+		primitive_id?: string;
+		primitive_version?: number;
+		ui?: AM2JsonObject | null;
+	}
+
+	interface AM2ImportEffectiveModel extends AM2JsonObject {
+		flowmodel_kind?: string;
+		steps?: AM2ImportWizardStep[];
+	}
+
+	interface AM2ImportWizardFlow extends AM2JsonObject {
+		steps?: AM2ImportWizardStep[];
+	}
+
+	interface AM2ImportWizardState extends AM2JsonObject {
+		session_id?: string;
+		current_step_id?: string;
+		status?: string;
+		answers?: Record<string, AM2JsonValue>;
+		inputs?: Record<string, AM2JsonValue>;
+		effective_model?: AM2ImportEffectiveModel | null;
+		job_ids?: string[];
+	}
+
+	interface AM2ImportStartConflict {
+		session_id: string;
+		root: string;
+		path: string;
+		mode: string;
+		intent?: string;
+	}
+
+	interface AM2ImportPromptDisplayItem {
+		item_id: string;
+		label: string;
+	}
+
+	interface AM2ImportPromptModel {
+		step_id: string;
+		primitive_id: string;
+		title: string;
+		label: string;
+		prompt: string;
+		help: string;
+		hint: string;
+		examples: AM2JsonValue[];
+		items: AM2ImportPromptDisplayItem[];
+		default_value: AM2JsonValue;
+		prefill: AM2JsonValue;
+	}
+
+	interface AM2ImportStepContext {
+		session_id: string;
+		current_step_id: string;
+		status: string;
+	}
+
+	interface AM2ImportPromptBodyState {
+		context: AM2ImportStepContext;
+		dirty: boolean;
+		editor:
+			| HTMLInputElement
+			| HTMLSelectElement
+			| HTMLTextAreaElement
+			| HTMLElement
+			| null;
+		mode: string;
+		model: AM2ImportPromptModel;
+		primitive_id: string;
+		row?: HTMLElement | null;
+		wrapper?: HTMLElement | null;
+		list?: HTMLElement | null;
+		filterInput?: HTMLInputElement | null;
+		actions?: HTMLElement | null;
+		summary?: HTMLElement | null;
+		selectionSet: Set<number> | null;
+		filterDirty?: boolean;
+	}
+
+	interface AM2ImportPromptMountState {
+		body: HTMLElement | null;
+		bodyState: AM2ImportPromptBodyState | null;
+	}
+
 	interface AM2FlowCanvasRenderOptions {
 		mount: HTMLElement | null;
 		metaMount?: HTMLElement | null;

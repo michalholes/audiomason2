@@ -2,6 +2,9 @@
 	const H = window["AM2EditorHTTP"];
 	if (!H) return;
 
+	/** @typedef {HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement} FormInput */
+
+	/** @param {string} id */
 	function $(id) {
 		return document.getElementById(id);
 	}
@@ -36,26 +39,37 @@
 	};
 
 	if (!ui.ta) return;
+	const ta = /** @type {HTMLTextAreaElement} */ (ui.ta);
+	const errBox = ui.err;
+	const historyMount = ui.history;
+	const stepFormMount = ui.stepForm;
+	const stepHistoryMount = ui.stepHistory;
 
 	const unifiedMode = !!ui.stepPanel;
 
+	/** @type {AM2JsonObject | null} */
 	let baselineConfig = null;
 
+	/** @param {AM2JsonValue | undefined} x */
 	function deepClone(x) {
 		return x === undefined ? undefined : JSON.parse(JSON.stringify(x));
 	}
 
+	/** @returns {AM2FlowSnapshot | null} */
 	function snapshot() {
 		const FE = window["AM2FlowEditorState"];
 		return FE && FE.getSnapshot ? FE.getSnapshot() : null;
 	}
 
+	/** @type {Record<string, AM2FlowStepDetailsPayload>} */
 	const stepCache = {};
 
+	/** @param {Node | null} node */
 	function clear(node) {
 		while (node && node.firstChild) node.removeChild(node.firstChild);
 	}
 
+	/** @param {AM2JsonObject} item */
 	function historyRow(item) {
 		const row = document.createElement("div");
 		row.className = "historyItem";
@@ -84,10 +98,11 @@
 			H.renderError(ui.err, out.data);
 			return;
 		}
-		clear(ui.history);
+		if (!historyMount) return;
+		clear(historyMount);
 		const items = out.data && out.data.items ? out.data.items : [];
 		(Array.isArray(items) ? items : []).forEach((it) => {
-			ui.history.appendChild(historyRow(it || {}));
+			historyMount.appendChild(historyRow(_objOrEmpty(it)));
 		});
 	}
 
@@ -100,7 +115,7 @@
 		}
 		const cfg = out.data && out.data.config ? out.data.config : {};
 		baselineConfig = deepClone(cfg);
-		ui.ta.value = H.pretty(cfg);
+		ta.value = H.pretty(cfg);
 		const FE = window["AM2FlowEditorState"];
 		if (FE && FE.loadAll && FE.getSnapshot) {
 			const snap = FE.getSnapshot();
@@ -114,16 +129,15 @@
 	async function validateOnly() {
 		H.renderError(ui.err, null);
 		/** @type {AM2JsonObject} */
-		/** @type {AM2JsonObject} */
 		let payloadCfg = {};
 		if (unifiedMode) {
 			const s = snapshot();
 			payloadCfg = (s && s.configDraft) || {};
 		} else {
 			try {
-				payloadCfg = JSON.parse(ui.ta.value || "{}");
+				payloadCfg = JSON.parse(ta.value || "{}");
 			} catch (e) {
-				ui.err.textContent = String(e || "parse error");
+				if (errBox) errBox.textContent = String(e || "parse error");
 				return false;
 			}
 		}
@@ -140,7 +154,7 @@
 			return false;
 		}
 		baselineConfig = deepClone(out.data.config || {});
-		ui.ta.value = H.pretty(out.data.config || {});
+		ta.value = H.pretty(out.data.config || {});
 
 		const FE = window["AM2FlowEditorState"];
 		if (FE && FE.markValidated && FE.getSnapshot) {
@@ -169,9 +183,9 @@
 			payloadCfg = (s && s.configDraft) || {};
 		} else {
 			try {
-				payloadCfg = JSON.parse(ui.ta.value || "{}");
+				payloadCfg = JSON.parse(ta.value || "{}");
 			} catch (e) {
-				ui.err.textContent = String(e || "parse error");
+				if (errBox) errBox.textContent = String(e || "parse error");
 				return false;
 			}
 		}
@@ -188,7 +202,7 @@
 			return false;
 		}
 		baselineConfig = deepClone(out.data.config || {});
-		ui.ta.value = H.pretty(out.data.config || {});
+		ta.value = H.pretty(out.data.config || {});
 
 		const FE = window["AM2FlowEditorState"];
 		if (FE && FE.loadAll && FE.getSnapshot) {
@@ -217,7 +231,7 @@
 			return false;
 		}
 		baselineConfig = deepClone(out.data.config || {});
-		ui.ta.value = H.pretty(out.data.config || {});
+		ta.value = H.pretty(out.data.config || {});
 
 		const FE = window["AM2FlowEditorState"];
 		if (FE && FE.loadAll && FE.getSnapshot) {
@@ -249,6 +263,7 @@
 		return true;
 	}
 
+	/** @param {string} id */
 	async function rollback(id) {
 		H.renderError(ui.err, null);
 		const out = await H.requestJSON("/import/ui/config/rollback", {
@@ -261,7 +276,7 @@
 			return;
 		}
 		baselineConfig = deepClone(out.data.config || {});
-		ui.ta.value = H.pretty(out.data.config || {});
+		ta.value = H.pretty(out.data.config || {});
 
 		const FE = window["AM2FlowEditorState"];
 		if (FE && FE.loadAll && FE.getSnapshot) {
@@ -276,21 +291,43 @@
 		if (unifiedMode) renderSelectedStep();
 	}
 
+	/**
+	 * @param {AM2FlowSettingsSchema | AM2JsonObject | null | undefined} schema
+	 * @returns {AM2FlowConfigFieldSchema[]}
+	 */
 	function stableFields(schema) {
 		const root = schema && typeof schema === "object" ? schema : {};
 		const fields = Array.isArray(root.fields) ? root.fields : [];
-		return fields.filter((f) => f && typeof f.key === "string" && f.key);
+		return /** @type {AM2FlowConfigFieldSchema[]} */ (
+			fields.filter(
+				(f) =>
+					!!f &&
+					typeof f === "object" &&
+					!Array.isArray(f) &&
+					typeof f.key === "string" &&
+					!!f.key,
+			)
+		);
 	}
 
+	/** @param {AM2JsonObject} cfg @returns {Record<string, AM2JsonObject>} */
 	function safeDefaultsRoot(cfg) {
-		if (!cfg || typeof cfg !== "object") return {};
-		if (!cfg.defaults || typeof cfg.defaults !== "object") cfg.defaults = {};
-		return cfg.defaults;
+		if (
+			!cfg.defaults ||
+			typeof cfg.defaults !== "object" ||
+			Array.isArray(cfg.defaults)
+		) {
+			cfg.defaults = {};
+		}
+		return /** @type {Record<string, AM2JsonObject>} */ (cfg.defaults);
 	}
 
+	/** @returns {AM2JsonObject} */
 	function currentConfig() {
 		const s = snapshot();
-		return deepClone((s && s.configDraft) || {});
+		return /** @type {AM2JsonObject} */ (
+			deepClone((s && s.configDraft) || {}) || {}
+		);
 	}
 
 	function emitChanged() {
@@ -299,6 +336,7 @@
 		} catch (e) {}
 	}
 
+	/** @param {string} stepId @param {string} key @param {AM2JsonValue} value */
 	function setStepValue(stepId, key, value) {
 		const FE = window["AM2FlowEditorState"];
 		if (FE && FE.mutateConfig) {
@@ -311,12 +349,13 @@
 		}
 
 		if (!unifiedMode) {
-			ui.ta.value = H.pretty(currentConfig());
+			ta.value = H.pretty(currentConfig());
 			emitChanged();
 		}
 		updateApplyStatus(stepId);
 	}
 
+	/** @param {string} stepId @param {string} key */
 	function unsetStepValue(stepId, key) {
 		const FE = window["AM2FlowEditorState"];
 		if (FE && FE.mutateConfig) {
@@ -334,12 +373,13 @@
 		}
 
 		if (!unifiedMode) {
-			ui.ta.value = H.pretty(currentConfig());
+			ta.value = H.pretty(currentConfig());
 			emitChanged();
 		}
 		updateApplyStatus(stepId);
 	}
 
+	/** @param {string | null} stepId */
 	function clearStepDefaults(stepId) {
 		if (!stepId) return;
 		const FE = window["AM2FlowEditorState"];
@@ -350,12 +390,13 @@
 			});
 		}
 		if (!unifiedMode) {
-			ui.ta.value = H.pretty(currentConfig());
+			ta.value = H.pretty(currentConfig());
 			emitChanged();
 		}
 		renderSelectedStep();
 	}
 
+	/** @param {string | null} stepId */
 	function updateApplyStatus(stepId) {
 		if (!ui.stepApply) return;
 		if (!stepId) {
@@ -368,6 +409,7 @@
 			: "No settings applied";
 	}
 
+	/** @param {string} stepId */
 	function getAppliedKeys(stepId) {
 		const cfg = currentConfig();
 		const defaults = safeDefaultsRoot(cfg);
@@ -376,6 +418,7 @@
 		return Object.keys(o).sort();
 	}
 
+	/** @param {AM2JsonValue | undefined} v */
 	function _shortVal(v) {
 		if (v === null) return "null";
 		if (v === undefined) return "(none)";
@@ -390,6 +433,7 @@
 		}
 	}
 
+	/** @param {AM2FlowConfigFieldSchema} field @param {AM2JsonValue | undefined} value */
 	function _validateField(field, value) {
 		const key = String(field && field.key ? field.key : "");
 		const typ = field && field.type ? String(field.type) : "string";
@@ -428,6 +472,7 @@
 		return "";
 	}
 
+	/** @param {AM2FlowConfigFieldSchema} field @param {string} stepId */
 	function inputForField(field, stepId) {
 		const wrap = document.createElement("div");
 		wrap.className = "flowField";
@@ -476,6 +521,7 @@
 			" | override: " +
 			(hasOverride ? "yes" : "no");
 
+		/** @type {FormInput | null} */
 		let inp = null;
 		let rawJsonText = "";
 		const err = document.createElement("div");
@@ -487,61 +533,71 @@
 				? field.choices
 				: null;
 
+		/** @param {string} msg */
 		function setErr(msg) {
 			err.textContent = String(msg || "");
 		}
 
+		/** @param {AM2JsonValue | undefined} v */
 		function applyValue(v) {
 			const msg = _validateField(field, v);
 			setErr(msg);
-			if (!msg) {
-				setStepValue(stepId, String(field.key || ""), v);
+			if (msg) return;
+			if (v === undefined) {
+				unsetStepValue(stepId, String(field.key || ""));
+				return;
 			}
+			setStepValue(stepId, String(field.key || ""), v);
 		}
 
 		if (choices && choices.length) {
 			inp = document.createElement("select");
 			inp.className = "flowFieldInput";
+			const select = /** @type {HTMLSelectElement} */ (inp);
 			choices.forEach((c) => {
 				const opt = document.createElement("option");
 				opt.value = String(c);
 				opt.textContent = String(c);
-				inp.appendChild(opt);
+				select.appendChild(opt);
 			});
 			const v0 = hasOverride ? cur : defVal;
-			inp.value = v0 === undefined ? "" : String(v0);
+			select.value = v0 === undefined ? "" : String(v0);
 			inp.addEventListener("change", () => {
-				applyValue(String(inp.value || ""));
+				applyValue(String(select.value || ""));
 			});
 		} else if (typ === "bool") {
 			inp = document.createElement("input");
 			inp.className = "flowFieldInput";
-			inp.type = "checkbox";
-			inp.checked = typeof effective === "boolean" ? effective : !!effective;
+			const checkbox = /** @type {HTMLInputElement} */ (inp);
+			checkbox.type = "checkbox";
+			checkbox.checked =
+				typeof effective === "boolean" ? effective : !!effective;
 			inp.addEventListener("change", () => {
-				applyValue(!!inp.checked);
+				applyValue(!!checkbox.checked);
 			});
 		} else if (typ === "number" || typ === "int") {
 			inp = document.createElement("input");
 			inp.className = "flowFieldInput";
-			inp.type = "number";
-			if (typeof field.min === "number") inp.min = String(field.min);
-			if (typeof field.max === "number") inp.max = String(field.max);
-			if (typeof field.step === "number") inp.step = String(field.step);
+			const numberInput = /** @type {HTMLInputElement} */ (inp);
+			numberInput.type = "number";
+			if (typeof field.min === "number") numberInput.min = String(field.min);
+			if (typeof field.max === "number") numberInput.max = String(field.max);
+			if (typeof field.step === "number") numberInput.step = String(field.step);
 			const v0 = typeof effective === "number" ? String(effective) : "";
-			inp.value = v0;
+			numberInput.value = v0;
 			inp.addEventListener("input", () => {
-				if (inp.value === "") {
+				if (numberInput.value === "") {
 					applyValue(undefined);
 					return;
 				}
-				const n = Number(inp.value);
+				const n = Number(numberInput.value);
 				if (!Number.isNaN(n)) applyValue(n);
 			});
 		} else if (typ === "json") {
 			inp = document.createElement("textarea");
 			inp.className = "flowFieldInput";
-			inp.rows = 4;
+			const jsonInput = /** @type {HTMLTextAreaElement} */ (inp);
+			jsonInput.rows = 4;
 			try {
 				rawJsonText = JSON.stringify(
 					effective === undefined ? {} : effective,
@@ -551,10 +607,10 @@
 			} catch (e) {
 				rawJsonText = "{}";
 			}
-			inp.value = rawJsonText;
+			jsonInput.value = rawJsonText;
 			inp.addEventListener("input", () => {
 				try {
-					const parsed = JSON.parse(String(inp.value || "{}"));
+					const parsed = JSON.parse(String(jsonInput.value || "{}"));
 					applyValue(parsed);
 				} catch (e) {
 					setErr("Invalid JSON");
@@ -563,38 +619,43 @@
 		} else if (field && (field.multiline || field.format === "textarea")) {
 			inp = document.createElement("textarea");
 			inp.className = "flowFieldInput";
-			inp.rows = 3;
-			inp.value = effective === undefined ? "" : String(effective);
+			const textArea = /** @type {HTMLTextAreaElement} */ (inp);
+			textArea.rows = 3;
+			textArea.value = effective === undefined ? "" : String(effective);
 			inp.addEventListener("input", () => {
-				applyValue(String(inp.value || ""));
+				applyValue(String(textArea.value || ""));
 			});
 		} else {
 			inp = document.createElement("input");
 			inp.className = "flowFieldInput";
-			inp.type = "text";
-			inp.value = effective === undefined ? "" : String(effective);
+			const textInput = /** @type {HTMLInputElement} */ (inp);
+			textInput.type = "text";
+			textInput.value = effective === undefined ? "" : String(effective);
 			inp.addEventListener("input", () => {
-				applyValue(String(inp.value || ""));
+				applyValue(String(textInput.value || ""));
 			});
 		}
 
 		wrap.appendChild(labelRow);
 		wrap.appendChild(meta);
-		wrap.appendChild(inp);
+		if (inp) wrap.appendChild(inp);
 		wrap.appendChild(err);
 		setErr(_validateField(field, hasOverride ? cur : defVal));
 		return wrap;
 	}
 
+	/** @param {Node | null} node */
 	function clearNode(node) {
 		while (node && node.firstChild) node.removeChild(node.firstChild);
 	}
 
+	/** @param {string} msg */
 	function setStepError(msg) {
 		if (!ui.stepError) return;
 		ui.stepError.textContent = String(msg || "");
 	}
 
+	/** @param {string} stepId @returns {Promise<AM2FlowStepDetailsPayload | null>} */
 	async function fetchStepDetails(stepId) {
 		const sid = String(stepId || "");
 		if (!sid) return null;
@@ -606,15 +667,21 @@
 			setStepError("Failed to load step details");
 			return null;
 		}
-		const d = out.data && typeof out.data === "object" ? out.data : {};
+		const d = /** @type {AM2FlowStepDetailsPayload} */ (
+			out.data && typeof out.data === "object" ? out.data : {}
+		);
 		stepCache[sid] = d;
 		return d;
 	}
 
+	/** @param {AM2JsonValue | null | undefined} x @returns {AM2JsonObject} */
 	function _objOrEmpty(x) {
-		return x && typeof x === "object" ? x : {};
+		return x && typeof x === "object" && !Array.isArray(x)
+			? /** @type {AM2JsonObject} */ (x)
+			: {};
 	}
 
+	/** @param {string} stepId */
 	function renderStepDiff(stepId) {
 		if (!ui.stepDiff) return;
 		const base = _objOrEmpty(baselineConfig);
@@ -640,16 +707,16 @@
 	}
 
 	async function loadStepHistory() {
-		if (!ui.stepHistory) return;
+		if (!stepHistoryMount) return;
 		const out = await H.requestJSON("/import/ui/config/history");
 		if (!out.ok) {
-			ui.stepHistory.textContent = "Failed to load history";
+			stepHistoryMount.textContent = "Failed to load history";
 			return;
 		}
-		clear(ui.stepHistory);
+		clear(stepHistoryMount);
 		const items = out.data && out.data.items ? out.data.items : [];
 		(Array.isArray(items) ? items : []).slice(0, 20).forEach((it) => {
-			ui.stepHistory.appendChild(historyRow(it || {}));
+			stepHistoryMount.appendChild(historyRow(_objOrEmpty(it)));
 		});
 	}
 
@@ -658,7 +725,7 @@
 		const s = snapshot();
 		const stepId = (s && s.selectedStepId) || null;
 
-		if (!ui.stepHeader || !ui.stepBehavior || !ui.stepForm || !ui.stepApply)
+		if (!ui.stepHeader || !ui.stepBehavior || !stepFormMount || !ui.stepApply)
 			return;
 
 		setStepError("");
@@ -670,7 +737,7 @@
 			if (ui.stepInput) ui.stepInput.textContent = "";
 			if (ui.stepOutput) ui.stepOutput.textContent = "";
 			if (ui.stepSideEffects) ui.stepSideEffects.textContent = "";
-			clearNode(ui.stepForm);
+			clearNode(stepFormMount);
 			ui.stepApply.textContent = "";
 			return;
 		}
@@ -698,9 +765,9 @@
 		if (ui.stepOutput) ui.stepOutput.textContent = outC;
 		if (ui.stepSideEffects) ui.stepSideEffects.textContent = sideFx;
 
-		clearNode(ui.stepForm);
+		clearNode(stepFormMount);
 		stableFields(schema).forEach((f) => {
-			ui.stepForm.appendChild(inputForField(f, stepId));
+			stepFormMount.appendChild(inputForField(f, stepId));
 		});
 
 		if (ui.stepDiff) {
