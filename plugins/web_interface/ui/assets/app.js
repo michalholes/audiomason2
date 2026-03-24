@@ -489,11 +489,11 @@ window.onerror = (msg, src, line, col, err) => {
 
 	async function renderButtonRow(content, notify) {
 		const wrap = el("div", { class: "buttonRow" });
-		const buttons = Array.isArray(content.buttons) ? content.buttons : [];
-		buttons.forEach((b) => {
+		(Array.isArray(content.buttons) ? content.buttons : []).forEach((b) => {
 			const btn = el("button", { class: "btn", text: b.label || "Action" });
 			btn.addEventListener("click", () => {
-				void startBookFlow(b);
+				if (b && b.action && b.action.type === "download")
+					window.location.href = b.action.href;
 			});
 			wrap.appendChild(btn);
 		});
