@@ -108,7 +108,7 @@ def test_default_v3_cli_acceptance_keeps_selection_and_plan_state(tmp_path: Path
     }
     assert job_requests["actions"][0]["authority"]["rename"] == {
         "mode": "explicit_relative_paths",
-        "outputs": ["track01.mp3"],
+        "outputs": ["01.mp3"],
     }
     assert [entry["step_id"] for entry in state["trace"]] == [
         "select_authors",
@@ -135,6 +135,7 @@ def test_default_v3_cli_acceptance_keeps_selection_and_plan_state(tmp_path: Path
         "audio_processing",
         "publish_policy",
         "delete_source_policy",
+        "skip_processed_books",
         "conflict_policy",
         "parallelism",
         "final_summary_confirm",

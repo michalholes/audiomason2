@@ -100,6 +100,10 @@ def test_v3_runtime_runs_phase1_runtime_then_ctrl_stop(tmp_path: Path) -> None:
         "title": "",
     }
     assert state["vars"]["phase1"]["runtime"]["parallelism"] == {"workers": 1}
+    assert state["vars"]["phase1"]["runtime"]["skip_processed_books"] == {
+        "mode": "no",
+        "enabled": False,
+    }
 
     blocked = engine.apply_action(state["session_id"], "next")
     assert blocked["error"]["code"] == "INVARIANT_VIOLATION"

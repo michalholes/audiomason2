@@ -186,6 +186,22 @@ STEP_CATALOG: dict[str, dict[str, Any]] = {
         ),
         "defaults_template": {"hint": ""},
     },
+    "skip_processed_books": {
+        "id": "skip_processed_books",
+        "title": "Skip Processed Books",
+        "displayName": "Skip Processed Books",
+        "description": "Define whether already processed books should be skipped.",
+        "behavioralSummary": "Configures whether successful prior imports are skipped.",
+        "inputContract": "Accepts yes/no policy for processed-book skipping.",
+        "outputContract": "Produces skip-processed policy settings for runtime.",
+        "sideEffectsDescription": "No side effects until processing runs.",
+        "settings_schema": _schema(
+            [
+                _field(key="hint", type_name="string", required=False, default=""),
+            ]
+        ),
+        "defaults_template": {"hint": ""},
+    },
     "conflict_policy": {
         "id": "conflict_policy",
         "title": "Conflict Policy",

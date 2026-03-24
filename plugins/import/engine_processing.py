@@ -8,10 +8,8 @@ ASCII-only.
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from plugins.file_io.import_runtime import normalize_relative_path
 from plugins.file_io.service.types import RootName
 
 from . import engine_diagnostics_required as diagnostics_required
@@ -26,120 +24,6 @@ from .storage import atomic_write_json, read_json
 
 if TYPE_CHECKING:
     from .engine import ImportWizardEngine
-
-
-_PHASE2_AUDIO_SUFFIXES = {".m4a", ".m4b", ".mp3", ".opus"}
-
-
-def _iter_phase2_audio_sources(source_path: Path) -> list[Path]:
-    if source_path.is_file():
-        return [source_path] if source_path.suffix.lower() in _PHASE2_AUDIO_SUFFIXES else []
-    return [
-        path
-        for path in sorted(source_path.rglob("*"))
-        if path.is_file() and path.suffix.lower() in _PHASE2_AUDIO_SUFFIXES
-    ]
-
-
-def _phase2_explicit_outputs_for_source(source_path: Path) -> list[str]:
-    outputs: list[str] = []
-    for source_file in _iter_phase2_audio_sources(source_path):
-        relative_parent = (
-            source_file.relative_to(source_path).parent if source_path.is_dir() else Path()
-        )
-        output_name = (
-            source_file.name if source_file.suffix.lower() == ".mp3" else f"{source_file.stem}.mp3"
-        )
-        rel_path = normalize_relative_path(str(relative_parent / output_name))
-        if rel_path:
-            outputs.append(rel_path)
-    return outputs
-
-
-def _phase2_rename_by_book(
-    *,
-    engine: ImportWizardEngine,
-    state: dict[str, Any],
-    plan: dict[str, Any],
-) -> dict[str, dict[str, Any]]:
-    fs = engine.get_file_service()
-    state_source_any = state.get("source")
-    state_source = dict(state_source_any) if isinstance(state_source_any, dict) else {}
-    plan_source_any = plan.get("source")
-    plan_source = dict(plan_source_any) if isinstance(plan_source_any, dict) else {}
-
-    source_root_text = str(
-        state_source.get("root") or state.get("root") or plan_source.get("root") or ""
-    ).strip()
-    if not source_root_text:
-        raise FinalizeError(
-            "phase2 source root is missing; "
-            "expected state.source.root, state.root, or plan.source.root"
-        )
-    source_root = RootName(source_root_text)
-    source_base_rel = normalize_relative_path(
-        str(
-            state_source.get("relative_path")
-            or state.get("relative_path")
-            or plan_source.get("relative_path")
-            or ""
-        )
-    )
-
-    phase1_any = (state.get("vars") or {}).get("phase1")
-    phase1 = dict(phase1_any) if isinstance(phase1_any, dict) else {}
-    book_meta_any = phase1.get("book_meta")
-    book_meta = dict(book_meta_any) if isinstance(book_meta_any, dict) else {}
-
-    selected_any = plan.get("selected_books")
-    selected = selected_any if isinstance(selected_any, list) else []
-
-    rename_by_book: dict[str, dict[str, Any]] = {}
-    for item in selected:
-        if not isinstance(item, dict):
-            continue
-        book_id = str(item.get("book_id") or "")
-        source_rel = normalize_relative_path(str(item.get("source_relative_path") or ""))
-        if not book_id:
-            continue
-        scoped_source_value = (
-            f"{source_base_rel}/{source_rel}"
-            if source_base_rel and source_rel
-            else source_base_rel or source_rel
-        )
-        scoped_source_rel = normalize_relative_path(scoped_source_value)
-        source_path = fs.resolve_abs_path(source_root, scoped_source_rel)
-        outputs = _phase2_explicit_outputs_for_source(source_path)
-        if not outputs:
-            authority_any = book_meta.get(book_id)
-            authority = dict(authority_any) if isinstance(authority_any, dict) else {}
-            author_label = str(authority.get("author_label") or "").strip()
-            book_label = str(authority.get("book_label") or "").strip()
-            if not author_label or not book_label:
-                label_source = (
-                    normalize_relative_path(str(item.get("proposed_target_relative_path") or ""))
-                    or source_rel
-                )
-                label_parts = [part for part in label_source.split("/") if part]
-                if len(label_parts) >= 2:
-                    author_label = author_label or label_parts[-2]
-                    book_label = book_label or label_parts[-1]
-                elif len(label_parts) == 1:
-                    author_label = author_label or label_parts[0]
-                    book_label = book_label or label_parts[0]
-            if not author_label or not book_label:
-                raise FinalizeError(
-                    f"phase2 rename authority missing for {book_id}; expected "
-                    "scanned audio outputs, phase1 book_meta labels, or plan path labels"
-                )
-            fallback_rel = normalize_relative_path(f"{author_label} - {book_label}.mp3")
-            outputs = [fallback_rel] if fallback_rel else []
-        if outputs:
-            rename_by_book[book_id] = {
-                "mode": "explicit_relative_paths",
-                "outputs": outputs,
-            }
-    return rename_by_book
 
 
 def _validate_start_processing_body(body: dict[str, Any]) -> dict[str, Any] | None:
@@ -201,6 +85,43 @@ def _record_session_job_state(
     )
     engine._persist_state(session_id, latest_state)
     return latest_state
+
+
+def _plan_requires_canonical_refresh(plan: dict[str, Any]) -> bool:
+    selected_any = plan.get("selected_books")
+    if not isinstance(selected_any, list):
+        return True
+    for item in selected_any:
+        if not isinstance(item, dict):
+            return True
+        target_rel = item.get("proposed_target_relative_path")
+        rename_any = item.get("rename_outputs")
+        if not isinstance(target_rel, str) or not target_rel.strip():
+            return True
+        if not isinstance(rename_any, list) or not rename_any:
+            return True
+        if not all(isinstance(value, str) and value.strip() for value in rename_any):
+            return True
+    return False
+
+
+def _coerce_legacy_plan_authority(plan: dict[str, Any]) -> dict[str, Any]:
+    doc = dict(plan)
+    selected_any = doc.get("selected_books")
+    selected = list(selected_any) if isinstance(selected_any, list) else []
+    normalized: list[dict[str, Any]] = []
+    for item in selected:
+        current = dict(item) if isinstance(item, dict) else {}
+        outputs_any = current.get("rename_outputs")
+        if isinstance(outputs_any, list):
+            outputs = [value for value in outputs_any if isinstance(value, str) and value.strip()]
+        else:
+            outputs = []
+        if not outputs:
+            current["rename_outputs"] = ["01.mp3"]
+        normalized.append(current)
+    doc["selected_books"] = normalized
+    return doc
 
 
 def _build_start_processing_result(
@@ -304,15 +225,17 @@ def start_processing_impl(
         effective_model = engine._load_effective_model(session_id)
         if phase1_session_authority_applies(effective_model=effective_model):
             session_dir = f"import/sessions/{session_id}"
-            discovery_any = read_json(engine._fs, RootName.WIZARDS, f"{session_dir}/discovery.json")
-            if isinstance(discovery_any, list) and all(
-                isinstance(item, dict) for item in discovery_any
-            ):
-                state.setdefault("vars", {})["phase1"] = build_phase1_projection(
-                    discovery=discovery_any,
-                    state=state,
-                )
-                engine._persist_state(session_id, state)
+            discovery_rel = f"{session_dir}/discovery.json"
+            if engine._fs.exists(RootName.WIZARDS, discovery_rel):
+                discovery_any = read_json(engine._fs, RootName.WIZARDS, discovery_rel)
+                if isinstance(discovery_any, list) and all(
+                    isinstance(item, dict) for item in discovery_any
+                ):
+                    state.setdefault("vars", {})["phase1"] = build_phase1_projection(
+                        discovery=discovery_any,
+                        state=state,
+                    )
+                    engine._persist_state(session_id, state)
         phase1_any = state.get("vars", {}).get("phase1")
         phase1 = dict(phase1_any) if isinstance(phase1_any, dict) else {}
         runtime_any = phase1.get("runtime")
@@ -412,6 +335,14 @@ def start_processing_impl(
         plan_path = f"{session_dir}/plan.json"
         if engine._fs.exists(RootName.WIZARDS, plan_path):
             plan = read_json(engine._fs, RootName.WIZARDS, plan_path)
+            if not isinstance(plan, dict):
+                plan = engine.compute_plan(session_id)
+            elif _plan_requires_canonical_refresh(plan):
+                discovery_rel = f"{session_dir}/discovery.json"
+                if engine._fs.exists(RootName.WIZARDS, discovery_rel):
+                    plan = engine.compute_plan(session_id)
+                else:
+                    plan = _coerce_legacy_plan_authority(plan)
         else:
             plan = engine.compute_plan(session_id)
 
@@ -430,12 +361,6 @@ def start_processing_impl(
         }
 
         policy_inputs = dict(state.get("answers") or {})
-        phase1_with_rename = dict(phase1)
-        phase1_with_rename["rename_by_book"] = _phase2_rename_by_book(
-            engine=engine,
-            state=state,
-            plan=plan,
-        )
         job_requests = build_job_requests(
             session_id=session_id,
             root=src_root,
@@ -448,7 +373,7 @@ def start_processing_impl(
             plan=plan,
             inputs=policy_inputs,
             detached_runtime=build_detached_runtime_bootstrap(fs=engine.get_file_service()),
-            session_authority=phase1_with_rename,
+            session_authority=phase1,
         )
 
         job_path = f"{session_dir}/job_requests.json"

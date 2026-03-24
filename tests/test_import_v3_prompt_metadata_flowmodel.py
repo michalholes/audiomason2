@@ -294,6 +294,7 @@ def test_validate_wizard_definition_structure_does_not_read_projection_behaviora
                         {"step_id": "select_authors"},
                         {"step_id": "select_books"},
                         {"step_id": "plan_preview_batch"},
+                        {"step_id": "skip_processed_books"},
                         {"step_id": "conflict_policy"},
                         {"step_id": "final_summary_confirm"},
                         {"step_id": "processing"},
@@ -313,6 +314,12 @@ def test_validate_wizard_definition_structure_does_not_read_projection_behaviora
                         },
                         {
                             "from_step_id": "plan_preview_batch",
+                            "to_step_id": "skip_processed_books",
+                            "priority": 0,
+                            "when": None,
+                        },
+                        {
+                            "from_step_id": "skip_processed_books",
                             "to_step_id": "conflict_policy",
                             "priority": 0,
                             "when": None,

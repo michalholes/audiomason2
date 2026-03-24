@@ -34,6 +34,7 @@ CANONICAL_STEP_ORDER: list[str] = [
     "audio_processing",
     "publish_policy",
     "delete_source_policy",
+    "skip_processed_books",
     "conflict_policy",
     "parallelism",
     "final_summary_confirm",
@@ -52,6 +53,7 @@ OPTIONAL_STEP_IDS: set[str] = {
     "audio_processing",
     "publish_policy",
     "delete_source_policy",
+    "skip_processed_books",
     "parallelism",
 }
 

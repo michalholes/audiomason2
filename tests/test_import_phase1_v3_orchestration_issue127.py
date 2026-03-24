@@ -84,6 +84,72 @@ def test_create_session_autofills_single_author_and_single_book(tmp_path: Path) 
     assert state["vars"]["phase1"]["policy"]["publish_policy"] == {"target_root": "stage"}
 
 
+def test_multi_book_author_and_title_edit_apply_per_book(tmp_path: Path) -> None:
+    engine, roots = _make_engine(tmp_path)
+    _write_book(roots["inbox"], "Author", "Book1")
+    _write_book(roots["inbox"], "Author", "Book2")
+
+    state = engine.create_session("inbox", "", mode="stage")
+    session_id = str(state["session_id"])
+
+    if state["current_step_id"] == "select_authors":
+        state = engine.submit_step(session_id, "select_authors", {"selection": "1"})
+        assert state["current_step_id"] == "select_books"
+    else:
+        assert state["current_step_id"] == "select_books"
+
+    state = engine.submit_step(session_id, "select_books", {"selection": "all"})
+    assert state["current_step_id"] == "effective_author"
+
+    state = engine.submit_step(session_id, "effective_author", {"value": "Canonical Author"})
+    assert state["current_step_id"] == "effective_title"
+
+    state = engine.submit_step(session_id, "effective_title", {"value": "Canonical Title"})
+    assert state["current_step_id"] == "covers_policy_mode"
+
+    authority_by_book = state["vars"]["phase1"]["metadata"]["authority_by_book"]
+    titles = {book["book_label"] for book in authority_by_book.values()}
+    authors = {book["author_label"] for book in authority_by_book.values()}
+    assert titles == {"Canonical Title"}
+    assert authors == {"Canonical Author"}
+
+
+def test_metadata_projection_applies_multi_book_title_override_per_book(tmp_path: Path) -> None:
+    del tmp_path
+    phase1_metadata = import_module("plugins.import.phase1_metadata_flow")
+
+    projection = phase1_metadata.build_phase1_metadata_projection(
+        source_projection={
+            "book_meta": {
+                "book:1": {
+                    "author_label": "Author",
+                    "book_label": "Book1",
+                    "source_relative_path": "Author/Book1",
+                },
+                "book:2": {
+                    "author_label": "Author",
+                    "book_label": "Book2",
+                    "source_relative_path": "Author/Book2",
+                },
+            },
+            "select_books": {
+                "selected_ids": ["book:1", "book:2"],
+                "selected_source_relative_paths": ["Author/Book1", "Author/Book2"],
+            },
+        },
+        state={
+            "answers": {
+                "effective_author": {"author": "Canonical Author"},
+                "effective_title": {"title": "Canonical Title"},
+            }
+        },
+    )
+
+    authority_by_book = projection["authority_by_book"]
+    assert {book["author_label"] for book in authority_by_book.values()} == {"Canonical Author"}
+    assert {book["book_label"] for book in authority_by_book.values()} == {"Canonical Title"}
+
+
 def test_select_authors_refreshes_filtered_book_defaults_for_two_pass_flow(tmp_path: Path) -> None:
     engine, roots = _make_engine(tmp_path)
     _write_book(roots["inbox"], "A", "Book1")

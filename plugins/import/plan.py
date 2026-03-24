@@ -7,9 +7,11 @@ ASCII-only.
 
 from __future__ import annotations
 
+from pathlib import PurePosixPath
 from typing import Any
 
-from .fingerprints import sha256_hex
+from .phase1_metadata_flow import build_phase1_metadata_projection
+from .phase1_source_intake import build_phase1_source_projection
 
 
 def _normalize_rel_path(value: str) -> str:
@@ -32,68 +34,106 @@ class PlanSelectionError(ValueError):
     """Raised when a plan cannot be computed due to invalid selection."""
 
 
-def _to_ascii(text: str) -> str:
-    return text.encode("ascii", errors="replace").decode("ascii")
+def _canonical_target_relative_path(*, authority_meta: dict[str, Any] | None) -> str:
+    authority = dict(authority_meta) if isinstance(authority_meta, dict) else {}
+    author_label = _normalize_rel_path(str(authority.get("author_label") or ""))
+    book_label = _normalize_rel_path(str(authority.get("book_label") or ""))
+    if not author_label or not book_label:
+        raise PlanSelectionError("canonical target authority missing")
+    return _normalize_rel_path(f"{author_label}/{book_label}")
 
 
-def _derive_book_units(
+_PHASE2_AUDIO_SUFFIXES = {".m4a", ".m4b", ".mp3", ".opus"}
+
+
+def _audio_rel_paths_for_unit(
     discovery: list[dict[str, Any]],
     *,
+    relative_path: str,
     source_relative_path: str,
-) -> dict[str, dict[str, str]]:
-    """Return mapping: book_id -> unit data derived from source-scoped discovery."""
-
-    source_prefix = _normalize_rel_path(source_relative_path)
-    dirs: list[str] = []
-    for it in discovery:
-        if not (isinstance(it, dict) and it.get("kind") == "dir"):
+) -> list[str]:
+    source_prefix = _normalize_rel_path(relative_path)
+    scoped_prefix = _normalize_rel_path(source_relative_path)
+    matched: list[str] = []
+    for item in discovery:
+        if not isinstance(item, dict):
             continue
-        rel_any = it.get("relative_path")
-        if isinstance(rel_any, str):
-            rel = _strip_source_prefix(
-                rel_path=_normalize_rel_path(rel_any),
-                source_prefix=source_prefix,
-            )
-            dirs.append(rel)
+        if str(item.get("kind") or "") not in {"file", "bundle"}:
+            continue
+        rel_any = item.get("relative_path")
+        if not isinstance(rel_any, str):
+            continue
+        rel = _strip_source_prefix(
+            rel_path=_normalize_rel_path(rel_any),
+            source_prefix=source_prefix,
+        )
+        if scoped_prefix:
+            if not (rel == scoped_prefix or rel.startswith(scoped_prefix + "/")):
+                continue
+            rel = rel[len(scoped_prefix) :].lstrip("/")
+        suffix = PurePosixPath(rel).suffix.lower()
+        if suffix in _PHASE2_AUDIO_SUFFIXES:
+            matched.append(rel)
+    return sorted(path for path in matched if path)
 
-    pairs: set[tuple[str, str]] = set()
-    for rel in dirs:
-        segs = [s for s in rel.split("/") if s]
-        if len(segs) >= 2:
-            pairs.add((segs[0], segs[1]))
 
-    if not pairs:
-        for rel in dirs:
-            segs = [s for s in rel.split("/") if s]
-            if len(segs) >= 1:
-                pairs.add((segs[0], segs[0]))
+def _rename_outputs_for_unit(
+    discovery: list[dict[str, Any]],
+    *,
+    relative_path: str,
+    source_relative_path: str,
+) -> list[str]:
+    audio_rel_paths = _audio_rel_paths_for_unit(
+        discovery,
+        relative_path=relative_path,
+        source_relative_path=source_relative_path,
+    )
+    count = len(audio_rel_paths) or 1
+    return [f"{index:02d}.mp3" for index in range(1, count + 1)]
 
-    if not pairs:
-        pairs.add(("(root)", "(root)"))
 
-    units: dict[str, dict[str, str]] = {}
-    for author_key, book_key in sorted(pairs):
-        book_id = "book:" + sha256_hex(f"b|{author_key}|{book_key}".encode())[:16]
+def _authority_book_meta(
+    *,
+    root: str,
+    relative_path: str,
+    discovery: list[dict[str, Any]],
+    inputs: dict[str, Any],
+    selected_book_ids: list[str],
+    session_authority: dict[str, Any] | None,
+) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
+    authority_any = dict(session_authority) if isinstance(session_authority, dict) else {}
+    authority_book_meta_any = authority_any.get("authority_book_meta")
+    authority_book_meta = (
+        dict(authority_book_meta_any) if isinstance(authority_book_meta_any, dict) else {}
+    )
+    source_book_meta: dict[str, dict[str, Any]] = {}
+    if authority_book_meta:
+        source_projection = build_phase1_source_projection(
+            discovery=discovery,
+            state={
+                "source": {"root": root, "relative_path": relative_path},
+                "selected_book_ids": list(selected_book_ids),
+            },
+        )
+        source_meta_any = source_projection.get("book_meta")
+        source_book_meta = dict(source_meta_any) if isinstance(source_meta_any, dict) else {}
+        return authority_book_meta, source_book_meta
 
-        if author_key == "(root)":
-            source_rel = ""
-        elif author_key == book_key:
-            source_rel = author_key
-        else:
-            source_rel = f"{author_key}/{book_key}"
-
-        display_label = author_key if author_key == book_key else f"{author_key} / {book_key}"
-        label = _to_ascii(display_label)
-
-        units[book_id] = {
-            "book_id": book_id,
-            "label": label,
-            "display_label": display_label,
-            "source_relative_path": source_rel,
-            "proposed_target_relative_path": source_rel,
-        }
-
-    return units
+    phase1_state = {
+        "source": {"root": root, "relative_path": relative_path},
+        "answers": dict(inputs),
+        "selected_book_ids": list(selected_book_ids),
+    }
+    source_projection = build_phase1_source_projection(discovery=discovery, state=phase1_state)
+    source_meta_any = source_projection.get("book_meta")
+    source_book_meta = dict(source_meta_any) if isinstance(source_meta_any, dict) else {}
+    metadata_projection = build_phase1_metadata_projection(
+        source_projection=source_projection,
+        state=phase1_state,
+    )
+    authority_meta_any = metadata_projection.get("authority_by_book")
+    authority_book_meta = dict(authority_meta_any) if isinstance(authority_meta_any, dict) else {}
+    return authority_book_meta, source_book_meta
 
 
 def _filter_discovery_for_books(
@@ -138,20 +178,54 @@ def compute_plan(
     discovery: list[dict[str, Any]],
     inputs: dict[str, Any],
     selected_book_ids: list[str],
+    session_authority: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    units_by_id = _derive_book_units(discovery, source_relative_path=relative_path)
+    authority_book_meta, source_book_meta = _authority_book_meta(
+        root=root,
+        relative_path=relative_path,
+        discovery=discovery,
+        inputs=inputs,
+        selected_book_ids=selected_book_ids,
+        session_authority=session_authority,
+    )
 
-    selected_units: list[dict[str, str]] = []
-    for bid in selected_book_ids:
-        if not isinstance(bid, str):
+    selected_units: list[dict[str, Any]] = []
+    for book_id in selected_book_ids:
+        if not isinstance(book_id, str):
             continue
-        unit = units_by_id.get(bid)
-        if unit is None:
+        source_meta = dict(source_book_meta.get(book_id) or {})
+        authority_meta = dict(authority_book_meta.get(book_id) or {})
+        source_rel = _normalize_rel_path(str(source_meta.get("source_relative_path") or ""))
+        if not authority_meta:
             raise PlanSelectionError("invalid selected_book_ids")
-        selected_units.append(unit)
+        display_label = str(authority_meta.get("display_label") or "")
+        if not display_label:
+            author_label = str(authority_meta.get("author_label") or "")
+            book_label = str(authority_meta.get("book_label") or "")
+            display_label = (
+                author_label if author_label == book_label else f"{author_label} / {book_label}"
+            )
+        selected_units.append(
+            {
+                "book_id": book_id,
+                "label": display_label.encode("ascii", errors="replace").decode("ascii"),
+                "display_label": display_label,
+                "source_relative_path": source_rel,
+                "proposed_target_relative_path": _canonical_target_relative_path(
+                    authority_meta=authority_meta
+                ),
+                "rename_outputs": _rename_outputs_for_unit(
+                    discovery,
+                    relative_path=relative_path,
+                    source_relative_path=source_rel,
+                ),
+            }
+        )
 
-    # Canonical order: preserve selectable item ordering (label,id).
-    selected_units = sorted(selected_units, key=lambda x: (x["label"], x["book_id"]))
+    selected_units = sorted(
+        selected_units,
+        key=lambda item: (str(item["label"]), str(item["book_id"])),
+    )
 
     selected_discovery = _filter_discovery_for_books(
         discovery,
@@ -169,6 +243,7 @@ def compute_plan(
         "audio_processing": inputs.get("audio_processing"),
         "publish_policy": inputs.get("publish_policy"),
         "delete_source_policy": inputs.get("delete_source_policy"),
+        "skip_processed_books": inputs.get("skip_processed_books"),
         "conflict_policy": inputs.get("conflict_policy"),
         "parallelism": inputs.get("parallelism"),
     }

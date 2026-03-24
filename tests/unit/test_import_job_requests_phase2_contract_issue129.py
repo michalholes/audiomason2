@@ -19,6 +19,7 @@ def test_build_job_requests_uses_phase1_authority_without_path_fallback() -> Non
                     "book_id": "book:1",
                     "source_relative_path": "Shelf/Disc-01",
                     "proposed_target_relative_path": "Stage/Disc-01",
+                    "rename_outputs": ["01.mp3"],
                 }
             ],
             "summary": {"selected_books": 1},
@@ -30,7 +31,7 @@ def test_build_job_requests_uses_phase1_authority_without_path_fallback() -> Non
             "id3_policy": {"values": {"title": "Path Derived"}},
         },
         session_authority={
-            "book_meta": {
+            "authority_book_meta": {
                 "book:1": {
                     "author_label": "Canonical Author",
                     "book_label": "Canonical Book",
@@ -74,12 +75,6 @@ def test_build_job_requests_uses_phase1_authority_without_path_fallback() -> Non
                 "effective_author_title": {
                     "author": "Canonical Author",
                     "title": "Canonical Book",
-                }
-            },
-            "rename_by_book": {
-                "book:1": {
-                    "mode": "explicit_relative_paths",
-                    "outputs": ["track01.mp3"],
                 }
             },
         },
@@ -136,7 +131,7 @@ def test_build_job_requests_uses_phase1_authority_without_path_fallback() -> Non
             "track_start": 7,
         },
         "publish": {"root": "outbox", "relative_path": "Stage/Disc-01"},
-        "rename": {"mode": "explicit_relative_paths", "outputs": ["track01.mp3"]},
+        "rename": {"mode": "explicit_relative_paths", "outputs": ["01.mp3"]},
     }
     assert capabilities[2]["track_start"] == 7
     assert doc["authority"]["phase1"]["selected_books"]["book:1"]["book_label"] == "Canonical Book"
@@ -177,13 +172,14 @@ def test_build_job_requests_persists_keep_generated_for_split_chapters() -> None
                     "book_id": "book:1",
                     "source_relative_path": "Shelf/Disc-01",
                     "proposed_target_relative_path": "Stage/Disc-01",
+                    "rename_outputs": ["01.mp3"],
                 }
             ],
             "summary": {"selected_books": 1},
         },
         inputs={},
         session_authority={
-            "book_meta": {
+            "authority_book_meta": {
                 "book:1": {
                     "author_label": "Canonical Author",
                     "book_label": "Canonical Book",
@@ -192,12 +188,6 @@ def test_build_job_requests_persists_keep_generated_for_split_chapters() -> None
             "phase2_inputs": {
                 "audio_processing": {"split_chapters": True},
             },
-            "rename_by_book": {
-                "book:1": {
-                    "mode": "explicit_relative_paths",
-                    "outputs": ["track01.mp3"],
-                }
-            },
         },
     )
 
@@ -205,4 +195,44 @@ def test_build_job_requests_persists_keep_generated_for_split_chapters() -> None
     assert action["authority"]["rename"] == {
         "mode": "keep_generated",
         "extension": ".mp3",
+    }
+
+
+def test_build_job_requests_defaults_single_track_rename_when_plan_outputs_missing() -> None:
+    doc = build_job_requests(
+        session_id="s1",
+        root="inbox",
+        relative_path="src",
+        mode="stage",
+        diagnostics_context={},
+        config_fingerprint="cfg",
+        plan={
+            "selected_books": [
+                {
+                    "book_id": "b1",
+                    "source_relative_path": "Author/Book",
+                    "proposed_target_relative_path": "Canonical/Book",
+                }
+            ],
+            "summary": {},
+        },
+        inputs={},
+        detached_runtime=None,
+        session_authority={
+            "phase2_inputs": {},
+            "authority_book_meta": {
+                "b1": {
+                    "author_label": "Canonical",
+                    "book_label": "Book",
+                    "source_relative_path": "Author/Book",
+                }
+            },
+        },
+    )
+
+    actions = doc["actions"]
+    assert len(actions) == 1
+    assert actions[0]["authority"]["rename"] == {
+        "mode": "explicit_relative_paths",
+        "outputs": ["01.mp3"],
     }

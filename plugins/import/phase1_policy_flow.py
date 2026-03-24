@@ -14,6 +14,7 @@ DEFAULT_AUDIO_POLICY = {
     "split_chapters": False,
 }
 DEFAULT_PARALLELISM = {"workers": 1}
+DEFAULT_SKIP_PROCESSED_BOOKS = {"mode": "no", "enabled": False}
 _ROOT_AUDIO_BASELINE = {"author": "__ROOT_AUDIO__", "title": "Untitled"}
 
 
@@ -37,6 +38,16 @@ def _normalize_clean_inbox(answer: dict[str, Any]) -> str:
     if mode in {"keep", "no"}:
         return "no"
     return "ask"
+
+
+def _normalize_skip_processed_books(answer: dict[str, Any]) -> dict[str, Any]:
+    mode = str(answer.get("mode") or "").strip().lower()
+    if mode in {"yes", "no"}:
+        return {"mode": mode, "enabled": mode == "yes"}
+    enabled = answer.get("enabled")
+    if isinstance(enabled, bool):
+        return {"mode": "yes" if enabled else "no", "enabled": enabled}
+    return dict(DEFAULT_SKIP_PROCESSED_BOOKS)
 
 
 def build_phase1_policy_projection(
@@ -77,14 +88,19 @@ def build_phase1_policy_projection(
     parallelism = deepcopy(DEFAULT_PARALLELISM)
     parallelism.update(_answer_dict(state, "parallelism"))
 
+    skip_processed_books_policy = _normalize_skip_processed_books(
+        _answer_dict(state, "skip_processed_books")
+    )
+
     return {
         "conflict_policy": conflict_policy,
         "audio_processing": audio_processing,
         "publish_policy": publish_policy,
         "delete_source_policy": delete_source_policy,
         "parallelism": parallelism,
+        "skip_processed_books_policy": skip_processed_books_policy,
         "clean_inbox": clean_inbox,
-        "skip_processed_books": str(conflict_policy.get("mode") or "ask") == "skip",
+        "skip_processed_books": bool(skip_processed_books_policy.get("enabled", False)),
         "root_audio_baseline": {
             **_ROOT_AUDIO_BASELINE,
             "target_root": str(publish_policy.get("target_root") or target_root),
@@ -101,6 +117,7 @@ def build_phase1_policy_projection(
             "audio_processing",
             "publish_policy",
             "delete_source_policy",
+            "skip_processed_books",
             "conflict_policy",
             "parallelism",
             "final_summary_confirm",

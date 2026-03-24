@@ -61,6 +61,7 @@ def _build_runtime_projection(
         ),
         "filename_policy": deepcopy(dict(metadata_projection.get("filename_policy") or {})),
         "covers_policy": deepcopy(dict(phase2_inputs.get("covers_policy") or {})),
+        "skip_processed_books": deepcopy(dict(phase2_inputs.get("skip_processed_books") or {})),
         "id3_policy": deepcopy(dict(phase2_inputs.get("id3_policy") or {})),
         "audio_processing": deepcopy(dict(phase2_inputs.get("audio_processing") or {})),
         "publish_policy": deepcopy(dict(phase2_inputs.get("publish_policy") or {})),
@@ -409,11 +410,47 @@ def build_phase1_projection(
         state=state,
         source_projection=source_projection,
     )
+    authority_by_book_any = metadata_projection.get("authority_by_book")
+    authority_by_book = (
+        dict(authority_by_book_any) if isinstance(authority_by_book_any, dict) else {}
+    )
+    selected_ids_any = source_projection.get("select_books", {}).get("selected_ids")
+    selected_ids = (
+        [item for item in selected_ids_any if isinstance(item, str)]
+        if isinstance(selected_ids_any, list)
+        else []
+    )
+    source_book_meta_any = source_projection.get("book_meta")
+    source_book_meta = dict(source_book_meta_any) if isinstance(source_book_meta_any, dict) else {}
+    cover_by_source_any = cover_projection.get("by_source_relative_path")
+    cover_by_source = dict(cover_by_source_any) if isinstance(cover_by_source_any, dict) else {}
+    covers_by_book: dict[str, dict[str, Any]] = {}
+    authority_book_meta: dict[str, dict[str, Any]] = {}
+    for book_id in selected_ids:
+        source_book = dict(source_book_meta.get(book_id) or {})
+        authority_book = dict(authority_by_book.get(book_id) or {})
+        authority_book_meta[book_id] = {
+            **source_book,
+            **authority_book,
+        }
+        source_relative_path = str(
+            source_book.get("source_relative_path")
+            or authority_book.get("source_relative_path")
+            or ""
+        )
+        cover_choice_any = cover_by_source.get(source_relative_path)
+        cover_choice = (
+            dict(cover_choice_any) if isinstance(cover_choice_any, dict) else {"kind": "skip"}
+        )
+        covers_by_book[book_id] = cover_choice
+
     phase2_inputs = {
         "covers_policy": {
             "mode": str(cover_projection.get("mode") or "skip"),
             "url": str(cover_projection.get("url") or ""),
             "choice": dict(cover_projection.get("choice") or {}),
+            "by_book": {key: dict(value) for key, value in covers_by_book.items()},
+            "by_source_relative_path": {key: dict(value) for key, value in cover_by_source.items()},
             "candidates": [
                 dict(item)
                 for item in cover_projection.get("candidates", [])
@@ -445,6 +482,7 @@ def build_phase1_projection(
         "audio_processing": dict(policy_projection.get("audio_processing") or {}),
         "publish_policy": dict(policy_projection.get("publish_policy") or {}),
         "delete_source_policy": dict(policy_projection.get("delete_source_policy") or {}),
+        "skip_processed_books": dict(policy_projection.get("skip_processed_books_policy") or {}),
         "conflict_policy": dict(policy_projection.get("conflict_policy") or {}),
     }
     phase1_projection = {
@@ -455,6 +493,7 @@ def build_phase1_projection(
         "effective_author_title": dict(metadata_projection.get("effective_author_title") or {}),
         "filename_policy": dict(metadata_projection.get("filename_policy") or {}),
         "parallelism": dict(policy_projection.get("parallelism") or {}),
+        "authority_book_meta": authority_book_meta,
         "normalized_author": str(metadata_projection.get("normalize_author") or ""),
         "normalized_book_title": str(metadata_projection.get("normalize_book_title") or ""),
         "clean_inbox": str(policy_projection.get("clean_inbox") or "ask"),

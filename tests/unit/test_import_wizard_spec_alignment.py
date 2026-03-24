@@ -62,6 +62,7 @@ def _disable_optional_steps(roots: dict[str, Path]) -> None:
         "audio_processing": {"enabled": False},
         "publish_policy": {"enabled": False},
         "delete_source_policy": {"enabled": False},
+        "skip_processed_books": {"enabled": False},
         "parallelism": {"enabled": False},
     }
     cfg_path.write_text(json.dumps(cfg_any), encoding="utf-8")
@@ -76,6 +77,7 @@ def _optional_disable_overrides() -> dict[str, object]:
             "audio_processing": {"enabled": False},
             "publish_policy": {"enabled": False},
             "delete_source_policy": {"enabled": False},
+            "skip_processed_books": {"enabled": False},
             "parallelism": {"enabled": False},
         }
     }

@@ -154,7 +154,7 @@ def build_phase1_metadata_projection(
     state: dict[str, Any],
 ) -> dict[str, Any]:
     book_meta_any = source_projection.get("book_meta")
-    book_meta = dict(book_meta_any) if isinstance(book_meta_any, dict) else {}
+    source_book_meta = dict(book_meta_any) if isinstance(book_meta_any, dict) else {}
     selected_any = source_projection.get("select_books")
     selected = dict(selected_any) if isinstance(selected_any, dict) else {}
     selected_ids_any = selected.get("selected_ids")
@@ -170,38 +170,97 @@ def build_phase1_metadata_projection(
         else []
     )
 
-    first_book = book_meta.get(selected_ids[0], {}) if selected_ids else {}
-    source_author = _normalize_root_audio_value(
-        value=first_book.get("author_label"),
+    validated_books: dict[str, dict[str, Any]] = {}
+    for book_id in selected_ids:
+        source_book = source_book_meta.get(book_id, {})
+        source_author = _normalize_root_audio_value(
+            value=source_book.get("author_label"),
+            fallback=_ROOT_AUDIO_AUTHOR,
+        )
+        source_title = _normalize_root_audio_value(
+            value=source_book.get("book_label"),
+            fallback=_ROOT_AUDIO_TITLE,
+        )
+        validation, validated_author, validated_title = _validated_author_title(
+            author=source_author,
+            title=source_title,
+        )
+        validated_books[book_id] = {
+            "source_author": source_author,
+            "source_title": source_title,
+            "author_label": validated_author,
+            "book_label": validated_title,
+            "display_label": (
+                validated_author
+                if validated_author == validated_title
+                else f"{validated_author} / {validated_title}"
+            ),
+            "source_relative_path": str(source_book.get("source_relative_path") or ""),
+            "validation": validation,
+        }
+
+    first_book = validated_books.get(selected_ids[0], {}) if selected_ids else {}
+    source_author = str(first_book.get("source_author") or _ROOT_AUDIO_AUTHOR)
+    source_title = str(first_book.get("source_title") or _ROOT_AUDIO_TITLE)
+
+    author_answer = _answer_dict(state, "effective_author")
+    title_answer = _answer_dict(state, "effective_title")
+    merged_answer = _answer_dict(state, "effective_author_title")
+
+    author_override_raw = author_answer.get("author")
+    if author_override_raw is None:
+        author_override_raw = merged_answer.get("author")
+    title_override_raw = title_answer.get("title")
+    if title_override_raw is None:
+        title_override_raw = merged_answer.get("title")
+
+    author_override_present = author_override_raw is not None
+    title_override_present = title_override_raw is not None
+
+    if author_override_present or title_override_present:
+        for book_id in selected_ids:
+            current = dict(validated_books.get(book_id) or {})
+            requested_author_source = (
+                author_override_raw if author_override_present else current.get("author_label")
+            )
+            requested_author = _normalize_root_audio_value(
+                value=requested_author_source,
+                fallback=str(current.get("author_label") or _ROOT_AUDIO_AUTHOR),
+            )
+            requested_title = _normalize_root_audio_value(
+                value=(title_override_raw if title_override_present else current.get("book_label")),
+                fallback=str(current.get("book_label") or _ROOT_AUDIO_TITLE),
+            )
+            validation, canonical_author, canonical_title = _validated_author_title(
+                author=requested_author,
+                title=requested_title,
+            )
+            validated_books[book_id] = {
+                **current,
+                "author_label": canonical_author,
+                "book_label": canonical_title,
+                "display_label": (
+                    canonical_author
+                    if canonical_author == canonical_title
+                    else f"{canonical_author} / {canonical_title}"
+                ),
+                "validation": validation,
+            }
+
+    effective_book = validated_books.get(selected_ids[0], {}) if selected_ids else {}
+    normalized_author = _normalize_root_audio_value(
+        value=effective_book.get("author_label"),
         fallback=_ROOT_AUDIO_AUTHOR,
     )
-    source_title = _normalize_root_audio_value(
-        value=first_book.get("book_label"),
-        fallback=_ROOT_AUDIO_TITLE,
-    )
-
-    validation, validated_author, validated_title = _validated_author_title(
-        author=source_author,
-        title=source_title,
-    )
-
-    effective_author_title = {
-        "author": validated_author,
-        "title": validated_title,
-    }
-    effective_author_title.update(_answer_dict(state, "effective_author_title"))
-    normalized_author = _normalize_root_audio_value(
-        value=effective_author_title.get("author"),
-        fallback=validated_author,
-    )
     normalized_book_title = _normalize_root_audio_value(
-        value=effective_author_title.get("title"),
-        fallback=validated_title,
+        value=effective_book.get("book_label"),
+        fallback=_ROOT_AUDIO_TITLE,
     )
     effective_author_title = {
         "author": normalized_author,
         "title": normalized_book_title,
     }
+    validation = dict(effective_book.get("validation") or {})
 
     filename_policy = deepcopy(DEFAULT_FILENAME_POLICY)
     filename_policy.update(
@@ -229,13 +288,14 @@ def build_phase1_metadata_projection(
     return {
         "source_author": source_author,
         "book_title": source_title,
+        "normalize_author": normalized_author,
+        "normalize_book_title": normalized_book_title,
         "validation": validation,
         "effective_author_title": effective_author_title,
         "filename_policy": filename_policy,
         "field_map": field_map,
         "values": values,
-        "normalize_author": normalized_author,
-        "normalize_book_title": normalized_book_title,
         "selected_book_ids": selected_ids,
         "selected_source_relative_paths": selected_paths,
+        "authority_by_book": validated_books,
     }

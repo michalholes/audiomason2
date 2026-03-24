@@ -55,6 +55,13 @@ def _write_inbox_tree(roots: dict[str, Path]) -> None:
     (d / "b.txt").write_text("y", encoding="utf-8")
 
 
+def _write_inbox_audio_tree(roots: dict[str, Path]) -> None:
+    d = roots["inbox"] / "A" / "Book1"
+    d.mkdir(parents=True, exist_ok=True)
+    (d / "track01.mp3").write_text("x", encoding="utf-8")
+    (d / "track02.mp3").write_text("y", encoding="utf-8")
+
+
 def test_plan_json_contains_selected_books(tmp_path: Path) -> None:
     engine, roots = _make_engine(tmp_path)
     fs = engine.get_file_service()
@@ -123,3 +130,25 @@ def test_invalid_selection_bounces_back_to_select_books(tmp_path: Path) -> None:
     assert isinstance(err, dict)
     assert err.get("code") == "VALIDATION_ERROR"
     assert str(engine.get_state(session_id).get("current_step_id") or "") == "select_books"
+
+
+def test_plan_uses_canonical_target_and_persisted_rename_outputs(tmp_path: Path) -> None:
+    engine, roots = _make_engine(tmp_path)
+    fs = engine.get_file_service()
+
+    _write_inbox_audio_tree(roots)
+    ensure_default_models(fs)
+
+    state = engine.create_session("inbox", "", mode="stage")
+    session_id = str(state["session_id"])
+
+    state = engine.submit_step(session_id, "select_authors", {"selection": "1"})
+    state = engine.submit_step(session_id, "select_books", {"selection": "1"})
+    state = engine.submit_step(session_id, "effective_author", {"value": "Canonical Author"})
+    state = engine.submit_step(session_id, "effective_title", {"value": "Canonical Book"})
+
+    plan = engine.compute_plan(session_id)
+    selected = plan.get("selected_books") or []
+    assert len(selected) == 1
+    assert selected[0]["proposed_target_relative_path"] == "Canonical Author/Canonical Book"
+    assert selected[0]["rename_outputs"] == ["01.mp3", "02.mp3"]

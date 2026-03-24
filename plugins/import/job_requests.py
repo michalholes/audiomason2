@@ -60,8 +60,25 @@ def _metadata_field_map(inputs: dict[str, Any]) -> dict[str, str]:
     return _string_dict(id3_policy.get("field_map"))
 
 
-def _cover_choice(inputs: dict[str, Any]) -> dict[str, str]:
+def _cover_choice(inputs: dict[str, Any], *, book_id: str | None = None) -> dict[str, str]:
     covers_policy = _policy_dict(inputs, "covers_policy")
+    if book_id:
+        by_book_any = covers_policy.get("by_book")
+        by_book = dict(by_book_any) if isinstance(by_book_any, dict) else {}
+        choice_any = by_book.get(book_id)
+        if isinstance(choice_any, dict):
+            choice = dict(choice_any)
+            kind = str(choice.get("kind") or "skip")
+            if kind == "url":
+                url = str(choice.get("url") or "")
+                return {"kind": "url", "url": url} if url else {"kind": "skip"}
+            if kind == "candidate":
+                return {
+                    "kind": "candidate",
+                    "candidate_id": str(choice.get("candidate_id") or ""),
+                    "source_relative_path": str(choice.get("source_relative_path") or ""),
+                }
+            return {"kind": "skip"}
     choice_any = covers_policy.get("choice")
     choice = dict(choice_any) if isinstance(choice_any, dict) else {}
     kind = str(choice.get("kind") or covers_policy.get("mode") or "skip")
@@ -82,9 +99,10 @@ def _cover_choice(inputs: dict[str, Any]) -> dict[str, str]:
 def _cover_candidate_for_action(
     *,
     inputs: dict[str, Any],
+    book_id: str,
     source_relative_path: str,
 ) -> dict[str, str] | None:
-    choice = _cover_choice(inputs)
+    choice = _cover_choice(inputs, book_id=book_id)
     if choice.get("kind") != "candidate":
         return None
     if choice.get("source_relative_path") != source_relative_path:
@@ -130,6 +148,7 @@ def _cover_candidate_for_action(
 
 def _rename_authority_for_action(
     *,
+    item: dict[str, Any],
     book_id: str,
     inputs: dict[str, Any],
     rename_by_book: dict[str, Any],
@@ -138,19 +157,30 @@ def _rename_authority_for_action(
     if bool(audio_processing.get("split_chapters", False)):
         return {"mode": "keep_generated", "extension": ".mp3"}
 
-    rename_any = rename_by_book.get(book_id)
-    rename = dict(rename_any) if isinstance(rename_any, dict) else {}
-    outputs_any = rename.get("outputs")
+    outputs_any = item.get("rename_outputs")
     outputs_raw = outputs_any if isinstance(outputs_any, list) else []
     outputs: list[str] = []
-    for item in outputs_raw:
-        if not isinstance(item, str):
+    for value in outputs_raw:
+        if not isinstance(value, str):
             continue
-        rel_path = normalize_relative_path(item)
+        rel_path = normalize_relative_path(value)
+        if rel_path and rel_path not in outputs:
+            outputs.append(rel_path)
+    if outputs:
+        return {"mode": "explicit_relative_paths", "outputs": outputs}
+
+    rename_any = rename_by_book.get(book_id)
+    rename = dict(rename_any) if isinstance(rename_any, dict) else {}
+    rename_outputs_any = rename.get("outputs")
+    fallback_raw: list[Any] = rename_outputs_any if isinstance(rename_outputs_any, list) else []
+    for value in fallback_raw:
+        if not isinstance(value, str):
+            continue
+        rel_path = normalize_relative_path(value)
         if rel_path and rel_path not in outputs:
             outputs.append(rel_path)
     if not outputs:
-        raise ValueError(f"rename authority outputs missing for {book_id}")
+        outputs = ["01.mp3"]
     return {"mode": "explicit_relative_paths", "outputs": outputs}
 
 
@@ -193,6 +223,7 @@ def _action_authority(
 
 def _build_capabilities(
     *,
+    book_id: str,
     root: str,
     source_relative_path: str,
     target_root: str,
@@ -207,9 +238,10 @@ def _build_capabilities(
     conflict_policy = _policy_dict(inputs, "conflict_policy")
     delete_policy = _policy_dict(inputs, "delete_source_policy")
 
-    cover_choice = _cover_choice(inputs)
+    cover_choice = _cover_choice(inputs, book_id=book_id)
     cover_candidate = _cover_candidate_for_action(
         inputs=inputs,
+        book_id=book_id,
         source_relative_path=source_relative_path,
     )
     cover_mode = str(cover_choice.get("kind") or "skip")
@@ -317,7 +349,7 @@ def build_job_requests(
     target_root = str(publish_policy.get("target_root") or "")
     if target_root not in {"stage", "outbox"}:
         target_root = "stage" if mode == "stage" else "outbox"
-    book_meta_any = authority.get("book_meta")
+    book_meta_any = authority.get("authority_book_meta")
     book_meta = dict(book_meta_any) if isinstance(book_meta_any, dict) else {}
     field_map = _metadata_field_map(phase2_inputs)
     track_start = _track_start_value(phase2_inputs)
@@ -340,6 +372,7 @@ def build_job_requests(
             selected_book_meta[book_id] = dict(authority_meta)
         tag_values = _tag_values_for_action(inputs=phase2_inputs, authority_meta=authority_meta)
         rename_authority = _rename_authority_for_action(
+            item=it,
             book_id=book_id,
             inputs=phase2_inputs,
             rename_by_book=rename_by_book,
@@ -360,6 +393,7 @@ def build_job_requests(
                     rename_authority=rename_authority,
                 ),
                 "capabilities": _build_capabilities(
+                    book_id=book_id,
                     root=root,
                     source_relative_path=src_rel,
                     target_root=target_root,
@@ -374,6 +408,12 @@ def build_job_requests(
 
     plan_fingerprint = fingerprint_json({"selected_books": selected_any})
 
+    rename_authority_doc = {
+        str(action.get("book_id") or ""): dict(action.get("authority", {}).get("rename") or {})
+        for action in actions
+        if isinstance(action, dict) and str(action.get("book_id") or "")
+    }
+
     doc: dict[str, Any] = {
         "job_type": "import.process",
         "job_version": 1,
@@ -387,7 +427,7 @@ def build_job_requests(
             "phase1": {
                 "runtime": dict(phase1_runtime),
                 "selected_books": selected_book_meta,
-                "rename_by_book": dict(rename_by_book),
+                "rename_by_book": rename_authority_doc,
             }
         },
         "diagnostics_context": dict(diagnostics_context),

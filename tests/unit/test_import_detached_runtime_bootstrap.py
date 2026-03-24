@@ -284,8 +284,8 @@ def test_pending_process_job_adopts_detached_runtime_without_original_host_engin
     first_action = dict(job_requests["actions"][0])
     target = dict(first_action["target"])
     target_rel = str(target["relative_path"])
-    actual_output = roots["stage"] / target_rel / "track01.mp3"
-    detached_output = detached_roots["stage"] / target_rel / "track01.mp3"
+    actual_output = roots["stage"] / target_rel / "01.mp3"
+    detached_output = detached_roots["stage"] / target_rel / "01.mp3"
 
     assert actual_output.exists()
     assert actual_output.read_bytes().endswith(b"|tags")
@@ -293,7 +293,7 @@ def test_pending_process_job_adopts_detached_runtime_without_original_host_engin
     assert calls == [
         "audio.plan:track01.m4a",
         "audio.exec:track01.mp3",
-        "tags.write:track01.mp3:Book1",
+        "tags.write:01.mp3:Book1",
     ]
     assert session_id == str(job_requests.get("session_id") or "")
 
@@ -376,5 +376,5 @@ def test_detached_process_loader_completes_finalize_without_parent_subscriber(
     assert calls == [
         "audio.plan:track01.m4a",
         "audio.exec:track01.mp3",
-        "tags.write:track01.mp3:Book1",
+        "tags.write:01.mp3:Book1",
     ]

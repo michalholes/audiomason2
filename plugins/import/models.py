@@ -36,6 +36,7 @@ OPTIONAL_STEP_IDS = {
     "audio_processing",
     "publish_policy",
     "delete_source_policy",
+    "skip_processed_books",
     "parallelism",
 }
 

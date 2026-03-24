@@ -68,6 +68,7 @@ def test_default_catalog_step_ids_and_order(tmp_path: Path) -> None:
         "audio_processing",
         "publish_policy",
         "delete_source_policy",
+        "skip_processed_books",
         "conflict_policy",
         "parallelism",
         "final_summary_confirm",

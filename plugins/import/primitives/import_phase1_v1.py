@@ -51,6 +51,7 @@ def _merge_defaults(defaults: dict[str, Any], override: dict[str, Any]) -> dict[
 DEFAULT_PARALLELISM = {"workers": 1}
 DEFAULT_FILENAME_POLICY = {"mode": "keep", "template": "{author}/{title}"}
 DEFAULT_EFFECTIVE_AUTHOR_TITLE = {"author": "", "title": ""}
+DEFAULT_SKIP_PROCESSED_BOOKS = {"mode": "no", "enabled": False}
 DEFAULT_RESOLVE_CONFLICTS = {"confirm": False}
 DEFAULT_FINAL_CONFIRM = {"confirm_start": False}
 
@@ -83,6 +84,18 @@ def build_runtime_snapshot(state: dict[str, Any]) -> dict[str, Any]:
         _dict_copy(phase2_inputs.get("covers_policy")),
         _answer_dict(state, "covers_policy"),
     )
+    skip_processed_books = _merge_defaults(
+        _dict_copy(phase2_inputs.get("skip_processed_books")),
+        _answer_dict(state, "skip_processed_books"),
+    )
+    mode = str(skip_processed_books.get("mode") or "").strip().lower()
+    if mode in {"yes", "no"}:
+        skip_processed_books["enabled"] = mode == "yes"
+    elif isinstance(skip_processed_books.get("enabled"), bool):
+        skip_processed_books["mode"] = "yes" if skip_processed_books.get("enabled") else "no"
+    else:
+        skip_processed_books = dict(DEFAULT_SKIP_PROCESSED_BOOKS)
+
     id3_policy = _merge_defaults(
         _dict_copy(phase2_inputs.get("id3_policy")),
         _answer_dict(state, "id3_policy"),
@@ -128,6 +141,7 @@ def build_runtime_snapshot(state: dict[str, Any]) -> dict[str, Any]:
         "effective_author_title": effective_author_title,
         "filename_policy": filename_policy,
         "covers_policy": covers_policy,
+        "skip_processed_books": skip_processed_books,
         "id3_policy": id3_policy,
         "audio_processing": audio_processing,
         "publish_policy": publish_policy,

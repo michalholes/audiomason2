@@ -30,6 +30,7 @@ def _make_default_steps() -> list[dict[str, Any]]:
         "audio_processing",
         "publish_policy",
         "delete_source_policy",
+        "skip_processed_books",
         "conflict_policy",
         "parallelism",
         "final_summary_confirm",
@@ -89,6 +90,15 @@ def _default_fields_for_step(step_id: str) -> list[dict[str, Any]]:
             {
                 "name": "confirm",
                 "type": "confirm",
+                "required": True,
+                "constraints": {},
+            }
+        ]
+    if step_id == "skip_processed_books":
+        return [
+            {
+                "name": "mode",
+                "type": "text",
                 "required": True,
                 "constraints": {},
             }
