@@ -4,6 +4,7 @@
 		"checkJs": true,
 		"noEmit": true,
 		"strict": false,
+                "noImplicitAny": true,
 		"target": "ES2022",
 		"lib": ["ES2022", "DOM"],
 		"skipLibCheck": true
