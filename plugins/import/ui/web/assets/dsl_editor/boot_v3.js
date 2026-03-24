@@ -22,6 +22,11 @@
 		return document.getElementById(id);
 	}
 
+	function textarea(id) {
+		const node = $(id);
+		return node instanceof HTMLTextAreaElement ? node : null;
+	}
+
 	function clear(node) {
 		while (node && node.firstChild) {
 			node.removeChild(node.firstChild);
@@ -315,7 +320,7 @@
 	}
 
 	function renderForms(definition) {
-		const textArea = $("wdJson");
+		const textArea = textarea("wdJson");
 		const graphDefinition = graphOps.currentGraphDefinition();
 		if (window["AM2DSLEditorRawJSON"]) {
 			window["AM2DSLEditorRawJSON"].renderRawJSON({

@@ -1,10 +1,12 @@
 (function () {
 	"use strict";
 
+	/** @param {Node | null} node */
 	function clear(node) {
 		while (node && node.firstChild) node.removeChild(node.firstChild);
 	}
 
+	/** @param {string} tag @param {string | null | undefined} cls @param {unknown=} textValue */
 	function el(tag, cls, textValue) {
 		const node = document.createElement(tag);
 		if (cls) node.className = cls;
@@ -12,12 +14,23 @@
 		return node;
 	}
 
+	/** @param {string} label @returns {HTMLButtonElement} */
+	function button(label) {
+		const node = document.createElement("button");
+		node.className = "btn";
+		node.type = "button";
+		node.textContent = label;
+		return node;
+	}
+
+	/** @param {AM2PrimitiveRegistryItem} item */
 	function primitiveLine(item) {
 		const pid = String(item.primitive_id || "");
 		const version = Number(item.version || 0);
 		return pid + "@" + version;
 	}
 
+	/** @param {AM2PrimitiveRegistryItem} item @param {string} searchText */
 	function matches(item, searchText) {
 		if (!searchText) return true;
 		const hay = [
@@ -30,13 +43,16 @@
 		return hay.indexOf(searchText.toLowerCase()) >= 0;
 	}
 
+	/** @param {AM2DSLEditorPaletteOptions} opts */
 	function renderPalette(opts) {
 		const mount = opts && opts.mount;
 		if (!mount) return;
 		clear(mount);
 
 		const state = (opts && opts.state) || {};
-		const registry = Array.isArray(opts && opts.registry) ? opts.registry : [];
+		const registry = /** @type {AM2PrimitiveRegistryItem[]} */ (
+			Array.isArray(opts && opts.registry) ? opts.registry : []
+		);
 		const onSearch =
 			typeof state.onSearch === "function" ? state.onSearch : function () {};
 		const onAdd =
@@ -74,8 +90,7 @@
 							String(item.determinism_notes || ""),
 					),
 				);
-				const btn = el("button", "btn", "Add Node");
-				btn.type = "button";
+				const btn = button("Add Node");
 				btn.setAttribute("data-am2-palette-add", primitiveLine(item));
 				btn.addEventListener("click", function () {
 					onAdd(item);
@@ -88,5 +103,5 @@
 		mount.appendChild(wrap);
 	}
 
-	window["AM2DSLEditorPalette"] = { renderPalette: renderPalette };
+	window.AM2DSLEditorPalette = { renderPalette };
 })();

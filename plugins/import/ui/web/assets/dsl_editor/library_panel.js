@@ -1,10 +1,12 @@
 (function () {
 	"use strict";
 
+	/** @param {Node | null} node */
 	function clear(node) {
 		while (node && node.firstChild) node.removeChild(node.firstChild);
 	}
 
+	/** @param {string} tag @param {string | null | undefined} cls @param {unknown=} textValue */
 	function el(tag, cls, textValue) {
 		const node = document.createElement(tag);
 		if (cls) node.className = cls;
@@ -12,6 +14,16 @@
 		return node;
 	}
 
+	/** @param {string} label @returns {HTMLButtonElement} */
+	function button(label) {
+		const node = document.createElement("button");
+		node.className = "btn";
+		node.type = "button";
+		node.textContent = label;
+		return node;
+	}
+
+	/** @param {string} labelText @param {HTMLElement} inputNode */
 	function row(labelText, inputNode) {
 		const wrap = el("label", "flowField");
 		wrap.appendChild(el("div", "flowStepSectionTitle", labelText));
@@ -19,15 +31,22 @@
 		return wrap;
 	}
 
+	/** @param {AM2DSLEditorLibrary | null} library */
 	function cloneParams(library) {
-		return JSON.parse(JSON.stringify((library && library.params) || []));
+		return /** @type {AM2DSLEditorLibraryParam[]} */ (
+			JSON.parse(JSON.stringify((library && library.params) || []))
+		);
 	}
 
+	/** @param {AM2JsonObject} definition @returns {Record<string, AM2DSLEditorLibrary>} */
 	function libraries(definition) {
 		const raw = definition && definition.libraries;
-		return raw && typeof raw === "object" ? raw : {};
+		return raw && typeof raw === "object"
+			? /** @type {Record<string, AM2DSLEditorLibrary>} */ (raw)
+			: {};
 	}
 
+	/** @param {AM2DSLEditorLibraryPanelOptions} opts */
 	function renderLibraryPanel(opts) {
 		const mount = opts && opts.mount;
 		if (!mount) return;
@@ -63,8 +82,7 @@
 		wrap.setAttribute("data-am2-library-panel", "true");
 		wrap.appendChild(el("div", "flowStepSectionTitle", "Libraries"));
 
-		const rootBtn = el("button", "btn", "Edit Main Graph");
-		rootBtn.type = "button";
+		const rootBtn = button("Edit Main Graph");
 		rootBtn.setAttribute("data-am2-library-select", "root");
 		rootBtn.addEventListener("click", function () {
 			onSelectRoot();
@@ -88,16 +106,14 @@
 							String((library.params || []).length),
 					),
 				);
-				const editBtn = el("button", "btn", "Edit Library");
-				editBtn.type = "button";
+				const editBtn = button("Edit Library");
 				editBtn.setAttribute("data-am2-library-select", libraryId);
 				editBtn.addEventListener("click", function () {
 					onSelectLibrary(libraryId);
 				});
 				card.appendChild(editBtn);
 				if (libraryId === selectedLibraryId) {
-					const removeBtn = el("button", "btn", "Delete Library");
-					removeBtn.type = "button";
+					const removeBtn = button("Delete Library");
 					removeBtn.setAttribute("data-am2-library-remove", libraryId);
 					removeBtn.addEventListener("click", function () {
 						onRemoveLibrary(libraryId);
@@ -110,8 +126,7 @@
 		const newIdInput = document.createElement("input");
 		newIdInput.setAttribute("data-am2-library-new-id", "true");
 		wrap.appendChild(row("new library id", newIdInput));
-		const addBtn = el("button", "btn", "Add Library");
-		addBtn.type = "button";
+		const addBtn = button("Add Library");
 		addBtn.setAttribute("data-am2-library-add", "true");
 		addBtn.addEventListener("click", function () {
 			onAddLibrary(newIdInput.value || "library");
@@ -194,8 +209,7 @@
 				});
 				card.appendChild(row("required", requiredSelect));
 
-				const removeBtn = el("button", "btn", "Remove Param");
-				removeBtn.type = "button";
+				const removeBtn = button("Remove Param");
 				removeBtn.setAttribute("data-am2-library-param-remove", String(index));
 				removeBtn.addEventListener("click", function () {
 					const next = cloneParams(selectedLibrary).filter(
@@ -209,8 +223,7 @@
 				editor.appendChild(card);
 			});
 
-			const addParamBtn = el("button", "btn", "Add Param");
-			addParamBtn.type = "button";
+			const addParamBtn = button("Add Param");
 			addParamBtn.setAttribute("data-am2-library-param-add", "true");
 			addParamBtn.addEventListener("click", function () {
 				const next = cloneParams(selectedLibrary);
@@ -227,7 +240,5 @@
 		mount.appendChild(wrap);
 	}
 
-	window["AM2DSLEditorLibraryPanel"] = {
-		renderLibraryPanel: renderLibraryPanel,
-	};
+	window.AM2DSLEditorLibraryPanel = { renderLibraryPanel };
 })();

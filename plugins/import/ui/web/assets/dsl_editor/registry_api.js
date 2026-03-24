@@ -4,6 +4,7 @@
 	const H = window.AM2EditorHTTP;
 	if (!H || !H.requestJSON) return;
 
+	/** @param {string} url @param {AM2JsonObject} body */
 	function postJSON(url, body) {
 		return H.requestJSON(url, {
 			method: "POST",
@@ -12,17 +13,16 @@
 		});
 	}
 
+	/** @param {AM2JsonObject | undefined} definition */
 	function sanitizeWizardDefinitionForWire(definition) {
-		const payload = JSON.parse(
-			JSON.stringify(definition === undefined ? {} : definition),
+		const payload = /** @type {AM2JsonObject} */ (
+			JSON.parse(JSON.stringify(definition === undefined ? {} : definition))
 		);
-		if (payload && typeof payload === "object" && !Array.isArray(payload)) {
-			delete payload._am2_ui;
-		}
+		delete payload._am2_ui;
 		return payload;
 	}
 
-	window["AM2DSLEditorRegistryAPI"] = {
+	window.AM2DSLEditorRegistryAPI = {
 		getPrimitiveRegistry: function getPrimitiveRegistry() {
 			return H.requestJSON("/import/ui/primitive-registry");
 		},
@@ -53,7 +53,7 @@
 			return H.requestJSON("/import/ui/wizard-definition/history");
 		},
 		rollbackWizardDefinition: function rollbackWizardDefinition(id) {
-			return postJSON("/import/ui/wizard-definition/rollback", { id: id });
+			return postJSON("/import/ui/wizard-definition/rollback", { id });
 		},
 	};
 })();
