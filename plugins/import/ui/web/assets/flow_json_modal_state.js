@@ -1,5 +1,6 @@
 (() => {
-	var root = /** @type {any} */ (window);
+	/** @type {Window} */
+	var root = window;
 
 	var dom = root.AM2FlowJSONModalDOM;
 	var clip = root.AM2FlowJSONClipboard;
@@ -8,10 +9,15 @@
 		return;
 	}
 
+	/** @param {AM2JsonValue | undefined} obj */
 	function pretty(obj) {
 		return JSON.stringify(obj, null, 2);
 	}
 
+	/** @template T
+	 * @param {T} obj
+	 * @returns {T}
+	 */
 	function deepClone(obj) {
 		return JSON.parse(JSON.stringify(obj));
 	}
@@ -23,6 +29,9 @@
 			: null;
 	}
 
+	/** @param {AM2JsonObject} target
+	 * @param {AM2JsonObject} source
+	 */
 	function replaceObject(target, source) {
 		Object.keys(target).forEach((key) => {
 			delete target[key];
@@ -32,6 +41,9 @@
 		});
 	}
 
+	/** @param {AM2JsonObject | null | undefined} definition
+	 * @returns {AM2JsonObject}
+	 */
 	function sanitizeWizard(definition) {
 		var next = deepClone(definition || {});
 		if (next && next._am2_ui) {
@@ -40,6 +52,9 @@
 		return next;
 	}
 
+	/** @param {AM2JsonObject | null | undefined} config
+	 * @returns {AM2JsonObject}
+	 */
 	function sanitizeConfig(config) {
 		var next = deepClone(config || {});
 		if (next && next.ui) {
@@ -48,6 +63,7 @@
 		return next;
 	}
 
+	/** @param {string} message */
 	function confirmDiscard(message) {
 		if (typeof root.confirm !== "function") {
 			return true;
@@ -55,21 +71,25 @@
 		return root.confirm(message);
 	}
 
+	/** @param {string} message */
 	function setModalError(message) {
 		dom.setStatus("", "");
 		dom.setError(String(message || ""));
 	}
 
+	/** @param {string} message */
 	function setModalStatus(message) {
 		dom.setError("");
 		dom.setStatus(String(message || ""), "ok");
 	}
 
+	/** @type {{ artifact: AM2FlowJSONArtifact, lastLoadedText: string }} */
 	var state = {
-		artifact: "",
+		artifact: "config",
 		lastLoadedText: "",
 	};
 
+	/** @param {AM2FlowJSONArtifact} artifact */
 	function driverFor(artifact) {
 		if (artifact === "wizard") {
 			return {
@@ -178,17 +198,26 @@
 		driver.stage(parsed);
 	}
 
+	/** @param {AM2FlowJSONArtifact} artifact */
 	function prettyCurrent(artifact) {
 		return pretty(driverFor(artifact).readCurrent());
 	}
 
 	function syncFromState() {
-		var text = prettyCurrent(currentDriver().key);
+		var text = prettyCurrent(state.artifact);
 		state.lastLoadedText = text;
 		dom.setValue(text);
 		return text;
 	}
 
+	/** @param {{
+	 * 	artifact: AM2FlowJSONArtifact,
+	 * 	title: string,
+	 * 	subtitle: string,
+	 * 	text: string,
+	 * }} loaded
+	 * @param {boolean=} openState
+	 */
 	function commitLoadedArtifact(loaded, openState) {
 		state.artifact = loaded.artifact;
 		state.lastLoadedText = loaded.text;
@@ -220,6 +249,7 @@
 		return true;
 	}
 
+	/** @param {AM2FlowJSONArtifact} artifact */
 	async function reloadArtifact(artifact) {
 		var driver = driverFor(artifact);
 		var ok = await driver.reload();
@@ -240,7 +270,7 @@
 			return false;
 		}
 		dom.clearFeedback();
-		loaded = await reloadArtifact(currentDriver().key);
+		loaded = await reloadArtifact(state.artifact);
 		if (!loaded) {
 			setModalError("Re-read failed.");
 			return false;
@@ -347,7 +377,7 @@
 			return false;
 		}
 		try {
-			result = await fileIO.openTextFile(currentDriver().key);
+			result = await fileIO.openTextFile(state.artifact);
 			if (!result || result.cancelled === true) {
 				return false;
 			}
@@ -362,7 +392,7 @@
 
 	async function saveToFile() {
 		try {
-			await fileIO.saveTextFile(currentDriver().key, dom.getValue());
+			await fileIO.saveTextFile(state.artifact, dom.getValue());
 			setModalStatus("JSON saved to file.");
 			return true;
 		} catch (err) {
@@ -371,8 +401,10 @@
 		}
 	}
 
+	/** @param {AM2FlowJSONArtifact} artifact */
 	async function openModal(artifact) {
 		var loaded = null;
+		/** @type {AM2FlowJSONArtifact} */
 		var nextArtifact = artifact === "wizard" ? "wizard" : "config";
 		var wasOpen = dom.isOpen();
 		var stepModal = root.AM2FlowStepModalState;

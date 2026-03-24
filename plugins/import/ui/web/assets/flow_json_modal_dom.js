@@ -1,10 +1,13 @@
 (() => {
-	var root = /** @type {any} */ (window);
+	/** @type {Window} */
+	var root = window;
 
+	/** @param {string} id */
 	function $(id) {
 		return document.getElementById(id);
 	}
 
+	/** @type {AM2FlowJSONModalDomUi} */
 	var ui = {
 		modal: $("flowJsonModal"),
 		title: $("flowJsonModalTitle"),
@@ -34,6 +37,7 @@
 		return !ui.modal.classList.contains("is-hidden");
 	}
 
+	/** @param {boolean} open */
 	function setOpen(open) {
 		ui.modal.classList.toggle("is-hidden", open !== true);
 		ui.modal.setAttribute("aria-hidden", open === true ? "false" : "true");
@@ -42,11 +46,15 @@
 		}
 	}
 
+	/** @param {string} title
+	 * @param {string} subtitle
+	 */
 	function setArtifactMeta(title, subtitle) {
 		if (ui.title) ui.title.textContent = String(title || "");
 		if (ui.subtitle) ui.subtitle.textContent = String(subtitle || "");
 	}
 
+	/** @param {string} text */
 	function setValue(text) {
 		ui.editor.value = String(text || "");
 	}
@@ -55,6 +63,9 @@
 		return String(ui.editor.value || "");
 	}
 
+	/** @param {string} msg
+	 * @param {string} kind
+	 */
 	function setStatus(msg, kind) {
 		if (!ui.status) return;
 		ui.status.textContent = String(msg || "");
@@ -62,6 +73,7 @@
 		ui.status.classList.toggle("is-bad", kind === "bad");
 	}
 
+	/** @param {string} msg */
 	function setError(msg) {
 		if (!ui.error) return;
 		ui.error.textContent = String(msg || "");

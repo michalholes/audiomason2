@@ -79,6 +79,103 @@ declare global {
 		reason?: string;
 	}
 
+	interface AM2FlowJSONClipboardApi {
+		copyText(text: string): Promise<string>;
+	}
+
+	type AM2FlowJSONArtifact = "wizard" | "config";
+
+	interface AM2FlowJSONOpenResult {
+		cancelled: boolean;
+		text: string;
+	}
+
+	interface AM2FlowJSONFileIOHooks {
+		openTextFile?: (
+			artifact: AM2FlowJSONArtifact,
+		) =>
+			| Promise<AM2FlowJSONOpenResult | string | null>
+			| AM2FlowJSONOpenResult
+			| string
+			| null;
+		saveTextFile?: (
+			artifact: AM2FlowJSONArtifact,
+			text: string,
+		) => Promise<void> | void;
+	}
+
+	interface AM2FlowJSONFileIOApi {
+		fileNameForArtifact(artifact: AM2FlowJSONArtifact): string;
+		normalizeOpenResult(
+			result: AM2FlowJSONOpenResult | string | null,
+		): AM2FlowJSONOpenResult;
+		openTextFile(artifact: AM2FlowJSONArtifact): Promise<AM2FlowJSONOpenResult>;
+		saveTextFile(artifact: AM2FlowJSONArtifact, text: string): Promise<void>;
+		setHooks(nextHooks: AM2FlowJSONFileIOHooks): boolean;
+	}
+
+	interface AM2FlowJSONModalDomUi {
+		modal: HTMLElement | null;
+		title: HTMLElement | null;
+		subtitle: HTMLElement | null;
+		editor: HTMLTextAreaElement | null;
+		status: HTMLElement | null;
+		error: HTMLElement | null;
+		reread: HTMLElement | null;
+		abort: HTMLElement | null;
+		save: HTMLElement | null;
+		openFromFile: HTMLElement | null;
+		saveToFile: HTMLElement | null;
+		close: HTMLElement | null;
+		cancel: HTMLElement | null;
+		copySelected: HTMLElement | null;
+		copyAll: HTMLElement | null;
+		apply: HTMLElement | null;
+	}
+
+	interface AM2FlowJSONModalDOMApi {
+		ui: AM2FlowJSONModalDomUi;
+		clearFeedback(): void;
+		getSelectedText(): string;
+		getValue(): string;
+		isOpen(): boolean;
+		setArtifactMeta(title: string, subtitle: string): void;
+		setError(message: string): void;
+		setOpen(open: boolean): void;
+		setStatus(message: string, kind: string): void;
+		setValue(text: string): void;
+	}
+
+	interface AM2FlowJSONModalStateApi {
+		abortChanges(): boolean;
+		applyForFutureRuns(): Promise<boolean>;
+		cancelModal(): boolean;
+		copyAll(): Promise<boolean>;
+		copySelected(): Promise<boolean>;
+		isOpen(): boolean;
+		openFromFile(): Promise<boolean>;
+		openModal(artifact: AM2FlowJSONArtifact): Promise<boolean>;
+		rereadFromServer(): Promise<boolean>;
+		saveDraft(): Promise<boolean>;
+		saveToFile(): Promise<boolean>;
+		_syncFromState(): string;
+	}
+
+	interface AM2FlowStepModalStateApi {
+		isOpen(): boolean;
+	}
+
+	interface AM2DSLEditorV3Api {
+		activateDefinition?(): Promise<boolean | void>;
+		isV3Draft?(definition: AM2JsonObject): boolean;
+		reloadAll?(opts?: { skipConfirm?: boolean }): Promise<boolean | void>;
+		renderAll?(): void;
+		resetDefinition?(): Promise<boolean | void>;
+		rollback?(historyId: string): Promise<boolean | void>;
+		saveDraft?(): Promise<boolean | void>;
+		validateDraft?(): Promise<boolean | void>;
+	}
+
 	interface AM2FlowEditorStateApi {
 		on(
 			eventName: AM2FlowListenerEventName,
@@ -223,6 +320,11 @@ declare global {
 		AM2FlowEditorState: AM2FlowEditorStateApi;
 		FlowEditorState: AM2FlowEditorStateConstructor;
 		AM2FlowConfigEditor: AM2FlowConfigEditorApi;
+		AM2FlowJSONClipboard: AM2FlowJSONClipboardApi;
+		AM2FlowJSONFileIO: AM2FlowJSONFileIOApi;
+		AM2FlowJSONModalDOM: AM2FlowJSONModalDOMApi;
+		AM2FlowJSONModalState: AM2FlowJSONModalStateApi;
+		AM2FlowStepModalState: AM2FlowStepModalStateApi;
 		AM2WizardDefinitionEditor: AM2WizardDefinitionEditorApi;
 		AM2UI: AM2UiGlobalApi;
 		AM2WDDomIcons: AM2WDDomIconsApi;
@@ -234,5 +336,6 @@ declare global {
 		AM2WDPaletteRender: AM2WDPaletteRenderApi;
 		AM2WDRawError: AM2WDRawErrorApi;
 		AM2WDSidebar: AM2WDSidebarApi;
+		AM2DSLEditorV3?: AM2DSLEditorV3Api;
 	}
 }

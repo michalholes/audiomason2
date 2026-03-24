@@ -1,17 +1,30 @@
 (() => {
-	var root = /** @type {any} */ (window);
+	/** @typedef {Window & {
+	 * 	showOpenFilePicker?: (
+	 * 		opts: AM2JsonValue,
+	 * 	) => Promise<Array<{ getFile: () => Promise<File | null> }>>;
+	 * 	Date?: DateConstructor;
+	 * 	Blob?: typeof Blob;
+	 * 	URL?: typeof URL;
+	 * }} AM2FlowJsonFileWindow
+	 */
+	/** @type {AM2FlowJsonFileWindow} */
+	var root = window;
 
+	/** @type {AM2FlowJSONFileIOHooks} */
 	var hooks = {
 		openTextFile: null,
 		saveTextFile: null,
 	};
 
+	/** @param {AM2FlowJSONArtifact} artifact */
 	function fileNameForArtifact(artifact) {
 		return artifact === "wizard"
 			? "wizard_definition_draft.json"
 			: "flow_config_draft.json";
 	}
 
+	/** @param {unknown} err */
 	function isCancelledError(err) {
 		return !!(
 			err &&
@@ -20,6 +33,9 @@
 		);
 	}
 
+	/** @param {AM2FlowJSONOpenResult | string | null} result
+	 * @returns {AM2FlowJSONOpenResult}
+	 */
 	function normalizeOpenResult(result) {
 		if (result == null) {
 			return { cancelled: true, text: "" };
@@ -39,6 +55,7 @@
 		};
 	}
 
+	/** @param {File | null} file */
 	function readFileAsText(file) {
 		if (file && typeof file.text === "function") {
 			return file.text();
@@ -100,7 +117,9 @@
 			var input = document.createElement("input");
 			var settled = false;
 			var reading = false;
+			/** @type {((ev: FocusEvent) => void) | null} */
 			var focusHandler = null;
+			/** @type {number | null} */
 			var focusSettleTimer = null;
 			var focusSettleDeadline = 0;
 			var schedule =
@@ -132,6 +151,9 @@
 				focusSettleTimer = null;
 			}
 
+			/** @param {AM2FlowJSONOpenResult | null} result
+			 * @param {unknown} err
+			 */
 			function finish(result, err) {
 				if (settled) {
 					return;
@@ -253,6 +275,9 @@
 		return openWithInput();
 	}
 
+	/** @param {AM2FlowJSONArtifact} artifact
+	 * @param {string} text
+	 */
 	async function defaultSaveTextFile(artifact, text) {
 		var blobCtor = typeof root.Blob === "function" ? root.Blob : null;
 		var urlApi = root.URL;
@@ -289,6 +314,7 @@
 		}
 	}
 
+	/** @param {AM2FlowJSONFileIOHooks} nextHooks */
 	function setHooks(nextHooks) {
 		hooks.openTextFile =
 			nextHooks && typeof nextHooks.openTextFile === "function"
@@ -301,11 +327,15 @@
 		return true;
 	}
 
+	/** @param {AM2FlowJSONArtifact} artifact */
 	function openTextFile(artifact) {
 		var handler = hooks.openTextFile || defaultOpenTextFile;
 		return Promise.resolve(handler(artifact)).then(normalizeOpenResult);
 	}
 
+	/** @param {AM2FlowJSONArtifact} artifact
+	 * @param {string} text
+	 */
 	function saveTextFile(artifact, text) {
 		var handler = hooks.saveTextFile || defaultSaveTextFile;
 		return Promise.resolve(handler(artifact, String(text || "")));
@@ -313,6 +343,7 @@
 
 	root.AM2FlowJSONFileIO = {
 		fileNameForArtifact: fileNameForArtifact,
+		normalizeOpenResult: normalizeOpenResult,
 		openTextFile: openTextFile,
 		saveTextFile: saveTextFile,
 		setHooks: setHooks,

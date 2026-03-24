@@ -1,6 +1,8 @@
 (() => {
-	var root = /** @type {any} */ (window);
+	/** @type {Window} */
+	var root = window;
 
+	/** @param {string} payload */
 	function copyTextExecCommand(payload) {
 		return new Promise((resolve, reject) => {
 			var ta = null;
@@ -38,6 +40,7 @@
 		});
 	}
 
+	/** @param {string} text */
 	function copyText(text) {
 		var payload = String(text || "");
 		var nav = typeof navigator !== "undefined" ? navigator : null;
