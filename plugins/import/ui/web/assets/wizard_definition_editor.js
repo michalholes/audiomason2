@@ -1,5 +1,5 @@
 (() => {
-	const W = /** @type {any} */ (window);
+	const W = window;
 	const H = W.AM2EditorHTTP;
 	if (!H) return;
 
@@ -50,17 +50,22 @@
 		return x;
 	}
 
+	/** @returns {AM2WizardUiState} */
+	function makeWizardUiState() {
+		return {
+			dragId: null,
+			dropBeforeId: null,
+			showOptional: true,
+			validation: { ok: null, local: [], server: [] },
+			showRawError: false,
+			hasErrorDetails: false,
+		};
+	}
+
 	function ensureWizardUi(wd) {
-		if (!wd || typeof wd !== "object") return { showOptional: true };
+		if (!wd || typeof wd !== "object") return makeWizardUiState();
 		if (!wd._am2_ui || typeof wd._am2_ui !== "object") {
-			wd._am2_ui = {
-				dragId: null,
-				dropBeforeId: null,
-				showOptional: true,
-				validation: { ok: null, local: [], server: [] },
-				showRawError: false,
-				hasErrorDetails: false,
-			};
+			wd._am2_ui = makeWizardUiState();
 		}
 		return wd._am2_ui;
 	}
@@ -148,12 +153,14 @@
 		);
 	}
 
+	/** @type {AM2JsonObject[]} */
 	const paletteItems = [];
 
 	function renderCanvasPanel() {
 		const renderer = W.AM2FlowCanvasPanel;
 		if (!renderer || !renderer.renderCanvas) return;
 		const graph = stableGraph(wizardDraft());
+		/** @type {Record<string, AM2JsonObject>} */
 		const catalog = {};
 		paletteItems.forEach((item) => {
 			const sid = String(item && item.step_id ? item.step_id : "");
@@ -473,7 +480,7 @@
 
 	function validationMessages() {
 		const u = ensureWizardUi(wizardDraft());
-		const v = u.validation || {};
+		const v = u.validation;
 		const msgs = [];
 		(Array.isArray(v.local) ? v.local : []).forEach((m) => {
 			msgs.push(m);
@@ -513,9 +520,13 @@
 	}
 
 	function setupRawErrorPanel() {
-		const rawErrorState = {};
+		/** @type {AM2WDRawErrorPanelState} */
+		const rawErrorState = {
+			showRawError: false,
+			hasErrorDetails: false,
+		};
 		Object.defineProperty(rawErrorState, "showRawError", {
-			get: () => !!(wizardDraft()._am2_ui || {}).showRawError,
+			get: () => !!ensureWizardUi(wizardDraft()).showRawError,
 			set: (on) => {
 				mutateWizard((uiState) => {
 					uiState.showRawError = !!on;
@@ -523,7 +534,7 @@
 			},
 		});
 		Object.defineProperty(rawErrorState, "hasErrorDetails", {
-			get: () => !!(wizardDraft()._am2_ui || {}).hasErrorDetails,
+			get: () => !!ensureWizardUi(wizardDraft()).hasErrorDetails,
 			set: (on) => {
 				mutateWizard((uiState) => {
 					uiState.hasErrorDetails = !!on;
@@ -612,7 +623,9 @@
 				renderError(out.data, false);
 				return false;
 			}
-			const defn = out.data && out.data.definition ? out.data.definition : {};
+			const defn = /** @type {AM2JsonObject} */ (
+				out.data && out.data.definition ? out.data.definition : {}
+			);
 			const FE = W.AM2FlowEditorState;
 			if (FE && FE.loadAll && FE.getSnapshot) {
 				const snap = FE.getSnapshot();
@@ -667,7 +680,9 @@
 				renderAll();
 				return false;
 			}
-			const defn = out.data && out.data.definition ? out.data.definition : {};
+			const defn = /** @type {AM2JsonObject} */ (
+				out.data && out.data.definition ? out.data.definition : {}
+			);
 			const FE = W.AM2FlowEditorState;
 			if (FE && FE.markValidated && FE.getSnapshot) {
 				const snap = FE.getSnapshot();
@@ -697,7 +712,9 @@
 					renderError(out.data, false);
 					return false;
 				}
-				const defn = out.data && out.data.definition ? out.data.definition : {};
+				const defn = /** @type {AM2JsonObject} */ (
+					out.data && out.data.definition ? out.data.definition : {}
+				);
 				const FE = W.AM2FlowEditorState;
 				if (FE && FE.loadAll && FE.getSnapshot) {
 					const snap = FE.getSnapshot();
@@ -726,7 +743,9 @@
 				renderError(out.data, false);
 				return false;
 			}
-			const defn = out.data && out.data.definition ? out.data.definition : {};
+			const defn = /** @type {AM2JsonObject} */ (
+				out.data && out.data.definition ? out.data.definition : {}
+			);
 			const FE = W.AM2FlowEditorState;
 			if (FE && FE.loadAll && FE.getSnapshot) {
 				const snap = FE.getSnapshot();
@@ -756,7 +775,9 @@
 				renderError(out.data, false);
 				return;
 			}
-			const defn = out.data && out.data.definition ? out.data.definition : {};
+			const defn = /** @type {AM2JsonObject} */ (
+				out.data && out.data.definition ? out.data.definition : {}
+			);
 			const FE = W.AM2FlowEditorState;
 			if (FE && FE.loadAll && FE.getSnapshot) {
 				const snap = FE.getSnapshot();

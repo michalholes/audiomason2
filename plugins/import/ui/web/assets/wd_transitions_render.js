@@ -1,5 +1,5 @@
 (() => {
-	const W = /** @type {any} */ (window);
+	const W = window;
 	const H = W.AM2EditorHTTP;
 
 	const stableGraph =

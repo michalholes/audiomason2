@@ -1,7 +1,7 @@
 (function () {
 	"use strict";
 
-	const W = /** @type {any} */ (window);
+	const W = window;
 	const httpApi = W.AM2EditorHTTP;
 	const registryApi = window["AM2DSLEditorRegistryAPI"];
 	const graphOps = window["AM2DSLEditorGraphOps"];

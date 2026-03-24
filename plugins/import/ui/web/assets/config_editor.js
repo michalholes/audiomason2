@@ -113,7 +113,9 @@
 
 	async function validateOnly() {
 		H.renderError(ui.err, null);
-		let payloadCfg = /** @type {any} */ ({});
+		/** @type {AM2JsonObject} */
+		/** @type {AM2JsonObject} */
+		let payloadCfg = {};
 		if (unifiedMode) {
 			const s = snapshot();
 			payloadCfg = (s && s.configDraft) || {};
@@ -126,7 +128,7 @@
 			}
 		}
 		if (payloadCfg && typeof payloadCfg === "object") {
-			delete (/** @type {any} */ (payloadCfg).ui);
+			delete payloadCfg.ui;
 		}
 		const out = await H.requestJSON("/import/ui/config/validate", {
 			method: "POST",
@@ -160,7 +162,8 @@
 			const ok = await validateOnly();
 			if (!ok) return false;
 		}
-		let payloadCfg = /** @type {any} */ ({});
+		/** @type {AM2JsonObject} */
+		let payloadCfg = {};
 		if (unifiedMode) {
 			const s = snapshot();
 			payloadCfg = (s && s.configDraft) || {};
@@ -173,7 +176,7 @@
 			}
 		}
 		if (payloadCfg && typeof payloadCfg === "object") {
-			delete (/** @type {any} */ (payloadCfg).ui);
+			delete payloadCfg.ui;
 		}
 		const out = await H.requestJSON("/import/ui/config", {
 			method: "POST",

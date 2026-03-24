@@ -2,14 +2,14 @@
 	"use strict";
 
 	/** @typedef {{
-	 * 	reload?: () => Promise<boolean | void>,
-	 * 	reloadAll?: () => Promise<boolean | void>,
-	 * 	reset?: () => Promise<boolean | void>,
-	 * 	resetDefinition?: () => Promise<boolean | void>,
-	 * 	save?: () => Promise<boolean | void>,
-	 * 	saveDraft?: () => Promise<boolean | void>,
-	 * 	validate?: () => Promise<boolean | void>,
-	 * 	validateDraft?: () => Promise<boolean | void>,
+	 * 	reload?: () => boolean | void | Promise<boolean | void>,
+	 * 	reloadAll?: () => boolean | void | Promise<boolean | void>,
+	 * 	reset?: () => boolean | void | Promise<boolean | void>,
+	 * 	resetDefinition?: () => boolean | void | Promise<boolean | void>,
+	 * 	save?: () => boolean | void | Promise<boolean | void>,
+	 * 	saveDraft?: () => boolean | void | Promise<boolean | void>,
+	 * 	validate?: () => boolean | void | Promise<boolean | void>,
+	 * 	validateDraft?: () => boolean | void | Promise<boolean | void>,
 	 * }} AM2FlowAllWizardAdapter
 	 */
 	/** @type {Window} */

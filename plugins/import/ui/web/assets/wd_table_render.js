@@ -1,7 +1,6 @@
 (function () {
 	"use strict";
 
-	/** @type {any} */
 	const W = window;
 
 	const stableGraph =

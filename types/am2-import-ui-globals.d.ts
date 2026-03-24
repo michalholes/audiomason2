@@ -92,6 +92,17 @@ declare global {
 	interface AM2FlowCanvasPanelApi {
 		renderCanvas(opts: AM2FlowCanvasRenderOptions): void;
 	}
+	interface AM2DomFactoryApi {
+		(tag: string, cls?: string | null): HTMLElement;
+	}
+
+	interface AM2TextFactoryApi {
+		(tag: string, cls?: string | null, value?: string): HTMLElement;
+	}
+
+	interface AM2ClearNodeFn {
+		(node: Node | null): void;
+	}
 
 	interface AM2FlowStepFieldSpec {
 		fieldId: string;
@@ -133,6 +144,21 @@ declare global {
 		fieldBuffers: Record<string, string>;
 		jsonBuffer: string;
 		jsonDirty: boolean;
+	}
+
+	interface AM2WizardUiValidationState {
+		ok: boolean | null;
+		local: string[];
+		server: string[];
+	}
+
+	interface AM2WizardUiState {
+		dragId: string | null;
+		dropBeforeId: string | null;
+		showOptional: boolean;
+		validation: AM2WizardUiValidationState;
+		showRawError: boolean;
+		hasErrorDetails: boolean;
 	}
 
 	interface AM2DSLEditorGraphOpsApi {
@@ -305,14 +331,16 @@ declare global {
 	}
 
 	interface AM2DSLEditorV3Api {
-		activateDefinition?(): Promise<boolean | void>;
+		activateDefinition?(): boolean | void | Promise<boolean | void>;
 		isV3Draft?(definition: AM2JsonObject): boolean;
-		reloadAll?(opts?: { skipConfirm?: boolean }): Promise<boolean | void>;
+		reloadAll?(opts?: {
+			skipConfirm?: boolean;
+		}): boolean | void | Promise<boolean | void>;
 		renderAll?(): void;
-		resetDefinition?(): Promise<boolean | void>;
-		rollback?(historyId: string): Promise<boolean | void>;
-		saveDraft?(): Promise<boolean | void>;
-		validateDraft?(): Promise<boolean | void>;
+		resetDefinition?(): boolean | void | Promise<boolean | void>;
+		rollback?(historyId: string): boolean | void | Promise<boolean | void>;
+		saveDraft?(): boolean | void | Promise<boolean | void>;
+		validateDraft?(): boolean | void | Promise<boolean | void>;
 	}
 
 	interface AM2FlowEditorStateApi {
@@ -349,14 +377,14 @@ declare global {
 	}
 
 	interface AM2FlowEditorWizardApi {
-		reload(): Promise<boolean | void>;
-		validate(): Promise<boolean | void>;
-		save(): Promise<boolean | void>;
-		reset(): Promise<boolean | void>;
+		reload(): boolean | void | Promise<boolean | void>;
+		validate(): boolean | void | Promise<boolean | void>;
+		save(): boolean | void | Promise<boolean | void>;
+		reset(): boolean | void | Promise<boolean | void>;
 	}
 
 	interface AM2FlowEditorConfigApi extends AM2FlowEditorWizardApi {
-		activate(): Promise<boolean | void>;
+		activate(): boolean | void | Promise<boolean | void>;
 	}
 
 	interface AM2FlowEditorGlobalApi {
@@ -365,19 +393,19 @@ declare global {
 	}
 
 	interface AM2FlowConfigEditorApi extends AM2FlowEditorConfigApi {
-		renderNow(): Promise<boolean | void>;
+		renderNow(): boolean | void | Promise<boolean | void>;
 		_debug_getDraft(): AM2JsonObject;
 	}
 
 	interface AM2WizardDefinitionEditorApi {
 		reload?(): Promise<boolean | void>;
-		reloadAll(): Promise<boolean | void>;
+		reloadAll(): boolean | void | Promise<boolean | void>;
 		reset?(): Promise<boolean | void>;
-		resetDefinition(): Promise<boolean | void>;
+		resetDefinition(): boolean | void | Promise<boolean | void>;
 		save?(): Promise<boolean | void>;
-		saveDraft(): Promise<boolean | void>;
+		saveDraft(): boolean | void | Promise<boolean | void>;
 		validate?(): Promise<boolean | void>;
-		validateDraft(): Promise<boolean | void>;
+		validateDraft(): boolean | void | Promise<boolean | void>;
 	}
 
 	interface AM2UiGlobalApi {
@@ -403,6 +431,14 @@ declare global {
 		getState(): AM2WDStepDetailsLoaderState;
 	}
 
+	interface AM2WDDetailsRenderValidationOptions {
+		mount: HTMLElement;
+		countEl?: HTMLElement | null;
+		el?: AM2DomFactoryApi;
+		text?: AM2TextFactoryApi;
+		messages?: AM2JsonValue[];
+	}
+
 	interface AM2WDDetailsRenderOptions {
 		mount: HTMLElement;
 		validation?: AM2JsonValue;
@@ -411,7 +447,7 @@ declare global {
 	}
 
 	interface AM2WDDetailsRenderApi {
-		renderValidation(opts: AM2WDDetailsRenderOptions): void;
+		renderValidation(opts: AM2WDDetailsRenderValidationOptions): void;
 		renderStepDetails(opts: AM2WDDetailsRenderOptions): void;
 	}
 
@@ -420,8 +456,17 @@ declare global {
 	}
 
 	interface AM2WDLayoutRootTextNodes {
-		title?: string;
-		subtitle?: string;
+		(titleTag: string, cls?: string | null, value?: string): HTMLElement;
+	}
+
+	interface AM2WDLayoutRootUi {
+		ta: HTMLElement | null;
+		err: HTMLElement | null;
+		history: HTMLElement | null;
+		reload: HTMLElement | null;
+		validate: HTMLElement | null;
+		save: HTMLElement | null;
+		reset: HTMLElement | null;
 	}
 
 	interface AM2WDLayoutRootResult {
@@ -436,26 +481,111 @@ declare global {
 
 	interface AM2WDLayoutRootApi {
 		createRoot(opts: {
-			ui: AM2JsonObject;
-			el: HTMLElement;
-			text: AM2WDLayoutRootTextNodes;
+			ui: AM2WDLayoutRootUi;
+			el: AM2DomFactoryApi;
+			text: AM2TextFactoryApi;
 		}): AM2WDLayoutRootResult;
 	}
 
 	interface AM2WDPaletteRenderApi {
-		renderPalette(opts: AM2JsonObject): void;
+		renderPalette(opts: {
+			mount: HTMLElement;
+			el: AM2DomFactoryApi;
+			text: AM2TextFactoryApi;
+			items: AM2JsonObject[];
+			state: {
+				canAdd: (stepId: string) => boolean;
+				addStep: (stepId: string) => void;
+			};
+		}): void;
+	}
+
+	interface AM2WDRawErrorPanelState {
+		showRawError: boolean;
+		hasErrorDetails: boolean;
+	}
+
+	interface AM2WDRawErrorPanelOptions {
+		ui: AM2WDLayoutRootUi;
+		state: AM2WDRawErrorPanelState;
+		el: AM2DomFactoryApi;
+		text: AM2TextFactoryApi;
 	}
 
 	interface AM2WDRawErrorApi {
-		setupRawErrorPanel(opts: AM2JsonObject): void;
+		setupRawErrorPanel(opts: AM2WDRawErrorPanelOptions): void;
 		setRawErrorVisible(state: AM2JsonObject, visible: boolean): void;
 	}
 
+	interface AM2WDSidebarSectionsOptions {
+		flowSidebar: HTMLElement;
+		stepPanel: HTMLElement;
+		transitionsPanel: HTMLElement;
+		rightCol: HTMLElement;
+		clear: AM2ClearNodeFn;
+		el: AM2DomFactoryApi;
+		text: AM2TextFactoryApi;
+	}
+
 	interface AM2WDSidebarApi {
-		buildSidebarSections(opts: AM2JsonObject): AM2JsonObject | void;
+		buildSidebarSections(
+			opts: AM2WDSidebarSectionsOptions,
+		): AM2JsonObject | void;
 		buildSidebarTabs(opts: AM2JsonObject): AM2JsonObject | void;
 		clearSidebar(state: AM2JsonObject): void;
 		renderSidebar(state: AM2JsonObject, stepId?: string | null): void;
+	}
+
+	interface AM2WDTableStateApi {
+		getWizardDraft: () => AM2JsonObject;
+		getSelectedStepId: () => string | null;
+		isOptional: (stepId: string) => boolean;
+		canRemove: (stepId: string) => boolean;
+		setSelectedStep: (stepIdOrNull: string | null) => void;
+		removeStep: (stepId: string) => void;
+		moveStepUp: (stepId: string) => void;
+		moveStepDown: (stepId: string) => void;
+		reorderStep: (dragId: string, dropBeforeId: string | null) => void;
+	}
+
+	interface AM2WDTableRenderInstance {
+		renderAll(): void;
+		updateSelection(): void;
+	}
+
+	interface AM2WDTableRenderApi {
+		initTable(opts: {
+			body: HTMLElement;
+			el: AM2DomFactoryApi;
+			text: AM2TextFactoryApi;
+			state: AM2WDTableStateApi;
+		}): AM2WDTableRenderInstance | null;
+	}
+
+	interface AM2WDTransitionsStateApi {
+		getWizardDraft: () => AM2JsonObject;
+		getSelectedStepId: () => string | null;
+		addEdge: (
+			fromId: string,
+			toId: string,
+			priority: number,
+			whenVal: AM2JsonValue,
+		) => void;
+		removeEdge: (fromId: string, outgoingIndex: number) => void;
+		updateEdge?: (
+			fromId: string,
+			outgoingIndex: number,
+			payload: AM2JsonObject,
+		) => void;
+	}
+
+	interface AM2WDTransitionsRenderApi {
+		renderTransitions(opts: {
+			mount: HTMLElement;
+			el: AM2DomFactoryApi;
+			text: AM2TextFactoryApi;
+			state: AM2WDTransitionsStateApi;
+		}): void;
 	}
 
 	interface Window {
@@ -484,6 +614,8 @@ declare global {
 		AM2WDPaletteRender: AM2WDPaletteRenderApi;
 		AM2WDRawError: AM2WDRawErrorApi;
 		AM2WDSidebar: AM2WDSidebarApi;
+		AM2WDTableRender: AM2WDTableRenderApi;
+		AM2WDTransitionsRender: AM2WDTransitionsRenderApi;
 		AM2DSLEditorV3?: AM2DSLEditorV3Api;
 	}
 }
