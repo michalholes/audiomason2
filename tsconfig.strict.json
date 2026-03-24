@@ -2,6 +2,7 @@
 	"extends": "./tsconfig.json",
 	"compilerOptions": {
 		"strict": true,
+		"noImplicitAny": true,
 		"module": "NodeNext",
 		"moduleResolution": "NodeNext",
 		"types": ["node"]

@@ -1,6 +1,12 @@
 (function () {
 	"use strict";
 
+	/**
+	 * @param {string} name
+	 * @param {string | undefined} cls
+	 * @param {string | undefined} title
+	 * @returns {SVGSVGElement}
+	 */
 	function svgIcon(name, cls, title) {
 		const ns = "http://www.w3.org/2000/svg";
 		const svg = document.createElementNS(ns, "svg");
@@ -9,16 +15,13 @@
 		svg.setAttribute("height", "16");
 		svg.setAttribute("aria-hidden", "true");
 		if (cls) svg.setAttribute("class", cls);
-
 		if (title) {
 			const t = document.createElementNS(ns, "title");
 			t.textContent = String(title);
 			svg.appendChild(t);
 		}
-
 		const p = document.createElementNS(ns, "path");
 		p.setAttribute("fill", "currentColor");
-
 		if (name === "lock") {
 			p.setAttribute(
 				"d",
@@ -47,7 +50,6 @@
 				"M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm1 5v6h-2V7h2Zm0 8v2h-2v-2h2Z",
 			);
 		}
-
 		svg.appendChild(p);
 		return svg;
 	}

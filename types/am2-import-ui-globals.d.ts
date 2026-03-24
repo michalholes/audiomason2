@@ -773,7 +773,7 @@ declare global {
 			ui: AM2WDLayoutRootUi;
 			el: AM2DomFactoryApi;
 			text: AM2TextFactoryApi;
-		}): AM2WDLayoutRootResult;
+		}): AM2WDLayoutRootResult | null;
 	}
 
 	interface AM2WDPaletteRenderApi {
@@ -803,7 +803,11 @@ declare global {
 
 	interface AM2WDRawErrorApi {
 		setupRawErrorPanel(opts: AM2WDRawErrorPanelOptions): void;
-		setRawErrorVisible(state: AM2JsonObject, visible: boolean): void;
+		setRawErrorVisible(
+			state: AM2WDRawErrorPanelState,
+			ui: AM2WDLayoutRootUi,
+			visible: boolean,
+		): void;
 	}
 
 	interface AM2WDSidebarSectionsOptions {
