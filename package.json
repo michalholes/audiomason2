@@ -13,13 +13,16 @@
 		"lint:files": "biome lint --diagnostic-level=error --max-diagnostics=10000",
 		"lint:files:fix": "biome lint --write --diagnostic-level=error --max-diagnostics=10000",
 		"format": "biome format .",
-		"typecheck": "tsc --noEmit"
+		"typecheck": "tsc --noEmit",
+		"typecheck:strict": "tsc -p tsconfig.strict.json --noEmit"
 	},
 	"keywords": [],
 	"author": "",
 	"license": "ISC",
 	"devDependencies": {
 		"@biomejs/biome": "^2.4.4",
-		"typescript": "^5.9.3"
+		"typescript": "^5.9.3",
+		"@playwright/test": "^1.53.2",
+		"@types/node": "^24.5.2"
 	}
 }

@@ -1,18 +1,16 @@
 {
+	"extends": "./tsconfig.json",
 	"compilerOptions": {
-		"allowJs": true,
-		"checkJs": true,
-		"noEmit": true,
-		"strict": false,
-		"target": "ES2022",
-		"lib": ["ES2022", "DOM"],
-		"skipLibCheck": true
+		"strict": true,
+		"module": "NodeNext",
+		"moduleResolution": "NodeNext",
+		"types": ["node"]
 	},
 	"include": [
 		"am2-globals.d.ts",
 		"plugins/import/ui/web/assets/**/*.js",
 		"plugins/web_interface/ui/assets/**/*.js",
-		"scripts/patchhub/static/**/*.js",
+		"playwright.config.ts",
 		"types/**/*.d.ts"
 	],
 	"exclude": ["node_modules", "patches", "**/patches/**"]

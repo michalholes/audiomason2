@@ -1,5 +1,8 @@
+/// <reference path="./types/am2-import-ui-globals.d.ts" />
+/// <reference path="./types/am2-web-interface-globals.d.ts" />
 export {};
 
+/* legacy declarations disabled; authoritative declarations moved to types/
 declare global {
 	interface Window {
 		// --- import/ui globals (reálne sa nastavujú v JS assets) ---
@@ -43,3 +46,5 @@ declare global {
 	// Ak sa to volá globálne bez window. (napr. startBookFlow())
 	function startBookFlow(...args: any[]): any;
 }
+
+*/
