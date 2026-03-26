@@ -226,8 +226,6 @@ Ak pouzivatel po implementacii poskytne zip s repo tree:
 2. O vysledkoch musi byt pouzivatel informovany.
 3. Report vysledku kontroly MUSI explicitne vyhodnotit kazde Pi a kazde jeho SCi.j osobitne. Pri kazdom Pi MUSI uviest aj samostatny verdikt pre uplnost, spravnost a sulad. Agregovane tvrdenie typu "implementovane" bez tohto rozpisu je zakazane.
 
----
-
 ## 7. PATCH PRAVIDLA (HARD)
 
 1. Pri vytvarani patchov je povinne striktne dodrziavat instrukcie am_patch.
