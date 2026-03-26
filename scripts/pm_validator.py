@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import argparse
 import ast
+import hashlib
+import json
 import re
 import shutil
 import subprocess
@@ -243,12 +245,7 @@ def _collect_patch_members(
         name for name in non_dirs if name.startswith(PATCH_PREFIX) and name.endswith(PATCH_SUFFIX)
     ]
     if not members:
-        return (
-            results + [RuleResult("PER_FILE_LAYOUT", "FAIL", "entries=0")],
-            [],
-            [],
-            None,
-        )
+        return results + [RuleResult("PER_FILE_LAYOUT", "FAIL", "entries=0")], [], [], None
     allowed = {"COMMIT_MESSAGE.txt", "ISSUE_NUMBER.txt", TARGET_FILE_NAME, *members}
     extras = sorted(name for name in non_dirs if name not in allowed)
     if extras:
@@ -262,36 +259,16 @@ def _collect_patch_members(
         repo_path = _member_repo_path(member)
         if repo_path is None:
             detail = f"invalid_member:{member}"
-            return (
-                results + [RuleResult("PATCH_MEMBER_PATHS", "FAIL", detail)],
-                [],
-                [],
-                None,
-            )
+            return results + [RuleResult("PATCH_MEMBER_PATHS", "FAIL", detail)], [], [], None
         if not _is_ascii_text(member):
             detail = f"non_ascii_member:{member}"
-            return (
-                results + [RuleResult("PATCH_MEMBER_PATHS", "FAIL", detail)],
-                [],
-                [],
-                None,
-            )
+            return results + [RuleResult("PATCH_MEMBER_PATHS", "FAIL", detail)], [], [], None
         if not _is_ascii_text(repo_path):
             detail = f"non_ascii_repo_path:{repo_path}"
-            return (
-                results + [RuleResult("PATCH_MEMBER_PATHS", "FAIL", detail)],
-                [],
-                [],
-                None,
-            )
+            return results + [RuleResult("PATCH_MEMBER_PATHS", "FAIL", detail)], [], [], None
         if repo_path in seen:
             detail = f"duplicate_repo_path:{repo_path}"
-            return (
-                results + [RuleResult("PATCH_MEMBER_PATHS", "FAIL", detail)],
-                [],
-                [],
-                None,
-            )
+            return results + [RuleResult("PATCH_MEMBER_PATHS", "FAIL", detail)], [], [], None
         seen.add(repo_path)
         if not _is_ascii_bytes(items[member]):
             detail = f"{member}:non_ascii_patch_text"
@@ -300,22 +277,12 @@ def _collect_patch_members(
         header_err = _validate_patch_headers(repo_path, text)
         if header_err is not None:
             detail = f"{member}:{header_err}"
-            return (
-                results + [RuleResult("PATCH_MEMBER_PATHS", "FAIL", detail)],
-                [],
-                [],
-                None,
-            )
+            return results + [RuleResult("PATCH_MEMBER_PATHS", "FAIL", detail)], [], [], None
         if Path(repo_path).suffix in LINE_EXTS:
             line_err = _check_line_lengths(text)
             if line_err is not None:
                 detail = f"{member}:{line_err}"
-                return (
-                    results + [RuleResult("LINE_LENGTH", "FAIL", detail)],
-                    [],
-                    [],
-                    None,
-                )
+                return results + [RuleResult("LINE_LENGTH", "FAIL", detail)], [], [], None
         patch_members.append((member, items[member]))
         decision_paths.append(repo_path)
     results.append(RuleResult("PATCH_MEMBER_PATHS", "PASS", f"paths={len(decision_paths)}"))
@@ -781,8 +748,353 @@ def _monolith(root: Path, baseline: dict[str, bytes], decision_paths: list[str])
     return RuleResult("MONOLITH", "PASS", "gate_passed")
 
 
+
+INSTRUCTIONS_REQUIRED = {"HANDOFF.md", "constraint_pack.json", "hash_pack.txt"}
+HEX64_RE = re.compile(r"^[0-9a-f]{64}$")
+SUPPORTED_BINDING_TYPES = {"resolver_contract", "constraint_pack"}
+BINDING_REQUIRED_FIELDS = (
+    "id",
+    "binding_type",
+    "match",
+    "symbol_role",
+    "authoritative_semantics",
+    "peer_renderers",
+    "shared_contract_refs",
+    "downstream_consumers",
+    "exception_state_refs",
+    "required_wiring",
+    "forbidden",
+    "required_validation",
+    "verification_mode",
+    "verification_method",
+    "semantic_group",
+    "conflict_policy",
+)
+AUTHORITY_ONLY_PATHS = {
+    "docs/instructions_project_chats.txt",
+    "docs/am_patch_instructions.md",
+    "docs/pm_spec.md",
+    "docs/specification.jsonl",
+    "docs/validate_master_spec_v2.py",
+    "scripts/authority_resolver.py",
+}
+
+
+def _decode_utf8_text(raw: bytes) -> str | None:
+    try:
+        return raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+
+
+def _normalize_single_ascii_line(raw: bytes) -> tuple[str | None, str | None]:
+    text = _decode_ascii_raw(raw)
+    if text is None:
+        return None, "non_ascii"
+    if "\r" in text:
+        return None, "must_use_lf"
+    value = text[:-1] if text.endswith("\n") else text
+    if "\n" in value:
+        return None, "must_have_exactly_one_line"
+    if value == "":
+        return None, "must_be_non_empty"
+    return value, None
+
+
+def _read_instructions_zip(path: Path) -> tuple[list[RuleResult], dict | None, bytes | None, str | None]:
+    results: list[RuleResult] = []
+    status = "PASS" if path.suffix == ".zip" else "FAIL"
+    results.append(RuleResult("INSTRUCTIONS_EXTENSION", status, str(path)))
+    if path.suffix != ".zip":
+        return results, None, None, None
+    names, items = _read_zip(path)
+    non_dirs = [name for name in names if not name.endswith("/")]
+    root_entries = sorted(non_dirs)
+    expected = sorted(INSTRUCTIONS_REQUIRED)
+    results.append(
+        RuleResult(
+            "INSTRUCTIONS_LAYOUT",
+            "PASS" if root_entries == expected else "FAIL",
+            f"entries={','.join(root_entries)}",
+        )
+    )
+    handoff_raw = items.get("HANDOFF.md")
+    pack_raw = items.get("constraint_pack.json")
+    hash_raw = items.get("hash_pack.txt")
+    handoff_text = None if handoff_raw is None else _decode_utf8_text(handoff_raw)
+    if handoff_text is None:
+        results.append(RuleResult("INSTRUCTIONS_HANDOFF", "FAIL", "missing_or_non_utf8_handoff"))
+    else:
+        status = "PASS" if "SPEC CONTEXT" in handoff_text else "FAIL"
+        detail = "spec_context_present" if status == "PASS" else "missing_spec_context"
+        results.append(RuleResult("INSTRUCTIONS_HANDOFF", status, detail))
+    pack_obj = None
+    if pack_raw is None:
+        results.append(RuleResult("INSTRUCTIONS_PACK", "FAIL", "missing_constraint_pack"))
+    else:
+        pack_text = _decode_utf8_text(pack_raw)
+        if pack_text is None:
+            results.append(RuleResult("INSTRUCTIONS_PACK", "FAIL", "constraint_pack_non_utf8"))
+        else:
+            try:
+                pack_obj = json.loads(pack_text)
+                results.append(RuleResult("INSTRUCTIONS_PACK", "PASS", "json_ok"))
+            except json.JSONDecodeError as exc:
+                results.append(RuleResult("INSTRUCTIONS_PACK", "FAIL", f"json_error:{exc.msg}"))
+    hash_value = None
+    if hash_raw is None:
+        results.append(RuleResult("INSTRUCTIONS_HASH", "FAIL", "missing_hash_pack"))
+    else:
+        hash_value, err = _normalize_single_ascii_line(hash_raw)
+        if err is not None or hash_value is None or HEX64_RE.fullmatch(hash_value) is None:
+            detail = err or "invalid_hash_format"
+            results.append(RuleResult("INSTRUCTIONS_HASH", "FAIL", detail))
+        else:
+            results.append(RuleResult("INSTRUCTIONS_HASH", "PASS", hash_value))
+    if pack_raw is not None and hash_value is not None and HEX64_RE.fullmatch(hash_value or "") is not None:
+        actual_hash = hashlib.sha256(pack_raw).hexdigest()
+        results.append(
+            RuleResult(
+                "PACK_HASH_INTEGRITY",
+                "PASS" if actual_hash == hash_value else "FAIL",
+                f"expected={hash_value}:actual={actual_hash}",
+            )
+        )
+    return results, pack_obj, pack_raw, hash_value
+
+
+def _load_jsonl_bytes(raw: bytes) -> list[dict]:
+    text = raw.decode("utf-8")
+    return [json.loads(line) for line in text.splitlines() if line.strip()]
+
+
+def _collect_binding_meta_and_bindings(objects: list[dict]) -> tuple[dict, list[dict]]:
+    binding_meta = None
+    bindings: list[dict] = []
+    seen_ids: set[str] = set()
+    for obj in objects:
+        obj_type = obj.get("type")
+        if obj_type == "binding_meta":
+            if binding_meta is not None:
+                raise ValidationError("binding_meta_duplicate")
+            binding_meta = obj
+            continue
+        if obj_type != "obligation_binding":
+            continue
+        binding_id = str(obj.get("id", "<missing-id>"))
+        if binding_id in seen_ids:
+            raise ValidationError(f"binding_duplicate:{binding_id}")
+        seen_ids.add(binding_id)
+        missing = [field for field in BINDING_REQUIRED_FIELDS if field not in obj]
+        if missing:
+            raise ValidationError(f"binding_missing_fields:{binding_id}:{','.join(missing)}")
+        if obj["binding_type"] not in SUPPORTED_BINDING_TYPES:
+            raise ValidationError(f"binding_type_unsupported:{binding_id}:{obj['binding_type']}")
+        for field in ("verification_mode", "verification_method", "semantic_group", "conflict_policy"):
+            if not str(obj.get(field, "")).strip():
+                raise ValidationError(f"binding_empty_field:{binding_id}:{field}")
+        bindings.append(obj)
+    if binding_meta is None:
+        raise ValidationError("binding_meta_missing")
+    return binding_meta, bindings
+
+
+def _binding_is_active(binding: dict, mode: str, target_scope: str) -> bool:
+    match = binding.get("match", {})
+    if binding.get("binding_type") == "constraint_pack":
+        return True
+    return match.get("phase") == mode and match.get("target") == target_scope
+
+
+def _ensure_binding_consistency(active_bindings: list[dict]) -> None:
+    if not active_bindings:
+        raise ValidationError("binding_active_missing")
+    symbol_matches: dict[tuple[str, str], list[str]] = {}
+    semantics: dict[str, list[str]] = {}
+    role_semantics: dict[str, set[str]] = {}
+    for binding in active_bindings:
+        binding_id = binding["id"]
+        match_key = json.dumps(binding.get("match", {}), sort_keys=True)
+        symbol_key = (match_key, binding["symbol_role"])
+        symbol_matches.setdefault(symbol_key, []).append(binding_id)
+        semantics.setdefault(binding["authoritative_semantics"], []).append(binding_id)
+        role_semantics.setdefault(binding["symbol_role"], set()).add(binding["authoritative_semantics"])
+    for ids in symbol_matches.values():
+        if len(ids) > 1:
+            raise ValidationError(f"binding_ambiguous_symbol:{','.join(sorted(ids))}")
+    for ids in semantics.values():
+        if len(ids) > 1:
+            raise ValidationError(f"binding_duplicate_semantics:{','.join(sorted(ids))}")
+    for role, values in role_semantics.items():
+        if len(values) > 1:
+            raise ValidationError(f"binding_conflicting_obligations:{role}")
+
+
+def _build_pack_from_spec_bytes(spec_raw: bytes, mode: str, target_scope: str) -> tuple[bytes, str, list[dict]]:
+    objects = _load_jsonl_bytes(spec_raw)
+    if not objects or objects[0].get("type") != "meta":
+        raise ValidationError("spec_meta_missing")
+    binding_meta, bindings = _collect_binding_meta_and_bindings(objects)
+    active_bindings = [binding for binding in bindings if _binding_is_active(binding, mode, target_scope)]
+    _ensure_binding_consistency(active_bindings)
+    spec_fingerprint = hashlib.sha256(spec_raw).hexdigest()
+    active_rule_ids = [binding["id"] for binding in active_bindings]
+    pack = {
+        "target_symbol": None,
+        "target_scope": target_scope,
+        "mode": mode,
+        "spec_fingerprint": spec_fingerprint,
+        "binding_meta_id": binding_meta["id"],
+        "active_bindings": active_bindings,
+        "active_rule_ids": active_rule_ids,
+        "full_rule_text": {binding["id"]: binding["authoritative_semantics"] for binding in active_bindings},
+        "match_basis": {binding["id"]: binding.get("match", {}) for binding in active_bindings},
+        "authoritative_sources": ["docs/specification.jsonl"],
+        "shared_contracts": sorted({ref for binding in active_bindings for ref in binding.get("shared_contract_refs", [])}),
+        "downstream_consumers": sorted({consumer for binding in active_bindings for consumer in binding.get("downstream_consumers", [])}),
+        "exception_state_refs": sorted({ref for binding in active_bindings for ref in binding.get("exception_state_refs", [])}),
+        "required_wiring": sorted({item for binding in active_bindings for item in binding.get("required_wiring", [])}),
+        "forbidden_strategies": sorted({item for binding in active_bindings for item in binding.get("forbidden", [])}),
+        "required_validation": sorted({item for binding in active_bindings for item in binding.get("required_validation", [])}),
+        "verification_mode_per_rule": {binding["id"]: binding["verification_mode"] for binding in active_bindings},
+        "verification_method_per_rule": {binding["id"]: binding["verification_method"] for binding in active_bindings},
+        "oracle_refs": {binding["id"]: binding.get("oracle_ref") for binding in active_bindings},
+        "aggregate_scope_metadata": {"binding_count": len(active_bindings), "mode": mode, "target_scope": target_scope},
+    }
+    pack_json = json.dumps(pack, indent=2, sort_keys=True, ensure_ascii=True)
+    pack_bytes = (pack_json + "\n").encode("utf-8")
+    return pack_bytes, hashlib.sha256(pack_bytes).hexdigest(), active_bindings
+
+
+def _authority_spec_bytes(args: argparse.Namespace) -> tuple[bytes | None, str | None]:
+    spec_path = "docs/specification.jsonl"
+    if not args.repair_overlay:
+        snapshot = _iter_zip_files(Path(args.workspace_snapshot))
+        return snapshot.get(spec_path), None if spec_path in snapshot else "missing_spec_in_workspace_snapshot"
+    overlay = _iter_zip_files(Path(args.repair_overlay))
+    if spec_path in overlay:
+        return overlay[spec_path], None
+    if args.workspace_snapshot and spec_path in set(args.supplemental_file):
+        snapshot = _iter_zip_files(Path(args.workspace_snapshot))
+        if spec_path in snapshot:
+            return snapshot[spec_path], None
+        return None, "supplemental_spec_missing_in_snapshot"
+    return None, "missing_spec_for_repair_recompute"
+
+
+def _pack_union_rule(rule_id: str, pack: dict, key: str, active_bindings: list[dict], field: str) -> RuleResult:
+    expected = sorted({item for binding in active_bindings for item in binding.get(field, [])})
+    actual = sorted(pack.get(key, []))
+    return RuleResult(rule_id, "PASS" if actual == expected else "FAIL", f"expected={expected}:actual={actual}")
+
+
+def _scope_mapping_rule(decision_paths: list[str], pack: dict) -> RuleResult:
+    target_scope = str(pack.get("target_scope", ""))
+    if not decision_paths:
+        return RuleResult("PACK_SCOPE_MAPPING", "FAIL", "no_patch_paths")
+    if target_scope == "authority_scope":
+        bad = [path for path in decision_paths if not (path.startswith("docs/") or path.startswith("scripts/"))]
+        status = "PASS" if not bad else "FAIL"
+        detail = "authority_paths_ok" if status == "PASS" else f"out_of_scope={bad}"
+        return RuleResult("PACK_SCOPE_MAPPING", status, detail)
+    if target_scope == "implementation_scope":
+        bad = [path for path in decision_paths if path in AUTHORITY_ONLY_PATHS]
+        status = "PASS" if not bad else "FAIL"
+        detail = "implementation_paths_ok" if status == "PASS" else f"authority_paths={bad}"
+        return RuleResult("PACK_SCOPE_MAPPING", status, detail)
+    return RuleResult("PACK_SCOPE_MAPPING", "FAIL", f"unsupported_target_scope:{target_scope}")
+
+
+def _forbidden_bypass_rule(patch_member_names: list[str], pack: dict, active_bindings: list[dict]) -> RuleResult:
+    expected = sorted({item for binding in active_bindings for item in binding.get("forbidden", [])})
+    actual = sorted(pack.get("forbidden_strategies", []))
+    if actual != expected:
+        return RuleResult("PACK_FORBIDDEN_BYPASS", "FAIL", f"expected={expected}:actual={actual}")
+    forbidden_names = {"HANDOFF.md", "constraint_pack.json", "hash_pack.txt"}
+    leaked = [name for name in patch_member_names if any(item in name for item in forbidden_names)]
+    if leaked:
+        return RuleResult("PACK_FORBIDDEN_BYPASS", "FAIL", f"patch_contains_instruction_artifacts:{leaked}")
+    return RuleResult("PACK_FORBIDDEN_BYPASS", "PASS", "forbidden_bypass_checks_ok")
+
+
+def _recompute_pack_rule(args: argparse.Namespace, pack: dict, pack_raw: bytes | None) -> tuple[RuleResult, list[dict] | None]:
+    spec_raw, err = _authority_spec_bytes(args)
+    if err is not None or spec_raw is None:
+        return RuleResult("PACK_RECOMPUTE", "UNVERIFIED_ENVIRONMENT", err or "missing_authority_spec"), None
+    mode = str(pack.get("mode", ""))
+    target_scope = str(pack.get("target_scope", ""))
+    if not mode or not target_scope:
+        return RuleResult("PACK_RECOMPUTE", "FAIL", "missing_mode_or_target_scope"), None
+    try:
+        rebuilt_raw, _rebuilt_hash, active_bindings = _build_pack_from_spec_bytes(spec_raw, mode, target_scope)
+    except ValidationError as exc:
+        return RuleResult("PACK_RECOMPUTE", "FAIL", str(exc)), None
+    if pack_raw is None:
+        return RuleResult("PACK_RECOMPUTE", "FAIL", "missing_pack_bytes"), active_bindings
+    status = "PASS" if rebuilt_raw == pack_raw else "FAIL"
+    detail = "recompute_match" if status == "PASS" else "recompute_mismatch"
+    return RuleResult("PACK_RECOMPUTE", status, detail), active_bindings
+
+
+def _pack_rule_verdicts(pack: dict, active_bindings: list[dict] | None, support_rules: dict[str, RuleResult]) -> list[RuleResult]:
+    verdicts: list[RuleResult] = []
+    bindings = active_bindings if active_bindings is not None else pack.get("active_bindings", [])
+    for binding in bindings:
+        binding_id = str(binding.get("id", "<missing-id>"))
+        mode = str(binding.get("verification_mode", "")).strip()
+        if not mode:
+            verdicts.append(RuleResult(f"PACK_RULE:{binding_id}", "FAIL", "missing_verification_mode"))
+            continue
+        if mode != "machine":
+            verdicts.append(RuleResult(f"PACK_RULE:{binding_id}", "MANUAL_REVIEW_REQUIRED", f"mode={mode}"))
+            continue
+        failing = [rule for rule in support_rules.values() if rule.status != "PASS"]
+        if failing:
+            status = failing[0].status if failing[0].status in {"UNVERIFIED_ENVIRONMENT", "MANUAL_REVIEW_REQUIRED"} else "FAIL"
+            verdicts.append(RuleResult(f"PACK_RULE:{binding_id}", status, failing[0].rule_id))
+        else:
+            detail = f"mode={binding.get('verification_mode')} method={binding.get('verification_method')}"
+            verdicts.append(RuleResult(f"PACK_RULE:{binding_id}", "PASS", detail))
+    return verdicts
+
+
+def _verdict_coverage_rule(pack: dict, verdicts: list[RuleResult]) -> RuleResult:
+    expected = sorted(str(binding.get("id", "<missing-id>")) for binding in pack.get("active_bindings", []))
+    actual = sorted(rule.rule_id.split(":", 1)[1] for rule in verdicts if rule.rule_id.startswith("PACK_RULE:"))
+    status = "PASS" if actual == expected else "FAIL"
+    return RuleResult("PACK_VERDICT_COVERAGE", status, f"expected={expected}:actual={actual}")
+
+
+def _pack_rules(args: argparse.Namespace, instructions_path: Path, decision_paths: list[str], patch_member_names: list[str]) -> tuple[list[RuleResult], dict | None]:
+    results, pack, pack_raw, _hash_value = _read_instructions_zip(instructions_path)
+    if pack is None:
+        return results, None
+    recompute_rule, active_bindings = _recompute_pack_rule(args, pack, pack_raw)
+    results.append(recompute_rule)
+    if active_bindings is None:
+        active_bindings = pack.get("active_bindings", [])
+    results.append(_pack_union_rule("PACK_REQUIRED_WIRING", pack, "required_wiring", active_bindings, "required_wiring"))
+    results.append(_forbidden_bypass_rule(patch_member_names, pack, active_bindings))
+    results.append(_pack_union_rule("PACK_DOWNSTREAM_COVERAGE", pack, "downstream_consumers", active_bindings, "downstream_consumers"))
+    results.append(_pack_union_rule("PACK_REQUIRED_VALIDATION", pack, "required_validation", active_bindings, "required_validation"))
+    results.append(_scope_mapping_rule(decision_paths, pack))
+    support_rules = {rule.rule_id: rule for rule in results if rule.rule_id in {
+        "PACK_HASH_INTEGRITY",
+        "PACK_RECOMPUTE",
+        "PACK_REQUIRED_WIRING",
+        "PACK_FORBIDDEN_BYPASS",
+        "PACK_DOWNSTREAM_COVERAGE",
+        "PACK_REQUIRED_VALIDATION",
+        "PACK_SCOPE_MAPPING",
+    }}
+    verdicts = _pack_rule_verdicts(pack, active_bindings, support_rules)
+    results.extend(verdicts)
+    results.append(_verdict_coverage_rule(pack, verdicts))
+    return results, pack
+
 def _format(results: list[RuleResult]) -> str:
-    overall = "FAIL" if any(item.status == "FAIL" for item in results) else "PASS"
+    hard_fail_statuses = {"FAIL", "UNVERIFIED_ENVIRONMENT", "MANUAL_REVIEW_REQUIRED"}
+    overall = "FAIL" if any(item.status in hard_fail_statuses for item in results) else "PASS"
     lines = [f"RESULT: {overall}"]
     lines.extend(f"RULE {item.rule_id}: {item.status} - {item.detail}" for item in results)
     return "\n".join(lines) + "\n"
@@ -793,6 +1105,7 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     parser.add_argument("issue_id")
     parser.add_argument("commit_message")
     parser.add_argument("patch")
+    parser.add_argument("instructions_zip")
     parser.add_argument(
         "--workspace-snapshot",
         help="Workspace snapshot zip for initial mode or supplemental files.",
@@ -815,6 +1128,8 @@ def main(argv: list[str] | None = None) -> int:
     try:
         if not Path(args.patch).is_file():
             raise ValidationError("patch_not_found")
+        if not Path(args.instructions_zip).is_file():
+            raise ValidationError("instructions_zip_not_found")
         if args.repair_overlay:
             if not Path(args.repair_overlay).is_file():
                 raise ValidationError("repair_overlay_not_found")
@@ -825,6 +1140,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.supplemental_file and not args.repair_overlay:
             raise ValidationError("supplemental_file_requires_repair_mode")
         patch_path = Path(args.patch).resolve()
+        instructions_path = Path(args.instructions_zip).resolve()
         results = [_validate_basename(patch_path, args.issue_id)]
         more, patch_members, decision_paths, patch_target = _collect_patch_members(
             patch_path,
@@ -841,33 +1157,24 @@ def main(argv: list[str] | None = None) -> int:
             repair_rule, overlay_target = _repair_overlay_target_rule(Path(args.repair_overlay))
             results.append(repair_rule)
             if overlay_target is not None:
-                results.append(
-                    _target_match_rule(
-                        "REPAIR_TARGET_MATCH",
-                        overlay_target,
-                        patch_target,
-                    )
-                )
+                results.append(_target_match_rule("REPAIR_TARGET_MATCH", overlay_target, patch_target))
                 if args.workspace_snapshot:
-                    results.append(
-                        _repair_snapshot_consistency_rule(
-                            Path(args.workspace_snapshot),
-                            overlay_target,
-                        )
-                    )
+                    results.append(_repair_snapshot_consistency_rule(Path(args.workspace_snapshot), overlay_target))
         else:
-            initial_rule, initial_target = _initial_target_source_rule(
-                Path(args.workspace_snapshot)
-            )
+            initial_rule, initial_target = _initial_target_source_rule(Path(args.workspace_snapshot))
             results.append(initial_rule)
             if initial_target is not None:
-                results.append(
-                    _target_match_rule("INITIAL_TARGET_MATCH", initial_target, patch_target)
-                )
+                results.append(_target_match_rule("INITIAL_TARGET_MATCH", initial_target, patch_target))
         if any(item.status == "FAIL" for item in results):
             sys.stdout.write(_format(results))
             return 1
         results.append(_docs_gate(decision_paths))
+        patch_member_names = [member for member, _data in patch_members]
+        pack_results, _pack = _pack_rules(args, instructions_path, decision_paths, patch_member_names)
+        results.extend(pack_results)
+        if any(item.status in {"FAIL", "UNVERIFIED_ENVIRONMENT", "MANUAL_REVIEW_REQUIRED"} for item in results):
+            sys.stdout.write(_format(results))
+            return 1
         baseline, _mode = _authority_files(args, decision_paths)
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
@@ -876,15 +1183,13 @@ def main(argv: list[str] | None = None) -> int:
             if any(item.status == "FAIL" for item in results):
                 sys.stdout.write(_format(results))
                 return 1
-            results.extend(
-                [
-                    _compile_python(root, decision_paths),
-                    _check_js(root, decision_paths),
-                    _monolith(root, baseline, decision_paths),
-                ]
-            )
+            results.extend([
+                _compile_python(root, decision_paths),
+                _check_js(root, decision_paths),
+                _monolith(root, baseline, decision_paths),
+            ])
         sys.stdout.write(_format(results))
-        return 0 if all(item.status != "FAIL" for item in results) else 1
+        return 0 if all(item.status not in {"FAIL", "UNVERIFIED_ENVIRONMENT", "MANUAL_REVIEW_REQUIRED"} for item in results) else 1
     except ValidationError as exc:
         sys.stdout.write(_format([RuleResult("VALIDATION_ERROR", "FAIL", str(exc))]))
         return 1
