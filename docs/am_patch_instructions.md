@@ -2,7 +2,7 @@
 
 # PM_IMPLEMENTATION
 
-AUTHORITATIVE -- AudioMason2 Status: active Version: v2.51
+AUTHORITATIVE -- AudioMason2 Status: active Version: v2.52
 
 HARD: The authoritative version of this document is always the one with the highest version number. Any document without a stated version number, or with a lower version number, is invalid and MUST NOT be used. If two documents carry the same version number but differ in content, this is a HARD STOP / invalid corpus.
 
@@ -412,7 +412,7 @@ The runner remains the authority.
 ## PM validator (HARD)
 
 Before delivering any initial patch or repair patch, the chat MUST run
-one self-contained PM validator Python file supplied as a project file.
+one self-contained PM validator Python file supplied as an authority artifact.
 The validator artifact MUST NOT rely on repository-relative imports,
 repository-relative config files, or an opened repository checkout.
 
@@ -420,61 +420,36 @@ Canonical invocation formats (NO REPO-BOUND VARIANTS):
 
 Initial patch:
 
-    python3 pm_validator.py ISSUE_ID "commit message" PATCH --workspace-snapshot WORKSPACE_SNAPSHOT_ZIP
+    python3 pm_validator.py ISSUE_ID "commit message" PATCH INSTRUCTIONS_ZIP --workspace-snapshot WORKSPACE_SNAPSHOT_ZIP
 
 Repair patch:
 
-    python3 pm_validator.py ISSUE_ID "commit message" PATCH --repair-overlay PATCHED_ISSUE_ZIP [--workspace-snapshot WORKSPACE_SNAPSHOT_ZIP --supplemental-file REPO_PATH ...]
+    python3 pm_validator.py ISSUE_ID "commit message" PATCH INSTRUCTIONS_ZIP --repair-overlay PATCHED_ISSUE_ZIP [--workspace-snapshot WORKSPACE_SNAPSHOT_ZIP --supplemental-file REPO_PATH ...]
 
 Where:
 
--   `pm_validator.py` means the filesystem path to the single-file PM validator artifact.
+-   `pm_validator.py` means the filesystem path to the single-file PM validator authority artifact.
+-   `INSTRUCTIONS_ZIP` means the authoritative `instructions_issue<ISSUE>.zip` artifact.
 -   `WORKSPACE_SNAPSHOT_ZIP` means the authoritative full workspace snapshot artifact.
 -   `PATCHED_ISSUE_ZIP` means the authoritative latest `patched_issue{ISSUE}_*.zip` overlay artifact.
--   `--supplemental-file REPO_PATH` is permitted only for explicit per-file supplemental authority outside the overlay as defined in Repair patch rules (HARD).
 
 Rules:
 
-1.  Delivery is forbidden unless the validator exits with status 0 and
-    reports PASS.
+1.  Delivery is forbidden unless the validator exits with status 0 and reports PASS.
 2.  The chat MUST include a validator evidence block containing:
     - the exact command,
     - the exact exit status,
     - the full raw validator output without paraphrase or summarization,
     - the exact authoritative artifact paths passed to the validator,
-    - for repair validation, whether the run was overlay-only or used
-      supplemental authority,
-    - if supplemental authority was used, the exact repo-relative file
-      list supplied via `--supplemental-file`.
-3.  The validator evidence block is mandatory for both initial patches
-    and repair patches.
-4.  PASS means only that machine-verifiable PM checks covered by the
-    validator passed.
-5.  Manual-only PM requirements remain mandatory even when the
-    validator reports PASS.
-6.  The chat MUST NOT claim "PM fully verified" unless manual-only PM
-    requirements are also independently evidenced.
-7.  The validator evidence block is additive. The runner remains the
-    authority for apply and runtime results.
-8.  pm_validator.py is in project files, or in repo folder scripts/.
-9.  For initial patch validation, the validator MUST derive the expected
-    target from the authoritative workspace snapshot basename using the
-    contract <TARGET>-main_<OPAQUE>.zip and verify exact equality with
-    target.txt in PATCH.
+    - the exact `INSTRUCTIONS_ZIP` path,
+    - for repair validation, whether the run was overlay-only or used supplemental authority,
+    - if supplemental authority was used, the exact repo-relative file list supplied via `--supplemental-file`.
+3.  The validator evidence block is mandatory for both initial patches and repair patches.
+4.  PASS means only that machine-verifiable PM checks covered by the validator passed.
+5.  Manual-only PM requirements remain mandatory even when the validator reports PASS.
+6.  The validator MUST validate the integrity of `INSTRUCTIONS_ZIP`, MUST read `HANDOFF.md`, `constraint_pack.json`, and `hash_pack.txt`, MUST recompute the authority pack from the authoritative corpus, and MUST FAIL on any missing verdict, hash mismatch, recompute mismatch, machine-verifiable rule failure, or hard-rule `UNVERIFIED_ENVIRONMENT` / `MANUAL_REVIEW_REQUIRED`.
+7.  The validator evidence block is additive. The runner remains the authority for apply and runtime results.
 
-10. If the authoritative workspace snapshot basename does not match that
-    contract, the validator MUST fail.
-
-11. For repair patch validation, the validator MUST read target.txt from
-    the authoritative latest patched_issue{ISSUE}_*.zip overlay artifact
-    and verify exact equality with target.txt in PATCH.
-
-12. If repair validation also uses a workspace snapshot and its basename
-    matches the initial snapshot naming contract, the validator MUST
-    verify that the basename-derived target exactly equals the overlay
-    target.txt value.
-
-13. Any target mismatch detected by the validator is a FAIL. 
 ------------------------------------------------------------------------
 
 # REPAIR PATCH RULES (HARD)
