@@ -8,6 +8,39 @@ FORBIDDEN_FIELDS = {
     "generation_policy",
     "source_line",
 }
+SUPPORTED_TYPES = {
+    "meta",
+    "binding_meta",
+    "obligation_binding",
+    "rule",
+    "capability",
+    "provider",
+    "route",
+    "surface",
+    "implementation",
+}
+SUPPORTED_BINDING_TYPES = {
+    "resolver_contract",
+    "constraint_pack",
+}
+BINDING_REQUIRED_FIELDS = (
+    "id",
+    "binding_type",
+    "match",
+    "symbol_role",
+    "authoritative_semantics",
+    "peer_renderers",
+    "shared_contract_refs",
+    "downstream_consumers",
+    "exception_state_refs",
+    "required_wiring",
+    "forbidden",
+    "required_validation",
+    "verification_mode",
+    "verification_method",
+    "semantic_group",
+    "conflict_policy",
+)
 
 
 def load(path):
@@ -26,9 +59,12 @@ def main(path):
     routes = {}
     surfaces = {}
     impls = {}
+    bindings = {}
+    binding_meta = None
 
     for obj in objs:
-        if obj.get("type") == "source_line":
+        obj_type = obj.get("type")
+        if obj_type == "source_line":
             raise SystemExit("FAIL: source_line objects are not allowed in v2.0.0")
 
         for field in FORBIDDEN_FIELDS:
@@ -37,7 +73,9 @@ def main(path):
                     f"FAIL forbidden field '{field}' present in {obj.get('id')}"
                 )
 
-        obj_type = obj.get("type")
+        if obj_type not in SUPPORTED_TYPES:
+            raise SystemExit(f"FAIL unsupported object type {obj_type}")
+
         if obj_type == "rule":
             rules[obj["id"]] = obj
         elif obj_type == "capability":
@@ -50,6 +88,38 @@ def main(path):
             surfaces[obj["id"]] = obj
         elif obj_type == "implementation":
             impls[obj["id"]] = obj
+        elif obj_type == "binding_meta":
+            if binding_meta is not None:
+                raise SystemExit("FAIL: exactly one binding_meta object is required")
+            binding_meta = obj
+        elif obj_type == "obligation_binding":
+            binding_id = obj.get("id")
+            if binding_id in bindings:
+                raise SystemExit(f"FAIL duplicate binding id {binding_id}")
+            for field in BINDING_REQUIRED_FIELDS:
+                if field not in obj:
+                    raise SystemExit(
+                        f"FAIL binding {binding_id} missing field {field}"
+                    )
+            if obj["binding_type"] not in SUPPORTED_BINDING_TYPES:
+                raise SystemExit(
+                    f"FAIL binding {binding_id} has unsupported binding_type "
+                    f"{obj['binding_type']}"
+                )
+            for field in (
+                "verification_mode",
+                "verification_method",
+                "semantic_group",
+                "conflict_policy",
+            ):
+                if not str(obj.get(field, "")).strip():
+                    raise SystemExit(
+                        f"FAIL binding {binding_id} has empty field {field}"
+                    )
+            bindings[binding_id] = obj
+
+    if binding_meta is None:
+        raise SystemExit("FAIL: exactly one binding_meta object is required")
 
     rule_refs: defaultdict[str, int] = defaultdict(int)
     for capability_id, capability in caps.items():
@@ -135,7 +205,8 @@ def main(path):
     print(
         f"rules={len(rules)} caps={len(caps)} "
         f"providers={len(providers)} routes={len(routes)} "
-        f"surfaces={len(surfaces)} impls={len(impls)}"
+        f"surfaces={len(surfaces)} impls={len(impls)} "
+        f"binding_meta={1 if binding_meta else 0} bindings={len(bindings)}"
     )
 
 
