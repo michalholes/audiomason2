@@ -93,7 +93,7 @@ the authoritative repair overlay, as defined in Repair patch rules (HARD).
 
 Missing authoritative TARGET evidence = PRE-FLIGHT violation.
 
-4. If any required input is missing → STOP and request missing input.
+4. If any required input is missing -> STOP and request missing input.
 
 
 
@@ -121,7 +121,7 @@ Uncontrolled centralization and coupling expansion are.
 Required rules:
 
 1. Prefer small, localized changes.
-2. Do not create catch-all (“god”) modules.
+2. Do not create catch-all ("god") modules.
 3. Respect ownership boundaries.
 4. If a module grows significantly or is already large,
    new logic MUST be extracted into a new file.
@@ -643,9 +643,9 @@ Scope expansion requires explicit log-backed justification.
 ### Forbidden repairs (HARD)
 
 The chat MUST NOT:
-- suppress, bypass, or “silence” the violation,
+- suppress, bypass, or "silence" the violation,
 - centralize additional logic into the failing module,
-- merge unrelated responsibilities to “make it pass”,
+- merge unrelated responsibilities to "make it pass",
 - perform broad refactors not justified by the Monolith output.
 
 ### Escalation rule (HARD)
