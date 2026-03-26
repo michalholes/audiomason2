@@ -1,5 +1,5 @@
 # KONTRAKT RIADIACICH CHATOV (RC) - RIADIACE A DISKUSNE CHATY (AM2) (HARD)
-Verzia 1.2.21
+Verzia 1.2.22
 
 HARD: Autoritativna verzia tohto dokumentu je vzdy ta, ktora ma navyssie cislo verzie. Ostatne dokumenty bez urcenej verzie alebo s nizsim cislom verzie sa preto stavaju neplatne a je zakazane ich pouzivat. V pripade, ze natrafis na dokument s rovnakym cislom verzie, ale s odlisnym obsahom = HARD STOP/invalid corpus.
 
@@ -92,18 +92,30 @@ PM version used: <PM_VERSION>
 3. Implementacia alebo tvorba patchu je povolena iba na vyslovnu ziadost pouzivatela.
 4. Bez explicitnej poziadavky je zakazane menit funkcionalitu alebo navrhovat patch.
 
+## 2A. AUTHORITY-FIRST PROCESS (HARD)
+
+1. Pred plan negotiation MUSI riadiaci chat vykonat discovery resolver run nad autoritativnym workspace a MUSI STOP na nejednoznacnosti, chybajucej autorite, konflikte povinnosti, nevyjasnenom target scope alebo chybajucom verification contracte.
+2. Po plan negotiation a pred authoringom akehokolvek authority patchu MUSI riadiaci chat vydat AUTHORITY FREEZE.
+3. Po kazdom authority patchi, ktory sa tyka RC, PM, autoritativnej specifikacie alebo authority validator artifactov, MUSI riadiaci chat vykonat AUTHORITY VALIDATION voci schvalenemu AUTHORITY FREEZE skor, nez vyda implementation freeze.
+4. Po uspesnej AUTHORITY VALIDATION a pred authoringom implementation freeze alebo issue-specific implementation payloadu MUSI riadiaci chat vykonat final resolver run a MUSI STOP, ak sa recomputed authority pack rozchadza s ocakavanym packom.
+5. Vydanie planu, AUTHORITY FREEZE, implementation freeze alebo instructions artifactu je zakazane, ak este nepresiel prislusny resolver alebo validation krok pre dany stage.
+6. Standing implementation contract v docs/instructions_implementation_chats.txt ostava platny ako vseobecny operating contract a NESMIE fungovat ako issue-specific authority payload.
+
 ---
 
 ## 3. PRAVIDLA PRE IMPLEMENTACNE HANDOFFY (HARD)
 
 1. Implementacny handoff sa poskytuje iba na vyslovne poziadanie pouzivatela.
 
-1a. Kazdy implementacny handoff MUSI byt dodany ako downloadable artifact vo formate .md.
-1b. Downloadable .md artifact je autoritativny handoff payload.
-1c. Text v sprave mimo artifactu smie obsahovat iba nenormativne zhrnutie a odkaz na artifact; nesmie pridavat, uberat ani menit poziadavky handoffu.
-1d. Ak downloadable .md artifact chyba alebo sa inline text rozchadza s artifactom, handoff je neplatny.
-1e. Samotny downloadable .md handoff artifact MUSI obsahovat blok SPEC CONTEXT v presnom tvare definovanom v sekcii 1.
-1f. Ak SPEC CONTEXT blok chyba v samotnom artifacte, handoff je neplatny aj vtedy, ak je uvedeny iba v sprievodnej sprave.
+1a. Kazdy implementacny handoff MUSI byt dodany ako downloadable artifact s basename `instructions_issue<ISSUE>.zip`.
+1b. `instructions_issue<ISSUE>.zip` je jediny issue-specific authority handoff payload.
+1c. Root entries `instructions_issue<ISSUE>.zip` MUSIA byt presne:
+    - `HANDOFF.md`
+    - `constraint_pack.json`
+    - `hash_pack.txt`
+1d. `HANDOFF.md` je jediny normativny text handoff payloadu. Text v sprave mimo artifactu smie obsahovat iba nenormativne zhrnutie a odkaz na artifact; nesmie pridavat, uberat ani menit poziadavky handoffu.
+1e. Samotny `HANDOFF.md` MUSI obsahovat blok SPEC CONTEXT v presnom tvare definovanom v sekcii 1.
+1f. Ak `instructions_issue<ISSUE>.zip` chyba, chyba ktorykolvek povinny root entry alebo chyba SPEC CONTEXT blok v `HANDOFF.md`, handoff je neplatny.
 
 2. Ak sa handoff tyka zmien v:
    - src/
