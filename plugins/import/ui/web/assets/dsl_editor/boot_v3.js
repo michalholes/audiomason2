@@ -1,14 +1,30 @@
 (function () {
 	"use strict";
 
+	/** @typedef {{ skipConfirm?: boolean }} AM2ReloadAllOptions */
+	/** @typedef {() => boolean | void | Promise<boolean | void>} AM2AsyncActionHandler */
+
 	const W = window;
+	/** @type {AM2EditorHttpApi} */
 	const httpApi = W.AM2EditorHTTP;
+	/** @type {AM2DSLEditorRegistryApi} */
 	const registryApi = window["AM2DSLEditorRegistryAPI"];
+	/** @type {AM2DSLEditorGraphOpsApi} */
 	const graphOps = window["AM2DSLEditorGraphOps"];
 	if (!httpApi || !registryApi || !graphOps) {
 		return;
 	}
 
+	/**
+	 * @type {{
+	 * 	registry: AM2PrimitiveRegistryShape | null,
+	 * 	history: AM2WizardDefinitionHistoryItem[],
+	 * 	searchText: string,
+	 * 	rawMode: boolean,
+	 * 	status: string,
+	 * 	errorPayload: AM2EditorHttpPayload | AM2JsonValue | null,
+	 * }}
+	 */
 	const state = {
 		registry: null,
 		history: [],
@@ -18,31 +34,44 @@
 		errorPayload: null,
 	};
 
+	/** @param {string} id
+	 * @returns {HTMLElement | null}
+	 */
 	function $(id) {
 		return document.getElementById(id);
 	}
 
+	/** @param {string} id
+	 * @returns {HTMLTextAreaElement | null}
+	 */
 	function textarea(id) {
 		const node = $(id);
 		return node instanceof HTMLTextAreaElement ? node : null;
 	}
 
+	/** @param {Node | null | undefined} node */
 	function clear(node) {
 		while (node && node.firstChild) {
 			node.removeChild(node.firstChild);
 		}
 	}
 
+	/**
+	 * @param {string} nodeId
+	 * @param {AM2EditorHttpPayload | AM2JsonValue | undefined | null} payload
+	 */
 	function renderHTTPError(nodeId, payload) {
 		httpApi.renderError($(nodeId), payload);
 	}
 
+	/** @param {AM2EditorHttpPayload | AM2JsonValue | undefined | null} payload */
 	function setError(payload) {
 		state.errorPayload = payload || null;
 		renderHTTPError("wdError", state.errorPayload);
 		renderHTTPError("flowStepError", state.errorPayload);
 	}
 
+	/** @param {string | number | boolean | null | undefined} textValue */
 	function setStatus(textValue) {
 		state.status = String(textValue || "");
 		const node = $("flowStepApply");
@@ -51,6 +80,9 @@
 		}
 	}
 
+	/** @param {string} actionName
+	 * @returns {boolean}
+	 */
 	function confirmIfDirty(actionName) {
 		const flowEditor = W.AM2FlowEditorState;
 		const snap =
@@ -61,6 +93,7 @@
 		);
 	}
 
+	/** @returns {Promise<boolean>} */
 	async function loadDefinition() {
 		const out = await registryApi.getWizardDefinition();
 		if (!out.ok) {
@@ -76,6 +109,7 @@
 		return true;
 	}
 
+	/** @returns {Promise<boolean>} */
 	async function loadRegistry() {
 		const out = await registryApi.getPrimitiveRegistry();
 		if (!out.ok) {
@@ -83,10 +117,13 @@
 			return false;
 		}
 		state.registry =
-			out.data && out.data.registry ? out.data.registry : { primitives: [] };
+			out.data && out.data.registry
+				? /** @type {AM2PrimitiveRegistryShape} */ (out.data.registry)
+				: { primitives: [] };
 		return true;
 	}
 
+	/** @returns {Promise<boolean>} */
 	async function loadHistory() {
 		const out = await registryApi.listWizardDefinitionHistory();
 		if (!out.ok) {
@@ -94,12 +131,15 @@
 			return false;
 		}
 		state.history = Array.isArray(out.data && out.data.items)
-			? out.data.items
+			? /** @type {AM2WizardDefinitionHistoryItem[]} */ (out.data.items)
 			: [];
 		renderHistory();
 		return true;
 	}
 
+	/** @param {AM2ReloadAllOptions | null | undefined} [opts]
+	 * @returns {Promise<boolean>}
+	 */
 	async function reloadAll(opts) {
 		if (!(opts && opts.skipConfirm) && !confirmIfDirty("Reload")) {
 			return false;
@@ -119,6 +159,7 @@
 		return true;
 	}
 
+	/** @returns {Promise<boolean>} */
 	async function validateDraft() {
 		setError(null);
 		const out = await registryApi.validateWizardDefinition(
@@ -136,6 +177,7 @@
 		return true;
 	}
 
+	/** @returns {Promise<boolean>} */
 	async function saveDraft() {
 		if (!(await validateDraft())) {
 			return false;
@@ -159,6 +201,7 @@
 		return true;
 	}
 
+	/** @returns {Promise<boolean>} */
 	async function activateDefinition() {
 		if (!(await saveDraft())) {
 			return false;
@@ -174,6 +217,7 @@
 		return true;
 	}
 
+	/** @returns {Promise<boolean>} */
 	async function resetDefinition() {
 		if (!confirmIfDirty("Reset")) {
 			return false;
@@ -194,6 +238,9 @@
 		return true;
 	}
 
+	/** @param {string} id
+	 * @returns {Promise<boolean>}
+	 */
 	async function rollback(id) {
 		if (!confirmIfDirty("Rollback")) {
 			return false;
@@ -214,6 +261,7 @@
 		return true;
 	}
 
+	/** @returns {void} */
 	function renderHistory() {
 		["wdHistory", "flowStepHistory"].forEach(function (id) {
 			const mount = $(id);
@@ -243,11 +291,15 @@
 		});
 	}
 
+	/** @param {string} textValue */
 	function applyRawJSON(textValue) {
 		try {
-			graphOps.loadAll(JSON.parse(textValue || "{}"), {
-				preserveValidation: false,
-			});
+			graphOps.loadAll(
+				/** @type {AM2DSLGraphDefinition} */ (JSON.parse(textValue || "{}")),
+				{
+					preserveValidation: false,
+				},
+			);
 			setError(null);
 			setStatus("Raw JSON applied to draft.");
 		} catch (err) {
@@ -260,6 +312,7 @@
 		}
 	}
 
+	/** @param {AM2DSLGraphDefinition} definition */
 	function renderCanvasPanel(definition) {
 		const renderer = W.AM2FlowCanvasPanel;
 		if (!renderer || !renderer.renderCanvas) return;
@@ -279,6 +332,10 @@
 		});
 	}
 
+	/**
+	 * @param {AM2DSLGraphDefinition} definition
+	 * @param {AM2PrimitiveRegistryItem | null | undefined} meta
+	 */
 	function renderSummary(definition, meta) {
 		const header = $("flowStepHeader");
 		if (header) {
@@ -319,6 +376,7 @@
 		}
 	}
 
+	/** @param {AM2DSLGraphDefinition} definition */
 	function renderForms(definition) {
 		const textArea = textarea("wdJson");
 		const graphDefinition = graphOps.currentGraphDefinition();
@@ -406,6 +464,7 @@
 		}
 	}
 
+	/** @returns {boolean} */
 	function renderAll() {
 		const definition = graphOps.currentDefinition();
 		if (!graphOps.isV3Draft(definition)) {
@@ -425,7 +484,9 @@
 			textArea.classList.remove("is-hidden");
 			textArea.classList.remove("wdHidden");
 		}
-		const root = document.querySelector(".wdLayoutRoot");
+		const root = /** @type {HTMLElement | null} */ (
+			document.querySelector(".wdLayoutRoot")
+		);
 		if (root) root.classList.add("is-hidden");
 		renderSummary(
 			definition,
@@ -439,6 +500,10 @@
 		return true;
 	}
 
+	/**
+	 * @param {string} buttonId
+	 * @param {AM2AsyncActionHandler} handler
+	 */
 	function intercept(buttonId, handler) {
 		const node = $(buttonId);
 		if (!node) {
@@ -469,6 +534,7 @@
 	});
 	intercept("flowStepShowHistory", loadHistory);
 
+	/** @type {AM2DSLEditorV3Api} */
 	window["AM2DSLEditorV3"] = {
 		activateDefinition: activateDefinition,
 		isV3Draft: graphOps.isV3Draft,

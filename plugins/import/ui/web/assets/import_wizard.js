@@ -1,5 +1,43 @@
 /// <reference path="../../../../../am2-globals.d.ts" />
 (() => {
+	/**
+	 * @typedef {AM2ImportWizardField & {
+	 * 	constraints?: { min?: number; max?: number } | null,
+	 * }} AM2ImportWizardLegacyField
+	 */
+
+	/**
+	 * @typedef {{
+	 * 	root: HTMLInputElement | null,
+	 * 	path: HTMLInputElement | null,
+	 * 	mode: HTMLSelectElement | null,
+	 * 	start: HTMLButtonElement | null,
+	 * 	resumeExisting: HTMLButtonElement | null,
+	 * 	startNew: HTMLButtonElement | null,
+	 * 	cancelPendingStart: HTMLButtonElement | null,
+	 * 	reload: HTMLButtonElement | null,
+	 * 	submit: HTMLButtonElement | null,
+	 * 	startProcessing: HTMLButtonElement | null,
+	 * 	step: HTMLElement | null,
+	 * }} AM2ImportWizardDOM
+	 */
+
+	/**
+	 * @typedef {{ [name: string]: string[] }} AM2GroupedSelections
+	 */
+
+	/**
+	 * @typedef {Error & {
+	 * 	status?: number,
+	 * 	data?: unknown,
+	 * }} AM2FetchError
+	 */
+
+	/**
+	 * @param {string} url
+	 * @param {RequestInit} [opts]
+	 * @returns {Promise<AM2JsonObject>}
+	 */
 	async function fetchJSON(url, opts) {
 		const r = await fetch(url, opts || {});
 		const ct = (r.headers.get("content-type") || "").toLowerCase();
@@ -23,9 +61,7 @@
 				data && data.error && data.error.message
 					? String(data.error.message)
 					: text || `${r.status} ${r.statusText}`;
-			const err = /** @type {Error & {status?: number, data?: unknown}} */ (
-				new Error(msg)
-			);
+			const err = /** @type {AM2FetchError} */ (new Error(msg));
 			err.status = r.status;
 			err.data = data;
 			throw err;
@@ -33,6 +69,12 @@
 		return data;
 	}
 
+	/**
+	 * @param {string} tag
+	 * @param {Record<string, string | number | boolean | null | undefined> | null} [attrs]
+	 * @param {Node[] | null} [children]
+	 * @returns {HTMLElement}
+	 */
 	function el(tag, attrs, children) {
 		const n = document.createElement(tag);
 		if (attrs && typeof attrs === "object") {
@@ -48,29 +90,57 @@
 		return n;
 	}
 
+	/**
+	 * @param {Node | null} node
+	 * @returns {void}
+	 */
 	function clear(node) {
+		if (!node) return;
 		while (node.firstChild) node.removeChild(node.firstChild);
 	}
 
+	/**
+	 * @param {string} id
+	 * @param {unknown} text
+	 * @returns {void}
+	 */
 	function setText(id, text) {
 		const n = document.getElementById(id);
 		if (n) n.textContent = String(text || "");
 	}
 
+	/**
+	 * @param {string} id
+	 * @param {unknown} obj
+	 * @returns {void}
+	 */
 	function setPre(id, obj) {
 		const n = document.getElementById(id);
 		if (!n) return;
 		n.textContent = obj ? JSON.stringify(obj, null, 2) : "";
 	}
 
+	/**
+	 * @param {AM2ImportWizardLegacyField | null | undefined} fld
+	 * @returns {string}
+	 */
 	function fieldName(fld) {
 		return fld && typeof fld.name === "string" ? fld.name : "";
 	}
 
+	/**
+	 * @param {AM2ImportWizardLegacyField | null | undefined} fld
+	 * @returns {string}
+	 */
 	function fieldType(fld) {
 		return fld && typeof fld.type === "string" ? fld.type : "text";
 	}
 
+	/**
+	 * @param {string} ftype
+	 * @param {AM2ImportWizardLegacyField | null | undefined} fld
+	 * @returns {void}
+	 */
 	function renderUnsupported(ftype, fld) {
 		const meta =
 			fld && typeof fld === "object" ? JSON.stringify(fld, null, 2) : "";
@@ -79,6 +149,11 @@
 		setText("stepError", msg);
 	}
 
+	/**
+	 * @param {AM2ImportWizardState | null} state
+	 * @param {string} name
+	 * @returns {AM2JsonValue | null}
+	 */
 	function readAnswer(state, name) {
 		const ans =
 			state && state.answers && typeof state.answers === "object"
@@ -93,6 +168,10 @@
 		return null;
 	}
 
+	/**
+	 * @param {AM2ImportWizardLegacyField | null | undefined} fld
+	 * @returns {Array<AM2ImportWizardFieldOption | string>}
+	 */
 	function normalizeItems(fld) {
 		const items = fld && Array.isArray(fld.items) ? fld.items : null;
 		if (items) return items;
@@ -100,6 +179,10 @@
 		return opts || [];
 	}
 
+	/**
+	 * @param {AM2ImportWizardFieldOption | string | null | undefined} it
+	 * @returns {string}
+	 */
 	function itemId(it) {
 		if (it && typeof it === "object") {
 			if (typeof it.item_id === "string") return it.item_id;
@@ -108,6 +191,10 @@
 		return String(it || "");
 	}
 
+	/**
+	 * @param {AM2ImportWizardFieldOption | string | null | undefined} it
+	 * @returns {string}
+	 */
 	function itemLabel(it) {
 		if (it && typeof it === "object") {
 			if (typeof it.label === "string") return it.label;
@@ -118,6 +205,7 @@
 		return String(it || "");
 	}
 
+	/** @type {AM2ImportWizardDOM} */
 	const ui = {
 		root: /** @type {HTMLInputElement|null} */ (
 			document.getElementById("root")
@@ -152,6 +240,9 @@
 		step: document.getElementById("step"),
 	};
 
+	/**
+	 * @returns {void}
+	 */
 	function initTabs() {
 		const wrap = document.getElementById("tabs");
 		if (!wrap) return;
@@ -164,6 +255,10 @@
 
 		let flowAutoLoaded = false;
 
+		/**
+		 * @param {number} attempt
+		 * @returns {void}
+		 */
 		function tryFlowAutoReload(attempt) {
 			const fn = window.AM2UI && window.AM2UI.doReloadAll;
 			if (typeof fn === "function") {
@@ -175,6 +270,10 @@
 			setTimeout(() => tryFlowAutoReload(attempt + 1), delays[attempt] || 0);
 		}
 
+		/**
+		 * @param {string} tab
+		 * @returns {void}
+		 */
 		function activate(tab) {
 			btns.forEach((b) => {
 				b.classList.toggle("active", b.dataset.tab === tab);
@@ -197,24 +296,35 @@
 		activate("run");
 	}
 
-	const v3Renderer =
-		typeof globalThis !== "undefined"
-			? globalThis["AM2ImportWizardV3"] || null
-			: null;
+	const v3Renderer = /** @type {AM2ImportWizardV3Api | null} */ (
+		typeof window !== "undefined" ? window.AM2ImportWizardV3 || null : null
+	);
 
+	/** @type {string | null} */
 	let sessionId = null;
+	/** @type {AM2ImportWizardFlow | null} */
 	let flow = null;
+	/** @type {AM2ImportWizardState | null} */
 	let state = null;
+	/** @type {AM2ImportEffectiveModel | null} */
 	let sessionEffectiveModel = null;
+	/** @type {string | null} */
 	let currentStep = null;
+	/** @type {AM2ImportStartConflict | null} */
 	let pendingStartConflict = null;
 
 	initTabs();
 
+	/**
+	 * @returns {Promise<void>}
+	 */
 	async function loadFlow() {
 		flow = await fetchJSON("/import/ui/flow");
 	}
 
+	/**
+	 * @returns {Promise<void>}
+	 */
 	async function loadState() {
 		if (!sessionId) {
 			state = null;
@@ -228,6 +338,9 @@
 				: null;
 	}
 
+	/**
+	 * @returns {AM2ImportWizardStep[]}
+	 */
 	function _resolvedSteps() {
 		const sSteps =
 			sessionEffectiveModel && Array.isArray(sessionEffectiveModel.steps)
@@ -237,6 +350,10 @@
 		return flow && Array.isArray(flow.steps) ? flow.steps : [];
 	}
 
+	/**
+	 * @param {string} stepId
+	 * @returns {AM2ImportWizardStep | null}
+	 */
 	function _findSessionStep(stepId) {
 		const steps =
 			sessionEffectiveModel && Array.isArray(sessionEffectiveModel.steps)
@@ -245,6 +362,11 @@
 		return steps.find((s) => s && s.step_id === stepId) || null;
 	}
 
+	/**
+	 * @param {string} stepId
+	 * @param {string} field
+	 * @returns {Array<AM2ImportWizardFieldOption | string>}
+	 */
 	function _sessionFieldItems(stepId, field) {
 		const step = _findSessionStep(stepId);
 		const fields = step && Array.isArray(step.fields) ? step.fields : [];
@@ -253,11 +375,20 @@
 		return items || [];
 	}
 
+	/**
+	 * @param {string} stepId
+	 * @returns {AM2ImportWizardStep | null}
+	 */
 	function findStep(stepId) {
 		const steps = _resolvedSteps();
 		return steps.find((s) => s && s.step_id === stepId) || null;
 	}
 
+	/**
+	 * @param {AM2ImportWizardLegacyField} fld
+	 * @param {string} stepId
+	 * @returns {HTMLElement}
+	 */
 	function renderField(fld, stepId) {
 		const name = fieldName(fld);
 		const ftype = fieldType(fld);
@@ -268,7 +399,9 @@
 
 		if (ftype === "toggle" || ftype === "confirm") {
 			const row = el("div", { class: "choiceItem" });
-			const inp = el("input", { type: "checkbox" });
+			const inp = /** @type {HTMLInputElement} */ (
+				el("input", { type: "checkbox" })
+			);
 			inp.checked = !!cur;
 			inp.dataset.stepId = stepId;
 			inp.dataset.field = name;
@@ -280,7 +413,9 @@
 		}
 
 		if (ftype === "number") {
-			const inp = el("input", { type: "number" });
+			const inp = /** @type {HTMLInputElement} */ (
+				el("input", { type: "number" })
+			);
 			inp.value = cur === null || cur === undefined ? "" : String(cur);
 			const c =
 				fld && typeof fld.constraints === "object" ? fld.constraints : null;
@@ -294,7 +429,7 @@
 		}
 
 		if (ftype === "select") {
-			const sel = el("select");
+			const sel = /** @type {HTMLSelectElement} */ (el("select"));
 			const items = sessionEffectiveModel
 				? _sessionFieldItems(stepId, name)
 				: normalizeItems(fld);
@@ -311,7 +446,9 @@
 		}
 
 		if (ftype === "table_edit") {
-			const ta = el("textarea", { rows: "10" });
+			const ta = /** @type {HTMLTextAreaElement} */ (
+				el("textarea", { rows: "10" })
+			);
 			if (typeof cur === "string") ta.value = cur;
 			else ta.value = JSON.stringify(cur || [], null, 2);
 			ta.dataset.stepId = stepId;
@@ -330,7 +467,9 @@
 			items.forEach((it) => {
 				const id = itemId(it);
 				const row = el("label", { class: "choiceItem" });
-				const cb = el("input", { type: "checkbox" });
+				const cb = /** @type {HTMLInputElement} */ (
+					el("input", { type: "checkbox" })
+				);
 				cb.checked = curArr.includes(String(id));
 				cb.dataset.stepId = stepId;
 				cb.dataset.field = name;
@@ -351,7 +490,7 @@
 		}
 
 		if (ftype === "text") {
-			const inp = el("input");
+			const inp = /** @type {HTMLInputElement} */ (el("input"));
 			inp.value = cur === null || cur === undefined ? "" : String(cur);
 			inp.dataset.stepId = stepId;
 			inp.dataset.field = name;
@@ -364,6 +503,10 @@
 		return box;
 	}
 
+	/**
+	 * @param {string} stepId
+	 * @returns {Record<string, AM2JsonValue>}
+	 */
 	function collectPayload(stepId) {
 		setText("stepError", "");
 		const step = findStep(stepId);
@@ -375,11 +518,13 @@
 		) {
 			return v3Renderer.collectPayload({ mount: ui.step, step });
 		}
+		/** @type {Record<string, AM2JsonValue>} */
 		const payload = {};
 
 		const nodes = ui.step
 			? Array.from(ui.step.querySelectorAll("input,select,textarea"))
 			: [];
+		/** @type {AM2GroupedSelections} */
 		const grouped = {};
 
 		nodes.forEach((n) => {
@@ -442,6 +587,9 @@
 		return payload;
 	}
 
+	/**
+	 * @returns {Promise<void>}
+	 */
 	async function submitStep() {
 		if (!sessionId || !currentStep) return;
 		const sid = encodeURIComponent(sessionId);
@@ -452,8 +600,17 @@
 			headers: { "content-type": "application/json" },
 			body: JSON.stringify(payload),
 		});
-		if (r && typeof r === "object" && r.error) {
-			throw new Error(String(r.error.message || "step submission failed"));
+		const errorPayload =
+			typeof r.error === "object" && r.error && !Array.isArray(r.error)
+				? /** @type {AM2JsonObject} */ (r.error)
+				: null;
+		if (errorPayload) {
+			const messageValue = errorPayload["message"];
+			const message =
+				typeof messageValue === "string"
+					? messageValue
+					: "step submission failed";
+			throw new Error(message);
 		}
 		state = r;
 		sessionEffectiveModel =
@@ -462,6 +619,9 @@
 				: null;
 	}
 
+	/**
+	 * @returns {Promise<void>}
+	 */
 	async function startProcessing() {
 		if (!sessionId) return;
 		const sid = encodeURIComponent(sessionId);
@@ -474,6 +634,9 @@
 		setText("status", `job_ids: ${ids}`);
 	}
 
+	/**
+	 * @returns {Promise<void>}
+	 */
 	async function refresh() {
 		if (!flow) await loadFlow();
 		await loadState();
@@ -525,6 +688,7 @@
 		}
 
 		const fields = step && Array.isArray(step.fields) ? step.fields : [];
+		/** @type {Record<string, boolean>} */
 		const supported = {
 			toggle: true,
 			confirm: true,
@@ -547,6 +711,10 @@
 		setText("status", `session_id: ${sessionId}`);
 	}
 
+	/**
+	 * @param {AM2ImportStartConflict | null} conflict
+	 * @returns {void}
+	 */
 	function setPendingStartConflict(conflict) {
 		pendingStartConflict = conflict;
 		const hasPending = !!pendingStartConflict;
@@ -557,17 +725,40 @@
 			ui.cancelPendingStart.classList.toggle("is-hidden", !hasPending);
 	}
 
+	/**
+	 * @param {unknown} err
+	 * @returns {AM2ImportStartConflict | null}
+	 */
 	function readStartConflict(err) {
+		const fetchErr = /** @type {AM2FetchError | null} */ (
+			err instanceof Error ? err : null
+		);
 		const data =
-			err && err.data && typeof err.data === "object" ? err.data : null;
+			fetchErr &&
+			fetchErr.data &&
+			typeof fetchErr.data === "object" &&
+			!Array.isArray(fetchErr.data)
+				? /** @type {AM2JsonObject} */ (fetchErr.data)
+				: null;
+		const errorValue = data ? data["error"] : null;
 		const error =
-			data && data.error && typeof data.error === "object" ? data.error : null;
-		if (!error || String(error.code || "") !== "SESSION_START_CONFLICT")
+			errorValue && typeof errorValue === "object" && !Array.isArray(errorValue)
+				? /** @type {AM2JsonObject} */ (errorValue)
+				: null;
+		if (!error || String(error["code"] || "") !== "SESSION_START_CONFLICT")
 			return null;
-		const details = Array.isArray(error.details) ? error.details : [];
+		const detailsValue = error["details"];
+		const details = Array.isArray(detailsValue) ? detailsValue : [];
+		const firstDetail = details.length > 0 ? details[0] : null;
+		const metaValue =
+			firstDetail &&
+			typeof firstDetail === "object" &&
+			!Array.isArray(firstDetail)
+				? firstDetail["meta"]
+				: null;
 		const meta =
-			details.length > 0 && details[0] && typeof details[0].meta === "object"
-				? details[0].meta
+			metaValue && typeof metaValue === "object" && !Array.isArray(metaValue)
+				? /** @type {AM2JsonObject} */ (metaValue)
 				: null;
 		if (!meta) return null;
 		return {
@@ -578,9 +769,14 @@
 		};
 	}
 
+	/**
+	 * @param {string} [intent]
+	 * @returns {Promise<void>}
+	 */
 	async function startSession(intent) {
 		const selectedMode = String(ui.mode.value || "").trim();
 		if (!selectedMode) throw new Error("Mode must be explicitly selected.");
+		/** @type {AM2ImportSessionStartRequest} */
 		const body = {
 			root: String(ui.root.value || ""),
 			path: String(ui.path.value || ""),

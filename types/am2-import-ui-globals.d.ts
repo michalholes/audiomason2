@@ -159,6 +159,13 @@ declare global {
 		job_ids?: string[];
 	}
 
+	interface AM2ImportSessionStartRequest extends AM2JsonObject {
+		root: string;
+		path: string;
+		mode: string;
+		intent?: string;
+	}
+
 	interface AM2ImportStartConflict {
 		session_id: string;
 		root: string;
@@ -219,6 +226,149 @@ declare global {
 		bodyState: AM2ImportPromptBodyState | null;
 	}
 
+	interface AM2ImportWizardV3MountState extends AM2ImportPromptMountState {}
+
+	interface AM2ImportWizardV3MountState extends AM2ImportPromptMountState {}
+
+	interface AM2PromptNode extends Node {
+		attrs?: Record<string, string>;
+		children?: Node[] | HTMLCollection;
+		childNodes?: NodeListOf<ChildNode> | Node[];
+		dataset?: DOMStringMap;
+		checked?: boolean;
+		value?: string;
+		type?: string;
+		tag?: string;
+		tagName?: string;
+		appendChild?: (child: Node) => Node;
+		removeChild?: (child: Node) => Node;
+		setAttribute?: (name: string, value: string) => void;
+		getAttribute?: (name: string) => string | null;
+		addEventListener?: (
+			type: string,
+			handler: EventListenerOrEventListenerObject,
+		) => void;
+		oninput?: ((event: Event) => void) | null;
+		onchange?: ((event: Event) => void) | null;
+		onclick?: ((event: Event) => void) | null;
+	}
+
+	type AM2PromptElementFactory = (
+		tag: string,
+		attrs?: Record<string, string | number | boolean | null | undefined> | null,
+		children?: Node[] | null,
+	) => HTMLElement;
+
+	type AM2PromptPredicate = (node: AM2PromptNode) => boolean;
+
+	interface AM2PromptRenderArgs {
+		body: HTMLElement;
+		bodyState?: AM2ImportPromptBodyState | null;
+		context: AM2ImportStepContext;
+		el?: AM2PromptElementFactory;
+		localDraft?: AM2JsonValue | null;
+		makeEl: AM2PromptElementFactory;
+		mode?: string;
+		model: AM2ImportPromptModel;
+		mount?: HTMLElement;
+		mountState?: AM2ImportWizardV3MountState;
+		sameStep?: boolean;
+		step?: AM2ImportWizardStep | null;
+	}
+
+	interface AM2ChecklistShell {
+		actions: HTMLElement;
+		editor: HTMLElement;
+		filterInput: HTMLInputElement | null;
+		list: HTMLElement;
+		summary: HTMLElement;
+		wrapper: HTMLElement;
+	}
+
+	interface AM2ImportWizardV3HelpersApi {
+		childNodes(node: AM2PromptNode | null | undefined): Node[];
+		tagName(node: AM2PromptNode | null | undefined): string;
+		getAttr(
+			node: AM2PromptNode | null | undefined,
+			name: string,
+		): string | null;
+		setAttr(
+			node: AM2PromptNode | null | undefined,
+			name: string,
+			value: string | number | boolean,
+		): void;
+		addEvent(
+			node: AM2PromptNode | null | undefined,
+			type: string,
+			handler: (event: Event) => void,
+		): void;
+		clearMount(mount: HTMLElement | null | undefined): void;
+		walkNodes(
+			node: AM2PromptNode | null | undefined,
+			visit: AM2PromptPredicate,
+		): boolean;
+		findNode(
+			node: AM2PromptNode | null | undefined,
+			predicate: AM2PromptPredicate,
+		): AM2PromptNode | null;
+		findNodes(
+			node: AM2PromptNode | null | undefined,
+			predicate: AM2PromptPredicate,
+		): AM2PromptNode[];
+		findBodyMount(mount: HTMLElement): HTMLElement | null;
+		ensureBodyMount(
+			mount: HTMLElement,
+			makeEl: AM2PromptElementFactory,
+		): HTMLElement;
+		markDirty(bodyState: AM2ImportPromptBodyState | null | undefined): void;
+		serializeDropdownValue(value: AM2JsonValue | undefined): string;
+		selectionSetFromExpr(
+			raw: AM2JsonValue | string | undefined,
+			count: number,
+		): Set<number>;
+		selectionExprFromSet(
+			selectionSet: Set<number> | null | undefined,
+			count: number,
+		): string;
+		extractLocalDraft(
+			bodyState: AM2ImportPromptBodyState | null | undefined,
+		): AM2JsonValue | null;
+		resolveSelectionSeed(
+			model: AM2ImportPromptModel,
+			localDraft: AM2JsonValue | null | undefined,
+		): string;
+		visibleItemIndices(
+			model: AM2ImportPromptModel,
+			filterText: string | null | undefined,
+		): number[];
+		appendHint(
+			body: HTMLElement,
+			makeEl: AM2PromptElementFactory,
+			text: string | null | undefined,
+			className: string | null | undefined,
+		): void;
+		renderExamplesList(
+			body: HTMLElement,
+			makeEl: AM2PromptElementFactory,
+			examples: AM2JsonValue[],
+		): void;
+		createInputNode(
+			makeEl: AM2PromptElementFactory,
+			mode: string,
+			key: string,
+		): HTMLInputElement | HTMLTextAreaElement;
+		ensureTextEditor(
+			bodyState: AM2ImportPromptBodyState | null | undefined,
+			makeEl: AM2PromptElementFactory,
+			mode: string,
+			key: string,
+		): HTMLInputElement | HTMLTextAreaElement;
+		bindTextEditor(
+			editor: HTMLElement,
+			bodyState: AM2ImportPromptBodyState,
+		): void;
+	}
+
 	interface AM2FlowCanvasRenderOptions {
 		mount: HTMLElement | null;
 		metaMount?: HTMLElement | null;
@@ -246,6 +396,7 @@ declare global {
 
 	interface AM2FlowStepFieldSpec {
 		fieldId: string;
+		label?: string;
 		editor?: string;
 		getValue(step: AM2JsonObject): AM2JsonValue;
 	}
@@ -286,13 +437,13 @@ declare global {
 		jsonDirty: boolean;
 	}
 
-	interface AM2WizardUiValidationState {
+	interface AM2WizardUiValidationState extends AM2JsonObject {
 		ok: boolean | null;
 		local: string[];
 		server: string[];
 	}
 
-	interface AM2WizardUiState {
+	interface AM2WizardUiState extends AM2JsonObject {
 		dragId: string | null;
 		dropBeforeId: string | null;
 		showOptional: boolean;
@@ -301,9 +452,45 @@ declare global {
 		hasErrorDetails: boolean;
 	}
 
+	interface AM2DSLEditorWriteRecord extends AM2JsonObject {
+		to_path?: string;
+		value?: AM2JsonValue;
+	}
+
+	interface AM2DSLEditorBranchBinding extends AM2JsonObject {
+		name?: string;
+		value?: AM2JsonValue;
+	}
+
+	interface AM2DSLEditorBranchSpec extends AM2JsonObject {
+		target_library?: string;
+		target_subflow?: string;
+		param_bindings?: AM2DSLEditorBranchBinding[];
+	}
+
+	interface AM2DSLEditorBranchInputs extends AM2JsonObject {
+		branch_order?: string[];
+		branches?: Record<string, AM2DSLEditorBranchSpec>;
+	}
+
+	interface AM2DSLEditorGraphNodeOp extends AM2JsonObject {
+		primitive_id?: string;
+		primitive_version?: number;
+		inputs?: AM2JsonObject | null;
+		writes?: AM2DSLEditorWriteRecord[];
+	}
+
+	interface AM2DSLEditorUiState extends AM2JsonObject {
+		selected_library_id?: string;
+	}
+
+	interface AM2DSLEditorUiEnvelope extends AM2JsonObject {
+		dsl_editor?: AM2DSLEditorUiState;
+	}
+
 	interface AM2DSLGraphNode extends AM2JsonObject {
 		step_id?: string;
-		op?: AM2JsonObject | null;
+		op?: AM2DSLEditorGraphNodeOp | null;
 	}
 
 	interface AM2DSLGraphDefinition extends AM2JsonObject {
@@ -312,6 +499,7 @@ declare global {
 		nodes?: AM2DSLGraphNode[];
 		edges?: AM2DSLEditorEdgeRecord[];
 		libraries?: Record<string, AM2DSLEditorLibrary>;
+		_am2_ui?: AM2DSLEditorUiEnvelope;
 	}
 
 	interface AM2DSLEditorGraphOpsApi {
@@ -462,7 +650,7 @@ declare global {
 	interface AM2DSLEditorNodeFormActions {
 		onAddWrite?(): void;
 		onPatchNode?(payload: AM2JsonObject): void;
-		onPatchWrite?(index: number, payload: AM2JsonObject): void;
+		onPatchWrite?(index: number, payload: AM2DSLEditorWriteRecord): void;
 		onRemoveNode?(stepId: string): void;
 		onRemoveWrite?(index: number): void;
 		onSelect?(stepId: string): void;
@@ -470,14 +658,25 @@ declare global {
 
 	interface AM2DSLEditorNodeFormOptions {
 		mount: HTMLElement | null;
-		definition?: AM2JsonObject;
-		graphDefinition?: AM2JsonObject;
+		definition?: AM2DSLGraphDefinition;
+		graphDefinition?: AM2DSLGraphDefinition;
 		selectedStepId?: string | null;
 		actions?: AM2DSLEditorNodeFormActions;
 	}
 
 	interface AM2DSLEditorNodeFormApi {
 		renderNodeForm(opts: AM2DSLEditorNodeFormOptions): void;
+	}
+
+	interface AM2DSLEditorCapabilityFormOptions {
+		mount: HTMLElement | null;
+		node: AM2DSLGraphNode | null;
+		definition?: AM2DSLGraphDefinition;
+		onPatchNode?: (payload: AM2JsonObject) => void;
+	}
+
+	interface AM2DSLEditorCapabilityFormsApi {
+		renderCapabilityForm(opts: AM2DSLEditorCapabilityFormOptions): boolean;
 	}
 
 	interface AM2DSLEditorRegistryApi {
@@ -615,7 +814,7 @@ declare global {
 		openStep(stepId: string): Promise<boolean>;
 		reReadStep(): Promise<boolean>;
 		restoreBaseline(): boolean;
-		setView(nextView: string): void;
+		setView(nextView: string): boolean;
 		validateStep(): Promise<boolean>;
 	}
 
@@ -701,6 +900,73 @@ declare global {
 		doReloadAll?: () => Promise<boolean | void>;
 	}
 
+	interface AM2ImportWizardV3Api {
+		buildPromptModel(
+			step: AM2ImportWizardStep | null | undefined,
+		): AM2ImportPromptModel | null;
+		canRenderCurrentStep(
+			state: AM2ImportWizardState | null | undefined,
+		): boolean;
+		collectPayload(opts: {
+			mount: HTMLElement | null;
+			step: AM2ImportWizardStep | null | undefined;
+		}): Record<string, AM2JsonValue>;
+		findCurrentStep(
+			state: AM2ImportWizardState | null | undefined,
+		): AM2ImportWizardStep | null;
+		isPromptStep(step: AM2ImportWizardStep | null | undefined): boolean;
+		isV3State(state: AM2ImportWizardState | null | undefined): boolean;
+		renderCurrentStep(opts: {
+			state: AM2ImportWizardState | null | undefined;
+			mount: HTMLElement | null;
+			el: (
+				tag: string,
+				attrs?: Record<
+					string,
+					string | number | boolean | null | undefined
+				> | null,
+				children?: Node[] | null,
+			) => HTMLElement;
+			getLiveContext?: (() => AM2ImportStepContext | null) | null;
+		}): boolean;
+	}
+
+	interface AM2WizardDefinitionGraphNode extends AM2JsonObject {
+		step_id?: string;
+	}
+
+	interface AM2WizardDefinitionGraphEdge extends AM2JsonObject {
+		from_step_id?: string;
+		to_step_id?: string;
+		priority?: number;
+		when?: AM2JsonValue;
+	}
+
+	interface AM2WizardDefinitionV2Graph extends AM2JsonObject {
+		entry_step_id: string;
+		nodes: AM2WizardDefinitionGraphNode[];
+		edges: AM2WizardDefinitionGraphEdge[];
+	}
+
+	interface AM2WizardDefinitionV2 extends AM2JsonObject {
+		version: number;
+		graph: AM2WizardDefinitionV2Graph;
+		_am2_ui?: AM2WizardUiState;
+	}
+
+	interface AM2WDStableGraphResult {
+		version: number;
+		nodes: string[];
+		edges: AM2WizardDefinitionGraphEdge[];
+		entry: string | null;
+	}
+
+	interface AM2WDTransitionCondition extends AM2JsonObject {
+		op?: string;
+		path?: string;
+		value?: AM2JsonValue;
+	}
+
 	interface AM2WDDomIconsApi {
 		svgIcon(name: string, cls?: string, title?: string): SVGSVGElement;
 	}
@@ -741,7 +1007,7 @@ declare global {
 	}
 
 	interface AM2WDGraphStableApi {
-		stableGraph(definition: AM2JsonObject): AM2JsonObject;
+		stableGraph(definition: AM2JsonObject): AM2WDStableGraphResult;
 	}
 
 	interface AM2WDLayoutRootTextNodes {
@@ -870,6 +1136,7 @@ declare global {
 			outgoingIndex: number,
 			payload: AM2JsonObject,
 		) => void;
+		moveEdge?: (fromId: string, outgoingIndex: number, dir: number) => void;
 	}
 
 	interface AM2WDTransitionsRenderApi {
@@ -879,6 +1146,64 @@ declare global {
 			text: AM2TextFactoryApi;
 			state: AM2WDTransitionsStateApi;
 		}): void;
+	}
+
+	interface AM2WizardDefinitionEditorGraphOpsDeps {
+		stableGraph: (definition: AM2JsonObject) => AM2WDStableGraphResult;
+		wizardDraft: () => AM2JsonObject;
+		ensureV2: () => void;
+		mutateWizard: (
+			fn: (uiState: AM2WizardUiState, wd: AM2JsonObject) => void,
+			opts?: AM2FlowMutationOptions | null | undefined,
+		) => void;
+		defFromGraph: (
+			nodes: string[],
+			entryStepId: string | null | undefined,
+			edges: AM2WizardDefinitionGraphEdge[],
+		) => AM2WizardDefinitionV2;
+		replaceWizardDraft: (
+			wd: AM2JsonObject,
+			next: AM2WizardDefinitionV2,
+		) => void;
+		selectedStepId: () => string | null;
+		setSelectedStep: (stepIdOrNull: string | null | undefined) => void;
+	}
+
+	interface AM2WizardDefinitionEditorGraphOpsApi {
+		isOptionalStep(stepId: string | null | undefined): boolean;
+		canRemove(stepId: string | null | undefined): boolean;
+		hasStep(stepId: string | null | undefined): boolean;
+		addStep(stepId: string | null | undefined): void;
+		removeStep(stepId: string | null | undefined): void;
+		reorderStep(
+			dragStepId: string | null | undefined,
+			dropBeforeStepIdOrNull: string | null | undefined,
+		): void;
+		moveStepUp(stepId: string | null | undefined): void;
+		moveStepDown(stepId: string | null | undefined): void;
+		addEdge(
+			fromId: string | null | undefined,
+			toId: string | null | undefined,
+			prio: number | string | null | undefined,
+			whenVal: AM2JsonValue,
+		): void;
+		removeEdge(fromId: string | null | undefined, outgoingIndex: number): void;
+		updateEdge(
+			fromId: string | null | undefined,
+			outgoingIndex: number,
+			newEdge: AM2WizardDefinitionGraphEdge,
+		): void;
+		moveEdge(
+			fromId: string | null | undefined,
+			outgoingIndex: number,
+			dir: number,
+		): void;
+	}
+
+	interface AM2WizardDefinitionEditorHelpersApi {
+		createGraphOps(
+			deps: AM2WizardDefinitionEditorGraphOpsDeps,
+		): AM2WizardDefinitionEditorGraphOpsApi;
 	}
 
 	interface Window {
@@ -898,6 +1223,7 @@ declare global {
 		AM2FlowStepModalState: AM2FlowStepModalStateApi;
 		AM2WizardDefinitionEditor: AM2WizardDefinitionEditorApi;
 		AM2UI: AM2UiGlobalApi;
+		AM2ImportWizardV3?: AM2ImportWizardV3Api;
 		AM2WDDomIcons: AM2WDDomIconsApi;
 		AM2WDEdgesIntegrity: AM2WDEdgesIntegrityApi;
 		AM2WDStepDetailsLoader: AM2WDStepDetailsLoaderApi;
@@ -911,6 +1237,7 @@ declare global {
 		AM2WDTransitionsRender: AM2WDTransitionsRenderApi;
 		AM2DSLEditorGraphOps: AM2DSLEditorGraphOpsApi;
 		AM2DSLEditorNodeForm?: AM2DSLEditorNodeFormApi;
+		AM2DSLEditorCapabilityForms?: AM2DSLEditorCapabilityFormsApi;
 		AM2DSLEditorLibraryPanel?: AM2DSLEditorLibraryPanelApi;
 		AM2DSLEditorPalette?: AM2DSLEditorPaletteApi;
 		AM2DSLEditorRawJSON?: AM2DSLEditorRawJSONApi;

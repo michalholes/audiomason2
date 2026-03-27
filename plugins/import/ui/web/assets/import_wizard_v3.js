@@ -1,12 +1,66 @@
 (() => {
-	const root = typeof window !== "undefined" ? window : globalThis;
+	/** @typedef {Node & {
+	 *   attrs?: Record<string, string>,
+	 *   children?: Node[] | HTMLCollection,
+	 *   childNodes?: NodeListOf<ChildNode> | Node[],
+	 *   dataset?: DOMStringMap,
+	 *   checked?: boolean,
+	 *   value?: string,
+	 *   type?: string,
+	 *   tag?: string,
+	 *   tagName?: string,
+	 *   appendChild?: (child: Node) => Node,
+	 *   removeChild?: (child: Node) => Node,
+	 *   setAttribute?: (name: string, value: string) => void,
+	 *   getAttribute?: (name: string) => string | null,
+	 *   addEventListener?: (type: string, handler: EventListenerOrEventListenerObject) => void,
+	 *   oninput?: ((event: Event) => void) | null,
+	 *   onchange?: ((event: Event) => void) | null,
+	 *   onclick?: ((event: Event) => void) | null,
+	 * }} AM2PromptNode */
+	/**
+	 * @typedef {(tag: string,
+	 *   attrs?: Record<string, string | number | boolean | null | undefined> | null,
+	 *   children?: Node[] | null) => HTMLElement} AM2PromptElementFactory
+	 */
+	/** @typedef {(node: AM2PromptNode) => boolean} AM2PromptPredicate */
+	/** @typedef {{
+	 *   body: HTMLElement,
+	 *   bodyState?: AM2ImportPromptBodyState | null,
+	 *   context: AM2ImportStepContext,
+	 *   el?: AM2PromptElementFactory,
+	 *   localDraft?: AM2JsonValue | null,
+	 *   makeEl: AM2PromptElementFactory,
+	 *   mode?: string,
+	 *   model: AM2ImportPromptModel,
+	 *   mount?: HTMLElement,
+	 *   mountState?: AM2ImportWizardV3MountState,
+	 *   sameStep?: boolean,
+	 *   step?: AM2ImportWizardStep | null,
+	 * }} AM2PromptRenderArgs */
+	/** @typedef {{
+	 *   actions: HTMLElement,
+	 *   editor: HTMLElement,
+	 *   filterInput: HTMLInputElement | null,
+	 *   list: HTMLElement,
+	 *   summary: HTMLElement,
+	 *   wrapper: HTMLElement,
+	 * }} AM2ChecklistShell */
+
+	const root = /** @type {(Window & typeof globalThis) & {
+	 *   AM2ImportWizardV3?: AM2ImportWizardV3Api,
+	 *   AM2ImportWizardV3Helpers?: AM2ImportWizardV3HelpersApi,
+	 * }} */ (typeof window !== "undefined" ? window : globalThis);
+	/** @type {Record<string, string>} */
 	const PROMPT_PAYLOAD_KEYS = {
 		"ui.prompt_text": "value",
 		"ui.prompt_select": "selection",
 		"ui.prompt_confirm": "confirmed",
 	};
+	/** @type {WeakMap<HTMLElement, AM2ImportWizardV3MountState>} */
 	const mountStates = new WeakMap();
 
+	/** @param {AM2ImportWizardState | null | undefined} state */
 	function isV3State(state) {
 		return !!(
 			state &&
@@ -15,6 +69,7 @@
 		);
 	}
 
+	/** @param {AM2ImportWizardStep | null | undefined} step */
 	function isPromptStep(step) {
 		if (!step || typeof step !== "object") return false;
 		const primitiveId = String(step.primitive_id || "");
@@ -22,6 +77,10 @@
 		return primitiveVersion === 1 && primitiveId in PROMPT_PAYLOAD_KEYS;
 	}
 
+	/**
+	 * @param {AM2ImportWizardState | null | undefined} state
+	 * @returns {AM2ImportWizardStep | null}
+	 */
 	function findCurrentStep(state) {
 		if (!isV3State(state)) return null;
 		const model = state.effective_model;
@@ -30,12 +89,14 @@
 		return steps.find((step) => step && step.step_id === currentStepId) || null;
 	}
 
+	/** @param {AM2ImportWizardState | null | undefined} state */
 	function canRenderCurrentStep(state) {
 		if (!isV3State(state)) return false;
 		if (!state || state.status !== "in_progress") return false;
 		return isPromptStep(findCurrentStep(state));
 	}
 
+	/** @param {unknown} items @returns {AM2ImportPromptDisplayItem[]} */
 	function normalizeDisplayItems(items) {
 		if (!Array.isArray(items)) return [];
 		return items
@@ -53,6 +114,7 @@
 			}));
 	}
 
+	/** @param {AM2ImportWizardStep | null | undefined} step @returns {AM2ImportPromptModel | null} */
 	function buildPromptModel(step) {
 		if (!isPromptStep(step)) return null;
 		const ui = step && typeof step.ui === "object" ? step.ui : {};
@@ -76,6 +138,7 @@
 		};
 	}
 
+	/** @param {HTMLElement} mount @returns {AM2ImportWizardV3MountState} */
 	function getMountState(mount) {
 		let state = mountStates.get(mount);
 		if (!state) {
@@ -85,6 +148,7 @@
 		return state;
 	}
 
+	/** @param {AM2ImportWizardState | null | undefined} state @returns {AM2ImportStepContext} */
 	function snapshotContext(state) {
 		return {
 			session_id: String((state && state.session_id) || ""),
@@ -93,6 +157,10 @@
 		};
 	}
 
+	/**
+	 * @param {AM2ImportStepContext | null | undefined} left
+	 * @param {AM2ImportStepContext | null | undefined} right
+	 */
 	function sameActiveContext(left, right) {
 		return !!(
 			left &&
@@ -104,6 +172,10 @@
 		);
 	}
 
+	/**
+	 * @param {AM2ImportStepContext | null | undefined} left
+	 * @param {AM2ImportStepContext | null | undefined} right
+	 */
 	function sameStepContext(left, right) {
 		return !!(
 			left &&
@@ -113,6 +185,7 @@
 		);
 	}
 
+	/** @param {AM2JsonValue | undefined} value */
 	function isScalar(value) {
 		return (
 			typeof value === "string" ||
@@ -121,12 +194,14 @@
 		);
 	}
 
+	/** @param {AM2ImportPromptModel} model @returns {AM2JsonValue} */
 	function seedValue(model) {
 		return model && model.prefill !== null
 			? model.prefill
 			: model.default_value;
 	}
 
+	/** @param {AM2JsonValue | undefined} value */
 	function serializeSeed(value) {
 		if (value === null || value === undefined) return "";
 		if (isScalar(value)) return String(value);
@@ -137,6 +212,7 @@
 		}
 	}
 
+	/** @param {string} raw @returns {AM2JsonValue | string} */
 	function parseLooseJson(raw) {
 		if (raw === "") return "";
 		try {
@@ -146,12 +222,14 @@
 		}
 	}
 
+	/** @param {AM2ImportPromptModel} model */
 	function isNumericPrompt(model) {
 		const seed = seedValue(model);
 		if (typeof seed !== "number") return false;
 		return model.examples.every((example) => typeof example === "number");
 	}
 
+	/** @param {AM2ImportPromptModel | null | undefined} model */
 	function isDropdownSelect(model) {
 		if (!model || model.primitive_id !== "ui.prompt_select") return false;
 		if (model.items.length !== 0) return false;
@@ -159,6 +237,7 @@
 		return model.examples.every(isScalar);
 	}
 
+	/** @param {AM2ImportPromptModel | null | undefined} model */
 	function isChecklistSelect(model) {
 		return (
 			model &&
@@ -167,6 +246,7 @@
 		);
 	}
 
+	/** @param {AM2ImportPromptModel | null | undefined} model */
 	function classifyPromptMode(model) {
 		if (!model) return "";
 		if (model.primitive_id === "ui.prompt_confirm") return "confirm";
@@ -180,235 +260,43 @@
 		return "text";
 	}
 
-	function childNodes(node) {
-		if (!node || typeof node !== "object") return [];
-		const children =
-			node.children && typeof node.children !== "string"
-				? node.children
-				: node.childNodes && typeof node.childNodes !== "string"
-					? node.childNodes
-					: [];
-		try {
-			return Array.from(children);
-		} catch {
-			return [];
-		}
-	}
+	const promptHelpers = /** @type {AM2ImportWizardV3HelpersApi | undefined} */ (
+		Reflect.get(root, "AM2ImportWizardV3Helpers")
+	);
+	if (!promptHelpers) return;
+	const {
+		childNodes,
+		tagName,
+		getAttr,
+		setAttr,
+		addEvent,
+		clearMount,
+		walkNodes,
+		findNode,
+		findNodes,
+		findBodyMount,
+		ensureBodyMount,
+		markDirty,
+		serializeDropdownValue,
+		selectionSetFromExpr,
+		selectionExprFromSet,
+		extractLocalDraft,
+		resolveSelectionSeed,
+		visibleItemIndices,
+		appendHint,
+		renderExamplesList,
+		createInputNode,
+		ensureTextEditor,
+		bindTextEditor,
+	} = promptHelpers;
 
-	function tagName(node) {
-		if (!node || typeof node !== "object") return "";
-		if (typeof node.tagName === "string") return node.tagName.toLowerCase();
-		if (typeof node.tag === "string") return node.tag.toLowerCase();
-		return "";
-	}
-
-	function getAttr(node, name) {
-		if (!node || typeof node !== "object") return null;
-		if (typeof node.getAttribute === "function") {
-			const value = node.getAttribute(name);
-			if (value !== null && value !== undefined) return String(value);
-		}
-		if (node.attrs && Object.prototype.hasOwnProperty.call(node.attrs, name)) {
-			return String(node.attrs[name]);
-		}
-		if (name.startsWith("data-") && node.dataset) {
-			const key = name
-				.slice(5)
-				.replace(/-([a-z])/g, (_, ch) => ch.toUpperCase());
-			if (Object.prototype.hasOwnProperty.call(node.dataset, key)) {
-				return String(node.dataset[key]);
-			}
-		}
-		return null;
-	}
-
-	function setAttr(node, name, value) {
-		if (!node || typeof node !== "object") return;
-		if (typeof node.setAttribute === "function") {
-			node.setAttribute(name, String(value));
-		}
-		if (!node.attrs || typeof node.attrs !== "object") node.attrs = {};
-		node.attrs[name] = String(value);
-	}
-
-	function addEvent(node, type, handler) {
-		if (!node || typeof node !== "object") return;
-		if (typeof node.addEventListener === "function") {
-			node.addEventListener(type, handler);
-		}
-		node[`on${type}`] = handler;
-	}
-
-	function clearMount(mount) {
-		if (!mount) return;
-		if (typeof mount.replaceChildren === "function") {
-			mount.replaceChildren();
-			return;
-		}
-		if (Array.isArray(mount.children)) {
-			mount.children = [];
-			return;
-		}
-		while (mount.firstChild && typeof mount.removeChild === "function") {
-			mount.removeChild(mount.firstChild);
-		}
-	}
-
-	function walkNodes(node, visit) {
-		if (!node || typeof node !== "object") return false;
-		if (visit(node)) return true;
-		return childNodes(node).some((child) => walkNodes(child, visit));
-	}
-
-	function findNode(node, predicate) {
-		let found = null;
-		walkNodes(node, (entry) => {
-			if (predicate(entry)) {
-				found = entry;
-				return true;
-			}
-			return false;
-		});
-		return found;
-	}
-
-	function findNodes(node, predicate) {
-		const found = [];
-		walkNodes(node, (entry) => {
-			if (predicate(entry)) found.push(entry);
-			return false;
-		});
-		return found;
-	}
-
-	function findBodyMount(mount) {
-		return findNode(
-			mount,
-			(node) => getAttr(node, "data-v3-step-body") === "1",
-		);
-	}
-
-	function ensureBodyMount(mount, makeEl) {
-		const existing = findBodyMount(mount);
-		if (existing) return existing;
-		const body = makeEl("div", { "data-v3-step-body": "1" });
-		mount.appendChild(body);
-		return body;
-	}
-
-	function markDirty(bodyState) {
-		if (bodyState) bodyState.dirty = true;
-	}
-
-	function serializeDropdownValue(value) {
-		if (value === null || value === undefined) return "";
-		return JSON.stringify(value);
-	}
-
-	function selectionSetFromExpr(raw, count) {
-		const text = typeof raw === "string" ? raw.trim() : "";
-		const out = new Set();
-		if (text === "") return out;
-		if (text === "all") {
-			for (let index = 0; index < count; index += 1) out.add(index);
-			return out;
-		}
-		text.split(",").forEach((part) => {
-			if (!/^\d+$/.test(part.trim())) return;
-			const ordinal = Number(part.trim());
-			if (ordinal >= 1 && ordinal <= count) out.add(ordinal - 1);
-		});
-		return out;
-	}
-
-	function selectionExprFromSet(selectionSet, count) {
-		const chosen = Array.from(selectionSet || []).filter(
-			(index) => Number.isInteger(index) && index >= 0 && index < count,
-		);
-		chosen.sort((left, right) => left - right);
-		if (count > 0 && chosen.length === count) return "all";
-		if (!chosen.length) return "";
-		return chosen.map((index) => String(index + 1)).join(",");
-	}
-
-	function extractLocalDraft(bodyState) {
-		if (!bodyState || !bodyState.dirty) return null;
-		if (bodyState.mode === "confirm")
-			return !!(bodyState.editor && bodyState.editor.checked);
-		if (
-			bodyState.mode === "checklist" ||
-			bodyState.mode === "filterable-checklist"
-		) {
-			return selectionExprFromSet(
-				bodyState.selectionSet,
-				bodyState.model ? bodyState.model.items.length : 0,
-			);
-		}
-		if (!bodyState.editor) return null;
-		if (bodyState.mode === "dropdown") {
-			return parseLooseJson(String(bodyState.editor.value || ""));
-		}
-		return String(bodyState.editor.value || "");
-	}
-
-	function resolveSelectionSeed(model, localDraft) {
-		if (typeof localDraft === "string") return localDraft;
-		const seed = seedValue(model);
-		return typeof seed === "string" ? seed : "";
-	}
-
-	function visibleItemIndices(model, filterText) {
-		const needle = String(filterText || "")
-			.trim()
-			.toLowerCase();
-		return model.items
-			.map((item, index) => ({ item, index }))
-			.filter(({ item }) => {
-				if (!needle) return true;
-				const haystack = `${item.label} ${item.item_id}`.toLowerCase();
-				return haystack.includes(needle);
-			})
-			.map(({ index }) => index);
-	}
-
-	function appendHint(body, makeEl, text, className) {
-		if (!text) return;
-		body.appendChild(makeEl("div", { class: className || "hint", text }));
-	}
-
-	function renderExamplesList(body, makeEl, examples) {
-		if (!examples.length) return;
-		const list = makeEl("ul", { class: "hint" });
-		examples.forEach((example) => {
-			list.appendChild(makeEl("li", { text: serializeSeed(example) }));
-		});
-		body.appendChild(list);
-	}
-
-	function createInputNode(makeEl, mode, key) {
-		if (mode === "textarea") {
-			return makeEl("textarea", { rows: "6", "data-v3-payload-key": key });
-		}
-		const attrs = { "data-v3-payload-key": key };
-		if (mode === "number") attrs.type = "number";
-		return makeEl("input", attrs);
-	}
-
-	function ensureTextEditor(bodyState, makeEl, mode, key) {
-		if (bodyState && bodyState.mode === mode && bodyState.editor) {
-			return bodyState.editor;
-		}
-		return createInputNode(makeEl, mode, key);
-	}
-
-	function bindTextEditor(editor, bodyState) {
-		addEvent(editor, "input", () => markDirty(bodyState));
-		addEvent(editor, "change", () => markDirty(bodyState));
-	}
-
+	/** @param {AM2PromptRenderArgs} args @returns {AM2ImportPromptBodyState} */
 	function renderTextLike(args) {
 		const { body, bodyState, makeEl, mode, model, localDraft, sameStep } = args;
-		const key = PROMPT_PAYLOAD_KEYS[model.primitive_id];
+		const key =
+			PROMPT_PAYLOAD_KEYS[
+				/** @type {keyof typeof PROMPT_PAYLOAD_KEYS} */ (model.primitive_id)
+			];
 		const next = {
 			context: args.context,
 			dirty: sameStep ? bodyState && bodyState.dirty : false,
@@ -416,7 +304,7 @@
 			mode,
 			model,
 			primitive_id: model.primitive_id,
-			selectionSet: null,
+			selectionSet: /** @type {Set<number> | null} */ (null),
 		};
 		bindTextEditor(next.editor, next);
 		const seedText =
@@ -448,16 +336,27 @@
 		return next;
 	}
 
+	/**
+	 * @param {AM2ImportPromptBodyState | null | undefined} bodyState
+	 * @param {AM2PromptElementFactory} makeEl
+	 * @param {string} key
+	 */
 	function ensureDropdownEditor(bodyState, makeEl, key) {
 		if (bodyState && bodyState.mode === "dropdown" && bodyState.editor) {
-			return bodyState.editor;
+			return /** @type {HTMLSelectElement} */ (bodyState.editor);
 		}
-		return makeEl("select", { "data-v3-payload-key": key });
+		return /** @type {HTMLSelectElement} */ (
+			makeEl("select", { "data-v3-payload-key": key })
+		);
 	}
 
+	/** @param {AM2PromptRenderArgs} args @returns {AM2ImportPromptBodyState} */
 	function renderDropdown(args) {
 		const { body, bodyState, makeEl, model, localDraft, sameStep } = args;
-		const key = PROMPT_PAYLOAD_KEYS[model.primitive_id];
+		const key =
+			PROMPT_PAYLOAD_KEYS[
+				/** @type {keyof typeof PROMPT_PAYLOAD_KEYS} */ (model.primitive_id)
+			];
 		const editor = ensureDropdownEditor(bodyState, makeEl, key);
 		clearMount(editor);
 		model.examples.forEach((example) => {
@@ -474,7 +373,7 @@
 			mode: "dropdown",
 			model,
 			primitive_id: model.primitive_id,
-			selectionSet: null,
+			selectionSet: /** @type {Set<number> | null} */ (null),
 		};
 		addEvent(editor, "change", () => markDirty(next));
 		addEvent(editor, "input", () => markDirty(next));
@@ -487,31 +386,48 @@
 		return next;
 	}
 
+	/**
+	 * @param {AM2PromptElementFactory} makeEl
+	 * @param {boolean} filterable
+	 * @returns {AM2ChecklistShell}
+	 */
 	function createChecklistShell(makeEl, filterable) {
 		const wrapper = makeEl("div", { "data-v3-payload-key": "selection" });
 		const summary = makeEl("div", { class: "hint" });
 		const actions = makeEl("div", { class: "hint" });
 		const list = makeEl("div", { class: "hint" });
 		const filterInput = filterable
-			? makeEl("input", { type: "text", placeholder: "Filter" })
+			? /** @type {HTMLInputElement} */ (
+					makeEl("input", { type: "text", placeholder: "Filter" })
+				)
 			: null;
-		return { actions, filterInput, list, summary, wrapper };
+		return { actions, editor: wrapper, filterInput, list, summary, wrapper };
 	}
 
+	/**
+	 * @param {AM2ImportPromptBodyState | null | undefined} bodyState
+	 * @param {AM2PromptElementFactory} makeEl
+	 * @param {boolean} filterable
+	 * @returns {AM2ChecklistShell}
+	 */
 	function ensureChecklistState(bodyState, makeEl, filterable) {
 		const mode = filterable ? "filterable-checklist" : "checklist";
 		if (bodyState && bodyState.mode === mode && bodyState.editor) {
 			return {
-				actions: bodyState.actions,
-				editor: bodyState.editor,
+				actions: /** @type {HTMLElement} */ (bodyState.actions),
+				editor: /** @type {HTMLElement} */ (bodyState.editor),
 				filterInput: bodyState.filterInput || null,
-				list: bodyState.list,
-				summary: bodyState.summary,
+				list: /** @type {HTMLElement} */ (bodyState.list),
+				summary: /** @type {HTMLElement} */ (bodyState.summary),
+				wrapper: /** @type {HTMLElement} */ (
+					bodyState.wrapper || bodyState.editor
+				),
 			};
 		}
 		return createChecklistShell(makeEl, filterable);
 	}
 
+	/** @param {AM2PromptRenderArgs} args @returns {AM2ImportPromptBodyState} */
 	function renderChecklist(args) {
 		const {
 			body,
@@ -573,7 +489,6 @@
 		}
 		clearMount(shell.editor || shell.wrapper);
 		shell.summary.textContent = `Selected ${next.selectionSet.size} of ${model.items.length}`;
-		shell.summary.text = shell.summary.textContent;
 		(shell.editor || shell.wrapper).appendChild(shell.summary);
 		if (shell.filterInput) {
 			(shell.editor || shell.wrapper).appendChild(shell.filterInput);
@@ -599,10 +514,10 @@
 							shell.filterInput ? shell.filterInput.value : "",
 						)
 					: model.items.map((_, index) => index);
-				indices.forEach((index) => {
+				for (const index of indices) {
 					if (checked) next.selectionSet.add(index);
 					else next.selectionSet.delete(index);
-				});
+				}
 				next.dirty = true;
 				renderChecklist({
 					body,
@@ -623,13 +538,15 @@
 		});
 		(shell.editor || shell.wrapper).appendChild(shell.actions);
 		clearMount(shell.list);
-		visibleItemIndices(
+		for (const index of visibleItemIndices(
 			model,
 			shell.filterInput ? shell.filterInput.value : "",
-		).forEach((index) => {
+		)) {
 			const item = model.items[index];
 			const row = makeEl("label", { class: "choiceItem" });
-			const checkbox = makeEl("input", { type: "checkbox" });
+			const checkbox = /** @type {HTMLInputElement} */ (
+				makeEl("input", { type: "checkbox" })
+			);
 			checkbox.checked = next.selectionSet.has(index);
 			addEvent(checkbox, "change", () => {
 				if (checkbox.checked) next.selectionSet.add(index);
@@ -655,7 +572,7 @@
 				makeEl("span", { text: item.label || item.item_id || "" }),
 			);
 			shell.list.appendChild(row);
-		});
+		}
 		(shell.editor || shell.wrapper).appendChild(shell.list);
 		body.appendChild(shell.editor || shell.wrapper);
 		next.editor = shell.editor || shell.wrapper;
@@ -663,6 +580,7 @@
 		return next;
 	}
 
+	/** @param {AM2PromptRenderArgs} args @returns {AM2ImportPromptBodyState} */
 	function renderConfirm(args) {
 		const { body, bodyState, context, makeEl, model, sameStep } = args;
 		let row = null;
@@ -677,10 +595,12 @@
 			checkbox = bodyState.editor;
 		} else {
 			row = makeEl("label", { class: "choiceItem" });
-			checkbox = makeEl("input", {
-				type: "checkbox",
-				"data-v3-payload-key": "confirmed",
-			});
+			checkbox = /** @type {HTMLInputElement} */ (
+				makeEl("input", {
+					type: "checkbox",
+					"data-v3-payload-key": "confirmed",
+				})
+			);
 			row.appendChild(checkbox);
 			row.appendChild(makeEl("span", { text: "" }));
 		}
@@ -692,24 +612,39 @@
 			model,
 			primitive_id: model.primitive_id,
 			row,
-			selectionSet: null,
+			selectionSet: /** @type {Set<number> | null} */ (null),
 		};
 		addEvent(checkbox, "change", () => markDirty(next));
-		if (!next.dirty) checkbox.checked = seedValue(model) === true;
-		const labelNode = childNodes(row).find(
-			(entry) => tagName(entry) === "span",
-		);
+		if (!next.dirty)
+			/** @type {HTMLInputElement} */ (checkbox).checked =
+				seedValue(model) === true;
+		let labelNode = null;
+		for (const entry of childNodes(row)) {
+			if (tagName(entry) === "span") {
+				labelNode = entry;
+				break;
+			}
+		}
 		if (labelNode) {
 			labelNode.textContent =
 				model.prompt || model.label || model.title || "Confirm";
-			labelNode.text = labelNode.textContent;
 		}
 		body.appendChild(row);
 		return next;
 	}
 
+	/**
+	 * @param {{
+	 *   context: AM2ImportStepContext,
+	 *   el: AM2PromptElementFactory,
+	 *   model: AM2ImportPromptModel,
+	 *   mount: HTMLElement,
+	 *   step?: AM2ImportWizardStep | null,
+	 * }} args
+	 */
 	function renderPromptBody(args) {
 		const body = ensureBodyMount(args.mount, args.el);
+		/** @type {AM2ImportWizardV3MountState} */
 		const mountState = getMountState(args.mount);
 		const previous = mountState.bodyState;
 		const sameStep = sameStepContext(
@@ -784,6 +719,10 @@
 		return true;
 	}
 
+	/**
+	 * @param {AM2ImportWizardState | null | undefined} state
+	 * @returns {Promise<AM2ImportWizardStep | null>}
+	 */
 	async function fetchCurrentStepProjection(state) {
 		if (!state || !state.session_id || !state.current_step_id || !root.fetch) {
 			return null;
@@ -802,13 +741,24 @@
 		}
 	}
 
+	/**
+	 * @param {{
+	 *   state?: AM2ImportWizardState | null,
+	 *   mount?: HTMLElement | null,
+	 *   el?: AM2PromptElementFactory | null,
+	 *   getLiveContext?: (() => AM2ImportStepContext | null) | null,
+	 * } | null | undefined} args
+	 */
 	function renderCurrentStep(args) {
 		const state = args && args.state ? args.state : null;
 		const mount = args && args.mount ? args.mount : null;
-		const makeEl = args && typeof args.el === "function" ? args.el : null;
+		const makeEl =
+			args && typeof args.el === "function"
+				? /** @type {AM2PromptElementFactory} */ (args.el)
+				: null;
 		const getLiveContext =
 			args && typeof args.getLiveContext === "function"
-				? args.getLiveContext
+				? /** @type {() => AM2ImportStepContext | null} */ (args.getLiveContext)
 				: null;
 		if (!mount || !makeEl || !canRenderCurrentStep(state)) return false;
 		const step = findCurrentStep(state);
@@ -833,33 +783,46 @@
 		return true;
 	}
 
+	/** @param {HTMLElement} mount @returns {AM2JsonValue} */
 	function fallbackCollectSelect(mount) {
-		const payload = findNode(
-			mount,
-			(node) => getAttr(node, "data-v3-payload-key") === "selection",
-		);
+		/** @param {AM2PromptNode} node */
+		function isSelectionPayloadNode(node) {
+			return getAttr(node, "data-v3-payload-key") === "selection";
+		}
+		const payload = findNode(mount, isSelectionPayloadNode);
 		if (!payload) return "";
 		if (tagName(payload) === "select") {
 			return parseLooseJson(String(payload.value || ""));
 		}
-		const rows = findNodes(
-			payload,
-			(node) =>
-				tagName(node) === "input" && getAttr(node, "type") === "checkbox",
-		);
+		/** @param {AM2PromptNode} node */
+		function isSelectionCheckbox(node) {
+			return tagName(node) === "input" && getAttr(node, "type") === "checkbox";
+		}
+		const rows = findNodes(payload, isSelectionCheckbox);
+		/** @type {number[]} */
 		const picks = [];
-		rows.forEach((checkbox, index) => {
+		for (const [index, checkbox] of rows.entries()) {
 			if (checkbox.checked) picks.push(index);
-		});
+		}
 		return selectionExprFromSet(new Set(picks), rows.length);
 	}
 
+	/**
+	 * @param {{
+	 *   mount?: HTMLElement | null,
+	 *   step?: AM2ImportWizardStep | null,
+	 * } | null | undefined} args
+	 * @returns {Record<string, AM2JsonValue>}
+	 */
 	function collectPayload(args) {
 		const mount = args && args.mount ? args.mount : null;
 		const step = args && args.step ? args.step : null;
 		if (!mount || !isPromptStep(step)) return {};
 		const primitiveId = String(step.primitive_id || "");
-		const key = PROMPT_PAYLOAD_KEYS[primitiveId];
+		const key =
+			PROMPT_PAYLOAD_KEYS[
+				/** @type {keyof typeof PROMPT_PAYLOAD_KEYS} */ (primitiveId)
+			];
 		const mountState = getMountState(mount);
 		const bodyState = mountState.bodyState;
 		if (
@@ -868,7 +831,12 @@
 			String(step.step_id || "") === bodyState.context.current_step_id
 		) {
 			if (primitiveId === "ui.prompt_confirm") {
-				return { [key]: !!(bodyState.editor && bodyState.editor.checked) };
+				return {
+					[key]: !!(
+						bodyState.editor &&
+						/** @type {HTMLInputElement} */ (bodyState.editor).checked
+					),
+				};
 			}
 			if (
 				bodyState.mode === "checklist" ||
@@ -883,16 +851,23 @@
 			}
 			return {
 				[key]: parseLooseJson(
-					String((bodyState.editor && bodyState.editor.value) || ""),
+					String(
+						(bodyState.editor &&
+							/** @type {HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement} */ (
+								bodyState.editor
+							).value) ||
+							"",
+					),
 				),
 			};
 		}
 		if (primitiveId === "ui.prompt_select")
 			return { [key]: fallbackCollectSelect(mount) };
-		const node = findNode(
-			mount,
-			(entry) => getAttr(entry, "data-v3-payload-key") === key,
-		);
+		/** @param {AM2PromptNode} entry */
+		function matchesPayloadKey(entry) {
+			return getAttr(entry, "data-v3-payload-key") === key;
+		}
+		const node = findNode(mount, matchesPayloadKey);
 		if (!node) return {};
 		if (primitiveId === "ui.prompt_confirm") return { [key]: !!node.checked };
 		return { [key]: parseLooseJson(String(node.value || "")) };

@@ -1,18 +1,26 @@
 (() => {
+	/** @param {AM2WebJobItem | null | undefined} job */
 	function jobIdOf(job) {
 		return String((job && (job.job_id || job.id)) || "");
 	}
 
+	/** @param {AM2WebJobItem | null | undefined} job */
 	function jobMetaSource(job) {
 		const meta = job && typeof job.meta === "object" ? job.meta : null;
 		return meta && typeof meta.source === "string" ? meta.source : "";
 	}
 
+	/** @param {AM2WebJobItem | null | undefined} job */
 	function canStartJob(job) {
 		return job && job.state === "pending" && jobMetaSource(job) !== "import";
 	}
 
 	Reflect.set(window, "AMWebJobsBrowserSurface", {
+		/**
+		 * @param {AM2WebContent} content
+		 * @param {AM2WebNotifyFn} notify
+		 * @param {AM2WebSurfaceDeps} deps
+		 */
 		async render(content, notify, deps) {
 			const { API, el, clear } = deps;
 			const root = el("div", { class: "jobsLog" });
@@ -32,7 +40,9 @@
 			left.appendChild(jobsBox);
 
 			const logHeader = el("div", { class: "row" });
-			const followChk = el("input", { type: "checkbox" });
+			const followChk = /** @type {HTMLInputElement} */ (
+				el("input", { type: "checkbox" })
+			);
 			const followLbl = el("label", { class: "hint", text: "Follow" });
 			followLbl.prepend(followChk);
 			const clearBtn = el("button", { class: "btn", text: "Clear" });
@@ -43,9 +53,12 @@
 			const pre = el("pre", { class: "logBox", text: "Select a job." });
 			right.appendChild(pre);
 
+			/** @type {string | null} */
 			let currentJobId = null;
 			let offset = 0;
+			/** @type {ReturnType<typeof setInterval> | null} */
 			let followTimer = null;
+			/** @type {HTMLElement | null} */
 			let selectedRow = null;
 			const observer = new MutationObserver(() => {
 				if (document.body.contains(root)) return;
@@ -60,6 +73,7 @@
 				followTimer = null;
 			}
 
+			/** @param {HTMLElement | null} row */
 			function setSelectedRow(row) {
 				if (selectedRow) selectedRow.style.background = "";
 				selectedRow = row;
@@ -89,6 +103,7 @@
 				}
 			}
 
+			/** @param {string} jobId @param {HTMLElement} row */
 			async function selectJob(jobId, row) {
 				currentJobId = jobId;
 				offset = 0;
@@ -97,6 +112,7 @@
 				await loadMore();
 			}
 
+			/** @param {string} jobId */
 			async function startJob(jobId) {
 				try {
 					await API.sendJson(
@@ -112,6 +128,7 @@
 
 			async function loadJobs() {
 				clear(jobsBox);
+				/** @type {AM2JsonObject} */
 				let data;
 				try {
 					data = await API.getJson("/api/jobs");
@@ -119,7 +136,9 @@
 					jobsBox.appendChild(el("div", { class: "hint", text: String(e) }));
 					return;
 				}
-				const items = Array.isArray(data.items) ? data.items : [];
+				const items = /** @type {AM2WebJobItem[]} */ (
+					Array.isArray(data.items) ? data.items : []
+				);
 				if (!items.length) {
 					jobsBox.appendChild(el("div", { class: "hint", text: "No jobs." }));
 					return;
@@ -128,7 +147,13 @@
 				const table = el("table", { class: "table" });
 				const thead = el("thead");
 				const trh = el("tr");
-				["job_id", "type", "state", "source", "actions"].forEach((h) => {
+				/** @type {string[]} */ ([
+					"job_id",
+					"type",
+					"state",
+					"source",
+					"actions",
+				]).forEach((h) => {
 					trh.appendChild(el("th", { text: h }));
 				});
 				thead.appendChild(trh);
@@ -145,10 +170,13 @@
 					const actionsTd = el("td");
 					if (canStartJob(job)) {
 						const startBtn = el("button", { class: "btn", text: "Start" });
-						startBtn.addEventListener("click", async (ev) => {
-							ev.stopPropagation();
-							await startJob(jid);
-						});
+						startBtn.addEventListener(
+							"click",
+							/** @param {MouseEvent} ev */ async (ev) => {
+								ev.stopPropagation();
+								await startJob(jid);
+							},
+						);
 						actionsTd.appendChild(startBtn);
 					}
 					tr.appendChild(actionsTd);

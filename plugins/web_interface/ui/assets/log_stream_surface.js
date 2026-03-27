@@ -1,4 +1,5 @@
 (() => {
+	/** @param {AM2WebContent | null | undefined} content */
 	function resolveSurfaceKind(content) {
 		const kind =
 			content && typeof content.stream_kind === "string"
@@ -7,14 +8,17 @@
 		return kind === "logbus" ? "logbus" : "eventbus";
 	}
 
+	/** @param {string} kind */
 	function selectedFilename(kind) {
 		return `${kind}_selected.txt`;
 	}
 
+	/** @param {string} kind */
 	function allFilename(kind) {
 		return `${kind}_all.txt`;
 	}
 
+	/** @param {string} text */
 	async function copyTextWithFallback(text) {
 		const payload = String(text || "");
 		try {
@@ -43,6 +47,7 @@
 		}
 	}
 
+	/** @param {string} filename @param {string} text */
 	function downloadText(filename, text) {
 		const blobCtor = typeof window.Blob === "function" ? window.Blob : null;
 		const urlApi = window.URL;
@@ -84,6 +89,7 @@
 		}
 	}
 
+	/** @param {Node} node */
 	function readScopedSelection(node) {
 		const sel = window.getSelection ? window.getSelection() : null;
 		if (!sel || sel.rangeCount < 1) return "";
@@ -97,6 +103,11 @@
 	}
 
 	Reflect.set(window, "AMWebLogStreamSurface", {
+		/**
+		 * @param {AM2WebContent} content
+		 * @param {AM2WebNotifyFn} notify
+		 * @param {AM2WebSurfaceDeps} deps
+		 */
 		async render(content, notify, deps) {
 			const { API, el } = deps;
 			const kind = resolveSurfaceKind(content);
@@ -127,6 +138,7 @@
 			wrap.appendChild(pre);
 
 			let buffer = "";
+			/** @type {EventSource | null} */
 			let eventSource = null;
 			const observer = new MutationObserver(() => {
 				if (document.body.contains(wrap)) return;
@@ -140,16 +152,19 @@
 				pre.scrollTop = pre.scrollHeight;
 			}
 
+			/** @param {string} text */
 			function replaceBuffer(text) {
 				buffer = String(text || "");
 				renderBuffer();
 			}
 
+			/** @param {string} line */
 			function appendLine(line) {
 				buffer += `${String(line || "")}\n`;
 				renderBuffer();
 			}
 
+			/** @param {string} text */
 			async function copyPayload(text) {
 				const ok = await copyTextWithFallback(text);
 				if (typeof notify === "function") {
@@ -211,7 +226,9 @@
 			const src = content.source;
 			if (src && src.type === "sse") {
 				eventSource = new EventSource(src.path);
-				eventSource.onmessage = (ev) => {
+				eventSource.onmessage = /** @param {MessageEvent<string>} ev */ (
+					ev,
+				) => {
 					appendLine(ev.data);
 				};
 				eventSource.onerror = () => {

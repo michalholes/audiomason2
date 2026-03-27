@@ -1,6 +1,19 @@
 (function () {
 	"use strict";
 
+	/**
+	 * @typedef {(graph: AM2DSLGraphDefinition | AM2DSLEditorLibrary,
+	 * 	definition: AM2DSLGraphDefinition,
+	 * 	libraryId: string) => void} AM2GraphMutator
+	 */
+	/**
+	 * @typedef {(node: AM2DSLGraphNode,
+	 * 	graph: AM2DSLGraphDefinition | AM2DSLEditorLibrary,
+	 * 	definition: AM2DSLGraphDefinition,
+	 * 	libraryId: string) => void} AM2SelectedNodeMutator
+	 */
+
+	/** @returns {AM2FlowSnapshot | null} */
 	function snapshot() {
 		const flowEditor = window.AM2FlowEditorState;
 		return flowEditor && flowEditor.getSnapshot
@@ -8,16 +21,23 @@
 			: null;
 	}
 
+	/** @returns {AM2DSLGraphDefinition} */
 	function currentDefinition() {
 		const snap = snapshot();
-		return (snap && snap.wizardDraft) || {};
+		return /** @type {AM2DSLGraphDefinition} */ (
+			(snap && snap.wizardDraft) || {}
+		);
 	}
 
+	/** @returns {AM2JsonObject} */
 	function currentConfig() {
 		const snap = snapshot();
 		return (snap && snap.configDraft) || {};
 	}
 
+	/** @param {AM2JsonObject | null | undefined} definition
+	 * @returns {boolean}
+	 */
 	function isV3Draft(definition) {
 		return !!(
 			definition &&
@@ -26,11 +46,13 @@
 		);
 	}
 
+	/** @returns {string} */
 	function selectedStepId() {
 		const snap = snapshot();
 		return String((snap && snap.selectedStepId) || "");
 	}
 
+	/** @param {string | null | undefined} stepId */
 	function setSelectedStep(stepId) {
 		const flowEditor = window.AM2FlowEditorState;
 		if (flowEditor && flowEditor.setSelectedStep) {
@@ -38,6 +60,10 @@
 		}
 	}
 
+	/**
+	 * @param {(definition: AM2DSLGraphDefinition) => void} mutator
+	 * @param {AM2FlowMutationOptions | null | undefined} [opts]
+	 */
 	function mutateWizard(mutator, opts) {
 		const flowEditor = window.AM2FlowEditorState;
 		if (flowEditor && flowEditor.mutateWizard) {
@@ -45,6 +71,10 @@
 		}
 	}
 
+	/**
+	 * @param {AM2DSLGraphDefinition | null | undefined} definition
+	 * @param {AM2FlowLoadAllOptions | null | undefined} [opts]
+	 */
 	function loadAll(definition, opts) {
 		const flowEditor = window.AM2FlowEditorState;
 		if (!flowEditor || !flowEditor.loadAll) {
@@ -59,6 +89,7 @@
 		);
 	}
 
+	/** @param {AM2DSLGraphDefinition | null | undefined} definition */
 	function markValidated(definition) {
 		const flowEditor = window.AM2FlowEditorState;
 		if (!flowEditor || !flowEditor.markValidated) {
@@ -71,12 +102,22 @@
 		});
 	}
 
+	/**
+	 * @param {AM2PrimitiveRegistryShape | null | undefined} registry
+	 * @returns {AM2PrimitiveRegistryItem[]}
+	 */
 	function primitiveItems(registry) {
-		return Array.isArray(registry && registry.primitives)
-			? registry.primitives
-			: [];
+		if (!registry || !Array.isArray(registry.primitives)) {
+			return [];
+		}
+		return /** @type {AM2PrimitiveRegistryItem[]} */ (registry.primitives);
 	}
 
+	/**
+	 * @param {AM2DSLGraphNode | null | undefined} node
+	 * @param {AM2PrimitiveRegistryShape | null | undefined} registry
+	 * @returns {AM2PrimitiveRegistryItem | null}
+	 */
 	function primitiveMeta(node, registry) {
 		const primitiveId = String((node && node.op && node.op.primitive_id) || "");
 		const version = String(
@@ -91,12 +132,20 @@
 		);
 	}
 
+	/**
+	 * @param {AM2DSLGraphDefinition} definition
+	 * @returns {AM2DSLEditorUiState | null}
+	 */
 	function readEditorState(definition) {
-		const uiState = definition && definition._am2_ui;
+		const uiState = definition._am2_ui;
 		const editorState = uiState && uiState.dsl_editor;
 		return editorState && typeof editorState === "object" ? editorState : null;
 	}
 
+	/**
+	 * @param {AM2DSLGraphDefinition} definition
+	 * @returns {AM2DSLEditorUiState}
+	 */
 	function ensureEditorState(definition) {
 		if (!definition._am2_ui || typeof definition._am2_ui !== "object") {
 			definition._am2_ui = {};
@@ -110,11 +159,21 @@
 		return definition._am2_ui.dsl_editor;
 	}
 
+	/**
+	 * @param {AM2DSLGraphDefinition} definition
+	 * @returns {Record<string, AM2DSLEditorLibrary>}
+	 */
 	function libraryMap(definition) {
-		const libraries = definition && definition.libraries;
-		return libraries && typeof libraries === "object" ? libraries : {};
+		const libraries = definition.libraries;
+		return libraries && typeof libraries === "object"
+			? /** @type {Record<string, AM2DSLEditorLibrary>} */ (libraries)
+			: {};
 	}
 
+	/**
+	 * @param {AM2DSLGraphDefinition} definition
+	 * @returns {Record<string, AM2DSLEditorLibrary>}
+	 */
 	function ensureLibraries(definition) {
 		if (!definition.libraries || typeof definition.libraries !== "object") {
 			definition.libraries = {};
@@ -122,6 +181,7 @@
 		return definition.libraries;
 	}
 
+	/** @returns {string} */
 	function selectedLibraryId() {
 		const definition = currentDefinition();
 		const editorState = readEditorState(definition);
@@ -131,6 +191,7 @@
 		return libraryMap(definition)[libraryId] ? libraryId : "";
 	}
 
+	/** @param {string | null | undefined} libraryId */
 	function setSelectedLibrary(libraryId) {
 		const nextLibraryId = String(libraryId || "");
 		mutateWizard(
@@ -145,6 +206,7 @@
 		setSelectedStep(null);
 	}
 
+	/** @returns {AM2DSLGraphDefinition} */
 	function currentGraphDefinition() {
 		const definition = currentDefinition();
 		const libraryId = selectedLibraryId();
@@ -153,29 +215,47 @@
 			: definition;
 	}
 
+	/** @returns {string} */
 	function currentGraphLabel() {
 		const libraryId = selectedLibraryId();
 		return libraryId ? "library:" + libraryId : "root";
 	}
 
+	/**
+	 * @param {AM2DSLGraphDefinition | AM2DSLEditorLibrary | null | undefined} definition
+	 * @returns {AM2DSLGraphNode[]}
+	 */
 	function graphNodes(definition) {
-		return Array.isArray(definition && definition.nodes)
-			? definition.nodes
-			: [];
+		if (!definition || !Array.isArray(definition.nodes)) {
+			return [];
+		}
+		return /** @type {AM2DSLGraphNode[]} */ (definition.nodes);
 	}
 
+	/**
+	 * @param {AM2DSLGraphDefinition | AM2DSLEditorLibrary | null | undefined} definition
+	 * @returns {AM2DSLEditorEdgeRecord[]}
+	 */
 	function graphEdges(definition) {
-		return Array.isArray(definition && definition.edges)
-			? definition.edges
-			: [];
+		if (!definition || !Array.isArray(definition.edges)) {
+			return [];
+		}
+		return /** @type {AM2DSLEditorEdgeRecord[]} */ (definition.edges);
 	}
 
+	/** @returns {AM2DSLGraphNode | null} */
 	function currentNode() {
 		const stepId = selectedStepId();
 		const nodes = graphNodes(currentGraphDefinition());
 		return nodes.find((item) => String(item.step_id || "") === stepId) || null;
 	}
 
+	/**
+	 * @param {string | null | undefined} value
+	 * @param {Set<string>} seenValues
+	 * @param {string} fallback
+	 * @returns {string}
+	 */
 	function sanitizeId(value, seenValues, fallback) {
 		const base =
 			String(value || fallback)
@@ -192,17 +272,27 @@
 		return base + "_" + String(counter);
 	}
 
+	/** @param {string | null | undefined} value
+	 * @returns {string}
+	 */
 	function sanitizeStepId(value) {
 		const nodes = graphNodes(currentGraphDefinition());
 		const seen = new Set(nodes.map((item) => String(item.step_id || "")));
 		return sanitizeId(value, seen, "step");
 	}
 
+	/** @param {string | null | undefined} value
+	 * @returns {string}
+	 */
 	function sanitizeLibraryId(value) {
 		const seen = new Set(Object.keys(libraryMap(currentDefinition())));
 		return sanitizeId(value, seen, "library");
 	}
 
+	/**
+	 * @param {AM2DSLGraphDefinition | AM2DSLEditorLibrary} graph
+	 * @returns {AM2DSLGraphDefinition | AM2DSLEditorLibrary}
+	 */
 	function ensureGraph(graph) {
 		if (!Array.isArray(graph.nodes)) {
 			graph.nodes = [];
@@ -213,22 +303,29 @@
 		return graph;
 	}
 
+	/**
+	 * @param {AM2GraphMutator} mutator
+	 * @param {AM2FlowMutationOptions | null | undefined} [opts]
+	 */
 	function mutateCurrentGraph(mutator, opts) {
 		mutateWizard(function (definition) {
 			const libraryId = selectedLibraryId();
-			const graph = libraryId
-				? ensureGraph(ensureLibraries(definition)[libraryId] || {})
-				: ensureGraph(definition);
+			const graph =
+				libraryId && ensureLibraries(definition)[libraryId]
+					? ensureGraph(ensureLibraries(definition)[libraryId])
+					: ensureGraph(definition);
 			mutator(graph, definition, libraryId);
 		}, opts);
 	}
 
+	/** @param {AM2PrimitiveRegistryItem} item */
 	function addPrimitiveNode(item) {
 		const stepId = sanitizeStepId(
 			String(item.primitive_id || "").replace(/\./g, "_"),
 		);
 		mutateCurrentGraph(function (graph) {
-			graph.nodes.push({
+			/** @type {AM2DSLGraphNode} */
+			const nextNode = {
 				step_id: stepId,
 				op: {
 					primitive_id: String(item.primitive_id || ""),
@@ -236,7 +333,9 @@
 					inputs: {},
 					writes: [],
 				},
-			});
+			};
+			graph.nodes.push(nextNode);
+
 			if (!graph.entry_step_id) {
 				graph.entry_step_id = stepId;
 			}
@@ -244,6 +343,7 @@
 		setSelectedStep(stepId);
 	}
 
+	/** @param {AM2JsonObject} update */
 	function patchNode(update) {
 		const stepId = selectedStepId();
 		if (!stepId) {
@@ -282,11 +382,14 @@
 				node.op.primitive_version = Number(update.primitive_version || 0);
 			}
 			if (Object.prototype.hasOwnProperty.call(update, "inputs")) {
-				node.op.inputs = update.inputs || {};
+				node.op.inputs = /** @type {AM2JsonObject} */ (update.inputs || {});
 			}
 		});
 	}
 
+	/**
+	 * @param {AM2SelectedNodeMutator} fn
+	 */
 	function withSelectedNode(fn) {
 		const stepId = selectedStepId();
 		if (!stepId) {
@@ -302,6 +405,7 @@
 		});
 	}
 
+	/** @param {string | null | undefined} stepId */
 	function removeNode(stepId) {
 		mutateCurrentGraph(function (graph) {
 			const selectedId = String(stepId || "");
@@ -321,6 +425,7 @@
 		setSelectedStep(nodes[0] ? String(nodes[0].step_id || "") : null);
 	}
 
+	/** @returns {AM2DSLEditorWriteRecord} */
 	function createEmptyWrite() {
 		return { to_path: "", value: null };
 	}
@@ -337,6 +442,10 @@
 		});
 	}
 
+	/**
+	 * @param {number} index
+	 * @param {AM2DSLEditorWriteRecord} item
+	 */
 	function patchWrite(index, item) {
 		withSelectedNode(function (node) {
 			if (node.op && Array.isArray(node.op.writes) && node.op.writes[index]) {
@@ -345,6 +454,7 @@
 		});
 	}
 
+	/** @param {number} index */
 	function removeWrite(index) {
 		withSelectedNode(function (node) {
 			if (node.op && Array.isArray(node.op.writes)) {
@@ -363,32 +473,41 @@
 		});
 	}
 
+	/** @returns {void} */
 	function addEdge() {
 		const nodes = graphNodes(currentGraphDefinition());
 		if (nodes.length < 2) {
 			return;
 		}
 		mutateCurrentGraph(function (graph) {
-			graph.edges.push({
+			const edges = graphEdges(graph);
+			edges.push({
 				from: String(nodes[0].step_id || ""),
 				to: String(nodes[1].step_id || ""),
 			});
 		});
 	}
 
+	/**
+	 * @param {number} index
+	 * @param {AM2DSLEditorEdgeRecord} edge
+	 */
 	function patchEdge(index, edge) {
 		mutateCurrentGraph(function (graph) {
-			if (!graphEdges(graph)[index]) {
+			const edges = graphEdges(graph);
+			if (!edges[index]) {
 				return;
 			}
+			/** @type {AM2DSLEditorEdgeRecord} */
 			const next = { from: String(edge.from || ""), to: String(edge.to || "") };
 			if (edge.condition_expr) {
 				next.condition_expr = edge.condition_expr;
 			}
-			graph.edges[index] = next;
+			edges[index] = next;
 		});
 	}
 
+	/** @param {number} index */
 	function removeEdge(index) {
 		mutateCurrentGraph(function (graph) {
 			if (Array.isArray(graph.edges)) {
@@ -397,10 +516,12 @@
 		});
 	}
 
+	/** @param {string | null | undefined} name */
 	function addLibrary(name) {
 		const libraryId = sanitizeLibraryId(name || "library");
 		mutateWizard(function (definition) {
 			const libraries = ensureLibraries(definition);
+			/** @type {AM2DSLEditorLibrary} */
 			libraries[libraryId] = {
 				entry_step_id: "",
 				params: [],
@@ -412,6 +533,7 @@
 		setSelectedStep(null);
 	}
 
+	/** @param {AM2JsonObject} update */
 	function patchLibrary(update) {
 		const libraryId = selectedLibraryId();
 		if (!libraryId) {
@@ -426,11 +548,14 @@
 				library.entry_step_id = String(update.entry_step_id || "");
 			}
 			if (Object.prototype.hasOwnProperty.call(update, "params")) {
-				library.params = Array.isArray(update.params) ? update.params : [];
+				library.params = Array.isArray(update.params)
+					? /** @type {AM2DSLEditorLibraryParam[]} */ (update.params)
+					: [];
 			}
 		});
 	}
 
+	/** @param {string | null | undefined} libraryId */
 	function removeLibrary(libraryId) {
 		const selectedId = String(libraryId || "");
 		mutateWizard(function (definition) {
@@ -444,6 +569,7 @@
 		setSelectedStep(null);
 	}
 
+	/** @type {AM2DSLEditorGraphOpsApi} */
 	window["AM2DSLEditorGraphOps"] = {
 		addEdge: addEdge,
 		addLibrary: addLibrary,

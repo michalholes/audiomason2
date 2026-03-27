@@ -15,6 +15,9 @@
 	/** @type {Window} */
 	const W = window;
 
+	/** @param {string} id
+	 * @returns {HTMLElement | null}
+	 */
 	function $(id) {
 		return document.getElementById(id);
 	}
@@ -27,6 +30,9 @@
 		resetAll: $("flowResetAll"),
 	};
 
+	/** @param {string} msg
+	 * @param {string} kind
+	 */
 	function setStatus(msg, kind) {
 		if (!ui.status) return;
 		ui.status.textContent = String(msg || "");
@@ -43,6 +49,7 @@
 	const AM2 = W.AM2FlowEditor;
 	AM2.__allValid = false;
 
+	/** @param {boolean} ok */
 	function setAllValid(ok) {
 		AM2.__allValid = ok === true;
 		setSaveEnabled();
@@ -63,6 +70,9 @@
 		return !!(modal && modal.isOpen && modal.isOpen() === true);
 	}
 
+	/** @param {string} actionName
+	 * @returns {boolean}
+	 */
 	function blockIfStepModalOpen(actionName) {
 		if (stepModalOpen()) {
 			setStatus(

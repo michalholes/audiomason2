@@ -1,8 +1,11 @@
 (() => {
-	const W = window;
+	const W = /** @type {(Window & typeof globalThis) & {
+	 *   AM2WizardDefinitionEditorHelpers?: AM2WizardDefinitionEditorHelpersApi,
+	 * }} */ (window);
 	const H = W.AM2EditorHTTP;
 	if (!H) return;
 
+	/** @param {string} id */
 	function $(id) {
 		return document.getElementById(id);
 	}
@@ -19,31 +22,37 @@
 
 	if (!ui.ta) return;
 
+	/** @param {Node | null | undefined} node */
 	function clear(node) {
 		while (node && node.firstChild) node.removeChild(node.firstChild);
 	}
 
+	/** @type {AM2DomFactoryApi} */
 	function el(tag, cls) {
 		const n = document.createElement(tag);
 		if (cls) n.className = cls;
 		return n;
 	}
 
+	/** @type {AM2TextFactoryApi} */
 	function text(tag, cls, s) {
 		const n = el(tag, cls);
 		n.textContent = String(s || "");
 		return n;
 	}
 
+	/** @type {(definition: AM2JsonObject) => AM2WDStableGraphResult} */
 	const stableGraph =
 		W.AM2WDGraphStable && W.AM2WDGraphStable.stableGraph
 			? W.AM2WDGraphStable.stableGraph
 			: () => ({ version: 1, nodes: [], edges: [], entry: null });
 
+	/** @template T @param {T} x @returns {T} */
 	function deepClone(x) {
 		return x === undefined ? undefined : JSON.parse(JSON.stringify(x));
 	}
 
+	/** @param {AM2JsonObject | null | undefined} defn @returns {AM2JsonObject} */
 	function stripUi(defn) {
 		const x = deepClone(defn || {});
 		if (x && x._am2_ui) delete x._am2_ui;
@@ -62,12 +71,13 @@
 		};
 	}
 
+	/** @param {AM2JsonObject | null | undefined} wd @returns {AM2WizardUiState} */
 	function ensureWizardUi(wd) {
 		if (!wd || typeof wd !== "object") return makeWizardUiState();
 		if (!wd._am2_ui || typeof wd._am2_ui !== "object") {
 			wd._am2_ui = makeWizardUiState();
 		}
-		return wd._am2_ui;
+		return /** @type {AM2WizardUiState} */ (wd._am2_ui);
 	}
 
 	function snapshot() {
@@ -85,6 +95,10 @@
 		return (s && s.selectedStepId) || null;
 	}
 
+	/**
+	 * @param {(uiState: AM2WizardUiState, wd: AM2JsonObject) => void} fn
+	 * @param {AM2FlowMutationOptions | null | undefined} [opts]
+	 */
 	function mutateWizard(fn, opts) {
 		const FE = W.AM2FlowEditorState;
 		if (!FE || !FE.mutateWizard) return;
@@ -93,11 +107,18 @@
 		}, opts || null);
 	}
 
+	/** @param {string | null | undefined} stepIdOrNull */
 	function setSelectedStep(stepIdOrNull) {
 		const FE = W.AM2FlowEditorState;
 		if (FE && FE.setSelectedStep) FE.setSelectedStep(stepIdOrNull || null);
 	}
 
+	/**
+	 * @param {string[]} nodes
+	 * @param {string | null | undefined} entryStepId
+	 * @param {AM2WizardDefinitionGraphEdge[]} edges
+	 * @returns {AM2WizardDefinitionV2}
+	 */
 	function defFromGraph(nodes, entryStepId, edges) {
 		const entry = entryStepId || (nodes && nodes[0]) || "";
 		return {
@@ -115,18 +136,32 @@
 		};
 	}
 
+	/**
+	 * @param {AM2JsonObject} wd
+	 * @param {AM2WizardDefinitionV2} next
+	 */
+	function replaceWizardDraft(wd, next) {
+		Object.keys(wd).forEach((key) => {
+			delete wd[key];
+		});
+		Object.assign(wd, next);
+	}
+
 	function ensureV2() {
 		mutateWizard(
+			/** @param {AM2WizardUiState} uiState @param {AM2JsonObject} wd */
 			(uiState, wd) => {
 				// Only normalize when required; avoid marking the draft dirty for
 				// internal idempotent migrations.
 				if (wd && typeof wd === "object") {
 					const v2 = wd.version === 2;
 					const hasWizardId = Object.hasOwn(wd, "wizard_id");
-					const g = wd.graph;
+					const g =
+						wd.graph && typeof wd.graph === "object" && !Array.isArray(wd.graph)
+							? /** @type {AM2WizardDefinitionV2Graph} */ (wd.graph)
+							: null;
 					const graphOk =
 						g &&
-						typeof g === "object" &&
 						Array.isArray(g.nodes) &&
 						Array.isArray(g.edges) &&
 						typeof g.entry_step_id === "string";
@@ -142,17 +177,13 @@
 				const edges = Array.isArray(g.edges) ? g.edges.slice(0) : [];
 				const next = defFromGraph(nodes, g.entry, edges);
 				next._am2_ui = uiState;
-				Object.keys(wd).forEach((k) => {
-					delete wd[k];
-				});
-				for (const k in next) {
-					wd[k] = next[k];
-				}
+				replaceWizardDraft(wd, next);
 			},
 			{ markDirty: false, resetValidation: false, reason: "normalize_v2" },
 		);
 	}
 
+	/** @type {AM2JsonObject[]} */
 	/** @type {AM2JsonObject[]} */
 	const paletteItems = [];
 
@@ -215,272 +246,56 @@
 		if (C && C.renderNow) void C.renderNow();
 	}
 
-	function isOptionalStep(stepId) {
-		const sid = String(stepId || "");
-		return (
-			sid &&
-			sid !== "select_authors" &&
-			sid !== "select_books" &&
-			sid !== "processing"
+	const wizardEditorHelperApi =
+		/** @type {AM2WizardDefinitionEditorHelpersApi | undefined} */ (
+			Reflect.get(W, "AM2WizardDefinitionEditorHelpers")
 		);
-	}
+	const wizardEditorHelpers =
+		wizardEditorHelperApi && wizardEditorHelperApi.createGraphOps
+			? wizardEditorHelperApi.createGraphOps({
+					stableGraph: stableGraph,
+					wizardDraft: wizardDraft,
+					ensureV2: ensureV2,
+					mutateWizard: mutateWizard,
+					defFromGraph: defFromGraph,
+					replaceWizardDraft: replaceWizardDraft,
+					selectedStepId: selectedStepId,
+					setSelectedStep: setSelectedStep,
+				})
+			: null;
+	if (!wizardEditorHelpers) return;
+	const {
+		isOptionalStep,
+		canRemove,
+		hasStep,
+		addStep,
+		removeStep,
+		reorderStep,
+		moveStepUp,
+		moveStepDown,
+		addEdge,
+		removeEdge,
+		updateEdge,
+		moveEdge,
+	} = wizardEditorHelpers;
 
-	function canRemove(stepId) {
-		return isOptionalStep(stepId);
-	}
-
-	function hasStep(stepId) {
-		const g = stableGraph(wizardDraft());
-		const nodes = Array.isArray(g.nodes) ? g.nodes : [];
-		return nodes.indexOf(String(stepId || "")) >= 0;
-	}
-
-	function addStep(stepId) {
-		ensureV2();
-		mutateWizard((uiState, wd) => {
-			const g = stableGraph(wd);
-			const nodes = Array.isArray(g.nodes) ? g.nodes.slice(0) : [];
-			const sid = String(stepId || "");
-			if (!sid || nodes.indexOf(sid) >= 0) return;
-			nodes.splice(nodes.length - 1, 0, sid);
-			const next = defFromGraph(nodes, g.entry, g.edges);
-			next._am2_ui = uiState;
-			Object.keys(wd).forEach((k) => {
-				delete wd[k];
-			});
-			for (const k in next) {
-				wd[k] = next[k];
-			}
-		});
-	}
-
-	function removeStep(stepId) {
-		ensureV2();
-		mutateWizard((uiState, wd) => {
-			const g = stableGraph(wd);
-			const sid = String(stepId || "");
-			const nodes = Array.isArray(g.nodes) ? g.nodes.slice(0) : [];
-			const idx = nodes.indexOf(sid);
-			if (idx < 0) return;
-			if (!canRemove(sid)) return;
-			nodes.splice(idx, 1);
-			const edges = (Array.isArray(g.edges) ? g.edges : []).filter(
-				(e) =>
-					String(e.from_step_id || "") !== sid &&
-					String(e.to_step_id || "") !== sid,
-			);
-			const next = defFromGraph(nodes, g.entry, edges);
-			next._am2_ui = uiState;
-			Object.keys(wd).forEach((k) => {
-				delete wd[k];
-			});
-			for (const k in next) {
-				wd[k] = next[k];
-			}
-			if (selectedStepId() === sid) setSelectedStep(null);
-		});
-	}
-
-	function reorderStep(dragStepId, dropBeforeStepIdOrNull) {
-		ensureV2();
-		mutateWizard((uiState, wd) => {
-			const g = stableGraph(wd);
-			const nodes = Array.isArray(g.nodes) ? g.nodes.slice(0) : [];
-			const dragId = String(dragStepId || "");
-			const dropBeforeId = dropBeforeStepIdOrNull
-				? String(dropBeforeStepIdOrNull)
-				: null;
-			const fromIdx = nodes.indexOf(dragId);
-			if (fromIdx < 0) return;
-			if (dropBeforeId && dropBeforeId === dragId) return;
-			nodes.splice(fromIdx, 1);
-			let toIdx = -1;
-			if (dropBeforeId) toIdx = nodes.indexOf(dropBeforeId);
-			if (toIdx < 0) {
-				nodes.push(dragId);
-			} else {
-				nodes.splice(toIdx, 0, dragId);
-			}
-			const next = defFromGraph(nodes, g.entry, g.edges);
-			next._am2_ui = uiState;
-			Object.keys(wd).forEach((k) => {
-				delete wd[k];
-			});
-			for (const k in next) {
-				wd[k] = next[k];
-			}
-		});
-	}
-
-	function moveStepUp(stepId) {
-		ensureV2();
-		mutateWizard((uiState, wd) => {
-			const g = stableGraph(wd);
-			const nodes = Array.isArray(g.nodes) ? g.nodes.slice(0) : [];
-			const sid = String(stepId || "");
-			const idx = nodes.indexOf(sid);
-			if (idx <= 0) return;
-			const tmp = nodes[idx - 1];
-			nodes[idx - 1] = nodes[idx];
-			nodes[idx] = tmp;
-			const next = defFromGraph(nodes, g.entry, g.edges);
-			next._am2_ui = uiState;
-			Object.keys(wd).forEach((k) => {
-				delete wd[k];
-			});
-			for (const k in next) {
-				wd[k] = next[k];
-			}
-		});
-	}
-
-	function moveStepDown(stepId) {
-		ensureV2();
-		mutateWizard((uiState, wd) => {
-			const g = stableGraph(wd);
-			const nodes = Array.isArray(g.nodes) ? g.nodes.slice(0) : [];
-			const sid = String(stepId || "");
-			const idx = nodes.indexOf(sid);
-			if (idx < 0 || idx >= nodes.length - 1) return;
-			const tmp = nodes[idx + 1];
-			nodes[idx + 1] = nodes[idx];
-			nodes[idx] = tmp;
-			const next = defFromGraph(nodes, g.entry, g.edges);
-			next._am2_ui = uiState;
-			Object.keys(wd).forEach((k) => {
-				delete wd[k];
-			});
-			for (const k in next) {
-				wd[k] = next[k];
-			}
-		});
-	}
-	function addEdge(fromId, toId, prio, whenVal) {
-		ensureV2();
-		mutateWizard((uiState, wd) => {
-			const g = stableGraph(wd);
-			const edges = Array.isArray(g.edges) ? g.edges.slice(0) : [];
-			edges.push({
-				from_step_id: String(fromId || ""),
-				to_step_id: String(toId || ""),
-				priority: Number(prio || 0),
-				when: whenVal === undefined ? null : whenVal,
-			});
-			const next = defFromGraph(g.nodes, g.entry, edges);
-			next._am2_ui = uiState;
-			Object.keys(wd).forEach((k) => {
-				delete wd[k];
-			});
-			for (const k in next) {
-				wd[k] = next[k];
-			}
-		});
-	}
-
-	function removeEdge(fromId, outgoingIndex) {
-		ensureV2();
-		mutateWizard((uiState, wd) => {
-			const g = stableGraph(wd);
-			const from = String(fromId || "");
-			const edgesAll = Array.isArray(g.edges) ? g.edges.slice(0) : [];
-			const outgoing = edgesAll.filter(
-				(e) => String(e.from_step_id || "") === from,
-			);
-			const target = outgoing[outgoingIndex];
-			if (!target) return;
-			const idx = edgesAll.indexOf(target);
-			if (idx < 0) return;
-			edgesAll.splice(idx, 1);
-			const next = defFromGraph(g.nodes, g.entry, edgesAll);
-			next._am2_ui = uiState;
-			Object.keys(wd).forEach((k) => {
-				delete wd[k];
-			});
-			for (const k in next) {
-				wd[k] = next[k];
-			}
-		});
-	}
-
-	function updateEdge(fromId, outgoingIndex, newEdge) {
-		ensureV2();
-		mutateWizard((uiState, wd) => {
-			const g = stableGraph(wd);
-			const from = String(fromId || "");
-			const edgesAll = Array.isArray(g.edges) ? g.edges.slice(0) : [];
-			const outgoing = edgesAll.filter(
-				(e) => String(e.from_step_id || "") === from,
-			);
-			const target = outgoing[outgoingIndex];
-			if (!target) return;
-			const idx = edgesAll.indexOf(target);
-			if (idx < 0) return;
-			const nextEdge = {
-				from_step_id: from,
-				to_step_id: String(
-					newEdge && newEdge.to_step_id ? newEdge.to_step_id : "",
-				),
-				priority: Number(newEdge && newEdge.priority ? newEdge.priority : 0),
-				when: newEdge && "when" in newEdge ? newEdge.when : null,
-			};
-			edgesAll[idx] = nextEdge;
-			const next = defFromGraph(g.nodes, g.entry, edgesAll);
-			next._am2_ui = uiState;
-			Object.keys(wd).forEach((k) => {
-				delete wd[k];
-			});
-			Object.assign(wd, next);
-		});
-	}
-
-	function moveEdge(fromId, outgoingIndex, dir) {
-		ensureV2();
-		mutateWizard((uiState, wd) => {
-			const g = stableGraph(wd);
-			const from = String(fromId || "");
-			const edgesAll = Array.isArray(g.edges) ? g.edges.slice(0) : [];
-			const outgoing = edgesAll
-				.filter((e) => String(e.from_step_id || "") === from)
-				.map((e, i) => ({ edge: e, outgoingIndex: i }));
-			const target = outgoing[outgoingIndex];
-			if (!target) return;
-			const byPri = outgoing
-				.slice(0)
-				.sort(
-					(a, b) => Number(a.edge.priority || 0) - Number(b.edge.priority || 0),
-				);
-			const pos = byPri.findIndex((x) => x.outgoingIndex === outgoingIndex);
-			if (pos < 0) return;
-			const nextPos = pos + (dir < 0 ? -1 : 1);
-			if (nextPos < 0 || nextPos >= byPri.length) return;
-			const a = byPri[pos].edge;
-			const b = byPri[nextPos].edge;
-			const aPri = Number(a.priority || 0);
-			const bPri = Number(b.priority || 0);
-			a.priority = bPri;
-			b.priority = aPri;
-			const next = defFromGraph(g.nodes, g.entry, edgesAll);
-			next._am2_ui = uiState;
-			Object.keys(wd).forEach((k) => {
-				delete wd[k];
-			});
-			Object.assign(wd, next);
-		});
-	}
-
+	/** @param {boolean | null} ok @param {string[]} localMsgs @param {string[]} serverMsgs */
 	function setValidation(ok, localMsgs, serverMsgs) {
-		mutateWizard((uiState) => {
-			uiState.validation = {
-				ok: ok,
-				local: Array.isArray(localMsgs) ? localMsgs : [],
-				server: Array.isArray(serverMsgs) ? serverMsgs : [],
-			};
-		});
+		mutateWizard(
+			/** @param {AM2WizardUiState} uiState */ (uiState) => {
+				uiState.validation = {
+					ok: ok,
+					local: Array.isArray(localMsgs) ? localMsgs : [],
+					server: Array.isArray(serverMsgs) ? serverMsgs : [],
+				};
+			},
+		);
 	}
 
 	function validationMessages() {
 		const u = ensureWizardUi(wizardDraft());
 		const v = u.validation;
+		/** @type {string[]} */
 		const msgs = [];
 		(Array.isArray(v.local) ? v.local : []).forEach((m) => {
 			msgs.push(m);
@@ -491,32 +306,45 @@
 		return msgs;
 	}
 
+	/** @param {AM2JsonValue} errEnvelope @returns {string[]} */
 	function extractServerMessages(errEnvelope) {
 		const outer =
-			errEnvelope && typeof errEnvelope === "object" ? errEnvelope : null;
-		const inner =
-			outer && outer.error && typeof outer.error === "object"
-				? outer.error
-				: outer;
-		const details = inner && inner.details;
+			errEnvelope &&
+			typeof errEnvelope === "object" &&
+			!Array.isArray(errEnvelope)
+				? /** @type {AM2JsonObject} */ (errEnvelope)
+				: null;
+		const maybeError =
+			outer &&
+			outer.error &&
+			typeof outer.error === "object" &&
+			!Array.isArray(outer.error)
+				? /** @type {AM2JsonObject} */ (outer.error)
+				: null;
+		const inner = maybeError || outer;
+		const details = inner && "details" in inner ? inner.details : null;
 		const out = [];
-		const msg = inner && inner.message;
+		const msg = inner && "message" in inner ? inner.message : null;
 		if (msg) out.push(String(msg));
 		(Array.isArray(details) ? details : []).forEach((d) => {
-			if (!d) return;
-			const path = d.path ? String(d.path) : "";
-			const reason = d.reason ? String(d.reason) : "";
+			if (!d || typeof d !== "object" || Array.isArray(d)) return;
+			const detail = /** @type {AM2JsonObject} */ (d);
+			const path = detail.path ? String(detail.path) : "";
+			const reason = detail.reason ? String(detail.reason) : "";
 			if (path || reason) out.push(path + " " + reason);
 		});
 		return out;
 	}
 
+	/** @param {AM2JsonValue} data @param {boolean} collapseByDefault */
 	function renderError(data, collapseByDefault) {
 		H.renderError(ui.err, data);
-		mutateWizard((uiState) => {
-			uiState.hasErrorDetails = !!data;
-			uiState.showRawError = data ? !collapseByDefault : false;
-		});
+		mutateWizard(
+			/** @param {AM2WizardUiState} uiState */ (uiState) => {
+				uiState.hasErrorDetails = !!data;
+				uiState.showRawError = data ? !collapseByDefault : false;
+			},
+		);
 	}
 
 	function setupRawErrorPanel() {
@@ -528,17 +356,21 @@
 		Object.defineProperty(rawErrorState, "showRawError", {
 			get: () => !!ensureWizardUi(wizardDraft()).showRawError,
 			set: (on) => {
-				mutateWizard((uiState) => {
-					uiState.showRawError = !!on;
-				});
+				mutateWizard(
+					/** @param {AM2WizardUiState} uiState */ (uiState) => {
+						uiState.showRawError = !!on;
+					},
+				);
 			},
 		});
 		Object.defineProperty(rawErrorState, "hasErrorDetails", {
 			get: () => !!ensureWizardUi(wizardDraft()).hasErrorDetails,
 			set: (on) => {
-				mutateWizard((uiState) => {
-					uiState.hasErrorDetails = !!on;
-				});
+				mutateWizard(
+					/** @param {AM2WizardUiState} uiState */ (uiState) => {
+						uiState.hasErrorDetails = !!on;
+					},
+				);
 			},
 		});
 		if (W.AM2WDRawError && W.AM2WDRawError.setupRawErrorPanel) {
@@ -565,6 +397,7 @@
 		return !!(s && s.draftDirty);
 	}
 
+	/** @param {string} actionName */
 	function confirmIfDirty(actionName) {
 		if (!isDirty()) return true;
 		return window.confirm(
@@ -573,6 +406,7 @@
 		);
 	}
 
+	/** @param {AM2WizardDefinitionHistoryItem} item */
 	function historyRow(item) {
 		const row = el("div", "historyItem");
 		const meta = el("div", "historyMeta");
@@ -638,6 +472,7 @@
 		});
 	}
 
+	/** @param {{ skipConfirm?: boolean } | null | undefined} opts */
 	function reloadAll(opts) {
 		const skipConfirm = !!(opts && opts.skipConfirm);
 		if (!skipConfirm && !confirmIfDirty("Reload")) return false;
@@ -761,6 +596,7 @@
 		});
 	}
 
+	/** @param {string} id */
 	function rollback(id) {
 		if (!confirmIfDirty("Rollback")) return;
 
@@ -796,9 +632,13 @@
 		if (!root) return;
 		clear(root.toolbar);
 
-		const btnAdd = text("button", "btn", "Add Step");
+		const btnAdd = /** @type {HTMLButtonElement} */ (
+			text("button", "btn", "Add Step")
+		);
 		const optLabel = el("label", "wdToggle");
-		const optToggle = el("input", "wdToggleInput");
+		const optToggle = /** @type {HTMLInputElement} */ (
+			el("input", "wdToggleInput")
+		);
 		optToggle.type = "checkbox";
 		optToggle.checked = true;
 		optLabel.appendChild(optToggle);
@@ -816,9 +656,11 @@
 		});
 
 		optToggle.addEventListener("change", () => {
-			mutateWizard((uiState) => {
-				uiState.showOptional = !!optToggle.checked;
-			});
+			mutateWizard(
+				/** @param {AM2WizardUiState} uiState */ (uiState) => {
+					uiState.showOptional = !!optToggle.checked;
+				},
+			);
 			renderAll();
 		});
 
@@ -950,39 +792,75 @@
 	}
 
 	if (ui.reload)
-		ui.reload.addEventListener("click", () =>
-			(v3() || {}).reloadAll ? v3().reloadAll() : reloadAll(),
-		);
+		ui.reload.addEventListener("click", () => {
+			const editor = v3();
+			return editor && editor.reloadAll ? editor.reloadAll({}) : reloadAll({});
+		});
 	if (ui.validate)
-		ui.validate.addEventListener("click", () =>
-			(v3() || {}).validateDraft ? v3().validateDraft() : validateDraft(),
-		);
+		ui.validate.addEventListener("click", () => {
+			const editor = v3();
+			return editor && editor.validateDraft
+				? editor.validateDraft()
+				: validateDraft();
+		});
 	if (ui.save)
-		ui.save.addEventListener("click", () =>
-			(v3() || {}).saveDraft ? v3().saveDraft() : saveDraft(),
-		);
+		ui.save.addEventListener("click", () => {
+			const editor = v3();
+			return editor && editor.saveDraft ? editor.saveDraft() : saveDraft();
+		});
 	if (ui.reset)
-		ui.reset.addEventListener("click", () =>
-			(v3() || {}).resetDefinition ? v3().resetDefinition() : resetDefinition(),
-		);
+		ui.reset.addEventListener("click", () => {
+			const editor = v3();
+			return editor && editor.resetDefinition
+				? editor.resetDefinition()
+				: resetDefinition();
+		});
 
 	W.AM2WizardDefinitionEditor = {
-		reloadAll: () => ((v3() || {}).reloadAll ? v3().reloadAll() : reloadAll()),
-		validateDraft: () =>
-			(v3() || {}).validateDraft ? v3().validateDraft() : validateDraft(),
-		saveDraft: () => ((v3() || {}).saveDraft ? v3().saveDraft() : saveDraft()),
-		resetDefinition: () =>
-			(v3() || {}).resetDefinition ? v3().resetDefinition() : resetDefinition(),
+		reloadAll: () => {
+			const editor = v3();
+			return editor && editor.reloadAll ? editor.reloadAll({}) : reloadAll({});
+		},
+		validateDraft: () => {
+			const editor = v3();
+			return editor && editor.validateDraft
+				? editor.validateDraft()
+				: validateDraft();
+		},
+		saveDraft: () => {
+			const editor = v3();
+			return editor && editor.saveDraft ? editor.saveDraft() : saveDraft();
+		},
+		resetDefinition: () => {
+			const editor = v3();
+			return editor && editor.resetDefinition
+				? editor.resetDefinition()
+				: resetDefinition();
+		},
 	};
 
 	W.AM2FlowEditor = W.AM2FlowEditor || {};
 	W.AM2FlowEditor.wizard = {
-		reload: () => ((v3() || {}).reloadAll ? v3().reloadAll() : reloadAll()),
-		validate: () =>
-			(v3() || {}).validateDraft ? v3().validateDraft() : validateDraft(),
-		save: () => ((v3() || {}).saveDraft ? v3().saveDraft() : saveDraft()),
-		reset: () =>
-			(v3() || {}).resetDefinition ? v3().resetDefinition() : resetDefinition(),
+		reload: () => {
+			const editor = v3();
+			return editor && editor.reloadAll ? editor.reloadAll({}) : reloadAll({});
+		},
+		validate: () => {
+			const editor = v3();
+			return editor && editor.validateDraft
+				? editor.validateDraft()
+				: validateDraft();
+		},
+		save: () => {
+			const editor = v3();
+			return editor && editor.saveDraft ? editor.saveDraft() : saveDraft();
+		},
+		reset: () => {
+			const editor = v3();
+			return editor && editor.resetDefinition
+				? editor.resetDefinition()
+				: resetDefinition();
+		},
 	};
 
 	reloadAll({ skipConfirm: true });

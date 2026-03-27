@@ -1,28 +1,88 @@
 (function () {
 	"use strict";
 
+	/** @typedef {AM2FlowStepFieldSpec & { editor?: string }} AM2FlowStepFieldModelSpec */
+
 	/** @type {Window} */
 	const W = window;
 
+	/** @template T
+	 * @param {T} value
+	 * @returns {T}
+	 */
 	function deepClone(value) {
 		return JSON.parse(JSON.stringify(value));
 	}
 
+	/** @param {AM2JsonObject} step
+	 * @returns {AM2JsonObject}
+	 */
+	function ensureStepOp(step) {
+		if (!step.op || typeof step.op !== "object" || Array.isArray(step.op)) {
+			step.op = {};
+		}
+		return /** @type {AM2JsonObject} */ (step.op);
+	}
+
+	/** @param {AM2JsonObject} step
+	 * @returns {AM2JsonObject}
+	 */
+	function ensureStepInputs(step) {
+		const op = ensureStepOp(step);
+		if (
+			!op.inputs ||
+			typeof op.inputs !== "object" ||
+			Array.isArray(op.inputs)
+		) {
+			op.inputs = {};
+		}
+		return /** @type {AM2JsonObject} */ (op.inputs);
+	}
+
+	/** @param {AM2JsonObject} step
+	 * @returns {AM2DSLEditorWriteRecord[]}
+	 */
+	function ensureStepWrites(step) {
+		const op = ensureStepOp(step);
+		if (!Array.isArray(op.writes)) {
+			op.writes = [];
+		}
+		return /** @type {AM2DSLEditorWriteRecord[]} */ (op.writes);
+	}
+
+	/**
+	 * @param {AM2FlowStepModalStateShape} state
+	 * @param {AM2FlowStepFieldModelSpec} spec
+	 * @returns {AM2JsonValue}
+	 */
 	function readFieldValue(state, spec) {
 		if (
 			Object.prototype.hasOwnProperty.call(state.fieldBuffers, spec.fieldId)
 		) {
 			return state.fieldBuffers[spec.fieldId];
 		}
-		return spec.getValue(state.workingStep);
+		return spec.getValue(state.workingStep || {});
 	}
 
+	/**
+	 * @param {AM2FlowStepModalStateShape} state
+	 * @param {string} fieldId
+	 * @returns {boolean}
+	 */
 	function isFieldDirty(state, fieldId) {
 		return Object.prototype.hasOwnProperty.call(state.fieldBuffers, fieldId);
 	}
 
+	/**
+	 * @param {AM2FlowStepModalFormApi} formApi
+	 * @param {AM2FlowStepModalStateShape} state
+	 * @param {string} fieldId
+	 * @returns {AM2FlowStepFieldModelSpec | null}
+	 */
 	function findFieldSpec(formApi, state, fieldId) {
-		const specs = formApi.buildFieldSpecs(state.workingStep || {});
+		const specs = /** @type {AM2FlowStepFieldModelSpec[]} */ (
+			formApi.buildFieldSpecs(state.workingStep || {})
+		);
 		return (
 			specs.find(function (item) {
 				return item.fieldId === fieldId;
@@ -30,65 +90,71 @@
 		);
 	}
 
+	/**
+	 * @param {AM2FlowStepModalStateShape} state
+	 * @param {AM2FlowStepFieldModelSpec | null} spec
+	 * @param {string} rawValue
+	 */
 	function applyFieldValue(state, spec, rawValue) {
 		if (!state.workingStep || !spec) return;
-		if (!state.workingStep.op || typeof state.workingStep.op !== "object") {
-			state.workingStep.op = {};
-		}
-		if (
-			!state.workingStep.op.inputs ||
-			typeof state.workingStep.op.inputs !== "object"
-		) {
-			state.workingStep.op.inputs = {};
-		}
-		if (!Array.isArray(state.workingStep.op.writes)) {
-			state.workingStep.op.writes = [];
-		}
+		const op = ensureStepOp(state.workingStep);
+		const inputs = ensureStepInputs(state.workingStep);
+		ensureStepWrites(state.workingStep);
 		if (spec.fieldId === "core:step_id") {
 			state.workingStep.step_id = String(rawValue || "");
 			return;
 		}
 		if (spec.fieldId === "core:primitive_id") {
-			state.workingStep.op.primitive_id = String(rawValue || "");
+			op.primitive_id = String(rawValue || "");
 			return;
 		}
 		if (spec.fieldId === "core:primitive_version") {
-			state.workingStep.op.primitive_version = Number(rawValue || 0);
+			op.primitive_version = Number(rawValue || 0);
 			return;
 		}
 		if (spec.fieldId === "writes") {
-			state.workingStep.op.writes = JSON.parse(rawValue || "[]");
+			op.writes = /** @type {AM2DSLEditorWriteRecord[]} */ (
+				JSON.parse(rawValue || "[]")
+			);
 			return;
 		}
-		if (spec.fieldId.indexOf("input:") !== 0) {
-			return;
-		}
+		if (spec.fieldId.indexOf("input:") !== 0) return;
 		const key = spec.fieldId.slice(6);
 		if (spec.editor === "json") {
-			state.workingStep.op.inputs[key] = JSON.parse(rawValue || "null");
+			inputs[key] = /** @type {AM2JsonValue} */ (
+				JSON.parse(rawValue || "null")
+			);
 			return;
 		}
 		if (spec.editor === "number") {
-			state.workingStep.op.inputs[key] = Number(rawValue || 0);
+			inputs[key] = Number(rawValue || 0);
 			return;
 		}
 		if (spec.editor === "boolean") {
-			state.workingStep.op.inputs[key] = rawValue === "true";
+			inputs[key] = rawValue === "true";
 			return;
 		}
-		state.workingStep.op.inputs[key] = String(rawValue || "");
+		inputs[key] = String(rawValue || "");
 	}
 
+	/** @param {AM2FlowStepModalStateShape} state */
 	function rebuildJsonBuffer(state) {
 		state.jsonBuffer = JSON.stringify(state.workingStep || {}, null, 2);
 		state.jsonDirty = false;
 	}
 
+	/**
+	 * @param {AM2FlowStepModalStateShape} state
+	 * @param {AM2FlowStepModalFormApi} formApi
+	 * @param {string} fieldId
+	 * @param {(message: string) => void} setError
+	 * @returns {boolean}
+	 */
 	function flushField(state, formApi, fieldId, setError) {
 		const spec = findFieldSpec(formApi, state, fieldId);
 		if (!spec) return true;
 		try {
-			applyFieldValue(state, spec, state.fieldBuffers[fieldId]);
+			applyFieldValue(state, spec, state.fieldBuffers[fieldId] || "");
 			delete state.fieldBuffers[fieldId];
 			rebuildJsonBuffer(state);
 			return true;
@@ -98,20 +164,31 @@
 		}
 	}
 
+	/**
+	 * @param {AM2FlowStepModalStateShape} state
+	 * @param {AM2FlowStepModalFormApi} formApi
+	 * @param {(message: string) => void} setError
+	 * @returns {boolean}
+	 */
 	function flushAllFieldBuffers(state, formApi, setError) {
 		const fieldIds = Object.keys(state.fieldBuffers);
 		for (let i = 0; i < fieldIds.length; i += 1) {
-			if (!flushField(state, formApi, fieldIds[i], setError)) {
-				return false;
-			}
+			if (!flushField(state, formApi, fieldIds[i], setError)) return false;
 		}
 		return true;
 	}
 
+	/**
+	 * @param {AM2FlowStepModalStateShape} state
+	 * @param {(message: string) => void} setError
+	 * @returns {boolean}
+	 */
 	function flushJSONBuffer(state, setError) {
 		if (state.jsonDirty !== true) return true;
 		try {
-			state.workingStep = JSON.parse(state.jsonBuffer || "{}");
+			state.workingStep = /** @type {AM2JsonObject} */ (
+				JSON.parse(state.jsonBuffer || "{}")
+			);
 			state.fieldBuffers = {};
 			state.jsonDirty = false;
 			return true;
@@ -121,6 +198,13 @@
 		}
 	}
 
+	/**
+	 * @param {AM2FlowStepModalStateShape} state
+	 * @param {AM2FlowStepModalFormApi} formApi
+	 * @param {(message: string) => void} setError
+	 * @param {string} view
+	 * @returns {boolean}
+	 */
 	function flushPendingEdits(state, formApi, setError, view) {
 		if (view === "json") {
 			return flushJSONBuffer(state, setError);
@@ -128,41 +212,53 @@
 		return flushAllFieldBuffers(state, formApi, setError);
 	}
 
+	/** @param {AM2DSLEditorGraphOpsApi} graphOps
+	 * @returns {AM2JsonObject}
+	 */
 	function currentDefinitionClone(graphOps) {
 		return deepClone(
 			graphOps.currentDefinition ? graphOps.currentDefinition() : {},
 		);
 	}
 
+	/**
+	 * @param {AM2JsonObject} definition
+	 * @param {AM2FlowStepModalStateShape} state
+	 * @param {AM2JsonObject | null} nextStep
+	 * @returns {string}
+	 */
 	function replaceSelectedNode(definition, state, nextStep) {
 		const libraryId = String(state.selectedLibraryId || "");
 		const originalStepId = String(state.originalStepId || "");
-		const graph =
-			libraryId &&
-			definition &&
+		const libraries =
 			definition.libraries &&
-			definition.libraries[libraryId]
-				? definition.libraries[libraryId]
+			typeof definition.libraries === "object" &&
+			!Array.isArray(definition.libraries)
+				? /** @type {Record<string, AM2JsonObject>} */ (definition.libraries)
+				: null;
+		const graph =
+			libraryId && libraries && libraries[libraryId]
+				? libraries[libraryId]
 				: definition;
-		if (!graph || !Array.isArray(graph.nodes)) {
-			throw new Error("Graph nodes are unavailable.");
-		}
-		const index = graph.nodes.findIndex(function (item) {
-			return String((item && item.step_id) || "") === originalStepId;
+		const nodes = Array.isArray(graph.nodes) ? graph.nodes : null;
+		if (!nodes) throw new Error("Graph nodes are unavailable.");
+		const index = nodes.findIndex(function (item) {
+			return !!(
+				item &&
+				typeof item === "object" &&
+				!Array.isArray(item) &&
+				String(item.step_id || "") === originalStepId
+			);
 		});
-		if (index < 0) {
-			throw new Error("Selected step is no longer present.");
-		}
-		graph.nodes[index] = deepClone(nextStep || {});
+		if (index < 0) throw new Error("Selected step is no longer present.");
+		nodes[index] = deepClone(nextStep || {});
 		const nextStepId = String((nextStep && nextStep.step_id) || "");
-		if (originalStepId === nextStepId) {
-			return nextStepId;
-		}
-		if (graph.entry_step_id === originalStepId) {
+		if (originalStepId === nextStepId) return nextStepId;
+		if (graph.entry_step_id === originalStepId)
 			graph.entry_step_id = nextStepId;
-		}
 		if (Array.isArray(graph.edges)) {
 			graph.edges.forEach(function (edge) {
+				if (!edge || typeof edge !== "object" || Array.isArray(edge)) return;
 				if (edge.from === originalStepId) edge.from = nextStepId;
 				if (edge.to === originalStepId) edge.to = nextStepId;
 				if (edge.from_step_id === originalStepId)
@@ -173,16 +269,24 @@
 		return nextStepId;
 	}
 
+	/**
+	 * @param {AM2FlowStepModalStateShape} state
+	 * @param {AM2DSLEditorGraphOpsApi} graphOps
+	 * @returns {{ definition: AM2JsonObject, nextStepId: string }}
+	 */
 	function buildCandidateDefinition(state, graphOps) {
 		const definition = currentDefinitionClone(graphOps);
-		const nextStepId = replaceSelectedNode(
-			definition,
-			state,
-			state.workingStep,
-		);
-		return { definition: definition, nextStepId: nextStepId };
+		return {
+			definition: definition,
+			nextStepId: replaceSelectedNode(definition, state, state.workingStep),
+		};
 	}
 
+	/**
+	 * @param {AM2FlowStepModalStateShape} state
+	 * @param {AM2DSLEditorGraphOpsApi} graphOps
+	 * @param {string} stepId
+	 */
 	function syncFromSavedStep(state, graphOps, stepId) {
 		const current = graphOps.currentNode ? graphOps.currentNode() : null;
 		const next =
@@ -196,11 +300,16 @@
 		rebuildJsonBuffer(state);
 	}
 
+	/** @param {AM2FlowStepModalStateShape} state
+	 * @returns {number}
+	 */
 	function pendingBufferCount(state) {
-		const count = Object.keys(state.fieldBuffers).length;
-		return count + (state.jsonDirty ? 1 : 0);
+		return Object.keys(state.fieldBuffers).length + (state.jsonDirty ? 1 : 0);
 	}
 
+	/** @param {AM2FlowStepModalStateShape} state
+	 * @returns {boolean}
+	 */
 	function workingStateDirty(state) {
 		return (
 			JSON.stringify(state.workingStep || {}) !==

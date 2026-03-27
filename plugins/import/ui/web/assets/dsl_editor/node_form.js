@@ -1,6 +1,11 @@
 (function () {
 	"use strict";
 
+	/** @typedef {(payload: AM2JsonObject) => void} AM2NodePatchFn */
+	/** @typedef {(index: number, payload: AM2DSLEditorWriteRecord) => void} AM2WritePatchFn */
+	/** @typedef {(index: number) => void} AM2RemoveIndexFn */
+	/** @typedef {(stepId: string) => void} AM2RemoveStepFn */
+
 	const PROMPT_PRIMITIVE_IDS = {
 		"ui.prompt_text": "value",
 		"ui.prompt_select": "selection",
@@ -26,10 +31,17 @@
 		"autofill_if",
 	];
 
+	/** @param {Node | null | undefined} node */
 	function clear(node) {
 		while (node && node.firstChild) node.removeChild(node.firstChild);
 	}
 
+	/**
+	 * @param {string} tag
+	 * @param {string | null | undefined} [cls]
+	 * @param {string | number | boolean | null | undefined} [textValue]
+	 * @returns {HTMLElement}
+	 */
 	function el(tag, cls, textValue) {
 		const node = document.createElement(tag);
 		if (cls) node.className = cls;
@@ -37,6 +49,11 @@
 		return node;
 	}
 
+	/**
+	 * @param {string} labelText
+	 * @param {HTMLElement} inputNode
+	 * @returns {HTMLElement}
+	 */
 	function row(labelText, inputNode) {
 		const wrap = el("label", "flowField");
 		wrap.appendChild(el("div", "flowStepSectionTitle", labelText));
@@ -44,20 +61,31 @@
 		return wrap;
 	}
 
+	/**
+	 * @param {string} textValue
+	 * @param {AM2JsonValue} fallback
+	 * @returns {AM2JsonValue}
+	 */
 	function parseJSON(textValue, fallback) {
 		if (!textValue) return fallback;
-		return JSON.parse(textValue);
+		return /** @type {AM2JsonValue} */ (JSON.parse(textValue));
 	}
 
+	/** @param {string} textValue
+	 * @returns {AM2JsonValue}
+	 */
 	function parseLooseJSON(textValue) {
 		if (textValue === "") return "";
 		try {
-			return JSON.parse(textValue);
+			return /** @type {AM2JsonValue} */ (JSON.parse(textValue));
 		} catch (_err) {
 			return textValue;
 		}
 	}
 
+	/** @param {AM2JsonValue | undefined} value
+	 * @returns {string}
+	 */
 	function serializeLooseJSON(value) {
 		if (value === undefined || value === null) return "";
 		if (
@@ -70,14 +98,23 @@
 		return JSON.stringify(value, null, 2);
 	}
 
+	/** @param {AM2DSLGraphNode | null | undefined} node
+	 * @returns {AM2JsonObject}
+	 */
 	function cloneInputs(node) {
 		const raw =
 			node && node.op && typeof node.op.inputs === "object"
 				? node.op.inputs
 				: {};
-		return JSON.parse(JSON.stringify(raw || {}));
+		return /** @type {AM2JsonObject} */ (JSON.parse(JSON.stringify(raw || {})));
 	}
 
+	/**
+	 * @param {AM2DSLGraphNode} node
+	 * @param {string} key
+	 * @param {string | null | undefined} rawValue
+	 * @returns {AM2JsonObject}
+	 */
 	function applyTextInput(node, key, rawValue) {
 		const next = cloneInputs(node);
 		if (String(rawValue || "") === "") {
@@ -88,6 +125,12 @@
 		return next;
 	}
 
+	/**
+	 * @param {AM2DSLGraphNode} node
+	 * @param {string} key
+	 * @param {string | null | undefined} rawValue
+	 * @returns {AM2JsonObject}
+	 */
 	function applyLooseJSONInput(node, key, rawValue) {
 		const next = cloneInputs(node);
 		if (String(rawValue || "") === "") {
@@ -98,6 +141,12 @@
 		return next;
 	}
 
+	/**
+	 * @param {AM2DSLGraphNode} node
+	 * @param {string} key
+	 * @param {string | null | undefined} rawValue
+	 * @returns {AM2JsonObject}
+	 */
 	function applyExprInput(node, key, rawValue) {
 		const next = cloneInputs(node);
 		if (String(rawValue || "") === "") {
@@ -108,15 +157,25 @@
 		return next;
 	}
 
+	/**
+	 * @param {HTMLInputElement} pathInput
+	 * @param {HTMLTextAreaElement} valueInput
+	 * @returns {AM2DSLEditorWriteRecord}
+	 */
 	function currentWriteItem(pathInput, valueInput) {
-		return {
+		return /** @type {AM2DSLEditorWriteRecord} */ ({
 			to_path: pathInput.value,
 			value: parseJSON(valueInput.value, null),
-		};
+		});
 	}
 
+	/** @param {AM2DSLGraphNode | null | undefined} node
+	 * @returns {boolean}
+	 */
 	function isPromptPrimitive(node) {
-		const primitiveId = String((node && node.op && node.op.primitive_id) || "");
+		const primitiveId = /** @type {keyof typeof PROMPT_PRIMITIVE_IDS} */ (
+			String((node && node.op && node.op.primitive_id) || "")
+		);
 		const version = Number((node && node.op && node.op.primitive_version) || 0);
 		return (
 			version === 1 &&
@@ -124,24 +183,46 @@
 		);
 	}
 
+	/** @param {AM2DSLGraphNode | null | undefined} node
+	 * @returns {boolean}
+	 */
 	function isMessagePrimitive(node) {
 		const primitiveId = String((node && node.op && node.op.primitive_id) || "");
 		const version = Number((node && node.op && node.op.primitive_version) || 0);
 		return version === 1 && primitiveId === "ui.message";
 	}
 
+	/**
+	 * @param {HTMLElement} node
+	 * @param {string} key
+	 * @returns {HTMLElement}
+	 */
 	function setControlKey(node, key) {
 		node.setAttribute("data-am2-input-key", key);
 		return node;
 	}
 
+	/**
+	 * @param {HTMLElement} mount
+	 * @param {string} key
+	 * @param {string} textValue
+	 */
 	function appendNote(mount, key, textValue) {
 		const note = el("div", "flowStepDesc", textValue);
 		note.setAttribute("data-am2-note", key);
 		mount.appendChild(note);
 	}
 
+	/**
+	 * @param {HTMLElement} mount
+	 * @param {AM2DSLGraphNode} node
+	 * @param {AM2NodePatchFn} onPatchNode
+	 * @param {string} key
+	 * @param {string} labelText
+	 * @param {number} rows
+	 */
 	function appendTextField(mount, node, onPatchNode, key, labelText, rows) {
+		/** @type {HTMLInputElement | HTMLTextAreaElement} */
 		let input;
 		if (rows > 1) {
 			input = document.createElement("textarea");
@@ -159,6 +240,13 @@
 		mount.appendChild(row(labelText, input));
 	}
 
+	/**
+	 * @param {HTMLElement} mount
+	 * @param {AM2DSLGraphNode} node
+	 * @param {AM2NodePatchFn} onPatchNode
+	 * @param {string} key
+	 * @param {string} labelText
+	 */
 	function appendLooseJSONField(mount, node, onPatchNode, key, labelText) {
 		const input = document.createElement("textarea");
 		input.rows = 3;
@@ -172,11 +260,24 @@
 		mount.appendChild(row(labelText, input));
 	}
 
+	/**
+	 * @param {HTMLElement} mount
+	 * @param {AM2DSLGraphNode} node
+	 * @param {AM2NodePatchFn} onPatchNode
+	 * @param {string} key
+	 * @param {string} labelText
+	 */
 	function appendExprField(mount, node, onPatchNode, key, labelText) {
 		const input = document.createElement("input");
 		const current = node.op && node.op.inputs ? node.op.inputs[key] : null;
-		input.value =
-			current && typeof current.expr === "string" ? current.expr : "";
+		const currentExpr =
+			current &&
+			typeof current === "object" &&
+			!Array.isArray(current) &&
+			typeof current.expr === "string"
+				? current.expr
+				: "";
+		input.value = currentExpr;
 		setControlKey(input, key);
 		input.addEventListener("change", function () {
 			onPatchNode({ inputs: applyExprInput(node, key, input.value) });
@@ -184,6 +285,11 @@
 		mount.appendChild(row(labelText, input));
 	}
 
+	/**
+	 * @param {HTMLElement} mount
+	 * @param {AM2DSLGraphNode} node
+	 * @param {AM2NodePatchFn} onPatchNode
+	 */
 	function appendExamplesSection(mount, node, onPatchNode) {
 		const section = el("div", "flowStepSection");
 		section.setAttribute("data-am2-section", "examples");
@@ -217,7 +323,9 @@
 			);
 			wrap.appendChild(input);
 
-			const removeBtn = el("button", "btn", "Remove Example");
+			const removeBtn = /** @type {HTMLButtonElement} */ (
+				el("button", "btn", "Remove Example")
+			);
 			removeBtn.type = "button";
 			removeBtn.setAttribute("data-am2-example-remove", String(index));
 			removeBtn.addEventListener("click", function () {
@@ -237,7 +345,9 @@
 			section.appendChild(wrap);
 		});
 
-		const addBtn = el("button", "btn", "Add Example");
+		const addBtn = /** @type {HTMLButtonElement} */ (
+			el("button", "btn", "Add Example")
+		);
 		addBtn.type = "button";
 		addBtn.setAttribute("data-am2-example-add", "true");
 		addBtn.addEventListener("click", function () {
@@ -253,8 +363,15 @@
 		mount.appendChild(section);
 	}
 
+	/**
+	 * @param {HTMLElement} mount
+	 * @param {AM2DSLGraphNode} node
+	 * @param {AM2NodePatchFn} onPatchNode
+	 */
 	function appendPromptPrimitiveFields(mount, node, onPatchNode) {
-		const primitiveId = String((node && node.op && node.op.primitive_id) || "");
+		const primitiveId = /** @type {keyof typeof PROMPT_PRIMITIVE_IDS} */ (
+			String((node && node.op && node.op.primitive_id) || "")
+		);
 		mount.setAttribute("data-am2-node-form", "prompt");
 		appendNote(
 			mount,
@@ -297,6 +414,11 @@
 		}
 	}
 
+	/**
+	 * @param {HTMLElement} mount
+	 * @param {AM2DSLGraphNode} node
+	 * @param {AM2NodePatchFn} onPatchNode
+	 */
 	function appendMessagePrimitiveFields(mount, node, onPatchNode) {
 		mount.setAttribute("data-am2-node-form", "message");
 		appendNote(
@@ -319,6 +441,13 @@
 		}
 	}
 
+	/**
+	 * @param {AM2DSLEditorWriteRecord} writeItem
+	 * @param {number} index
+	 * @param {AM2WritePatchFn} onPatch
+	 * @param {AM2RemoveIndexFn} onRemove
+	 * @returns {HTMLElement}
+	 */
 	function writeRow(writeItem, index, onPatch, onRemove) {
 		const wrap = el("div", "flowStepSection");
 		const pathInput = document.createElement("input");
@@ -336,7 +465,9 @@
 		});
 		wrap.appendChild(row("value", valueInput));
 
-		const removeBtn = el("button", "btn", "Remove Write");
+		const removeBtn = /** @type {HTMLButtonElement} */ (
+			el("button", "btn", "Remove Write")
+		);
 		removeBtn.type = "button";
 		removeBtn.addEventListener("click", function () {
 			onRemove(index);
@@ -345,13 +476,20 @@
 		return wrap;
 	}
 
+	/** @param {AM2DSLEditorNodeFormOptions | null | undefined} opts
+	 * @returns {void}
+	 */
 	function renderNodeForm(opts) {
 		const mount = opts && opts.mount;
 		if (!mount) return;
 		clear(mount);
 
-		const definition = (opts && opts.definition) || {};
-		const graphDefinition = (opts && opts.graphDefinition) || definition;
+		const definition = /** @type {AM2DSLGraphDefinition} */ (
+			(opts && opts.definition) || {}
+		);
+		const graphDefinition = /** @type {AM2DSLGraphDefinition} */ (
+			(opts && opts.graphDefinition) || definition
+		);
 		const nodes = Array.isArray(graphDefinition.nodes)
 			? graphDefinition.nodes
 			: [];
@@ -364,31 +502,39 @@
 			return;
 		}
 
-		const actions = (opts && opts.actions) || {};
+		const actions = /** @type {AM2DSLEditorNodeFormActions} */ (
+			(opts && opts.actions) || {}
+		);
+		/** @type {(stepId: string) => void} */
 		const onSelect =
 			typeof actions.onSelect === "function"
 				? actions.onSelect
-				: function () {};
+				: function (_stepId) {};
+		/** @type {AM2NodePatchFn} */
 		const onPatchNode =
 			typeof actions.onPatchNode === "function"
 				? actions.onPatchNode
-				: function () {};
+				: function (_payload) {};
+		/** @type {() => void} */
 		const onAddWrite =
 			typeof actions.onAddWrite === "function"
 				? actions.onAddWrite
 				: function () {};
+		/** @type {AM2WritePatchFn} */
 		const onPatchWrite =
 			typeof actions.onPatchWrite === "function"
 				? actions.onPatchWrite
-				: function () {};
+				: function (_index, _payload) {};
+		/** @type {AM2RemoveIndexFn} */
 		const onRemoveWrite =
 			typeof actions.onRemoveWrite === "function"
 				? actions.onRemoveWrite
-				: function () {};
+				: function (_index) {};
+		/** @type {AM2RemoveStepFn} */
 		const onRemoveNode =
 			typeof actions.onRemoveNode === "function"
 				? actions.onRemoveNode
-				: function () {};
+				: function (_stepId) {};
 
 		const select = document.createElement("select");
 		nodes.forEach((item) => {
@@ -430,9 +576,9 @@
 		} else if (isMessagePrimitive(node)) {
 			appendMessagePrimitiveFields(mount, node, onPatchNode);
 		} else if (
-			window["AM2DSLEditorCapabilityForms"] &&
-			window["AM2DSLEditorCapabilityForms"].renderCapabilityForm &&
-			window["AM2DSLEditorCapabilityForms"].renderCapabilityForm({
+			window.AM2DSLEditorCapabilityForms &&
+			window.AM2DSLEditorCapabilityForms.renderCapabilityForm &&
+			window.AM2DSLEditorCapabilityForms.renderCapabilityForm({
 				definition: definition,
 				mount: mount,
 				node: node,
@@ -457,14 +603,16 @@
 		const writesWrap = el("div", "flowStepSection");
 		writesWrap.appendChild(el("div", "flowStepSectionTitle", "op.writes"));
 		const writes = Array.isArray(node.op && node.op.writes)
-			? node.op.writes
+			? /** @type {AM2DSLEditorWriteRecord[]} */ (node.op.writes)
 			: [];
 		writes.forEach((item, index) => {
 			writesWrap.appendChild(
 				writeRow(item || {}, index, onPatchWrite, onRemoveWrite),
 			);
 		});
-		const addWriteBtn = el("button", "btn", "Add Write");
+		const addWriteBtn = /** @type {HTMLButtonElement} */ (
+			el("button", "btn", "Add Write")
+		);
 		addWriteBtn.type = "button";
 		addWriteBtn.addEventListener("click", function () {
 			onAddWrite();
@@ -472,7 +620,9 @@
 		writesWrap.appendChild(addWriteBtn);
 		mount.appendChild(writesWrap);
 
-		const removeBtn = el("button", "btn", "Remove Node");
+		const removeBtn = /** @type {HTMLButtonElement} */ (
+			el("button", "btn", "Remove Node")
+		);
 		removeBtn.type = "button";
 		removeBtn.addEventListener("click", function () {
 			onRemoveNode(selectedStepId);
@@ -480,5 +630,6 @@
 		mount.appendChild(removeBtn);
 	}
 
+	/** @type {AM2DSLEditorNodeFormApi} */
 	window["AM2DSLEditorNodeForm"] = { renderNodeForm: renderNodeForm };
 })();

@@ -1,10 +1,30 @@
 (function () {
 	"use strict";
 
+	/** @typedef {(payload: AM2JsonObject) => void} AM2NodePatchFn */
+	/** @typedef {(next: AM2JsonObject) => void} AM2InputsMutator */
+	/** @typedef {(next: AM2DSLEditorBranchInputs) => void} AM2BranchInputsMutator */
+	/**
+	 * @typedef {(index: number, nextBinding: AM2DSLEditorBranchBinding) => void}
+	 * 	AM2BindingChangeFn
+	 */
+	/** @typedef {(index: number) => void} AM2BindingRemoveFn */
+
+	/** @param {AM2JsonValue | undefined | null} value
+	 * @returns {AM2JsonObject}
+	 */
 	function clone(value) {
-		return JSON.parse(JSON.stringify(value || {}));
+		return /** @type {AM2JsonObject} */ (
+			JSON.parse(JSON.stringify(value || {}))
+		);
 	}
 
+	/**
+	 * @param {string} tag
+	 * @param {string | null | undefined} [cls]
+	 * @param {string | number | boolean | null | undefined} [textValue]
+	 * @returns {HTMLElement}
+	 */
 	function el(tag, cls, textValue) {
 		const node = document.createElement(tag);
 		if (cls) node.className = cls;
@@ -12,6 +32,11 @@
 		return node;
 	}
 
+	/**
+	 * @param {string} labelText
+	 * @param {HTMLElement} inputNode
+	 * @returns {HTMLElement}
+	 */
 	function row(labelText, inputNode) {
 		const wrap = el("label", "flowField");
 		wrap.appendChild(el("div", "flowStepSectionTitle", labelText));
@@ -19,17 +44,30 @@
 		return wrap;
 	}
 
+	/**
+	 * @param {HTMLElement} node
+	 * @param {string} key
+	 * @returns {HTMLElement}
+	 */
 	function setKey(node, key) {
 		node.setAttribute("data-am2-capability-key", key);
 		return node;
 	}
 
+	/**
+	 * @param {HTMLElement} mount
+	 * @param {string} key
+	 * @param {string} textValue
+	 */
 	function note(mount, key, textValue) {
 		const item = el("div", "flowStepDesc", textValue);
 		item.setAttribute("data-am2-capability-note", key);
 		mount.appendChild(item);
 	}
 
+	/** @param {AM2DSLGraphNode | null | undefined} node
+	 * @returns {AM2JsonObject}
+	 */
 	function inputsOf(node) {
 		const raw =
 			node && node.op && typeof node.op.inputs === "object"
@@ -38,15 +76,21 @@
 		return clone(raw);
 	}
 
+	/** @param {string} textValue
+	 * @returns {AM2JsonValue}
+	 */
 	function parseLooseJSON(textValue) {
 		if (textValue === "") return "";
 		try {
-			return JSON.parse(textValue);
+			return /** @type {AM2JsonValue} */ (JSON.parse(textValue));
 		} catch (_err) {
 			return textValue;
 		}
 	}
 
+	/** @param {AM2JsonValue | undefined} value
+	 * @returns {string}
+	 */
 	function serializeLooseJSON(value) {
 		if (value === undefined || value === null) return "";
 		if (
@@ -59,6 +103,9 @@
 		return JSON.stringify(value, null, 2);
 	}
 
+	/** @param {AM2DSLGraphNode | null | undefined} node
+	 * @returns {"" | "fork" | "invoke" | "loop"}
+	 */
 	function primitiveKind(node) {
 		const id = String((node && node.op && node.op.primitive_id) || "");
 		const version = Number((node && node.op && node.op.primitive_version) || 0);
@@ -69,20 +116,40 @@
 		return "";
 	}
 
+	/** @param {AM2DSLGraphDefinition} definition
+	 * @returns {Record<string, AM2DSLEditorLibrary>}
+	 */
 	function librariesOf(definition) {
-		const libraries = definition && definition.libraries;
-		return libraries && typeof libraries === "object" ? libraries : {};
+		const libraries = definition.libraries;
+		return libraries && typeof libraries === "object"
+			? /** @type {Record<string, AM2DSLEditorLibrary>} */ (libraries)
+			: {};
 	}
 
+	/** @param {AM2DSLGraphDefinition} definition
+	 * @returns {string[]}
+	 */
 	function libraryIds(definition) {
 		return Object.keys(librariesOf(definition)).sort();
 	}
 
+	/**
+	 * @param {AM2DSLGraphDefinition} definition
+	 * @param {string | null | undefined} libraryId
+	 * @returns {AM2DSLEditorLibraryParam[]}
+	 */
 	function libraryParams(definition, libraryId) {
 		const library = librariesOf(definition)[String(libraryId || "")];
-		return Array.isArray(library && library.params) ? library.params : [];
+		return Array.isArray(library && library.params)
+			? /** @type {AM2DSLEditorLibraryParam[]} */ (library.params)
+			: [];
 	}
 
+	/**
+	 * @param {HTMLSelectElement} select
+	 * @param {Array<string | number | null | undefined>} values
+	 * @param {string | null | undefined} currentValue
+	 */
 	function appendOptions(select, values, currentValue) {
 		const seen = new Set();
 		values.forEach(function (item) {
@@ -97,12 +164,22 @@
 		});
 	}
 
+	/**
+	 * @param {AM2DSLGraphNode} node
+	 * @param {AM2NodePatchFn} onPatchNode
+	 * @param {AM2InputsMutator} mutator
+	 */
 	function patchInputs(node, onPatchNode, mutator) {
 		const next = inputsOf(node);
 		mutator(next);
 		onPatchNode({ inputs: next });
 	}
 
+	/**
+	 * @param {AM2JsonObject} baseInputs
+	 * @param {AM2NodePatchFn} onPatchNode
+	 * @param {AM2BranchInputsMutator} mutator
+	 */
 	function patchBranchInputs(baseInputs, onPatchNode, mutator) {
 		const next = clone(baseInputs);
 		next.branch_order = Array.isArray(next.branch_order)
@@ -114,22 +191,48 @@
 		onPatchNode({ inputs: next });
 	}
 
+	/** @param {AM2JsonObject | AM2DSLEditorBranchInputs} inputs
+	 * @returns {string[]}
+	 */
 	function branchOrder(inputs) {
-		return Array.isArray(inputs && inputs.branch_order)
-			? inputs.branch_order.map(String)
-			: [];
+		if (!inputs || !Array.isArray(inputs.branch_order)) {
+			return [];
+		}
+		return /** @type {string[]} */ (inputs.branch_order).map(String);
 	}
 
+	/**
+	 * @param {AM2JsonObject | AM2DSLEditorBranchInputs} inputs
+	 * @param {string | null | undefined} branchId
+	 * @returns {AM2DSLEditorBranchSpec}
+	 */
 	function branchSpec(inputs, branchId) {
 		const branches =
-			inputs && typeof inputs.branches === "object" ? inputs.branches : {};
+			inputs && typeof inputs.branches === "object"
+				? /** @type {Record<string, AM2DSLEditorBranchSpec>} */ (
+						inputs.branches
+					)
+				: {};
 		const spec = branches[String(branchId || "")];
-		return spec && typeof spec === "object" ? spec : {};
+		return spec && typeof spec === "object"
+			? spec
+			: /** @type {AM2DSLEditorBranchSpec} */ ({});
 	}
 
+	/**
+	 * @param {AM2DSLEditorBranchBinding} item
+	 * @param {number} index
+	 * @param {string[]} names
+	 * @param {AM2BindingChangeFn} onChange
+	 * @param {AM2BindingRemoveFn} onRemove
+	 * @returns {HTMLElement}
+	 */
 	function bindingRow(item, index, names, onChange, onRemove) {
 		const wrap = el("div", "flowStepSection");
-		const binding = item && typeof item === "object" ? item : {};
+		const binding =
+			item && typeof item === "object"
+				? item
+				: /** @type {AM2DSLEditorBranchBinding} */ ({});
 		const currentName = String(binding.name || "");
 		const nameSelect = document.createElement("select");
 		appendOptions(
@@ -155,7 +258,9 @@
 		});
 		wrap.appendChild(row("binding value", valueInput));
 
-		const removeBtn = el("button", "btn", "Remove Binding");
+		const removeBtn = /** @type {HTMLButtonElement} */ (
+			el("button", "btn", "Remove Binding")
+		);
 		removeBtn.type = "button";
 		removeBtn.setAttribute(
 			"data-am2-capability-remove",
@@ -168,6 +273,12 @@
 		return wrap;
 	}
 
+	/**
+	 * @param {HTMLElement} mount
+	 * @param {AM2DSLGraphNode} node
+	 * @param {AM2DSLGraphDefinition} definition
+	 * @param {AM2NodePatchFn} onPatchNode
+	 */
 	function renderInvokeForm(mount, node, definition, onPatchNode) {
 		const baseInputs = inputsOf(node);
 		const currentLibrary = String(baseInputs.target_library || "");
@@ -177,7 +288,7 @@
 			},
 		);
 		const bindings = Array.isArray(baseInputs.param_bindings)
-			? baseInputs.param_bindings
+			? /** @type {AM2DSLEditorBranchBinding[]} */ (baseInputs.param_bindings)
 			: [];
 		mount.setAttribute("data-am2-capability-form", "flow.invoke");
 		note(
@@ -236,7 +347,9 @@
 				),
 			);
 		});
-		const addBindingBtn = el("button", "btn", "Add Binding");
+		const addBindingBtn = /** @type {HTMLButtonElement} */ (
+			el("button", "btn", "Add Binding")
+		);
 		addBindingBtn.type = "button";
 		addBindingBtn.setAttribute("data-am2-capability-add", "binding");
 		addBindingBtn.addEventListener("click", function () {
@@ -252,6 +365,12 @@
 		mount.appendChild(section);
 	}
 
+	/**
+	 * @param {HTMLElement} mount
+	 * @param {AM2DSLGraphNode} node
+	 * @param {AM2DSLGraphDefinition} definition
+	 * @param {AM2NodePatchFn} onPatchNode
+	 */
 	function renderForkForm(mount, node, definition, onPatchNode) {
 		const baseInputs = inputsOf(node);
 		const order = branchOrder(baseInputs);
@@ -334,7 +453,9 @@
 			});
 			card.appendChild(row("param_bindings", bindingsInput));
 
-			const removeBtn = el("button", "btn", "Remove Branch");
+			const removeBtn = /** @type {HTMLButtonElement} */ (
+				el("button", "btn", "Remove Branch")
+			);
 			removeBtn.type = "button";
 			removeBtn.setAttribute(
 				"data-am2-capability-remove",
@@ -351,7 +472,9 @@
 			card.appendChild(removeBtn);
 			section.appendChild(card);
 		});
-		const addBranchBtn = el("button", "btn", "Add Branch");
+		const addBranchBtn = /** @type {HTMLButtonElement} */ (
+			el("button", "btn", "Add Branch")
+		);
 		addBranchBtn.type = "button";
 		addBranchBtn.setAttribute("data-am2-capability-add", "branch");
 		addBranchBtn.addEventListener("click", function () {
@@ -369,6 +492,11 @@
 		mount.appendChild(section);
 	}
 
+	/**
+	 * @param {HTMLElement} mount
+	 * @param {AM2DSLGraphNode} node
+	 * @param {AM2NodePatchFn} onPatchNode
+	 */
 	function renderLoopForm(mount, node, onPatchNode) {
 		const baseInputs = inputsOf(node);
 		mount.setAttribute("data-am2-capability-form", "flow.loop");
@@ -380,7 +508,10 @@
 		const iterableInput = document.createElement("input");
 		const currentExpr = baseInputs.iterable_expr;
 		iterableInput.value =
-			currentExpr && typeof currentExpr.expr === "string"
+			currentExpr &&
+			typeof currentExpr === "object" &&
+			!Array.isArray(currentExpr) &&
+			typeof currentExpr.expr === "string"
 				? currentExpr.expr
 				: "";
 		setKey(iterableInput, "iterable_expr");
@@ -407,15 +538,21 @@
 		});
 	}
 
+	/** @param {AM2DSLEditorCapabilityFormOptions | null | undefined} opts
+	 * @returns {boolean}
+	 */
 	function renderCapabilityForm(opts) {
 		const mount = opts && opts.mount;
 		const node = opts && opts.node;
 		if (!mount || !node) return false;
-		const definition = (opts && opts.definition) || {};
+		const definition = /** @type {AM2DSLGraphDefinition} */ (
+			(opts && opts.definition) || {}
+		);
+		/** @type {AM2NodePatchFn} */
 		const onPatchNode =
 			typeof (opts && opts.onPatchNode) === "function"
 				? opts.onPatchNode
-				: function () {};
+				: function (_payload) {};
 		const kind = primitiveKind(node);
 		if (!kind) return false;
 		if (kind === "fork") renderForkForm(mount, node, definition, onPatchNode);
@@ -425,6 +562,7 @@
 		return true;
 	}
 
+	/** @type {AM2DSLEditorCapabilityFormsApi} */
 	window["AM2DSLEditorCapabilityForms"] = {
 		renderCapabilityForm: renderCapabilityForm,
 	};

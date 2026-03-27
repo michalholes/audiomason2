@@ -22,6 +22,7 @@
 		return JSON.parse(JSON.stringify(obj));
 	}
 
+	/** @returns {AM2FlowSnapshot | null} */
 	function snapshot() {
 		var flowEditor = root.AM2FlowEditorState;
 		return flowEditor && flowEditor.getSnapshot
@@ -102,7 +103,7 @@
 					var snap = snapshot();
 					return sanitizeWizard((snap && snap.wizardDraft) || {});
 				},
-				stage: (parsed) => {
+				stage: /** @param {AM2JsonObject} parsed */ (parsed) => {
 					var flowEditor = root.AM2FlowEditorState;
 					if (!flowEditor || !flowEditor.mutateWizard) {
 						throw new Error("wizard draft bridge unavailable");
@@ -150,7 +151,7 @@
 				var snap = snapshot();
 				return sanitizeConfig((snap && snap.configDraft) || {});
 			},
-			stage: (parsed) => {
+			stage: /** @param {AM2JsonObject} parsed */ (parsed) => {
 				var flowEditor = root.AM2FlowEditorState;
 				if (!flowEditor || !flowEditor.mutateConfig) {
 					throw new Error("config draft bridge unavailable");
@@ -330,6 +331,7 @@
 		return true;
 	}
 
+	/** @param {KeyboardEvent | null | undefined} event */
 	function closeViaEscape(event) {
 		if (!event || event.key !== "Escape" || !dom.isOpen()) {
 			return;
@@ -437,6 +439,10 @@
 		}
 	}
 
+	/**
+	 * @param {HTMLElement | null | undefined} node
+	 * @param {() => boolean | Promise<boolean>} handler
+	 */
 	function bind(node, handler) {
 		if (!node || !node.addEventListener) {
 			return;

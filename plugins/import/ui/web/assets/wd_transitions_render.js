@@ -2,24 +2,28 @@
 	const W = window;
 	const H = W.AM2EditorHTTP;
 
+	/** @type {(definition: AM2JsonObject) => AM2WDStableGraphResult} */
 	const stableGraph =
 		W.AM2WDGraphStable && W.AM2WDGraphStable.stableGraph
 			? W.AM2WDGraphStable.stableGraph
 			: () => ({ version: 1, nodes: [], edges: [], entry: null });
 
+	/** @param {Node | null | undefined} node */
 	function clear(node) {
 		while (node && node.firstChild) node.removeChild(node.firstChild);
 	}
 
-	function _summarizeWhen(whenVal) {
+	/** @param {AM2JsonValue} whenVal */
+	function summarizeWhen(whenVal) {
 		if (whenVal === null || whenVal === undefined) return "<unconditional>";
 		if (typeof whenVal === "boolean") return whenVal ? "true" : "false";
 		if (typeof whenVal === "object") {
-			const op = whenVal.op;
-			const path = whenVal.path;
+			const condition = /** @type {AM2WDTransitionCondition} */ (whenVal);
+			const op = condition.op;
+			const path = condition.path;
 			if (typeof op === "string" && op && typeof path === "string" && path) {
-				if ("value" in whenVal) {
-					return op + ":" + path + "=" + String(whenVal.value);
+				if (Object.prototype.hasOwnProperty.call(condition, "value")) {
+					return op + ":" + path + "=" + String(condition.value);
 				}
 				return op + ":" + path;
 			}
@@ -28,44 +32,113 @@
 		return "<cond>";
 	}
 
-	let _prefixesCache = null;
-	let _editState = { from: null, outgoingIndex: null };
-	async function _getPathPrefixes() {
-		if (_prefixesCache) return _prefixesCache;
+	/** @type {string[] | null} */
+	let prefixesCache = null;
+	/** @type {{ from: string | null, outgoingIndex: number | null }} */
+	let editState = { from: null, outgoingIndex: null };
+
+	/** @returns {Promise<string[]>} */
+	async function getPathPrefixes() {
+		if (prefixesCache) return prefixesCache;
 		if (!H || !H.requestJSON) {
-			_prefixesCache = ["cfg.defaults."];
-			return _prefixesCache;
+			prefixesCache = ["cfg.defaults."];
+			return prefixesCache;
 		}
 		const out = await H.requestJSON("/import/ui/transition-condition-prefixes");
 		if (!out.ok) {
-			_prefixesCache = ["cfg.defaults."];
-			return _prefixesCache;
+			prefixesCache = ["cfg.defaults."];
+			return prefixesCache;
 		}
-		const items = out.data && out.data.items ? out.data.items : [];
-		_prefixesCache = (Array.isArray(items) ? items : []).map((x) =>
-			String(x || ""),
-		);
-		if (!_prefixesCache.length) _prefixesCache = ["cfg.defaults."];
-		return _prefixesCache;
+		const items =
+			out.data && Array.isArray(out.data.items) ? out.data.items : [];
+		prefixesCache = items.map((entry) => String(entry || ""));
+		if (!prefixesCache.length) prefixesCache = ["cfg.defaults."];
+		return prefixesCache;
 	}
 
+	/** @param {string} type */
+	function needsPath(type) {
+		return (
+			type === "eq" ||
+			type === "neq" ||
+			type === "exists" ||
+			type === "not_exists"
+		);
+	}
+
+	/** @param {string} type */
+	function needsValue(type) {
+		return type === "eq" || type === "neq";
+	}
+
+	/**
+	 * @param {string} type
+	 * @param {string} prefix
+	 * @param {string} rest
+	 * @param {string} value
+	 * @returns {AM2JsonValue}
+	 */
+	function buildWhenValue(type, prefix, rest, value) {
+		if (type === "true") return true;
+		if (type === "false") return false;
+		if (type === "unconditional") return null;
+		const trimmed = String(rest || "").trim();
+		if (!prefix || !trimmed) return null;
+		const fullPath = String(prefix) + trimmed;
+		if (type === "exists") return { op: "exists", path: fullPath };
+		if (type === "not_exists") return { op: "not_exists", path: fullPath };
+		if (type === "eq" || type === "neq") {
+			return { op: type, path: fullPath, value: String(value || "") };
+		}
+		return null;
+	}
+
+	/**
+	 * @param {{
+	 *   mount?: HTMLElement | null,
+	 *   el?: AM2DomFactoryApi | null,
+	 *   text?: AM2TextFactoryApi | null,
+	 *   state?: AM2WDTransitionsStateApi | null,
+	 * } | null | undefined} opts
+	 */
 	function renderTransitions(opts) {
-		const mount = opts && opts.mount;
-		const el = (opts && opts.el) || (() => {});
-		const text = (opts && opts.text) || (() => {});
-		const state = (opts && opts.state) || {};
+		const mount = opts && opts.mount ? opts.mount : null;
+		/** @type {AM2DomFactoryApi} */
+		const el =
+			(opts && opts.el) ||
+			/** @type {AM2DomFactoryApi} */ (() => document.createElement("div"));
+		/** @type {AM2TextFactoryApi} */
+		const text =
+			(opts && opts.text) ||
+			/** @type {AM2TextFactoryApi} */ (
+				(tag, cls, value) => {
+					const node = document.createElement(tag);
+					if (cls) node.className = cls;
+					node.textContent = String(value || "");
+					return node;
+				}
+			);
+		/** @type {AM2WDTransitionsStateApi} */
+		const state =
+			(opts && opts.state) ||
+			/** @type {AM2WDTransitionsStateApi} */ ({
+				getWizardDraft: () => ({}),
+				getSelectedStepId: () => null,
+				addEdge: () => {},
+				removeEdge: () => {},
+			});
 		if (!mount) return;
 
 		clear(mount);
 
-		const wd = state.getWizardDraft ? state.getWizardDraft() : {};
-		const g = stableGraph(wd);
+		const wizardDraft = state.getWizardDraft ? state.getWizardDraft() : {};
+		const graph = stableGraph(wizardDraft);
 		const selected = state.getSelectedStepId ? state.getSelectedStepId() : null;
-		const nodes = Array.isArray(g.nodes) ? g.nodes : [];
-		const edges = Array.isArray(g.edges) ? g.edges : [];
+		const nodes = Array.isArray(graph.nodes) ? graph.nodes : [];
+		/** @type {AM2WizardDefinitionGraphEdge[]} */
+		const edges = Array.isArray(graph.edges) ? graph.edges : [];
 
 		const panel = el("div", "flowTransPanel");
-
 		const body = el("div", "flowTransBody");
 		panel.appendChild(body);
 		mount.appendChild(panel);
@@ -78,27 +151,32 @@
 		}
 
 		const outgoing = edges.filter(
-			(e) => String(e.from_step_id || "") === String(selected),
+			(edge) => String(edge.from_step_id || "") === String(selected),
 		);
-		const outgoingWithIndex = outgoing.map((e, i) => ({
-			edge: e,
-			outgoingIndex: i,
+		/** @type {Array<{ edge: AM2WizardDefinitionGraphEdge, outgoingIndex: number }>} */
+		const outgoingWithIndex = outgoing.map((edge, outgoingIndex) => ({
+			edge,
+			outgoingIndex,
 		}));
 
 		const addWrap = el("div", "flowTransAdd");
-		const toSel = el("select", "flowTransSelect");
-		nodes.forEach((sid) => {
-			const opt = el("option", "");
-			opt.value = String(sid || "");
-			opt.textContent = String(sid || "");
+		const toSel = /** @type {HTMLSelectElement} */ (
+			el("select", "flowTransSelect")
+		);
+		nodes.forEach((stepId) => {
+			const opt = /** @type {HTMLOptionElement} */ (el("option", ""));
+			opt.value = String(stepId || "");
+			opt.textContent = String(stepId || "");
 			toSel.appendChild(opt);
 		});
-		const prio = el("input", "flowTransPrio");
+		const prio = /** @type {HTMLInputElement} */ (el("input", "flowTransPrio"));
 		prio.type = "number";
 		prio.value = "0";
 		prio.min = "-99999";
 		prio.max = "99999";
-		const condType = el("select", "flowTransSelect");
+		const condType = /** @type {HTMLSelectElement} */ (
+			el("select", "flowTransSelect")
+		);
 		[
 			{ id: "unconditional", label: "Unconditional" },
 			{ id: "true", label: "Always true" },
@@ -107,56 +185,48 @@
 			{ id: "neq", label: "Not equals" },
 			{ id: "exists", label: "Exists" },
 			{ id: "not_exists", label: "Not exists" },
-		].forEach((it) => {
-			const opt = el("option", "");
-			opt.value = it.id;
-			opt.textContent = it.label;
+		].forEach((item) => {
+			const opt = /** @type {HTMLOptionElement} */ (el("option", ""));
+			opt.value = item.id;
+			opt.textContent = item.label;
 			condType.appendChild(opt);
 		});
 
-		const pathPrefix = el("select", "flowTransSelect");
-		const pathRest = el("input", "flowTransWhen");
+		const pathPrefix = /** @type {HTMLSelectElement} */ (
+			el("select", "flowTransSelect")
+		);
+		const pathRest = /** @type {HTMLInputElement} */ (
+			el("input", "flowTransWhen")
+		);
 		pathRest.type = "text";
 		pathRest.placeholder = "path";
-
-		const val = el("input", "flowTransWhen");
+		const val = /** @type {HTMLInputElement} */ (el("input", "flowTransWhen"));
 		val.type = "text";
 		val.placeholder = "value";
 
-		function needsPath(t) {
-			return t === "eq" || t === "neq" || t === "exists" || t === "not_exists";
-		}
-
-		function needsValue(t) {
-			return t === "eq" || t === "neq";
-		}
-
 		function updateCondUi() {
-			const t = String(condType.value || "unconditional");
-			const showPath = needsPath(t);
-			const showValue = needsValue(t);
+			const type = String(condType.value || "unconditional");
+			const showPath = needsPath(type);
+			const showValue = needsValue(type);
 			pathPrefix.disabled = !showPath;
 			pathRest.disabled = !showPath;
 			val.disabled = !showValue;
-			if (!showPath) {
-				pathRest.value = "";
-			}
-			if (!showValue) {
-				val.value = "";
-			}
+			if (!showPath) pathRest.value = "";
+			if (!showValue) val.value = "";
 		}
-		const btnAdd = text("button", "btn btnSmall", "Add");
-		btnAdd.type = "button";
 
+		const btnAdd = /** @type {HTMLButtonElement} */ (
+			text("button", "btn btnSmall", "Add")
+		);
+		btnAdd.type = "button";
 		btnAdd.addEventListener("click", () => {
 			const toId = String(toSel.value || "");
-			const p = Number(prio.value || 0);
-			const t = String(condType.value || "unconditional");
-			let whenVal = null;
-
-			if (t === "true") whenVal = true;
-			else if (t === "false") whenVal = false;
-			else if (t === "unconditional") whenVal = null;
+			const priority = Number(prio.value || 0);
+			const type = String(condType.value || "unconditional");
+			let whenVal = /** @type {AM2JsonValue} */ (null);
+			if (type === "true") whenVal = true;
+			else if (type === "false") whenVal = false;
+			else if (type === "unconditional") whenVal = null;
 			else {
 				const prefix = String(pathPrefix.value || "");
 				const rest = String(pathRest.value || "").trim();
@@ -164,42 +234,27 @@
 					window.alert("Condition path is required");
 					return;
 				}
-				const fullPath = prefix + rest;
-				if (t === "exists") whenVal = { op: "exists", path: fullPath };
-				else if (t === "not_exists")
-					whenVal = { op: "not_exists", path: fullPath };
-				else if (t === "eq" || t === "neq") {
-					const v = String(val.value || "");
-					whenVal = { op: t, path: fullPath, value: v };
-				}
+				whenVal = buildWhenValue(type, prefix, rest, String(val.value || ""));
 			}
-			state.addEdge && state.addEdge(String(selected), toId, p, whenVal);
+			if (state.addEdge)
+				state.addEdge(String(selected), toId, priority, whenVal);
 		});
 
-		addWrap.appendChild(toSel);
-		addWrap.appendChild(prio);
-		addWrap.appendChild(condType);
-		addWrap.appendChild(pathPrefix);
-		addWrap.appendChild(pathRest);
-		addWrap.appendChild(val);
-		addWrap.appendChild(btnAdd);
+		addWrap.append(toSel, prio, condType, pathPrefix, pathRest, val, btnAdd);
 		body.appendChild(addWrap);
 
-		_getPathPrefixes().then((prefixes) => {
+		void getPathPrefixes().then((prefixes) => {
 			clear(pathPrefix);
-			(Array.isArray(prefixes) ? prefixes : []).forEach((pfx) => {
-				const opt = el("option", "");
-				opt.value = String(pfx || "");
-				opt.textContent = String(pfx || "");
+			prefixes.forEach((prefix) => {
+				const opt = /** @type {HTMLOptionElement} */ (el("option", ""));
+				opt.value = prefix;
+				opt.textContent = prefix;
 				pathPrefix.appendChild(opt);
 			});
 			updateCondUi();
 		});
 
-		condType.addEventListener("change", () => {
-			updateCondUi();
-		});
-
+		condType.addEventListener("change", updateCondUi);
 		updateCondUi();
 
 		if (!outgoingWithIndex.length) {
@@ -216,35 +271,19 @@
 			renderTransitions(opts);
 		}
 
-		function buildWhenValue(t, prefix, rest, v) {
-			if (t === "true") return true;
-			if (t === "false") return false;
-			if (t === "unconditional") return null;
-			const r = String(rest || "").trim();
-			if (!prefix || !r) return null;
-			const fullPath = String(prefix) + r;
-			if (t === "exists") return { op: "exists", path: fullPath };
-			if (t === "not_exists") return { op: "not_exists", path: fullPath };
-			if (t === "eq" || t === "neq") {
-				return { op: t, path: fullPath, value: String(v || "") };
-			}
-			return null;
-		}
-
 		outgoingWithIndex
 			.slice(0)
 			.sort(
-				(a, b) => Number(a.edge.priority || 0) - Number(b.edge.priority || 0),
+				(left, right) =>
+					Number(left.edge.priority || 0) - Number(right.edge.priority || 0),
 			)
-			.forEach((e) => {
-				const edge = e.edge;
+			.forEach((entry) => {
+				const edge = entry.edge;
 				const row = el("div", "flowTransRow");
-
 				const isEditing =
-					_editState &&
-					String(_editState.from || "") === String(selected) &&
-					Number(_editState.outgoingIndex || -1) ===
-						Number(e.outgoingIndex || -2);
+					String(editState.from || "") === String(selected) &&
+					Number(editState.outgoingIndex || -1) ===
+						Number(entry.outgoingIndex || -2);
 
 				if (!isEditing) {
 					row.appendChild(
@@ -254,69 +293,90 @@
 						text("div", "flowTransTo", String(edge.to_step_id || "")),
 					);
 					row.appendChild(
-						text("div", "flowTransMeta", _summarizeWhen(edge.when)),
+						text(
+							"div",
+							"flowTransMeta",
+							summarizeWhen(edge.when === undefined ? null : edge.when),
+						),
 					);
 
-					const btnUp = text("button", "btn btnSmall", "Up");
+					const btnUp = /** @type {HTMLButtonElement} */ (
+						text("button", "btn btnSmall", "Up")
+					);
 					btnUp.type = "button";
 					btnUp.addEventListener("click", () => {
-						state.moveEdge &&
+						if (state.moveEdge)
 							state.moveEdge(
 								String(selected),
-								Number(e.outgoingIndex || 0),
+								Number(entry.outgoingIndex || 0),
 								-1,
 							);
 					});
 
-					const btnDown = text("button", "btn btnSmall", "Down");
+					const btnDown = /** @type {HTMLButtonElement} */ (
+						text("button", "btn btnSmall", "Down")
+					);
 					btnDown.type = "button";
 					btnDown.addEventListener("click", () => {
-						state.moveEdge &&
-							state.moveEdge(String(selected), Number(e.outgoingIndex || 0), 1);
+						if (state.moveEdge)
+							state.moveEdge(
+								String(selected),
+								Number(entry.outgoingIndex || 0),
+								1,
+							);
 					});
 
-					const btnEdit = text("button", "btn btnSmall", "Edit");
+					const btnEdit = /** @type {HTMLButtonElement} */ (
+						text("button", "btn btnSmall", "Edit")
+					);
 					btnEdit.type = "button";
 					btnEdit.addEventListener("click", () => {
-						_editState = {
+						editState = {
 							from: String(selected),
-							outgoingIndex: Number(e.outgoingIndex || 0),
+							outgoingIndex: Number(entry.outgoingIndex || 0),
 						};
 						rerender();
 					});
 
-					const btnDel = text("button", "btn btnSmall", "Remove");
+					const btnDel = /** @type {HTMLButtonElement} */ (
+						text("button", "btn btnSmall", "Remove")
+					);
 					btnDel.type = "button";
 					btnDel.addEventListener("click", () => {
-						state.removeEdge &&
-							state.removeEdge(String(selected), Number(e.outgoingIndex || 0));
+						if (state.removeEdge)
+							state.removeEdge(
+								String(selected),
+								Number(entry.outgoingIndex || 0),
+							);
 					});
 
-					row.appendChild(btnUp);
-					row.appendChild(btnDown);
-					row.appendChild(btnEdit);
-					row.appendChild(btnDel);
+					row.append(btnUp, btnDown, btnEdit, btnDel);
 					table.appendChild(row);
 					return;
 				}
 
-				// Edit mode
-				const toSelE = el("select", "flowTransSelect");
-				nodes.forEach((sid) => {
-					const opt = el("option", "");
-					opt.value = String(sid || "");
-					opt.textContent = String(sid || "");
+				const toSelE = /** @type {HTMLSelectElement} */ (
+					el("select", "flowTransSelect")
+				);
+				nodes.forEach((stepId) => {
+					const opt = /** @type {HTMLOptionElement} */ (el("option", ""));
+					opt.value = String(stepId || "");
+					opt.textContent = String(stepId || "");
 					toSelE.appendChild(opt);
 				});
 				toSelE.value = String(edge.to_step_id || "");
 
-				const prioE = el("input", "flowTransPrio");
+				const prioE = /** @type {HTMLInputElement} */ (
+					el("input", "flowTransPrio")
+				);
 				prioE.type = "number";
 				prioE.min = "-99999";
 				prioE.max = "99999";
 				prioE.value = String(edge.priority || 0);
 
-				const condTypeE = el("select", "flowTransSelect");
+				const condTypeE = /** @type {HTMLSelectElement} */ (
+					el("select", "flowTransSelect")
+				);
 				[
 					{ id: "unconditional", label: "Unconditional" },
 					{ id: "true", label: "Always true" },
@@ -325,64 +385,67 @@
 					{ id: "neq", label: "Not equals" },
 					{ id: "exists", label: "Exists" },
 					{ id: "not_exists", label: "Not exists" },
-				].forEach((it) => {
-					const opt = el("option", "");
-					opt.value = it.id;
-					opt.textContent = it.label;
+				].forEach((item) => {
+					const opt = /** @type {HTMLOptionElement} */ (el("option", ""));
+					opt.value = item.id;
+					opt.textContent = item.label;
 					condTypeE.appendChild(opt);
 				});
 
-				const pathPrefixE = el("select", "flowTransSelect");
-				const pathRestE = el("input", "flowTransWhen");
+				const pathPrefixE = /** @type {HTMLSelectElement} */ (
+					el("select", "flowTransSelect")
+				);
+				const pathRestE = /** @type {HTMLInputElement} */ (
+					el("input", "flowTransWhen")
+				);
 				pathRestE.type = "text";
 				pathRestE.placeholder = "path";
-				const valE = el("input", "flowTransWhen");
+				const valE = /** @type {HTMLInputElement} */ (
+					el("input", "flowTransWhen")
+				);
 				valE.type = "text";
 				valE.placeholder = "value";
 
 				function initFromWhen() {
-					const w = edge.when;
-					if (w === null || w === undefined) {
+					const whenVal = edge.when;
+					if (whenVal === null || whenVal === undefined) {
 						condTypeE.value = "unconditional";
 						return;
 					}
-					if (w === true) {
+					if (whenVal === true) {
 						condTypeE.value = "true";
 						return;
 					}
-					if (w === false) {
+					if (whenVal === false) {
 						condTypeE.value = "false";
 						return;
 					}
-					if (typeof w === "object" && w && typeof w.op === "string") {
-						condTypeE.value = String(w.op);
-						const path = typeof w.path === "string" ? w.path : "";
+					if (typeof whenVal === "object") {
+						const condition = /** @type {AM2WDTransitionCondition} */ (whenVal);
+						if (typeof condition.op === "string")
+							condTypeE.value = condition.op;
+						const path =
+							typeof condition.path === "string" ? condition.path : "";
 						const prefixes = Array.from(pathPrefixE.options).map(
-							(o) => o.value,
+							(option) => option.value,
 						);
-						const match = prefixes.find((p) => path.startsWith(p));
+						const match = prefixes.find((prefix) => path.startsWith(prefix));
 						if (match) {
 							pathPrefixE.value = match;
 							pathRestE.value = path.slice(match.length);
 						} else {
 							pathRestE.value = path;
 						}
-						if ("value" in w) valE.value = String(w.value);
+						if (Object.prototype.hasOwnProperty.call(condition, "value")) {
+							valE.value = String(condition.value || "");
+						}
 					}
 				}
 
-				function needsPath(t) {
-					return (
-						t === "eq" || t === "neq" || t === "exists" || t === "not_exists"
-					);
-				}
-				function needsValue(t) {
-					return t === "eq" || t === "neq";
-				}
 				function updateCondUiE() {
-					const t = String(condTypeE.value || "unconditional");
-					const showPath = needsPath(t);
-					const showValue = needsValue(t);
+					const type = String(condTypeE.value || "unconditional");
+					const showPath = needsPath(type);
+					const showValue = needsValue(type);
 					pathPrefixE.disabled = !showPath;
 					pathRestE.disabled = !showPath;
 					valE.disabled = !showValue;
@@ -391,60 +454,64 @@
 				}
 
 				condTypeE.addEventListener("change", updateCondUiE);
-
-				_getPathPrefixes().then((prefixes) => {
+				void getPathPrefixes().then((prefixes) => {
 					clear(pathPrefixE);
-					(Array.isArray(prefixes) ? prefixes : []).forEach((pfx) => {
-						const opt = el("option", "");
-						opt.value = String(pfx || "");
-						opt.textContent = String(pfx || "");
+					prefixes.forEach((prefix) => {
+						const opt = /** @type {HTMLOptionElement} */ (el("option", ""));
+						opt.value = prefix;
+						opt.textContent = prefix;
 						pathPrefixE.appendChild(opt);
 					});
 					initFromWhen();
 					updateCondUiE();
 				});
 
-				const btnSave = text("button", "btn btnSmall", "Save");
+				const btnSave = /** @type {HTMLButtonElement} */ (
+					text("button", "btn btnSmall", "Save")
+				);
 				btnSave.type = "button";
 				btnSave.addEventListener("click", () => {
-					const toId = String(toSelE.value || "");
-					const p = Number(prioE.value || 0);
-					const t = String(condTypeE.value || "unconditional");
-					const whenVal = buildWhenValue(
-						t,
-						String(pathPrefixE.value || ""),
-						String(pathRestE.value || ""),
-						String(valE.value || ""),
-					);
-					state.updateEdge &&
-						state.updateEdge(String(selected), Number(e.outgoingIndex || 0), {
-							to_step_id: toId,
-							priority: p,
-							when: whenVal,
-						});
-					_editState = { from: null, outgoingIndex: null };
+					const payload = {
+						to_step_id: String(toSelE.value || ""),
+						priority: Number(prioE.value || 0),
+						when: buildWhenValue(
+							String(condTypeE.value || "unconditional"),
+							String(pathPrefixE.value || ""),
+							String(pathRestE.value || ""),
+							String(valE.value || ""),
+						),
+					};
+					if (state.updateEdge)
+						state.updateEdge(
+							String(selected),
+							Number(entry.outgoingIndex || 0),
+							payload,
+						);
+					editState = { from: null, outgoingIndex: null };
 				});
 
-				const btnCancel = text("button", "btn btnSmall", "Cancel");
+				const btnCancel = /** @type {HTMLButtonElement} */ (
+					text("button", "btn btnSmall", "Cancel")
+				);
 				btnCancel.type = "button";
 				btnCancel.addEventListener("click", () => {
-					_editState = { from: null, outgoingIndex: null };
+					editState = { from: null, outgoingIndex: null };
 					rerender();
 				});
 
-				row.appendChild(prioE);
-				row.appendChild(toSelE);
-				row.appendChild(condTypeE);
-				row.appendChild(pathPrefixE);
-				row.appendChild(pathRestE);
-				row.appendChild(valE);
-				row.appendChild(btnSave);
-				row.appendChild(btnCancel);
+				row.append(
+					prioE,
+					toSelE,
+					condTypeE,
+					pathPrefixE,
+					pathRestE,
+					valE,
+					btnSave,
+					btnCancel,
+				);
 				table.appendChild(row);
 			});
 	}
 
-	W.AM2WDTransitionsRender = {
-		renderTransitions: renderTransitions,
-	};
+	W.AM2WDTransitionsRender = { renderTransitions };
 })();

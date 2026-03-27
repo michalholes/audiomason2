@@ -4,6 +4,11 @@
 	/** @type {Window} */
 	const W = window;
 
+	/** @param {{
+	 * 	textarea: HTMLTextAreaElement | null,
+	 * 	value: string,
+	 * 	onInput?: ((value: string) => void) | undefined,
+	 * } | null | undefined} opts */
 	function renderJSON(opts) {
 		const textarea = opts && opts.textarea;
 		const value = String((opts && opts.value) || "");

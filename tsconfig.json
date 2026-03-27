@@ -3,14 +3,13 @@
 		"allowJs": true,
 		"checkJs": true,
 		"noEmit": true,
+		"noImplicitAny": true,
 		"strict": false,
-                "noImplicitAny": true,
 		"target": "ES2022",
 		"lib": ["ES2022", "DOM"],
 		"skipLibCheck": true
 	},
 	"include": [
-		"am2-globals.d.ts",
 		"plugins/import/ui/web/assets/**/*.js",
 		"plugins/web_interface/ui/assets/**/*.js",
 		"scripts/patchhub/static/**/*.js",

@@ -89,9 +89,12 @@ def _run_v3_renderer(function_name: str, payload: dict) -> dict | bool | None:
     script = """
 const fs = require("fs");
 const vm = require("vm");
+const helperPath = "plugins/import/ui/web/assets/import_wizard_v3_helpers.js";
+const helperSource = fs.readFileSync(helperPath, "utf8");
 const source = fs.readFileSync("plugins/import/ui/web/assets/import_wizard_v3.js", "utf8");
 const sandbox = { window: {}, globalThis: {}, console };
 vm.createContext(sandbox);
+vm.runInContext(helperSource, sandbox, { filename: "import_wizard_v3_helpers.js" });
 vm.runInContext(source, sandbox, { filename: "import_wizard_v3.js" });
 const api = sandbox.window.AM2ImportWizardV3 || sandbox.globalThis.AM2ImportWizardV3;
 const payload = JSON.parse(fs.readFileSync(0, "utf8"));
@@ -112,6 +115,8 @@ def _run_v3_dom(payload: dict, body: str) -> dict:
     script = rf"""
 const fs = require("fs");
 const vm = require("vm");
+const helperPath = "plugins/import/ui/web/assets/import_wizard_v3_helpers.js";
+const helperSource = fs.readFileSync(helperPath, "utf8");
 const source = fs.readFileSync("plugins/import/ui/web/assets/import_wizard_v3.js", "utf8");
 const payload = JSON.parse(fs.readFileSync(0, "utf8"));
 function makeNode(tag, attrs) {{
@@ -265,6 +270,7 @@ const sandbox = {{
 }};
 payload.fetch_calls = [];
 vm.createContext(sandbox);
+vm.runInContext(helperSource, sandbox, {{ filename: "import_wizard_v3_helpers.js" }});
 vm.runInContext(source, sandbox, {{ filename: "import_wizard_v3.js" }});
 const api = sandbox.window.AM2ImportWizardV3 || sandbox.globalThis.AM2ImportWizardV3;
 const mount = makeNode("div", {{}});

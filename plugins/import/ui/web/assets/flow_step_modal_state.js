@@ -17,14 +17,24 @@
 	const fileIO = W.AM2FlowJSONFileIO;
 	if (!graphOps || !registryApi || !formApi || !jsonApi || !model) return;
 
+	/** @param {string} id
+	 * @returns {HTMLElement | null}
+	 */
 	function $(id) {
 		return document.getElementById(id);
 	}
 
+	/** @template T
+	 * @param {T} value
+	 * @returns {T}
+	 */
 	function deepClone(value) {
 		return JSON.parse(JSON.stringify(value));
 	}
 
+	/** @param {string} id
+	 * @returns {HTMLButtonElement | null}
+	 */
 	function button(id) {
 		return /** @type {HTMLButtonElement|null} */ ($(id));
 	}
@@ -57,6 +67,7 @@
 		close: button("flowStepModalClose"),
 	};
 
+	/** @type {AM2FlowStepModalStateShape} */
 	const state = {
 		open: false,
 		view: "form",
@@ -78,18 +89,28 @@
 		return !!(modal && modal.isOpen && modal.isOpen() === true);
 	}
 
+	/** @param {AM2JsonObject | null | undefined} step
+	 * @returns {string}
+	 */
 	function stepSubtitle(step) {
-		const primitiveId = String((step && step.op && step.op.primitive_id) || "");
+		const op =
+			step && step.op && typeof step.op === "object" && !Array.isArray(step.op)
+				? step.op
+				: {};
+		const primitiveId = String(op.primitive_id || "");
 		const version = String(
-			(step && step.op && step.op.primitive_version) === undefined
-				? ""
-				: step.op.primitive_version,
+			op.primitive_version === undefined ? "" : op.primitive_version,
 		);
 		return primitiveId
 			? primitiveId + (version ? " v" + version : "")
 			: "Selected step";
 	}
 
+	/**
+	 * @param {HTMLElement | null | undefined} element
+	 * @param {string} text
+	 * @param {string} kind
+	 */
 	function updateStatusElement(element, text, kind) {
 		if (!element) return;
 		element.textContent = String(text || "");
@@ -97,30 +118,53 @@
 		element.classList.toggle("is-bad", kind === "bad");
 	}
 
+	/** @param {string} text
+	 * @param {string} kind
+	 */
 	function setStatus(text, kind) {
 		updateStatusElement(ui.status, text, kind);
 		updateStatusElement(ui.actionStatus, text, kind);
 	}
 
+	/**
+	 * @param {AM2EditorHttpPayload | AM2JsonValue | undefined} payload
+	 * @param {string} fallback
+	 * @returns {string}
+	 */
 	function extractErrorMessage(payload, fallback) {
-		const errorValue =
-			payload && typeof payload === "object" && payload.error
-				? payload.error
+		const record =
+			typeof payload === "object" && !Array.isArray(payload) && payload
+				? payload
 				: null;
-		if (errorValue && typeof errorValue === "object" && errorValue.message) {
+		const errorValue = record && record.error ? record.error : null;
+		if (
+			errorValue &&
+			typeof errorValue === "object" &&
+			!Array.isArray(errorValue) &&
+			errorValue.message
+		) {
 			return String(errorValue.message || fallback);
 		}
 		return String(fallback);
 	}
 
+	/**
+	 * @param {AM2EditorHttpPayload | AM2JsonValue | undefined} payload
+	 * @param {AM2JsonObject} fallback
+	 * @returns {AM2JsonObject}
+	 */
 	function extractDefinitionPayload(payload, fallback) {
-		const next =
-			payload && typeof payload === "object" && payload.definition
-				? payload.definition
+		const record =
+			typeof payload === "object" && !Array.isArray(payload) && payload
+				? payload
 				: null;
-		return next && typeof next === "object" ? next : fallback;
+		const next = record && record.definition ? record.definition : null;
+		return next && typeof next === "object" && !Array.isArray(next)
+			? next
+			: fallback;
 	}
 
+	/** @param {string} text */
 	function setError(text) {
 		if (!ui.error) return;
 		ui.error.textContent = String(text || "");
@@ -133,6 +177,9 @@
 		);
 	}
 
+	/** @param {string} message
+	 * @returns {boolean}
+	 */
 	function confirmDiscard(message) {
 		if (typeof window.confirm !== "function") return true;
 		return window.confirm(message);
@@ -163,6 +210,7 @@
 		return String(ui.json.value || "").slice(start, end);
 	}
 
+	/** @param {string} nextText */
 	function writeJSONBuffer(nextText) {
 		state.jsonBuffer = String(nextText || "");
 		state.jsonDirty = true;
@@ -172,6 +220,10 @@
 		updateDirtySummary();
 	}
 
+	/**
+	 * @param {string} fileName
+	 * @param {string} text
+	 */
 	function downloadJSONFile(fileName, text) {
 		const blobCtor = typeof window.Blob === "function" ? window.Blob : null;
 		const urlApi = window.URL;
@@ -285,7 +337,9 @@
 						return model.readFieldValue(state, spec);
 					},
 					onFieldInput: function (spec, value) {
-						state.fieldBuffers[spec.fieldId] = String(value || "");
+						state.fieldBuffers[String(spec.fieldId || "")] = String(
+							value || "",
+						);
 						updateDirtySummary();
 					},
 					onFieldApply: function (spec) {
@@ -455,6 +509,9 @@
 		return true;
 	}
 
+	/** @param {string} stepId
+	 * @returns {Promise<boolean>}
+	 */
 	async function openStep(stepId) {
 		if (wholeArtifactOpen()) {
 			window.alert(
@@ -588,6 +645,9 @@
 		}
 	}
 
+	/** @param {string} nextView
+	 * @returns {boolean}
+	 */
 	function setView(nextView) {
 		if (nextView === state.view) return true;
 		setError("");
