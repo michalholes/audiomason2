@@ -1,5 +1,5 @@
-# Issue 212 v6 - web typing cleanup and v3 test bootstrap
+# Web UI debug feed refactor follow-up
 
-- tightened web interface UI typing so the repo-wide TypeScript check clears without changing tsconfig
-- updated import v3 parity and DOM tests to bootstrap the helper script before the main runtime asset
-- kept import helper extraction intact while restoring test coverage against the real browser bootstrap shape
+- restored the local web UI JSDoc type surface for the debug feed refactor so repo TypeScript checks resolve the browser globals again
+- kept the extracted debug feed rendering on the shared log stream surface without regrowing the main app shell
+- marked the shared UI element factory parameters optional again so CheckJS accepts the existing one- and two-argument call sites

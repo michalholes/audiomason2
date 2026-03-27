@@ -1,5 +1,9 @@
 (() => {
-	/** @param {AM2WebContent | null | undefined} content */
+	/** @typedef {*} AM2LogWebContent */
+	/** @typedef {*} AM2LogWebDebugRecord */
+	/** @typedef {*} AM2LogWebNotifyFn */
+	/** @typedef {*} AM2LogWebSurfaceDeps */
+	/** @param {AM2LogWebContent | null | undefined} content */
 	function resolveSurfaceKind(content) {
 		const kind =
 			content && typeof content.stream_kind === "string"
@@ -102,11 +106,194 @@
 		return text;
 	}
 
+	function createDebugFeedShell(
+		/** @type {Function} */ el,
+		/** @type {string} */ hintText,
+		/** @type {string} */ height,
+	) {
+		const root = el("div");
+		const controls = el("div", { class: "row" });
+		const filterInput = el("input", {
+			class: "input",
+			type: "text",
+			placeholder: "Filter...",
+		});
+		filterInput.style.maxWidth = "420px";
+		const pauseBtn = el("button", { class: "btn", text: "Pause" });
+		const clearBtn = el("button", { class: "btn danger", text: "Clear" });
+		const exportBtn = el("button", { class: "btn", text: "Export JSONL" });
+		controls.append(filterInput, pauseBtn, clearBtn, exportBtn);
+		root.append(controls, el("div", { class: "hint", text: hintText }));
+		const box = el("div", { class: "logBox" });
+		box.style.height = height;
+		box.style.whiteSpace = "normal";
+		root.appendChild(box);
+		return { root, box, filterInput, pauseBtn, clearBtn, exportBtn };
+	}
+
+	function debugRecordMatches(
+		/** @type {AM2LogWebDebugRecord} */ rec,
+		/** @type {string} */ filterText,
+		/** @type {string[]} */ fields,
+	) {
+		if (!filterText) return true;
+		const hay = fields
+			.map((field) => {
+				const value = rec && typeof rec === "object" ? rec[field] : "";
+				return typeof value === "string"
+					? value
+					: value == null
+						? ""
+						: String(value);
+			})
+			.join("\n")
+			.toLowerCase();
+		return hay.includes(filterText);
+	}
+
+	function snapshotDebugRecords(
+		/** @type {Function} */ ensureBuffer,
+		/** @type {string} */ filterText,
+		/** @type {string[]} */ fields,
+	) {
+		const buf = ensureBuffer();
+		const filter = String(filterText || "")
+			.trim()
+			.toLowerCase();
+		const out = [];
+		for (let i = buf.length - 1; i >= 0; i--) {
+			const rec = buf[i];
+			if (debugRecordMatches(rec, filter, fields)) out.push(rec);
+		}
+		return out;
+	}
+
+	function renderEmptyDebugState(
+		/** @type {HTMLElement} */ box,
+		/** @type {Function} */ clear,
+		/** @type {Function} */ el,
+		/** @type {string} */ emptyText,
+	) {
+		clear(box);
+		box.appendChild(el("div", { class: "hint", text: emptyText }));
+	}
+
+	function downloadJsonLines(
+		/** @type {string} */ filename,
+		/** @type {string[]} */ lines,
+	) {
+		downloadText(filename, `${lines.join("\n")}\n`);
+	}
+
+	function startDebugFeedLoop(
+		/** @type {HTMLElement} */ root,
+		/** @type {() => boolean} */ isPaused,
+		/** @type {() => void} */ renderOnce,
+	) {
+		renderOnce();
+		const timer = setInterval(() => {
+			if (!isPaused()) renderOnce();
+		}, 500);
+		const stop = () => clearInterval(timer);
+		root.addEventListener("DOMNodeRemoved", stop, { once: true });
+		window.addEventListener("popstate", stop, { once: true });
+	}
+
+	function renderJsErrorRow(
+		/** @type {AM2LogWebDebugRecord} */ rec,
+		/** @type {AM2LogWebNotifyFn} */ notify,
+		/** @type {Function} */ el,
+	) {
+		const row = el("div");
+		row.style.borderBottom = "1px solid rgba(255,255,255,0.06)";
+		row.style.padding = "8px 0";
+		const top = el("div", { class: "row" });
+		top.style.margin = "0 0 6px 0";
+		const meta = el("div", {
+			class: "hint",
+			text: `${rec.ts || ""}  ${rec.kind || ""}`.trim(),
+		});
+		meta.style.flex = "1";
+		const copyBtn = el("button", { class: "btn", text: "Copy" });
+		copyBtn.addEventListener("click", async () => {
+			const ok = await copyTextWithFallback(JSON.stringify(rec, null, 2));
+			if (typeof notify === "function") notify(ok ? "Copied." : "Copy failed.");
+		});
+		top.append(meta, copyBtn);
+		const pre = el("pre");
+		pre.style.margin = "0";
+		pre.style.whiteSpace = "pre-wrap";
+		pre.style.fontFamily =
+			"ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas," +
+			" 'Liberation Mono', 'Courier New', monospace";
+		pre.style.fontSize = "12px";
+		const parts = [];
+		if (rec.message) parts.push(String(rec.message));
+		if (rec.source) parts.push(`source: ${rec.source}`);
+		if (rec.line !== null || rec.col !== null) {
+			parts.push(`loc: ${rec.line ?? ""}:${rec.col ?? ""}`);
+		}
+		if (rec.stack) parts.push(String(rec.stack));
+		pre.textContent = parts.join("\n");
+		row.append(top, pre);
+		return row;
+	}
+
+	function renderUiDebugRow(
+		/** @type {AM2LogWebDebugRecord} */ rec,
+		/** @type {AM2LogWebNotifyFn} */ notify,
+		/** @type {Function} */ el,
+		/** @type {Function} */ showModal,
+	) {
+		const row = el("div");
+		row.style.borderBottom = "1px solid rgba(255,255,255,0.06)";
+		row.style.padding = "8px 0";
+		const top = el("div", { class: "row" });
+		top.style.margin = "0 0 6px 0";
+		const channel = rec.channel || "";
+		const kind = rec.kind || "";
+		const meta = el("div", {
+			class: "hint",
+			text: `${rec.ts || ""}  ${channel} ${kind}`.trim(),
+		});
+		meta.style.flex = "1";
+		const detailsBtn = el("button", { class: "btn", text: "Details" });
+		const copyBtn = el("button", { class: "btn", text: "Copy" });
+		detailsBtn.addEventListener("click", () => {
+			showModal(
+				`${channel} ${kind}`.trim(),
+				JSON.stringify(rec, null, 2),
+				notify,
+			);
+		});
+		copyBtn.addEventListener("click", async () => {
+			const ok = await copyTextWithFallback(JSON.stringify(rec, null, 2));
+			if (typeof notify === "function") notify(ok ? "Copied." : "Copy failed.");
+		});
+		top.append(meta, detailsBtn, copyBtn);
+		row.appendChild(top);
+		const msg =
+			rec.message ||
+			(rec.status
+				? `${rec.method || ""} ${rec.url || ""} -> ${rec.status}`
+				: "");
+		row.appendChild(el("div", { class: "mono", text: String(msg || "") }));
+		if (rec.response_text) {
+			const pre = el("pre");
+			pre.style.marginTop = "6px";
+			pre.style.whiteSpace = "pre-wrap";
+			pre.style.wordBreak = "break-word";
+			pre.textContent = String(rec.response_text);
+			row.appendChild(pre);
+		}
+		return row;
+	}
+
 	Reflect.set(window, "AMWebLogStreamSurface", {
 		/**
-		 * @param {AM2WebContent} content
-		 * @param {AM2WebNotifyFn} notify
-		 * @param {AM2WebSurfaceDeps} deps
+		 * @param {AM2LogWebContent} content
+		 * @param {AM2LogWebNotifyFn} notify
+		 * @param {AM2LogWebSurfaceDeps} deps
 		 */
 		async render(content, notify, deps) {
 			const { API, el } = deps;
@@ -239,6 +426,157 @@
 			}
 
 			return wrap;
+		},
+	});
+	Reflect.set(window, "AMWebAppDebugSurface", {
+		/**
+		 * @param {AM2LogWebContent} content
+		 * @param {AM2LogWebNotifyFn} notify
+		 * @param {{
+		 * 	el: Function,
+		 * 	clear: Function,
+		 * 	ensureJsErrorBuffer: Function,
+		 * }} deps
+		 */
+		async renderJsErrorFeed(content, notify, deps) {
+			const { el, clear, ensureJsErrorBuffer } = deps;
+			ensureJsErrorBuffer();
+			let paused = false;
+			let filterText = "";
+			const shell = createDebugFeedShell(
+				el,
+				"Captures window.onerror and unhandledrejection (session-local).",
+				"420px",
+			);
+			const fields = ["ts", "kind", "message", "stack", "source"];
+			const renderOnce = () => {
+				const items = snapshotDebugRecords(
+					ensureJsErrorBuffer,
+					filterText,
+					fields,
+				);
+				if (!items.length) {
+					renderEmptyDebugState(shell.box, clear, el, "No errors captured.");
+					return;
+				}
+				clear(shell.box);
+				for (const rec of items) {
+					shell.box.appendChild(renderJsErrorRow(rec, notify, el));
+				}
+			};
+			shell.filterInput.addEventListener("input", () => {
+				filterText = String(shell.filterInput.value || "");
+				renderOnce();
+			});
+			shell.pauseBtn.addEventListener("click", () => {
+				paused = !paused;
+				shell.pauseBtn.textContent = paused ? "Resume" : "Pause";
+				if (!paused) renderOnce();
+			});
+			shell.clearBtn.addEventListener("click", () => {
+				try {
+					const buf = ensureJsErrorBuffer();
+					buf.length = 0;
+				} catch {}
+				renderOnce();
+			});
+			shell.exportBtn.addEventListener("click", () => {
+				try {
+					const items = snapshotDebugRecords(
+						ensureJsErrorBuffer,
+						filterText,
+						fields,
+					);
+					downloadJsonLines(
+						"am_js_errors.jsonl",
+						items.map((item) => JSON.stringify(item)),
+					);
+				} catch (e) {
+					if (typeof notify === "function") notify(String(e));
+				}
+			});
+			startDebugFeedLoop(shell.root, () => paused, renderOnce);
+			return shell.root;
+		},
+		/**
+		 * @param {AM2LogWebContent} content
+		 * @param {AM2LogWebNotifyFn} notify
+		 * @param {{
+		 * 	el: Function,
+		 * 	clear: Function,
+		 * 	ensureUiLogBuffer: Function,
+		 * 	showModal: Function,
+		 * }} deps
+		 */
+		async renderUiDebugFeed(content, notify, deps) {
+			const { el, clear, ensureUiLogBuffer, showModal } = deps;
+			ensureUiLogBuffer();
+			let paused = false;
+			let filterText = "";
+			const shell = createDebugFeedShell(
+				el,
+				"Debug mode: browser-side errors and HTTP failures (session-local).",
+				"520px",
+			);
+			const fields = [
+				"ts",
+				"channel",
+				"kind",
+				"message",
+				"url",
+				"method",
+				"response_text",
+			];
+			const renderOnce = () => {
+				const items = snapshotDebugRecords(
+					ensureUiLogBuffer,
+					filterText,
+					fields,
+				);
+				if (!items.length) {
+					renderEmptyDebugState(
+						shell.box,
+						clear,
+						el,
+						"No debug records captured.",
+					);
+					return;
+				}
+				clear(shell.box);
+				for (const rec of items) {
+					shell.box.appendChild(renderUiDebugRow(rec, notify, el, showModal));
+				}
+				try {
+					shell.box.scrollTop = shell.box.scrollHeight;
+				} catch {}
+			};
+			shell.filterInput.addEventListener("input", () => {
+				filterText = String(shell.filterInput.value || "");
+				if (!paused) renderOnce();
+			});
+			shell.pauseBtn.addEventListener("click", () => {
+				paused = !paused;
+				shell.pauseBtn.textContent = paused ? "Resume" : "Pause";
+				if (!paused) renderOnce();
+			});
+			shell.clearBtn.addEventListener("click", () => {
+				const buf = ensureUiLogBuffer();
+				buf.splice(0, buf.length);
+				renderOnce();
+			});
+			shell.exportBtn.addEventListener("click", () => {
+				const items = snapshotDebugRecords(
+					ensureUiLogBuffer,
+					filterText,
+					fields,
+				);
+				downloadJsonLines(
+					"audiomason_ui_debug.jsonl",
+					items.map((item) => JSON.stringify(item)),
+				);
+			});
+			startDebugFeedLoop(shell.root, () => paused, renderOnce);
+			return shell.root;
 		},
 	});
 })();
