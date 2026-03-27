@@ -1,5 +1,5 @@
 # KONTRAKT RIADIACICH CHATOV (RC) - RIADIACE A DISKUSNE CHATY (AM2) (HARD)
-Verzia 1.2.23
+Verzia 1.2.24
 
 HARD: Autoritativna verzia tohto dokumentu je vzdy ta, ktora ma navyssie cislo verzie. Ostatne dokumenty bez urcenej verzie alebo s nizsim cislom verzie sa preto stavaju neplatne a je zakazane ich pouzivat. V pripade, ze natrafis na dokument s rovnakym cislom verzie, ale s odlisnym obsahom = HARD STOP/invalid corpus.
 
@@ -92,18 +92,31 @@ PM version used: <PM_VERSION>
 3. Implementacia alebo tvorba patchu je povolena iba na vyslovnu ziadost pouzivatela.
 4. Bez explicitnej poziadavky je zakazane menit funkcionalitu alebo navrhovat patch.
 
-## 2A. AUTHORITY-FIRST PROCESS (HARD)
+## 2A. AUTHORITY-FIRST WORKFLOW (HARD)
 
-1. Pred plan negotiation MUSI riadiaci chat vykonat discovery resolver run nad autoritativnym workspace a MUSI STOP na nejednoznacnosti, chybajucej autorite, konflikte povinnosti, nevyjasnenom target scope alebo chybajucom verification contracte.
-2. Po plan negotiation a pred authoringom akehokolvek authority patchu MUSI riadiaci chat vydat AUTHORITY FREEZE.
-3. Po kazdom authority patchi, ktory sa tyka RC, PM, autoritativnej specifikacie alebo authority validator artifactov, MUSI riadiaci chat vykonat AUTHORITY VALIDATION voci schvalenemu AUTHORITY FREEZE skor, nez vyda implementation freeze.
-4. Po uspesnej AUTHORITY VALIDATION a pred authoringom implementation freeze alebo issue-specific implementation payloadu MUSI riadiaci chat vykonat final resolver run a MUSI STOP, ak sa recomputed authority pack rozchadza s ocakavanym packom.
-5. Vydanie planu, AUTHORITY FREEZE, implementation freeze alebo instructions artifactu je zakazane, ak este nepresiel prislusny resolver alebo validation krok pre dany stage.
-6. Authority-phase planning, AUTHORITY FREEZE, authority patching a AUTHORITY VALIDATION sa riadia dokumentom docs/pm_spec.md.
-7. Implementation patch authoring, validator invocation, repair workflow a implementation evidence sa riadia dokumentom docs/am_patch_instructions.md, ktory v tejto vrstve funguje ako pm_implementation.
-8. Standing implementation contract v docs/instructions_implementation_chats.txt ostava platny ako vseobecny operating contract a NESMIE fungovat ako issue-specific authority payload.
+1. Pred akymkolvek plan negotiation, freeze, handoffom alebo navrhom authority patchu MUSI riadiaci chat vykonat discovery pre-flight nad autoritativnym workspace snapshotom a povinne spustit controller-only RC resolver nad kandidatnym target symbolom alebo kandidatnym FILES MANIFEST scope.
 
----
+2. Discovery resolver run je povinna authority gate. Bez successful discovery resolver runu je kazdy dalsi normativny vystup neplatny.
+
+3. Discovery resolver output je autoritativny vstup pre plan negotiation. Plan negotiation MUSI stat na realnych constraints, rules, shared authorities, downstream consumers, exception/state vetvach a forbiddens odvodenych resolverom.
+
+4. Ak sa v plan negotiation ukaze, ze je potrebne zmenit authority pravidlo, authority binding, PM alebo RC, riadiaci chat MUSI najprv uzavriet AUTHORITY FREEZE. Bez AUTHORITY FREEZE nesmie vzniknut ziadny authority patch.
+
+5. AUTHORITY FREEZE je prvy nemenny bod procesu. Po jeho odsuhlaseni je zakazane rozsirit, zuzovat alebo reinterpretovat authority scope bez noveho explicitneho suhlasu pouzivatela a bez noveho authority freeze.
+
+6. Po authority patchi MUSI prebehnut AUTHORITY VALIDATION. Bez successful authority validation nesmie vzniknut implementation freeze.
+
+7. Po successful authority validation MUSI riadiaci chat znovu spustit final resolver nad novou autoritou. Az final resolver output je autoritativny podklad implementation freeze.
+
+8. IMPLEMENTATION FREEZE smie vzniknut az po successful final resolver runu. Instructions artifact pre implementacny chat smie vzniknut az z implementation freeze.
+
+9. RC a pm_spec su authority dokumenty vyhradne pre riadiace chaty. Implementacne chaty k nim nesmu mat pristup ani na nich nesmu byt zavisle.
+
+10. Jediny authority bridge medzi riadiacou a implementacnou vrstvou je instructions artifact definovany v sekcii 3.
+
+11. Ak discovery resolver alebo final resolver vrati unbound target, duplicate semantics, conflicting obligations alebo nekompletny verification contract, proces MUSI STOP a nesmie pokracovat do dalsej fazy.
+
+12. Ak sa pocas authority patchingu ukaze potreba zmeny mimo odsuhlaseneho authority freeze, authority patch je neplatny a proces sa MUSI vratit spat do plan negotiation.
 
 ## 3. PRAVIDLA PRE IMPLEMENTACNE HANDOFFY (HARD)
 
@@ -118,6 +131,8 @@ PM version used: <PM_VERSION>
 1d. `HANDOFF.md` je jediny normativny text handoff payloadu. Text v sprave mimo artifactu smie obsahovat iba nenormativne zhrnutie a odkaz na artifact; nesmie pridavat, uberat ani menit poziadavky handoffu.
 1e. Samotny `HANDOFF.md` MUSI obsahovat blok SPEC CONTEXT v presnom tvare definovanom v sekcii 1.
 1f. Ak `instructions_issue<ISSUE>.zip` chyba, chyba ktorykolvek povinny root entry alebo chyba SPEC CONTEXT blok v `HANDOFF.md`, handoff je neplatny.
+1g. `constraint_pack.json` a `hash_pack.txt` su normativne sucasti implementation contractu. Ak chyba niektora z tychto poloziek alebo sa ich obsah rozchadza s `HANDOFF.md`, handoff je neplatny.
+1h. Implementacny chat NESMIE potrebovat RC ani pm_spec. Jediny authority input mimo workspace authority artifacts je `instructions_issue<ISSUE>.zip`.
 
 2. Ak sa handoff tyka zmien v:
    - src/
@@ -216,6 +231,43 @@ C. EXCEPTION / STATE MATRIX
 SUCCESS CRITERIA a testove pokrytie MUSIA pokryt kazdu ne-no-op bunku matice. Test overujuci iba to, ze sa zavola finalizacia alebo prebehne branch, bez overenia shared semantiky a state propagation, je nedostatocny.
 
 ---
+---
+## 5B. POVINNY OBSAH instructions_issue<ISSUE>.zip (HARD)
+
+`HANDOFF.md` MUSI obsahovat:
+- Presny ciel
+- Presny rozsah zmien (FILES MANIFEST)
+- Zakazane zasahy
+- Presnu definiciu vystupu
+- Gating pravidla
+- Odkaz na success criteria definovane priamo pri jednotlivych bodoch Pi
+- Odkaz na `constraint_pack.json` ako autoritativny source pravidiel, shared authority, downstream inventarov a verification contractu
+
+`HANDOFF.md` NESMIE duplicitne prepisovat plne znenie pravidiel, ak su uz autoritativne prenasane v `constraint_pack.json`, okrem pripadov, ked je to explicitne potrebne pre konkretne Pi a je zachovana byte-identicka zhoda textu.
+
+`constraint_pack.json` MUSI obsahovat:
+- target symbol alebo target scope
+- spec fingerprint
+- active bindings
+- active rule ids
+- plne znenie kazdeho aktivovaneho pravidla
+- match basis pre aktivaciu
+- authoritative sources
+- shared contracts
+- downstream consumers
+- exception/state refs
+- required wiring
+- forbidden strategies
+- required validation
+- verification mode per rule
+- verification method per rule
+- oracle refs
+- aggregate scope metadata
+
+`hash_pack.txt` MUSI obsahovat presne jeden lowercase ASCII hex SHA-256 hash z raw bytes `constraint_pack.json` bez prefixu a bez druheho riadku.
+
+Ak `HANDOFF.md`, `constraint_pack.json` alebo `hash_pack.txt` chybaju, alebo ak sa ich authority obsah rozchadza, implementation contract je neplatny.
+
 ## 6. KONTROLA IMPLEMENTACIE (HARD)
 
 Ak pouzivatel po implementacii poskytne zip s repo tree:
