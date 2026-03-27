@@ -1,11 +1,14 @@
 import argparse
 import hashlib
 import json
+import re
 import sys
-from collections import defaultdict
 from pathlib import Path
 from zipfile import ZipFile
 
+SPEC_PATH = "docs/specification.jsonl"
+UNBOUND = "RULE RESOLVER: FAIL - unbound_target"
+CONFLICT = "RULE RESOLVER: FAIL - conflicting_obligations"
 REQUIRED_FIELDS = (
     "id",
     "binding_type",
@@ -23,172 +26,21 @@ REQUIRED_FIELDS = (
     "verification_method",
     "semantic_group",
     "conflict_policy",
+    "oracle_ref",
 )
 SUPPORTED_BINDING_TYPES = {"resolver_contract", "constraint_pack"}
 
 
-def fail(code: str, detail: str) -> None:
+def fail_unbound() -> None:
     print("RESULT: FAIL")
-    print(f"RULE {code}: FAIL - {detail}")
+    print(UNBOUND)
     raise SystemExit(1)
 
 
-def load_snapshot_entries(path: Path) -> dict[str, bytes]:
-    with ZipFile(path, "r") as zf:
-        return {name: zf.read(name) for name in zf.namelist() if not name.endswith("/")}
-
-
-def load_spec(path: Path) -> list[dict]:
-    with path.open(encoding="utf-8") as handle:
-        return [json.loads(line) for line in handle if line.strip()]
-
-
-def split_target(raw: str) -> tuple[str, str | None]:
-    repo_path, sep, symbol = raw.partition("::")
-    if not repo_path.strip():
-        fail("AMBIGUOUS_TARGET", "empty repo path")
-    return repo_path.strip(), symbol.strip() if sep else None
-
-
-def resolve_target(entries: dict[str, bytes], repo_path: str, symbol: str | None) -> None:
-    raw = entries.get(repo_path)
-    if raw is None:
-        fail("MISSING_AUTHORITY", f"missing target {repo_path}")
-    if symbol is None:
-        return
-    text = raw.decode("utf-8", errors="ignore")
-    hits = text.count(symbol)
-    if hits == 0:
-        fail("MISSING_AUTHORITY", f"missing symbol {symbol}")
-    if hits > 1:
-        fail("AMBIGUOUS_TARGET", f"symbol {symbol} appears {hits} times")
-
-
-def target_scope(repo_path: str) -> str:
-    if repo_path.startswith(("docs/", "scripts/")):
-        return "authority_scope"
-    return "implementation_scope"
-
-
-def collect_bindings(objects: list[dict]) -> tuple[dict, list[dict]]:
-    binding_meta = None
-    bindings = []
-    for obj in objects:
-        obj_type = obj.get("type")
-        if obj_type == "binding_meta":
-            if binding_meta is not None:
-                fail("CONFLICTING_OBLIGATIONS", "multiple binding_meta objects")
-            binding_meta = obj
-        if obj_type != "obligation_binding":
-            continue
-        binding_id = obj.get("id", "<missing-id>")
-        for field in REQUIRED_FIELDS:
-            if field not in obj:
-                fail(
-                    "MISSING_VERIFICATION_CONTRACT",
-                    f"{binding_id} missing field {field}",
-                )
-        if obj["binding_type"] not in SUPPORTED_BINDING_TYPES:
-            detail = f"{binding_id} unsupported type {obj['binding_type']}"
-            fail("CONFLICTING_OBLIGATIONS", detail)
-        for field in (
-            "verification_mode",
-            "verification_method",
-            "semantic_group",
-            "conflict_policy",
-        ):
-            if not str(obj.get(field, "")).strip():
-                fail("MISSING_VERIFICATION_CONTRACT", f"{binding_id} empty {field}")
-        bindings.append(obj)
-    if binding_meta is None:
-        fail("MISSING_BINDING", "missing binding_meta object")
-    return binding_meta, bindings
-
-
-def active_bindings(bindings: list[dict], scope: str) -> list[dict]:
-    active: list[dict] = []
-    for binding in bindings:
-        match = binding.get("match", {})
-        if binding["binding_type"] == "constraint_pack":
-            active.append(binding)
-            continue
-        if match.get("target") == scope:
-            active.append(binding)
-    return active
-
-
-def ensure_consistency(bindings: list[dict]) -> None:
-    if not bindings:
-        fail("MISSING_BINDING", "no active bindings for requested scope")
-    symbol_matches: dict[tuple[str, str], list[str]] = defaultdict(list)
-    semantics: dict[str, list[str]] = defaultdict(list)
-    role_semantics: dict[str, set[str]] = defaultdict(set)
-    for binding in bindings:
-        binding_id = binding["id"]
-        match_key = json.dumps(binding.get("match", {}), sort_keys=True)
-        symbol_key = (match_key, binding["symbol_role"])
-        symbol_matches[symbol_key].append(binding_id)
-        semantics[binding["authoritative_semantics"]].append(binding_id)
-        role_semantics[binding["symbol_role"]].add(binding["authoritative_semantics"])
-    for ids in symbol_matches.values():
-        if len(ids) > 1:
-            fail("AMBIGUOUS_TARGET", ", ".join(sorted(ids)))
-    for ids in semantics.values():
-        if len(ids) > 1:
-            fail("DUPLICATE_SEMANTICS", ", ".join(sorted(ids)))
-    for role, values in role_semantics.items():
-        if len(values) > 1:
-            fail("CONFLICTING_OBLIGATIONS", role)
-
-
-def build_pack(
-    spec_path: Path,
-    target: str,
-    repo_path: str,
-    symbol: str | None,
-    scope: str,
-) -> bytes:
-    objects = load_spec(spec_path)
-    if not objects or objects[0].get("type") != "meta":
-        fail("MISSING_BINDING", "spec meta object missing")
-    binding_meta, bindings = collect_bindings(objects)
-    active = active_bindings(bindings, scope)
-    ensure_consistency(active)
-    spec_bytes = spec_path.read_bytes()
-    pack = {
-        "target": target,
-        "target_symbol": symbol,
-        "target_path": repo_path,
-        "target_scope": scope,
-        "spec_fingerprint": hashlib.sha256(spec_bytes).hexdigest(),
-        "binding_meta_id": binding_meta["id"],
-        "active_bindings": active,
-        "active_rule_ids": [binding["id"] for binding in active],
-        "authoritative_sources": ["docs/specification.jsonl"],
-        "shared_contracts": sorted(
-            {ref for binding in active for ref in binding["shared_contract_refs"]}
-        ),
-        "downstream_consumers": sorted(
-            {ref for binding in active for ref in binding["downstream_consumers"]}
-        ),
-        "exception_state_refs": sorted(
-            {ref for binding in active for ref in binding["exception_state_refs"]}
-        ),
-        "required_wiring": sorted(
-            {ref for binding in active for ref in binding["required_wiring"]}
-        ),
-        "required_validation": sorted(
-            {ref for binding in active for ref in binding["required_validation"]}
-        ),
-        "verification_method_per_rule": {
-            binding["id"]: binding["verification_method"] for binding in active
-        },
-        "verification_mode_per_rule": {
-            binding["id"]: binding["verification_mode"] for binding in active
-        },
-    }
-    pack_json = json.dumps(pack, indent=2, sort_keys=True, ensure_ascii=True)
-    return (pack_json + "\n").encode("utf-8")
+def fail_conflict() -> None:
+    print("RESULT: FAIL")
+    print(CONFLICT)
+    raise SystemExit(1)
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
@@ -202,27 +54,224 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
+def read_snapshot(path: Path) -> dict[str, bytes]:
+    with ZipFile(path, "r") as zf:
+        return {name: zf.read(name) for name in zf.namelist() if not name.endswith("/")}
+
+
+def read_jsonl(path: Path) -> list[dict]:
+    objects: list[dict] = []
+    with path.open(encoding="utf-8") as handle:
+        for line in handle:
+            line = line.strip()
+            if line:
+                objects.append(json.loads(line))
+    return objects
+
+
+def split_target(raw: str) -> tuple[str, str | None]:
+    repo_path, sep, symbol = raw.partition("::")
+    repo_path = repo_path.strip()
+    if not repo_path:
+        fail_unbound()
+    return repo_path, symbol.strip() if sep and symbol.strip() else None
+
+
+def resolve_symbol(entries: dict[str, bytes], repo_path: str, symbol: str | None) -> None:
+    raw = entries.get(repo_path)
+    if raw is None:
+        fail_unbound()
+    if symbol is None:
+        return
+    text = raw.decode("utf-8", errors="ignore")
+    patterns = [
+        rf"^def\s+{re.escape(symbol)}\s*\(",
+        rf"^async\s+def\s+{re.escape(symbol)}\s*\(",
+        rf"^class\s+{re.escape(symbol)}\b",
+        rf"^function\s+{re.escape(symbol)}\s*\(",
+        rf"^(?:const|let|var)\s+{re.escape(symbol)}\s*=",
+    ]
+    hits = 0
+    for line in text.splitlines():
+        stripped = line.strip()
+        if any(re.match(pattern, stripped) for pattern in patterns):
+            hits += 1
+    if hits == 0:
+        fail_unbound()
+    if hits > 1:
+        fail_conflict()
+
+
+def target_scope(repo_path: str) -> str:
+    if repo_path.startswith(("docs/", "scripts/")):
+        return "authority_scope"
+    return "implementation_scope"
+
+
+def target_mode(scope: str) -> str:
+    if scope == "authority_scope":
+        return "discovery"
+    return "final"
+
+
+def collect_objects(objects: list[dict]) -> tuple[dict, list[dict], dict[str, dict]]:
+    binding_meta = None
+    bindings: list[dict] = []
+    oracles: dict[str, dict] = {}
+    for obj in objects:
+        kind = obj.get("type")
+        if kind == "binding_meta":
+            if binding_meta is not None:
+                fail_conflict()
+            binding_meta = obj
+            continue
+        if kind == "oracle":
+            oracle_id = str(obj.get("id", "")).strip()
+            if not oracle_id:
+                fail_unbound()
+            oracles[oracle_id] = obj
+            continue
+        if kind != "obligation_binding":
+            continue
+        for field in REQUIRED_FIELDS:
+            if field not in obj:
+                fail_unbound()
+        if obj.get("binding_type") not in SUPPORTED_BINDING_TYPES:
+            fail_conflict()
+        if obj.get("conflict_policy") != "fail_closed":
+            fail_conflict()
+        if not str(obj.get("oracle_ref", "")).strip():
+            fail_unbound()
+        bindings.append(obj)
+    if binding_meta is None:
+        fail_unbound()
+    return binding_meta, bindings, oracles
+
+
+def active_bindings(bindings: list[dict], mode: str, scope: str) -> list[dict]:
+    active: list[dict] = []
+    for binding in bindings:
+        match = binding.get("match", {})
+        if binding.get("binding_type") == "constraint_pack":
+            active.append(binding)
+            continue
+        if match.get("phase") == mode and match.get("target") == scope:
+            active.append(binding)
+    return active
+
+
+def ensure_consistency(bindings: list[dict], oracles: dict[str, dict]) -> None:
+    if not bindings:
+        fail_unbound()
+    symbol_map: dict[tuple[str, str], list[str]] = {}
+    semantic_map: dict[str, list[str]] = {}
+    role_map: dict[str, set[str]] = {}
+    for binding in bindings:
+        binding_id = str(binding.get("id", "<missing-id>"))
+        oracle_ref = str(binding.get("oracle_ref", "")).strip()
+        if oracle_ref not in oracles:
+            fail_unbound()
+        match_key = json.dumps(binding.get("match", {}), sort_keys=True)
+        role = str(binding.get("symbol_role", ""))
+        semantics = str(binding.get("authoritative_semantics", ""))
+        symbol_map.setdefault((match_key, role), []).append(binding_id)
+        semantic_map.setdefault(semantics, []).append(binding_id)
+        role_map.setdefault(role, set()).add(semantics)
+        if not str(binding.get("verification_mode", "")).strip():
+            fail_unbound()
+        if not str(binding.get("verification_method", "")).strip():
+            fail_unbound()
+    if any(len(ids) > 1 for ids in symbol_map.values()):
+        fail_conflict()
+    if any(len(ids) > 1 for ids in semantic_map.values()):
+        fail_conflict()
+    if any(len(values) > 1 for values in role_map.values()):
+        fail_conflict()
+
+
+def union_values(bindings: list[dict], field: str) -> list:
+    values = {item for binding in bindings for item in binding.get(field, [])}
+    return sorted(values)
+
+
+def binding_map(bindings: list[dict], key: str, value: str) -> dict[str, str]:
+    return {binding[key]: binding[value] for binding in bindings}
+
+
+def build_pack(spec_raw: bytes, mode: str, scope: str) -> bytes:
+    objects = []
+    for line in spec_raw.decode("utf-8").splitlines():
+        line = line.strip()
+        if line:
+            objects.append(json.loads(line))
+    if not objects or objects[0].get("type") != "meta":
+        fail_unbound()
+    binding_meta, bindings, oracles = collect_objects(objects)
+    active = active_bindings(bindings, mode, scope)
+    ensure_consistency(active, oracles)
+    pack = {
+        "target_symbol": None,
+        "target_scope": scope,
+        "mode": mode,
+        "spec_fingerprint": hashlib.sha256(spec_raw).hexdigest(),
+        "binding_meta_id": binding_meta["id"],
+        "active_bindings": active,
+        "active_rule_ids": [binding["id"] for binding in active],
+        "full_rule_text": binding_map(active, "id", "authoritative_semantics"),
+        "match_basis": {binding["id"]: binding.get("match", {}) for binding in active},
+        "authoritative_sources": [SPEC_PATH],
+        "shared_contracts": union_values(active, "shared_contract_refs"),
+        "downstream_consumers": union_values(active, "downstream_consumers"),
+        "exception_state_refs": union_values(active, "exception_state_refs"),
+        "required_wiring": union_values(active, "required_wiring"),
+        "forbidden_strategies": union_values(active, "forbidden"),
+        "required_validation": union_values(active, "required_validation"),
+        "verification_mode_per_rule": binding_map(active, "id", "verification_mode"),
+        "verification_method_per_rule": binding_map(
+            active,
+            "id",
+            "verification_method",
+        ),
+        "oracle_refs": {binding["id"]: binding.get("oracle_ref") for binding in active},
+        "aggregate_scope_metadata": {
+            "binding_count": len(active),
+            "mode": mode,
+            "target_scope": scope,
+        },
+    }
+    payload = json.dumps(pack, indent=2, sort_keys=True, ensure_ascii=True)
+    return (payload + "\n").encode("utf-8")
+
+
+def handoff_text(target: str, scope: str, mode: str) -> str:
+    lines = [
+        "SPEC CONTEXT",
+        "RC version used: resolver-generated",
+        "PM version used: resolver-generated",
+        "",
+        f"TARGET: {target}",
+        f"TARGET_SCOPE: {scope}",
+        f"MODE: {mode}",
+    ]
+    return "\n".join(lines) + "\n"
+
+
 def main(argv: list[str]) -> None:
     args = parse_args(argv)
     repo_path, symbol = split_target(args.target)
-    entries = load_snapshot_entries(Path(args.workspace_snapshot))
-    resolve_target(entries, repo_path, symbol)
+    entries = read_snapshot(Path(args.workspace_snapshot))
+    resolve_symbol(entries, repo_path, symbol)
     scope = target_scope(repo_path)
-    pack_bytes = build_pack(Path(args.spec), args.target, repo_path, symbol, scope)
-    handoff_text = "\n".join(
-        [
-            "SPEC CONTEXT",
-            "RC version used: resolver-generated",
-            "PM version used: resolver-generated",
-            "",
-            f"TARGET: {args.target}",
-            f"TARGET_SCOPE: {scope}",
-        ]
-    ) + "\n"
-    Path(args.handoff_output).write_text(handoff_text, encoding="utf-8")
+    mode = target_mode(scope)
+    spec_raw = Path(args.spec).read_bytes()
+    pack_bytes = build_pack(spec_raw, mode, scope)
+    Path(args.handoff_output).write_text(
+        handoff_text(args.target, scope, mode),
+        encoding="utf-8",
+    )
     Path(args.pack_output).write_bytes(pack_bytes)
-    hash_value = hashlib.sha256(pack_bytes).hexdigest()
-    Path(args.hash_output).write_text(hash_value, encoding="utf-8")
+    digest = hashlib.sha256(pack_bytes).hexdigest()
+    Path(args.hash_output).write_text(digest + "\n", encoding="utf-8")
     print("RESULT: PASS")
 
 
