@@ -1,4 +1,4 @@
-# PM Spec Manual - Legacy Pointer Stub
+# PM Implementation Manual - Legacy Pointer Stub
 
 Status: DERIVED MIRROR ONLY
 Lifecycle: OBSOLETE / PENDING MANUAL DELETE
