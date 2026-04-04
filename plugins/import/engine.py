@@ -48,6 +48,7 @@ from .errors import (
 from .field_schema_validation import validate_step_fields
 from .fingerprints import fingerprint_json
 from .flow_graph import MAX_TRANSITION_HOPS, normalize_to_graph, select_next_step
+from .flow_graph_state_view import build_flow_graph_state_view
 from .flow_runtime import (
     build_flow_model,
 )
@@ -774,17 +775,7 @@ class ImportWizardEngine:
         known_step_ids = _wizard_definition_known_step_ids(wd)
         graph = normalize_to_graph(wd, known_step_ids=known_step_ids)
 
-        inputs_view = state.get("inputs") if isinstance(state.get("inputs"), dict) else {}
-        state_view = {
-            "inputs": inputs_view,
-            "state": {
-                "conflicts": (
-                    state.get("conflicts") if isinstance(state.get("conflicts"), dict) else {}
-                ),
-                "phase": state.get("phase"),
-                "current_step_id": state.get("current_step_id"),
-            },
-        }
+        state_view = build_flow_graph_state_view(state)
 
         def is_enabled(sid: str) -> bool:
             return self._is_step_enabled(sid, flow_cfg_norm)

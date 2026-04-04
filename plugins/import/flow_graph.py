@@ -16,6 +16,7 @@ from typing import Any, TypeGuard
 
 from .conditions import eval_condition, find_invalid_condition_path
 from .errors import FinalizeError
+from .flow_graph_state_view import FlowGraphStateView
 
 MAX_TRANSITION_HOPS = 50
 
@@ -236,7 +237,7 @@ def select_next_step(
     graph: FlowGraph,
     *,
     current_step_id: str,
-    state_view: dict[str, Any],
+    state_view: FlowGraphStateView,
     is_step_enabled: Callable[[str], bool],
     debug_log: Callable[[str, dict[str, Any]], None] | None = None,
 ) -> str:

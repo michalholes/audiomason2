@@ -32,10 +32,12 @@ import re
 from collections.abc import Callable
 from typing import Any
 
+from .flow_graph_state_view import FlowGraphStateView
+
 
 def eval_condition(
     cond: Any,
-    state_view: dict[str, Any],
+    state_view: FlowGraphStateView,
     *,
     warn: Callable[[str, dict[str, Any]], None] | None = None,
 ) -> bool:
@@ -80,7 +82,7 @@ def eval_condition(
 
 def _op_eq(
     cond: dict[str, Any],
-    state_view: dict[str, Any],
+    state_view: FlowGraphStateView,
     *,
     warn: Callable[[str, dict[str, Any]], None] | None = None,
 ) -> bool:
@@ -94,7 +96,7 @@ def _op_eq(
 
 def _op_ne(
     cond: dict[str, Any],
-    state_view: dict[str, Any],
+    state_view: FlowGraphStateView,
     *,
     warn: Callable[[str, dict[str, Any]], None] | None = None,
 ) -> bool:
@@ -108,7 +110,7 @@ def _op_ne(
 
 def _op_exists(
     cond: dict[str, Any],
-    state_view: dict[str, Any],
+    state_view: FlowGraphStateView,
     *,
     warn: Callable[[str, dict[str, Any]], None] | None = None,
 ) -> bool:
@@ -121,7 +123,7 @@ def _op_exists(
 
 def _op_truthy(
     cond: dict[str, Any],
-    state_view: dict[str, Any],
+    state_view: FlowGraphStateView,
     *,
     warn: Callable[[str, dict[str, Any]], None] | None = None,
 ) -> bool:
