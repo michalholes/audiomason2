@@ -320,6 +320,10 @@ declare global {
 		) => Promise<void> | void;
 	}
 
+	interface AM2FlowJSONOpenFilePickerHandle {
+		getFile(): Promise<File | null>;
+	}
+
 	interface AM2FlowJSONFileIOApi {
 		fileNameForArtifact(artifact: AM2FlowJSONArtifact): string;
 		normalizeOpenResult(
@@ -776,6 +780,9 @@ declare global {
 	}
 
 	interface Window {
+		showOpenFilePicker?: (
+			opts: AM2JsonValue,
+		) => Promise<AM2FlowJSONOpenFilePickerHandle[]>;
 		AM2EditorHTTP: AM2EditorHttpApi;
 		AM2FlowEditor: AM2FlowEditorGlobalApi;
 		AM2FlowEditorState: AM2FlowEditorStateApi;

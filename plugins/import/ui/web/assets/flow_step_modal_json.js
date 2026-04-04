@@ -1,3 +1,4 @@
+/// <reference path="../../../../../types/am2-import-ui-globals.d.ts" />
 (function () {
 	"use strict";
 
@@ -12,10 +13,9 @@
 	function renderJSON(opts) {
 		const textarea = opts && opts.textarea;
 		const value = String((opts && opts.value) || "");
+		const rawOnInput = opts ? opts.onInput : undefined;
 		const onInput =
-			typeof (opts && opts.onInput) === "function"
-				? opts.onInput
-				: function () {};
+			typeof rawOnInput === "function" ? rawOnInput : function () {};
 		if (!textarea) return;
 		textarea.value = value;
 		textarea.oninput = function () {

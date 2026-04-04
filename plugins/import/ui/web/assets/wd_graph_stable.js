@@ -1,10 +1,6 @@
+/// <reference path="../../../../../types/am2-import-ui-globals.d.ts" />
 (function () {
 	"use strict";
-
-	/**
-	 * @typedef {{version:number,nodes:string[],edges:AM2JsonObject[],entry:string|null}}
-	 * 	AM2WDStableGraph
-	 */
 
 	/**
 	 * @param {AM2JsonValue} value
@@ -18,7 +14,7 @@
 
 	/**
 	 * @param {AM2JsonObject} defn
-	 * @returns {AM2WDStableGraph}
+	 * @returns {AM2WDStableGraphResult}
 	 */
 	function stableGraph(defn) {
 		const root = defn && typeof defn === "object" ? defn : {};

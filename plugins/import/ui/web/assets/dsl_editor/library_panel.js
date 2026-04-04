@@ -1,3 +1,4 @@
+/// <reference path="../../../../../../types/am2-import-ui-globals.d.ts" />
 (function () {
 	"use strict";
 
@@ -52,7 +53,8 @@
 		if (!mount) return;
 		clear(mount);
 		const definition = (opts && opts.definition) || {};
-		const state = (opts && opts.state) || {};
+		/** @type {AM2DSLEditorLibraryPanelState} */
+		const state = opts && opts.state ? opts.state : { selectedLibraryId: "" };
 		const actions = (opts && opts.actions) || {};
 		const onAddLibrary =
 			typeof actions.onAddLibrary === "function"

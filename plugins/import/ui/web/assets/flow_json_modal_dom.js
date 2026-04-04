@@ -1,3 +1,4 @@
+/// <reference path="../../../../../types/am2-import-ui-globals.d.ts" />
 (() => {
 	/** @type {Window} */
 	var root = window;
@@ -33,16 +34,21 @@
 		return;
 	}
 
+	/** @type {HTMLElement} */
+	var modal = ui.modal;
+	/** @type {HTMLTextAreaElement} */
+	var editor = ui.editor;
+
 	function isOpen() {
-		return !ui.modal.classList.contains("is-hidden");
+		return !modal.classList.contains("is-hidden");
 	}
 
 	/** @param {boolean} open */
 	function setOpen(open) {
-		ui.modal.classList.toggle("is-hidden", open !== true);
-		ui.modal.setAttribute("aria-hidden", open === true ? "false" : "true");
-		if (open === true && ui.editor && ui.editor.focus) {
-			ui.editor.focus();
+		modal.classList.toggle("is-hidden", open !== true);
+		modal.setAttribute("aria-hidden", open === true ? "false" : "true");
+		if (open === true && editor.focus) {
+			editor.focus();
 		}
 	}
 
@@ -56,11 +62,11 @@
 
 	/** @param {string} text */
 	function setValue(text) {
-		ui.editor.value = String(text || "");
+		editor.value = String(text || "");
 	}
 
 	function getValue() {
-		return String(ui.editor.value || "");
+		return String(editor.value || "");
 	}
 
 	/** @param {string} msg
@@ -86,8 +92,8 @@
 
 	function getSelectedText() {
 		var value = getValue();
-		var start = Number(ui.editor.selectionStart || 0);
-		var end = Number(ui.editor.selectionEnd || 0);
+		var start = Number(editor.selectionStart || 0);
+		var end = Number(editor.selectionEnd || 0);
 		if (end <= start) {
 			return "";
 		}

@@ -1,3 +1,4 @@
+/// <reference path="../../../../../types/am2-import-ui-globals.d.ts" />
 (function () {
 	"use strict";
 
@@ -326,6 +327,9 @@
 		ui.jsonPanel &&
 			ui.jsonPanel.classList.toggle("is-hidden", state.view !== "json");
 		if (state.view === "form") {
+			if (!state.workingStep) {
+				return;
+			}
 			formApi.renderForm({
 				mount: ui.body,
 				step: state.workingStep,
@@ -520,10 +524,8 @@
 			return false;
 		}
 		if (state.open === true && !canDiscardModalChanges()) return false;
-		if (
-			String((currentStep() && currentStep().step_id) || "") !==
-			String(stepId || "")
-		) {
+		const current = currentStep();
+		if (String((current && current.step_id) || "") !== String(stepId || "")) {
 			graphOps.setSelectedStep(stepId);
 		}
 		const next = currentStep();

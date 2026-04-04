@@ -1,3 +1,4 @@
+/// <reference path="../../../../../types/am2-import-ui-globals.d.ts" />
 (function () {
 	"use strict";
 
@@ -185,13 +186,16 @@
 		clear(mount);
 
 		const nodes = normalizeNodes(opts && opts.nodes, opts && opts.catalog);
-		const edges = Array.isArray(opts && opts.edges) ? opts.edges : [];
+		/** @type {AM2DSLEditorEdgeRecord[]} */
+		const edges =
+			opts && Array.isArray(opts.edges)
+				? /** @type {AM2DSLEditorEdgeRecord[]} */ (opts.edges)
+				: [];
 		const selectedStepId = String((opts && opts.selectedStepId) || "");
+		const rawOnSelectStep = opts ? opts.onSelectStep : undefined;
 		/** @type {(stepId: string) => void} */
 		const onSelectStep =
-			typeof (opts && opts.onSelectStep) === "function"
-				? opts.onSelectStep
-				: function () {};
+			typeof rawOnSelectStep === "function" ? rawOnSelectStep : function () {};
 
 		if (metaMount) {
 			metaMount.textContent =

@@ -1,21 +1,10 @@
+/// <reference path="../../../../../types/am2-import-ui-globals.d.ts" />
 (() => {
-	/** @typedef {Window & {
-	 * 	showOpenFilePicker?: (
-	 * 		opts: AM2JsonValue,
-	 * 	) => Promise<Array<{ getFile: () => Promise<File | null> }>>;
-	 * 	Date?: DateConstructor;
-	 * 	Blob?: typeof Blob;
-	 * 	URL?: typeof URL;
-	 * }} AM2FlowJsonFileWindow
-	 */
-	/** @type {AM2FlowJsonFileWindow} */
+	/** @type {Window} */
 	var root = window;
 
 	/** @type {AM2FlowJSONFileIOHooks} */
-	var hooks = {
-		openTextFile: null,
-		saveTextFile: null,
-	};
+	var hooks = {};
 
 	/** @param {AM2FlowJSONArtifact} artifact */
 	function fileNameForArtifact(artifact) {
@@ -55,9 +44,9 @@
 		};
 	}
 
-	/** @param {File | null} file */
+	/** @param {File} file */
 	function readFileAsText(file) {
-		if (file && typeof file.text === "function") {
+		if (typeof file.text === "function") {
 			return file.text();
 		}
 		return new Promise((resolve, reject) => {
@@ -80,6 +69,9 @@
 		var handles = null;
 		var file = null;
 		try {
+			if (typeof root.showOpenFilePicker !== "function") {
+				throw new Error("Open from file unavailable in this browser.");
+			}
 			handles = await root.showOpenFilePicker({
 				excludeAcceptAllOption: false,
 				multiple: false,
@@ -130,10 +122,7 @@
 				typeof root.clearTimeout === "function"
 					? root.clearTimeout.bind(root)
 					: null;
-			var now =
-				root.Date && typeof root.Date.now === "function"
-					? root.Date.now.bind(root.Date)
-					: Date.now;
+			var now = typeof Date.now === "function" ? Date.now.bind(Date) : Date.now;
 			var focusSettleWindowMs = 1000;
 			var focusSettlePollMs = 25;
 
@@ -187,7 +176,7 @@
 				if (settled || reading) {
 					return true;
 				}
-				file = hasSelectedFile() ? input.files[0] : null;
+				file = hasSelectedFile() && input.files ? input.files[0] : null;
 				if (!file) {
 					return false;
 				}
@@ -195,10 +184,13 @@
 				clearFocusSettleTimer();
 				Promise.resolve(readFileAsText(file)).then(
 					(text) => {
-						finish({
-							cancelled: false,
-							text: String(text || ""),
-						});
+						finish(
+							{
+								cancelled: false,
+								text: String(text || ""),
+							},
+							undefined,
+						);
 					},
 					(err) => {
 						finish(null, err || new Error("Open from file failed."));
@@ -249,7 +241,7 @@
 			});
 			input.addEventListener("cancel", () => {
 				clearFocusSettleTimer();
-				finish({ cancelled: true, text: "" });
+				finish({ cancelled: true, text: "" }, undefined);
 			});
 			if (typeof root.addEventListener === "function") {
 				focusHandler = () => {
@@ -279,8 +271,8 @@
 	 * @param {string} text
 	 */
 	async function defaultSaveTextFile(artifact, text) {
-		var blobCtor = typeof root.Blob === "function" ? root.Blob : null;
-		var urlApi = root.URL;
+		var blobCtor = typeof Blob === "function" ? Blob : null;
+		var urlApi = typeof URL === "function" ? URL : null;
 		if (!blobCtor || !urlApi || typeof urlApi.createObjectURL !== "function") {
 			throw new Error("Save to file unavailable in this browser.");
 		}
@@ -319,11 +311,11 @@
 		hooks.openTextFile =
 			nextHooks && typeof nextHooks.openTextFile === "function"
 				? nextHooks.openTextFile
-				: null;
+				: undefined;
 		hooks.saveTextFile =
 			nextHooks && typeof nextHooks.saveTextFile === "function"
 				? nextHooks.saveTextFile
-				: null;
+				: undefined;
 		return true;
 	}
 

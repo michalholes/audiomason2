@@ -1,3 +1,4 @@
+/// <reference path="../../../../../../types/am2-import-ui-globals.d.ts" />
 (function () {
 	"use strict";
 
@@ -556,6 +557,11 @@
 		});
 		mount.appendChild(row("step_id", stepInput));
 
+		const nodeOp =
+			node && node.op && typeof node.op === "object" && !Array.isArray(node.op)
+				? node.op
+				: null;
+
 		const primitiveInput = document.createElement("input");
 		primitiveInput.value = String((node.op && node.op.primitive_id) || "");
 		primitiveInput.addEventListener("change", function () {
@@ -590,7 +596,7 @@
 			const inputsArea = document.createElement("textarea");
 			inputsArea.rows = 6;
 			inputsArea.value = JSON.stringify(
-				(node.op && node.op.inputs) || {},
+				(nodeOp && nodeOp.inputs) || {},
 				null,
 				2,
 			);
@@ -602,8 +608,9 @@
 
 		const writesWrap = el("div", "flowStepSection");
 		writesWrap.appendChild(el("div", "flowStepSectionTitle", "op.writes"));
-		const writes = Array.isArray(node.op && node.op.writes)
-			? /** @type {AM2DSLEditorWriteRecord[]} */ (node.op.writes)
+		const nodeOpWrites = nodeOp ? nodeOp.writes : undefined;
+		const writes = Array.isArray(nodeOpWrites)
+			? /** @type {AM2DSLEditorWriteRecord[]} */ (nodeOpWrites)
 			: [];
 		writes.forEach((item, index) => {
 			writesWrap.appendChild(
