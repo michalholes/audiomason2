@@ -1,19 +1,6 @@
-/** @typedef {*} AM2AppBook @typedef {*} AM2AppBtn @typedef {*} AM2AppContent
- * @typedef {*} AM2AppHdr @typedef {*} AM2AppItem
- * @typedef {*} AM2AppJsonObject @typedef {*} AM2AppJsonValue
- * @typedef {*} AM2AppMaybeObj @typedef {*} AM2AppN @typedef {*} AM2AppStage
- * @typedef {*} AM2AppTable @typedef {*} AM2AppUpload
- * @typedef {*} AM2AppUploadItem @typedef {*} AM2AppValLabel
- * @typedef {*} AM2AppWebApi @typedef {*} AM2AppWebChild
- * @typedef {*} AM2AppWebDebugRecord @typedef {*} AM2AppWebFsItem
- * @typedef {*} AM2AppWebNavItem @typedef {*} AM2AppWebPage
- * @typedef {*} AM2AppWebRootItem @typedef {*} AM2AppWebSurfaceDeps
- * @typedef {*} AM2AppWebUiElement @typedef {*} AM2AppWebWizardBody
- * @typedef {*} AM2AppWebWizardStep @typedef {*} AM2AppWizItem
- * @typedef {*} AM2AppWizModel @typedef {*} AM2AppAV @typedef {*} AM2AppE
- * @typedef {*} AM2AppL @typedef {*} AM2AppMJ @typedef {*} AM2AppMN
- * @typedef {*} AM2AppS @typedef {Window & Record<string, any>} AM2AppWebWindow */
-const _amWin = /** @type {AM2AppWebWindow} */ (window);
+/// <reference path="../../../../am2-globals.d.ts" />
+const _amWin = /** @type {Window} */ (window),
+	_amUiAssetsBaseUrl = "/ui/assets/";
 
 async function fetchJSON(
 	/** @type {string} */ url,
@@ -38,7 +25,7 @@ async function fetchJSON(
 
 _amWin.__AM_APP_LOADED__ = true;
 
-function _amFpKeyForBook(/** @type {AM2AppBook} */ book) {
+function _amFpKeyForBook(/** @type {AM2Book} */ book) {
 	if (book && typeof book === "object") {
 		if (typeof book.fingerprint === "string" && book.fingerprint)
 			return book.fingerprint;
@@ -57,7 +44,7 @@ function _amNormalizeFpKey(/** @type {unknown} */ key) {
 
 function asObj(/** @type {unknown} */ v) {
 	return v && typeof v === "object" && !Array.isArray(v)
-		? /** @type {AM2AppMaybeObj} */ (v)
+		? /** @type {AM2MaybeObj} */ (v)
 		: null;
 }
 
@@ -68,7 +55,7 @@ function _amEnsureUiLogBuffer() {
 	return _amWin.__AM_UI_LOGS__;
 }
 
-function _amPushUiLog(/** @type {AM2AppWebDebugRecord} */ rec) {
+function _amPushUiLog(/** @type {AM2WebDebugRecord} */ rec) {
 	try {
 		const buf = _amEnsureUiLogBuffer();
 		buf.push(rec);
@@ -83,7 +70,7 @@ function _amEnsureJsErrorBuffer() {
 	return _amWin.__AM_JS_ERRORS__;
 }
 
-function _amPushJsError(/** @type {AM2AppWebDebugRecord} */ rec) {
+function _amPushJsError(/** @type {AM2WebDebugRecord} */ rec) {
 	try {
 		const buf = _amEnsureJsErrorBuffer();
 		buf.push(rec);
@@ -96,7 +83,7 @@ function _amPushJsError(/** @type {AM2AppWebDebugRecord} */ rec) {
 _amWin._amPushJsError = _amPushJsError;
 _amWin._amPushJSError = _amPushJsError;
 
-function _amPushAnyJsError(/** @type {AM2AppWebDebugRecord} */ rec) {
+function _amPushAnyJsError(/** @type {AM2WebDebugRecord} */ rec) {
 	try {
 		const fn =
 			typeof _amWin._amPushJSError === "function"
@@ -108,7 +95,7 @@ function _amPushAnyJsError(/** @type {AM2AppWebDebugRecord} */ rec) {
 	} catch {}
 }
 
-function _amFormatHeaders(/** @type {AM2AppHdr} */ h) {
+function _amFormatHeaders(/** @type {AM2Hdr} */ h) {
 	try {
 		const out = /** @type {Record<string, string>} */ ({});
 		if (!h) return out;
@@ -128,9 +115,9 @@ function _amFormatHeaders(/** @type {AM2AppHdr} */ h) {
 }
 
 function _dbgModal(
-	/** @type {AM2AppS} */ title,
-	/** @type {AM2AppS} */ detailsText,
-	/** @type {AM2AppMN} */ notify,
+	/** @type {AM2Str} */ title,
+	/** @type {AM2Str} */ detailsText,
+	/** @type {AM2MaybeN} */ notify,
 ) {
 	try {
 		const overlay = document.createElement("div");
@@ -222,7 +209,7 @@ function _dbgModal(
 	}
 }
 
-function _amInstallDebugFetchCapture(/** @type {AM2AppMN} */ notify) {
+function _amInstallDebugFetchCapture(/** @type {AM2MaybeN} */ notify) {
 	if (_amWin.__AM_FETCH_CAPTURE_INSTALLED__) return;
 	_amWin.__AM_FETCH_CAPTURE_INSTALLED__ = true;
 	const orig = window.fetch;
@@ -249,7 +236,6 @@ function _amInstallDebugFetchCapture(/** @type {AM2AppMN} */ notify) {
 			// ignore
 		}
 
-		// Best-effort callsite capture.
 		let stack = null;
 		try {
 			stack = String(new Error().stack || "");
@@ -266,7 +252,6 @@ function _amInstallDebugFetchCapture(/** @type {AM2AppMN} */ notify) {
 				r && typeof r.statusText === "string" ? r.statusText : "";
 			const respHeaders = r && r.headers ? _amFormatHeaders(r.headers) : {};
 
-			// Read response body from a clone so the caller can still consume it.
 			let respText = "";
 			try {
 				const c = r && typeof r.clone === "function" ? r.clone() : null;
@@ -275,7 +260,7 @@ function _amInstallDebugFetchCapture(/** @type {AM2AppMN} */ notify) {
 				respText = "";
 			}
 
-			const rec = /** @type {AM2AppWebDebugRecord & AM2AppJsonObject} */ ({
+			const rec = /** @type {AM2WebDebugRecord & AM2JsonObject} */ ({
 				ts,
 				channel: "http",
 				kind: "response_not_ok",
@@ -356,7 +341,7 @@ window.onerror = (msg, src, line, col, err) => {
 	return false;
 };
 (async () => {
-	const API = /** @type {AM2AppWebApi} */ ({
+	const API = /** @type {AM2WebApi} */ ({
 		async _readErrorDetail(/** @type {Response} */ r) {
 			const status = r && typeof r.status === "number" ? r.status : 0;
 			let raw = "";
@@ -365,7 +350,6 @@ window.onerror = (msg, src, line, col, err) => {
 			} catch {}
 			raw = (raw || "").trim();
 			if (!raw) return `${status}`;
-			// Prefer {"detail": "..."} or {"detail": {...}} from FastAPI
 			try {
 				const obj = JSON.parse(raw);
 				if (obj && typeof obj === "object" && "detail" in obj) {
@@ -385,9 +369,9 @@ window.onerror = (msg, src, line, col, err) => {
 			return await r.json();
 		},
 		async sendJson(
-			/** @type {AM2AppS} */ method,
-			/** @type {AM2AppS} */ path,
-			/** @type {AM2AppMJ} */ body,
+			/** @type {AM2Str} */ method,
+			/** @type {AM2Str} */ path,
+			/** @type {AM2MaybeJ} */ body,
 		) {
 			const r = await fetch(path, {
 				method,
@@ -408,9 +392,9 @@ window.onerror = (msg, src, line, col, err) => {
 	});
 
 	/** @type {(tag: string,
-	 * attrs?: Record<string, any> | null,
-	 * children?: AM2AppWebChild[] | null,
-	 * ) => AM2AppWebUiElement} */
+	 * attrs?: AM2WebElAttrs | null,
+	 * children?: AM2WebChild[] | null,
+	 * ) => AM2WebUiElement} */
 	function el(tag, attrs, children) {
 		const node = document.createElement(tag);
 		if (attrs) {
@@ -422,17 +406,33 @@ window.onerror = (msg, src, line, col, err) => {
 				else node.setAttribute(k, String(v));
 			}
 		}
-		(children || []).forEach((/** @type {AM2AppWebChild} */ c) => {
+		(children || []).forEach((/** @type {AM2WebChild} */ c) => {
 			node.appendChild(typeof c === "string" ? document.createTextNode(c) : c);
 		});
-		return /** @type {AM2AppWebUiElement} */ (node);
+		return /** @type {AM2WebUiElement} */ (node);
 	}
 
-	function clear(/** @type {Node} */ node) {
+	function clear(/** @type {Node | null} */ node) {
+		if (!node) return;
 		while (node.firstChild) node.removeChild(node.firstChild);
 	}
 
-	function fmtTs(/** @type {AM2AppJsonValue | undefined} */ v) {
+	/** @type {Promise<AM2WebAppDragdropBindingsModule> | null} */
+	let _amStepRowDragdropBindingsPromise = null;
+
+	function _amLoadStepRowDragdropBindings() {
+		if (!_amStepRowDragdropBindingsPromise) {
+			_amStepRowDragdropBindingsPromise =
+				/** @type {Promise<AM2WebAppDragdropBindingsModule>} */ (
+					new Function("p", "return import(p)")(
+						`${_amUiAssetsBaseUrl}app_dragdrop_bindings.js`,
+					)
+				);
+		}
+		return _amStepRowDragdropBindingsPromise;
+	}
+
+	function fmtTs(/** @type {AM2JsonValue | undefined} */ v) {
 		if (typeof v !== "number") return String(v ?? "");
 		if (v > 1e12) v = Math.floor(v / 1000);
 		const d = new Date(v * 1000);
@@ -440,7 +440,7 @@ window.onerror = (msg, src, line, col, err) => {
 		return d.toLocaleString();
 	}
 
-	function fpKeyForBook(/** @type {AM2AppBook} */ book) {
+	function fpKeyForBook(/** @type {AM2Book} */ book) {
 		if (book && typeof book === "object") {
 			if (typeof book.fingerprint === "string" && book.fingerprint)
 				return book.fingerprint;
@@ -455,13 +455,16 @@ window.onerror = (msg, src, line, col, err) => {
 		return "";
 	}
 
-	async function renderStatList(/** @type {AM2AppContent} */ content) {
+	async function renderStatList(/** @type {AM2Content} */ content) {
 		const box = el("div", { class: "statList" });
 		const src = content.source;
-		const data = src && src.type === "api" ? await API.getJson(src.path) : {};
+		const data =
+			src && src.type === "api" && typeof src.path === "string"
+				? await API.getJson(src.path)
+				: {};
 		for (const f of content.fields || []) {
 			const key = f.key;
-			let value = data && typeof data === "object" ? data[key] : "";
+			let value = key && data && typeof data === "object" ? data[key] : "";
 			if (key && key.endsWith("_ts")) value = fmtTs(value);
 			box.appendChild(
 				el("div", { class: "statRow" }, [
@@ -476,11 +479,13 @@ window.onerror = (msg, src, line, col, err) => {
 		return box;
 	}
 
-	async function renderTable(/** @type {AM2AppTable} */ content) {
+	async function renderTable(/** @type {AM2Table} */ content) {
 		const src = content.source;
 		const data =
-			src && src.type === "api" ? await API.getJson(src.path) : { items: [] };
-		const items = /** @type {AM2AppItem[]} */ (
+			src && src.type === "api" && typeof src.path === "string"
+				? await API.getJson(src.path)
+				: { items: [] };
+		const items = /** @type {AM2Item[]} */ (
 			Array.isArray(data.items) ? data.items : []
 		);
 		const cols = Array.isArray(content.columns) ? content.columns : [];
@@ -493,11 +498,12 @@ window.onerror = (msg, src, line, col, err) => {
 		thead.appendChild(trh);
 		table.appendChild(thead);
 		const tbody = el("tbody");
-		items.forEach((/** @type {AM2AppJsonObject} */ row) => {
+		items.forEach((/** @type {AM2JsonObject} */ row) => {
 			const tr = el("tr");
-			cols.forEach((/** @type {{ header?: string, key?: string }} */ c) => {
-				let v = row ? row[c.key] : "";
-				if (c.key && c.key.endsWith("_ts")) v = fmtTs(v);
+			cols.forEach((/** @type {AM2WebTableColumn} */ c) => {
+				const key = c.key;
+				let v = key && row ? row[key] : "";
+				if (key && key.endsWith("_ts")) v = fmtTs(v);
 				tr.appendChild(el("td", { text: v === undefined ? "" : String(v) }));
 			});
 			tbody.appendChild(tr);
@@ -507,16 +513,22 @@ window.onerror = (msg, src, line, col, err) => {
 	}
 
 	async function renderButtonRow(
-		/** @type {AM2AppContent} */ content,
-		/** @type {AM2AppN} */ notify,
+		/** @type {AM2Content} */ content,
+		/** @type {AM2N} */ notify,
 	) {
 		const wrap = el("div", { class: "buttonRow" });
 		(Array.isArray(content.buttons) ? content.buttons : []).forEach(
-			(/** @type {AM2AppBtn} */ b) => {
+			(/** @type {AM2Btn} */ b) => {
 				const btn = el("button", { class: "btn", text: b.label || "Action" });
 				btn.addEventListener("click", () => {
-					if (b && b.action && b.action.type === "download")
+					if (
+						b &&
+						b.action &&
+						b.action.type === "download" &&
+						typeof b.action.href === "string"
+					) {
 						window.location.href = b.action.href;
+					}
 				});
 				wrap.appendChild(btn);
 			},
@@ -525,12 +537,12 @@ window.onerror = (msg, src, line, col, err) => {
 	}
 
 	async function renderJsonEditor(
-		/** @type {AM2AppContent} */ content,
-		/** @type {AM2AppN} */ notify,
+		/** @type {AM2Content} */ content,
+		/** @type {AM2N} */ notify,
 	) {
 		const src = content.source;
 		const data =
-			src && src.type === "api"
+			src && src.type === "api" && typeof src.path === "string"
 				? await API.getJson(src.path)
 				: { data: {}, info: "" };
 		const textarea = el("textarea", { class: "jsonEditor" });
@@ -545,7 +557,9 @@ window.onerror = (msg, src, line, col, err) => {
 			try {
 				const payload = JSON.parse(textarea.value || "{}");
 				const a = content.save_action || {};
-				if (a.type !== "api") throw new Error("save_action must be api");
+				if (a.type !== "api" || typeof a.path !== "string") {
+					throw new Error("save_action must be api");
+				}
 				await API.sendJson((a.method || "PUT").toUpperCase(), a.path, payload);
 				notify("Saved.");
 			} catch (e) {
@@ -561,8 +575,8 @@ window.onerror = (msg, src, line, col, err) => {
 	}
 
 	async function renderYamlEditor(
-		/** @type {AM2AppContent} */ content,
-		/** @type {AM2AppN} */ notify,
+		/** @type {AM2Content} */ content,
+		/** @type {AM2N} */ notify,
 	) {
 		const info = el("div", { class: "hint", text: "" });
 		const textarea = el("textarea", { class: "jsonEditor" }); // reuse styling
@@ -571,12 +585,15 @@ window.onerror = (msg, src, line, col, err) => {
 		async function load() {
 			try {
 				const src = content.source || {};
-				if (src.type !== "api") throw new Error("source must be api");
+				if (src.type !== "api" || typeof src.path !== "string") {
+					throw new Error("source must be api");
+				}
 				const data = await API.getJson(src.path);
 				if (data && typeof data.info === "string")
 					info.textContent = `Source: ${data.info}`;
 				textarea.value = data && typeof data.yaml === "string" ? data.yaml : "";
-				if (!textarea.value.endsWith("\n")) textarea.value += "\n";
+				const yamlText = String(textarea.value || "");
+				if (!yamlText.endsWith("\n")) textarea.value = `${yamlText}\n`;
 			} catch (e) {
 				info.textContent = String(e);
 			}
@@ -585,7 +602,9 @@ window.onerror = (msg, src, line, col, err) => {
 		saveBtn.addEventListener("click", async () => {
 			try {
 				const a = content.save_action || {};
-				if (a.type !== "api") throw new Error("save_action must be api");
+				if (a.type !== "api" || typeof a.path !== "string") {
+					throw new Error("save_action must be api");
+				}
 				await API.sendJson((a.method || "PUT").toUpperCase(), a.path, {
 					yaml: String(textarea.value || ""),
 				});
@@ -605,8 +624,8 @@ window.onerror = (msg, src, line, col, err) => {
 	}
 
 	async function renderLogStream(
-		/** @type {AM2AppContent} */ content,
-		/** @type {AM2AppN} */ notify,
+		/** @type {AM2Content} */ content,
+		/** @type {AM2N} */ notify,
 	) {
 		const surface = Reflect.get(window, "AMWebLogStreamSurface");
 		if (!surface || typeof surface.render !== "function") {
@@ -624,8 +643,8 @@ window.onerror = (msg, src, line, col, err) => {
 	}
 
 	async function renderJsErrorFeed(
-		/** @type {AM2AppContent} */ content,
-		/** @type {AM2AppN} */ notify,
+		/** @type {AM2Content} */ content,
+		/** @type {AM2N} */ notify,
 	) {
 		const surface = await _amGetAppDebugSurface();
 		if (typeof surface.renderJsErrorFeed !== "function") {
@@ -641,8 +660,8 @@ window.onerror = (msg, src, line, col, err) => {
 	}
 
 	async function renderUiDebugFeed(
-		/** @type {AM2AppContent} */ content,
-		/** @type {AM2AppN} */ notify,
+		/** @type {AM2Content} */ content,
+		/** @type {AM2N} */ notify,
 	) {
 		const surface = await _amGetAppDebugSurface();
 		if (typeof surface.renderUiDebugFeed !== "function") {
@@ -659,8 +678,8 @@ window.onerror = (msg, src, line, col, err) => {
 	}
 
 	async function renderJobsLogViewer(
-		/** @type {AM2AppContent} */ content,
-		/** @type {AM2AppN} */ notify,
+		/** @type {AM2Content} */ content,
+		/** @type {AM2N} */ notify,
 	) {
 		const surface = Reflect.get(window, "AMWebJobsBrowserSurface");
 		if (!surface || typeof surface.render !== "function") {
@@ -670,14 +689,13 @@ window.onerror = (msg, src, line, col, err) => {
 	}
 
 	async function renderPluginManager(
-		/** @type {AM2AppUpload} */ content,
-		/** @type {AM2AppN} */ notify,
+		/** @type {AM2Upload} */ content,
+		/** @type {AM2N} */ notify,
 	) {
 		const wrap = el("div");
 		const header = el("div", { class: "row" });
 		const refreshBtn = el("button", { class: "btn", text: "Refresh" });
 		header.appendChild(refreshBtn);
-		// upload
 		const up = el("input", { type: "file" });
 		up.multiple = true;
 		up.setAttribute("webkitdirectory", "");
@@ -699,7 +717,7 @@ window.onerror = (msg, src, line, col, err) => {
 				tableBox.appendChild(el("div", { class: "hint", text: String(e) }));
 				return;
 			}
-			const items = /** @type {AM2AppUploadItem[]} */ (
+			const items = /** @type {AM2UploadItem[]} */ (
 				Array.isArray(data.items) ? data.items : []
 			);
 			const table = el("table", { class: "table" });
@@ -733,7 +751,9 @@ window.onerror = (msg, src, line, col, err) => {
 					try {
 						await API.sendJson(
 							"POST",
-							`/api/plugins/${encodeURIComponent(p.name)}/${p.enabled ? "disable" : "enable"}`,
+							`/api/plugins/${encodeURIComponent(String(p.name || ""))}/${
+								p.enabled ? "disable" : "enable"
+							}`,
 							{},
 						);
 						await load();
@@ -750,7 +770,7 @@ window.onerror = (msg, src, line, col, err) => {
 						try {
 							await API.sendJson(
 								"DELETE",
-								`/api/plugins/${encodeURIComponent(p.name)}`,
+								`/api/plugins/${encodeURIComponent(String(p.name || ""))}`,
 								undefined,
 							);
 							await load();
@@ -795,8 +815,8 @@ window.onerror = (msg, src, line, col, err) => {
 	}
 
 	async function renderStageManager(
-		/** @type {AM2AppStage} */ content,
-		/** @type {AM2AppN} */ notify,
+		/** @type {AM2Stage} */ content,
+		/** @type {AM2N} */ notify,
 	) {
 		const wrap = el("div");
 		const header = el("div", { class: "row" });
@@ -833,7 +853,7 @@ window.onerror = (msg, src, line, col, err) => {
 				info.textContent = "";
 				info.style.display = "none";
 			}
-			const items = /** @type {AM2AppWebRootItem[]} */ (
+			const items = /** @type {AM2UploadItem[]} */ (
 				Array.isArray(data.items) ? data.items : []
 			);
 			const table = el("table", { class: "table" });
@@ -859,7 +879,7 @@ window.onerror = (msg, src, line, col, err) => {
 					try {
 						await API.sendJson(
 							"DELETE",
-							`/api/stage/${encodeURIComponent(f.name)}`,
+							`/api/stage/${encodeURIComponent(String(f.name || ""))}`,
 							undefined,
 						);
 						await load();
@@ -909,8 +929,8 @@ window.onerror = (msg, src, line, col, err) => {
 	}
 
 	async function renderAmConfig(
-		/** @type {AM2AppContent} */ content,
-		/** @type {AM2AppN} */ notify,
+		/** @type {AM2Content} */ content,
+		/** @type {AM2N} */ notify,
 	) {
 		const wrap = el("div");
 
@@ -925,7 +945,7 @@ window.onerror = (msg, src, line, col, err) => {
 		];
 
 		function formatValue(
-			/** @type {AM2AppJsonValue | undefined} */ v,
+			/** @type {AM2JsonValue | undefined} */ v,
 			/** @type {boolean} */ pretty,
 		) {
 			if (v === null) return "null";
@@ -947,13 +967,12 @@ window.onerror = (msg, src, line, col, err) => {
 			try {
 				return JSON.parse(text);
 			} catch {
-				// Allow plain strings without forcing JSON quoting.
 				return text;
 			}
 		}
 
 		function getEntry(
-			/** @type {AM2AppBook} */ snap,
+			/** @type {AM2Book} */ snap,
 			/** @type {string} */ keyPath,
 		) {
 			if (!snap || typeof snap !== "object" || Array.isArray(snap))
@@ -961,8 +980,9 @@ window.onerror = (msg, src, line, col, err) => {
 			const e = snap[keyPath];
 			if (!e || typeof e !== "object" || Array.isArray(e))
 				return { value: void 0, source: "" };
-			const entry =
-				/** @type {{ value?: AM2AppJsonValue, source?: string }} */ (e);
+			const entry = /** @type {{ value?: AM2JsonValue, source?: string }} */ (
+				e
+			);
 			return { value: entry.value, source: String(entry.source || "") };
 		}
 
@@ -989,10 +1009,10 @@ window.onerror = (msg, src, line, col, err) => {
 		}
 
 		function buildRow(
-			/** @type {AM2AppS} */ keyPath,
-			/** @type {AM2AppS} */ label,
-			/** @type {AM2AppE} */ entry,
-			/** @type {AM2AppAV} */ done,
+			/** @type {AM2Str} */ keyPath,
+			/** @type {AM2Str} */ label,
+			/** @type {AM2Entry} */ entry,
+			/** @type {AM2AsyncVoid} */ done,
 		) {
 			const valueText = formatValue(entry.value, false);
 			const valueBox = el("div", { class: "configValue", text: valueText });
@@ -1011,7 +1031,7 @@ window.onerror = (msg, src, line, col, err) => {
 
 			setBtn.addEventListener("click", async () => {
 				try {
-					await apiSet(keyPath, input.value);
+					await apiSet(keyPath, String(input.value || ""));
 					notify("Saved.");
 					input.value = "";
 					await done();
@@ -1102,9 +1122,9 @@ window.onerror = (msg, src, line, col, err) => {
 		]);
 		wrap.appendChild(rawDetails);
 
-		let lastSnap = /** @type {AM2AppJsonObject} */ ({});
+		let lastSnap = /** @type {AM2JsonObject} */ ({});
 
-		function renderBasic(/** @type {AM2AppJsonObject} */ snap) {
+		function renderBasic(/** @type {AM2JsonObject} */ snap) {
 			clear(basicBox);
 			const hint = el("div", {
 				class: "hint",
@@ -1122,7 +1142,7 @@ window.onerror = (msg, src, line, col, err) => {
 			}
 		}
 
-		function renderAdvanced(/** @type {AM2AppJsonObject} */ snap) {
+		function renderAdvanced(/** @type {AM2JsonObject} */ snap) {
 			clear(advBox);
 
 			const allKeys = Object.keys(snap || {}).sort();
@@ -1207,10 +1227,9 @@ window.onerror = (msg, src, line, col, err) => {
 	}
 
 	async function renderWizardManager(
-		/** @type {AM2AppContent} */ content,
-		/** @type {AM2AppN} */ notify,
+		/** @type {AM2Content} */ content,
+		/** @type {AM2N} */ notify,
 	) {
-		// content is the card body element provided by the layout renderer
 		const root = el("div", { class: "wizardManager" });
 
 		const header = el("div", { class: "toolbar" }, [
@@ -1232,7 +1251,7 @@ window.onerror = (msg, src, line, col, err) => {
 		root.appendChild(main);
 
 		let currentName = /** @type {string | null} */ (null);
-		let currentModel = /** @type {AM2AppWizModel | null} */ (null);
+		let currentModel = /** @type {AM2WizModel | null} */ (null);
 
 		function setYamlText(/** @type {string} */ txt) {
 			clear(yamlPane);
@@ -1279,7 +1298,6 @@ window.onerror = (msg, src, line, col, err) => {
 			const enabledIn = el("input", { type: "checkbox" });
 			enabledIn.checked = s.enabled !== false;
 
-			// Templates are stored under wizard._ui.templates (dict: name -> step partial).
 			const tmplSel = el("select", { class: "input" });
 			tmplSel.appendChild(el("option", { value: "", text: "(no template)" }));
 			const wiz =
@@ -1381,7 +1399,10 @@ window.onerror = (msg, src, line, col, err) => {
 
 			defaultsTa.addEventListener("input", () => {
 				try {
-					const v = parseJsonOrEmpty(defaultsTa.value, "defaults");
+					const v = parseJsonOrEmpty(
+						String(defaultsTa.value || ""),
+						"defaults",
+					);
 					s.defaults = v === null ? {} : v;
 					refreshYamlPreview();
 				} catch (e) {
@@ -1390,7 +1411,7 @@ window.onerror = (msg, src, line, col, err) => {
 			});
 			whenTa.addEventListener("input", () => {
 				try {
-					const v = parseJsonOrEmpty(whenTa.value, "when");
+					const v = parseJsonOrEmpty(String(whenTa.value || ""), "when");
 					if (v === null) delete s.when;
 					else s.when = v;
 					refreshYamlPreview();
@@ -1402,13 +1423,14 @@ window.onerror = (msg, src, line, col, err) => {
 			applyTmplBtn.addEventListener("click", () => {
 				const key = tmplSel.value;
 				if (!key) return;
-				const tpl = /** @type {AM2AppJsonObject | null} */ (
+				const tpl = /** @type {AM2JsonObject | null} */ (
 					tmplMap && tmplMap[key] ? tmplMap[key] : null
 				);
 				if (!tpl) return;
+				const stepRecord = /** @type {AM2JsonObject} */ (s);
 				Object.keys(tpl).forEach((k) => {
 					if (k === "id") return;
-					s[k] = tpl[k];
+					stepRecord[k] = tpl[k];
 				});
 				// Refresh inputs from model
 				renderStepEditor(stepIndex);
@@ -1419,16 +1441,18 @@ window.onerror = (msg, src, line, col, err) => {
 				const key =
 					(s.template && String(s.template).trim()) || prompt("Template name?");
 				if (!key) return;
-				currentModel.wizard._ui = currentModel.wizard._ui || {};
-				currentModel.wizard._ui.templates =
-					currentModel.wizard._ui.templates || {};
-				const tpl = /** @type {AM2AppJsonObject} */ ({});
+				const currentWizard = currentModel && currentModel.wizard;
+				if (!currentWizard) return;
+				currentWizard._ui = currentWizard._ui || {};
+				currentWizard._ui.templates = currentWizard._ui.templates || {};
+				const tpl = /** @type {AM2JsonObject} */ ({});
+				const stepRecord = /** @type {AM2JsonObject} */ (s);
 				Object.keys(s).forEach((k) => {
 					if (k === "id") return;
 					if (k === "_ui") return;
-					tpl[k] = s[k];
+					tpl[k] = stepRecord[k];
 				});
-				currentModel.wizard._ui.templates[key] = tpl;
+				currentWizard._ui.templates[key] = tpl;
 				s.template = key;
 				renderStepEditor(stepIndex);
 				refreshYamlPreview();
@@ -1471,6 +1495,7 @@ window.onerror = (msg, src, line, col, err) => {
 		}
 
 		function renderDetail() {
+			const dragdropBindingsPromise = _amLoadStepRowDragdropBindings();
 			clear(detailPane);
 			clear(editorPane);
 			clear(yamlPane);
@@ -1506,12 +1531,12 @@ window.onerror = (msg, src, line, col, err) => {
 			detailPane.appendChild(mkRow("Display name", nameIn));
 			detailPane.appendChild(mkRow("Description", descIn));
 
-			// defaults memory is stored under wizard._ui.defaults_memory
-			wiz._ui = wiz._ui || {};
-			if (!wiz._ui.defaults_memory) wiz._ui.defaults_memory = {};
+			const wizUi = /** @type {AM2WebWizardUiState} */ (wiz._ui || {});
+			wiz._ui = wizUi;
+			if (!wizUi.defaults_memory) wizUi.defaults_memory = {};
 			const dmTa = el("textarea", {
 				class: "textarea",
-				text: JSON.stringify(wiz._ui.defaults_memory || {}, null, 2),
+				text: JSON.stringify(wizUi.defaults_memory || {}, null, 2),
 			});
 			detailPane.appendChild(
 				el("div", { class: "subTitle", text: "Defaults memory (JSON)" }),
@@ -1520,11 +1545,9 @@ window.onerror = (msg, src, line, col, err) => {
 			dmTa.addEventListener("input", () => {
 				try {
 					const t = String(dmTa.value || "").trim();
-					wiz._ui.defaults_memory = t ? JSON.parse(t) : {};
+					wizUi.defaults_memory = t ? JSON.parse(t) : {};
 					refreshYamlPreview();
-				} catch (e) {
-					// ignore while typing
-				}
+				} catch (e) {}
 			});
 
 			nameIn.addEventListener("input", () => {
@@ -1558,41 +1581,19 @@ window.onerror = (msg, src, line, col, err) => {
 			stepsBox.appendChild(addBtn);
 
 			(wiz.steps || []).forEach(
-				(/** @type {AM2AppWebWizardStep} */ s, /** @type {number} */ idx) => {
+				(/** @type {AM2WebWizardStep} */ s, /** @type {number} */ idx) => {
 					const label = `${s.id || "step_" + (idx + 1)} : ${s.type || "unknown"}${s.enabled === false ? " [disabled]" : ""}`;
 					const row = el("div", { class: "stepRow", text: label });
 					row.dataset.stepIndex = String(idx);
 					row.draggable = true;
 					row.addEventListener("click", () => renderStepEditor(idx));
 
-					row.addEventListener("dragstart", (/** @type {DragEvent} */ ev) => {
-						ev.dataTransfer.setData("text/plain", String(idx));
-						ev.dataTransfer.effectAllowed = "move";
-					});
-					row.addEventListener("dragover", (/** @type {DragEvent} */ ev) => {
-						ev.preventDefault();
-						ev.dataTransfer.dropEffect = "move";
-					});
-					row.addEventListener("drop", (/** @type {DragEvent} */ ev) => {
-						ev.preventDefault();
-						const from = parseInt(
-							ev.dataTransfer.getData("text/plain") || "-1",
-							10,
-						);
-						const to = idx;
-						if (
-							Number.isNaN(from) ||
-							from < 0 ||
-							from >= (wiz.steps || []).length
-						)
-							return;
-						if (from === to) return;
-						const arr = wiz.steps || [];
-						const [it] = arr.splice(from, 1);
-						arr.splice(to, 0, it);
-						renderDetail();
-						renderStepEditor(to);
-						refreshYamlPreview();
+					void dragdropBindingsPromise.then((dragdropBindings) => {
+						dragdropBindings.bindStepRowDragdropHandlers(row, idx, wiz, {
+							renderDetail,
+							renderStepEditor,
+							refreshYamlPreview,
+						});
 					});
 
 					stepsBox.appendChild(row);
@@ -1614,7 +1615,6 @@ window.onerror = (msg, src, line, col, err) => {
 			saveBtn.addEventListener("click", async () => {
 				if (!currentName) return;
 				try {
-					// Validate on server before saving (safe-save contract).
 					await API.sendJson("POST", "/api/wizards/validate", {
 						model: currentModel,
 					});
@@ -1655,9 +1655,9 @@ window.onerror = (msg, src, line, col, err) => {
 			currentName = name;
 			try {
 				const w = await API.getJson(`/api/wizards/${encodeURIComponent(name)}`);
-				currentModel = /** @type {AM2AppWizModel | null} */ (asObj(w.model));
+				currentModel = /** @type {AM2WizModel | null} */ (asObj(w.model));
 				if (!currentModel)
-					currentModel = /** @type {AM2AppWizModel} */ ({
+					currentModel = /** @type {AM2WizModel} */ ({
 						wizard: { name, description: "", steps: [] },
 					});
 				renderDetail();
@@ -1672,12 +1672,12 @@ window.onerror = (msg, src, line, col, err) => {
 			clear(listPane);
 			listPane.appendChild(el("div", { class: "hint", text: "Loading..." }));
 			const r = await API.getJson("/api/wizards");
-			const items = /** @type {AM2AppWizItem[]} */ (
+			const items = /** @type {AM2WizItem[]} */ (
 				Array.isArray(r.items) ? r.items : []
 			);
 			clear(listPane);
 
-			items.forEach((/** @type {AM2AppWizItem} */ w) => {
+			items.forEach((/** @type {AM2WizItem} */ w) => {
 				const wizName = (w && (w.name || w.filename || w.id || w.title)) || "";
 				const count = (w && (w.step_count != null ? w.step_count : "?")) ?? "?";
 				const row = el("div", {
@@ -1712,8 +1712,8 @@ window.onerror = (msg, src, line, col, err) => {
 	}
 
 	async function renderRootBrowser(
-		/** @type {AM2AppContent} */ content,
-		/** @type {AM2AppN} */ notify,
+		/** @type {AM2Content} */ content,
+		/** @type {AM2N} */ notify,
 	) {
 		const root = el("div", { class: "rootBrowser" });
 
@@ -1760,11 +1760,11 @@ window.onerror = (msg, src, line, col, err) => {
 
 		async function loadRoots() {
 			const data = await API.getJson("/api/roots");
-			const items = /** @type {AM2AppWizItem[]} */ (
+			const items = /** @type {AM2WizItem[]} */ (
 				Array.isArray(data.items) ? data.items : []
 			);
 			clear(rootsSel);
-			items.forEach((/** @type {AM2AppWebRootItem} */ it) => {
+			items.forEach((/** @type {AM2WebRootItem} */ it) => {
 				const id = String(it && (it.id ?? it.name ?? ""));
 				const label = String(it && (it.label ?? it.name ?? it.id ?? ""));
 				rootsSel.appendChild(el("option", { value: id, text: label }));
@@ -1776,12 +1776,16 @@ window.onerror = (msg, src, line, col, err) => {
 
 		async function loadWizards() {
 			const data = await API.getJson("/api/wizards");
-			const items = Array.isArray(data.items) ? data.items : [];
+			const items = /** @type {AM2WizItem[]} */ (
+				Array.isArray(data.items) ? data.items : []
+			);
 			clear(wizSel);
 			wizSel.appendChild(el("option", { value: "", text: "Select wizard" }));
-			items.forEach((/** @type {AM2AppWizItem} */ it) => {
+			items.forEach((/** @type {AM2WizItem} */ it) => {
 				const label = String(it.display_name || it.name || "");
-				wizSel.appendChild(el("option", { value: it.name, text: label }));
+				wizSel.appendChild(
+					el("option", { value: String(it.name || ""), text: label }),
+				);
 			});
 		}
 
@@ -1799,17 +1803,19 @@ window.onerror = (msg, src, line, col, err) => {
 
 		async function loadDir() {
 			if (!currentRoot) return;
-			currentPath = normPath(pathInp.value);
+			currentPath = normPath(String(pathInp.value || ""));
 			pathInp.value = currentPath;
 			selected = new Set();
-			const url = `/api/fs/list?root=${encodeURIComponent(currentRoot)}&path=${encodeURIComponent(currentPath)}&recursive=0`;
+			const url =
+				`/api/fs/list?root=${encodeURIComponent(currentRoot)}&path=${encodeURIComponent(
+					currentPath,
+				)}` + "&recursive=0";
 			const data = await API.getJson(url);
-			const items = Array.isArray(data.items) ? data.items : [];
+			const items = /** @type {AM2WebFsItem[]} */ (
+				Array.isArray(data.items) ? data.items : []
+			);
 			items.sort(
-				(
-					/** @type {AM2AppWebFsItem} */ a,
-					/** @type {AM2AppWebFsItem} */ b,
-				) => {
+				(/** @type {AM2WebFsItem} */ a, /** @type {AM2WebFsItem} */ b) => {
 					const ad = a.is_dir ? 0 : 1;
 					const bd = b.is_dir ? 0 : 1;
 					if (ad !== bd) return ad - bd;
@@ -1831,12 +1837,12 @@ window.onerror = (msg, src, line, col, err) => {
 			);
 			listBox.appendChild(curRow);
 
-			items.forEach((/** @type {AM2AppWebFsItem} */ it) => {
+			items.forEach((/** @type {AM2WebFsItem} */ it) => {
 				const row = el("div", { class: "fileRow" });
 				const chk = el("input", { type: "checkbox" });
 				chk.addEventListener("change", () => {
 					if (chk.checked) selected.add(String(it.path || ""));
-					else selected.delete(it.path);
+					else selected.delete(String(it.path || ""));
 				});
 				const name = String(it.path || "")
 					.split("/")
@@ -1862,10 +1868,10 @@ window.onerror = (msg, src, line, col, err) => {
 			const id = wizSel.value;
 			if (!id) return;
 			const data = await API.getJson(`/api/wizards/${encodeURIComponent(id)}`);
-			wizardModel = /** @type {AM2AppWizModel | null} */ (
+			wizardModel = /** @type {AM2WizModel | null} */ (
 				asObj(data && data.model)
 			);
-			const wiz = /** @type {AM2AppWebWizardBody | null} */ (
+			const wiz = /** @type {AM2WebWizardBody | null} */ (
 				asObj(wizardModel && wizardModel.wizard)
 			);
 			const steps = wiz && Array.isArray(wiz.steps) ? wiz.steps : [];
@@ -1873,7 +1879,7 @@ window.onerror = (msg, src, line, col, err) => {
 			formBox.appendChild(
 				el("div", { class: "hint", text: `Wizard: ${title}` }),
 			);
-			steps.forEach((/** @type {AM2AppWebWizardStep} */ s) => {
+			steps.forEach((/** @type {AM2WebWizardStep} */ s) => {
 				const sid = s.id || s.key || "";
 				if (!sid) return;
 				const st = String(s.type || "input");
@@ -1900,8 +1906,8 @@ window.onerror = (msg, src, line, col, err) => {
 					const sel = el("select");
 					sel.dataset.stepId = sid;
 					(Array.isArray(s.options) ? s.options : []).forEach(
-						(/** @type {AM2AppJsonValue} */ o) => {
-							const obj = /** @type {AM2AppValLabel | null} */ (asObj(o));
+						(/** @type {AM2JsonValue} */ o) => {
+							const obj = /** @type {AM2ValLabel | null} */ (asObj(o));
 							const v = obj
 								? String(obj.value !== undefined ? obj.value : "")
 								: String(o);
@@ -1927,7 +1933,7 @@ window.onerror = (msg, src, line, col, err) => {
 		}
 
 		function collectPayload() {
-			const payload = /** @type {AM2AppJsonObject} */ ({});
+			const payload = /** @type {AM2JsonObject} */ ({});
 			Array.from(formBox.querySelectorAll("input,select")).forEach(
 				(/** @type {Element} */ n) => {
 					const field = /** @type {HTMLInputElement | HTMLSelectElement} */ (n);
@@ -1948,13 +1954,13 @@ window.onerror = (msg, src, line, col, err) => {
 		}
 
 		rootsSel.addEventListener("change", async () => {
-			currentRoot = rootsSel.value;
+			currentRoot = String(rootsSel.value || "");
 			pathInp.value = ".";
 			await loadDir();
 		});
 		refreshBtn.addEventListener("click", () => loadDir());
 		upBtn.addEventListener("click", async () => {
-			const p = normPath(pathInp.value);
+			const p = normPath(String(pathInp.value || ""));
 			if (p === ".") return;
 			const parts = p.split("/");
 			parts.pop();
@@ -2037,8 +2043,8 @@ window.onerror = (msg, src, line, col, err) => {
 	};
 
 	async function renderContent(
-		/** @type {AM2AppContent} */ content,
-		/** @type {AM2AppN} */ notify,
+		/** @type {AM2Content} */ content,
+		/** @type {AM2N} */ notify,
 	) {
 		const contentType = typeof content.type === "string" ? content.type : "";
 		const fn = Reflect.get(CONTENT_RENDERERS, contentType);
@@ -2051,8 +2057,8 @@ window.onerror = (msg, src, line, col, err) => {
 	}
 
 	async function renderLayout(
-		/** @type {AM2AppL} */ layout,
-		/** @type {AM2AppN} */ notify,
+		/** @type {AM2Layout} */ layout,
+		/** @type {AM2N} */ notify,
 	) {
 		if (!layout || layout.type !== "grid") {
 			return el("div", { class: "hint", text: "Unsupported layout." });
@@ -2102,7 +2108,7 @@ window.onerror = (msg, src, line, col, err) => {
 	async function loadNav() {
 		try {
 			const nav = await API.getJson("/api/ui/nav");
-			return /** @type {AM2AppWebNavItem[]} */ (
+			return /** @type {AM2WebNavItem[]} */ (
 				Array.isArray(nav.items) ? nav.items : []
 			);
 		} catch (e) {
@@ -2113,10 +2119,10 @@ window.onerror = (msg, src, line, col, err) => {
 
 	function routeToPageId(
 		/** @type {string} */ pathname,
-		/** @type {AM2AppWebNavItem[]} */ navItems,
+		/** @type {AM2WebNavItem[]} */ navItems,
 	) {
 		const hit = navItems.find(
-			(/** @type {AM2AppWebNavItem} */ i) => i.route === pathname,
+			(/** @type {AM2WebNavItem} */ i) => i.route === pathname,
 		);
 		if (hit) return String(hit.page_id || "dashboard");
 		if (pathname === "/") return "dashboard";
@@ -2142,7 +2148,7 @@ window.onerror = (msg, src, line, col, err) => {
 		const debugEnabled =
 			Array.isArray(navItems) &&
 			navItems.some(
-				(/** @type {AM2AppWebNavItem} */ i) =>
+				(/** @type {AM2WebNavItem} */ i) =>
 					i && (i.page_id === "debug_js" || i.route === "/debug-js"),
 			);
 		if (debugEnabled) {
@@ -2152,7 +2158,7 @@ window.onerror = (msg, src, line, col, err) => {
 		const sidebar = el("div", { class: "sidebar" });
 		sidebar.appendChild(el("div", { class: "brand", text: "AudioMason" }));
 		const nav = el("div", { class: "nav" });
-		navItems.forEach((/** @type {AM2AppWebNavItem} */ item) => {
+		navItems.forEach((/** @type {AM2WebNavItem} */ item) => {
 			const a = el("a", {
 				class: "navItem",
 				href: item.route,
@@ -2201,7 +2207,7 @@ window.onerror = (msg, src, line, col, err) => {
 				page = await API.getJson(`/api/ui/page/${encodeURIComponent(pageId)}`);
 			} catch (e) {
 				notify(String(e));
-				page = /** @type {AM2AppWebPage} */ ({
+				page = /** @type {AM2WebPage} */ ({
 					title: "Error",
 					layout: { type: "grid", cols: 12, gap: 12, children: [] },
 				});
@@ -2212,7 +2218,7 @@ window.onerror = (msg, src, line, col, err) => {
 			);
 			if (titleNode) titleNode.textContent = String(page.title || pageId);
 			clear(content);
-			const layout = /** @type {AM2AppL} */ (
+			const layout = /** @type {AM2Layout} */ (
 				page.layout || { type: "grid", cols: 12, gap: 12, children: [] }
 			);
 			content.appendChild(await renderLayout(layout, notify));

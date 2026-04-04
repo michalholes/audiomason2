@@ -1,8 +1,9 @@
+/// <reference path="../../../../am2-globals.d.ts" />
 (() => {
-	/** @typedef {*} AM2LogWebContent */
-	/** @typedef {*} AM2LogWebDebugRecord */
-	/** @typedef {*} AM2LogWebNotifyFn */
-	/** @typedef {*} AM2LogWebSurfaceDeps */
+	/** @typedef {AM2WebContent} AM2LogWebContent */
+	/** @typedef {AM2WebDebugRecord} AM2LogWebDebugRecord */
+	/** @typedef {AM2WebNotifyFn} AM2LogWebNotifyFn */
+	/** @typedef {AM2WebSurfaceDeps} AM2LogWebSurfaceDeps */
 	/** @param {AM2LogWebContent | null | undefined} content */
 	function resolveSurfaceKind(content) {
 		const kind =
@@ -399,7 +400,11 @@
 			});
 
 			try {
-				if (content.tail_source && content.tail_source.type === "api") {
+				if (
+					content.tail_source &&
+					content.tail_source.type === "api" &&
+					typeof content.tail_source.path === "string"
+				) {
 					const t = await API.getJson(content.tail_source.path);
 					if (t && typeof t.text === "string") {
 						const tail = t.text.endsWith("\n") ? t.text : `${t.text}\n`;
@@ -411,7 +416,7 @@
 			}
 
 			const src = content.source;
-			if (src && src.type === "sse") {
+			if (src && src.type === "sse" && typeof src.path === "string") {
 				eventSource = new EventSource(src.path);
 				eventSource.onmessage = /** @param {MessageEvent<string>} ev */ (
 					ev,

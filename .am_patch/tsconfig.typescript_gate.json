@@ -1,8 +1,0 @@
-{
-  "extends": "../tsconfig.json",
-  "include": [
-    "../plugins/**/*",
-    "../am2-globals.d.ts/**/*",
-    "../playwright.config.ts/**/*"
-  ]
-}

@@ -1,23 +1,27 @@
 export {};
 
 declare global {
-	interface AM2WebDebugRecord {
+	interface AM2WebDebugRecord extends AM2JsonObject {
 		ts?: string;
 		channel?: string;
 		level?: string;
 		kind?: string;
 		message?: string;
-		source?: string;
+		source?: string | null;
 		url?: string;
 		method?: string;
+		status_text?: string;
 		status?: number;
 		ok?: boolean;
 		line?: number | null;
 		col?: number | null;
 		requestBody?: string | null;
 		responseBody?: string | null;
+		request_headers?: Record<string, string>;
+		request_body?: string | null;
+		response_headers?: Record<string, string>;
 		response_text?: string | null;
-		stack?: string;
+		stack?: string | null;
 	}
 
 	type AM2WebNotifyFn = (message: string) => void;
@@ -118,6 +122,11 @@ declare global {
 		) => AM2WebUiElement;
 		clear: (node: Node | null) => void;
 	}
+
+	type AM2WebTableColumn = {
+		header?: string;
+		key?: string;
+	};
 
 	interface AM2WebSourceRef extends AM2JsonObject {
 		type?: string;
@@ -255,6 +264,21 @@ declare global {
 			notify: AM2WebNotifyFn,
 			deps: AM2WebSurfaceDeps,
 		): Promise<HTMLElement>;
+	}
+
+	interface AM2WebStepRowDragdropDeps {
+		renderDetail: () => void;
+		renderStepEditor: (stepIndex: number) => void;
+		refreshYamlPreview: () => void;
+	}
+
+	interface AM2WebAppDragdropBindingsModule {
+		bindStepRowDragdropHandlers(
+			row: HTMLElement,
+			idx: number,
+			wiz: AM2WebWizardBody,
+			deps: AM2WebStepRowDragdropDeps,
+		): void;
 	}
 
 	interface Window {
