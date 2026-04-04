@@ -1,3 +1,4 @@
+/// <reference path="../../../../../../types/am2-import-ui-globals.d.ts" />
 (function () {
 	"use strict";
 
@@ -434,7 +435,7 @@
 				mount: libraryMount,
 				definition: definition,
 				state: {
-					selectedLibraryId: graphOps.selectedLibraryId(),
+					selectedLibraryId: graphOps.selectedLibraryId() || "",
 				},
 				actions: {
 					onAddLibrary: graphOps.addLibrary,

@@ -1,3 +1,4 @@
+/// <reference path="../../../../../../types/am2-import-ui-globals.d.ts" />
 (function () {
 	"use strict";
 
@@ -181,7 +182,7 @@
 	 * @param {AM2BranchInputsMutator} mutator
 	 */
 	function patchBranchInputs(baseInputs, onPatchNode, mutator) {
-		const next = clone(baseInputs);
+		const next = /** @type {AM2DSLEditorBranchInputs} */ (clone(baseInputs));
 		next.branch_order = Array.isArray(next.branch_order)
 			? next.branch_order
 			: [];
@@ -242,7 +243,10 @@
 		);
 		setKey(nameSelect, "binding.name." + String(index));
 		nameSelect.addEventListener("change", function () {
-			onChange(index, { name: nameSelect.value || "", value: binding.value });
+			/** @type {AM2DSLEditorBranchBinding} */
+			const nextBinding = { name: nameSelect.value || "" };
+			if (binding.value !== undefined) nextBinding.value = binding.value;
+			onChange(index, nextBinding);
 		});
 		wrap.appendChild(row("binding name", nameSelect));
 
@@ -548,11 +552,11 @@
 		const definition = /** @type {AM2DSLGraphDefinition} */ (
 			(opts && opts.definition) || {}
 		);
-		/** @type {AM2NodePatchFn} */
-		const onPatchNode =
+		const onPatchNode = /** @type {AM2NodePatchFn} */ (
 			typeof (opts && opts.onPatchNode) === "function"
 				? opts.onPatchNode
-				: function (_payload) {};
+				: function (_payload) {}
+		);
 		const kind = primitiveKind(node);
 		if (!kind) return false;
 		if (kind === "fork") renderForkForm(mount, node, definition, onPatchNode);

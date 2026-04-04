@@ -19,7 +19,7 @@
 		/** @param {string | null | undefined} stepId */
 		function isOptionalStep(stepId) {
 			const sid = String(stepId || "");
-			return (
+			return !!(
 				sid &&
 				sid !== "select_authors" &&
 				sid !== "select_books" &&

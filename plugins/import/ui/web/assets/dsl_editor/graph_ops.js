@@ -1,3 +1,4 @@
+/// <reference path="../../../../../../types/am2-import-ui-globals.d.ts" />
 (function () {
 	"use strict";
 
@@ -67,7 +68,7 @@
 	function mutateWizard(mutator, opts) {
 		const flowEditor = window.AM2FlowEditorState;
 		if (flowEditor && flowEditor.mutateWizard) {
-			flowEditor.mutateWizard(mutator, opts || null);
+			flowEditor.mutateWizard(mutator, opts || undefined);
 		}
 	}
 
@@ -334,6 +335,7 @@
 					writes: [],
 				},
 			};
+			graph.nodes = graphNodes(graph);
 			graph.nodes.push(nextNode);
 
 			if (!graph.entry_step_id) {

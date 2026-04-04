@@ -1,3 +1,4 @@
+/// <reference path="../../../../../types/am2-import-ui-globals.d.ts" />
 (() => {
 	const W = /** @type {(Window & typeof globalThis) & {
 	 *   AM2WizardDefinitionEditorHelpers?: AM2WizardDefinitionEditorHelpersApi,
@@ -49,7 +50,7 @@
 
 	/** @template T @param {T} x @returns {T} */
 	function deepClone(x) {
-		return x === undefined ? undefined : JSON.parse(JSON.stringify(x));
+		return /** @type {T} */ (JSON.parse(JSON.stringify(x)));
 	}
 
 	/** @param {AM2JsonObject | null | undefined} defn @returns {AM2JsonObject} */
@@ -104,7 +105,7 @@
 		if (!FE || !FE.mutateWizard) return;
 		FE.mutateWizard((wd) => {
 			fn && fn(ensureWizardUi(wd), wd);
-		}, opts || null);
+		}, opts || undefined);
 	}
 
 	/** @param {string | null | undefined} stepIdOrNull */
@@ -127,8 +128,8 @@
 				entry_step_id: String(entry || ""),
 				nodes: (nodes || []).map((sid) => ({ step_id: sid })),
 				edges: (edges || []).map((e) => ({
-					from_step_id: e.from_step_id,
-					to_step_id: e.to_step_id,
+					from_step_id: String(e.from_step_id || ""),
+					to_step_id: String(e.to_step_id || ""),
 					priority: typeof e.priority === "number" ? e.priority : 0,
 					when: e.when === undefined ? null : e.when,
 				})),
@@ -155,7 +156,10 @@
 				// internal idempotent migrations.
 				if (wd && typeof wd === "object") {
 					const v2 = wd.version === 2;
-					const hasWizardId = Object.hasOwn(wd, "wizard_id");
+					const hasWizardId = Object.prototype.hasOwnProperty.call(
+						wd,
+						"wizard_id",
+					);
 					const g =
 						wd.graph && typeof wd.graph === "object" && !Array.isArray(wd.graph)
 							? /** @type {AM2WizardDefinitionV2Graph} */ (wd.graph)
@@ -427,10 +431,14 @@
 				renderError(out.data, false);
 				return false;
 			}
-			clear(ui.history);
+			const historyMount = ui.history;
+			if (!historyMount) {
+				return false;
+			}
+			clear(historyMount);
 			const items = out.data && out.data.items ? out.data.items : [];
 			(Array.isArray(items) ? items : []).forEach((it) => {
-				ui.history.appendChild(historyRow(it || {}));
+				historyMount.appendChild(historyRow(it || {}));
 			});
 			return true;
 		});
@@ -669,7 +677,7 @@
 	}
 
 	const table =
-		W.AM2WDTableRender && W.AM2WDTableRender.initTable && root
+		W.AM2WDTableRender && root
 			? W.AM2WDTableRender.initTable({
 					body: root.tableBody,
 					el: el,

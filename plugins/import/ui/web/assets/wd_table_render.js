@@ -57,6 +57,7 @@
 				reorderStep: () => {},
 			});
 		if (!body) return null;
+		const tableBody = body;
 
 		/** @type {Record<string, HTMLElement>} */
 		const rowById = {};
@@ -73,7 +74,7 @@
 		}
 
 		if (typeof state.reorderStep === "function") {
-			body.addEventListener("dragover", function (event) {
+			tableBody.addEventListener("dragover", function (event) {
 				event.preventDefault();
 				dropBeforeId = null;
 				try {
@@ -81,7 +82,7 @@
 				} catch (error) {}
 			});
 
-			body.addEventListener("drop", function (event) {
+			tableBody.addEventListener("drop", function (event) {
 				event.preventDefault();
 				let dragId = dragStepId;
 				try {
@@ -97,7 +98,7 @@
 		}
 
 		function renderAll() {
-			clear(body);
+			clear(tableBody);
 			Object.keys(rowById).forEach((stepId) => {
 				delete rowById[stepId];
 			});
@@ -145,7 +146,7 @@
 				btnRemove.title = "Remove";
 				const trashSvg =
 					W.AM2WDDomIcons && W.AM2WDDomIcons.svgIcon
-						? W.AM2WDDomIcons.svgIcon("trash", null, "Remove")
+						? W.AM2WDDomIcons.svgIcon("trash", undefined, "Remove")
 						: null;
 				if (trashSvg) btnRemove.appendChild(trashSvg);
 				else btnRemove.appendChild(text("span", null, "X"));
@@ -216,7 +217,7 @@
 				row.appendChild(cellType);
 				row.appendChild(cellReq);
 				row.appendChild(cellActions);
-				body.appendChild(row);
+				tableBody.appendChild(row);
 				rowById[sid] = row;
 			});
 		}

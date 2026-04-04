@@ -1,43 +1,5 @@
+/// <reference path="../../../../../types/am2-import-ui-globals.d.ts" />
 (() => {
-	/** @typedef {Node & {
-	 *   attrs?: Record<string, string>,
-	 *   children?: Node[] | HTMLCollection,
-	 *   childNodes?: NodeListOf<ChildNode> | Node[],
-	 *   dataset?: DOMStringMap,
-	 *   checked?: boolean,
-	 *   value?: string,
-	 *   type?: string,
-	 *   tag?: string,
-	 *   tagName?: string,
-	 *   appendChild?: (child: Node) => Node,
-	 *   removeChild?: (child: Node) => Node,
-	 *   setAttribute?: (name: string, value: string) => void,
-	 *   getAttribute?: (name: string) => string | null,
-	 *   addEventListener?: (type: string, handler: EventListenerOrEventListenerObject) => void,
-	 *   oninput?: ((event: Event) => void) | null,
-	 *   onchange?: ((event: Event) => void) | null,
-	 *   onclick?: ((event: Event) => void) | null,
-	 * }} AM2PromptNode */
-	/**
-	 * @typedef {(tag: string,
-	 *   attrs?: Record<string, string | number | boolean | null | undefined> | null,
-	 *   children?: Node[] | null) => HTMLElement} AM2PromptElementFactory
-	 */
-	/** @typedef {(node: AM2PromptNode) => boolean} AM2PromptPredicate */
-	/** @typedef {{
-	 *   body: HTMLElement,
-	 *   bodyState?: AM2ImportPromptBodyState | null,
-	 *   context: AM2ImportStepContext,
-	 *   el?: AM2PromptElementFactory,
-	 *   localDraft?: AM2JsonValue | null,
-	 *   makeEl: AM2PromptElementFactory,
-	 *   mode?: string,
-	 *   model: AM2ImportPromptModel,
-	 *   mount?: HTMLElement,
-	 *   mountState?: AM2ImportWizardV3MountState,
-	 *   sameStep?: boolean,
-	 *   step?: AM2ImportWizardStep | null,
-	 * }} AM2PromptRenderArgs */
 	/** @typedef {{
 	 *   actions: HTMLElement,
 	 *   editor: HTMLElement,
@@ -72,7 +34,8 @@
 	/** @param {AM2ImportWizardStep | null | undefined} step */
 	function isPromptStep(step) {
 		if (!step || typeof step !== "object") return false;
-		const primitiveId = String(step.primitive_id || "");
+		const promptStep = /** @type {AM2ImportWizardStep} */ (step);
+		const primitiveId = String(promptStep.primitive_id || "");
 		const primitiveVersion = Number(step.primitive_version || 0);
 		return primitiveVersion === 1 && primitiveId in PROMPT_PAYLOAD_KEYS;
 	}
@@ -83,9 +46,12 @@
 	 */
 	function findCurrentStep(state) {
 		if (!isV3State(state)) return null;
-		const model = state.effective_model;
+		const activeState = /** @type {AM2ImportWizardState} */ (state);
+		const model = /** @type {AM2ImportEffectiveModel} */ (
+			activeState.effective_model || {}
+		);
 		const steps = Array.isArray(model.steps) ? model.steps : [];
-		const currentStepId = String(state.current_step_id || "");
+		const currentStepId = String(activeState.current_step_id || "");
 		return steps.find((step) => step && step.step_id === currentStepId) || null;
 	}
 
@@ -117,12 +83,15 @@
 	/** @param {AM2ImportWizardStep | null | undefined} step @returns {AM2ImportPromptModel | null} */
 	function buildPromptModel(step) {
 		if (!isPromptStep(step)) return null;
-		const ui = step && typeof step.ui === "object" ? step.ui : {};
+		const promptStep = /** @type {AM2ImportWizardStep} */ (step);
+		const ui =
+			promptStep.ui && typeof promptStep.ui === "object" ? promptStep.ui : {};
 		return {
-			step_id: String(step.step_id || ""),
-			primitive_id: String(step.primitive_id || ""),
-			title:
-				step && step.title ? String(step.title) : String(step.step_id || ""),
+			step_id: String(promptStep.step_id || ""),
+			primitive_id: String(promptStep.primitive_id || ""),
+			title: promptStep.title
+				? String(promptStep.title)
+				: String(promptStep.step_id || ""),
 			label: typeof ui.label === "string" ? ui.label : "",
 			prompt: typeof ui.prompt === "string" ? ui.prompt : "",
 			help: typeof ui.help === "string" ? ui.help : "",
@@ -155,6 +124,16 @@
 			current_step_id: String((state && state.current_step_id) || ""),
 			status: String((state && state.status) || ""),
 		};
+	}
+
+	/** @param {AM2ImportPromptBodyState | null | undefined} bodyState @param {boolean | null | undefined} sameStep */
+	function rememberDirty(bodyState, sameStep) {
+		return !!(sameStep && bodyState && bodyState.dirty);
+	}
+
+	/** @param {AM2ImportPromptBodyState | null | undefined} bodyState @param {boolean | null | undefined} sameStep */
+	function rememberFilterDirty(bodyState, sameStep) {
+		return !!(sameStep && bodyState && bodyState.filterDirty);
 	}
 
 	/**
@@ -293,15 +272,16 @@
 	/** @param {AM2PromptRenderArgs} args @returns {AM2ImportPromptBodyState} */
 	function renderTextLike(args) {
 		const { body, bodyState, makeEl, mode, model, localDraft, sameStep } = args;
+		const resolvedMode = String(mode || "text");
 		const key =
 			PROMPT_PAYLOAD_KEYS[
 				/** @type {keyof typeof PROMPT_PAYLOAD_KEYS} */ (model.primitive_id)
 			];
 		const next = {
 			context: args.context,
-			dirty: sameStep ? bodyState && bodyState.dirty : false,
-			editor: ensureTextEditor(bodyState, makeEl, mode, key),
-			mode,
+			dirty: rememberDirty(bodyState, sameStep),
+			editor: ensureTextEditor(bodyState, makeEl, resolvedMode, key),
+			mode: resolvedMode,
 			model,
 			primitive_id: model.primitive_id,
 			selectionSet: /** @type {Set<number> | null} */ (null),
@@ -368,7 +348,7 @@
 		});
 		const next = {
 			context: args.context,
-			dirty: sameStep ? bodyState && bodyState.dirty : false,
+			dirty: rememberDirty(bodyState, sameStep),
 			editor,
 			mode: "dropdown",
 			model,
@@ -440,9 +420,12 @@
 			sameStep,
 		} = args;
 		const filterable = mode === "filterable-checklist";
+		const renderMode = String(
+			mode || (filterable ? "filterable-checklist" : "checklist"),
+		);
 		const shell = ensureChecklistState(bodyState, makeEl, filterable);
-		const dirty = sameStep ? bodyState && bodyState.dirty : false;
-		const filterDirty = sameStep ? bodyState && bodyState.filterDirty : false;
+		const dirty = rememberDirty(bodyState, sameStep);
+		const filterDirty = rememberFilterDirty(bodyState, sameStep);
 		const filterText =
 			filterDirty && bodyState && bodyState.filterInput
 				? String(bodyState.filterInput.value || "")
@@ -455,7 +438,7 @@
 			filterDirty,
 			filterInput: shell.filterInput,
 			list: shell.list,
-			mode,
+			mode: renderMode,
 			model,
 			primitive_id: model.primitive_id,
 			selectionSet:
@@ -606,7 +589,7 @@
 		}
 		const next = {
 			context,
-			dirty: sameStep ? bodyState && bodyState.dirty : false,
+			dirty: rememberDirty(bodyState, sameStep),
 			editor: checkbox,
 			mode: "confirm",
 			model,
@@ -769,11 +752,12 @@
 		void fetchCurrentStepProjection(state).then((projectedStep) => {
 			if (!isPromptStep(projectedStep)) return;
 			const liveContext = getLiveContext ? getLiveContext() : context;
-			if (!sameActiveContext(context, liveContext)) return;
+			const nextContext = liveContext || context;
+			if (!sameActiveContext(context, nextContext)) return;
 			const projectedModel = buildPromptModel(projectedStep);
 			if (!projectedModel) return;
 			renderPromptBody({
-				context: liveContext,
+				context: nextContext,
 				el: makeEl,
 				model: projectedModel,
 				mount,
@@ -818,7 +802,8 @@
 		const mount = args && args.mount ? args.mount : null;
 		const step = args && args.step ? args.step : null;
 		if (!mount || !isPromptStep(step)) return {};
-		const primitiveId = String(step.primitive_id || "");
+		const promptStep = /** @type {AM2ImportWizardStep} */ (step);
+		const primitiveId = String(promptStep.primitive_id || "");
 		const key =
 			PROMPT_PAYLOAD_KEYS[
 				/** @type {keyof typeof PROMPT_PAYLOAD_KEYS} */ (primitiveId)
@@ -828,7 +813,7 @@
 		if (
 			bodyState &&
 			bodyState.context &&
-			String(step.step_id || "") === bodyState.context.current_step_id
+			String(promptStep.step_id || "") === bodyState.context.current_step_id
 		) {
 			if (primitiveId === "ui.prompt_confirm") {
 				return {

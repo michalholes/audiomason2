@@ -240,6 +240,35 @@
 		step: document.getElementById("step"),
 	};
 
+	if (
+		!ui.root ||
+		!ui.path ||
+		!ui.mode ||
+		!ui.start ||
+		!ui.reload ||
+		!ui.submit ||
+		!ui.startProcessing ||
+		!ui.step
+	) {
+		return;
+	}
+
+	const rootInput = ui.root;
+	const pathInput = ui.path;
+	const modeSelect = ui.mode;
+	const startButton = ui.start;
+	const reloadButton = ui.reload;
+	const submitButton = ui.submit;
+	const startProcessingButton = ui.startProcessing;
+	const stepMount = ui.step;
+
+	/** @param {unknown} errorLike */
+	function errorMessage(errorLike) {
+		return errorLike instanceof Error
+			? errorLike.message
+			: String(errorLike || "");
+	}
+
 	/**
 	 * @returns {void}
 	 */
@@ -516,14 +545,14 @@
 			v3Renderer.isV3State(state) &&
 			v3Renderer.isPromptStep(step)
 		) {
-			return v3Renderer.collectPayload({ mount: ui.step, step });
+			return v3Renderer.collectPayload({ mount: stepMount, step });
 		}
 		/** @type {Record<string, AM2JsonValue>} */
 		const payload = {};
 
-		const nodes = ui.step
-			? Array.from(ui.step.querySelectorAll("input,select,textarea"))
-			: [];
+		const nodes = Array.from(
+			stepMount.querySelectorAll("input,select,textarea"),
+		);
 		/** @type {AM2GroupedSelections} */
 		const grouped = {};
 
@@ -642,26 +671,26 @@
 		await loadState();
 
 		setPre("state", state);
-		clear(ui.step);
+		clear(stepMount);
 
 		if (!state) {
 			setText("status", "No active session.");
 			currentStep = null;
-			if (ui.submit) ui.submit.disabled = true;
+			submitButton.disabled = true;
 			return;
 		}
 
 		currentStep = String(state.current_step_id || "");
 		const step = findStep(currentStep);
 		const title = step && step.title ? String(step.title) : currentStep;
-		ui.step.appendChild(el("div", { class: "hint", text: `Step: ${title}` }));
+		stepMount.appendChild(el("div", { class: "hint", text: `Step: ${title}` }));
 
 		const status = String(state.status || "");
 		if (status && status !== "in_progress") {
-			ui.step.appendChild(
+			stepMount.appendChild(
 				el("div", { class: "hint", text: `Session status: ${status}` }),
 			);
-			if (ui.submit) ui.submit.disabled = true;
+			submitButton.disabled = true;
 			setText("status", `session_id: ${sessionId}`);
 			return;
 		}
@@ -674,7 +703,7 @@
 		) {
 			const rendered = v3Renderer.renderCurrentStep({
 				state,
-				mount: ui.step,
+				mount: stepMount,
 				el,
 				getLiveContext: () => ({
 					session_id: String(sessionId || ""),
@@ -682,7 +711,7 @@
 					status: String((state && state.status) || ""),
 				}),
 			});
-			if (ui.submit) ui.submit.disabled = !rendered;
+			submitButton.disabled = !rendered;
 			setText("status", `session_id: ${sessionId}`);
 			return;
 		}
@@ -704,10 +733,10 @@
 			if (!supported[ftype]) {
 				renderUnsupported(ftype, fld);
 			}
-			ui.step.appendChild(renderField(fld, currentStep));
+			stepMount.appendChild(renderField(fld, currentStep));
 		}
 
-		if (ui.submit) ui.submit.disabled = fields.length === 0;
+		submitButton.disabled = fields.length === 0;
 		setText("status", `session_id: ${sessionId}`);
 	}
 
@@ -763,9 +792,9 @@
 		if (!meta) return null;
 		return {
 			session_id: String(meta.session_id || ""),
-			root: String(meta.root || ui.root.value || ""),
-			path: String(meta.relative_path || ui.path.value || ""),
-			mode: String(meta.mode || ui.mode.value || ""),
+			root: String(meta.root || rootInput.value || ""),
+			path: String(meta.relative_path || pathInput.value || ""),
+			mode: String(meta.mode || modeSelect.value || ""),
 		};
 	}
 
@@ -774,12 +803,12 @@
 	 * @returns {Promise<void>}
 	 */
 	async function startSession(intent) {
-		const selectedMode = String(ui.mode.value || "").trim();
+		const selectedMode = String(modeSelect.value || "").trim();
 		if (!selectedMode) throw new Error("Mode must be explicitly selected.");
 		/** @type {AM2ImportSessionStartRequest} */
 		const body = {
-			root: String(ui.root.value || ""),
-			path: String(ui.path.value || ""),
+			root: String(rootInput.value || ""),
+			path: String(pathInput.value || ""),
 			mode: selectedMode,
 		};
 		if (typeof intent === "string" && intent) body.intent = intent;
@@ -805,12 +834,12 @@
 		}
 	}
 
-	ui.start.addEventListener("click", async () => {
+	startButton.addEventListener("click", async () => {
 		try {
 			await startSession();
 			if (sessionId) await refresh();
 		} catch (e) {
-			setText("status", String(e && e.message ? e.message : e));
+			setText("status", errorMessage(e));
 		}
 	});
 
@@ -820,7 +849,7 @@
 				await startSession("resume");
 				await refresh();
 			} catch (e) {
-				setText("status", String(e && e.message ? e.message : e));
+				setText("status", errorMessage(e));
 			}
 		});
 	}
@@ -831,7 +860,7 @@
 				await startSession("new");
 				await refresh();
 			} catch (e) {
-				setText("status", String(e && e.message ? e.message : e));
+				setText("status", errorMessage(e));
 			}
 		});
 	}
@@ -843,32 +872,30 @@
 		});
 	}
 
-	ui.reload.addEventListener("click", async () => {
+	reloadButton.addEventListener("click", async () => {
 		try {
 			await refresh();
 		} catch (e) {
-			setText("status", String(e && e.message ? e.message : e));
+			setText("status", errorMessage(e));
 		}
 	});
 
-	ui.submit.addEventListener("click", async () => {
+	submitButton.addEventListener("click", async () => {
 		try {
 			await submitStep();
 			await refresh();
 		} catch (e) {
-			setText("status", String(e && e.message ? e.message : e));
+			setText("status", errorMessage(e));
 		}
 	});
 
-	ui.startProcessing.addEventListener("click", async () => {
+	startProcessingButton.addEventListener("click", async () => {
 		try {
 			await startProcessing();
 		} catch (e) {
-			setText("status", String(e && e.message ? e.message : e));
+			setText("status", errorMessage(e));
 		}
 	});
 
-	refresh().catch((e) =>
-		setText("status", String(e && e.message ? e.message : e)),
-	);
+	refresh().catch((e) => setText("status", errorMessage(e)));
 })();
