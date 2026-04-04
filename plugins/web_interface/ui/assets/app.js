@@ -1,4 +1,3 @@
-/// <reference path="../../../../am2-globals.d.ts" />
 const _amWin = /** @type {Window} */ (window),
 	_amUiAssetsBaseUrl = "/ui/assets/";
 
