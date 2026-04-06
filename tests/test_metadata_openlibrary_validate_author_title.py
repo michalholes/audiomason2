@@ -170,3 +170,68 @@ def test_validate_book_uses_googlebooks_title_fallback_when_openlibrary_misses()
             20,
         )
     ]
+
+
+def test_execute_request_phase1_validation_returns_provider_payload() -> None:
+    plugin = _FakeOpenLibrary(
+        docs=[
+            {
+                "author_name": ["J. K. Rowling"],
+                "title": "Harry Potter and the Philosopher's Stone",
+            }
+        ],
+        googlebooks_items=[
+            {
+                "id": "gb1",
+                "volumeInfo": {
+                    "title": "Harry Potter and the Philosopher's Stone",
+                    "authors": ["J. K. Rowling"],
+                },
+            }
+        ],
+    )
+
+    result = asyncio.run(
+        plugin.execute_request(
+            plugin.build_phase1_validation_request(
+                "J. K. Roling",
+                "Harry Potter and the Philosopher Stone",
+            )
+        )
+    )
+
+    assert result == {
+        "provider": "metadata_openlibrary",
+        "author": {
+            "valid": False,
+            "canonical": None,
+            "suggestion": "J. K. Rowling",
+        },
+        "book": {
+            "valid": False,
+            "canonical": None,
+            "suggestion": {
+                "author": "J. K. Rowling",
+                "title": "Harry Potter and the Philosopher's Stone",
+            },
+        },
+    }
+
+
+def test_execute_request_rejects_unknown_operation() -> None:
+    plugin = _FakeOpenLibrary(docs=[])
+
+    try:
+        asyncio.run(
+            plugin.execute_request(
+                {
+                    "request_version": plugin.REQUEST_VERSION,
+                    "operation": "unknown",
+                    "payload": {},
+                }
+            )
+        )
+    except Exception as exc:
+        assert str(exc) == "Unsupported operation: unknown"
+    else:
+        raise AssertionError("expected execute_request to reject unknown operation")

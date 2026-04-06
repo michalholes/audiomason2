@@ -24,6 +24,7 @@ class OpenLibraryPlugin:
 
     DEFAULT_TIMEOUT_SECONDS = 10.0
     DEFAULT_MAX_RESPONSE_BYTES = 2 * 1024 * 1024
+    REQUEST_VERSION = 1
 
     def __init__(self, config: dict | None = None) -> None:
         self.config = config or {}
@@ -41,7 +42,97 @@ class OpenLibraryPlugin:
         except (TypeError, ValueError):
             self.max_response_bytes = self.DEFAULT_MAX_RESPONSE_BYTES
 
+    def build_fetch_request(self, query: dict[str, Any]) -> dict[str, Any]:
+        payload = dict(query) if isinstance(query, dict) else {}
+        return {
+            "request_version": self.REQUEST_VERSION,
+            "operation": "fetch",
+            "payload": payload,
+        }
+
+    def build_validate_author_request(self, name: str) -> dict[str, Any]:
+        return {
+            "request_version": self.REQUEST_VERSION,
+            "operation": "validate_author",
+            "payload": {"name": str(name)},
+        }
+
+    def build_validate_book_request(self, author: str, title: str) -> dict[str, Any]:
+        return {
+            "request_version": self.REQUEST_VERSION,
+            "operation": "validate_book",
+            "payload": {"author": str(author), "title": str(title)},
+        }
+
+    def build_lookup_book_request(self, author: str, title: str) -> dict[str, Any]:
+        return {
+            "request_version": self.REQUEST_VERSION,
+            "operation": "lookup_book",
+            "payload": {"author": str(author), "title": str(title)},
+        }
+
+    def build_phase1_validation_request(self, author: str, title: str) -> dict[str, Any]:
+        return {
+            "request_version": self.REQUEST_VERSION,
+            "operation": "phase1_validate",
+            "payload": {"author": str(author), "title": str(title)},
+        }
+
+    async def execute_request(self, request: dict[str, Any]) -> dict[str, Any]:
+        if not isinstance(request, dict):
+            raise MetadataError("Request must be an object")
+        version = int(request.get("request_version") or self.REQUEST_VERSION)
+        if version != self.REQUEST_VERSION:
+            raise MetadataError(f"Unsupported request version: {version}")
+        operation = str(request.get("operation") or "").strip()
+        payload_any = request.get("payload")
+        payload = dict(payload_any) if isinstance(payload_any, dict) else {}
+
+        if operation == "fetch":
+            return await self._execute_fetch(payload)
+        if operation == "validate_author":
+            return await self._execute_validate_author(str(payload.get("name") or ""))
+        if operation == "validate_book":
+            return await self._execute_validate_book(
+                author=str(payload.get("author") or ""),
+                title=str(payload.get("title") or ""),
+            )
+        if operation == "lookup_book":
+            return await self._execute_lookup_book(
+                author=str(payload.get("author") or ""),
+                title=str(payload.get("title") or ""),
+            )
+        if operation == "phase1_validate":
+            author = str(payload.get("author") or "")
+            title = str(payload.get("title") or "")
+            author_validation = await self._execute_validate_author(author)
+            validated_author = str(
+                author_validation.get("canonical") or author_validation.get("suggestion") or author
+            )
+            book_validation = await self._execute_validate_book(
+                author=validated_author,
+                title=title,
+            )
+            return {
+                "provider": "metadata_openlibrary",
+                "author": author_validation,
+                "book": book_validation,
+            }
+        raise MetadataError(f"Unsupported operation: {operation}")
+
     async def fetch(self, query: dict[str, Any]) -> dict[str, Any]:
+        return await self.execute_request(self.build_fetch_request(query))
+
+    async def validate_author(self, name: str) -> dict[str, Any]:
+        return await self.execute_request(self.build_validate_author_request(name))
+
+    async def validate_book(self, author: str, title: str) -> dict[str, Any]:
+        return await self.execute_request(self.build_validate_book_request(author, title))
+
+    async def lookup_book(self, author: str, title: str) -> dict[str, Any]:
+        return await self.execute_request(self.build_lookup_book_request(author, title))
+
+    async def _execute_fetch(self, query: dict[str, Any]) -> dict[str, Any]:
         author = str(query.get("author") or "")
         title = str(query.get("title") or "")
         isbn = query.get("isbn")
@@ -55,7 +146,7 @@ class OpenLibraryPlugin:
             raise MetadataError("No results found")
         return self._extract_metadata(match[0])
 
-    async def validate_author(self, name: str) -> dict[str, Any]:
+    async def _execute_validate_author(self, name: str) -> dict[str, Any]:
         if not self._normalize_text(name):
             raise MetadataError("Need author name")
         docs = await self._search_docs(author=name, limit=20)
@@ -66,7 +157,7 @@ class OpenLibraryPlugin:
             return {"valid": True, "canonical": candidate, "suggestion": None}
         return {"valid": False, "canonical": None, "suggestion": candidate}
 
-    async def validate_book(self, author: str, title: str) -> dict[str, Any]:
+    async def _execute_validate_book(self, *, author: str, title: str) -> dict[str, Any]:
         if not self._normalize_text(author) and not self._normalize_text(title):
             raise MetadataError("Need author or title")
         docs = await self._search_docs(author=author, title=title, limit=20)
@@ -80,7 +171,8 @@ class OpenLibraryPlugin:
             title_candidate = str(doc.get("title") or "").strip()
             canonical = {"author": author_candidate, "title": title_candidate}
             if self._same_text(author, canonical["author"]) and self._same_text(
-                title, canonical["title"]
+                title,
+                canonical["title"],
             ):
                 return {"valid": True, "canonical": canonical, "suggestion": None}
 
@@ -99,7 +191,7 @@ class OpenLibraryPlugin:
         )
         return {"valid": False, "canonical": None, "suggestion": suggestion}
 
-    async def lookup_book(self, author: str, title: str) -> dict[str, Any]:
+    async def _execute_lookup_book(self, *, author: str, title: str) -> dict[str, Any]:
         if not self._normalize_text(author) and not self._normalize_text(title):
             raise MetadataError("Need author or title")
         docs = await self._search_docs(author=author, title=title, limit=20)
