@@ -68,6 +68,15 @@ def _ordered_file_candidates(directory: Path) -> list[Path]:
     return ordered
 
 
+def _first_audio_source(directory: Path) -> Path | None:
+    if not directory.exists() or not directory.is_dir():
+        return None
+    for path in sorted(directory.iterdir()):
+        if path.is_file() and path.suffix.lower() in _EMBEDDED_SUFFIXES:
+            return path
+    return None
+
+
 def _has_embedded_artwork(audio_file: Path) -> bool:
     suffix = audio_file.suffix.lower()
     try:
@@ -82,6 +91,30 @@ def _has_embedded_artwork(audio_file: Path) -> bool:
     except Exception:
         return False
     return False
+
+
+def _normalize_relative_path(rel_path: str) -> str:
+    value = str(rel_path).replace("\\", "/").strip("/")
+    if not value or value == ".":
+        return ""
+    parts = [part for part in value.split("/") if part not in {"", "."}]
+    if any(part == ".." for part in parts):
+        raise CoverError("Invalid relative path")
+    return "/".join(parts)
+
+
+def _join_relative_path(base: str, leaf: str) -> str:
+    base_norm = _normalize_relative_path(base)
+    leaf_norm = _normalize_relative_path(leaf)
+    if not base_norm:
+        return leaf_norm
+    if not leaf_norm:
+        return base_norm
+    return f"{base_norm}/{leaf_norm}"
+
+
+def _path_to_relative(*, root_dir: Path, abs_path: Path) -> str:
+    return abs_path.resolve().relative_to(root_dir.resolve()).as_posix()
 
 
 class CoverHandlerPlugin:
@@ -219,6 +252,112 @@ class CoverHandlerPlugin:
             "mime_type": resolved_mime,
             "cache_key": resolved_cache_key,
             "root_name": resolved_root,
+        }
+
+    def discover_cover_candidates_for_ref(
+        self,
+        *,
+        file_service: Any,
+        source_root: str,
+        source_relative_path: str,
+        group_root: str | None = None,
+        stage_root: str | None = None,
+    ) -> list[dict[str, str]]:
+        from plugins.file_io.service import RootName
+
+        root_name = RootName(str(source_root))
+        source_rel = _normalize_relative_path(source_relative_path)
+        source_dir = file_service.resolve_abs_path(root_name, source_rel)
+        if source_dir.exists() and source_dir.is_file():
+            source_dir = source_dir.parent
+            source_rel = _normalize_relative_path(str(Path(source_rel).parent))
+        if not source_dir.exists() or not source_dir.is_dir():
+            return []
+
+        root_dir = file_service.root_dir(root_name)
+        candidates = self.discover_cover_candidates(
+            source_dir,
+            audio_file=_first_audio_source(source_dir),
+            group_root=group_root,
+            stage_root=stage_root,
+        )
+        out: list[dict[str, str]] = []
+        for candidate in candidates:
+            entry = {
+                "source_root": root_name.value,
+                "source_relative_path": source_rel,
+                "root_name": str(candidate.get("root_name") or ""),
+                "kind": str(candidate.get("kind") or ""),
+                "candidate_id": str(candidate.get("candidate_id") or ""),
+                "apply_mode": str(candidate.get("apply_mode") or ""),
+                "mime_type": str(candidate.get("mime_type") or ""),
+                "cache_key": str(candidate.get("cache_key") or ""),
+            }
+            path_text = str(candidate.get("path") or "")
+            if path_text:
+                rel_path = _path_to_relative(root_dir=root_dir, abs_path=Path(path_text))
+                if str(candidate.get("kind") or "") == "embedded":
+                    entry["audio_relative_path"] = rel_path
+                else:
+                    entry["candidate_relative_path"] = rel_path
+            url = str(candidate.get("url") or "")
+            if url:
+                entry["url"] = url
+            out.append(entry)
+        return out
+
+    async def apply_cover_candidate_for_ref(
+        self,
+        *,
+        file_service: Any,
+        candidate: dict[str, Any],
+        output_root: str,
+        output_relative_dir: str,
+    ) -> dict[str, str] | None:
+        from plugins.file_io.service import RootName
+
+        output_root_name = RootName(str(output_root))
+        output_rel_dir = _normalize_relative_path(output_relative_dir)
+        output_dir = file_service.resolve_abs_path(output_root_name, output_rel_dir)
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        source_root_text = str(candidate.get("source_root") or "")
+        source_root = RootName(source_root_text) if source_root_text else None
+        mode = str(candidate.get("apply_mode") or "")
+        materialized: Path | None = None
+
+        if mode == "copy" and source_root is not None:
+            rel = _normalize_relative_path(str(candidate.get("candidate_relative_path") or ""))
+            if not rel:
+                return None
+            source_path = file_service.resolve_abs_path(source_root, rel)
+            raw_candidate = dict(candidate)
+            raw_candidate["path"] = str(source_path)
+            materialized = await self.apply_cover_candidate(raw_candidate, output_dir=output_dir)
+        elif mode == "extract_embedded" and source_root is not None:
+            rel = _normalize_relative_path(str(candidate.get("audio_relative_path") or ""))
+            if not rel:
+                return None
+            audio_file = file_service.resolve_abs_path(source_root, rel)
+            materialized = await self.extract_embedded_cover(
+                audio_file,
+                output_path=output_dir / "cover_extracted.jpg",
+            )
+        elif mode == "download":
+            materialized = await self.download_cover(
+                str(candidate.get("url") or "").strip(),
+                output_dir=output_dir,
+                mime_type=str(candidate.get("mime_type") or ""),
+                cache_key=str(candidate.get("cache_key") or ""),
+            )
+        else:
+            raise CoverError(f"Unsupported apply_mode: {mode}")
+
+        if materialized is None:
+            return None
+        return {
+            "root": output_root_name.value,
+            "relative_path": _join_relative_path(output_rel_dir, materialized.name),
         }
 
     def discover_cover_candidates(
@@ -365,9 +504,14 @@ class CoverHandlerPlugin:
 
         return [base + ["-frames:v", "1", str(output)]]
 
-    async def extract_embedded_cover(self, audio_file: Path) -> Path | None:
+    async def extract_embedded_cover(
+        self,
+        audio_file: Path,
+        *,
+        output_path: Path | None = None,
+    ) -> Path | None:
         """Extract embedded cover from audio file."""
-        output = audio_file.parent / "cover_extracted.jpg"
+        output = output_path or (audio_file.parent / "cover_extracted.jpg")
 
         for cmd in self.build_embedded_extract_commands(audio_file, output):
             try:
@@ -437,8 +581,8 @@ class CoverHandlerPlugin:
         Returns:
             Path to downloaded cover or None
         """
-        if not output_dir:
-            output_dir = Path("/tmp")
+        if output_dir is None:
+            return None
 
         output_dir.mkdir(parents=True, exist_ok=True)
         output = self._download_output_path(

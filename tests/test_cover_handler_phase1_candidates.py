@@ -7,6 +7,7 @@ from pathlib import Path
 
 from mutagen.id3 import APIC, ID3
 from plugins.cover_handler.plugin import CoverHandlerPlugin
+from plugins.file_io.plugin import FileIOPlugin
 
 
 def _write_mp3(path: Path, *, with_artwork: bool) -> None:
@@ -224,3 +225,91 @@ def test_download_output_path_uses_cache_key_and_mime_extension(tmp_path: Path) 
     assert output.parent == tmp_path
     assert output.suffix == ".png"
     assert output.name.startswith("cover_cache_")
+
+
+def _file_io_plugin(tmp_path: Path) -> FileIOPlugin:
+    roots = {}
+    for name in ("inbox", "stage", "outbox", "jobs", "config", "wizards"):
+        root = tmp_path / name
+        root.mkdir(parents=True, exist_ok=True)
+        roots[f"{name}_dir"] = str(root)
+    return FileIOPlugin(config={"roots": roots})
+
+
+def test_discover_cover_candidates_for_ref_returns_resolver_friendly_payload(
+    tmp_path: Path,
+) -> None:
+    plugin = CoverHandlerPlugin()
+    file_io = _file_io_plugin(tmp_path)
+    source_dir = tmp_path / "inbox" / "Author" / "Book"
+    source_dir.mkdir(parents=True)
+    (source_dir / "cover.jpeg").write_bytes(b"cover")
+    audio_file = source_dir / "book.mp3"
+    _write_mp3(audio_file, with_artwork=True)
+
+    candidates = plugin.discover_cover_candidates_for_ref(
+        file_service=file_io.file_service,
+        source_root="inbox",
+        source_relative_path="Author/Book",
+        group_root="group",
+    )
+
+    assert candidates == [
+        {
+            "source_root": "inbox",
+            "source_relative_path": "Author/Book",
+            "root_name": "group",
+            "kind": "file",
+            "candidate_id": "file:cover.jpeg",
+            "apply_mode": "copy",
+            "mime_type": "image/jpeg",
+            "cache_key": "file:cover.jpeg",
+            "candidate_relative_path": "Author/Book/cover.jpeg",
+        },
+        {
+            "source_root": "inbox",
+            "source_relative_path": "Author/Book",
+            "root_name": "group",
+            "kind": "embedded",
+            "candidate_id": "embedded:book.mp3",
+            "apply_mode": "extract_embedded",
+            "mime_type": "image/jpeg",
+            "cache_key": "embedded:book.mp3",
+            "audio_relative_path": "Author/Book/book.mp3",
+        },
+    ]
+
+
+def test_apply_cover_candidate_for_ref_copies_file_to_output_root(
+    tmp_path: Path,
+) -> None:
+    plugin = CoverHandlerPlugin()
+    file_io = _file_io_plugin(tmp_path)
+    source_dir = tmp_path / "inbox" / "Author" / "Book"
+    source_dir.mkdir(parents=True)
+    (source_dir / "cover.png").write_bytes(b"cover-bytes")
+
+    result = asyncio.run(
+        plugin.apply_cover_candidate_for_ref(
+            file_service=file_io.file_service,
+            candidate={
+                "source_root": "inbox",
+                "source_relative_path": "Author/Book",
+                "kind": "file",
+                "candidate_id": "file:cover.png",
+                "apply_mode": "copy",
+                "mime_type": "image/png",
+                "cache_key": "file:cover.png",
+                "candidate_relative_path": "Author/Book/cover.png",
+            },
+            output_root="stage",
+            output_relative_dir="import_runtime/work/Author/Book",
+        )
+    )
+
+    assert result == {
+        "root": "stage",
+        "relative_path": "import_runtime/work/Author/Book/cover.png",
+    }
+    copied = tmp_path / "stage" / "import_runtime" / "work" / "Author" / "Book" / "cover.png"
+    assert copied.read_bytes() == b"cover-bytes"
