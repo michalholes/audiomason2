@@ -50,37 +50,35 @@ class FileIOPlugin:
 
         resolver = ConfigResolver(cli_args={})
 
-        # Keep legacy stage/output behavior for pipeline steps.
-        stage_dir_value = self.config.get("stage_dir")
-        output_dir_value = self.config.get("output_dir")
+        default_service = FileService.from_resolver(resolver)
+        roots = {name: default_service.root_dir(name) for name in RootName}
 
-        if stage_dir_value is None:
-            stage_dir_value, _src = resolver.resolve("stage_dir")
-
-        if output_dir_value is None:
-            output_dir_value, _src = resolver.resolve("output_dir")
-
-        self.stage_dir = Path(str(stage_dir_value)).expanduser()
-        self.output_dir = Path(str(output_dir_value)).expanduser()
-
-        # File service roots are resolved via the central ConfigResolver.
-        # Optional config override: config["roots"]["inbox_dir"|...]
         roots_override = self.config.get("roots")
         if isinstance(roots_override, dict):
-            roots = {}
             for name in RootName:
                 key = f"{name.value}_dir"
                 val = roots_override.get(key)
                 if isinstance(val, str) and val:
                     roots[name] = Path(val).expanduser()
-            if roots:
-                self.file_service = FileService(roots)
-            else:
-                self.file_service = FileService.from_resolver(resolver)
-        else:
-            self.file_service = FileService.from_resolver(resolver)
 
+        stage_dir_value = self.config.get("stage_dir")
+        if isinstance(stage_dir_value, str) and stage_dir_value:
+            roots[RootName.STAGE] = Path(stage_dir_value).expanduser()
+
+        output_dir_value = self.config.get("output_dir")
+        if isinstance(output_dir_value, str) and output_dir_value:
+            roots[RootName.OUTBOX] = Path(output_dir_value).expanduser()
+
+        self.file_service = FileService(roots)
         self.archive_service = ArchiveService(self.file_service, resolver)
+
+    @property
+    def stage_dir(self) -> Path:
+        return self.file_service.root_dir(RootName.STAGE)
+
+    @property
+    def output_dir(self) -> Path:
+        return self.file_service.root_dir(RootName.OUTBOX)
 
     def stage_import_path(
         self,

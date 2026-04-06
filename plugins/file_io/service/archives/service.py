@@ -115,6 +115,13 @@ def _tarinfo_deterministic(name: str, size: int) -> tarfile.TarInfo:
     return ti
 
 
+def _local_path(fs: FileService, root: RootName, rel_path: str) -> Path:
+    resolver = getattr(fs, "_resolve_local_path", None)
+    if callable(resolver):
+        return resolver(root, rel_path)
+    return fs.resolve_abs_path(root, rel_path)
+
+
 class ArchiveService:
     """Archive capability.
 
@@ -126,7 +133,7 @@ class ArchiveService:
         self._resolver = resolver or ConfigResolver(cli_args={})
 
     def detect_format(self, root: RootName, rel_path: str) -> DetectedArchiveFormat:
-        abs_path = self._fs.resolve_abs_path(root, rel_path)
+        abs_path = _local_path(self._fs, root, rel_path)
         detected = detect_from_suffix(abs_path)
         if detected is not None:
             return detected
@@ -518,7 +525,7 @@ class ArchiveService:
         self, src_root: RootName, src_archive_path: str, fmt: ArchiveFormat, backend: str
     ) -> tuple[list[str], list[str]]:
         warnings: list[str] = []
-        abs_path = self._fs.resolve_abs_path(src_root, src_archive_path)
+        abs_path = _local_path(self._fs, src_root, src_archive_path)
         if backend == "stdlib":
             if fmt == ArchiveFormat.ZIP:
                 with zipfile.ZipFile(abs_path, "r") as zf:
@@ -635,7 +642,7 @@ class ArchiveService:
         return mapped, _stable_sorted(collisions)
 
     def _list_files_under(self, src_root: RootName, src_dir: str) -> list[str]:
-        base = self._fs.resolve_abs_path(src_root, src_dir)
+        base = _local_path(self._fs, src_root, src_dir)
         if not base.exists():
             raise FileError(f"Source dir not found: {src_dir}")
         if not base.is_dir():
@@ -656,8 +663,8 @@ class ArchiveService:
         flatten: bool,
         collision: CollisionPolicy,
     ) -> tuple[int, int]:
-        abs_src = self._fs.resolve_abs_path(src_root, src_archive_path)
-        abs_dst = self._fs.resolve_abs_path(dst_root, dst_dir)
+        abs_src = _local_path(self._fs, src_root, src_archive_path)
+        abs_dst = _local_path(self._fs, dst_root, dst_dir)
         files = 0
         total = 0
         used: set[str] = set()
@@ -698,8 +705,8 @@ class ArchiveService:
         flatten: bool,
         collision: CollisionPolicy,
     ) -> tuple[int, int]:
-        abs_src = self._fs.resolve_abs_path(src_root, src_archive_path)
-        abs_dst = self._fs.resolve_abs_path(dst_root, dst_dir)
+        abs_src = _local_path(self._fs, src_root, src_archive_path)
+        abs_dst = _local_path(self._fs, dst_root, dst_dir)
         mode = cast(
             TarReadMode,
             {"tar": "r:", "tar.gz": "r:gz", "tar.xz": "r:xz"}[fmt.value],
@@ -745,8 +752,8 @@ class ArchiveService:
         flatten: bool,
         collision: CollisionPolicy,
     ) -> tuple[int, int]:
-        abs_src = self._fs.resolve_abs_path(src_root, src_archive_path)
-        abs_dst = self._fs.resolve_abs_path(dst_root, dst_dir)
+        abs_src = _local_path(self._fs, src_root, src_archive_path)
+        abs_dst = _local_path(self._fs, dst_root, dst_dir)
 
         # For external tools, prefer preserve tree; flatten is supported by post-processing.
         tool = self._pick_external_unpack_tool(fmt)
@@ -809,8 +816,8 @@ class ArchiveService:
         flatten: bool,
         collision: CollisionPolicy,
     ) -> tuple[int, int]:
-        abs_src_dir = self._fs.resolve_abs_path(src_root, src_dir)
-        abs_dst = self._fs.resolve_abs_path(dst_root, dst_archive_path)
+        abs_src_dir = _local_path(self._fs, src_root, src_dir)
+        abs_dst = _local_path(self._fs, dst_root, dst_archive_path)
         entries = self._list_files_under(src_root, src_dir)
         mapped, collisions = self._map_entry_names(
             entries, preserve_tree=preserve_tree, flatten=flatten, collision=collision
@@ -841,8 +848,8 @@ class ArchiveService:
         flatten: bool,
         collision: CollisionPolicy,
     ) -> tuple[int, int]:
-        abs_src_dir = self._fs.resolve_abs_path(src_root, src_dir)
-        abs_dst = self._fs.resolve_abs_path(dst_root, dst_archive_path)
+        abs_src_dir = _local_path(self._fs, src_root, src_dir)
+        abs_dst = _local_path(self._fs, dst_root, dst_archive_path)
         entries = self._list_files_under(src_root, src_dir)
         mapped, collisions = self._map_entry_names(
             entries, preserve_tree=preserve_tree, flatten=flatten, collision=collision
@@ -879,8 +886,8 @@ class ArchiveService:
     ) -> tuple[int, int]:
         if fmt != ArchiveFormat.RAR:
             raise FileError(f"External packing not supported for format {fmt.value}")
-        abs_src_dir = self._fs.resolve_abs_path(src_root, src_dir)
-        abs_dst = self._fs.resolve_abs_path(dst_root, dst_archive_path)
+        abs_src_dir = _local_path(self._fs, src_root, src_dir)
+        abs_dst = _local_path(self._fs, dst_root, dst_archive_path)
         if not shutil.which("rar"):
             raise FileError("RAR pack requested but 'rar' binary is not available on this system")
         # Note: rar does not guarantee deterministic output across versions.

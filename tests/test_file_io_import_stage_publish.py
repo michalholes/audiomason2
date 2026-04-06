@@ -4,8 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import anyio
 from plugins.file_io.plugin import FileIOPlugin
 from plugins.file_io.service import ArchiveFormat, RootName
+
+from audiomason.core.context import ProcessingContext
 
 
 def _plugin(tmp_path: Path) -> FileIOPlugin:
@@ -116,3 +119,53 @@ def test_cleanup_import_path_removes_work_tree(tmp_path: Path) -> None:
     plugin.cleanup_import_path(staged["work"]["relative_path"])
 
     assert not (tmp_path / "stage" / "import_runtime" / "work" / "Author" / "Book").exists()
+
+
+def test_legacy_stage_and_output_roots_follow_file_service_single_truth(
+    tmp_path: Path,
+) -> None:
+    plugin = FileIOPlugin(
+        config={
+            "stage_dir": str(tmp_path / "stage_override"),
+            "output_dir": str(tmp_path / "outbox_override"),
+        }
+    )
+
+    assert plugin.stage_dir == plugin.file_service.root_dir(RootName.STAGE)
+    assert plugin.output_dir == plugin.file_service.root_dir(RootName.OUTBOX)
+
+
+async def _run_legacy_import_and_export_use_configured_file_service_roots(
+    tmp_path: Path,
+) -> None:
+    plugin = FileIOPlugin(
+        config={
+            "stage_dir": str(tmp_path / "stage_override"),
+            "output_dir": str(tmp_path / "outbox_override"),
+        }
+    )
+    source = tmp_path / "source.m4a"
+    source.write_bytes(b"audio")
+    context = ProcessingContext(id="ctx1", source=source)
+
+    context = await plugin.import_file(context)
+    assert context.stage_dir == tmp_path / "stage_override" / context.stage_dir.name
+
+    converted = context.stage_dir / "converted.mp3"
+    converted.write_bytes(b"mp3")
+    context.converted_files = [converted]
+    context.author = "Author"
+    context.title = "Title"
+
+    context = await plugin.export_files(context)
+    assert context.output_path == tmp_path / "outbox_override" / "Author - Title"
+    assert (context.output_path / "converted.mp3").read_bytes() == b"mp3"
+
+
+def test_legacy_import_and_export_use_configured_file_service_roots_runner(
+    tmp_path: Path,
+) -> None:
+    anyio.run(
+        _run_legacy_import_and_export_use_configured_file_service_roots,
+        tmp_path,
+    )

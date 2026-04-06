@@ -52,6 +52,20 @@ def target_root_for_mode(mode: str) -> RootName:
     raise ValueError("mode must be 'stage' or 'inplace'")
 
 
+def _local_path(fs: FileService, root: RootName, rel_path: str) -> Path:
+    resolver = getattr(fs, "_resolve_local_path", None)
+    if callable(resolver):
+        return resolver(root, rel_path)
+    return fs.resolve_abs_path(root, rel_path)
+
+
+def _path_kind(fs: FileService, root: RootName, rel_path: str) -> str:
+    kind = fs.path_kind(root, rel_path)
+    if kind not in {"file", "dir", "missing"}:
+        raise ValueError(f"Unsupported path kind: {kind}")
+    return kind
+
+
 def _strip_archive_suffix(source_relative_path: str, archive_format: ArchiveFormat | None) -> str:
     rel = normalize_relative_path(source_relative_path)
     if archive_format is None or not rel:
@@ -86,11 +100,11 @@ def inspect_source(
 ) -> dict[str, str]:
     src_root = parse_root(source_root)
     src_rel = normalize_relative_path(source_relative_path)
-    src_abs = fs.resolve_abs_path(src_root, src_rel)
-    if not src_abs.exists():
+    src_kind = _path_kind(fs, src_root, src_rel)
+    if src_kind == "missing":
         raise FileNotFoundError(f"Source not found: {src_root.value}:{src_rel}")
 
-    if src_abs.is_dir():
+    if src_kind == "dir":
         return {
             "root": src_root.value,
             "relative_path": src_rel,
@@ -210,8 +224,7 @@ def publish_staged(
     work_rel = normalize_relative_path(work_relative_path)
     dst_root = parse_root(final_root)
     dst_rel = normalize_relative_path(final_relative_path)
-    work_abs = fs.resolve_abs_path(RootName.STAGE, work_rel)
-    if not work_abs.exists():
+    if not fs.exists(RootName.STAGE, work_rel):
         raise FileNotFoundError(f"Work path not found: stage:{work_rel}")
 
     actual_dst_rel = dst_rel

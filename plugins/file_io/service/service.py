@@ -260,13 +260,36 @@ class FileService:
             raise ValueError(f"Unknown root: {root}")
         return self._roots[root]
 
-    def root_dir(self, root: RootName) -> Path:
-        """Return the configured absolute directory for a root."""
+    def _root_dir_path(self, root: RootName) -> Path:
         return self._root(root).dir_path
 
+    def _resolve_local_path(
+        self,
+        root: RootName,
+        rel_path: str,
+        *,
+        silent_polling_read: bool = False,
+    ) -> Path:
+        return resolve_path(
+            self._root_dir_path(root),
+            rel_path,
+            root_name=root,
+            silent_polling_read=silent_polling_read,
+        )
+
+    def root_dir(self, root: RootName) -> Path:
+        """Compatibility wrapper for legacy callers.
+
+        The canonical authority remains the configured root set owned by FileService.
+        """
+        return self._root_dir_path(root)
+
     def resolve_abs_path(self, root: RootName, rel_path: str) -> Path:
-        """Resolve a relative path to an absolute path under a root."""
-        abs_path = resolve_path(self._root(root).dir_path, rel_path, root_name=root)
+        """Compatibility wrapper for legacy callers.
+
+        Absolute local paths remain an internal execution detail of FileService.
+        """
+        abs_path = self._resolve_local_path(root, rel_path)
         base = {"root": root.value, "rel_path": rel_path, "resolved_path": str(abs_path)}
         with _observe_operation(operation="file_io.resolve", base=base):
             return abs_path
