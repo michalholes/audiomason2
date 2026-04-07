@@ -216,10 +216,8 @@ class ImportWizardEngine:
     def get_state(self, session_id: str) -> dict[str, Any]:
         try:
             state = self._load_state(session_id)
-            session_dir = f"import/sessions/{session_id}"
-            session_abs = self._fs.resolve_abs_path(RootName.WIZARDS, session_dir)
             out = dict(state)
-            out["effective_model"] = load_effective_model_json(session_abs)
+            out["effective_model"] = load_effective_model_json(fs=self._fs, session_id=session_id)
             return out
         except Exception as e:
             return _exception_envelope(e)
@@ -955,6 +953,7 @@ class ImportWizardEngine:
                     state.setdefault("vars", {})["phase1"] = build_phase1_projection(
                         discovery=discovery_any,
                         state=state,
+                        fs=self._fs,
                     )
             state.setdefault("conflicts", {})["policy"] = str(
                 (state.get("answers") or {}).get("conflict_policy", {}).get("mode")

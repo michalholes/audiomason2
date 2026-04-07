@@ -27,6 +27,7 @@ from .detached_runtime import (
     load_detached_runtime_bootstrap_from_meta,
     rehydrate_detached_runtime_from_bootstrap,
 )
+from .file_io_boundary import materialize_root_dir
 
 
 def _detached_runtime_from_meta(*, job_meta: dict[str, Any]) -> DetachedImportRuntime | None:
@@ -45,7 +46,7 @@ def _jobs_root_from_meta(*, job_meta: dict[str, Any]) -> Path | None:
     if runtime is None:
         return None
     root_name = import_module("plugins.file_io.service").RootName.JOBS
-    return runtime.get_file_service().root_dir(root_name)
+    return materialize_root_dir(runtime.get_file_service(), root_name)
 
 
 def _job_service_for_meta(*, job_meta: dict[str, Any]) -> JobService:
@@ -58,7 +59,7 @@ def _job_service_for_meta(*, job_meta: dict[str, Any]) -> JobService:
 def _job_service_for_engine(*, engine: object) -> JobService:
     fs = cast(Any, engine).get_file_service()
     root_name = import_module("plugins.file_io.service").RootName.JOBS
-    return JobService(store=JobStore(root=fs.root_dir(root_name)))
+    return JobService(store=JobStore(root=materialize_root_dir(fs, root_name)))
 
 
 def _link_job_alias(*, job_id: str, primary: JobService) -> None:
@@ -236,11 +237,4 @@ def submit_process_job(*, engine: object, job_id: str, verbosity: int = 1) -> No
     """Submit an existing PROCESS job through core orchestration."""
 
     orch = Orchestrator(job_service=_job_service_for_engine(engine=engine))
-    try:
-        orch.submit_process_contract_job(job_id, verbosity=verbosity)
-        return
-    except FileNotFoundError:
-        pass
-    loader = _plugin_loader(engine=engine)
-    _ensure_required_process_plugins(loader=loader)
-    orch.run_job(job_id, plugin_loader=loader, verbosity=verbosity)
+    orch.submit_process_contract_job(job_id, verbosity=verbosity)

@@ -17,6 +17,7 @@ from .detached_runtime import (
     load_detached_runtime_bootstrap_from_meta,
     rehydrate_detached_runtime_from_bootstrap,
 )
+from .file_io_boundary import materialize_root_dir
 from .process_contract_completion import (
     apply_successful_process_completion,
     successful_process_completion_already_applied,
@@ -31,7 +32,7 @@ def _file_service_signature(fs: Any) -> tuple[tuple[str, str], ...]:
     items: list[tuple[str, str]] = []
     for root_name in sorted(file_io_facade.ROOT_MAP):
         root = file_io_facade.ROOT_MAP[root_name]
-        items.append((root_name, str(fs.root_dir(root))))
+        items.append((root_name, str(materialize_root_dir(fs, root))))
     return tuple(items)
 
 

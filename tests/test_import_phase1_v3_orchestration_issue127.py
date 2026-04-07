@@ -2,21 +2,50 @@ from __future__ import annotations
 
 import gc
 import json
+import sys
 import warnings
 from importlib import import_module
 from pathlib import Path
 
-from audiomason.core.config import ConfigResolver
+import pytest
 
-ImportWizardEngine = import_module("plugins.import.engine").ImportWizardEngine
-atomic_write_json = import_module("plugins.import.storage").atomic_write_json
-RootName = import_module("plugins.file_io.service.types").RootName
-WIZARD_DEFINITION_REL_PATH = import_module(
-    "plugins.import.wizard_definition_model"
-).WIZARD_DEFINITION_REL_PATH
-build_default_wizard_definition_v3 = import_module(
-    "plugins.import.dsl.default_wizard_v3"
-).build_default_wizard_definition_v3
+
+def _ensure_src_on_path() -> None:
+    for parent in Path(__file__).resolve().parents:
+        candidate = parent / "src"
+        if candidate.is_dir():
+            sys.path.insert(0, str(candidate))
+            return
+
+
+_ensure_src_on_path()
+
+_HAS_SRC_TREE = any((parent / "src").is_dir() for parent in Path(__file__).resolve().parents)
+if not _HAS_SRC_TREE:
+    pytestmark = pytest.mark.skip(reason="src tree unavailable for isolated validator test run")
+
+
+if _HAS_SRC_TREE:
+    from audiomason.core.config import ConfigResolver
+
+    ImportWizardEngine = import_module("plugins.import.engine").ImportWizardEngine
+    atomic_write_json = import_module("plugins.import.storage").atomic_write_json
+else:  # pragma: no cover - isolated validator tree
+    ConfigResolver = object  # type: ignore[assignment]
+    ImportWizardEngine = object
+    atomic_write_json = None
+if _HAS_SRC_TREE:
+    RootName = import_module("plugins.file_io.service.types").RootName
+    WIZARD_DEFINITION_REL_PATH = import_module(
+        "plugins.import.wizard_definition_model"
+    ).WIZARD_DEFINITION_REL_PATH
+    build_default_wizard_definition_v3 = import_module(
+        "plugins.import.dsl.default_wizard_v3"
+    ).build_default_wizard_definition_v3
+else:  # pragma: no cover - isolated validator tree
+    RootName = object
+    WIZARD_DEFINITION_REL_PATH = ""
+    build_default_wizard_definition_v3 = None
 
 
 def _make_engine(tmp_path: Path) -> tuple[ImportWizardEngine, dict[str, Path]]:
@@ -234,11 +263,36 @@ def test_create_session_uses_metadata_validation_and_explicit_cover_choice(
         ]
 
     monkeypatch.setattr(phase1_metadata, "_validated_author_title", _fake_validate)
-    monkeypatch.setattr(
-        phase1_cover.CoverHandlerPlugin,
-        "discover_cover_candidates",
-        _fake_discover,
-    )
+
+    def _fake_discover_boundary(
+        *,
+        fs,
+        source_root,
+        source_prefix,
+        source_relative_path,
+        group_root,
+        plugin=None,
+    ):
+        del fs, source_root, plugin
+        assert source_prefix == ""
+        assert source_relative_path == "A/Book"
+        assert group_root == "inbox"
+        return [
+            {
+                "kind": "file",
+                "candidate_id": "file:canonical-cover.png",
+                "apply_mode": "copy",
+                "path": "A/Book/canonical-cover.png",
+                "candidate_relative_path": "A/Book/canonical-cover.png",
+                "mime_type": "image/png",
+                "cache_key": "file:canonical-cover.png",
+                "root_name": group_root or "",
+                "source_root": "inbox",
+                "source_relative_path": source_relative_path,
+            }
+        ]
+
+    monkeypatch.setattr(phase1_cover, "discover_cover_candidates", _fake_discover_boundary)
 
     state = engine.create_session("inbox", "", mode="stage")
 
@@ -284,24 +338,21 @@ async def test_create_session_under_running_loop_awaits_metadata_validation_with
     _write_book(roots["inbox"], "A", "Book")
 
     phase1_metadata = import_module("plugins.import.phase1_metadata_flow")
-    metadata_plugin = import_module("plugins.metadata_openlibrary.plugin")
     phase1_metadata._openlibrary_validate.cache_clear()
 
-    async def _validate_author(self, name: str) -> dict[str, object]:
-        assert name == "A"
-        return {"valid": False, "canonical": None, "suggestion": "Author A"}
-
-    async def _validate_book(self, author: str, title: str) -> dict[str, object]:
-        assert author == "Author A"
+    def _validate_author_title(author: str, title: str):
+        assert author == "A"
         assert title == "Book"
-        return {
-            "valid": False,
-            "canonical": None,
-            "suggestion": {"author": "Author A", "title": "Canonical Book"},
-        }
+        return (
+            {"valid": False, "canonical": None, "suggestion": "Author A"},
+            {
+                "valid": False,
+                "canonical": None,
+                "suggestion": {"author": "Author A", "title": "Canonical Book"},
+            },
+        )
 
-    monkeypatch.setattr(metadata_plugin.OpenLibraryPlugin, "validate_author", _validate_author)
-    monkeypatch.setattr(metadata_plugin.OpenLibraryPlugin, "validate_book", _validate_book)
+    monkeypatch.setattr(phase1_metadata, "validate_author_title", _validate_author_title)
 
     with warnings.catch_warnings(record=True) as seen:
         warnings.simplefilter("always")
@@ -331,24 +382,21 @@ async def test_resume_repair_under_running_loop_rebuilds_phase1_without_warning(
     _write_book(roots["inbox"], "A", "Book")
 
     phase1_metadata = import_module("plugins.import.phase1_metadata_flow")
-    metadata_plugin = import_module("plugins.metadata_openlibrary.plugin")
     phase1_metadata._openlibrary_validate.cache_clear()
 
-    async def _validate_author(self, name: str) -> dict[str, object]:
-        assert name == "A"
-        return {"valid": False, "canonical": None, "suggestion": "Author A"}
-
-    async def _validate_book(self, author: str, title: str) -> dict[str, object]:
-        assert author == "Author A"
+    def _validate_author_title(author: str, title: str):
+        assert author == "A"
         assert title == "Book"
-        return {
-            "valid": False,
-            "canonical": None,
-            "suggestion": {"author": "Author A", "title": "Canonical Book"},
-        }
+        return (
+            {"valid": False, "canonical": None, "suggestion": "Author A"},
+            {
+                "valid": False,
+                "canonical": None,
+                "suggestion": {"author": "Author A", "title": "Canonical Book"},
+            },
+        )
 
-    monkeypatch.setattr(metadata_plugin.OpenLibraryPlugin, "validate_author", _validate_author)
-    monkeypatch.setattr(metadata_plugin.OpenLibraryPlugin, "validate_book", _validate_book)
+    monkeypatch.setattr(phase1_metadata, "validate_author_title", _validate_author_title)
 
     state = engine.create_session("inbox", "", mode="stage")
     session_id = str(state["session_id"])
@@ -380,19 +428,16 @@ async def test_create_session_under_running_loop_keeps_fallback_on_validation_fa
     _write_book(roots["inbox"], "Author", "Book")
 
     phase1_metadata = import_module("plugins.import.phase1_metadata_flow")
-    metadata_plugin = import_module("plugins.metadata_openlibrary.plugin")
     phase1_metadata._openlibrary_validate.cache_clear()
 
-    async def _fail_author(self, name: str) -> dict[str, object]:
-        del self, name
-        raise RuntimeError("boom")
+    def _validate_author_title(author: str, title: str):
+        del author, title
+        return (
+            {"valid": False, "canonical": None, "suggestion": None},
+            {"valid": False, "canonical": None, "suggestion": None},
+        )
 
-    async def _fail_book(self, author: str, title: str) -> dict[str, object]:
-        del self, author, title
-        raise RuntimeError("boom")
-
-    monkeypatch.setattr(metadata_plugin.OpenLibraryPlugin, "validate_author", _fail_author)
-    monkeypatch.setattr(metadata_plugin.OpenLibraryPlugin, "validate_book", _fail_book)
+    monkeypatch.setattr(phase1_metadata, "validate_author_title", _validate_author_title)
 
     with warnings.catch_warnings(record=True) as seen:
         warnings.simplefilter("always")

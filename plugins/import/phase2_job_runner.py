@@ -12,7 +12,9 @@ from typing import Any
 from plugins.file_io.import_runtime import normalize_relative_path, publish_staged
 from plugins.file_io.service.types import RootName
 
+from .cover_boundary import apply_cover_candidate as apply_cover_candidate_ref
 from .engine_util import _emit_required
+from .file_io_boundary import materialize_local_path
 from .storage import read_json
 
 _AUDIO_SUFFIXES = {".m4a", ".m4b", ".mp3", ".opus"}
@@ -175,7 +177,6 @@ async def _run_audio_import(
     *,
     plugin_loader: Any,
     source_path: Path,
-    source_root_dir: Path,
     work_path: Path,
     capability: dict[str, Any],
 ) -> None:
@@ -221,23 +222,13 @@ async def _run_audio_import(
                 setattr(plugin, key, value)
 
 
-def _resolved_cover_candidate(
-    *,
-    candidate: dict[str, Any],
-    source_root_dir: Path,
-) -> dict[str, Any]:
-    resolved = dict(candidate)
-    path_text = str(resolved.get("path") or "")
-    if path_text and not Path(path_text).is_absolute():
-        resolved["path"] = str(source_root_dir / normalize_relative_path(path_text))
-    return resolved
-
-
 async def _run_cover_embed(
     *,
+    fs: Any,
     plugin_loader: Any,
-    source_path: Path,
-    source_root_dir: Path,
+    source_root: RootName,
+    source_relative_path: str,
+    work_rel: str,
     work_path: Path,
     capability: dict[str, Any],
 ) -> None:
@@ -247,18 +238,39 @@ async def _run_cover_embed(
         return
 
     cover_path: Path | None = None
-    if mode in {"file", "embedded"}:
+    if mode in {"file", "embedded", "copy", "extract_embedded", "download"}:
         candidate_any = capability.get("candidate")
         candidate = dict(candidate_any) if isinstance(candidate_any, dict) else {}
         if candidate:
-            resolved_candidate = _resolved_cover_candidate(
+            if "source_root" not in candidate:
+                candidate["source_root"] = source_root.value
+            if "source_relative_path" not in candidate:
+                candidate["source_relative_path"] = source_relative_path
+            if str(candidate.get("apply_mode") or "") == "copy" and not str(
+                candidate.get("candidate_relative_path") or ""
+            ):
+                candidate_path = normalize_relative_path(str(candidate.get("path") or ""))
+                if candidate_path:
+                    candidate["candidate_relative_path"] = candidate_path
+            if str(candidate.get("apply_mode") or "") == "extract_embedded" and not str(
+                candidate.get("audio_relative_path") or ""
+            ):
+                audio_path = normalize_relative_path(str(candidate.get("path") or ""))
+                if audio_path:
+                    candidate["audio_relative_path"] = audio_path
+            materialized_ref = await apply_cover_candidate_ref(
+                fs=fs,
                 candidate=candidate,
-                source_root_dir=source_root_dir,
+                output_root=RootName.STAGE,
+                output_relative_dir=work_rel,
+                plugin=plugin,
             )
-            cover_path = await plugin.apply_cover_candidate(
-                resolved_candidate,
-                output_dir=work_path,
-            )
+            if materialized_ref is not None:
+                cover_path = materialize_local_path(
+                    fs,
+                    RootName(str(materialized_ref["root"])),
+                    str(materialized_ref["relative_path"]),
+                )
     elif mode == "url":
         url = str(capability.get("url") or "")
         if url:
@@ -372,9 +384,9 @@ async def run_phase2_job_requests(
         if not source_rel or not target_rel:
             raise ValueError("action source/target paths must be non-empty")
 
-        source_path = fs.resolve_abs_path(source_root, source_rel)
+        source_path = materialize_local_path(fs, source_root, source_rel)
         work_rel = _resolve_work_relative_path(job_id, action_index, target_rel)
-        work_path = fs.resolve_abs_path(RootName.STAGE, work_rel)
+        work_path = materialize_local_path(fs, RootName.STAGE, work_rel)
         _remove_path(work_path)
         work_path.mkdir(parents=True, exist_ok=True)
 
@@ -397,7 +409,6 @@ async def run_phase2_job_requests(
                 await _run_audio_import(
                     plugin_loader=plugin_loader,
                     source_path=source_path,
-                    source_root_dir=fs.root_dir(source_root),
                     work_path=work_path,
                     capability=capability,
                 )
@@ -405,9 +416,11 @@ async def run_phase2_job_requests(
                 continue
             if kind == "cover.embed":
                 await _run_cover_embed(
+                    fs=fs,
                     plugin_loader=plugin_loader,
-                    source_path=source_path,
-                    source_root_dir=fs.root_dir(source_root),
+                    source_root=source_root,
+                    source_relative_path=source_rel,
+                    work_rel=work_rel,
                     work_path=work_path,
                     capability=capability,
                 )

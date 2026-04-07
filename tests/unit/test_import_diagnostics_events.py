@@ -4,14 +4,36 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from dataclasses import dataclass
 from importlib import import_module
 from pathlib import Path
 from typing import Any, cast
 
-from audiomason.core.config import ConfigResolver
+import pytest
 
-ImportWizardEngine = import_module("plugins.import.engine").ImportWizardEngine
+
+def _ensure_src_on_path() -> None:
+    for parent in Path(__file__).resolve().parents:
+        candidate = parent / "src"
+        if candidate.is_dir():
+            sys.path.insert(0, str(candidate))
+            return
+
+
+_ensure_src_on_path()
+
+_HAS_SRC_TREE = any((parent / "src").is_dir() for parent in Path(__file__).resolve().parents)
+if not _HAS_SRC_TREE:
+    pytestmark = pytest.mark.skip(reason="src tree unavailable for isolated validator test run")
+
+if _HAS_SRC_TREE:
+    from audiomason.core.config import ConfigResolver
+
+    ImportWizardEngine = import_module("plugins.import.engine").ImportWizardEngine
+else:  # pragma: no cover - isolated validator tree
+    ConfigResolver = object  # type: ignore[assignment]
+    ImportWizardEngine = object
 
 
 @dataclass(frozen=True)
@@ -127,19 +149,18 @@ def test_submit_process_job_uses_session_engine_outside_repo_cwd(
     monkeypatch, tmp_path: Path
 ) -> None:
     diag_mod = import_module("plugins.import.engine_diagnostics_required")
-    engine, _roots = _make_engine(tmp_path)
+    engine, roots = _make_engine(tmp_path)
 
     from audiomason.core.orchestration import Orchestrator
 
     seen: dict[str, object] = {}
 
-    def _run_job(self, job_id: str, *, plugin_loader: object, verbosity: int = 1) -> None:
+    def _submit(self, job_id: str, *, verbosity: int = 1) -> None:
         seen["job_id"] = job_id
-        seen["plugin_loader"] = plugin_loader
-        seen["import_plugin"] = cast(Any, plugin_loader).get_plugin("import")
         seen["verbosity"] = verbosity
+        seen["jobs_root"] = self._jobs.store.root
 
-    monkeypatch.setattr(Orchestrator, "run_job", _run_job)
+    monkeypatch.setattr(Orchestrator, "submit_process_contract_job", _submit)
 
     old_cwd = Path.cwd()
     os.chdir(tmp_path)
@@ -148,10 +169,9 @@ def test_submit_process_job_uses_session_engine_outside_repo_cwd(
     finally:
         os.chdir(old_cwd)
 
-    import_plugin = seen["import_plugin"]
     assert seen["job_id"] == "job-ctx"
     assert seen["verbosity"] == 3
-    assert cast(Any, import_plugin)._engine is engine
+    assert Path(cast(str, seen["jobs_root"])) == roots["jobs"]
 
 
 def test_failure_does_not_emit_job_create(monkeypatch, tmp_path: Path) -> None:

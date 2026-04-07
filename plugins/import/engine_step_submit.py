@@ -273,6 +273,7 @@ def submit_step_impl(
                 next_state.setdefault("vars", {})["phase1"] = build_phase1_projection(
                     discovery=discovery_any,
                     state=next_state,
+                    fs=engine._fs,
                 )
             next_state["updated_at"] = _iso_utc_now()
             engine._persist_state(session_id, next_state)

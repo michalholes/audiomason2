@@ -6,30 +6,32 @@ ASCII-only.
 from __future__ import annotations
 
 import json
-from pathlib import Path
+from typing import Any
+
+from plugins.file_io.service import FileService
+from plugins.file_io.service.types import RootName
 
 
 class EffectiveModelJsonError(RuntimeError):
-    def __init__(self, message: str, *, path: Path):
+    def __init__(self, message: str, *, rel_path: str):
         super().__init__(message)
-        self.path = path
+        self.rel_path = rel_path
 
 
-def load_effective_model_json(session_dir: Path) -> dict:
-    """Load sessions/<sid>/effective_model.json from session_dir.
-
-    Raises EffectiveModelJsonError on missing file or invalid JSON.
-    """
-
-    path = session_dir / "effective_model.json"
+def load_effective_model_json(*, fs: FileService, session_id: str) -> dict[str, Any]:
+    rel_path = f"import/sessions/{session_id}/effective_model.json"
     try:
-        raw = path.read_bytes()
-    except FileNotFoundError as e:
-        raise EffectiveModelJsonError("effective_model.json is missing", path=path) from e
+        with fs.open_read(RootName.WIZARDS, rel_path) as handle:
+            raw = handle.read()
+    except FileNotFoundError as exc:
+        raise EffectiveModelJsonError("effective_model.json is missing", rel_path=rel_path) from exc
     try:
-        obj = json.loads(raw.decode("utf-8"))
-    except Exception as e:
-        raise EffectiveModelJsonError("effective_model.json is invalid JSON", path=path) from e
-    if not isinstance(obj, dict):
-        raise EffectiveModelJsonError("effective_model.json must be an object", path=path)
-    return obj
+        payload = json.loads(raw.decode("utf-8"))
+    except json.JSONDecodeError as exc:
+        raise EffectiveModelJsonError(
+            "effective_model.json is invalid JSON",
+            rel_path=rel_path,
+        ) from exc
+    if not isinstance(payload, dict):
+        raise EffectiveModelJsonError("effective_model.json must be an object", rel_path=rel_path)
+    return payload

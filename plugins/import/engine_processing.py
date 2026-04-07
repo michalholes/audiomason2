@@ -234,6 +234,7 @@ def start_processing_impl(
                     state.setdefault("vars", {})["phase1"] = build_phase1_projection(
                         discovery=discovery_any,
                         state=state,
+                        fs=engine._fs,
                     )
                     engine._persist_state(session_id, state)
         phase1_any = state.get("vars", {}).get("phase1")

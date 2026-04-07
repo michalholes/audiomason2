@@ -8,7 +8,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from .defaults import DEFAULT_CATALOG, DEFAULT_FLOW_CONFIG
+from .defaults import DEFAULT_FLOW_CONFIG
+from .dsl.default_wizard_v3 import build_default_wizard_definition_v3
 from .errors import FinalizeError
 from .flow_runtime import CANONICAL_STEP_ORDER
 
@@ -280,51 +281,39 @@ STEP_CATALOG: dict[str, dict[str, Any]] = {
 
 
 def get_step_details(step_id: str) -> dict[str, Any] | None:
-    """Return legacy editor fallback metadata only.
+    """Return a derived default projection entry for legacy UI callers only."""
 
-    This helper is UI-only. Runtime and validation must not treat it as
-    authority. Active editor surfaces should prefer build_step_catalog_projection().
-    """
-
-    return STEP_CATALOG.get(step_id)
+    return build_default_step_catalog_projection().get(step_id)
 
 
 def build_authority_known_step_ids() -> set[str]:
-    """Return a legacy compatibility-only step id snapshot.
+    """Return a derived compatibility-only step id snapshot."""
 
-    Runtime authority must derive step ids from the active wizard definition.
-    This helper remains projection-only for legacy callers that still need the
-    default catalog view.
-    """
-
-    return set(_legacy_catalog_step_ids()) | set(CANONICAL_STEP_ORDER)
+    return set(build_default_step_catalog_projection()) | set(CANONICAL_STEP_ORDER)
 
 
 def _legacy_catalog_step_ids() -> tuple[str, ...]:
-    steps_any = DEFAULT_CATALOG.get("steps")
-    if not isinstance(steps_any, list):
-        raise FinalizeError("default catalog steps must be a list")
-
+    definition = build_default_wizard_definition_v3()
+    nodes_any = definition.get("nodes")
+    if not isinstance(nodes_any, list):
+        raise FinalizeError("default wizard_definition nodes must be a list")
     step_ids: list[str] = []
-    for step in steps_any:
-        if not isinstance(step, dict):
-            raise FinalizeError("default catalog step must be an object")
-        step_id = step.get("step_id")
+    for node_any in nodes_any:
+        if not isinstance(node_any, dict):
+            raise FinalizeError("default wizard_definition node must be an object")
+        step_id = node_any.get("step_id")
         if not isinstance(step_id, str) or not step_id:
-            raise FinalizeError("default catalog step_id must be a non-empty string")
-        step_ids.append(step_id)
+            raise FinalizeError("default wizard_definition step_id must be a non-empty string")
+        if step_id not in step_ids:
+            step_ids.append(step_id)
     return tuple(step_ids)
 
 
 def build_default_step_catalog_projection() -> dict[str, dict[str, Any]]:
-    defaults_any = DEFAULT_FLOW_CONFIG.get("defaults")
-    step_defaults_map = defaults_any if isinstance(defaults_any, dict) else {}
-    projection: dict[str, dict[str, Any]] = {}
-    for step_id in _legacy_catalog_step_ids():
-        defaults_obj = step_defaults_map.get(step_id)
-        step_defaults = defaults_obj if isinstance(defaults_obj, dict) else {}
-        projection[step_id] = _project_v2_step(step_id, step_defaults)
-    return projection
+    return build_step_catalog_projection(
+        wizard_definition=build_default_wizard_definition_v3(),
+        flow_config=DEFAULT_FLOW_CONFIG,
+    )
 
 
 _PROMPT_FIELD_ORDER: tuple[str, ...] = (

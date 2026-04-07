@@ -17,7 +17,6 @@ from plugins.file_io.service import FileService
 from plugins.file_io.service.types import RootName
 
 from .conditions import find_invalid_condition_path
-from .defaults import DEFAULT_CATALOG
 from .dsl.default_wizard_v3 import build_default_wizard_definition_v3
 from .dsl.wizard_definition_v3_model import (
     canonicalize_wizard_definition_v3,
@@ -32,6 +31,7 @@ from .flow_runtime import (
     build_flow_model,
 )
 from .models import CatalogModel, FlowModel, validate_models
+from .step_catalog import build_default_step_catalog_projection
 from .storage import atomic_write_json_if_missing, read_json
 from .wizard_definition_runtime_errors import invalid_authored_wizard_definition_error
 
@@ -345,7 +345,7 @@ def build_legacy_runtime_flow_model_from_definition(
         wizard_definition=wizard_definition,
         flow_config=flow_config,
     )
-    catalog = CatalogModel.from_dict(DEFAULT_CATALOG)
+    catalog = CatalogModel.from_dict(_derived_legacy_catalog())
     flow = FlowModel.from_dict(
         {
             "version": 1,
@@ -608,20 +608,23 @@ def _reachable_from(start: str, adj: dict[str, set[str]]) -> set[str]:
     return seen
 
 
-def _default_catalog_step_ids() -> tuple[str, ...]:
-    steps_any = DEFAULT_CATALOG.get("steps")
-    if not isinstance(steps_any, list):
-        raise FinalizeError("default catalog steps must be a list")
+def _derived_legacy_catalog() -> dict[str, Any]:
+    projection = build_default_step_catalog_projection()
+    steps = [
+        {
+            "step_id": step_id,
+            "title": str(entry.get("title") or step_id),
+            "computed_only": False,
+            "fields": [],
+        }
+        for step_id, entry in sorted(projection.items())
+    ]
+    return {"version": 1, "steps": steps}
 
-    step_ids: list[str] = []
-    for step_any in steps_any:
-        if not isinstance(step_any, dict):
-            raise FinalizeError("default catalog step must be an object")
-        step_id = step_any.get("step_id")
-        if not isinstance(step_id, str) or not step_id:
-            raise FinalizeError("default catalog step_id must be a non-empty string")
-        step_ids.append(step_id)
-    return tuple(step_ids)
+
+def _default_catalog_step_ids() -> tuple[str, ...]:
+    projection = build_default_step_catalog_projection()
+    return tuple(sorted(projection.keys()))
 
 
 def _known_step_ids() -> set[str]:

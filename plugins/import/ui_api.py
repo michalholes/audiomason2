@@ -190,7 +190,7 @@ def build_router(*, engine: Any):
                         {
                             "path": "$.effective_model",
                             "reason": _effective_model_reason(str(e)),
-                            "meta": {"path": str(e.path)},
+                            "meta": {"path": str(e.rel_path)},
                         }
                     ],
                 }

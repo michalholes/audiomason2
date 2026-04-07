@@ -255,11 +255,6 @@ def resume_session_from_context(
         },
     )
     loaded_state = _ensure_session_state_fields(loaded_state)
-    loaded_source = loaded_state.get("source")
-    loaded_source_dict = dict(loaded_source) if isinstance(loaded_source, dict) else {}
-    loaded_source_dict["root_dir"] = str(engine._fs.root_dir(RootName(ctx.root)))
-    loaded_state["source"] = loaded_source_dict
-
     runtime_fp = engine._runtime_effective_model_fingerprint(ctx.session_id)
     if runtime_fp and loaded_state.get("model_fingerprint") != runtime_fp:
         loaded_state["model_fingerprint"] = runtime_fp
@@ -267,6 +262,7 @@ def resume_session_from_context(
         loaded_state.setdefault("vars", {})["phase1"] = build_phase1_projection(
             discovery=ctx.discovery,
             state=loaded_state,
+            fs=engine._fs,
         )
     if ctx.effective_model.get("flowmodel_kind") == "dsl_step_graph_v3":
         from .engine_step_submit import _sync_v3_legacy_state
@@ -361,7 +357,6 @@ def create_new_session_from_context(
         "source": {
             "root": ctx.root,
             "relative_path": ctx.relative_path,
-            "root_dir": str(engine._fs.root_dir(RootName(ctx.root))),
         },
         "current_step_id": start_step_id,
         "cursor": {"step_id": start_step_id},
@@ -391,7 +386,13 @@ def create_new_session_from_context(
     }
 
     if phase1_session_authority_applies(effective_model=ctx.effective_model):
-        state["vars"] = {"phase1": build_phase1_projection(discovery=ctx.discovery, state=state)}
+        state["vars"] = {
+            "phase1": build_phase1_projection(
+                discovery=ctx.discovery,
+                state=state,
+                fs=engine._fs,
+            )
+        }
     if (
         isinstance(ctx.effective_model, dict)
         and ctx.effective_model.get("flowmodel_kind") == "dsl_step_graph_v3"
@@ -407,6 +408,7 @@ def create_new_session_from_context(
             state.setdefault("vars", {})["phase1"] = build_phase1_projection(
                 discovery=ctx.discovery,
                 state=state,
+                fs=engine._fs,
             )
         state = _sync_v3_legacy_state(
             engine=engine,

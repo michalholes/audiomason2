@@ -22,6 +22,9 @@ from plugins.file_io.service import FileService, RootName
 from .fingerprints import fingerprint_json
 from .flow_config_defaults import DEFAULT_FLOW_CONFIG
 from .flow_config_validation import normalize_flow_config
+from .step_catalog import build_step_catalog_projection
+from .wizard_definition_model import build_effective_workflow_snapshot
+from .wizard_editor_storage import ensure_wizard_definition_active_exists
 
 CATALOG_REL_PATH = "import/catalog/catalog.json"
 FLOW_REL_PATH = "import/flow/current.json"
@@ -32,12 +35,52 @@ HISTORY_DIR = "import/editor_history"
 HISTORY_LIMIT = 5
 
 
+def _derived_editor_catalog(fs: FileService) -> dict[str, Any]:
+    wizard_definition = ensure_wizard_definition_active_exists(fs)
+    flow_config = ensure_flow_config_active_exists(fs)
+    projection = build_step_catalog_projection(
+        wizard_definition=wizard_definition,
+        flow_config=flow_config,
+    )
+    steps = [
+        {
+            "step_id": step_id,
+            "title": str(entry.get("title") or step_id),
+            "computed_only": False,
+            "fields": [],
+        }
+        for step_id, entry in sorted(projection.items())
+    ]
+    return {"version": 1, "steps": steps}
+
+
+def _derived_editor_flow(fs: FileService) -> dict[str, Any]:
+    wizard_definition = ensure_wizard_definition_active_exists(fs)
+    flow_config = ensure_flow_config_active_exists(fs)
+    step_order = build_effective_workflow_snapshot(
+        wizard_definition=wizard_definition,
+        flow_config=flow_config,
+    )
+    return {
+        "version": 1,
+        "entry_step_id": step_order[0],
+        "nodes": [
+            {
+                "step_id": sid,
+                "next_step_id": step_order[index + 1] if index + 1 < len(step_order) else None,
+                "prev_step_id": step_order[index - 1] if index > 0 else None,
+            }
+            for index, sid in enumerate(step_order)
+        ],
+    }
+
+
 def load_catalog(fs: FileService) -> Any:
-    return _load_json(fs, RootName.WIZARDS, CATALOG_REL_PATH)
+    return _derived_editor_catalog(fs)
 
 
 def load_flow(fs: FileService) -> Any:
-    return _load_json(fs, RootName.WIZARDS, FLOW_REL_PATH)
+    return _derived_editor_flow(fs)
 
 
 def save_catalog(fs: FileService, obj: Any) -> None:

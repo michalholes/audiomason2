@@ -395,6 +395,7 @@ def build_phase1_projection(
     *,
     discovery: list[dict[str, Any]],
     state: dict[str, Any],
+    fs: Any | None = None,
 ) -> dict[str, Any]:
     source_projection = build_phase1_source_projection(discovery=discovery, state=state)
     metadata_projection = build_phase1_metadata_projection(
@@ -405,6 +406,7 @@ def build_phase1_projection(
         discovery=discovery,
         source_projection=source_projection,
         state=state,
+        fs=fs,
     )
     policy_projection = build_phase1_policy_projection(
         state=state,

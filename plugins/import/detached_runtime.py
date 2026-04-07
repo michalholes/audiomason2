@@ -14,6 +14,7 @@ from plugins.file_io.import_runtime import normalize_relative_path
 from plugins.file_io.service import FileService
 from plugins.file_io.service.types import RootName
 
+from .file_io_boundary import materialize_root_dir
 from .storage import read_json
 
 _ROOT_KEYS: tuple[tuple[RootName, str], ...] = (
@@ -39,7 +40,7 @@ class DetachedImportRuntime:
 def build_detached_runtime_bootstrap(*, fs: FileService) -> dict[str, Any]:
     roots: dict[str, str] = {}
     for root_name, key in _ROOT_KEYS:
-        roots[key] = str(fs.root_dir(root_name))
+        roots[key] = str(materialize_root_dir(fs, root_name))
     return {
         "version": 1,
         "file_io": {
