@@ -6,6 +6,7 @@ It must be deterministic and ASCII-only.
 
 from __future__ import annotations
 
+from collections.abc import Iterator, MutableMapping
 from typing import Any
 
 from .defaults import DEFAULT_FLOW_CONFIG
@@ -42,242 +43,101 @@ def _schema(fields: list[dict[str, Any]]) -> dict[str, Any]:
 # - active projection authority comes from WizardDefinition plus FlowConfig
 # - settings_schema + defaults_template are UI-only and do not affect runtime
 # - keep descriptions short and deterministic
-STEP_CATALOG: dict[str, dict[str, Any]] = {
-    "select_authors": {
-        "id": "select_authors",
-        "title": "Select Authors",
-        "displayName": "Select Authors",
-        "description": "Choose authors to include in the import session.",
-        "behavioralSummary": "User selects authors for the session plan.",
-        "inputContract": "Requires available authors in the chosen root/path.",
-        "outputContract": "Produces a selected author set for downstream steps.",
-        "sideEffectsDescription": "No side effects. UI-only selection.",
-        "settings_schema": _schema([]),
-        "defaults_template": {},
-    },
-    "select_books": {
-        "id": "select_books",
-        "title": "Select Books",
-        "displayName": "Select Books",
-        "description": "Choose which books to import for the selected authors.",
-        "behavioralSummary": "User selects books to include for selected authors.",
-        "inputContract": "Requires authors selected in prior step.",
-        "outputContract": "Produces a selected book set for downstream planning.",
-        "sideEffectsDescription": "No side effects. UI-only selection.",
-        "settings_schema": _schema([]),
-        "defaults_template": {},
-    },
-    "plan_preview_batch": {
-        "id": "plan_preview_batch",
-        "title": "Plan Preview",
-        "displayName": "Plan Preview",
-        "description": "Preview the planned operations before applying policies.",
-        "behavioralSummary": "Shows a preview of planned operations for review.",
-        "inputContract": "Requires selected authors and books.",
-        "outputContract": "Produces a plan snapshot for policy steps.",
-        "sideEffectsDescription": "No side effects. UI-only preview.",
-        "settings_schema": _schema([]),
-        "defaults_template": {},
-    },
-    "effective_author_title": {
-        "id": "effective_author_title",
-        "title": "Effective Author Title",
-        "displayName": "Effective Author Title",
-        "description": "Show the effective author/title values computed for the plan.",
-        "behavioralSummary": "Displays computed effective author/title values.",
-        "inputContract": "Requires a computed plan snapshot.",
-        "outputContract": "Provides visibility into computed naming inputs.",
-        "sideEffectsDescription": "No side effects. UI-only display.",
-        "settings_schema": _schema([]),
-        "defaults_template": {},
-    },
-    "filename_policy": {
-        "id": "filename_policy",
-        "title": "Filename Policy",
-        "displayName": "Filename Policy",
-        "description": "Define filename normalization and naming behavior.",
-        "behavioralSummary": "Configures filename policy used during processing.",
-        "inputContract": "Accepts policy settings for naming and normalization.",
-        "outputContract": "Produces filename policy settings for runtime.",
-        "sideEffectsDescription": "No side effects until processing runs.",
-        "settings_schema": _schema(
-            [
-                _field(key="hint", type_name="string", required=False, default=""),
-            ]
-        ),
-        "defaults_template": {"hint": ""},
-    },
-    "covers_policy": {
-        "id": "covers_policy",
-        "title": "Covers Policy",
-        "displayName": "Covers Policy",
-        "description": "Define how cover images are selected and applied.",
-        "behavioralSummary": "Configures cover image selection and application.",
-        "inputContract": "Accepts settings for cover selection rules.",
-        "outputContract": "Produces cover policy settings for runtime.",
-        "sideEffectsDescription": "No side effects until processing runs.",
-        "settings_schema": _schema(
-            [
-                _field(key="hint", type_name="string", required=False, default=""),
-            ]
-        ),
-        "defaults_template": {"hint": ""},
-    },
-    "id3_policy": {
-        "id": "id3_policy",
-        "title": "ID3 Policy",
-        "displayName": "ID3 Policy",
-        "description": "Define how ID3 tags are written for audio outputs.",
-        "behavioralSummary": "Configures ID3 tag writing behavior for audio.",
-        "inputContract": "Accepts settings for ID3 tag mapping and writing.",
-        "outputContract": "Produces ID3 policy settings for runtime.",
-        "sideEffectsDescription": "No side effects until processing runs.",
-        "settings_schema": _schema(
-            [
-                _field(key="hint", type_name="string", required=False, default=""),
-            ]
-        ),
-        "defaults_template": {"hint": ""},
-    },
-    "audio_processing": {
-        "id": "audio_processing",
-        "title": "Audio Processing",
-        "displayName": "Audio Processing",
-        "description": "Configure audio processing options used during import.",
-        "behavioralSummary": "Configures audio processing options and behavior.",
-        "inputContract": "Accepts audio processing settings.",
-        "outputContract": "Produces audio processing settings for runtime.",
-        "sideEffectsDescription": "No side effects until processing runs.",
-        "settings_schema": _schema(
-            [
-                _field(key="hint", type_name="string", required=False, default=""),
-            ]
-        ),
-        "defaults_template": {"hint": ""},
-    },
-    "publish_policy": {
-        "id": "publish_policy",
-        "title": "Publish Policy",
-        "displayName": "Publish Policy",
-        "description": "Define how results are published after processing.",
-        "behavioralSummary": "Configures publishing behavior after processing.",
-        "inputContract": "Accepts settings that control publishing actions.",
-        "outputContract": "Produces publish policy settings for runtime.",
-        "sideEffectsDescription": "May publish outputs during processing.",
-        "settings_schema": _schema(
-            [
-                _field(key="hint", type_name="string", required=False, default=""),
-            ]
-        ),
-        "defaults_template": {"hint": ""},
-    },
-    "delete_source_policy": {
-        "id": "delete_source_policy",
-        "title": "Delete Source Policy",
-        "displayName": "Delete Source Policy",
-        "description": "Define whether and when source files may be deleted.",
-        "behavioralSummary": "Configures deletion behavior for source files.",
-        "inputContract": "Accepts settings controlling deletion conditions.",
-        "outputContract": "Produces delete policy settings for runtime.",
-        "sideEffectsDescription": "May delete source files during processing.",
-        "settings_schema": _schema(
-            [
-                _field(key="hint", type_name="string", required=False, default=""),
-            ]
-        ),
-        "defaults_template": {"hint": ""},
-    },
-    "skip_processed_books": {
-        "id": "skip_processed_books",
-        "title": "Skip Processed Books",
-        "displayName": "Skip Processed Books",
-        "description": "Define whether already processed books should be skipped.",
-        "behavioralSummary": "Configures whether successful prior imports are skipped.",
-        "inputContract": "Accepts yes/no policy for processed-book skipping.",
-        "outputContract": "Produces skip-processed policy settings for runtime.",
-        "sideEffectsDescription": "No side effects until processing runs.",
-        "settings_schema": _schema(
-            [
-                _field(key="hint", type_name="string", required=False, default=""),
-            ]
-        ),
-        "defaults_template": {"hint": ""},
-    },
-    "conflict_policy": {
-        "id": "conflict_policy",
-        "title": "Conflict Policy",
-        "displayName": "Conflict Policy",
-        "description": "Define conflict detection and resolution behavior.",
-        "behavioralSummary": "Configures conflict detection and resolution rules.",
-        "inputContract": "Accepts settings for conflict policy and prefill.",
-        "outputContract": "Produces conflict policy settings for runtime.",
-        "sideEffectsDescription": "No side effects until processing runs.",
-        "settings_schema": _schema(
-            [
-                _field(key="hint", type_name="string", required=False, default=""),
-                _field(
-                    key="prefill_policy",
-                    type_name="string",
-                    required=False,
-                    default="",
-                ),
-            ]
-        ),
-        "defaults_template": {"hint": "", "prefill_policy": ""},
-    },
-    "parallelism": {
-        "id": "parallelism",
-        "title": "Parallelism",
-        "displayName": "Parallelism",
-        "description": "Configure concurrency limits for processing jobs.",
-        "behavioralSummary": "Configures concurrency limits for job execution.",
-        "inputContract": "Accepts integer concurrency configuration values.",
-        "outputContract": "Produces parallelism settings for runtime.",
-        "sideEffectsDescription": "No side effects. Limits apply during processing.",
-        "settings_schema": _schema(
-            [
-                _field(key="max_jobs", type_name="int", required=False, default=0),
-            ]
-        ),
-        "defaults_template": {"max_jobs": 0},
-    },
-    "final_summary_confirm": {
-        "id": "final_summary_confirm",
-        "title": "Final Summary",
-        "displayName": "Final Summary",
-        "description": "Review the final plan summary and confirm execution.",
-        "behavioralSummary": "User confirms the final plan summary before run.",
-        "inputContract": "Requires a computed plan snapshot and applied policies.",
-        "outputContract": "Produces a confirmation to proceed to processing.",
-        "sideEffectsDescription": "No side effects. Confirmation gates processing.",
-        "settings_schema": _schema([]),
-        "defaults_template": {},
-    },
-    "resolve_conflicts_batch": {
-        "id": "resolve_conflicts_batch",
-        "title": "Resolve Conflicts",
-        "displayName": "Resolve Conflicts",
-        "description": "Resolve conflicts when conflict resolution is required.",
-        "behavioralSummary": "User resolves detected conflicts for the plan.",
-        "inputContract": "Requires conflicts detected by prior planning.",
-        "outputContract": "Produces resolved conflict decisions.",
-        "sideEffectsDescription": "No side effects until processing runs.",
-        "settings_schema": _schema([]),
-        "defaults_template": {},
-    },
-    "processing": {
-        "id": "processing",
-        "title": "Processing",
-        "displayName": "Processing",
-        "description": "Execute processing jobs and show progress.",
-        "behavioralSummary": "Runs processing jobs and reports progress.",
-        "inputContract": "Requires validated configuration and wizard definition.",
-        "outputContract": "Produces job execution and output artifacts.",
-        "sideEffectsDescription": "Performs processing work and writes outputs.",
-        "settings_schema": _schema([]),
-        "defaults_template": {},
-    },
-}
+
+# Legacy UI fallback metadata must remain derived from the active authority.
+# Keep descriptions short and deterministic.
+
+
+def _projected_defaults_template(step_id: str, *, ui_fields: dict[str, Any]) -> dict[str, Any]:
+    defaults_template = {key: ui_fields[key] for key in _PROMPT_FIELD_ORDER if key in ui_fields}
+    if defaults_template:
+        return defaults_template
+    ui_only_steps = {
+        "plan_preview_batch",
+        "final_summary_confirm",
+        "resolve_conflicts_batch",
+        "processing",
+    }
+    if step_id in ui_only_steps:
+        return {}
+    if step_id == "parallelism":
+        return {"max_jobs": 0}
+    if step_id == "skip_processed_books":
+        return {"mode": "skip"}
+    return {"hint": ""}
+
+
+def _projected_step_catalog_entry(
+    step_id: str,
+    *,
+    ui_fields: dict[str, Any],
+    flow_defaults: dict[str, Any],
+) -> dict[str, Any]:
+    display_name = str(ui_fields.get("label") or _humanize_step_id(step_id))
+    description = str(ui_fields.get("prompt") or "Derived from the active import authority.")
+    defaults_template = _projected_defaults_template(step_id, ui_fields=ui_fields)
+    schema_inputs = dict(defaults_template)
+    schema_inputs.update(flow_defaults)
+    return {
+        "id": step_id,
+        "step_id": step_id,
+        "title": display_name,
+        "displayName": display_name,
+        "description": description,
+        "behavioralSummary": "Read-only projection from the active import authority.",
+        "inputContract": "Derived from active WizardDefinition and FlowConfig.",
+        "outputContract": "Projection-only step metadata for editor surfaces.",
+        "sideEffectsDescription": "No side effects. Projection only.",
+        "settings_schema": _schema_from_mapping(schema_inputs),
+        "defaults_template": defaults_template,
+    }
+
+
+class _DerivedStepCatalogView(MutableMapping[str, dict[str, Any]]):
+    def __init__(self) -> None:
+        self._overrides: dict[str, dict[str, Any]] = {}
+
+    def _base(self) -> dict[str, dict[str, Any]]:
+        return build_default_step_catalog_projection()
+
+    def _merged(self) -> dict[str, dict[str, Any]]:
+        merged = self._base()
+        merged.update(self._overrides)
+        return merged
+
+    def __getitem__(self, key: str) -> dict[str, Any]:
+        merged = self._merged()
+        if key not in merged:
+            raise KeyError(key)
+        return merged[key]
+
+    def __setitem__(self, key: str, value: dict[str, Any]) -> None:
+        self._overrides[key] = value
+
+    def __delitem__(self, key: str) -> None:
+        if key in self._overrides:
+            del self._overrides[key]
+            return
+        raise KeyError(key)
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._merged())
+
+    def __len__(self) -> int:
+        return len(self._merged())
+
+    def get(self, key: str, default: Any = None) -> Any:
+        return self._merged().get(key, default)
+
+    def pop(self, key: str, default: Any = None) -> Any:
+        if key in self._overrides:
+            return self._overrides.pop(key)
+        if default is not None:
+            return default
+        raise KeyError(key)
+
+
+STEP_CATALOG: MutableMapping[str, dict[str, Any]] = _DerivedStepCatalogView()
 
 
 def get_step_details(step_id: str) -> dict[str, Any] | None:
@@ -310,10 +170,13 @@ def _legacy_catalog_step_ids() -> tuple[str, ...]:
 
 
 def build_default_step_catalog_projection() -> dict[str, dict[str, Any]]:
-    return build_step_catalog_projection(
+    """Return a deterministic compatibility projection derived from authority inputs."""
+
+    projected = build_step_catalog_projection(
         wizard_definition=build_default_wizard_definition_v3(),
         flow_config=DEFAULT_FLOW_CONFIG,
     )
+    return {step_id: projected[step_id] for step_id in CANONICAL_STEP_ORDER if step_id in projected}
 
 
 _PROMPT_FIELD_ORDER: tuple[str, ...] = (
@@ -376,25 +239,15 @@ def _project_v3_step(step: dict[str, Any], step_defaults: dict[str, Any]) -> dic
     step_id = str(step.get("step_id") or "")
     ui_any = step.get("ui")
     ui: dict[str, Any] = dict(ui_any) if isinstance(ui_any, dict) else {}
-    display_name = str(ui.get("label") or step_id or _humanize_step_id(step_id))
-    defaults_template = {key: ui[key] for key in _PROMPT_FIELD_ORDER if key in ui}
-    fields_data = dict(defaults_template)
-    fields_data.update(step_defaults)
     primitive_id = str(step.get("primitive_id") or "")
-    description = str(ui.get("prompt") or primitive_id or "")
-    return {
-        "id": step_id,
-        "step_id": step_id,
-        "title": display_name,
-        "displayName": display_name,
-        "description": description or "Derived from the active WizardDefinition v3 graph.",
-        "behavioralSummary": "Read-only projection from the active import authority.",
-        "inputContract": "Derived from active WizardDefinition and FlowConfig.",
-        "outputContract": "Projection-only step metadata for editor surfaces.",
-        "sideEffectsDescription": "No side effects. Projection only.",
-        "settings_schema": _schema_from_mapping(fields_data),
-        "defaults_template": defaults_template,
-    }
+    entry = _projected_step_catalog_entry(
+        step_id,
+        ui_fields=ui,
+        flow_defaults=step_defaults,
+    )
+    if not str(entry.get("description") or "") and primitive_id:
+        entry["description"] = primitive_id
+    return entry
 
 
 def build_step_catalog_projection(
@@ -447,5 +300,6 @@ def build_step_catalog_projection(
             raise FinalizeError("wizard_definition graph node step_id must be a string")
         defaults_any = step_defaults_map.get(step_id_any)
         step_defaults = defaults_any if isinstance(defaults_any, dict) else {}
-        out[step_id_any] = _project_v2_step(step_id_any, step_defaults)
+        projected = _project_v2_step(step_id_any, step_defaults)
+        out[step_id_any] = projected
     return out

@@ -26,8 +26,6 @@ from .step_catalog import build_step_catalog_projection
 from .wizard_definition_model import build_effective_workflow_snapshot
 from .wizard_editor_storage import ensure_wizard_definition_active_exists
 
-CATALOG_REL_PATH = "import/catalog/catalog.json"
-FLOW_REL_PATH = "import/flow/current.json"
 FLOW_CONFIG_REL_PATH = "import/config/flow_config.json"
 FLOW_CONFIG_DRAFT_REL_PATH = "import/config/flow_config.draft.json"
 

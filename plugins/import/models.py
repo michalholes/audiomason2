@@ -1,7 +1,7 @@
 """Data models for the import wizard engine.
 
-The engine loads catalog/catalog.json and flow/current.json under the WIZARDS root.
-Only minimal schema validation is implemented here.
+Catalog/flow payloads handled here are compatibility projections derived from the
+active import authority. Only minimal schema validation is implemented here.
 
 ASCII-only.
 """

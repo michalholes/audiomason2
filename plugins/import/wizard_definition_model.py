@@ -610,15 +610,17 @@ def _reachable_from(start: str, adj: dict[str, set[str]]) -> set[str]:
 
 def _derived_legacy_catalog() -> dict[str, Any]:
     projection = build_default_step_catalog_projection()
-    steps = [
-        {
-            "step_id": step_id,
-            "title": str(entry.get("title") or step_id),
-            "computed_only": False,
-            "fields": [],
-        }
-        for step_id, entry in sorted(projection.items())
-    ]
+    steps: list[dict[str, Any]] = []
+    for step_id in projection:
+        entry = projection[step_id]
+        steps.append(
+            {
+                "step_id": step_id,
+                "title": str(entry.get("title") or step_id),
+                "computed_only": step_id in {"plan_preview_batch", "processing"},
+                "fields": [],
+            }
+        )
     return {"version": 1, "steps": steps}
 
 

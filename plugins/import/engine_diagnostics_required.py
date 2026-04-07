@@ -18,7 +18,6 @@ from audiomason.core.events import get_event_bus as _core_get_event_bus
 from audiomason.core.jobs.api import JobService
 from audiomason.core.jobs.model import JobType
 from audiomason.core.jobs.store import JobStore
-from audiomason.core.loader import PluginLoader
 from audiomason.core.orchestration import Orchestrator
 from audiomason.core.process_job_contracts import IMPORT_PROCESS_CONTRACT_ID
 
@@ -155,7 +154,7 @@ def _user_plugins_root() -> Path:
     return Path.home() / ".audiomason/plugins"
 
 
-class _ImportProcessRuntimePlugin:
+class _RuntimeImportPlugin:
     def __init__(self, *, engine: object) -> None:
         self._engine = engine
 
@@ -172,34 +171,47 @@ class _ImportProcessRuntimePlugin:
         )
 
 
-_REQUIRED_PROCESS_PLUGINS = ("audio_processor", "cover_handler", "id3_tagger")
+_ImportProcessRuntimePlugin = _RuntimeImportPlugin
 
 
-def _plugin_loader(*, engine: object) -> PluginLoader:
-    loader = PluginLoader(
-        builtin_plugins_dir=_builtin_plugins_root(),
-        user_plugins_dir=_user_plugins_root(),
-        registry=None,
-    )
-    loader._plugins["import"] = _ImportProcessRuntimePlugin(engine=engine)
+class _ProcessContractPluginLoader:
+    def __init__(self, plugins: dict[str, object] | None = None) -> None:
+        self._plugins: dict[str, object] = dict(plugins or {})
+
+    def add_plugin(self, name: str, plugin: object) -> None:
+        self._plugins[name] = plugin
+
+    def get_plugin(self, name: str) -> object:
+        return self._plugins[name]
+
+    def list_plugins(self) -> list[str]:
+        return list(self._plugins.keys())
+
+
+_REQUIRED_PROCESS_PLUGIN_MODULES: dict[str, tuple[str, str]] = {
+    "audio_processor": ("plugins.audio_processor.plugin", "AudioProcessorPlugin"),
+    "cover_handler": ("plugins.cover_handler.plugin", "CoverHandlerPlugin"),
+    "id3_tagger": ("plugins.id3_tagger.plugin", "ID3TaggerPlugin"),
+}
+
+
+def _plugin_loader(*, engine: object) -> _ProcessContractPluginLoader:
+    loader = _ProcessContractPluginLoader()
+    loader.add_plugin("import", _RuntimeImportPlugin(engine=engine))
     return loader
 
 
-def _ensure_required_process_plugins(*, loader: object) -> None:
-    loader_any = cast(Any, loader)
-    builtin_dir = getattr(loader_any, "builtin_plugins_dir", None)
-    if builtin_dir is None:
-        raise RuntimeError("plugin loader missing builtin_plugins_dir")
-
-    builtin_root = Path(builtin_dir)
-    for plugin_name in _REQUIRED_PROCESS_PLUGINS:
-        plugin_dir = builtin_root / plugin_name
-        if not (plugin_dir / "plugin.yaml").exists():
-            raise RuntimeError(f"required process plugin not found: {plugin_name}")
-        loader_any.load_plugin(plugin_dir, validate=False)
+def _ensure_required_process_plugins(*, loader: _ProcessContractPluginLoader) -> None:
+    for plugin_name, module_info in _REQUIRED_PROCESS_PLUGIN_MODULES.items():
+        module_name, class_name = module_info
+        module = import_module(module_name)
+        plugin_class = getattr(module, class_name)
+        loader.add_plugin(plugin_name, plugin_class())
 
 
-def build_process_contract_plugin_loader(*, job_meta: dict[str, Any]) -> PluginLoader:
+def build_process_contract_plugin_loader(
+    *, job_meta: dict[str, Any]
+) -> _ProcessContractPluginLoader:
     runtime = _detached_runtime_from_meta(job_meta=job_meta)
     if runtime is None:
         raise RuntimeError("detached process runtime bootstrap is required")

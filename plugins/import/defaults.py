@@ -1,131 +1,60 @@
-"""De-structuralized compatibility defaults for the import plugin.
+"""FlowConfig bootstrap helpers for the import plugin.
 
-This module keeps only in-memory compatibility data and FlowConfig re-exports.
-Persisted legacy JSON files under import/catalog/ and import/flow/ are not
-runtime authority and must not be created here.
+Compatibility catalog projections are derived on demand from the active
+authority layer. This module must not hold a hardcoded DEFAULT_CATALOG truth
+artifact.
 
 ASCII-only.
 """
 
 from __future__ import annotations
 
+from collections.abc import Iterator, Mapping
 from typing import Any
 
 from plugins.file_io.service import FileService
 
 from .flow_config_defaults import DEFAULT_FLOW_CONFIG, ensure_flow_config_exists
 
-__all__ = ["DEFAULT_CATALOG", "DEFAULT_FLOW_CONFIG", "ensure_default_models"]
 
+def _build_default_catalog() -> dict[str, Any]:
+    from .step_catalog import build_default_step_catalog_projection
 
-def _make_default_steps() -> list[dict[str, Any]]:
-    required_order = [
-        "select_authors",
-        "select_books",
-        "plan_preview_batch",
-        "effective_author_title",
-        "filename_policy",
-        "covers_policy",
-        "id3_policy",
-        "audio_processing",
-        "publish_policy",
-        "delete_source_policy",
-        "skip_processed_books",
-        "conflict_policy",
-        "parallelism",
-        "final_summary_confirm",
-        "resolve_conflicts_batch",
-        "processing",
-    ]
-
-    steps: list[dict[str, Any]] = []
-    for step_id in required_order:
-        computed_only = step_id in {"plan_preview_batch", "processing"}
+    projection = build_default_step_catalog_projection()
+    steps = []
+    for step_id in projection:
+        entry = projection[step_id]
         steps.append(
             {
                 "step_id": step_id,
-                "title": step_id.replace("_", " ").title(),
-                "computed_only": computed_only,
-                "fields": _default_fields_for_step(step_id),
+                "title": str(entry.get("title") or step_id),
+                "computed_only": step_id in {"plan_preview_batch", "processing"},
+                "fields": [],
             }
         )
-
-    return steps
-
-
-def _default_fields_for_step(step_id: str) -> list[dict[str, Any]]:
-    if step_id == "select_authors":
-        return [
-            {
-                "name": "selection",
-                "type": "multi_select_indexed",
-                "required": True,
-                "constraints": {},
-                "items": [],
-            }
-        ]
-    if step_id == "select_books":
-        return [
-            {
-                "name": "selection",
-                "type": "multi_select_indexed",
-                "required": True,
-                "constraints": {},
-                "items": [],
-            }
-        ]
-    if step_id in {"plan_preview_batch", "processing"}:
-        return []
-    if step_id == "final_summary_confirm":
-        return [
-            {
-                "name": "confirm_start",
-                "type": "confirm",
-                "required": True,
-                "constraints": {},
-            }
-        ]
-    if step_id == "resolve_conflicts_batch":
-        return [
-            {
-                "name": "confirm",
-                "type": "confirm",
-                "required": True,
-                "constraints": {},
-            }
-        ]
-    if step_id == "skip_processed_books":
-        return [
-            {
-                "name": "mode",
-                "type": "text",
-                "required": True,
-                "constraints": {},
-            }
-        ]
-    if step_id == "parallelism":
-        return [
-            {
-                "name": "workers",
-                "type": "number",
-                "required": True,
-                "constraints": {"min": 1, "max": 64},
-            }
-        ]
-    return [
-        {
-            "name": "mode",
-            "type": "text",
-            "required": True,
-            "constraints": {},
-        }
-    ]
+    return {"version": 1, "steps": steps}
 
 
-DEFAULT_CATALOG: dict[str, Any] = {
-    "version": 1,
-    "steps": _make_default_steps(),
-}
+class _DerivedCatalogView(Mapping[str, Any]):
+    def _current(self) -> dict[str, Any]:
+        return _build_default_catalog()
+
+    def __getitem__(self, key: str) -> Any:
+        return self._current()[key]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._current())
+
+    def __len__(self) -> int:
+        return len(self._current())
+
+    def get(self, key: str, default: Any = None) -> Any:
+        return self._current().get(key, default)
+
+
+DEFAULT_CATALOG: Mapping[str, Any] = _DerivedCatalogView()
+
+__all__ = ["DEFAULT_CATALOG", "DEFAULT_FLOW_CONFIG", "ensure_default_models"]
 
 
 def ensure_default_models(fs: FileService) -> dict[str, bool]:
