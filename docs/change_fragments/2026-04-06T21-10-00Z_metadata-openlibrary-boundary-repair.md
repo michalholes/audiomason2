@@ -1,0 +1,1 @@
+Issue 110: repaired metadata_openlibrary by removing public direct-call HTTP execution, making non-executing job builders the public contract, and updating tests to cover the internal job executor plus final builder surface.

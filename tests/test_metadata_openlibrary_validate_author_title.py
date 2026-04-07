@@ -41,7 +41,9 @@ def test_validate_author_is_diacritics_safe_and_suppresses_noop_suggestion() -> 
         ]
     )
 
-    result = asyncio.run(plugin.validate_author("Jozef Ciger Hronsky"))
+    result = asyncio.run(
+        plugin._execute_job(plugin.build_validate_author_job("Jozef Ciger Hronsky"))
+    )
 
     assert result == {
         "valid": True,
@@ -76,8 +78,12 @@ def test_validate_book_is_diacritics_safe_and_lookup_returns_metadata() -> None:
         ]
     )
 
-    result = asyncio.run(plugin.validate_book("Jozef Ciger Hronsky", "Pisalicek"))
-    metadata = asyncio.run(plugin.lookup_book("Jozef Ciger Hronsky", "Pisalicek"))
+    result = asyncio.run(
+        plugin._execute_job(plugin.build_validate_book_job("Jozef Ciger Hronsky", "Pisalicek"))
+    )
+    metadata = asyncio.run(
+        plugin._execute_job(plugin.build_lookup_book_job("Jozef Ciger Hronsky", "Pisalicek"))
+    )
 
     assert result == {
         "valid": True,
@@ -118,7 +124,12 @@ def test_validate_book_returns_deterministic_suggestion() -> None:
     )
 
     result = asyncio.run(
-        plugin.validate_book("J. K. Roling", "Harry Potter and the Philosopher Stone")
+        plugin._execute_job(
+            plugin.build_validate_book_job(
+                "J. K. Roling",
+                "Harry Potter and the Philosopher Stone",
+            )
+        )
     )
 
     assert result == {
@@ -153,7 +164,12 @@ def test_validate_book_uses_googlebooks_title_fallback_when_openlibrary_misses()
     )
 
     result = asyncio.run(
-        plugin.validate_book("J. K. Rowling", "Harry Potter and the Philosopher Stone")
+        plugin._execute_job(
+            plugin.build_validate_book_job(
+                "J. K. Rowling",
+                "Harry Potter and the Philosopher Stone",
+            )
+        )
     )
 
     assert result == {
@@ -192,8 +208,8 @@ def test_execute_request_phase1_validation_returns_provider_payload() -> None:
     )
 
     result = asyncio.run(
-        plugin.execute_request(
-            plugin.build_phase1_validation_request(
+        plugin._execute_job(
+            plugin.build_phase1_validation_job(
                 "J. K. Roling",
                 "Harry Potter and the Philosopher Stone",
             )
@@ -218,20 +234,35 @@ def test_execute_request_phase1_validation_returns_provider_payload() -> None:
     }
 
 
+def test_metadata_openlibrary_does_not_expose_public_direct_call_surface() -> None:
+    plugin = _FakeOpenLibrary(docs=[])
+
+    assert not hasattr(plugin, "execute_request")
+    assert not hasattr(plugin, "validate_author")
+    assert not hasattr(plugin, "validate_book")
+    assert not hasattr(plugin, "lookup_book")
+    assert not hasattr(plugin, "fetch")
+
+
 def test_execute_request_rejects_unknown_operation() -> None:
     plugin = _FakeOpenLibrary(docs=[])
 
     try:
         asyncio.run(
-            plugin.execute_request(
+            plugin._execute_job(
                 {
-                    "request_version": plugin.REQUEST_VERSION,
-                    "operation": "unknown",
-                    "payload": {},
+                    "job_type": plugin.JOB_TYPE,
+                    "job_version": plugin.JOB_VERSION,
+                    "provider": "metadata_openlibrary",
+                    "request": {
+                        "request_version": plugin.REQUEST_VERSION,
+                        "operation": "unknown",
+                        "payload": {},
+                    },
                 }
             )
         )
     except Exception as exc:
         assert str(exc) == "Unsupported operation: unknown"
     else:
-        raise AssertionError("expected execute_request to reject unknown operation")
+        raise AssertionError("expected metadata job executor to reject unknown operation")

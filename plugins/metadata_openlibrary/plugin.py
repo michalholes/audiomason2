@@ -25,6 +25,8 @@ class OpenLibraryPlugin:
     DEFAULT_TIMEOUT_SECONDS = 10.0
     DEFAULT_MAX_RESPONSE_BYTES = 2 * 1024 * 1024
     REQUEST_VERSION = 1
+    JOB_VERSION = 1
+    JOB_TYPE = "metadata_openlibrary.request"
 
     def __init__(self, config: dict | None = None) -> None:
         self.config = config or {}
@@ -78,7 +80,44 @@ class OpenLibraryPlugin:
             "payload": {"author": str(author), "title": str(title)},
         }
 
-    async def execute_request(self, request: dict[str, Any]) -> dict[str, Any]:
+    def build_job(self, request: dict[str, Any]) -> dict[str, Any]:
+        payload = dict(request) if isinstance(request, dict) else {}
+        return {
+            "job_type": self.JOB_TYPE,
+            "job_version": self.JOB_VERSION,
+            "provider": "metadata_openlibrary",
+            "request": payload,
+        }
+
+    def build_fetch_job(self, query: dict[str, Any]) -> dict[str, Any]:
+        return self.build_job(self.build_fetch_request(query))
+
+    def build_validate_author_job(self, name: str) -> dict[str, Any]:
+        return self.build_job(self.build_validate_author_request(name))
+
+    def build_validate_book_job(self, author: str, title: str) -> dict[str, Any]:
+        return self.build_job(self.build_validate_book_request(author, title))
+
+    def build_lookup_book_job(self, author: str, title: str) -> dict[str, Any]:
+        return self.build_job(self.build_lookup_book_request(author, title))
+
+    def build_phase1_validation_job(self, author: str, title: str) -> dict[str, Any]:
+        return self.build_job(self.build_phase1_validation_request(author, title))
+
+    async def _execute_job(self, job: dict[str, Any]) -> dict[str, Any]:
+        if not isinstance(job, dict):
+            raise MetadataError("Job must be an object")
+        job_type = str(job.get("job_type") or "").strip()
+        if job_type != self.JOB_TYPE:
+            raise MetadataError(f"Unsupported job type: {job_type}")
+        version = int(job.get("job_version") or self.JOB_VERSION)
+        if version != self.JOB_VERSION:
+            raise MetadataError(f"Unsupported job version: {version}")
+        request_any = job.get("request")
+        request = dict(request_any) if isinstance(request_any, dict) else {}
+        return await self._execute_request(request)
+
+    async def _execute_request(self, request: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(request, dict):
             raise MetadataError("Request must be an object")
         version = int(request.get("request_version") or self.REQUEST_VERSION)
@@ -119,18 +158,6 @@ class OpenLibraryPlugin:
                 "book": book_validation,
             }
         raise MetadataError(f"Unsupported operation: {operation}")
-
-    async def fetch(self, query: dict[str, Any]) -> dict[str, Any]:
-        return await self.execute_request(self.build_fetch_request(query))
-
-    async def validate_author(self, name: str) -> dict[str, Any]:
-        return await self.execute_request(self.build_validate_author_request(name))
-
-    async def validate_book(self, author: str, title: str) -> dict[str, Any]:
-        return await self.execute_request(self.build_validate_book_request(author, title))
-
-    async def lookup_book(self, author: str, title: str) -> dict[str, Any]:
-        return await self.execute_request(self.build_lookup_book_request(author, title))
 
     async def _execute_fetch(self, query: dict[str, Any]) -> dict[str, Any]:
         author = str(query.get("author") or "")
