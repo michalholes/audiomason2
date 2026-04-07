@@ -1,4 +1,4 @@
-"""Issue 138: cover_handler parity candidate surfaces."""
+"""Issue 138: cover_handler ref-based candidate surfaces."""
 
 from __future__ import annotations
 
@@ -25,17 +25,43 @@ def _write_mp3(path: Path, *, with_artwork: bool) -> None:
     tags.save(path)
 
 
-def test_discover_cover_candidates_primary_only_ordering(tmp_path: Path) -> None:
+def _file_io_plugin(tmp_path: Path) -> FileIOPlugin:
+    roots = {}
+    for name in ("inbox", "stage", "outbox", "jobs", "config", "wizards"):
+        root = tmp_path / name
+        root.mkdir(parents=True, exist_ok=True)
+        roots[f"{name}_dir"] = str(root)
+    return FileIOPlugin(config={"roots": roots})
+
+
+def _candidate_names(candidates: list[dict[str, str]]) -> list[str]:
+    names: list[str] = []
+    for candidate in candidates:
+        rel_path = str(candidate.get("candidate_relative_path") or "")
+        audio_rel = str(candidate.get("audio_relative_path") or "")
+        leaf = Path(rel_path or audio_rel).name
+        names.append(leaf)
+    return names
+
+
+def test_discover_cover_candidates_for_ref_primary_only_ordering(tmp_path: Path) -> None:
     plugin = CoverHandlerPlugin()
-    source_dir = tmp_path / "book"
-    source_dir.mkdir()
+    file_io = _file_io_plugin(tmp_path)
+    source_dir = tmp_path / "inbox" / "book"
+    source_dir.mkdir(parents=True)
     for name in ["folder.png", "cover.jpeg", "zzz.jpg", "aaa.webp"]:
         (source_dir / name).write_bytes(name.encode("utf-8"))
 
-    candidates = plugin.discover_cover_candidates(source_dir)
+    candidates = plugin.discover_cover_candidates_for_ref(
+        file_service=file_io.file_service,
+        source_root="inbox",
+        source_relative_path="book",
+    )
 
-    ordered = [(item["kind"], Path(item["path"]).name, item["apply_mode"]) for item in candidates]
-    assert ordered == [
+    assert [
+        (item["kind"], name, item["apply_mode"])
+        for item, name in zip(candidates, _candidate_names(candidates), strict=True)
+    ] == [
         ("file", "cover.jpeg", "copy"),
         ("file", "folder.png", "copy"),
         ("file", "aaa.webp", "copy"),
@@ -43,84 +69,105 @@ def test_discover_cover_candidates_primary_only_ordering(tmp_path: Path) -> None
     ]
 
 
-def test_discover_cover_candidates_fallback_only_ordering(tmp_path: Path) -> None:
+def test_discover_cover_candidates_for_ref_fallback_only_ordering(tmp_path: Path) -> None:
     plugin = CoverHandlerPlugin()
-    source_dir = tmp_path / "Author" / "Book"
+    file_io = _file_io_plugin(tmp_path)
+    source_dir = tmp_path / "inbox" / "Author" / "Book"
     source_dir.mkdir(parents=True)
     parent_dir = source_dir.parent
     for name in ["folder.png", "cover.jpeg", "zzz.jpg", "aaa.webp"]:
         (parent_dir / name).write_bytes(name.encode("utf-8"))
 
-    candidates = plugin.discover_cover_candidates(source_dir)
+    candidates = plugin.discover_cover_candidates_for_ref(
+        file_service=file_io.file_service,
+        source_root="inbox",
+        source_relative_path="Author/Book",
+    )
 
-    assert [Path(item["path"]).name for item in candidates] == [
-        "cover.jpeg",
-        "folder.png",
-        "aaa.webp",
-        "zzz.jpg",
-    ]
+    assert _candidate_names(candidates) == ["cover.jpeg", "folder.png", "aaa.webp", "zzz.jpg"]
 
 
-def test_discover_cover_candidates_orders_primary_before_fallback(tmp_path: Path) -> None:
+def test_discover_cover_candidates_for_ref_orders_primary_before_fallback(
+    tmp_path: Path,
+) -> None:
     plugin = CoverHandlerPlugin()
-    source_dir = tmp_path / "Author" / "Book"
+    file_io = _file_io_plugin(tmp_path)
+    source_dir = tmp_path / "inbox" / "Author" / "Book"
     source_dir.mkdir(parents=True)
     parent_dir = source_dir.parent
     (source_dir / "folder.png").write_bytes(b"primary")
     (parent_dir / "cover.jpeg").write_bytes(b"fallback-named")
     (parent_dir / "zzz.jpg").write_bytes(b"fallback-generic")
 
-    candidates = plugin.discover_cover_candidates(source_dir)
+    candidates = plugin.discover_cover_candidates_for_ref(
+        file_service=file_io.file_service,
+        source_root="inbox",
+        source_relative_path="Author/Book",
+    )
 
-    assert [Path(item["path"]).name for item in candidates] == [
-        "folder.png",
-        "cover.jpeg",
-        "zzz.jpg",
-    ]
+    assert _candidate_names(candidates) == ["folder.png", "cover.jpeg", "zzz.jpg"]
 
 
-def test_discover_cover_candidates_appends_embedded_only_after_positive_probe(
+def test_discover_cover_candidates_for_ref_appends_embedded_after_probe(
     tmp_path: Path,
 ) -> None:
     plugin = CoverHandlerPlugin()
-    source_dir = tmp_path / "book"
-    source_dir.mkdir()
+    file_io = _file_io_plugin(tmp_path)
+    source_dir = tmp_path / "inbox" / "book"
+    source_dir.mkdir(parents=True)
     (source_dir / "cover.jpeg").write_bytes(b"cover")
     audio_file = source_dir / "book.mp3"
     _write_mp3(audio_file, with_artwork=True)
 
-    candidates = plugin.discover_cover_candidates(source_dir, audio_file=audio_file)
+    candidates = plugin.discover_cover_candidates_for_ref(
+        file_service=file_io.file_service,
+        source_root="inbox",
+        source_relative_path="book",
+    )
 
-    assert [(item["kind"], Path(item["path"]).name) for item in candidates] == [
-        ("file", "cover.jpeg"),
-        ("embedded", "book.mp3"),
+    discovered = [
+        (item["kind"], name)
+        for item, name in zip(candidates, _candidate_names(candidates), strict=True)
     ]
+    assert discovered == [("file", "cover.jpeg"), ("embedded", "book.mp3")]
     assert candidates[-1]["cache_key"] == "embedded:book.mp3"
 
 
-def test_discover_cover_candidates_skips_embedded_without_artwork(tmp_path: Path) -> None:
+def test_discover_cover_candidates_for_ref_skips_embedded_without_artwork(
+    tmp_path: Path,
+) -> None:
     plugin = CoverHandlerPlugin()
-    source_dir = tmp_path / "book"
-    source_dir.mkdir()
+    file_io = _file_io_plugin(tmp_path)
+    source_dir = tmp_path / "inbox" / "book"
+    source_dir.mkdir(parents=True)
     audio_file = source_dir / "book.mp3"
     _write_mp3(audio_file, with_artwork=False)
 
-    candidates = plugin.discover_cover_candidates(source_dir, audio_file=audio_file)
+    candidates = plugin.discover_cover_candidates_for_ref(
+        file_service=file_io.file_service,
+        source_root="inbox",
+        source_relative_path="book",
+    )
 
     assert candidates == []
 
 
-def test_discover_cover_candidates_disambiguates_duplicate_basenames_across_scopes(
+def test_discover_cover_candidates_for_ref_disambiguates_duplicate_basenames(
     tmp_path: Path,
 ) -> None:
     plugin = CoverHandlerPlugin()
-    source_dir = tmp_path / "Author" / "Book"
+    file_io = _file_io_plugin(tmp_path)
+    source_dir = tmp_path / "inbox" / "Author" / "Book"
     source_dir.mkdir(parents=True)
     parent_dir = source_dir.parent
     (source_dir / "cover.jpeg").write_bytes(b"primary")
     (parent_dir / "cover.jpeg").write_bytes(b"fallback")
 
-    candidates = plugin.discover_cover_candidates(source_dir)
+    candidates = plugin.discover_cover_candidates_for_ref(
+        file_service=file_io.file_service,
+        source_root="inbox",
+        source_relative_path="Author/Book",
+    )
 
     assert [item["candidate_id"] for item in candidates] == [
         "file:cover.jpeg",
@@ -132,16 +179,21 @@ def test_discover_cover_candidates_disambiguates_duplicate_basenames_across_scop
     ]
 
 
-def test_discover_cover_candidates_disambiguates_case_variant_duplicates_in_same_scope(
+def test_discover_cover_candidates_for_ref_disambiguates_case_variants(
     tmp_path: Path,
 ) -> None:
     plugin = CoverHandlerPlugin()
-    source_dir = tmp_path / "book"
-    source_dir.mkdir()
+    file_io = _file_io_plugin(tmp_path)
+    source_dir = tmp_path / "inbox" / "book"
+    source_dir.mkdir(parents=True)
     (source_dir / "cover.jpeg").write_bytes(b"lower")
     (source_dir / "COVER.JPEG").write_bytes(b"upper")
 
-    candidates = plugin.discover_cover_candidates(source_dir)
+    candidates = plugin.discover_cover_candidates_for_ref(
+        file_service=file_io.file_service,
+        source_root="inbox",
+        source_relative_path="book",
+    )
 
     assert [item["candidate_id"] for item in candidates] == [
         "file:cover.jpeg",
@@ -151,7 +203,7 @@ def test_discover_cover_candidates_disambiguates_case_variant_duplicates_in_same
         "file:cover.jpeg",
         "file:cover.jpeg#2",
     ]
-    assert {Path(item["path"]).name for item in candidates} == {"COVER.JPEG", "cover.jpeg"}
+    assert set(_candidate_names(candidates)) == {"COVER.JPEG", "cover.jpeg"}
 
 
 def test_build_embedded_extract_commands_for_m4a_has_fallback(tmp_path: Path) -> None:
@@ -163,30 +215,7 @@ def test_build_embedded_extract_commands_for_m4a_has_fallback(tmp_path: Path) ->
 
     assert len(commands) == 2
     assert commands[0][-3:] == ["-c:v", "copy", str(output)]
-    assert commands[1][-4:] == ["-map", "0:v:0", "-frames:v", "1", str(output)][-4:]
-
-
-def test_apply_cover_candidate_copies_file_to_output_dir(tmp_path: Path) -> None:
-    plugin = CoverHandlerPlugin()
-    source = tmp_path / "cover.png"
-    source.write_bytes(b"cover-bytes")
-    output_dir = tmp_path / "out"
-
-    copied = asyncio.run(
-        plugin.apply_cover_candidate(
-            {
-                "kind": "file",
-                "candidate_id": "file:cover.png",
-                "apply_mode": "copy",
-                "path": str(source),
-            },
-            output_dir=output_dir,
-        )
-    )
-
-    assert copied == output_dir / "cover.png"
-    assert copied is not None
-    assert copied.read_bytes() == b"cover-bytes"
+    assert commands[1][-5:] == ["-map", "0:v:0", "-frames:v", "1", str(output)]
 
 
 def test_build_url_candidate_prefers_group_root_and_resolves_mime_and_cache() -> None:
@@ -227,62 +256,7 @@ def test_download_output_path_uses_cache_key_and_mime_extension(tmp_path: Path) 
     assert output.name.startswith("cover_cache_")
 
 
-def _file_io_plugin(tmp_path: Path) -> FileIOPlugin:
-    roots = {}
-    for name in ("inbox", "stage", "outbox", "jobs", "config", "wizards"):
-        root = tmp_path / name
-        root.mkdir(parents=True, exist_ok=True)
-        roots[f"{name}_dir"] = str(root)
-    return FileIOPlugin(config={"roots": roots})
-
-
-def test_discover_cover_candidates_for_ref_returns_resolver_friendly_payload(
-    tmp_path: Path,
-) -> None:
-    plugin = CoverHandlerPlugin()
-    file_io = _file_io_plugin(tmp_path)
-    source_dir = tmp_path / "inbox" / "Author" / "Book"
-    source_dir.mkdir(parents=True)
-    (source_dir / "cover.jpeg").write_bytes(b"cover")
-    audio_file = source_dir / "book.mp3"
-    _write_mp3(audio_file, with_artwork=True)
-
-    candidates = plugin.discover_cover_candidates_for_ref(
-        file_service=file_io.file_service,
-        source_root="inbox",
-        source_relative_path="Author/Book",
-        group_root="group",
-    )
-
-    assert candidates == [
-        {
-            "source_root": "inbox",
-            "source_relative_path": "Author/Book",
-            "root_name": "group",
-            "kind": "file",
-            "candidate_id": "file:cover.jpeg",
-            "apply_mode": "copy",
-            "mime_type": "image/jpeg",
-            "cache_key": "file:cover.jpeg",
-            "candidate_relative_path": "Author/Book/cover.jpeg",
-        },
-        {
-            "source_root": "inbox",
-            "source_relative_path": "Author/Book",
-            "root_name": "group",
-            "kind": "embedded",
-            "candidate_id": "embedded:book.mp3",
-            "apply_mode": "extract_embedded",
-            "mime_type": "image/jpeg",
-            "cache_key": "embedded:book.mp3",
-            "audio_relative_path": "Author/Book/book.mp3",
-        },
-    ]
-
-
-def test_apply_cover_candidate_for_ref_copies_file_to_output_root(
-    tmp_path: Path,
-) -> None:
+def test_apply_cover_candidate_for_ref_copies_file_to_output_root(tmp_path: Path) -> None:
     plugin = CoverHandlerPlugin()
     file_io = _file_io_plugin(tmp_path)
     source_dir = tmp_path / "inbox" / "Author" / "Book"

@@ -117,6 +117,20 @@ def _path_to_relative(*, root_dir: Path, abs_path: Path) -> str:
     return abs_path.resolve().relative_to(root_dir.resolve()).as_posix()
 
 
+def _file_service_root_dir(file_service: Any, root_name: Any) -> Path:
+    getter = getattr(file_service, "_root_dir_path", None)
+    if callable(getter):
+        return getter(root_name)
+    return file_service.root_dir(root_name)
+
+
+def _file_service_resolve_path(file_service: Any, root_name: Any, rel_path: str) -> Path:
+    getter = getattr(file_service, "_resolve_local_path", None)
+    if callable(getter):
+        return getter(root_name, rel_path)
+    return file_service.resolve_abs_path(root_name, rel_path)
+
+
 class CoverHandlerPlugin:
     """Cover handler plugin."""
 
@@ -145,7 +159,7 @@ class CoverHandlerPlugin:
         cover_path: Path | None = None
 
         try:
-            candidates = self.discover_cover_candidates(
+            candidates = self._discover_cover_candidates_from_paths(
                 context.source.parent,
                 audio_file=context.source,
             )
@@ -156,7 +170,7 @@ class CoverHandlerPlugin:
                     None,
                 )
                 if candidate is not None:
-                    cover_path = await self.apply_cover_candidate(candidate)
+                    cover_path = await self._apply_cover_candidate_from_paths(candidate)
 
             elif context.cover_choice == CoverChoice.FILE:
                 candidate = next(
@@ -165,7 +179,7 @@ class CoverHandlerPlugin:
                 )
                 if candidate is not None:
                     file_output_dir = context.stage_dir if context.stage_dir is not None else None
-                    cover_path = await self.apply_cover_candidate(
+                    cover_path = await self._apply_cover_candidate_from_paths(
                         candidate,
                         output_dir=file_output_dir,
                     )
@@ -175,7 +189,7 @@ class CoverHandlerPlugin:
                     context.cover_url,
                     stage_root="stage" if context.stage_dir is not None else None,
                 )
-                cover_path = await self.apply_cover_candidate(
+                cover_path = await self._apply_cover_candidate_from_paths(
                     candidate,
                     output_dir=context.stage_dir,
                 )
@@ -267,15 +281,15 @@ class CoverHandlerPlugin:
 
         root_name = RootName(str(source_root))
         source_rel = _normalize_relative_path(source_relative_path)
-        source_dir = file_service.resolve_abs_path(root_name, source_rel)
+        source_dir = _file_service_resolve_path(file_service, root_name, source_rel)
         if source_dir.exists() and source_dir.is_file():
             source_dir = source_dir.parent
             source_rel = _normalize_relative_path(str(Path(source_rel).parent))
         if not source_dir.exists() or not source_dir.is_dir():
             return []
 
-        root_dir = file_service.root_dir(root_name)
-        candidates = self.discover_cover_candidates(
+        root_dir = _file_service_root_dir(file_service, root_name)
+        candidates = self._discover_cover_candidates_from_paths(
             source_dir,
             audio_file=_first_audio_source(source_dir),
             group_root=group_root,
@@ -318,27 +332,35 @@ class CoverHandlerPlugin:
 
         output_root_name = RootName(str(output_root))
         output_rel_dir = _normalize_relative_path(output_relative_dir)
-        output_dir = file_service.resolve_abs_path(output_root_name, output_rel_dir)
+        output_dir = _file_service_resolve_path(file_service, output_root_name, output_rel_dir)
         output_dir.mkdir(parents=True, exist_ok=True)
 
         source_root_text = str(candidate.get("source_root") or "")
         source_root = RootName(source_root_text) if source_root_text else None
         mode = str(candidate.get("apply_mode") or "")
-        materialized: Path | None = None
 
         if mode == "copy" and source_root is not None:
             rel = _normalize_relative_path(str(candidate.get("candidate_relative_path") or ""))
             if not rel:
                 return None
-            source_path = file_service.resolve_abs_path(source_root, rel)
-            raw_candidate = dict(candidate)
-            raw_candidate["path"] = str(source_path)
-            materialized = await self.apply_cover_candidate(raw_candidate, output_dir=output_dir)
+            source_path = _file_service_resolve_path(file_service, source_root, rel)
+            materialized = await self._apply_cover_candidate_from_paths(
+                {
+                    "kind": str(candidate.get("kind") or "file"),
+                    "candidate_id": str(candidate.get("candidate_id") or ""),
+                    "apply_mode": "copy",
+                    "path": str(source_path),
+                    "mime_type": str(candidate.get("mime_type") or ""),
+                    "cache_key": str(candidate.get("cache_key") or ""),
+                    "root_name": str(candidate.get("root_name") or ""),
+                },
+                output_dir=output_dir,
+            )
         elif mode == "extract_embedded" and source_root is not None:
             rel = _normalize_relative_path(str(candidate.get("audio_relative_path") or ""))
             if not rel:
                 return None
-            audio_file = file_service.resolve_abs_path(source_root, rel)
+            audio_file = _file_service_resolve_path(file_service, source_root, rel)
             materialized = await self.extract_embedded_cover(
                 audio_file,
                 output_path=output_dir / "cover_extracted.jpg",
@@ -360,7 +382,7 @@ class CoverHandlerPlugin:
             "relative_path": _join_relative_path(output_rel_dir, materialized.name),
         }
 
-    def discover_cover_candidates(
+    def _discover_cover_candidates_from_paths(
         self,
         directory: Path,
         *,
@@ -368,7 +390,6 @@ class CoverHandlerPlugin:
         group_root: str | None = None,
         stage_root: str | None = None,
     ) -> list[dict[str, str]]:
-        """Return canonical cover candidates for a source directory."""
         if not directory.exists() or not directory.is_dir():
             return []
 
@@ -434,29 +455,29 @@ class CoverHandlerPlugin:
 
         return candidates
 
-    async def apply_cover_candidate(
+    async def _apply_cover_candidate_from_paths(
         self,
         candidate: dict[str, Any],
         *,
         output_dir: Path | None = None,
     ) -> Path | None:
-        """Materialize a discovered candidate through its declared apply mode."""
         mode = str(candidate.get("apply_mode") or "")
-        source_path = Path(str(candidate.get("path") or ""))
-
-        if not source_path.exists():
-            return None
 
         if mode == "copy":
+            source_path = Path(str(candidate.get("path") or ""))
+            if not source_path.exists():
+                return None
             if output_dir is None:
                 return source_path
-
             output_dir.mkdir(parents=True, exist_ok=True)
             copied_path = output_dir / source_path.name
             await asyncio.to_thread(shutil.copy2, source_path, copied_path)
             return copied_path
 
         if mode == "extract_embedded":
+            source_path = Path(str(candidate.get("path") or ""))
+            if not source_path.exists():
+                return None
             return await self.extract_embedded_cover(source_path)
 
         if mode == "download":
@@ -537,7 +558,7 @@ class CoverHandlerPlugin:
 
     def find_file_cover(self, directory: Path) -> Path | None:
         """Find the first deterministic file-cover candidate in a directory."""
-        for candidate in self.discover_cover_candidates(directory):
+        for candidate in self._discover_cover_candidates_from_paths(directory):
             if candidate.get("kind") == "file":
                 return Path(str(candidate.get("path") or ""))
         return None
