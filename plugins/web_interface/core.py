@@ -4,7 +4,6 @@ import logging
 import sys
 import traceback
 from contextlib import suppress
-from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Request
@@ -223,42 +222,9 @@ class WebInterfacePlugin:
                     },
                 )
                 logger.info("import_ui_mount: failed phase=get_plugin origin=None")
-                # Import plugin is not loaded. Best-effort auto-load from builtin plugins.
-                builtin_dir = getattr(loader, "builtin_plugins_dir", None)
-                try:
-                    if builtin_dir is not None:
-                        import_dir = Path(builtin_dir) / "import"
-                        if (import_dir / "plugin.yaml").exists():
-                            loader.load_plugin(import_dir, validate=False)
-                except Exception as exc2:
-                    _emit(
-                        "web_interface.import_ui_mount_failed",
-                        {
-                            "phase": "autoload_builtin",
-                            "exc_type": type(exc2).__name__,
-                            "exc_message": str(exc2),
-                            "plugin_origin": None,
-                        },
-                    )
-                    logger.info("import_ui_mount: failed phase=autoload_builtin origin=None")
-                    if verbosity >= 3:
-                        logger.debug(f"import_ui_mount: autoload_builtin failed: {exc2!r}")
-                try:
-                    plugin = loader.get_plugin("import")
-                except Exception as exc3:
-                    _emit(
-                        "web_interface.import_ui_mount_failed",
-                        {
-                            "phase": "get_plugin",
-                            "exc_type": type(exc3).__name__,
-                            "exc_message": str(exc3),
-                            "plugin_origin": None,
-                        },
-                    )
-                    logger.info("import_ui_mount: failed phase=get_plugin origin=None")
-                    if verbosity >= 3:
-                        logger.debug(f"import_ui_mount: get_plugin failed: {exc3!r}")
-                    return
+                if verbosity >= 3:
+                    logger.debug(f"import_ui_mount: get_plugin failed: {exc!r}")
+                return
             except Exception as exc:
                 _emit(
                     "web_interface.import_ui_mount_failed",

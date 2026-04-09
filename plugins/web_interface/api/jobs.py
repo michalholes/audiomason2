@@ -1,37 +1,16 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from typing import Any
 
-from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request
 
-from audiomason.core.jobs.model import JobState, JobType
-from audiomason.core.loader import PluginLoader
+from audiomason.core.jobs.model import JobType
 from audiomason.core.orchestration import Orchestrator
 from plugins.file_io.service.service import FileService
 from plugins.file_io.service.types import RootName
 
-from ..util.fs import find_repo_root
 from ..util.web_observability import web_operation
-
-
-def _user_plugins_root() -> Path:
-    return Path.home() / ".audiomason/plugins"
-
-
-def _plugin_loader(request: Any | None = None) -> PluginLoader:
-    injected = None
-    if request is not None:
-        injected = getattr(getattr(request, "app", None), "state", None)
-        injected = getattr(injected, "plugin_loader", None)
-    if isinstance(injected, PluginLoader):
-        return injected
-
-    repo = find_repo_root()
-    return PluginLoader(
-        builtin_plugins_dir=repo / "plugins", user_plugins_dir=_user_plugins_root(), registry=None
-    )
 
 
 def _get_resolver(request: Request) -> Any:
@@ -143,33 +122,3 @@ def mount_jobs(app: FastAPI) -> None:
                 },
             )
         return {"job_id": job.job_id, "item": _serialize_job(job)}
-
-    @app.post("/api/jobs/{job_id}/run")
-    def run_job(request: Request, job_id: str, bg: BackgroundTasks) -> dict[str, Any]:
-        try:
-            job = orch.get_job(job_id)
-        except Exception as e:
-            raise HTTPException(status_code=404, detail=str(e)) from e
-
-        if job.state != JobState.PENDING:
-            raise HTTPException(status_code=400, detail="job is not pending")
-
-        def _run() -> None:
-            loader = _plugin_loader(request)
-
-            try:
-                orch.run_job(
-                    job_id,
-                    plugin_loader=loader,
-                    verbosity=int(getattr(request.app.state, "verbosity", 1)),
-                )
-            except Exception as e:
-                orch.jobs.append_log_line(job_id, f"failed: {e}")
-                j = orch.get_job(job_id)
-                j.transition(JobState.FAILED)
-                j.error = str(e)
-                orch.jobs.store.save_job(j)
-
-        bg.add_task(_run)
-        job = orch.get_job(job_id)
-        return {"item": _serialize_job(job)}

@@ -74,3 +74,24 @@ def test_web_roots_api_and_wizard_job_path_resolution(tmp_path: Path, monkeypatc
     assert "inbox" in ids
     assert "stage" in ids
     assert "outbox" in ids
+
+
+def test_web_jobs_api_has_no_direct_run_route(tmp_path: Path, monkeypatch: Any) -> None:
+    monkeypatch.setenv("HOME", str(tmp_path))
+
+    web_interface_plugin_cls = _get_web_interface_plugin_cls()
+    app = web_interface_plugin_cls().create_app()
+    client = _make_client(app)
+
+    spec = app.openapi()
+    assert "/api/jobs/{job_id}/run" not in spec.get("paths", {})
+
+    resp = client.post(
+        "/api/jobs/process",
+        json={"pipeline_path": "pipelines/example.yaml", "sources": ["a.mp3"]},
+    )
+    assert resp.status_code == 200
+    job_id = resp.json()["job_id"]
+
+    resp = client.post(f"/api/jobs/{job_id}/run")
+    assert resp.status_code in {404, 405}

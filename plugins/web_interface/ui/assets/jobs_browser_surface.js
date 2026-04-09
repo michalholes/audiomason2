@@ -1,3 +1,5 @@
+/// <reference path="../../../../types/am2-import-ui-globals.d.ts" />
+/// <reference path="../../../../types/am2-web-interface-globals.d.ts" />
 (() => {
 	/** @param {AM2WebJobItem | null | undefined} job */
 	function jobIdOf(job) {
@@ -8,11 +10,6 @@
 	function jobMetaSource(job) {
 		const meta = job && typeof job.meta === "object" ? job.meta : null;
 		return meta && typeof meta.source === "string" ? meta.source : "";
-	}
-
-	/** @param {AM2WebJobItem | null | undefined} job */
-	function canStartJob(job) {
-		return job && job.state === "pending" && jobMetaSource(job) !== "import";
 	}
 
 	Reflect.set(window, "AMWebJobsBrowserSurface", {
@@ -112,20 +109,6 @@
 				await loadMore();
 			}
 
-			/** @param {string} jobId */
-			async function startJob(jobId) {
-				try {
-					await API.sendJson(
-						"POST",
-						`/api/jobs/${encodeURIComponent(jobId)}/run`,
-					);
-					if (typeof notify === "function") notify("Started.");
-					await loadJobs();
-				} catch (e) {
-					if (typeof notify === "function") notify(String(e));
-				}
-			}
-
 			async function loadJobs() {
 				clear(jobsBox);
 				/** @type {AM2JsonObject} */
@@ -168,17 +151,6 @@
 					tr.appendChild(el("td", { text: String(job.state || "") }));
 					tr.appendChild(el("td", { text: jobMetaSource(job) }));
 					const actionsTd = el("td");
-					if (canStartJob(job)) {
-						const startBtn = el("button", { class: "btn", text: "Start" });
-						startBtn.addEventListener(
-							"click",
-							/** @param {MouseEvent} ev */ async (ev) => {
-								ev.stopPropagation();
-								await startJob(jid);
-							},
-						);
-						actionsTd.appendChild(startBtn);
-					}
 					tr.appendChild(actionsTd);
 					tr.addEventListener("click", async () => {
 						await selectJob(jid, tr);

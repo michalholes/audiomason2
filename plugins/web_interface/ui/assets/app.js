@@ -1,3 +1,5 @@
+/// <reference path="../../../../types/am2-import-ui-globals.d.ts" />
+/// <reference path="../../../../types/am2-web-interface-globals.d.ts" />
 const _amWin = /** @type {Window} */ (window),
 	_amUiAssetsBaseUrl = "/ui/assets/";
 
@@ -48,9 +50,8 @@ function asObj(/** @type {unknown} */ v) {
 }
 
 function _amEnsureUiLogBuffer() {
-	if (!_amWin.__AM_UI_LOGS__ || !Array.isArray(_amWin.__AM_UI_LOGS__)) {
+	if (!_amWin.__AM_UI_LOGS__ || !Array.isArray(_amWin.__AM_UI_LOGS__))
 		_amWin.__AM_UI_LOGS__ = [];
-	}
 	return _amWin.__AM_UI_LOGS__;
 }
 
@@ -63,9 +64,8 @@ function _amPushUiLog(/** @type {AM2WebDebugRecord} */ rec) {
 }
 
 function _amEnsureJsErrorBuffer() {
-	if (!_amWin.__AM_JS_ERRORS__ || !Array.isArray(_amWin.__AM_JS_ERRORS__)) {
+	if (!_amWin.__AM_JS_ERRORS__ || !Array.isArray(_amWin.__AM_JS_ERRORS__))
 		_amWin.__AM_JS_ERRORS__ = [];
-	}
 	return _amWin.__AM_JS_ERRORS__;
 }
 
@@ -1988,11 +1988,6 @@ window.onerror = (msg, src, line, col, err) => {
 					};
 					const r = await API.sendJson("POST", "/api/jobs/wizard", body);
 					const jobId = String(r.job_id || "");
-					await API.sendJson(
-						"POST",
-						`/api/jobs/${encodeURIComponent(jobId)}/run`,
-						{},
-					);
 					jobIds.push(jobId);
 				} else {
 					for (const p of paths) {
@@ -2004,15 +1999,10 @@ window.onerror = (msg, src, line, col, err) => {
 						};
 						const r = await API.sendJson("POST", "/api/jobs/wizard", body);
 						const jobId = String(r.job_id || "");
-						await API.sendJson(
-							"POST",
-							`/api/jobs/${encodeURIComponent(jobId)}/run`,
-							{},
-						);
 						jobIds.push(jobId);
 					}
 				}
-				notify(`Started: ${jobIds.join(", ")}`);
+				notify(`Queued: ${jobIds.join(", ")}`);
 			} catch (e) {
 				notify(String(e));
 			}
