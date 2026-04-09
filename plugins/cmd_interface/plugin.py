@@ -60,6 +60,21 @@ CORE_COMMANDS: set[str] = {
 }
 
 
+def preload_supported_web_plugins(*, loader: PluginLoader, plugins_dir: Path) -> None:
+    """Preload plugin surfaces required by the supported web launch path."""
+    try:
+        loader.get_plugin("import")
+        return
+    except PluginError:
+        pass
+
+    import_dir = plugins_dir / "import"
+    if not (import_dir / "plugin.yaml").is_file():
+        raise PluginError("Import plugin not found")
+
+    loader.load_plugin(import_dir, validate=False)
+
+
 class CLIPlugin:
     """Enhanced CLI plugin."""
 
@@ -832,6 +847,12 @@ class CLIPlugin:
 
         if self.verbosity >= VerbosityLevel.DEBUG:
             log.debug(f"Plugins directory: {plugins_dir}")
+
+        try:
+            preload_supported_web_plugins(loader=loader, plugins_dir=plugins_dir)
+        except Exception as e:
+            self._error(f"X Error preloading import plugin: {e}")
+            raise SystemExit(1) from e
 
         # Deterministic manifest-only selection (no eager load-all).
         candidate_names = ["web_interface", "web_server"]
