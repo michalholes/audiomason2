@@ -7,45 +7,54 @@ from __future__ import annotations
 
 import asyncio
 import threading
-from collections.abc import Callable, Coroutine
 from functools import lru_cache
+from pathlib import Path
 from typing import Any
 
-
-def _callable_attr(obj: object, name: str) -> Any | None:
-    value = getattr(obj, name, None)
-    return value if callable(value) else None
-
-
-def _builder_runner(
-    plugin: object,
-) -> Callable[[object], Coroutine[Any, Any, dict[str, Any]]] | None:
-    for runner_name in ("_execute_job", "execute_request"):
-        runner = _callable_attr(plugin, runner_name)
-        if runner is not None:
-            return runner
-    return None
-
-
-def _builder_attr(plugin: object, *names: str) -> Callable[..., object] | None:
-    for name in names:
-        builder = _callable_attr(plugin, name)
-        if builder is not None:
-            return builder
-    return None
-
+from audiomason.core.loader import PluginLoader
 
 _DEFAULT_AUTHOR = {"valid": False, "canonical": None, "suggestion": None}
 _DEFAULT_BOOK = {"valid": False, "canonical": None, "suggestion": None}
+_DEFAULT_RESULT = {
+    "provider": "metadata_openlibrary",
+    "author": dict(_DEFAULT_AUTHOR),
+    "book": dict(_DEFAULT_BOOK),
+}
 
 
-def _run_async(
-    *,
-    factory: Callable[[], Coroutine[Any, Any, dict[str, Any]]],
-    default: dict[str, Any],
-) -> dict[str, Any]:
+def _configured_metadata_plugin() -> Any:
+    loader = PluginLoader(builtin_plugins_dir=Path(__file__).resolve().parents[1])
+    plugin = loader.load_plugin(
+        Path(__file__).resolve().parents[1] / "metadata_openlibrary",
+        validate=False,
+    )
+    default_max_bytes = getattr(plugin, "DEFAULT_MAX_RESPONSE_BYTES", 2 * 1024 * 1024)
+    plugin.config = {
+        "timeout_seconds": 0.1,
+        "max_response_bytes": default_max_bytes,
+    }
+    try:
+        plugin.timeout_seconds = float(plugin.config["timeout_seconds"])
+    except (TypeError, ValueError):
+        plugin.timeout_seconds = 0.1
+    try:
+        plugin.max_response_bytes = int(plugin.config["max_response_bytes"])
+    except (TypeError, ValueError):
+        plugin.max_response_bytes = int(default_max_bytes)
+    return plugin
+
+
+def _build_phase1_validation_job(*, plugin: Any, author: str, title: str) -> dict[str, Any] | None:
+    builder = getattr(plugin, "build_phase1_validation_job", None)
+    if not callable(builder):
+        return None
+    built = builder(author, title)
+    return dict(built) if isinstance(built, dict) else None
+
+
+def _run_async(*, factory: Any, default: dict[str, Any]) -> dict[str, Any]:
     def _direct() -> dict[str, Any]:
-        result: dict[str, Any] = asyncio.run(factory())
+        result = asyncio.run(factory())
         return dict(result) if isinstance(result, dict) else dict(default)
 
     try:
@@ -61,7 +70,7 @@ def _run_async(
 
     def _runner() -> None:
         try:
-            result: dict[str, Any] = asyncio.run(factory())
+            result = asyncio.run(factory())
             if isinstance(result, dict):
                 result_box.clear()
                 result_box.update(dict(result))
@@ -76,64 +85,52 @@ def _run_async(
     return dict(result_box)
 
 
-@lru_cache(maxsize=128)
-def validate_author_title(author: str, title: str) -> tuple[dict[str, Any], dict[str, Any]]:
+def _validate_author_title_payload(author: str, title: str) -> dict[str, Any]:
     if not author or not title:
-        return dict(_DEFAULT_AUTHOR), dict(_DEFAULT_BOOK)
+        return dict(_DEFAULT_RESULT)
     try:
-        from plugins.metadata_openlibrary.plugin import OpenLibraryPlugin
+        plugin = _configured_metadata_plugin()
+        job = _build_phase1_validation_job(plugin=plugin, author=author, title=title)
+        if job is None:
+            return dict(_DEFAULT_RESULT)
+        result = _run_async(
+            factory=lambda: _run_plugin_job(job=job, plugin=plugin),
+            default=_DEFAULT_RESULT,
+        )
     except Exception:
-        return dict(_DEFAULT_AUTHOR), dict(_DEFAULT_BOOK)
+        return dict(_DEFAULT_RESULT)
+    if not isinstance(result, dict):
+        return dict(_DEFAULT_RESULT)
+    author_payload = result.get("author")
+    book_payload = result.get("book")
+    author_result = (
+        dict(author_payload) if isinstance(author_payload, dict) else dict(_DEFAULT_AUTHOR)
+    )
+    book_result = dict(book_payload) if isinstance(book_payload, dict) else dict(_DEFAULT_BOOK)
+    return {
+        "provider": str(result.get("provider") or "metadata_openlibrary"),
+        "author": author_result,
+        "book": book_result,
+    }
 
-    plugin = OpenLibraryPlugin(
-        {
-            "timeout_seconds": 0.1,
-            "max_response_bytes": OpenLibraryPlugin.DEFAULT_MAX_RESPONSE_BYTES,
-        }
-    )
 
-    runner = _builder_runner(plugin)
-    author_builder = _builder_attr(
-        plugin,
-        "build_validate_author_job",
-        "build_validate_author_request",
-    )
-    book_builder = _builder_attr(
-        plugin,
-        "build_validate_book_job",
-        "build_validate_book_request",
-    )
-    if runner is not None and author_builder is not None and book_builder is not None:
-        author_validation = _run_async(
-            factory=lambda: runner(author_builder(author)),
-            default=_DEFAULT_AUTHOR,
-        )
-        validated_author = str(
-            author_validation.get("canonical") or author_validation.get("suggestion") or author
-        )
-        book_validation = _run_async(
-            factory=lambda: runner(book_builder(validated_author, title)),
-            default=_DEFAULT_BOOK,
-        )
-        return dict(author_validation), dict(book_validation)
-
-    validate_author = _callable_attr(plugin, "validate_author")
-    validate_book = _callable_attr(plugin, "validate_book")
-    if validate_author is None or validate_book is None:
-        return dict(_DEFAULT_AUTHOR), dict(_DEFAULT_BOOK)
-
-    author_validation = _run_async(
-        factory=lambda: validate_author(author),
-        default=_DEFAULT_AUTHOR,
-    )
-    validated_author = str(
-        author_validation.get("canonical") or author_validation.get("suggestion") or author
-    )
-    book_validation = _run_async(
-        factory=lambda: validate_book(validated_author, title),
-        default=_DEFAULT_BOOK,
-    )
-    return dict(author_validation), dict(book_validation)
+@lru_cache(maxsize=128)
+def validate_author_title(
+    author: str,
+    title: str,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    result = _validate_author_title_payload(author, title)
+    return dict(result["author"]), dict(result["book"])
 
 
 __all__ = ["validate_author_title"]
+
+
+def _run_plugin_job(*, job: dict[str, Any], plugin: object) -> Any:
+    from .plugin import run_import_owned_plugin_job
+
+    return run_import_owned_plugin_job(
+        plugin_name="metadata_openlibrary",
+        job=job,
+        plugin=plugin,
+    )

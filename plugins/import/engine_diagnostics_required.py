@@ -18,6 +18,7 @@ from audiomason.core.events import get_event_bus as _core_get_event_bus
 from audiomason.core.jobs.api import JobService
 from audiomason.core.jobs.model import JobType
 from audiomason.core.jobs.store import JobStore
+from audiomason.core.loader import PluginLoader
 from audiomason.core.orchestration import Orchestrator
 from audiomason.core.process_job_contracts import IMPORT_PROCESS_CONTRACT_ID
 
@@ -188,25 +189,36 @@ class _ProcessContractPluginLoader:
         return list(self._plugins.keys())
 
 
-_REQUIRED_PROCESS_PLUGIN_MODULES: dict[str, tuple[str, str]] = {
-    "audio_processor": ("plugins.audio_processor.plugin", "AudioProcessorPlugin"),
-    "cover_handler": ("plugins.cover_handler.plugin", "CoverHandlerPlugin"),
-    "id3_tagger": ("plugins.id3_tagger.plugin", "ID3TaggerPlugin"),
-}
-
-
 def _plugin_loader(*, engine: object) -> _ProcessContractPluginLoader:
     loader = _ProcessContractPluginLoader()
     loader.add_plugin("import", _RuntimeImportPlugin(engine=engine))
     return loader
 
 
+def _resolve_plugin_via_loader(*, plugin_name: str) -> object:
+    loader = PluginLoader(
+        builtin_plugins_dir=_builtin_plugins_root(),
+        user_plugins_dir=_user_plugins_root(),
+    )
+    for plugin_dir in loader.discover():
+        manifest = loader.load_manifest_only(plugin_dir)
+        if manifest.name != plugin_name:
+            continue
+        return loader.load_plugin(plugin_dir, validate=False)
+    raise RuntimeError(f"required_process_plugin_not_found:{plugin_name}")
+
+
 def _ensure_required_process_plugins(*, loader: _ProcessContractPluginLoader) -> None:
-    for plugin_name, module_info in _REQUIRED_PROCESS_PLUGIN_MODULES.items():
-        module_name, class_name = module_info
-        module = import_module(module_name)
-        plugin_class = getattr(module, class_name)
-        loader.add_plugin(plugin_name, plugin_class())
+    registry_loader = PluginLoader(
+        builtin_plugins_dir=_builtin_plugins_root(),
+        user_plugins_dir=_user_plugins_root(),
+    )
+    for plugin_name in ("audio_processor", "cover_handler", "id3_tagger"):
+        plugin_dir = _builtin_plugins_root() / plugin_name
+        if not plugin_dir.is_dir():
+            plugin_dir = _user_plugins_root() / plugin_name
+        plugin = registry_loader.load_plugin(plugin_dir, validate=False)
+        loader.add_plugin(plugin_name, plugin)
 
 
 def build_process_contract_plugin_loader(

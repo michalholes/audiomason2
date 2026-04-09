@@ -24,8 +24,11 @@ from .file_io_facade import (
 def _cover_plugin(plugin: Any | None) -> Any:
     if plugin is not None:
         return plugin
-    module = import_module("plugins.cover_handler.plugin")
-    return module.CoverHandlerPlugin()
+    plugin_mod = import_module("plugins.import.plugin")
+    load_plugin = getattr(plugin_mod, "load_import_owned_plugin", None)
+    if callable(load_plugin):
+        return load_plugin("cover_handler")
+    raise RuntimeError("import_owned_plugin_loader_missing:cover_handler")
 
 
 def discover_cover_candidates(

@@ -7,7 +7,11 @@ ASCII-only.
 
 from __future__ import annotations
 
+from pathlib import Path
+from typing import Any
+
 from audiomason.core.config import ConfigResolver
+from audiomason.core.loader import PluginLoader
 
 from . import processed_registry_required
 from .cli import import_cli_main
@@ -15,6 +19,26 @@ from .detached_runtime import resolve_phase2_runtime
 from .engine import ImportWizardEngine
 from .process_contract_completion import run_process_contract_completion
 from .ui_api import build_router
+
+
+def load_import_owned_plugin(name: str) -> Any:
+    plugins_root = Path(__file__).resolve().parents[1]
+    loader = PluginLoader(builtin_plugins_dir=plugins_root)
+    return loader.load_plugin(plugins_root / name, validate=False)
+
+
+async def run_import_owned_plugin_job(
+    *,
+    plugin_name: str,
+    job: dict[str, Any],
+    plugin: Any | None = None,
+) -> dict[str, Any]:
+    plugin_obj = plugin if plugin is not None else load_import_owned_plugin(plugin_name)
+    runner = plugin_obj._execute_job
+    result = await runner(dict(job))
+    if not isinstance(result, dict):
+        raise RuntimeError(f"provider_job_invalid_result:{plugin_name}")
+    return dict(result)
 
 
 class ImportPlugin:
@@ -58,3 +82,6 @@ class ImportPlugin:
         """Return the import UI router (host must mount it)."""
 
         return build_router(engine=self.engine)
+
+
+__all__ = ["ImportPlugin", "run_import_owned_plugin_job"]
