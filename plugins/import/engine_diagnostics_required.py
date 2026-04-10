@@ -13,6 +13,7 @@ from importlib import import_module
 from pathlib import Path
 from typing import Any, cast
 
+from audiomason.core.config_service import ConfigService
 from audiomason.core.diagnostics import build_envelope
 from audiomason.core.events import get_event_bus as _core_get_event_bus
 from audiomason.core.jobs.api import JobService
@@ -20,6 +21,7 @@ from audiomason.core.jobs.model import JobType
 from audiomason.core.jobs.store import JobStore
 from audiomason.core.loader import PluginLoader
 from audiomason.core.orchestration import Orchestrator
+from audiomason.core.plugin_registry import PluginRegistry
 from audiomason.core.process_job_contracts import IMPORT_PROCESS_CONTRACT_ID
 
 from .detached_runtime import (
@@ -199,6 +201,7 @@ def _resolve_plugin_via_loader(*, plugin_name: str) -> object:
     loader = PluginLoader(
         builtin_plugins_dir=_builtin_plugins_root(),
         user_plugins_dir=_user_plugins_root(),
+        registry=PluginRegistry(ConfigService()),
     )
     for plugin_dir in loader.discover():
         manifest = loader.load_manifest_only(plugin_dir)
@@ -209,16 +212,11 @@ def _resolve_plugin_via_loader(*, plugin_name: str) -> object:
 
 
 def _ensure_required_process_plugins(*, loader: _ProcessContractPluginLoader) -> None:
-    registry_loader = PluginLoader(
-        builtin_plugins_dir=_builtin_plugins_root(),
-        user_plugins_dir=_user_plugins_root(),
-    )
     for plugin_name in ("audio_processor", "cover_handler", "id3_tagger"):
-        plugin_dir = _builtin_plugins_root() / plugin_name
-        if not plugin_dir.is_dir():
-            plugin_dir = _user_plugins_root() / plugin_name
-        plugin = registry_loader.load_plugin(plugin_dir, validate=False)
-        loader.add_plugin(plugin_name, plugin)
+        loader.add_plugin(
+            plugin_name,
+            _resolve_plugin_via_loader(plugin_name=plugin_name),
+        )
 
 
 def build_process_contract_plugin_loader(

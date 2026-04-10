@@ -9,9 +9,12 @@ ASCII-only.
 from __future__ import annotations
 
 from importlib import import_module
+from pathlib import Path
 from typing import Any
 
-from plugins.file_io.service.types import RootName
+from audiomason.core.config_service import ConfigService
+from audiomason.core.loader import PluginLoader
+from audiomason.core.plugin_registry import PluginRegistry
 
 from .file_io_boundary import join_source_relative_path, normalize_root_name
 from .file_io_facade import (
@@ -21,20 +24,46 @@ from .file_io_facade import (
 )
 
 
+def _builtin_plugins_root() -> Path:
+    plugins_pkg = import_module("plugins")
+    pkg_file = getattr(plugins_pkg, "__file__", None)
+    if not isinstance(pkg_file, str) or not pkg_file:
+        raise RuntimeError("plugins package path unavailable")
+    return Path(pkg_file).resolve().parent
+
+
+def _user_plugins_root() -> Path:
+    return Path.home() / ".audiomason/plugins"
+
+
+def _cover_plugin_loader() -> PluginLoader:
+    return PluginLoader(
+        builtin_plugins_dir=_builtin_plugins_root(),
+        user_plugins_dir=_user_plugins_root(),
+        registry=PluginRegistry(ConfigService()),
+    )
+
+
+def _resolve_cover_plugin() -> Any:
+    loader = _cover_plugin_loader()
+    for plugin_dir in loader.discover():
+        manifest = loader.load_manifest_only(plugin_dir)
+        if manifest.name != "cover_handler":
+            continue
+        return loader.load_plugin(plugin_dir, validate=False)
+    raise RuntimeError("required_cover_plugin_not_found:cover_handler")
+
+
 def _cover_plugin(plugin: Any | None) -> Any:
     if plugin is not None:
         return plugin
-    plugin_mod = import_module("plugins.import.plugin")
-    load_plugin = getattr(plugin_mod, "load_import_owned_plugin", None)
-    if callable(load_plugin):
-        return load_plugin("cover_handler")
-    raise RuntimeError("import_owned_plugin_loader_missing:cover_handler")
+    return _resolve_cover_plugin()
 
 
 def discover_cover_candidates(
     *,
     fs: Any,
-    source_root: str | RootName,
+    source_root: Any,
     source_prefix: str,
     source_relative_path: str,
     group_root: str | None = None,
@@ -77,7 +106,7 @@ async def apply_cover_candidate(
     *,
     fs: Any,
     candidate: dict[str, Any],
-    output_root: str | RootName,
+    output_root: Any,
     output_relative_dir: str,
     plugin: Any | None = None,
 ) -> dict[str, str] | None:

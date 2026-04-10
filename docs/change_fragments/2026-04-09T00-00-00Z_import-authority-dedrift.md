@@ -1,3 +1,3 @@
 2026-04-09T00:00:00Z
-Import plugin now resolves cover, metadata, and process helpers via loader-backed
-seams, and the cover boundary seam avoids a cross-area monolith signal.
+Import Phase 1 metadata validation now resolves providers through registry-backed loader authority and an explicit job boundary; import bootstrap no longer relies on plugin.py second-truth helpers or path-based required-plugin loading.
+Import cover boundary no longer imports file-io root enums directly; root normalization remains delegated to the import file-io boundary.

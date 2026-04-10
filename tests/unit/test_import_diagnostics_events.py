@@ -28,12 +28,13 @@ if not _HAS_SRC_TREE:
     pytestmark = pytest.mark.skip(reason="src tree unavailable for isolated validator test run")
 
 if _HAS_SRC_TREE:
-    from audiomason.core.config import ConfigResolver
-
     ImportWizardEngine = import_module("plugins.import.engine").ImportWizardEngine
 else:  # pragma: no cover - isolated validator tree
-    ConfigResolver = object  # type: ignore[assignment]
-    ImportWizardEngine = object
+
+    class _ImportWizardEngineStub:
+        pass
+
+    ImportWizardEngine = _ImportWizardEngineStub
 
 
 @dataclass(frozen=True)
@@ -50,6 +51,9 @@ class _Bus:
 
 
 def _make_engine(tmp_path: Path) -> tuple[Any, dict[str, Path]]:
+    if not _HAS_SRC_TREE:
+        raise RuntimeError("src tree unavailable")
+    config_resolver_cls = import_module("audiomason.core.config").ConfigResolver
     roots = {
         "inbox": tmp_path / "inbox",
         "stage": tmp_path / "stage",
@@ -73,7 +77,7 @@ def _make_engine(tmp_path: Path) -> tuple[Any, dict[str, Path]]:
         "diagnostics": {"enabled": False},
     }
     cli_args = defaults
-    resolver = ConfigResolver(
+    resolver = config_resolver_cls(
         cli_args=cli_args,
         defaults=defaults,
         user_config_path=tmp_path / "no_user_config.yaml",
@@ -200,11 +204,17 @@ def test_failure_does_not_emit_job_create(monkeypatch, tmp_path: Path) -> None:
     assert "job.create" not in names
 
 
-def _write_minimal_plugin(repo_root: Path, *, name: str, class_name: str) -> None:
+def _write_minimal_plugin(
+    repo_root: Path,
+    *,
+    name: str,
+    class_name: str,
+    dir_name: str | None = None,
+) -> None:
     plugins_root = repo_root / "plugins"
     plugins_root.mkdir(parents=True, exist_ok=True)
     (plugins_root / "__init__.py").write_text("", encoding="utf-8")
-    plugin_dir = plugins_root / name
+    plugin_dir = plugins_root / str(dir_name or name)
     plugin_dir.mkdir(parents=True, exist_ok=True)
     (plugin_dir / "plugin.py").write_text(
         f"class {class_name}:\n    pass\n",
@@ -233,12 +243,17 @@ def _write_minimal_plugin(repo_root: Path, *, name: str, class_name: str) -> Non
 
 def test_submit_loader_autoloads_required_process_plugins(monkeypatch, tmp_path: Path) -> None:
     repo_root = tmp_path / "repo"
-    for name, class_name in [
-        ("audio_processor", "AudioProcessorPlugin"),
-        ("cover_handler", "CoverHandlerPlugin"),
-        ("id3_tagger", "ID3TaggerPlugin"),
+    for name, class_name, dir_name in [
+        ("audio_processor", "AudioProcessorPlugin", "zz-audio-provider"),
+        ("cover_handler", "CoverHandlerPlugin", "aa-cover-provider"),
+        ("id3_tagger", "ID3TaggerPlugin", "mm-id3-provider"),
     ]:
-        _write_minimal_plugin(repo_root, name=name, class_name=class_name)
+        _write_minimal_plugin(
+            repo_root,
+            name=name,
+            class_name=class_name,
+            dir_name=dir_name,
+        )
 
     diag_mod = import_module("plugins.import.engine_diagnostics_required")
     monkeypatch.setattr(diag_mod, "_builtin_plugins_root", lambda: repo_root / "plugins")
