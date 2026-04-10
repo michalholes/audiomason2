@@ -42,7 +42,7 @@ def test_validate_author_is_diacritics_safe_and_suppresses_noop_suggestion() -> 
     )
 
     result = asyncio.run(
-        plugin._execute_job(plugin.build_validate_author_job("Jozef Ciger Hronsky"))
+        plugin.execute_job(plugin.build_validate_author_job("Jozef Ciger Hronsky"))
     )
 
     assert result == {
@@ -79,10 +79,10 @@ def test_validate_book_is_diacritics_safe_and_lookup_returns_metadata() -> None:
     )
 
     result = asyncio.run(
-        plugin._execute_job(plugin.build_validate_book_job("Jozef Ciger Hronsky", "Pisalicek"))
+        plugin.execute_job(plugin.build_validate_book_job("Jozef Ciger Hronsky", "Pisalicek"))
     )
     metadata = asyncio.run(
-        plugin._execute_job(plugin.build_lookup_book_job("Jozef Ciger Hronsky", "Pisalicek"))
+        plugin.execute_job(plugin.build_lookup_book_job("Jozef Ciger Hronsky", "Pisalicek"))
     )
 
     assert result == {
@@ -124,7 +124,7 @@ def test_validate_book_returns_deterministic_suggestion() -> None:
     )
 
     result = asyncio.run(
-        plugin._execute_job(
+        plugin.execute_job(
             plugin.build_validate_book_job(
                 "J. K. Roling",
                 "Harry Potter and the Philosopher Stone",
@@ -164,7 +164,7 @@ def test_validate_book_uses_googlebooks_title_fallback_when_openlibrary_misses()
     )
 
     result = asyncio.run(
-        plugin._execute_job(
+        plugin.execute_job(
             plugin.build_validate_book_job(
                 "J. K. Rowling",
                 "Harry Potter and the Philosopher Stone",
@@ -208,7 +208,7 @@ def test_execute_request_phase1_validation_returns_provider_payload() -> None:
     )
 
     result = asyncio.run(
-        plugin._execute_job(
+        plugin.execute_job(
             plugin.build_phase1_validation_job(
                 "J. K. Roling",
                 "Harry Potter and the Philosopher Stone",
@@ -234,14 +234,61 @@ def test_execute_request_phase1_validation_returns_provider_payload() -> None:
     }
 
 
-def test_metadata_openlibrary_does_not_expose_public_direct_call_surface() -> None:
+def test_metadata_openlibrary_exposes_public_request_and_job_surfaces() -> None:
     plugin = _FakeOpenLibrary(docs=[])
 
-    assert not hasattr(plugin, "execute_request")
+    assert hasattr(plugin, "execute_request")
+    assert hasattr(plugin, "execute_job")
     assert not hasattr(plugin, "validate_author")
     assert not hasattr(plugin, "validate_book")
     assert not hasattr(plugin, "lookup_book")
     assert not hasattr(plugin, "fetch")
+
+
+def test_execute_request_accepts_real_public_request_builder() -> None:
+    plugin = _FakeOpenLibrary(
+        docs=[
+            {
+                "author_name": ["J. K. Rowling"],
+                "title": "Harry Potter and the Philosopher's Stone",
+            }
+        ],
+        googlebooks_items=[
+            {
+                "id": "gb1",
+                "volumeInfo": {
+                    "title": "Harry Potter and the Philosopher's Stone",
+                    "authors": ["J. K. Rowling"],
+                },
+            }
+        ],
+    )
+
+    result = asyncio.run(
+        plugin.execute_request(
+            plugin.build_phase1_validation_request(
+                "J. K. Roling",
+                "Harry Potter and the Philosopher Stone",
+            )
+        )
+    )
+
+    assert result == {
+        "provider": "metadata_openlibrary",
+        "author": {
+            "valid": False,
+            "canonical": None,
+            "suggestion": "J. K. Rowling",
+        },
+        "book": {
+            "valid": False,
+            "canonical": None,
+            "suggestion": {
+                "author": "J. K. Rowling",
+                "title": "Harry Potter and the Philosopher's Stone",
+            },
+        },
+    }
 
 
 def test_execute_request_rejects_unknown_operation() -> None:
@@ -249,7 +296,7 @@ def test_execute_request_rejects_unknown_operation() -> None:
 
     try:
         asyncio.run(
-            plugin._execute_job(
+            plugin.execute_job(
                 {
                     "job_type": plugin.JOB_TYPE,
                     "job_version": plugin.JOB_VERSION,

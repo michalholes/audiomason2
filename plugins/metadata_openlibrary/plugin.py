@@ -104,6 +104,12 @@ class OpenLibraryPlugin:
     def build_phase1_validation_job(self, author: str, title: str) -> dict[str, Any]:
         return self.build_job(self.build_phase1_validation_request(author, title))
 
+    async def execute_job(self, job: dict[str, Any]) -> dict[str, Any]:
+        return await self._execute_job(job)
+
+    async def execute_request(self, request: dict[str, Any]) -> dict[str, Any]:
+        return await self._execute_request(request)
+
     async def _execute_job(self, job: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(job, dict):
             raise MetadataError("Job must be an object")
