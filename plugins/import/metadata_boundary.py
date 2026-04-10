@@ -8,13 +8,9 @@ from __future__ import annotations
 import asyncio
 import threading
 from functools import lru_cache
-from importlib import import_module
-from pathlib import Path
 from typing import Any
 
-from audiomason.core.config_service import ConfigService
-from audiomason.core.loader import PluginLoader
-from audiomason.core.plugin_registry import PluginRegistry
+from .engine_diagnostics_required import resolve_import_plugin
 
 _DEFAULT_AUTHOR = {"valid": False, "canonical": None, "suggestion": None}
 _DEFAULT_BOOK = {"valid": False, "canonical": None, "suggestion": None}
@@ -23,54 +19,6 @@ _DEFAULT_RESULT = {
     "author": dict(_DEFAULT_AUTHOR),
     "book": dict(_DEFAULT_BOOK),
 }
-
-
-def _builtin_plugins_root() -> Path:
-    plugins_pkg = import_module("plugins")
-    pkg_file = getattr(plugins_pkg, "__file__", None)
-    if not isinstance(pkg_file, str) or not pkg_file:
-        raise RuntimeError("plugins package path unavailable")
-    return Path(pkg_file).resolve().parent
-
-
-def _user_plugins_root() -> Path:
-    return Path.home() / ".audiomason/plugins"
-
-
-def _metadata_plugin_loader() -> PluginLoader:
-    return PluginLoader(
-        builtin_plugins_dir=_builtin_plugins_root(),
-        user_plugins_dir=_user_plugins_root(),
-        registry=PluginRegistry(ConfigService()),
-    )
-
-
-def _apply_phase1_metadata_config(*, plugin: Any) -> None:
-    default_max_bytes = getattr(plugin, "DEFAULT_MAX_RESPONSE_BYTES", 2 * 1024 * 1024)
-    plugin.config = {
-        "timeout_seconds": 0.1,
-        "max_response_bytes": default_max_bytes,
-    }
-    try:
-        plugin.timeout_seconds = float(plugin.config["timeout_seconds"])
-    except (TypeError, ValueError):
-        plugin.timeout_seconds = 0.1
-    try:
-        plugin.max_response_bytes = int(plugin.config["max_response_bytes"])
-    except (TypeError, ValueError):
-        plugin.max_response_bytes = int(default_max_bytes)
-
-
-def _resolve_metadata_plugin() -> Any:
-    loader = _metadata_plugin_loader()
-    for plugin_dir in loader.discover():
-        manifest = loader.load_manifest_only(plugin_dir)
-        if manifest.name != "metadata_openlibrary":
-            continue
-        plugin = loader.load_plugin(plugin_dir, validate=False)
-        _apply_phase1_metadata_config(plugin=plugin)
-        return plugin
-    raise RuntimeError("required_metadata_plugin_not_found:metadata_openlibrary")
 
 
 def _build_phase1_validation_job(*, plugin: Any, author: str, title: str) -> dict[str, Any] | None:
@@ -119,7 +67,7 @@ async def _run_phase1_validation_job_boundary(
     job: dict[str, Any],
     plugin: Any,
 ) -> dict[str, Any]:
-    runner = getattr(plugin, "_execute_job", None)
+    runner = getattr(plugin, "execute_job", None)
     if not callable(runner):
         raise RuntimeError("metadata_phase1_job_runner_missing")
     result = await runner(dict(job))
@@ -130,7 +78,7 @@ def _validate_author_title_payload(author: str, title: str) -> dict[str, Any]:
     if not author or not title:
         return dict(_DEFAULT_RESULT)
     try:
-        plugin = _resolve_metadata_plugin()
+        plugin = resolve_import_plugin(plugin_name="metadata_openlibrary")
         job = _build_phase1_validation_job(plugin=plugin, author=author, title=title)
         if job is None:
             return dict(_DEFAULT_RESULT)

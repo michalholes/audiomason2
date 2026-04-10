@@ -11,17 +11,15 @@ from __future__ import annotations
 import shutil
 from importlib import import_module
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Protocol, cast
 
-from audiomason.core.config_service import ConfigService
 from audiomason.core.diagnostics import build_envelope
 from audiomason.core.events import get_event_bus as _core_get_event_bus
 from audiomason.core.jobs.api import JobService
 from audiomason.core.jobs.model import JobType
 from audiomason.core.jobs.store import JobStore
-from audiomason.core.loader import PluginLoader
 from audiomason.core.orchestration import Orchestrator
-from audiomason.core.plugin_registry import PluginRegistry
+from audiomason.core.process_contract_authority import _ContractPluginLoader
 from audiomason.core.process_job_contracts import IMPORT_PROCESS_CONTRACT_ID
 
 from .detached_runtime import (
@@ -145,18 +143,6 @@ def _get_bus():
     return _core_get_event_bus()
 
 
-def _builtin_plugins_root() -> Path:
-    plugins_pkg = import_module("plugins")
-    pkg_file = getattr(plugins_pkg, "__file__", None)
-    if not isinstance(pkg_file, str) or not pkg_file:
-        raise RuntimeError("plugins package path unavailable")
-    return Path(pkg_file).resolve().parent
-
-
-def _user_plugins_root() -> Path:
-    return Path.home() / ".audiomason/plugins"
-
-
 class _RuntimeImportPlugin:
     def __init__(self, *, engine: object) -> None:
         self._engine = engine
@@ -175,6 +161,13 @@ class _RuntimeImportPlugin:
 
 
 _ImportProcessRuntimePlugin = _RuntimeImportPlugin
+
+
+class _MetadataOpenLibraryTuningPlugin(Protocol):
+    DEFAULT_MAX_RESPONSE_BYTES: int
+    config: dict[str, object]
+    timeout_seconds: float
+    max_response_bytes: int
 
 
 class _ProcessContractPluginLoader:
@@ -197,25 +190,39 @@ def _plugin_loader(*, engine: object) -> _ProcessContractPluginLoader:
     return loader
 
 
-def _resolve_plugin_via_loader(*, plugin_name: str) -> object:
-    loader = PluginLoader(
-        builtin_plugins_dir=_builtin_plugins_root(),
-        user_plugins_dir=_user_plugins_root(),
-        registry=PluginRegistry(ConfigService()),
-    )
-    for plugin_dir in loader.discover():
-        manifest = loader.load_manifest_only(plugin_dir)
-        if manifest.name != plugin_name:
-            continue
-        return loader.load_plugin(plugin_dir, validate=False)
-    raise RuntimeError(f"required_process_plugin_not_found:{plugin_name}")
+def resolve_import_plugin(*, plugin_name: str) -> object:
+    loader = _ContractPluginLoader(job_meta={}, contract_plugin_name=plugin_name)
+    plugin = loader.get_plugin(plugin_name)
+    if plugin_name == "metadata_openlibrary":
+        tuned_plugin = cast(_MetadataOpenLibraryTuningPlugin, plugin)
+        default_max_bytes = getattr(
+            plugin,
+            "DEFAULT_MAX_RESPONSE_BYTES",
+            2 * 1024 * 1024,
+        )
+        config = dict(getattr(plugin, "config", {}) or {})
+        config["timeout_seconds"] = 0.1
+        try:
+            config["max_response_bytes"] = int(default_max_bytes)
+        except (TypeError, ValueError):
+            config["max_response_bytes"] = 2 * 1024 * 1024
+        tuned_plugin.config = config
+        try:
+            tuned_plugin.timeout_seconds = float(config["timeout_seconds"])
+        except (TypeError, ValueError):
+            tuned_plugin.timeout_seconds = 0.1
+        try:
+            tuned_plugin.max_response_bytes = int(config["max_response_bytes"])
+        except (TypeError, ValueError):
+            tuned_plugin.max_response_bytes = 2 * 1024 * 1024
+    return plugin
 
 
 def _ensure_required_process_plugins(*, loader: _ProcessContractPluginLoader) -> None:
     for plugin_name in ("audio_processor", "cover_handler", "id3_tagger"):
         loader.add_plugin(
             plugin_name,
-            _resolve_plugin_via_loader(plugin_name=plugin_name),
+            resolve_import_plugin(plugin_name=plugin_name),
         )
 
 

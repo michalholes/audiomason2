@@ -8,14 +8,9 @@ ASCII-only.
 
 from __future__ import annotations
 
-from importlib import import_module
-from pathlib import Path
 from typing import Any
 
-from audiomason.core.config_service import ConfigService
-from audiomason.core.loader import PluginLoader
-from audiomason.core.plugin_registry import PluginRegistry
-
+from .engine_diagnostics_required import resolve_import_plugin
 from .file_io_boundary import join_source_relative_path, normalize_root_name
 from .file_io_facade import (
     apply_path_cover_candidate,
@@ -24,40 +19,10 @@ from .file_io_facade import (
 )
 
 
-def _builtin_plugins_root() -> Path:
-    plugins_pkg = import_module("plugins")
-    pkg_file = getattr(plugins_pkg, "__file__", None)
-    if not isinstance(pkg_file, str) or not pkg_file:
-        raise RuntimeError("plugins package path unavailable")
-    return Path(pkg_file).resolve().parent
-
-
-def _user_plugins_root() -> Path:
-    return Path.home() / ".audiomason/plugins"
-
-
-def _cover_plugin_loader() -> PluginLoader:
-    return PluginLoader(
-        builtin_plugins_dir=_builtin_plugins_root(),
-        user_plugins_dir=_user_plugins_root(),
-        registry=PluginRegistry(ConfigService()),
-    )
-
-
-def _resolve_cover_plugin() -> Any:
-    loader = _cover_plugin_loader()
-    for plugin_dir in loader.discover():
-        manifest = loader.load_manifest_only(plugin_dir)
-        if manifest.name != "cover_handler":
-            continue
-        return loader.load_plugin(plugin_dir, validate=False)
-    raise RuntimeError("required_cover_plugin_not_found:cover_handler")
-
-
 def _cover_plugin(plugin: Any | None) -> Any:
     if plugin is not None:
         return plugin
-    return _resolve_cover_plugin()
+    return resolve_import_plugin(plugin_name="cover_handler")
 
 
 def discover_cover_candidates(

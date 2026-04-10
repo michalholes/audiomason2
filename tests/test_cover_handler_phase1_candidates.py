@@ -287,3 +287,41 @@ def test_apply_cover_candidate_for_ref_copies_file_to_output_root(tmp_path: Path
     }
     copied = tmp_path / "stage" / "import_runtime" / "work" / "Author" / "Book" / "cover.png"
     assert copied.read_bytes() == b"cover-bytes"
+
+
+def test_cover_boundary_resolves_plugin_via_shared_import_seam(monkeypatch, tmp_path: Path) -> None:
+    boundary = __import__("plugins.import.cover_boundary", fromlist=["discover_cover_candidates"])
+    file_io = _file_io_plugin(tmp_path)
+    source_dir = tmp_path / "inbox" / "book"
+    source_dir.mkdir(parents=True)
+    (source_dir / "cover.jpeg").write_bytes(b"cover")
+
+    plugin = CoverHandlerPlugin()
+    seen: dict[str, str] = {}
+
+    def _resolve_import_plugin(*, plugin_name: str):
+        seen["plugin_name"] = plugin_name
+        return plugin
+
+    monkeypatch.setattr(boundary, "resolve_import_plugin", _resolve_import_plugin)
+
+    candidates = boundary.discover_cover_candidates(
+        fs=file_io.file_service,
+        source_root="inbox",
+        source_prefix="",
+        source_relative_path="book",
+    )
+
+    assert seen == {"plugin_name": "cover_handler"}
+    assert [item["candidate_id"] for item in candidates] == ["file:cover.jpeg"]
+
+
+def test_cover_boundary_source_has_no_local_loader_or_root_resolver() -> None:
+    source = Path("plugins/import/cover_boundary.py").read_text(encoding="utf-8")
+
+    assert "PluginLoader" not in source
+    assert "PluginRegistry" not in source
+    assert "ConfigService" not in source
+    assert "_builtin_plugins_root" not in source
+    assert "_user_plugins_root" not in source
+    assert 'resolve_import_plugin(plugin_name="cover_handler")' in source

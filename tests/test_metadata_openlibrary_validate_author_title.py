@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from typing import Any
 
 from plugins.metadata_openlibrary.plugin import OpenLibraryPlugin
@@ -313,3 +314,81 @@ def test_execute_request_rejects_unknown_operation() -> None:
         assert str(exc) == "Unsupported operation: unknown"
     else:
         raise AssertionError("expected metadata job executor to reject unknown operation")
+
+
+def test_metadata_boundary_routes_phase1_validation_via_explicit_job_boundary(
+    monkeypatch,
+) -> None:
+    boundary = __import__("plugins.import.metadata_boundary", fromlist=["validate_author_title"])
+    plugin = _FakeOpenLibrary(
+        docs=[
+            {
+                "author_name": ["J. K. Rowling"],
+                "title": "Harry Potter and the Philosopher's Stone",
+            }
+        ],
+        googlebooks_items=[
+            {
+                "id": "gb1",
+                "volumeInfo": {
+                    "title": "Harry Potter and the Philosopher's Stone",
+                    "authors": ["J. K. Rowling"],
+                },
+            }
+        ],
+    )
+    seen: dict[str, object] = {}
+
+    async def _execute_job(job: dict[str, Any]) -> dict[str, Any]:
+        seen["job"] = dict(job)
+        request = dict(job.get("request") or {})
+        return await OpenLibraryPlugin._execute_request(plugin, request)
+
+    async def _private_execute_job(_job: dict[str, Any]) -> dict[str, Any]:
+        raise AssertionError("metadata boundary must not call private provider runner")
+
+    plugin.execute_job = _execute_job  # type: ignore[assignment]
+    plugin._execute_job = _private_execute_job  # type: ignore[assignment]
+
+    def _resolve_import_plugin(*, plugin_name: str) -> OpenLibraryPlugin:
+        seen["plugin_name"] = plugin_name
+        return plugin
+
+    monkeypatch.setattr(boundary, "resolve_import_plugin", _resolve_import_plugin)
+    boundary.validate_author_title.cache_clear()
+
+    author_result, book_result = boundary.validate_author_title(
+        "J. K. Roling",
+        "Harry Potter and the Philosopher Stone",
+    )
+
+    assert seen["plugin_name"] == "metadata_openlibrary"
+    assert isinstance(seen["job"], dict)
+    assert seen["job"]["request"]["operation"] == "phase1_validate"
+    assert author_result == {
+        "valid": False,
+        "canonical": None,
+        "suggestion": "J. K. Rowling",
+    }
+    assert book_result == {
+        "valid": False,
+        "canonical": None,
+        "suggestion": {
+            "author": "J. K. Rowling",
+            "title": "Harry Potter and the Philosopher's Stone",
+        },
+    }
+
+
+def test_metadata_boundary_source_removes_local_loader_and_private_runner_bridge() -> None:
+    source = Path("plugins/import/metadata_boundary.py").read_text(encoding="utf-8")
+
+    assert "PluginLoader" not in source
+    assert "PluginRegistry" not in source
+    assert "ConfigService" not in source
+    assert "_builtin_plugins_root" not in source
+    assert "_user_plugins_root" not in source
+    assert "_apply_phase1_metadata_config" not in source
+    assert 'resolve_import_plugin(plugin_name="metadata_openlibrary")' in source
+    assert 'getattr(plugin, "execute_job", None)' in source
+    assert 'getattr(plugin, "_execute_job", None)' not in source

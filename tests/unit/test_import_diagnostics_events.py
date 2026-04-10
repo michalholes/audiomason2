@@ -256,8 +256,18 @@ def test_submit_loader_autoloads_required_process_plugins(monkeypatch, tmp_path:
         )
 
     diag_mod = import_module("plugins.import.engine_diagnostics_required")
-    monkeypatch.setattr(diag_mod, "_builtin_plugins_root", lambda: repo_root / "plugins")
-    monkeypatch.setattr(diag_mod, "_user_plugins_root", lambda: tmp_path / "user_plugins")
+
+    def _resolve_import_plugin(*, plugin_name: str):
+        package = __import__(f"plugins.{plugin_name}.plugin", fromlist=[plugin_name])
+        class_name = {
+            "audio_processor": "AudioProcessorPlugin",
+            "cover_handler": "CoverHandlerPlugin",
+            "id3_tagger": "ID3TaggerPlugin",
+        }[plugin_name]
+        return getattr(package, class_name)()
+
+    monkeypatch.syspath_prepend(str(repo_root))
+    monkeypatch.setattr(diag_mod, "resolve_import_plugin", _resolve_import_plugin)
 
     loader = diag_mod._plugin_loader(engine=object())
     diag_mod._ensure_required_process_plugins(loader=loader)
@@ -268,3 +278,14 @@ def test_submit_loader_autoloads_required_process_plugins(monkeypatch, tmp_path:
         "cover_handler",
         "id3_tagger",
     ]
+
+
+def test_engine_diagnostics_required_source_has_no_local_root_or_discovery_bootstrap() -> None:
+    source = Path("plugins/import/engine_diagnostics_required.py").read_text(encoding="utf-8")
+
+    assert "from audiomason.core.loader import PluginLoader" not in source
+    assert "_builtin_plugins_root" not in source
+    assert "_user_plugins_root" not in source
+    assert "_resolve_plugin_via_loader" not in source
+    assert "_ContractPluginLoader" in source
+    assert "resolve_import_plugin(plugin_name=plugin_name)" in source
