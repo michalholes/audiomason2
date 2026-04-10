@@ -140,6 +140,37 @@ def test_import_live_and_detached_entrypoints_share_completion_authority(
     ]
 
 
+def test_build_request_avoids_import_side_bootstrap_helper(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    authority_mod = import_module("audiomason.core.process_contract_authority")
+    seen_imports: list[str] = []
+    real_import_module = authority_mod.import_module
+
+    def _tracking_import(name: str):
+        seen_imports.append(name)
+        if name == "plugins.import.engine_diagnostics_required":
+            raise AssertionError("bootstrap helper import must not be used")
+        return real_import_module(name)
+
+    monkeypatch.setattr(authority_mod, "import_module", _tracking_import)
+    request = authority_mod._build_request(
+        {
+            "contract_id": IMPORT_PROCESS_CONTRACT_ID,
+            "job_requests_path": "wizards:import/sessions/s-detached/job_requests.json",
+        }
+    )
+
+    assert request.contract_id == IMPORT_PROCESS_CONTRACT_ID
+    assert request.plugin_name == "import"
+    assert request.entrypoint_name == "run_process_contract"
+    assert request.job_meta == {
+        "contract_id": IMPORT_PROCESS_CONTRACT_ID,
+        "job_requests_path": "wizards:import/sessions/s-detached/job_requests.json",
+    }
+    assert "plugins.import.engine_diagnostics_required" not in seen_imports
+
+
 def test_run_job_dispatches_contract_process_to_plugin_entrypoint(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

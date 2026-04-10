@@ -12,11 +12,12 @@ import fcntl
 from collections.abc import Iterator
 from importlib import import_module
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol, TypeGuard
 
 from audiomason.core.jobs.api import JobService
 from audiomason.core.jobs.model import JobState, JobType
 from audiomason.core.jobs.store import JobStore
+from audiomason.core.loader import PluginLoader
 from audiomason.core.orchestration import OP_RUN_JOB, Orchestrator, _emit_diag, _utcnow_iso
 from audiomason.core.orchestration_models import ProcessContractRequest
 from audiomason.core.process_job_contracts import resolve_process_job_contract
@@ -70,6 +71,74 @@ def _mark_job_running(orch: Orchestrator, job_id: str) -> None:
     )
 
 
+def _builtin_plugins_root() -> Path:
+    plugins_pkg = import_module("plugins")
+    pkg_file = getattr(plugins_pkg, "__file__", None)
+    if not isinstance(pkg_file, str) or not pkg_file:
+        raise RuntimeError("plugins package path unavailable")
+    return Path(pkg_file).resolve().parent
+
+
+def _user_plugins_root() -> Path:
+    return Path.home() / ".audiomason/plugins"
+
+
+def _detached_contract_runtime(*, job_meta: dict[str, str]) -> object | None:
+    try:
+        runtime_mod = import_module("plugins.import.detached_runtime")
+        bootstrap = runtime_mod.load_detached_runtime_bootstrap_from_meta(job_meta=dict(job_meta))
+        return runtime_mod.rehydrate_detached_runtime_from_bootstrap(bootstrap=bootstrap)
+    except Exception:
+        return None
+
+
+class _SupportsDetachedRuntimeEngine(Protocol):
+    engine: object
+
+
+def _has_detached_runtime_engine(plugin: object) -> TypeGuard[_SupportsDetachedRuntimeEngine]:
+    return hasattr(plugin, "engine")
+
+
+class _ContractPluginLoader:
+    def __init__(self, *, job_meta: dict[str, str], contract_plugin_name: str) -> None:
+        self._job_meta = dict(job_meta)
+        self._contract_plugin_name = contract_plugin_name
+        self._loader = PluginLoader(
+            builtin_plugins_dir=_builtin_plugins_root(),
+            user_plugins_dir=_user_plugins_root(),
+        )
+        self._plugin_dirs: dict[str, Path] = {}
+        self._plugins: dict[str, object] = {}
+        self._contract_runtime = _detached_contract_runtime(job_meta=self._job_meta)
+
+    def _plugin_dir(self, name: str) -> Path:
+        if name in self._plugin_dirs:
+            return self._plugin_dirs[name]
+        for plugin_dir in self._loader.discover():
+            manifest = self._loader.load_manifest_only(plugin_dir)
+            self._plugin_dirs.setdefault(manifest.name, plugin_dir)
+        resolved = self._plugin_dirs.get(name)
+        if resolved is None:
+            raise RuntimeError(f"required_process_plugin_not_found:{name}")
+        return resolved
+
+    def get_plugin(self, name: str) -> object:
+        plugin = self._plugins.get(name)
+        if plugin is not None:
+            return plugin
+        plugin = self._loader.load_plugin(self._plugin_dir(name), validate=False)
+        if name == self._contract_plugin_name and self._contract_runtime is not None:
+            if not _has_detached_runtime_engine(plugin):
+                raise RuntimeError(f"contract_plugin_missing_engine:{name}")
+            plugin.engine = self._contract_runtime
+        self._plugins[name] = plugin
+        return plugin
+
+    def list_plugins(self) -> list[str]:
+        return list(self._plugins.keys())
+
+
 def _build_request(job_meta: dict[str, str]) -> ProcessContractRequest:
     contract = resolve_process_job_contract(job_meta)
     if contract is None:
@@ -79,9 +148,10 @@ def _build_request(job_meta: dict[str, str]) -> ProcessContractRequest:
     except ValueError as e:
         raise RuntimeError("unsupported or incomplete process contract") from e
 
-    helper = import_module("plugins.import.engine_diagnostics_required")
-    build_loader = helper.build_process_contract_plugin_loader
-    plugin_loader = build_loader(job_meta=dict(job_meta))
+    plugin_loader = _ContractPluginLoader(
+        job_meta=dict(job_meta),
+        contract_plugin_name=contract.plugin_name,
+    )
     return ProcessContractRequest(
         contract_id=contract.contract_id,
         plugin_name=contract.plugin_name,
