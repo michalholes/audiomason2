@@ -1,0 +1,1 @@
+- cover_handler: publish explicit wizard-callable contract for ref-based cover discovery and apply operations.

@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "operations": [
+    {
+      "operation_id": "cover.discover_candidates_for_ref",
+      "method_name": "discover_cover_candidates_for_ref",
+      "execution_mode": "inline"
+    },
+    {
+      "operation_id": "cover.apply_candidate_for_ref",
+      "method_name": "apply_cover_candidate_for_ref",
+      "execution_mode": "job"
+    }
+  ]
+}

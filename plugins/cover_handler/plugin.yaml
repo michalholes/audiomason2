@@ -23,3 +23,5 @@ config_schema:
     default: 1400
 
 test_level: basic
+
+wizard_callable_manifest_pointer: wizard_callable_manifest.json
