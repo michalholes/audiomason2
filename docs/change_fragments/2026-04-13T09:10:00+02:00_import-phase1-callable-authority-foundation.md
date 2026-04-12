@@ -1,0 +1,2 @@
+- Fix core callable authority publication so disabled plugins cannot leak wizard-callable registry entries during manifest-only discovery or blocked load attempts.
+- Keep callable manifest parsing in core while enforcing registry visibility strictly through enabled plugin state.

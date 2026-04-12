@@ -3,15 +3,35 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 from audiomason.core.config_service import ConfigService
+from audiomason.core.errors import PluginNotFoundError, PluginValidationError
+from audiomason.core.plugin_callable_authority import (
+    RegisteredWizardCallable,
+    load_wizard_callable_definitions,
+)
+
+if TYPE_CHECKING:
+    from audiomason.core.loader import PluginLoader, PluginManifest
 
 
 @dataclass(frozen=True)
 class PluginState:
     plugin_id: str
     enabled: bool
+
+
+@dataclass(frozen=True)
+class WizardCallableDiscoveryResult:
+    """Resolved registry-owned callable publication metadata."""
+
+    operation_id: str
+    plugin_id: str
+    method_name: str
+    execution_mode: str
+    manifest_path: Path
 
 
 class PluginRegistry:
@@ -28,6 +48,8 @@ class PluginRegistry:
 
     def __init__(self, config: ConfigService) -> None:
         self._config = config
+        self._wizard_callables_by_plugin: dict[str, tuple[RegisteredWizardCallable, ...]] = {}
+        self._wizard_callables_by_operation: dict[str, RegisteredWizardCallable] = {}
 
     def _get_disabled(self) -> list[str]:
         try:
@@ -35,14 +57,12 @@ class PluginRegistry:
         except Exception:
             return []
 
-        # Preferred location
         reg = cfg.get("plugin_registry")
         if isinstance(reg, dict):
             disabled = reg.get("disabled")
             if isinstance(disabled, list):
                 return [str(x) for x in disabled]
 
-        # Legacy fallback
         plugins = cfg.get("plugins")
         if not isinstance(plugins, dict):
             return []
@@ -126,3 +146,89 @@ class PluginRegistry:
             changed = True
 
         return changed
+
+    def unregister_callable_manifest(self, plugin_id: str) -> None:
+        """Remove all published callable metadata for a plugin from the registry view."""
+        existing_defs = self._wizard_callables_by_plugin.pop(plugin_id, ())
+        for existing in existing_defs:
+            current = self._wizard_callables_by_operation.get(existing.operation_id)
+            if current == existing:
+                self._wizard_callables_by_operation.pop(existing.operation_id, None)
+
+    def register_callable_manifest(
+        self,
+        *,
+        plugin_dir: Path,
+        manifest: PluginManifest,
+    ) -> tuple[RegisteredWizardCallable, ...]:
+        """Register provider-owned callable publication data under PluginRegistry."""
+        definitions = load_wizard_callable_definitions(
+            plugin_id=manifest.name,
+            plugin_dir=plugin_dir,
+            manifest_pointer=manifest.wizard_callable_manifest_pointer,
+        )
+        self.unregister_callable_manifest(manifest.name)
+
+        for definition in definitions:
+            current = self._wizard_callables_by_operation.get(definition.operation_id)
+            if current is not None and current.plugin_id != definition.plugin_id:
+                raise PluginValidationError(
+                    "Conflicting wizard callable publication for operation "
+                    f"'{definition.operation_id}': {current.plugin_id} vs {definition.plugin_id}"
+                )
+
+        for definition in definitions:
+            self._wizard_callables_by_operation[definition.operation_id] = definition
+        self._wizard_callables_by_plugin[manifest.name] = definitions
+        return definitions
+
+    def list_wizard_callables(self) -> list[WizardCallableDiscoveryResult]:
+        """Return the registry-owned callable publication view for enabled plugins."""
+        return [
+            WizardCallableDiscoveryResult(
+                operation_id=item.operation_id,
+                plugin_id=item.plugin_id,
+                method_name=item.method_name,
+                execution_mode=item.execution_mode,
+                manifest_path=item.manifest_path,
+            )
+            for item in sorted(
+                (
+                    item
+                    for item in self._wizard_callables_by_operation.values()
+                    if self.is_enabled(item.plugin_id)
+                ),
+                key=lambda item: (item.operation_id, item.plugin_id),
+            )
+        ]
+
+    def resolve_wizard_callable(self, operation_id: str) -> WizardCallableDiscoveryResult:
+        """Resolve a published wizard callable strictly via enabled PluginRegistry state."""
+        item = self._wizard_callables_by_operation.get(operation_id)
+        if item is None:
+            raise PluginNotFoundError(operation_id)
+        if not self.is_enabled(item.plugin_id):
+            self.unregister_callable_manifest(item.plugin_id)
+            raise PluginNotFoundError(operation_id)
+        return WizardCallableDiscoveryResult(
+            operation_id=item.operation_id,
+            plugin_id=item.plugin_id,
+            method_name=item.method_name,
+            execution_mode=item.execution_mode,
+            manifest_path=item.manifest_path,
+        )
+
+    def discover_wizard_callable(
+        self,
+        *,
+        loader: PluginLoader,
+        operation_id: str,
+    ) -> WizardCallableDiscoveryResult:
+        """Populate and resolve callable authority through the core loader/registry seam."""
+        for plugin_dir in loader.discover():
+            manifest = loader.load_manifest_only(plugin_dir)
+            if not self.is_enabled(manifest.name):
+                self.unregister_callable_manifest(manifest.name)
+                continue
+            self.register_callable_manifest(plugin_dir=plugin_dir, manifest=manifest)
+        return self.resolve_wizard_callable(operation_id)

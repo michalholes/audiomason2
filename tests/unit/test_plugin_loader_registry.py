@@ -1,17 +1,53 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
 
 from audiomason.core.config_service import ConfigService
-from audiomason.core.errors import PluginError
+from audiomason.core.errors import PluginError, PluginNotFoundError
 from audiomason.core.loader import PluginLoader
 from audiomason.core.plugin_registry import PluginRegistry
 
 
+def _write_demo_callable_plugin(plugins_dir: Path) -> Path:
+    plugin_dir = plugins_dir / "demo_plugin"
+    plugin_dir.mkdir(parents=True)
+    (plugin_dir / "plugin.yaml").write_text(
+        "\n".join(
+            [
+                "name: demo_plugin",
+                "version: 1.0.0",
+                "entrypoint: plugin:DemoPlugin",
+                "interfaces: []",
+                "wizard_callable_manifest_pointer: wizard_callable_manifest.json",
+                "test_level: none",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    (plugin_dir / "wizard_callable_manifest.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "operations": [
+                    {
+                        "operation_id": "demo.op",
+                        "method_name": "run_demo",
+                        "execution_mode": "inline",
+                    }
+                ],
+            }
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return plugin_dir
+
+
 def test_loader_respects_plugin_registry(tmp_path: Path) -> None:
-    # Create isolated config where example_plugin is disabled.
     cfg_path = tmp_path / "config.yaml"
     cfg = ConfigService(user_config_path=cfg_path)
     reg = PluginRegistry(cfg)
@@ -25,3 +61,66 @@ def test_loader_respects_plugin_registry(tmp_path: Path) -> None:
 
     with pytest.raises(PluginError):
         loader.load_plugin(example_dir, validate=False)
+
+
+def test_load_manifest_only_does_not_publish_disabled_callable_plugin(tmp_path: Path) -> None:
+    plugins_dir = tmp_path / "plugins"
+    plugin_dir = _write_demo_callable_plugin(plugins_dir)
+    cfg = ConfigService(user_config_path=tmp_path / "config.yaml")
+    reg = PluginRegistry(cfg)
+    reg.set_enabled("demo_plugin", enabled=False)
+    loader = PluginLoader(builtin_plugins_dir=plugins_dir, registry=reg)
+
+    manifest = loader.load_manifest_only(plugin_dir)
+
+    assert manifest.name == "demo_plugin"
+    assert reg.list_wizard_callables() == []
+    with pytest.raises(PluginNotFoundError):
+        reg.resolve_wizard_callable("demo.op")
+
+
+def test_load_plugin_disabled_does_not_leak_callable_authority(tmp_path: Path) -> None:
+    plugins_dir = tmp_path / "plugins"
+    plugin_dir = _write_demo_callable_plugin(plugins_dir)
+    cfg = ConfigService(user_config_path=tmp_path / "config.yaml")
+    reg = PluginRegistry(cfg)
+    reg.set_enabled("demo_plugin", enabled=False)
+    loader = PluginLoader(builtin_plugins_dir=plugins_dir, registry=reg)
+
+    with pytest.raises(PluginError, match="Plugin is disabled: demo_plugin"):
+        loader.load_plugin(plugin_dir, validate=False)
+
+    assert reg.list_wizard_callables() == []
+    with pytest.raises(PluginNotFoundError):
+        reg.resolve_wizard_callable("demo.op")
+
+
+def test_discover_wizard_callable_skips_disabled_plugin(tmp_path: Path) -> None:
+    plugins_dir = tmp_path / "plugins"
+    _write_demo_callable_plugin(plugins_dir)
+    cfg = ConfigService(user_config_path=tmp_path / "config.yaml")
+    reg = PluginRegistry(cfg)
+    reg.set_enabled("demo_plugin", enabled=False)
+    loader = PluginLoader(builtin_plugins_dir=plugins_dir, registry=reg)
+
+    with pytest.raises(PluginNotFoundError):
+        reg.discover_wizard_callable(loader=loader, operation_id="demo.op")
+
+    assert reg.list_wizard_callables() == []
+
+
+def test_resolve_wizard_callable_rejects_plugin_disabled_after_publish(tmp_path: Path) -> None:
+    plugins_dir = tmp_path / "plugins"
+    _write_demo_callable_plugin(plugins_dir)
+    cfg = ConfigService(user_config_path=tmp_path / "config.yaml")
+    reg = PluginRegistry(cfg)
+    loader = PluginLoader(builtin_plugins_dir=plugins_dir, registry=reg)
+
+    resolved = reg.discover_wizard_callable(loader=loader, operation_id="demo.op")
+
+    assert resolved.plugin_id == "demo_plugin"
+    reg.set_enabled("demo_plugin", enabled=False)
+
+    with pytest.raises(PluginNotFoundError):
+        reg.resolve_wizard_callable("demo.op")
+    assert reg.list_wizard_callables() == []

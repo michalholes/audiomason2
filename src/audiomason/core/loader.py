@@ -34,6 +34,7 @@ class PluginManifest:
     dependencies: dict[str, Any]
     config_schema: dict[str, Any]
     test_level: str  # "none" | "basic" | "strict"
+    wizard_callable_manifest_pointer: str | None = None
 
 
 class PluginLoader:
@@ -118,7 +119,8 @@ class PluginLoader:
         """Load and validate plugin manifest only.
 
         This performs manifest parsing and manifest-level validation only and MUST NOT
-        import or execute plugin code.
+        import or execute plugin code. It also MUST NOT publish callable authority
+        into PluginRegistry.
         """
         return self._load_manifest(plugin_dir)
 
@@ -140,7 +142,11 @@ class PluginLoader:
 
         # Registry enforcement
         if self._registry is not None and not self._registry.is_enabled(manifest.name):
+            self._registry.unregister_callable_manifest(manifest.name)
             raise PluginError(f"Plugin is disabled: {manifest.name}")
+
+        if self._registry is not None:
+            self._registry.register_callable_manifest(plugin_dir=plugin_dir, manifest=manifest)
 
         # Plugin config default normalization (host config)
         if (
@@ -278,6 +284,16 @@ class PluginLoader:
                         )
                 cli_commands = list(raw_cli_commands)
 
+            wizard_callable_manifest_pointer = data.get("wizard_callable_manifest_pointer")
+            if wizard_callable_manifest_pointer is not None and not isinstance(
+                wizard_callable_manifest_pointer,
+                str,
+            ):
+                raise PluginError(
+                    f"Invalid 'wizard_callable_manifest_pointer' in manifest {manifest_path}: "
+                    "must be a string"
+                )
+
             return PluginManifest(
                 name=data["name"],
                 version=data["version"],
@@ -291,6 +307,7 @@ class PluginLoader:
                 dependencies=data.get("dependencies", {}),
                 config_schema=data.get("config_schema", {}),
                 test_level=data.get("test_level", "basic"),
+                wizard_callable_manifest_pointer=wizard_callable_manifest_pointer,
             )
         except Exception as e:
             raise PluginError(f"Failed to load manifest from {manifest_path}: {e}") from e
