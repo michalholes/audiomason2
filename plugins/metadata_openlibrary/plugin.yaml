@@ -25,3 +25,5 @@ config_schema:
     description: "Max HTTP response size (bytes)"
 
 test_level: basic
+
+wizard_callable_manifest_pointer: wizard_callable_manifest.json

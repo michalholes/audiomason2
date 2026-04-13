@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from pathlib import Path
 from typing import Any
 
@@ -392,3 +393,28 @@ def test_metadata_boundary_source_removes_local_loader_and_private_runner_bridge
     assert 'resolve_import_plugin(plugin_name="metadata_openlibrary")' in source
     assert 'getattr(plugin, "execute_job", None)' in source
     assert 'getattr(plugin, "_execute_job", None)' not in source
+
+
+def test_metadata_openlibrary_manifest_points_to_provider_owned_callable_contract() -> None:
+    source = Path("plugins/metadata_openlibrary/plugin.yaml").read_text(encoding="utf-8")
+
+    assert "wizard_callable_manifest_pointer: wizard_callable_manifest.json" in source
+
+
+def test_metadata_openlibrary_publishes_phase1_validation_callable_manifest() -> None:
+    manifest = json.loads(
+        Path("plugins/metadata_openlibrary/wizard_callable_manifest.json").read_text(
+            encoding="utf-8"
+        )
+    )
+
+    assert manifest == {
+        "schema_version": 1,
+        "operations": [
+            {
+                "operation_id": "metadata.phase1_validate",
+                "method_name": "build_phase1_validation_job",
+                "execution_mode": "job",
+            }
+        ],
+    }
