@@ -289,21 +289,12 @@ def test_apply_cover_candidate_for_ref_copies_file_to_output_root(tmp_path: Path
     assert copied.read_bytes() == b"cover-bytes"
 
 
-def test_cover_boundary_resolves_plugin_via_shared_import_seam(monkeypatch, tmp_path: Path) -> None:
+def test_cover_boundary_uses_registry_callable_dispatch(tmp_path: Path) -> None:
     boundary = __import__("plugins.import.cover_boundary", fromlist=["discover_cover_candidates"])
     file_io = _file_io_plugin(tmp_path)
     source_dir = tmp_path / "inbox" / "book"
     source_dir.mkdir(parents=True)
     (source_dir / "cover.jpeg").write_bytes(b"cover")
-
-    plugin = CoverHandlerPlugin()
-    seen: dict[str, str] = {}
-
-    def _resolve_import_plugin(*, plugin_name: str):
-        seen["plugin_name"] = plugin_name
-        return plugin
-
-    monkeypatch.setattr(boundary, "resolve_import_plugin", _resolve_import_plugin)
 
     candidates = boundary.discover_cover_candidates(
         fs=file_io.file_service,
@@ -312,16 +303,17 @@ def test_cover_boundary_resolves_plugin_via_shared_import_seam(monkeypatch, tmp_
         source_relative_path="book",
     )
 
-    assert seen == {"plugin_name": "cover_handler"}
     assert [item["candidate_id"] for item in candidates] == ["file:cover.jpeg"]
 
 
-def test_cover_boundary_source_has_no_local_loader_or_root_resolver() -> None:
+def test_cover_boundary_source_uses_registry_callable_authority_only() -> None:
     source = Path("plugins/import/cover_boundary.py").read_text(encoding="utf-8")
 
-    assert "PluginLoader" not in source
-    assert "PluginRegistry" not in source
-    assert "ConfigService" not in source
-    assert "_builtin_plugins_root" not in source
-    assert "_user_plugins_root" not in source
-    assert 'resolve_import_plugin(plugin_name="cover_handler")' in source
+    assert 'resolve_import_plugin(plugin_name="cover_handler")' not in source
+    assert 'getattr(plugin_obj, "discover_cover_candidates_for_ref", None)' not in source
+    assert 'getattr(plugin_obj, "apply_cover_candidate_for_ref", None)' not in source
+    assert "discover_path_cover_candidates" not in source
+    assert 'operation_id="cover.discover_candidates_for_ref"' in source
+    assert 'operation_id="cover.apply_candidate_for_ref"' in source
+    assert "resolve_wizard_callable(" in source
+    assert "resolve_registered_wizard_callable(" in source

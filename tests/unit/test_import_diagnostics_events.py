@@ -241,37 +241,20 @@ def _write_minimal_plugin(
     )
 
 
-def test_submit_loader_autoloads_required_process_plugins(monkeypatch, tmp_path: Path) -> None:
-    repo_root = tmp_path / "repo"
-    for name, class_name, dir_name in [
-        ("audio_processor", "AudioProcessorPlugin", "zz-audio-provider"),
-        ("cover_handler", "CoverHandlerPlugin", "aa-cover-provider"),
-        ("id3_tagger", "ID3TaggerPlugin", "mm-id3-provider"),
-    ]:
-        _write_minimal_plugin(
-            repo_root,
-            name=name,
-            class_name=class_name,
-            dir_name=dir_name,
-        )
-
+def test_submit_loader_autoloads_required_process_plugins(monkeypatch) -> None:
     diag_mod = import_module("plugins.import.engine_diagnostics_required")
+    seen: list[str] = []
 
     def _resolve_import_plugin(*, plugin_name: str):
-        package = __import__(f"plugins.{plugin_name}.plugin", fromlist=[plugin_name])
-        class_name = {
-            "audio_processor": "AudioProcessorPlugin",
-            "cover_handler": "CoverHandlerPlugin",
-            "id3_tagger": "ID3TaggerPlugin",
-        }[plugin_name]
-        return getattr(package, class_name)()
+        seen.append(plugin_name)
+        return object()
 
-    monkeypatch.syspath_prepend(str(repo_root))
     monkeypatch.setattr(diag_mod, "resolve_import_plugin", _resolve_import_plugin)
 
     loader = diag_mod._plugin_loader(engine=object())
     diag_mod._ensure_required_process_plugins(loader=loader)
 
+    assert seen == ["audio_processor", "cover_handler", "id3_tagger"]
     assert loader.list_plugins() == [
         "import",
         "audio_processor",
@@ -287,5 +270,5 @@ def test_engine_diagnostics_required_source_has_no_local_root_or_discovery_boots
     assert "_builtin_plugins_root" not in source
     assert "_user_plugins_root" not in source
     assert "_resolve_plugin_via_loader" not in source
-    assert "_ContractPluginLoader" in source
     assert "resolve_import_plugin(plugin_name=plugin_name)" in source
+    assert "_ensure_required_process_plugins(loader=loader)" in source

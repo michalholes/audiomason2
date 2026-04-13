@@ -321,49 +321,57 @@ def test_metadata_boundary_routes_phase1_validation_via_explicit_job_boundary(
     monkeypatch,
 ) -> None:
     boundary = __import__("plugins.import.metadata_boundary", fromlist=["validate_author_title"])
-    plugin = _FakeOpenLibrary(
-        docs=[
-            {
-                "author_name": ["J. K. Rowling"],
+    docs = [
+        {
+            "author_name": ["J. K. Rowling"],
+            "title": "Harry Potter and the Philosopher's Stone",
+        }
+    ]
+    googlebooks_items = [
+        {
+            "id": "gb1",
+            "volumeInfo": {
                 "title": "Harry Potter and the Philosopher's Stone",
-            }
-        ],
-        googlebooks_items=[
-            {
-                "id": "gb1",
-                "volumeInfo": {
-                    "title": "Harry Potter and the Philosopher's Stone",
-                    "authors": ["J. K. Rowling"],
-                },
-            }
-        ],
-    )
+                "authors": ["J. K. Rowling"],
+            },
+        }
+    ]
     seen: dict[str, object] = {}
+    urls: list[str] = []
+    googlebooks_queries: list[tuple[str, int]] = []
 
-    async def _execute_job(job: dict[str, Any]) -> dict[str, Any]:
+    async def _api_request(self, url: str) -> dict[str, Any]:
+        urls.append(url)
+        return {"docs": docs}
+
+    async def _googlebooks_request(self, *, query: str, limit: int) -> dict[str, Any]:
+        googlebooks_queries.append((query, limit))
+        return {"items": googlebooks_items}
+
+    async def _execute_job(self, job: dict[str, Any]) -> dict[str, Any]:
         seen["job"] = dict(job)
         request = dict(job.get("request") or {})
-        return await OpenLibraryPlugin._execute_request(plugin, request)
+        return await OpenLibraryPlugin._execute_request(self, request)
 
-    async def _private_execute_job(_job: dict[str, Any]) -> dict[str, Any]:
+    async def _private_execute_job(self, _job: dict[str, Any]) -> dict[str, Any]:
         raise AssertionError("metadata boundary must not call private provider runner")
 
-    plugin.execute_job = _execute_job  # type: ignore[assignment]
-    plugin._execute_job = _private_execute_job  # type: ignore[assignment]
-
-    def _resolve_import_plugin(*, plugin_name: str) -> OpenLibraryPlugin:
-        seen["plugin_name"] = plugin_name
-        return plugin
-
-    monkeypatch.setattr(boundary, "resolve_import_plugin", _resolve_import_plugin)
     boundary.validate_author_title.cache_clear()
+    _builder, plugin = boundary._resolve_phase1_validation_authority()
+    monkeypatch.setattr(plugin, "_api_request", _api_request.__get__(plugin, type(plugin)))
+    monkeypatch.setattr(
+        plugin,
+        "_googlebooks_request",
+        _googlebooks_request.__get__(plugin, type(plugin)),
+    )
+    monkeypatch.setattr(plugin, "execute_job", _execute_job.__get__(plugin, type(plugin)))
+    monkeypatch.setattr(plugin, "_execute_job", _private_execute_job.__get__(plugin, type(plugin)))
 
     author_result, book_result = boundary.validate_author_title(
         "J. K. Roling",
         "Harry Potter and the Philosopher Stone",
     )
 
-    assert seen["plugin_name"] == "metadata_openlibrary"
     assert isinstance(seen["job"], dict)
     assert seen["job"]["request"]["operation"] == "phase1_validate"
     assert author_result == {
@@ -381,18 +389,18 @@ def test_metadata_boundary_routes_phase1_validation_via_explicit_job_boundary(
     }
 
 
-def test_metadata_boundary_source_removes_local_loader_and_private_runner_bridge() -> None:
+def test_metadata_boundary_source_uses_registry_callable_authority_only() -> None:
     source = Path("plugins/import/metadata_boundary.py").read_text(encoding="utf-8")
 
-    assert "PluginLoader" not in source
-    assert "PluginRegistry" not in source
-    assert "ConfigService" not in source
-    assert "_builtin_plugins_root" not in source
-    assert "_user_plugins_root" not in source
-    assert "_apply_phase1_metadata_config" not in source
-    assert 'resolve_import_plugin(plugin_name="metadata_openlibrary")' in source
-    assert 'getattr(plugin, "execute_job", None)' in source
+    assert 'resolve_import_plugin(plugin_name="metadata_openlibrary")' not in source
+    assert 'getattr(plugin, "build_phase1_validation_job", None)' not in source
+    assert 'getattr(plugin, "execute_job", None)' not in source
     assert 'getattr(plugin, "_execute_job", None)' not in source
+    assert "asyncio.run" not in source
+    assert "threading.Thread" not in source
+    assert '"metadata.phase1_validate"' in source
+    assert "resolve_wizard_callable(" in source
+    assert "resolve_registered_wizard_callable(" in source
 
 
 def test_metadata_openlibrary_manifest_points_to_provider_owned_callable_contract() -> None:
