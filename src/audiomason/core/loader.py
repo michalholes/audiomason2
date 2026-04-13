@@ -142,11 +142,14 @@ class PluginLoader:
 
         # Registry enforcement
         if self._registry is not None and not self._registry.is_enabled(manifest.name):
-            self._registry.unregister_callable_manifest(manifest.name)
+            self._registry._discard_published_wizard_callables(manifest.name)
             raise PluginError(f"Plugin is disabled: {manifest.name}")
 
         if self._registry is not None:
-            self._registry.register_callable_manifest(plugin_dir=plugin_dir, manifest=manifest)
+            self._registry._publish_wizard_callable_manifest(
+                plugin_dir=plugin_dir,
+                manifest=manifest,
+            )
 
         # Plugin config default normalization (host config)
         if (

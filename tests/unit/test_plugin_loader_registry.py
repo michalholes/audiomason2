@@ -63,6 +63,16 @@ def test_loader_respects_plugin_registry(tmp_path: Path) -> None:
         loader.load_plugin(example_dir, validate=False)
 
 
+def test_public_wizard_callable_authority_surface_has_single_entrypoint() -> None:
+    public_methods = sorted(
+        name
+        for name, value in PluginRegistry.__dict__.items()
+        if "wizard_callable" in name and callable(value) and not name.startswith("_")
+    )
+
+    assert public_methods == ["resolve_wizard_callable"]
+
+
 def test_load_manifest_only_does_not_publish_disabled_callable_plugin(tmp_path: Path) -> None:
     plugins_dir = tmp_path / "plugins"
     plugin_dir = _write_demo_callable_plugin(plugins_dir)
@@ -74,9 +84,8 @@ def test_load_manifest_only_does_not_publish_disabled_callable_plugin(tmp_path: 
     manifest = loader.load_manifest_only(plugin_dir)
 
     assert manifest.name == "demo_plugin"
-    assert reg.list_wizard_callables() == []
     with pytest.raises(PluginNotFoundError):
-        reg.resolve_wizard_callable("demo.op")
+        reg.resolve_wizard_callable("demo.op", loader=loader)
 
 
 def test_load_plugin_disabled_does_not_leak_callable_authority(tmp_path: Path) -> None:
@@ -90,12 +99,11 @@ def test_load_plugin_disabled_does_not_leak_callable_authority(tmp_path: Path) -
     with pytest.raises(PluginError, match="Plugin is disabled: demo_plugin"):
         loader.load_plugin(plugin_dir, validate=False)
 
-    assert reg.list_wizard_callables() == []
     with pytest.raises(PluginNotFoundError):
-        reg.resolve_wizard_callable("demo.op")
+        reg.resolve_wizard_callable("demo.op", loader=loader)
 
 
-def test_discover_wizard_callable_skips_disabled_plugin(tmp_path: Path) -> None:
+def test_resolve_wizard_callable_skips_disabled_plugin(tmp_path: Path) -> None:
     plugins_dir = tmp_path / "plugins"
     _write_demo_callable_plugin(plugins_dir)
     cfg = ConfigService(user_config_path=tmp_path / "config.yaml")
@@ -104,9 +112,7 @@ def test_discover_wizard_callable_skips_disabled_plugin(tmp_path: Path) -> None:
     loader = PluginLoader(builtin_plugins_dir=plugins_dir, registry=reg)
 
     with pytest.raises(PluginNotFoundError):
-        reg.discover_wizard_callable(loader=loader, operation_id="demo.op")
-
-    assert reg.list_wizard_callables() == []
+        reg.resolve_wizard_callable("demo.op", loader=loader)
 
 
 def test_resolve_wizard_callable_rejects_plugin_disabled_after_publish(tmp_path: Path) -> None:
@@ -116,11 +122,10 @@ def test_resolve_wizard_callable_rejects_plugin_disabled_after_publish(tmp_path:
     reg = PluginRegistry(cfg)
     loader = PluginLoader(builtin_plugins_dir=plugins_dir, registry=reg)
 
-    resolved = reg.discover_wizard_callable(loader=loader, operation_id="demo.op")
+    resolved = reg.resolve_wizard_callable("demo.op", loader=loader)
 
     assert resolved.plugin_id == "demo_plugin"
     reg.set_enabled("demo_plugin", enabled=False)
 
     with pytest.raises(PluginNotFoundError):
         reg.resolve_wizard_callable("demo.op")
-    assert reg.list_wizard_callables() == []
