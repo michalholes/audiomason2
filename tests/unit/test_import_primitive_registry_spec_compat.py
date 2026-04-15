@@ -19,7 +19,7 @@ def _minimal_registry() -> dict[str, object]:
         "registry_version": 1,
         "primitives": [
             {
-                "primitive_id": "import.phase1_runtime",
+                "primitive_id": "ui.message",
                 "version": 1,
                 "phase": 1,
                 "inputs_schema": {
@@ -44,7 +44,7 @@ def test_registry_accepts_minimal_spec_entry_without_determinism_notes() -> None
     out = validate_primitive_registry(registry)
 
     assert out["registry_version"] == 1
-    assert out["primitives"][0]["primitive_id"] == "import.phase1_runtime"
+    assert out["primitives"][0]["primitive_id"] == "ui.message"
     assert "determinism_notes" not in out["primitives"][0]
 
 

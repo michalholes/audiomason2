@@ -36,7 +36,6 @@ BASELINE_IDS = {
     ("io.list", 1),
     ("io.stat", 1),
     ("io.read_meta", 1),
-    ("import.phase1_runtime", 1),
     ("job.emit", 1),
     ("job.submit", 1),
     ("parallel.map", 1),

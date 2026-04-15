@@ -1,4 +1,4 @@
-"""Issue 149: minimal v3 runtime flow for import.phase1_runtime."""
+"""Issue 149: minimal v3 runtime flow stays on primitive baseline only."""
 
 from __future__ import annotations
 
@@ -22,13 +22,13 @@ MINIMAL_V3 = {
         {
             "step_id": "phase1_runtime_defaults",
             "op": {
-                "primitive_id": "import.phase1_runtime",
+                "primitive_id": "data.set",
                 "primitive_version": 1,
-                "inputs": {},
+                "inputs": {"value": {"author": "", "title": "", "parallelism": {"workers": 1}}},
                 "writes": [
                     {
                         "to_path": "$.state.vars.phase1.runtime",
-                        "value": {"expr": "$.op.outputs.snapshot"},
+                        "value": {"expr": "$.op.outputs.value"},
                     }
                 ],
             },
@@ -81,7 +81,7 @@ def _make_engine(tmp_path: Path) -> ImportWizardEngine:
     return ImportWizardEngine(resolver=resolver)
 
 
-def test_v3_runtime_runs_phase1_runtime_then_ctrl_stop(tmp_path: Path) -> None:
+def test_v3_runtime_runs_data_set_then_ctrl_stop(tmp_path: Path) -> None:
     engine = _make_engine(tmp_path)
     fs = engine.get_file_service()
     atomic_write_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_REL_PATH, MINIMAL_V3)
@@ -95,15 +95,9 @@ def test_v3_runtime_runs_phase1_runtime_then_ctrl_stop(tmp_path: Path) -> None:
     assert state["inputs"] == {}
     assert [entry["step_id"] for entry in state["trace"]] == ["phase1_runtime_defaults", "stop"]
     assert [entry["result"] for entry in state["trace"]] == ["OK", "OK"]
-    assert state["vars"]["phase1"]["runtime"]["effective_author_title"] == {
-        "author": "",
-        "title": "",
-    }
+    assert state["vars"]["phase1"]["runtime"]["author"] == ""
+    assert state["vars"]["phase1"]["runtime"]["title"] == ""
     assert state["vars"]["phase1"]["runtime"]["parallelism"] == {"workers": 1}
-    assert state["vars"]["phase1"]["runtime"]["skip_processed_books"] == {
-        "mode": "no",
-        "enabled": False,
-    }
 
     blocked = engine.apply_action(state["session_id"], "next")
     assert blocked["error"]["code"] == "INVARIANT_VIOLATION"
@@ -121,6 +115,7 @@ def test_phase1_runtime_uses_registry_dispatch_only() -> None:
     assert "execute_import_phase1_primitive" not in interpreter_text
     assert "_is_phase1_runtime_primitive" not in interpreter_text
     assert "build_runtime_snapshot" not in intake_text
+    assert "import.phase1_runtime" not in interpreter_text
 
 
 def test_phase1_projection_runtime_refreshes_current_answers() -> None:

@@ -148,7 +148,6 @@ def test_import_ui_v3_registry_endpoint_returns_bootstrapped_primitives(tmp_path
     assert all(primitive_ids)
     assert "select_authors" not in primitive_ids
     assert {
-        "import.phase1_runtime",
         "ui.message",
         "ui.prompt_text",
         "ui.prompt_select",
