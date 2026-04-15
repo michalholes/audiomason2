@@ -155,6 +155,7 @@ declare global {
 		session_id?: string;
 		current_step_id?: string;
 		status?: string;
+		phase?: number;
 		answers?: Record<string, AM2JsonValue>;
 		inputs?: Record<string, AM2JsonValue>;
 		effective_model?: AM2ImportEffectiveModel | null;
@@ -800,6 +801,7 @@ declare global {
 		AM2WizardDefinitionEditor: AM2WizardDefinitionEditorApi;
 		AM2UI: AM2UiGlobalApi;
 		AM2ImportWizardV3?: AM2ImportWizardV3Api;
+		AM2ImportWizardV3Helpers?: AM2ImportWizardV3HelpersApi;
 		AM2WDDomIcons: AM2WDDomIconsApi;
 		AM2WDEdgesIntegrity: AM2WDEdgesIntegrityApi;
 		AM2WDStepDetailsLoader: AM2WDStepDetailsLoaderApi;

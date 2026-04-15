@@ -87,6 +87,30 @@
 		return null;
 	}
 
+	/** @param {AM2ImportWizardState | null | undefined} state */
+	function phaseNumber(state) {
+		if (!state || typeof state !== "object") return 0;
+		const phase = state.phase;
+		if (typeof phase === "number" && Number.isFinite(phase)) return phase;
+		if (typeof phase === "string" && /^\d+$/.test(phase)) return Number(phase);
+		return 0;
+	}
+
+	/**
+	 * @param {AM2ImportWizardState | null | undefined} previousState
+	 * @param {AM2ImportWizardState | null | undefined} nextState
+	 * @returns {boolean}
+	 */
+	function shouldAutoStartPhaseBoundary(previousState, nextState) {
+		if (!previousState || !nextState) return false;
+		const previousSessionId = String(previousState.session_id || "");
+		const nextSessionId = String(nextState.session_id || "");
+		if (!previousSessionId || previousSessionId !== nextSessionId) return false;
+		if (String(previousState.status || "") !== "in_progress") return false;
+		if (String(nextState.status || "") !== "in_progress") return false;
+		return phaseNumber(previousState) === 1 && phaseNumber(nextState) === 2;
+	}
+
 	/**
 	 * @param {AM2PromptNode | null | undefined} node
 	 * @param {string} name
@@ -376,6 +400,7 @@
 		extractLocalDraft,
 		resolveSelectionSeed,
 		visibleItemIndices,
+		shouldAutoStartPhaseBoundary,
 		appendHint,
 		renderExamplesList,
 		createInputNode,

@@ -17,7 +17,6 @@
 	 * 	cancelPendingStart: HTMLButtonElement | null,
 	 * 	reload: HTMLButtonElement | null,
 	 * 	submit: HTMLButtonElement | null,
-	 * 	startProcessing: HTMLButtonElement | null,
 	 * 	step: HTMLElement | null,
 	 * }} AM2ImportWizardDOM
 	 */
@@ -234,9 +233,6 @@
 		submit: /** @type {HTMLButtonElement|null} */ (
 			document.getElementById("submit")
 		),
-		startProcessing: /** @type {HTMLButtonElement|null} */ (
-			document.getElementById("startProcessing")
-		),
 		step: document.getElementById("step"),
 	};
 
@@ -247,7 +243,6 @@
 		!ui.start ||
 		!ui.reload ||
 		!ui.submit ||
-		!ui.startProcessing ||
 		!ui.step
 	) {
 		return;
@@ -259,7 +254,6 @@
 	const startButton = ui.start;
 	const reloadButton = ui.reload;
 	const submitButton = ui.submit;
-	const startProcessingButton = ui.startProcessing;
 	const stepMount = ui.step;
 
 	/** @param {unknown} errorLike */
@@ -327,6 +321,11 @@
 
 	const v3Renderer = /** @type {AM2ImportWizardV3Api | null} */ (
 		typeof window !== "undefined" ? window.AM2ImportWizardV3 || null : null
+	);
+	const promptHelpers = /** @type {AM2ImportWizardV3HelpersApi | null} */ (
+		typeof window !== "undefined"
+			? window.AM2ImportWizardV3Helpers || null
+			: null
 	);
 
 	/** @type {string | null} */
@@ -621,6 +620,10 @@
 	 */
 	async function submitStep() {
 		if (!sessionId || !currentStep) return;
+		const previousState =
+			state && typeof state === "object"
+				? /** @type {AM2ImportWizardState} */ (state)
+				: null;
 		const sid = encodeURIComponent(sessionId);
 		const pid = encodeURIComponent(currentStep);
 		const payload = collectPayload(currentStep);
@@ -646,6 +649,12 @@
 			state && typeof state.effective_model === "object"
 				? state.effective_model
 				: null;
+		if (
+			promptHelpers &&
+			promptHelpers.shouldAutoStartPhaseBoundary(previousState, state)
+		) {
+			await startProcessing();
+		}
 	}
 
 	/**
@@ -884,14 +893,6 @@
 		try {
 			await submitStep();
 			await refresh();
-		} catch (e) {
-			setText("status", errorMessage(e));
-		}
-	});
-
-	startProcessingButton.addEventListener("click", async () => {
-		try {
-			await startProcessing();
 		} catch (e) {
 			setText("status", errorMessage(e));
 		}

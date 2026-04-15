@@ -163,6 +163,10 @@ declare global {
 			model: AM2ImportPromptModel,
 			filterText: string | null | undefined,
 		): number[];
+		shouldAutoStartPhaseBoundary(
+			previousState: AM2ImportWizardState | null | undefined,
+			nextState: AM2ImportWizardState | null | undefined,
+		): boolean;
 		appendHint(
 			body: HTMLElement,
 			makeEl: AM2PromptElementFactory,

@@ -187,6 +187,274 @@ process.stdout.write(JSON.stringify(out));
     return json.loads(proc.stdout)
 
 
+def _run_import_wizard_runtime_harness() -> dict[str, Any]:
+    script = """
+const fs = require("fs");
+const vm = require("vm");
+
+class FakeElement {
+  constructor(tagName, id = "") {
+    this.tagName = String(tagName || "div").toUpperCase();
+    this.id = id;
+    this.children = [];
+    this.childNodes = this.children;
+    this.dataset = {};
+    this.attributes = {};
+    this.listeners = {};
+    this.parentNode = null;
+    this.firstChild = null;
+    this.className = "";
+    this.textContent = "";
+    this.value = "";
+    this.checked = false;
+    this.disabled = false;
+    this.classList = { toggle() {} };
+  }
+
+  appendChild(child) {
+    child.parentNode = this;
+    this.children.push(child);
+    this.firstChild = this.children[0] || null;
+    return child;
+  }
+
+  removeChild(child) {
+    const index = this.children.indexOf(child);
+    if (index >= 0) {
+      this.children.splice(index, 1);
+    }
+    this.firstChild = this.children[0] || null;
+    return child;
+  }
+
+  setAttribute(name, value) {
+    const text = String(value);
+    this.attributes[name] = text;
+    if (name === "class") this.className = text;
+    if (name.startsWith("data-")) {
+      const key = name
+        .slice(5)
+        .replace(/-([a-z])/g, (_, ch) => ch.toUpperCase());
+      this.dataset[key] = text;
+    }
+  }
+
+  getAttribute(name) {
+    return Object.prototype.hasOwnProperty.call(this.attributes, name)
+      ? this.attributes[name]
+      : null;
+  }
+
+  addEventListener(type, handler) {
+    if (!this.listeners[type]) this.listeners[type] = [];
+    this.listeners[type].push(handler);
+  }
+
+  querySelectorAll() {
+    return [];
+  }
+
+  async click() {
+    const handlers = this.listeners.click || [];
+    for (const handler of handlers) {
+      await handler({ currentTarget: this, target: this });
+    }
+  }
+}
+
+function response(payload) {
+  return {
+    ok: true,
+    status: 200,
+    statusText: "OK",
+    headers: { get(name) {
+      return String(name).toLowerCase() === "content-type"
+        ? "application/json"
+        : null;
+    } },
+    async text() {
+      return JSON.stringify(payload);
+    },
+  };
+}
+
+const elements = {};
+function addElement(id, tagName, value = "") {
+  const node = new FakeElement(tagName, id);
+  node.value = value;
+  elements[id] = node;
+  return node;
+}
+
+addElement("root", "input", "inbox");
+addElement("path", "input", ".");
+addElement("mode", "select", "stage");
+addElement("start", "button");
+addElement("reload", "button");
+addElement("submit", "button");
+addElement("step", "div");
+addElement("status", "div");
+addElement("state", "pre");
+addElement("stepError", "div");
+
+const calls = [];
+let stateReads = 0;
+
+const promptStep = {
+  step_id: "final_summary_confirm",
+  primitive_id: "ui.prompt_confirm",
+  primitive_version: 1,
+  title: "Final summary",
+};
+const processingStep = {
+  step_id: "processing",
+  title: "Processing",
+};
+
+async function fetchStub(url, opts = {}) {
+  const method = String(opts.method || "GET").toUpperCase();
+  calls.push({
+    method,
+    url,
+    body: typeof opts.body === "string" ? opts.body : null,
+  });
+  if (url === "/import/ui/flow") {
+    return response({ steps: [promptStep, processingStep] });
+  }
+  if (url === "/import/ui/session/start") {
+    return response({ session_id: "sid-1" });
+  }
+  if (url === "/import/ui/session/sid-1/state") {
+    stateReads += 1;
+    if (stateReads === 1) {
+      return response({
+        session_id: "sid-1",
+        status: "in_progress",
+        phase: 1,
+        current_step_id: "final_summary_confirm",
+        effective_model: {
+          flowmodel_kind: "dsl_step_graph_v3",
+          steps: [promptStep],
+        },
+      });
+    }
+    return response({
+      session_id: "sid-1",
+      status: "processing",
+      phase: 2,
+      current_step_id: "processing",
+      effective_model: {
+        flowmodel_kind: "dsl_step_graph_v3",
+        steps: [processingStep],
+      },
+    });
+  }
+  if (url === "/import/ui/session/sid-1/step/final_summary_confirm") {
+    return response({
+      session_id: "sid-1",
+      status: "in_progress",
+      phase: 2,
+      current_step_id: "processing",
+      effective_model: {
+        flowmodel_kind: "dsl_step_graph_v3",
+        steps: [processingStep],
+      },
+    });
+  }
+  if (url === "/import/ui/session/sid-1/start_processing") {
+    return response({ job_ids: ["job-1"] });
+  }
+  throw new Error(`Unexpected request: ${method} ${url}`);
+}
+
+const sandbox = {
+  console,
+  fetch: fetchStub,
+  queueMicrotask,
+  setTimeout,
+  clearTimeout,
+  document: {
+    createElement(tagName) {
+      return new FakeElement(tagName);
+    },
+    getElementById(id) {
+      return Object.prototype.hasOwnProperty.call(elements, id)
+        ? elements[id]
+        : null;
+    },
+    querySelectorAll() {
+      return [];
+    },
+  },
+  window: {
+    AM2ImportWizardV3: {
+      isV3State(state) {
+        return !!(state && state.effective_model);
+      },
+      isPromptStep(step) {
+        return !!step && step.step_id === "final_summary_confirm";
+      },
+      renderCurrentStep() {
+        return true;
+      },
+      collectPayload() {
+        return { confirmed: true };
+      },
+    },
+  },
+  globalThis: {},
+};
+sandbox.globalThis = sandbox;
+sandbox.window.window = sandbox.window;
+sandbox.window.document = sandbox.document;
+sandbox.window.fetch = fetchStub;
+sandbox.window.queueMicrotask = queueMicrotask;
+sandbox.window.setTimeout = setTimeout;
+sandbox.window.clearTimeout = clearTimeout;
+sandbox.window.globalThis = sandbox;
+
+vm.createContext(sandbox);
+const helperSource = fs.readFileSync(
+  "plugins/import/ui/web/assets/import_wizard_v3_helpers.js",
+  "utf8",
+);
+vm.runInContext(helperSource, sandbox, {
+  filename: "import_wizard_v3_helpers.js",
+});
+sandbox.window.AM2ImportWizardV3Helpers =
+  sandbox.AM2ImportWizardV3Helpers || sandbox.window.AM2ImportWizardV3Helpers;
+const source = fs.readFileSync(
+  "plugins/import/ui/web/assets/import_wizard.js",
+  "utf8",
+);
+vm.runInContext(source, sandbox, { filename: "import_wizard.js" });
+
+(async () => {
+  await Promise.resolve();
+  await Promise.resolve();
+  await elements.start.click();
+  await elements.submit.click();
+  process.stdout.write(
+    JSON.stringify({
+      calls,
+      statusText: elements.status.textContent,
+      stepText: elements.step.textContent,
+    }),
+  );
+})().catch((error) => {
+  console.error(error && error.stack ? error.stack : String(error));
+  process.exit(1);
+});
+"""
+    proc = subprocess.run(
+        ["node", "-e", script],
+        text=True,
+        capture_output=True,
+        check=True,
+    )
+    return json.loads(proc.stdout)
+
+
 def test_cli_and_web_share_same_prompt_metadata_projection(tmp_path: Path) -> None:
     engine, resolver = _make_engine(tmp_path)
     fs = engine.get_file_service()
@@ -345,3 +613,34 @@ def test_web_start_processing_posts_canonical_confirm_payload() -> None:
     js = Path("plugins/import/ui/web/assets/import_wizard.js").read_text(encoding="utf-8")
     assert "body: JSON.stringify({ confirm: true })" in js
     assert 'body: "{}"' not in js
+
+
+def test_web_submit_auto_starts_processing_on_phase_boundary() -> None:
+    result = _run_import_wizard_runtime_harness()
+    calls = result["calls"]
+    step_call = next(
+        index
+        for index, call in enumerate(calls)
+        if call["url"].endswith("/step/final_summary_confirm")
+    )
+    start_processing_call = next(
+        index for index, call in enumerate(calls) if call["url"].endswith("/start_processing")
+    )
+    final_state_call = next(
+        index
+        for index, call in enumerate(calls)
+        if index > start_processing_call and call["url"].endswith("/state")
+    )
+
+    assert calls[start_processing_call]["body"] == '{"confirm":true}'
+    assert step_call < start_processing_call < final_state_call
+    assert "Start processing" not in result["statusText"]
+
+
+def test_web_import_ui_has_no_start_processing_cta() -> None:
+    html = Path("plugins/import/ui/web/index.html").read_text(encoding="utf-8")
+    js = Path("plugins/import/ui/web/assets/import_wizard.js").read_text(encoding="utf-8")
+
+    assert 'id="startProcessing"' not in html
+    assert 'document.getElementById("startProcessing")' not in js
+    assert "startProcessingButton" not in js
