@@ -393,25 +393,6 @@ def build_phase1_metadata_projection(
         _explicit_validation_from_state(state)
     )
 
-    if not explicit_validation_present:
-        for book_id in selected_ids:
-            current = dict(validated_books.get(book_id) or {})
-            validation, validated_author, validated_title = _validated_author_title(
-                author=str(current.get("source_author") or _ROOT_AUDIO_AUTHOR),
-                title=str(current.get("source_title") or _ROOT_AUDIO_TITLE),
-            )
-            validated_books[book_id] = {
-                **current,
-                "author_label": validated_author,
-                "book_label": validated_title,
-                "display_label": (
-                    validated_author
-                    if validated_author == validated_title
-                    else f"{validated_author} / {validated_title}"
-                ),
-                "validation": validation,
-            }
-
     if explicit_validation is not None:
         requested_author = _normalize_root_audio_value(
             value=(author_override_raw if author_override_present else source_author),

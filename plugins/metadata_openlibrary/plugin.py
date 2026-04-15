@@ -6,7 +6,7 @@ import asyncio
 import json
 import re
 import unicodedata
-from functools import partial
+from functools import lru_cache, partial
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote_plus
@@ -479,24 +479,43 @@ class OpenLibraryPlugin:
     def _http_get_json(
         *, url: str, timeout_seconds: float, max_response_bytes: int
     ) -> dict[str, Any]:
+        ok, payload = OpenLibraryPlugin._cached_http_result(
+            url=url,
+            timeout_seconds=timeout_seconds,
+            max_response_bytes=max_response_bytes,
+        )
+        if not ok:
+            raise MetadataError(payload)
+        return json.loads(payload)
+
+    @staticmethod
+    @lru_cache(maxsize=256)
+    def _cached_http_result(
+        *, url: str, timeout_seconds: float, max_response_bytes: int
+    ) -> tuple[bool, str]:
         req = Request(url, headers={"User-Agent": "AudioMason2/metadata_openlibrary"})
         try:
             with urlopen(req, timeout=timeout_seconds) as resp:
                 data = resp.read(max_response_bytes + 1)
         except HTTPError as e:
-            raise MetadataError(f"API request failed: HTTP {e.code}") from e
+            return False, f"API request failed: HTTP {e.code}"
         except URLError as e:
-            raise MetadataError(f"API request failed: {e.reason}") from e
-        except TimeoutError as e:
-            raise MetadataError("API request failed: timeout") from e
+            return False, f"API request failed: {e.reason}"
+        except TimeoutError:
+            return False, "API request failed: timeout"
         except Exception as e:
-            raise MetadataError(f"API request failed: {e}") from e
+            return False, f"API request failed: {e}"
         if len(data) > max_response_bytes:
-            raise MetadataError("API request failed: response too large")
+            return False, "API request failed: response too large"
         try:
-            return json.loads(data.decode("utf-8"))
+            text = data.decode("utf-8")
+        except UnicodeDecodeError as e:
+            return False, f"Invalid API response: {e}"
+        try:
+            json.loads(text)
         except json.JSONDecodeError as e:
-            raise MetadataError(f"Invalid API response: {e}") from e
+            return False, f"Invalid API response: {e}"
+        return True, text
 
     @classmethod
     def _get_cover_url(cls, cover_id: int | None) -> str | None:

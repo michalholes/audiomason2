@@ -6,7 +6,9 @@ import asyncio
 import json
 from pathlib import Path
 from typing import Any
+from urllib.error import HTTPError
 
+import pytest
 from plugins.metadata_openlibrary.plugin import OpenLibraryPlugin
 
 
@@ -387,6 +389,49 @@ def test_metadata_boundary_routes_phase1_validation_via_explicit_job_boundary(
             "title": "Harry Potter and the Philosopher's Stone",
         },
     }
+
+
+def test_metadata_boundary_uses_two_second_timeout() -> None:
+    boundary = __import__(
+        "plugins.import.metadata_boundary",
+        fromlist=["_resolve_phase1_validation_authority"],
+    )
+
+    _builder, plugin = boundary._resolve_phase1_validation_authority()
+
+    assert plugin.timeout_seconds == pytest.approx(2.0)
+
+
+def test_openlibrary_http_cache_reuses_rate_limited_result(monkeypatch) -> None:
+    OpenLibraryPlugin._cached_http_result.cache_clear()
+    calls = {"count": 0}
+
+    def _fake_urlopen(_request, timeout):
+        del timeout
+        calls["count"] += 1
+        raise HTTPError(
+            url="https://openlibrary.org/search.json?author=A&limit=20",
+            code=429,
+            msg="Too Many Requests",
+            hdrs=None,
+            fp=None,
+        )
+
+    monkeypatch.setattr("plugins.metadata_openlibrary.plugin.urlopen", _fake_urlopen)
+
+    for _ in range(2):
+        try:
+            OpenLibraryPlugin._http_get_json(
+                url="https://openlibrary.org/search.json?author=A&limit=20",
+                timeout_seconds=2.0,
+                max_response_bytes=1024,
+            )
+        except Exception as exc:
+            assert str(exc) == "API request failed: HTTP 429"
+        else:
+            raise AssertionError("expected cached HTTP 429 failure")
+
+    assert calls["count"] == 1
 
 
 def test_metadata_boundary_source_uses_registry_callable_authority_only() -> None:

@@ -29,6 +29,8 @@ from .detached_runtime import (
 )
 from .file_io_boundary import materialize_root_dir
 
+_METADATA_OPENLIBRARY_TIMEOUT_SECONDS = 2.0
+
 
 def _detached_runtime_from_meta(*, job_meta: dict[str, Any]) -> DetachedImportRuntime | None:
     try:
@@ -201,7 +203,7 @@ def resolve_import_plugin(*, plugin_name: str) -> object:
             2 * 1024 * 1024,
         )
         config = dict(getattr(plugin, "config", {}) or {})
-        config["timeout_seconds"] = 0.1
+        config["timeout_seconds"] = _METADATA_OPENLIBRARY_TIMEOUT_SECONDS
         try:
             config["max_response_bytes"] = int(default_max_bytes)
         except (TypeError, ValueError):
@@ -210,7 +212,7 @@ def resolve_import_plugin(*, plugin_name: str) -> object:
         try:
             tuned_plugin.timeout_seconds = float(config["timeout_seconds"])
         except (TypeError, ValueError):
-            tuned_plugin.timeout_seconds = 0.1
+            tuned_plugin.timeout_seconds = _METADATA_OPENLIBRARY_TIMEOUT_SECONDS
         try:
             tuned_plugin.max_response_bytes = int(config["max_response_bytes"])
         except (TypeError, ValueError):

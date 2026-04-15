@@ -28,6 +28,7 @@ _DEFAULT_RESULT = {
     "author": dict(_DEFAULT_AUTHOR),
     "book": dict(_DEFAULT_BOOK),
 }
+_PHASE1_METADATA_TIMEOUT_SECONDS = 2.0
 
 
 class _Phase1ValidationJobBuilder(Protocol):
@@ -66,7 +67,7 @@ def _tune_metadata_plugin(
 ) -> _MetadataPhase1ValidationPlugin:
     default_max_bytes = getattr(plugin, "DEFAULT_MAX_RESPONSE_BYTES", 2 * 1024 * 1024)
     config = dict(getattr(plugin, "config", {}) or {})
-    config["timeout_seconds"] = 0.1
+    config["timeout_seconds"] = _PHASE1_METADATA_TIMEOUT_SECONDS
     try:
         config["max_response_bytes"] = int(default_max_bytes)
     except (TypeError, ValueError):
@@ -75,7 +76,7 @@ def _tune_metadata_plugin(
     try:
         plugin.timeout_seconds = float(config["timeout_seconds"])
     except (TypeError, ValueError):
-        plugin.timeout_seconds = 0.1
+        plugin.timeout_seconds = _PHASE1_METADATA_TIMEOUT_SECONDS
     try:
         plugin.max_response_bytes = int(config["max_response_bytes"])
     except (TypeError, ValueError):
