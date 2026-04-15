@@ -91,8 +91,11 @@ def test_load_or_bootstrap_can_create_shipped_v3_default(tmp_path: Path) -> None
     )
     assert phase1_node["op"]["primitive_id"] == "data.set"
     assert any(node["step_id"] == "effective_author" for node in out["nodes"])
+    assert any(node["step_id"] == "cover_discover_initial" for node in out["nodes"])
+    assert any(node["step_id"] == "covers_policy_mode" for node in out["nodes"])
     assert any(node["step_id"] == "covers_policy_override_prepare" for node in out["nodes"])
-    assert any(node["step_id"] == "skip_processed_books" for node in out["nodes"])
+    assert any(node["step_id"] == "audio_processing_enabled" for node in out["nodes"])
+    assert not any(node["step_id"] == "skip_processed_books" for node in out["nodes"])
     assert out == expected
 
 

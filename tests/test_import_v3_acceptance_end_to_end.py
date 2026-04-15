@@ -124,7 +124,12 @@ def test_default_v3_cli_acceptance_keeps_selection_and_plan_state(tmp_path: Path
         "filename_policy_author",
         "filename_policy_title",
         "filename_policy",
+        "discover",
+        "stop",
+        "cover_discover_initial",
+        "cover_discover_initial",
         "covers_policy_mode",
+        "covers_policy_override_prepare",
         "covers_policy",
         "id3_policy_intro",
         "id3_policy_title",
@@ -132,13 +137,10 @@ def test_default_v3_cli_acceptance_keeps_selection_and_plan_state(tmp_path: Path
         "id3_policy_album",
         "id3_policy_album_artist",
         "id3_policy",
-        "audio_processing_bitrate",
-        "audio_processing_loudnorm",
-        "audio_processing_split_chapters",
+        "audio_processing_enabled",
         "audio_processing",
         "publish_policy",
         "delete_source_policy",
-        "skip_processed_books",
         "conflict_policy",
         "parallelism",
         "final_summary_confirm",
@@ -157,11 +159,10 @@ def test_default_v3_cli_acceptance_keeps_selection_and_plan_state(tmp_path: Path
         "id3_policy_artist",
         "id3_policy_album",
         "id3_policy_album_artist",
-        "audio_processing_bitrate",
-        "audio_processing_loudnorm",
-        "audio_processing_split_chapters",
         "parallelism",
     ]:
         assert f"Step: {hidden_step}" not in joined
+    assert "Step: covers_policy_mode" in joined
+    assert "Step: audio_processing_enabled" in joined
     assert "job_ids:" in joined
     assert '"batch_size": 1' in joined

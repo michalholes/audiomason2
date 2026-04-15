@@ -1,4 +1,4 @@
-"""Issue 113: deterministic v2/v3 coexistence with the v3 default bootstrap."""
+"""Issue 113: v3 bootstrap remains stable while explicit v2 artifacts now fail closed."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from pathlib import Path
 from audiomason.core.config import ConfigResolver
 
 ImportWizardEngine = import_module("plugins.import.engine").ImportWizardEngine
+FinalizeError = import_module("plugins.import.errors").FinalizeError
 atomic_write_json = import_module("plugins.import.storage").atomic_write_json
 read_json = import_module("plugins.import.storage").read_json
 CANONICAL_STEP_ORDER = import_module("plugins.import.flow_runtime").CANONICAL_STEP_ORDER
@@ -107,12 +108,16 @@ def test_v2_and_v3_sessions_can_coexist_deterministically(tmp_path: Path) -> Non
     fs = engine.get_file_service()
     atomic_write_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_REL_PATH, _v2_definition())
 
-    state_v2 = engine.create_session("inbox", "src")
-    assert state_v2["session_id"] != state_v3["session_id"]
-    assert state_v2["current_step_id"] == "select_authors"
+    try:
+        engine.get_flow_model()
+    except FinalizeError as exc:
+        assert str(exc) == "catalog missing required step definitions"
+    else:
+        raise AssertionError("engine.get_flow_model() must fail closed for explicit v2 artifact")
 
-    state_v2_loaded = engine.get_state(str(state_v2["session_id"]))
-    assert state_v2_loaded["effective_model"].get("flowmodel_kind") != "dsl_step_graph_v3"
+    state_v2 = engine.create_session("inbox", "src")
+    assert state_v2["error"]["code"] == "INVARIANT_VIOLATION"
+    assert state_v2["error"]["message"] == "catalog missing required step definitions"
 
     state_v3_reloaded = engine.get_state(str(state_v3["session_id"]))
     assert state_v3_reloaded["effective_model"]["flowmodel_kind"] == "dsl_step_graph_v3"
@@ -138,9 +143,16 @@ def test_default_selection_policy_is_missing_means_v3_and_explicit_v2_wins(
     fs = engine.get_file_service()
     atomic_write_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_REL_PATH, _v2_definition())
 
+    try:
+        engine.get_flow_model()
+    except FinalizeError as exc:
+        assert str(exc) == "catalog missing required step definitions"
+    else:
+        raise AssertionError("engine.get_flow_model() must fail closed for explicit v2 artifact")
+
     state_explicit_v2 = engine.create_session("inbox", "v2_explicit")
-    loaded_explicit_v2 = engine.get_state(str(state_explicit_v2["session_id"]))
-    assert loaded_explicit_v2["effective_model"].get("flowmodel_kind") != "dsl_step_graph_v3"
+    assert state_explicit_v2["error"]["code"] == "INVARIANT_VIOLATION"
+    assert state_explicit_v2["error"]["message"] == "catalog missing required step definitions"
 
     fs.delete_file(RootName.WIZARDS, WIZARD_DEFINITION_REL_PATH)
 

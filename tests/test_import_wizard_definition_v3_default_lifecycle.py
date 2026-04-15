@@ -1,4 +1,4 @@
-"""Issue 111: v3 bootstrap stays opt-in and existing v2 artifacts still dispatch."""
+"""Issue 111: v3 bootstrap stays opt-in and explicit v2 artifacts now fail closed."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from pathlib import Path
 from audiomason.core.config import ConfigResolver
 
 ImportWizardEngine = import_module("plugins.import.engine").ImportWizardEngine
+FinalizeError = import_module("plugins.import.errors").FinalizeError
 atomic_write_json = import_module("plugins.import.storage").atomic_write_json
 load_or_bootstrap_wizard_definition = import_module(
     "plugins.import.wizard_definition_model"
@@ -89,11 +90,16 @@ def test_existing_v2_artifact_keeps_v2_dispatch_while_v3_bootstrap_stays_availab
     loaded = load_or_bootstrap_wizard_definition(fs, bootstrap_default_version=3)
     assert loaded["version"] == 2
 
-    flow_model = engine.get_flow_model()
-    assert flow_model.get("flowmodel_kind") != "dsl_step_graph_v3"
+    try:
+        engine.get_flow_model()
+    except FinalizeError as exc:
+        assert str(exc) == "catalog missing required step definitions"
+    else:
+        raise AssertionError("engine.get_flow_model() must fail closed for explicit v2 artifact")
 
     state = engine.create_session("inbox", "")
-    assert state.get("current_step_id") == "select_authors"
+    assert state["error"]["code"] == "INVARIANT_VIOLATION"
+    assert state["error"]["message"] == "catalog missing required step definitions"
 
 
 def test_existing_v3_artifact_stays_authoritative_over_bootstrap_seed(tmp_path: Path) -> None:

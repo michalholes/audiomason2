@@ -172,14 +172,15 @@ def test_hidden_steps_remain_explicit_non_prompt_nodes(tmp_path: Path) -> None:
         "id3_policy_artist",
         "id3_policy_album",
         "id3_policy_album_artist",
-        "audio_processing_bitrate",
-        "audio_processing_loudnorm",
-        "audio_processing_split_chapters",
+        "covers_policy_override_prepare",
         "parallelism",
     ]
     for step_id in hidden_steps:
         assert step_id in steps
         assert steps[step_id].get("primitive_id") == "data.set"
+
+    assert steps["covers_policy_mode"].get("primitive_id") == "ui.prompt_select"
+    assert steps["audio_processing_enabled"].get("primitive_id") == "ui.prompt_confirm"
 
 
 def test_hidden_steps_auto_advance_without_extra_submit_calls(tmp_path: Path) -> None:
@@ -219,4 +220,8 @@ def test_hidden_steps_auto_advance_without_extra_submit_calls(tmp_path: Path) ->
         "filename_policy_author",
         "filename_policy_title",
         "filename_policy",
+        "discover",
+        "stop",
+        "cover_discover_initial",
+        "cover_discover_initial",
     ]
