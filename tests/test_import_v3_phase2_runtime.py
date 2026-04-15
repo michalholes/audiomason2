@@ -256,6 +256,98 @@ LOOP_GUARD_PROGRAM = {
 }
 
 
+LOOP_INVOKE_PROGRAM = {
+    "version": 3,
+    "entry_step_id": "seed_items",
+    "libraries": {
+        "tag_item": {
+            "entry_step_id": "lib_tag",
+            "params": [{"name": "item", "required": True}],
+            "returns": {
+                "seen": {"expr": "$.state.vars.loop_subflow.last_seen"},
+                "item": {"expr": "$.inputs.item"},
+            },
+            "nodes": [
+                {
+                    "step_id": "lib_tag",
+                    "op": {
+                        "primitive_id": "data.set",
+                        "primitive_version": 1,
+                        "inputs": {"value": {"expr": "$.inputs.item"}},
+                        "writes": [
+                            {
+                                "to_path": "$.state.vars.loop_subflow.last_seen",
+                                "value": {"expr": "$.op.outputs.value"},
+                            }
+                        ],
+                    },
+                },
+                {
+                    "step_id": "lib_stop",
+                    "op": {
+                        "primitive_id": "ctrl.stop",
+                        "primitive_version": 1,
+                        "inputs": {},
+                        "writes": [],
+                    },
+                },
+            ],
+            "edges": [{"from": "lib_tag", "to": "lib_stop"}],
+        }
+    },
+    "nodes": [
+        {
+            "step_id": "seed_items",
+            "op": {
+                "primitive_id": "data.set",
+                "primitive_version": 1,
+                "inputs": {"value": ["a", "b"]},
+                "writes": [
+                    {
+                        "to_path": "$.state.vars.items",
+                        "value": {"expr": "$.op.outputs.value"},
+                    }
+                ],
+            },
+        },
+        {
+            "step_id": "loop",
+            "op": {
+                "primitive_id": "flow.loop",
+                "primitive_version": 1,
+                "inputs": {
+                    "iterable_expr": {"expr": "$.state.vars.items"},
+                    "item_var": "item",
+                    "max_iterations": 2,
+                    "target_library": "tag_item",
+                    "target_subflow": "tag_item",
+                    "param_bindings": [{"name": "item", "value": {"expr": "$.inputs.item"}}],
+                },
+                "writes": [
+                    {
+                        "to_path": "$.state.vars.loop.results",
+                        "value": {"expr": "$.op.outputs.results"},
+                    }
+                ],
+            },
+        },
+        {
+            "step_id": "stop",
+            "op": {
+                "primitive_id": "ctrl.stop",
+                "primitive_version": 1,
+                "inputs": {},
+                "writes": [],
+            },
+        },
+    ],
+    "edges": [
+        {"from": "seed_items", "to": "loop"},
+        {"from": "loop", "to": "stop"},
+    ],
+}
+
+
 SEED_ITEMS_PROGRAM = {
     "version": 3,
     "entry_step_id": "seed_items",
@@ -390,3 +482,47 @@ def test_loop_guard_fails_when_iterable_exceeds_max_iterations(tmp_path: Path) -
 
     assert out["error"]["code"] == "INVARIANT_VIOLATION"
     assert out["error"]["message"] == "loop_max_iterations_exceeded"
+
+
+def test_loop_can_invoke_subflow_per_iteration_and_collect_results(tmp_path: Path) -> None:
+    engine = _make_engine(tmp_path)
+    fs = engine.get_file_service()
+    atomic_write_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_REL_PATH, LOOP_INVOKE_PROGRAM)
+
+    state = engine.create_session("inbox", "")
+
+    assert state["status"] == "completed"
+    assert state["vars"]["loop_subflow"]["last_seen"] == "b"
+    assert state["vars"]["loop"]["results"] == [
+        {
+            "iteration_index": 0,
+            "item": "a",
+            "subflow": {
+                "target_library": "tag_item",
+                "target_subflow": "tag_item",
+                "param_bindings": {"item": "a"},
+                "returns": {"seen": "a", "item": "a"},
+            },
+        },
+        {
+            "iteration_index": 1,
+            "item": "b",
+            "subflow": {
+                "target_library": "tag_item",
+                "target_subflow": "tag_item",
+                "param_bindings": {"item": "b"},
+                "returns": {"seen": "b", "item": "b"},
+            },
+        },
+    ]
+    assert [entry["step_id"] for entry in state["trace"]] == [
+        "seed_items",
+        "lib_tag",
+        "lib_stop",
+        "loop",
+        "lib_tag",
+        "lib_stop",
+        "loop",
+        "loop",
+        "stop",
+    ]

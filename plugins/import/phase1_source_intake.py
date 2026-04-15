@@ -487,11 +487,14 @@ def build_phase1_projection(
         "skip_processed_books": dict(policy_projection.get("skip_processed_books_policy") or {}),
         "conflict_policy": dict(policy_projection.get("conflict_policy") or {}),
     }
+    conflicts_any = state.get("conflicts")
+    conflicts = dict(conflicts_any) if isinstance(conflicts_any, dict) else {}
     phase1_projection = {
         **source_projection,
         "metadata": metadata_projection,
         "cover": cover_projection,
         "policy": policy_projection,
+        "conflicts_present": bool(conflicts.get("present")) or bool(conflicts.get("items")),
         "effective_author_title": dict(metadata_projection.get("effective_author_title") or {}),
         "filename_policy": dict(metadata_projection.get("filename_policy") or {}),
         "parallelism": dict(policy_projection.get("parallelism") or {}),

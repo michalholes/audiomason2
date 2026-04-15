@@ -25,6 +25,7 @@ def _state_view(state: dict[str, Any]) -> dict[str, Any]:
         "answers": dict(state.get("answers") or {}),
         "vars": dict(state.get("vars") or {}),
         "jobs": dict(state.get("jobs") or {}),
+        "source": dict(state.get("source") or {}),
         "status": state.get("status"),
         "cursor": dict(state.get("cursor") or {}),
     }
@@ -200,6 +201,12 @@ def execute_flow_invoke(
     state["vars"]["subflows"] = subflows
     try:
         state = run_graph(dict(library_any), state, session_id)
+        return_values = resolve_phase2_input_value(
+            dict(library_any.get("returns") or {}),
+            state=state,
+            inputs=bindings,
+            path=f"$.libraries.{library_id}.returns",
+        )
     finally:
         _restore_current_inputs(state, previous_inputs)
         state["status"] = saved_status
@@ -209,6 +216,7 @@ def execute_flow_invoke(
         "target_library": library_id,
         "target_subflow": target_subflow,
         "param_bindings": dict(bindings),
+        "returns": return_values,
     }
 
 
@@ -327,12 +335,53 @@ def execute_phase2_step(
         )
         return state, outputs, dict(state.get("jobs") or {}), False
     if primitive_id == "flow.loop" and primitive_version == 1:
+
+        def _invoke_loop_subflow(
+            current_state: dict[str, Any],
+            parent_step_id: str,
+            invoke_inputs: dict[str, Any],
+            loop_inputs: dict[str, Any],
+        ) -> tuple[dict[str, Any], dict[str, Any]]:
+            raw_inputs = dict(step.get("inputs") or {})
+            raw_bindings_any = raw_inputs.get("param_bindings")
+            resolved_bindings: list[dict[str, Any]] = []
+            if isinstance(raw_bindings_any, list):
+                for index, binding_any in enumerate(raw_bindings_any):
+                    if not isinstance(binding_any, dict):
+                        raise FinalizeError("subflow_binding_invalid")
+                    name = binding_any.get("name")
+                    if not isinstance(name, str) or not name:
+                        raise FinalizeError("subflow_binding_invalid")
+                    resolved_bindings.append(
+                        {
+                            "name": name,
+                            "value": resolve_phase2_input_value(
+                                binding_any.get("value"),
+                                state=current_state,
+                                inputs=loop_inputs,
+                                path=f"$.inputs.param_bindings[{index}].value",
+                            ),
+                        }
+                    )
+            return execute_flow_invoke(
+                effective_model=effective_model,
+                state=current_state,
+                session_id=session_id,
+                step_id=f"{parent_step_id}.invoke",
+                inputs={
+                    **invoke_inputs,
+                    "param_bindings": resolved_bindings,
+                },
+                run_graph=run_graph,
+            )
+
         state, outputs = execute_loop(
             state=state,
             step=step,
             inputs=inputs,
             apply_writes=apply_writes,
             append_trace=append_trace,
+            invoke_subflow=_invoke_loop_subflow,
         )
         return state, outputs, dict(state.get("jobs") or {}), True
     return None

@@ -239,13 +239,13 @@ def start_processing_impl(
                     engine._persist_state(session_id, state)
         phase1_any = state.get("vars", {}).get("phase1")
         phase1 = dict(phase1_any) if isinstance(phase1_any, dict) else {}
-        runtime_any = phase1.get("runtime")
-        runtime = dict(runtime_any) if isinstance(runtime_any, dict) else {}
-        final = runtime.get("final_summary_confirm")
+        answers_any = state.get("answers")
+        answers = dict(answers_any) if isinstance(answers_any, dict) else {}
+        final = answers.get("final_summary_confirm")
         if not (isinstance(final, dict) and final.get("confirm_start") is True):
             return validation_error(
                 message="final_summary_confirm must be submitted with confirm=true",
-                path="$.vars.phase1.runtime.final_summary_confirm.confirm_start",
+                path="$.state.answers.final_summary_confirm.confirm_start",
                 reason="missing_or_false",
                 meta={},
             )

@@ -5,6 +5,7 @@ ASCII-only.
 
 from __future__ import annotations
 
+from copy import deepcopy
 from typing import Any
 
 from ..engine_util import _emit_required, append_trace_event, sync_session_cursor
@@ -39,6 +40,7 @@ def _state_view(state: dict[str, Any]) -> dict[str, Any]:
         "answers": dict(state.get("answers") or {}),
         "vars": dict(state.get("vars") or {}),
         "jobs": dict(state.get("jobs") or {}),
+        "source": dict(state.get("source") or {}),
         "status": state.get("status"),
         "cursor": dict(state.get("cursor") or {}),
     }
@@ -96,6 +98,17 @@ def resolve_inputs(step: dict[str, Any], state: dict[str, Any]) -> dict[str, Any
     out: dict[str, Any] = {}
     for key, value in raw_inputs.items():
         if key in prompt_keys:
+            continue
+        if primitive_id == "call.invoke" and key == "args" and isinstance(value, dict):
+            out[str(key)] = resolve_phase2_input_value(
+                value,
+                state=state,
+                inputs={**current_inputs, **out},
+                path=f"$.inputs.{key}",
+            )
+            continue
+        if primitive_id == "flow.loop" and key == "param_bindings" and isinstance(value, list):
+            out[str(key)] = deepcopy(value)
             continue
         if phase2:
             out[str(key)] = resolve_phase2_input_value(

@@ -16,6 +16,7 @@ from plugins.file_io.service.types import RootName
 from . import discovery as discovery_mod
 from .action_jobs import extract_action_job_requests
 from .defaults import ensure_default_models
+from .detached_runtime import build_detached_runtime_bootstrap
 from .engine_actions_v3 import build_runtime_flow_model, initialize_state
 from .engine_session_guards import validate_root_and_path
 from .engine_util import (
@@ -210,6 +211,14 @@ def _session_diag(ctx: SessionStartContext) -> dict[str, Any]:
     }
 
 
+def _runtime_vars(*, engine: ImportWizardEngine) -> dict[str, Any]:
+    return {
+        "runtime": {
+            "detached_runtime": build_detached_runtime_bootstrap(fs=engine._fs),
+        }
+    }
+
+
 def emit_session_start_diagnostics(*, ctx: SessionStartContext) -> None:
     diag = _session_diag(ctx)
     _emit_required(
@@ -362,7 +371,7 @@ def create_new_session_from_context(
         "cursor": {"step_id": start_step_id},
         "completed_step_ids": [],
         "answers": {},
-        "vars": {},
+        "vars": _runtime_vars(engine=engine),
         "jobs": {"emitted": [], "submitted": []},
         "trace": [],
         "inputs": {},
@@ -387,11 +396,12 @@ def create_new_session_from_context(
 
     if phase1_session_authority_applies(effective_model=ctx.effective_model):
         state["vars"] = {
+            **_runtime_vars(engine=engine),
             "phase1": build_phase1_projection(
                 discovery=ctx.discovery,
                 state=state,
                 fs=engine._fs,
-            )
+            ),
         }
     if (
         isinstance(ctx.effective_model, dict)
@@ -405,6 +415,7 @@ def create_new_session_from_context(
             session_id=ctx.session_id,
         )
         if phase1_session_authority_applies(effective_model=ctx.effective_model):
+            state.setdefault("vars", {}).update(_runtime_vars(engine=engine))
             state.setdefault("vars", {})["phase1"] = build_phase1_projection(
                 discovery=ctx.discovery,
                 state=state,

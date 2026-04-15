@@ -493,7 +493,18 @@ def _validate_fork_join_inputs(
 
 
 def _validate_loop_inputs(inputs: dict[str, Any], *, path: str) -> None:
-    _assert_exact_keys(inputs, allowed={"iterable_expr", "item_var", "max_iterations"}, path=path)
+    _assert_exact_keys(
+        inputs,
+        allowed={
+            "iterable_expr",
+            "item_var",
+            "max_iterations",
+            "target_library",
+            "target_subflow",
+            "param_bindings",
+        },
+        path=path,
+    )
     _validate_expr_ref(inputs.get("iterable_expr"), path=f"{path}.iterable_expr")
     item_var = inputs.get("item_var")
     if not isinstance(item_var, str) or not item_var:
@@ -510,6 +521,85 @@ def _validate_loop_inputs(inputs: dict[str, Any], *, path: str) -> None:
             path=f"{path}.max_iterations",
             reason="missing_or_invalid",
         )
+    target_library = inputs.get("target_library")
+    target_subflow = inputs.get("target_subflow")
+    param_bindings = inputs.get("param_bindings")
+    has_invoke = any(
+        value is not None for value in (target_library, target_subflow, param_bindings)
+    )
+    if not has_invoke:
+        return
+    if (
+        not isinstance(target_library, str)
+        or not target_library
+        or not isinstance(target_subflow, str)
+        or not target_subflow
+    ):
+        _raise(
+            "loop subflow invocation requires target_library and target_subflow",
+            path=path,
+            reason="missing_or_invalid",
+        )
+    _validate_name(target_library, path=f"{path}.target_library")
+    _validate_name(target_subflow, path=f"{path}.target_subflow")
+    if not isinstance(param_bindings, list):
+        _raise(
+            "param_bindings must be a list when loop subflow invocation is configured",
+            path=f"{path}.param_bindings",
+            reason="invalid_type",
+        )
+    for index, binding_any in enumerate(param_bindings):
+        bfx = f"{path}.param_bindings[{index}]"
+        if not isinstance(binding_any, dict):
+            _raise("binding must be an object", path=bfx, reason="invalid_type")
+        binding = dict(binding_any)
+        _assert_exact_keys(binding, allowed={"name", "value"}, path=bfx)
+        name = binding.get("name")
+        if not isinstance(name, str) or not name:
+            _raise(
+                "binding.name must be a non-empty string",
+                path=f"{bfx}.name",
+                reason="missing_or_invalid",
+            )
+        _validate_name(name, path=f"{bfx}.name")
+        _validate_json_like(binding.get("value"), path=f"{bfx}.value")
+
+
+def _validate_call_invoke_inputs(inputs: dict[str, Any], *, path: str) -> None:
+    _assert_exact_keys(
+        inputs,
+        allowed={"operation_id", "execution_mode", "error_mode", "args"},
+        path=path,
+    )
+    operation_id = inputs.get("operation_id")
+    if not isinstance(operation_id, str) or not operation_id:
+        _raise(
+            "operation_id must be a non-empty string",
+            path=f"{path}.operation_id",
+            reason="missing_or_invalid",
+        )
+    _ascii_only(operation_id, path=f"{path}.operation_id")
+    execution_mode = inputs.get("execution_mode")
+    if not isinstance(execution_mode, str) or execution_mode not in {"inline", "job"}:
+        _raise(
+            "execution_mode must be one of: inline, job",
+            path=f"{path}.execution_mode",
+            reason="invalid_enum",
+            meta={"allowed": ["inline", "job"]},
+        )
+    error_mode = inputs.get("error_mode")
+    if error_mode is not None and (
+        not isinstance(error_mode, str) or error_mode not in {"raise", "capture"}
+    ):
+        _raise(
+            "error_mode must be one of: raise, capture",
+            path=f"{path}.error_mode",
+            reason="invalid_enum",
+            meta={"allowed": ["raise", "capture"]},
+        )
+    args_any = inputs.get("args")
+    if not isinstance(args_any, dict):
+        _raise("args must be an object", path=f"{path}.args", reason="invalid_type")
 
 
 def _validate_write(write_any: Any, *, step_id: str, path: str) -> None:
@@ -628,6 +718,8 @@ def _validate_graph(
             _validate_flow_invoke_inputs(inputs_any, libraries=libraries, path=f"{nfx}.op.inputs")
         elif primitive_id == "flow.loop" and primitive_version == 1:
             _validate_loop_inputs(inputs_any, path=f"{nfx}.op.inputs")
+        elif primitive_id == "call.invoke" and primitive_version == 1:
+            _validate_call_invoke_inputs(inputs_any, path=f"{nfx}.op.inputs")
         writes_any = op.get("writes")
         if not isinstance(writes_any, list):
             _raise("writes must be a list", path=f"{nfx}.op.writes", reason="invalid_type")
@@ -696,10 +788,23 @@ def _validated_libraries(wd: dict[str, Any]) -> dict[str, dict[str, Any]]:
         library = dict(library_any)
         _assert_exact_keys(
             library,
-            allowed={"entry_step_id", "nodes", "edges", "params"},
+            allowed={"entry_step_id", "nodes", "edges", "params", "returns"},
             path=path,
         )
         library["params"] = _validate_params(library.get("params"), path=f"{path}.params")
+        returns_any = library.get("returns")
+        if returns_any is not None:
+            if not isinstance(returns_any, dict):
+                _raise("returns must be an object", path=f"{path}.returns", reason="invalid_type")
+            for key, value in returns_any.items():
+                if not isinstance(key, str) or not key:
+                    _raise(
+                        "returns keys must be non-empty strings",
+                        path=f"{path}.returns",
+                        reason="invalid_type",
+                    )
+                _ascii_only(key, path=f"{path}.returns.{key}")
+                _validate_json_like(value, path=f"{path}.returns.{key}")
         libraries[library_id] = library
     return libraries
 

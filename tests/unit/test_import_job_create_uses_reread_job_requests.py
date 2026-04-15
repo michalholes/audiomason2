@@ -77,7 +77,7 @@ def test_start_processing_uses_persisted_idempotency_key(tmp_path: Path, monkeyp
         },
         "inputs": {},
         "vars": {"phase1": {"runtime": {"final_summary_confirm": {"confirm_start": True}}}},
-        "answers": {},
+        "answers": {"final_summary_confirm": {"confirm_start": True}},
         "computed": {},
         "selected_author_ids": [],
         "selected_book_ids": [],

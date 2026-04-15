@@ -63,6 +63,20 @@ PROMPT_METADATA_FLOW = {
             },
         },
         {
+            "step_id": "seed_examples",
+            "op": {
+                "primitive_id": "data.set",
+                "primitive_version": 1,
+                "inputs": {"value": ["Ada", "Bela"]},
+                "writes": [
+                    {
+                        "to_path": "$.state.vars.example_names",
+                        "value": {"expr": "$.op.outputs.value"},
+                    }
+                ],
+            },
+        },
+        {
             "step_id": "ask_name",
             "op": {
                 "primitive_id": "ui.prompt_text",
@@ -71,6 +85,8 @@ PROMPT_METADATA_FLOW = {
                     "label": "Name",
                     "prompt": "Enter the normalized name",
                     "help": "Used by the renderer",
+                    "hint_expr": {"expr": "$.state.vars.seed_name"},
+                    "examples_expr": {"expr": "$.state.vars.example_names"},
                     "default_value": "fallback",
                     "prefill": "literal",
                     "default_expr": {"expr": "$.state.vars.seed_name"},
@@ -97,7 +113,8 @@ PROMPT_METADATA_FLOW = {
     ],
     "edges": [
         {"from": "seed_name", "to": "seed_flag"},
-        {"from": "seed_flag", "to": "ask_name"},
+        {"from": "seed_flag", "to": "seed_examples"},
+        {"from": "seed_examples", "to": "ask_name"},
         {"from": "ask_name", "to": "stop"},
     ],
 }
@@ -151,6 +168,8 @@ def test_flow_model_projects_prompt_ui_and_step_api_normalizes_current_step(
         "label": "Name",
         "prompt": "Enter the normalized name",
         "help": "Used by the renderer",
+        "hint_expr": {"expr": "$.state.vars.seed_name"},
+        "examples_expr": {"expr": "$.state.vars.example_names"},
         "default_value": "fallback",
         "prefill": "literal",
         "default_expr": {"expr": "$.state.vars.seed_name"},
@@ -170,6 +189,8 @@ def test_flow_model_projects_prompt_ui_and_step_api_normalizes_current_step(
         "label": "Name",
         "prompt": "Enter the normalized name",
         "help": "Used by the renderer",
+        "hint": "Ada",
+        "examples": ["Ada", "Bela"],
         "default_value": "Ada",
         "prefill": "Ada",
         "autofill_if": False,
@@ -223,6 +244,7 @@ def test_step_routes_project_active_v3_metadata(tmp_path: Path) -> None:
     assert payload["pinned"] is False
     field_keys = [field["key"] for field in payload["settings_schema"]["fields"]]
     assert "label" in field_keys
+    assert "hint_expr" in field_keys
     assert "default_expr" in field_keys
     assert payload["defaults_template"]["default_value"] == "fallback"
 
@@ -233,7 +255,7 @@ def test_build_step_catalog_projection_uses_only_active_authority() -> None:
         flow_config={"version": 1, "steps": {}, "defaults": {}},
     )
 
-    assert set(projection) == {"seed_name", "seed_flag", "ask_name", "stop"}
+    assert set(projection) == {"seed_name", "seed_flag", "seed_examples", "ask_name", "stop"}
     assert "parallelism" not in projection
     assert projection["ask_name"]["displayName"] == "Name"
 

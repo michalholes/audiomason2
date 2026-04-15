@@ -133,4 +133,5 @@ def test_parallel_map_non_conflicting_writes_apply_without_blanket_invariant(
 
     assert state["status"] == "completed"
     assert state.get("error") is None
-    assert state["vars"] == {"first": 1, "second": 2}
+    assert state["vars"]["first"] == 1
+    assert state["vars"]["second"] == 2

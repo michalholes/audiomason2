@@ -49,6 +49,172 @@ def _candidate_entries(
     )
 
 
+def _sanitize_candidates(result_any: Any) -> list[dict[str, str]] | None:
+    if not isinstance(result_any, list):
+        return None
+    out: list[dict[str, str]] = []
+    for item in result_any:
+        if isinstance(item, dict):
+            out.append({str(key): str(value) for key, value in item.items()})
+    return out
+
+
+def _sanitize_candidates_by_source(result_any: Any) -> dict[str, list[dict[str, str]]] | None:
+    if not isinstance(result_any, dict):
+        return None
+    out: dict[str, list[dict[str, str]]] = {}
+    for key, value in result_any.items():
+        source_relative_path = str(key or "")
+        if not source_relative_path:
+            continue
+        candidates = _sanitize_candidates(value)
+        if candidates is None:
+            continue
+        out[source_relative_path] = candidates
+    return out
+
+
+def _sanitize_error_dict(error_any: Any) -> dict[str, Any] | None:
+    if not isinstance(error_any, dict):
+        return None
+    out: dict[str, Any] = {}
+    for key, value in error_any.items():
+        out[str(key)] = value
+    return out
+
+
+def _explicit_cover_entries_from_loop_results(result_any: Any) -> list[dict[str, Any]] | None:
+    if not isinstance(result_any, list):
+        return None
+    entries: list[dict[str, Any]] = []
+    for item in result_any:
+        if not isinstance(item, dict):
+            continue
+        subflow_any = item.get("subflow")
+        subflow = dict(subflow_any) if isinstance(subflow_any, dict) else {}
+        returns_any = subflow.get("returns")
+        returns = dict(returns_any) if isinstance(returns_any, dict) else {}
+        source_relative_path = str(
+            returns.get("source_relative_path") or item.get("item") or ""
+        ).strip()
+        if not source_relative_path:
+            continue
+        candidates = _sanitize_candidates(returns.get("result")) or []
+        entries.append(
+            {
+                "source_relative_path": source_relative_path,
+                "candidates": candidates,
+                "error": _sanitize_error_dict(returns.get("error")),
+            }
+        )
+    return entries or None
+
+
+def _explicit_cover_candidates_from_state(
+    *,
+    selected_paths: list[str],
+    state: dict[str, Any],
+) -> list[dict[str, Any]] | None:
+    answer = _answer_dict(state, "cover_discover_initial")
+    result_any = answer.get("result")
+    error_any = answer.get("error")
+    explicit_entries = _explicit_cover_entries_from_loop_results(result_any)
+    if explicit_entries is not None:
+        return [
+            entry
+            for entry in explicit_entries
+            if str(entry.get("source_relative_path") or "") in selected_paths
+        ]
+    if answer and result_any is None and error_any is not None:
+        source_relative_path = str(answer.get("source_relative_path") or "")
+        if source_relative_path and source_relative_path in selected_paths:
+            return [
+                {
+                    "source_relative_path": source_relative_path,
+                    "candidates": [],
+                    "error": _sanitize_error_dict(error_any),
+                }
+            ]
+        if len(selected_paths) == 1:
+            return [
+                {
+                    "source_relative_path": selected_paths[0],
+                    "candidates": [],
+                    "error": _sanitize_error_dict(error_any),
+                }
+            ]
+        return []
+    by_source = _sanitize_candidates_by_source(result_any)
+    if by_source is not None:
+        return [
+            {
+                "source_relative_path": source_relative_path,
+                "candidates": list(candidates),
+                "error": None,
+            }
+            for source_relative_path, candidates in by_source.items()
+            if source_relative_path in selected_paths
+        ]
+    result = _sanitize_candidates(result_any)
+    if result is None:
+        return None
+    if len(selected_paths) == 1:
+        return [
+            {
+                "source_relative_path": selected_paths[0],
+                "candidates": list(result),
+                "error": None,
+            }
+        ]
+    source_relative_path = str(answer.get("source_relative_path") or "")
+    if source_relative_path and source_relative_path in selected_paths:
+        return [
+            {
+                "source_relative_path": source_relative_path,
+                "candidates": list(result),
+                "error": None,
+            }
+        ]
+    return []
+
+
+def _build_cover_summary(
+    *,
+    per_source_candidates: list[dict[str, Any]],
+    error_any: Any,
+) -> str:
+    top_level_error = dict(error_any) if isinstance(error_any, dict) else {}
+    if top_level_error:
+        message = str(
+            top_level_error.get("message")
+            or top_level_error.get("type")
+            or "cover discovery failed"
+        )
+        return f"Cover autodetection failed: {message}"
+    parts: list[str] = []
+    for item in per_source_candidates:
+        if not isinstance(item, dict):
+            continue
+        source_relative_path = str(item.get("source_relative_path") or "")
+        item_error = _sanitize_error_dict(item.get("error"))
+        if item_error:
+            message = str(item_error.get("message") or item_error.get("type") or "failed")
+            parts.append(f"{source_relative_path}: failed ({message})")
+            continue
+        candidates_any = item.get("candidates")
+        candidates = (
+            [dict(candidate) for candidate in candidates_any if isinstance(candidate, dict)]
+            if isinstance(candidates_any, list)
+            else []
+        )
+        if not candidates:
+            parts.append(f"{source_relative_path}: none")
+            continue
+        kinds = ",".join(str(candidate.get("kind") or "") for candidate in candidates)
+        parts.append(f"{source_relative_path}: {len(candidates)} [{kinds}]")
+    return "Cover autodetection: " + "; ".join(parts) if parts else "Cover autodetection: none"
+
+
 def _first_matching_candidate(
     *,
     candidates: list[dict[str, str]],
@@ -160,19 +326,52 @@ def build_phase1_cover_projection(
         str(state.get("source", {}).get("relative_path") or "").replace("\\", "/").strip("/")
     )
     root_name = str(state.get("source", {}).get("root") or "")
-    per_source_candidates = [
-        {
-            "source_relative_path": source_relative_path,
-            "candidates": _candidate_entries(
-                source_relative_path=source_relative_path,
-                source_prefix=source_prefix,
-                root_name=root_name,
-                state=state,
-                fs=fs,
-            ),
+    explicit_candidates = _explicit_cover_candidates_from_state(
+        selected_paths=selected_paths,
+        state=state,
+    )
+    if explicit_candidates is None:
+        per_source_candidates: list[dict[str, Any]] = [
+            {
+                "source_relative_path": source_relative_path,
+                "candidates": _candidate_entries(
+                    source_relative_path=source_relative_path,
+                    source_prefix=source_prefix,
+                    root_name=root_name,
+                    state=state,
+                    fs=fs,
+                ),
+            }
+            for source_relative_path in selected_paths
+        ]
+    else:
+        explicit_by_source = {
+            str(item.get("source_relative_path") or ""): dict(item)
+            for item in explicit_candidates
+            if isinstance(item, dict)
         }
-        for source_relative_path in selected_paths
-    ]
+        per_source_candidates = [
+            {
+                "source_relative_path": source_relative_path,
+                "candidates": (
+                    list(explicit_by_source[source_relative_path].get("candidates") or [])
+                    if source_relative_path in explicit_by_source
+                    else _candidate_entries(
+                        source_relative_path=source_relative_path,
+                        source_prefix=source_prefix,
+                        root_name=root_name,
+                        state=state,
+                        fs=fs,
+                    )
+                ),
+                "error": (
+                    _sanitize_error_dict(explicit_by_source[source_relative_path].get("error"))
+                    if source_relative_path in explicit_by_source
+                    else None
+                ),
+            }
+            for source_relative_path in selected_paths
+        ]
     candidates = [
         dict(candidate)
         for block in per_source_candidates
@@ -185,6 +384,16 @@ def build_phase1_cover_projection(
         per_source_candidates=per_source_candidates,
         answer=answer,
     )
+    discover_answer = _answer_dict(state, "cover_discover_initial")
+    allowed_modes = ["skip", "url"]
+    candidate_kinds = {
+        str(candidate.get("kind") or "") for candidate in candidates if isinstance(candidate, dict)
+    }
+    if "embedded" in candidate_kinds:
+        allowed_modes.insert(0, "embedded")
+    if "file" in candidate_kinds:
+        insert_at = 1 if "embedded" in candidate_kinds else 0
+        allowed_modes.insert(insert_at, "file")
     return {
         "mode": mode,
         "url": url,
@@ -194,4 +403,9 @@ def build_phase1_cover_projection(
         "sources": per_source_candidates,
         "has_single_candidate": len(candidates) == 1,
         "by_source_relative_path": by_source_relative_path,
+        "allowed_modes": allowed_modes,
+        "discovery_summary": _build_cover_summary(
+            per_source_candidates=per_source_candidates,
+            error_any=discover_answer.get("error"),
+        ),
     }

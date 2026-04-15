@@ -80,6 +80,13 @@ PROMPT_RENDERER_METADATA_KEYS: tuple[str, ...] = (
     "hint",
     "examples",
 )
+PROMPT_RENDERER_EXPR_METADATA_KEYS: tuple[str, ...] = (
+    "label_expr",
+    "prompt_expr",
+    "help_expr",
+    "hint_expr",
+    "examples_expr",
+)
 PROMPT_RUNTIME_METADATA_KEYS: tuple[str, ...] = (
     "default_value",
     "prefill",
@@ -89,9 +96,11 @@ PROMPT_RUNTIME_METADATA_KEYS: tuple[str, ...] = (
 )
 PROMPT_METADATA_KEYS: tuple[str, ...] = (
     *PROMPT_RENDERER_METADATA_KEYS,
+    *PROMPT_RENDERER_EXPR_METADATA_KEYS,
     *PROMPT_RUNTIME_METADATA_KEYS,
 )
 _EXPR_METADATA_KEYS: tuple[str, ...] = (
+    *PROMPT_RENDERER_EXPR_METADATA_KEYS,
     "default_expr",
     "prefill_expr",
     "autofill_if",
@@ -148,22 +157,47 @@ def normalize_prompt_ui(
     for key in PROMPT_RENDERER_METADATA_KEYS:
         if key in metadata:
             normalized[key] = deepcopy(metadata[key])
+    for key, target_key in (
+        ("label_expr", "label"),
+        ("prompt_expr", "prompt"),
+        ("help_expr", "help"),
+        ("hint_expr", "hint"),
+        ("examples_expr", "examples"),
+    ):
+        if key not in metadata:
+            continue
+        value = resolve_expr(
+            metadata[key],
+            f"{path_prefix}.{key}",
+            normalized,
+        )
+        if target_key == "examples":
+            if not isinstance(value, list):
+                raise ValueError(f"{primitive_id}@1 {key} must resolve to list")
+        else:
+            if not isinstance(value, str):
+                raise ValueError(f"{primitive_id}@1 {key} must resolve to string")
+        normalized[target_key] = value
     if "default_value" in metadata:
         normalized["default_value"] = deepcopy(metadata["default_value"])
     if "prefill" in metadata:
         normalized["prefill"] = deepcopy(metadata["prefill"])
     if "default_expr" in metadata:
-        normalized["default_value"] = resolve_expr(
+        value = resolve_expr(
             metadata["default_expr"],
             f"{path_prefix}.default_expr",
             normalized,
         )
+        if value is not None:
+            normalized["default_value"] = value
     if "prefill_expr" in metadata:
-        normalized["prefill"] = resolve_expr(
+        value = resolve_expr(
             metadata["prefill_expr"],
             f"{path_prefix}.prefill_expr",
             normalized,
         )
+        if value is not None:
+            normalized["prefill"] = value
     if "autofill_if" in metadata:
         value = resolve_expr(
             metadata["autofill_if"],

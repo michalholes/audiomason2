@@ -22,7 +22,7 @@ class OpenLibraryPlugin:
     COVERS_URL = "https://covers.openlibrary.org/b/id"
     GOOGLE_BOOKS_API_URL = "https://www.googleapis.com/books/v1/volumes"
 
-    DEFAULT_TIMEOUT_SECONDS = 10.0
+    DEFAULT_TIMEOUT_SECONDS = 1.0
     DEFAULT_MAX_RESPONSE_BYTES = 2 * 1024 * 1024
     REQUEST_VERSION = 1
     JOB_VERSION = 1

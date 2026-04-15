@@ -172,6 +172,8 @@ def build_flow_model_v3(*, wizard_definition: dict[str, Any]) -> dict[str, Any]:
             graph = _build_graph_projection(library_any)
             params_any = library_any.get("params")
             graph["params"] = list(params_any) if isinstance(params_any, list) else []
+            returns_any = library_any.get("returns")
+            graph["returns"] = dict(returns_any) if isinstance(returns_any, dict) else {}
             libraries[str(library_id)] = graph
         model["libraries"] = libraries
     return model

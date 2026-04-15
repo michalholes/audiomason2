@@ -13,6 +13,10 @@ from ..errors import FinalizeError
 
 ApplyWrites = Callable[..., dict[str, Any]]
 AppendTrace = Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]]
+InvokeLoopSubflow = Callable[
+    [dict[str, Any], str, dict[str, Any], dict[str, Any]],
+    tuple[dict[str, Any], dict[str, Any]],
+]
 
 
 def _ensure_loop_namespace(state: dict[str, Any]) -> dict[str, Any]:
@@ -31,6 +35,7 @@ def execute_loop(
     inputs: dict[str, Any],
     apply_writes: ApplyWrites,
     append_trace: AppendTrace,
+    invoke_subflow: InvokeLoopSubflow | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     iterable = inputs.get("iterable_expr")
     item_var = str(inputs.get("item_var") or "")
@@ -55,6 +60,19 @@ def execute_loop(
     state = _ensure_loop_namespace(state)
     loops = dict((state.get("vars") or {}).get("loops") or {})
     history: list[dict[str, Any]] = []
+    results: list[dict[str, Any]] = []
+    target_library = inputs.get("target_library")
+    target_subflow = inputs.get("target_subflow")
+    param_bindings_any = inputs.get("param_bindings")
+    invoke_enabled = (
+        isinstance(target_library, str)
+        and bool(target_library)
+        and isinstance(target_subflow, str)
+        and bool(target_subflow)
+        and isinstance(param_bindings_any, list)
+    )
+    if invoke_enabled and invoke_subflow is None:
+        raise FinalizeError("loop_subflow_invoke_missing")
     for iteration_index, item in enumerate(iterable):
         loop_inputs = dict(inputs)
         loop_inputs[item_var] = deepcopy(item)
@@ -67,14 +85,33 @@ def execute_loop(
             "history": deepcopy(history),
         }
         state["vars"]["loops"] = loops
+        iteration_outputs = {
+            "item": deepcopy(item),
+            "iteration_index": iteration_index,
+        }
+        if invoke_enabled:
+            invoke_inputs = {
+                "target_library": target_library,
+                "target_subflow": target_subflow,
+                "param_bindings": deepcopy(param_bindings_any),
+            }
+            if invoke_subflow is None:
+                raise RuntimeError("loop_subflow_invoker_missing")
+            state, subflow_outputs = invoke_subflow(state, step_id, invoke_inputs, loop_inputs)
+            iteration_outputs["subflow"] = deepcopy(subflow_outputs)
+            results.append(
+                {
+                    "iteration_index": iteration_index,
+                    "item": deepcopy(item),
+                    "subflow": deepcopy(subflow_outputs),
+                }
+            )
+        iteration_outputs["results"] = deepcopy(results)
         state = apply_writes(
             state=state,
             step=step,
             inputs=loop_inputs,
-            op_outputs={
-                "item": deepcopy(item),
-                "iteration_index": iteration_index,
-            },
+            op_outputs=iteration_outputs,
         )
         state = append_trace(
             state,
@@ -94,7 +131,11 @@ def execute_loop(
         "history": history,
     }
     state["vars"]["loops"] = loops
-    return state, {"items": list(iterable), "completed_iterations": len(iterable)}
+    return state, {
+        "items": list(iterable),
+        "completed_iterations": len(iterable),
+        "results": results,
+    }
 
 
 __all__ = ["execute_loop"]

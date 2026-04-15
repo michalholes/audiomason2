@@ -60,7 +60,7 @@
 		},
 		{
 			"from": "effective_author",
-			"to": "effective_title"
+			"to": "metadata_validate_after_author"
 		},
 		{
 			"from": "effective_author_title",
@@ -68,6 +68,14 @@
 		},
 		{
 			"from": "effective_title",
+			"to": "metadata_validate_after_title"
+		},
+		{
+			"from": "metadata_validate_after_author",
+			"to": "effective_title"
+		},
+		{
+			"from": "metadata_validate_after_title",
 			"to": "effective_author_title"
 		},
 		{
@@ -84,14 +92,14 @@
 		},
 		{
 			"condition_expr": {
-				"expr": "$.state.answers.final_summary_confirm.confirm_start and not ($.state.answers.conflict_policy.mode == 'ask' and $.state.vars.phase1.runtime.resolve_conflicts_batch.has_conflicts)"
+				"expr": "$.state.answers.final_summary_confirm.confirm_start and not ($.state.answers.conflict_policy.mode == 'ask' and $.state.vars.phase1.conflicts_present)"
 			},
 			"from": "final_summary_confirm",
 			"to": "processing"
 		},
 		{
 			"condition_expr": {
-				"expr": "$.state.answers.final_summary_confirm.confirm_start and $.state.answers.conflict_policy.mode == 'ask' and $.state.vars.phase1.runtime.resolve_conflicts_batch.has_conflicts"
+				"expr": "$.state.answers.final_summary_confirm.confirm_start and $.state.answers.conflict_policy.mode == 'ask' and $.state.vars.phase1.conflicts_present"
 			},
 			"from": "final_summary_confirm",
 			"to": "resolve_conflicts_batch"
@@ -126,6 +134,10 @@
 		},
 		{
 			"from": "phase1_runtime_defaults",
+			"to": "metadata_validate_initial"
+		},
+		{
+			"from": "metadata_validate_initial",
 			"to": "effective_author"
 		},
 		{
@@ -228,30 +240,57 @@
 		{
 			"op": {
 				"inputs": {},
-				"primitive_id": "import.phase1_runtime",
+				"primitive_id": "data.set",
 				"primitive_version": 1,
-				"writes": [
-					{
-						"to_path": "$.state.vars.phase1.runtime",
-						"value": {
-							"expr": "$.op.outputs.snapshot"
-						}
-					}
-				]
+				"writes": []
 			},
 			"step_id": "phase1_runtime_defaults"
 		},
 		{
 			"op": {
 				"inputs": {
+					"args": {
+						"author": {
+							"expr": "$.state.vars.phase1.metadata.source_author"
+						},
+						"title": {
+							"expr": "$.state.vars.phase1.metadata.book_title"
+						}
+					},
+					"error_mode": "capture",
+					"execution_mode": "job",
+					"operation_id": "metadata.phase1_validate"
+				},
+				"primitive_id": "call.invoke",
+				"primitive_version": 1,
+				"writes": [
+					{
+						"to_path": "$.state.answers.metadata_validate_initial.result",
+						"value": {
+							"expr": "$.op.outputs.result"
+						}
+					},
+					{
+						"to_path": "$.state.answers.metadata_validate_initial.error",
+						"value": {
+							"expr": "$.op.outputs.error"
+						}
+					}
+				]
+			},
+			"step_id": "metadata_validate_initial"
+		},
+		{
+			"op": {
+				"inputs": {
 					"default_expr": {
-						"expr": "$.state.vars.phase1.runtime.effective_author_title.author"
+						"expr": "$.state.vars.phase1.metadata.normalize_author"
 					},
 					"examples": ["Gustav Meyrink"],
 					"help": "Press Enter to keep the suggested author.",
 					"label": "Author",
 					"prefill_expr": {
-						"expr": "$.state.vars.phase1.runtime.effective_author_title.author"
+						"expr": "$.state.vars.phase1.metadata.normalize_author"
 					},
 					"prompt": "[source] Author"
 				},
@@ -271,14 +310,48 @@
 		{
 			"op": {
 				"inputs": {
+					"args": {
+						"author": {
+							"expr": "$.state.answers.effective_author.author"
+						},
+						"title": {
+							"expr": "$.state.vars.phase1.metadata.book_title"
+						}
+					},
+					"error_mode": "capture",
+					"execution_mode": "job",
+					"operation_id": "metadata.phase1_validate"
+				},
+				"primitive_id": "call.invoke",
+				"primitive_version": 1,
+				"writes": [
+					{
+						"to_path": "$.state.answers.metadata_validate_after_author.result",
+						"value": {
+							"expr": "$.op.outputs.result"
+						}
+					},
+					{
+						"to_path": "$.state.answers.metadata_validate_after_author.error",
+						"value": {
+							"expr": "$.op.outputs.error"
+						}
+					}
+				]
+			},
+			"step_id": "metadata_validate_after_author"
+		},
+		{
+			"op": {
+				"inputs": {
 					"default_expr": {
-						"expr": "$.state.vars.phase1.runtime.effective_author_title.title"
+						"expr": "$.state.vars.phase1.metadata.normalize_book_title"
 					},
 					"examples": [],
 					"help": "Press Enter to keep the suggested title.",
 					"label": "Book title",
 					"prefill_expr": {
-						"expr": "$.state.vars.phase1.runtime.effective_author_title.title"
+						"expr": "$.state.vars.phase1.metadata.normalize_book_title"
 					},
 					"prompt": "[book] Book title"
 				},
@@ -298,8 +371,42 @@
 		{
 			"op": {
 				"inputs": {
+					"args": {
+						"author": {
+							"expr": "$.state.answers.effective_author.author"
+						},
+						"title": {
+							"expr": "$.state.answers.effective_title.title"
+						}
+					},
+					"error_mode": "capture",
+					"execution_mode": "job",
+					"operation_id": "metadata.phase1_validate"
+				},
+				"primitive_id": "call.invoke",
+				"primitive_version": 1,
+				"writes": [
+					{
+						"to_path": "$.state.answers.metadata_validate_after_title.result",
+						"value": {
+							"expr": "$.op.outputs.result"
+						}
+					},
+					{
+						"to_path": "$.state.answers.metadata_validate_after_title.error",
+						"value": {
+							"expr": "$.op.outputs.error"
+						}
+					}
+				]
+			},
+			"step_id": "metadata_validate_after_title"
+		},
+		{
+			"op": {
+				"inputs": {
 					"value": {
-						"expr": "$.state.vars.phase1.runtime.effective_author_title"
+						"expr": "$.state.vars.phase1.effective_author_title"
 					}
 				},
 				"primitive_id": "data.set",
@@ -331,7 +438,7 @@
 					{
 						"to_path": "$.state.vars.human.filename_policy.author",
 						"value": {
-							"expr": "$.state.vars.phase1.runtime.filename_policy.author"
+							"expr": "$.state.vars.phase1.metadata.filename_policy.author"
 						}
 					}
 				]
@@ -347,7 +454,7 @@
 					{
 						"to_path": "$.state.vars.human.filename_policy.title",
 						"value": {
-							"expr": "$.state.vars.phase1.runtime.filename_policy.title"
+							"expr": "$.state.vars.phase1.metadata.filename_policy.title"
 						}
 					}
 				]
@@ -431,13 +538,13 @@
 			"op": {
 				"inputs": {
 					"default_expr": {
-						"expr": "$.state.vars.phase1.runtime.covers_policy.url"
+						"expr": "$.state.vars.phase1.cover.url"
 					},
 					"examples": ["https://example.com/cover.jpg"],
 					"help": "Leave empty to skip cover override.",
 					"label": "Cover URL or file path",
 					"prefill_expr": {
-						"expr": "$.state.vars.phase1.runtime.covers_policy.url"
+						"expr": "$.state.vars.phase1.cover.url"
 					},
 					"prompt": "Cover URL or file path (Enter=skip)"
 				},
@@ -509,7 +616,7 @@
 					{
 						"to_path": "$.state.vars.human.id3_policy.values.title",
 						"value": {
-							"expr": "$.state.vars.phase1.runtime.id3_policy.values.title"
+							"expr": "$.state.vars.phase1.metadata.values.title"
 						}
 					}
 				]
@@ -525,7 +632,7 @@
 					{
 						"to_path": "$.state.vars.human.id3_policy.values.artist",
 						"value": {
-							"expr": "$.state.vars.phase1.runtime.id3_policy.values.artist"
+							"expr": "$.state.vars.phase1.metadata.values.artist"
 						}
 					}
 				]
@@ -541,7 +648,7 @@
 					{
 						"to_path": "$.state.vars.human.id3_policy.values.album",
 						"value": {
-							"expr": "$.state.vars.phase1.runtime.id3_policy.values.album"
+							"expr": "$.state.vars.phase1.metadata.values.album"
 						}
 					}
 				]
@@ -557,7 +664,7 @@
 					{
 						"to_path": "$.state.vars.human.id3_policy.values.album_artist",
 						"value": {
-							"expr": "$.state.vars.phase1.runtime.id3_policy.values.album_artist"
+							"expr": "$.state.vars.phase1.metadata.values.album_artist"
 						}
 					}
 				]
@@ -607,7 +714,7 @@
 					{
 						"to_path": "$.state.vars.human.audio_processing.bitrate",
 						"value": {
-							"expr": "$.state.vars.phase1.runtime.audio_processing.bitrate"
+							"expr": "$.state.vars.phase1.policy.audio_processing.bitrate"
 						}
 					}
 				]
@@ -623,7 +730,7 @@
 					{
 						"to_path": "$.state.vars.human.audio_processing.loudnorm",
 						"value": {
-							"expr": "$.state.vars.phase1.runtime.audio_processing.loudnorm"
+							"expr": "$.state.vars.phase1.policy.audio_processing.loudnorm"
 						}
 					}
 				]
@@ -639,7 +746,7 @@
 					{
 						"to_path": "$.state.vars.human.audio_processing.split_chapters",
 						"value": {
-							"expr": "$.state.vars.phase1.runtime.audio_processing.split_chapters"
+							"expr": "$.state.vars.phase1.policy.audio_processing.split_chapters"
 						}
 					}
 				]
@@ -677,13 +784,13 @@
 			"op": {
 				"inputs": {
 					"default_expr": {
-						"expr": "$.state.vars.phase1.runtime.publish_policy.target_root"
+						"expr": "$.state.vars.phase1.policy.publish_policy.target_root"
 					},
 					"examples": ["stage", "outbox"],
 					"help": "Enter stage or outbox. Press Enter to keep the suggested publish target.",
 					"label": "Publish target",
 					"prefill_expr": {
-						"expr": "$.state.vars.phase1.runtime.publish_policy.target_root"
+						"expr": "$.state.vars.phase1.policy.publish_policy.target_root"
 					},
 					"prompt": "Where should the processed files be published?"
 				},
@@ -704,13 +811,13 @@
 			"op": {
 				"inputs": {
 					"default_expr": {
-						"expr": "$.state.vars.phase1.runtime.delete_source_policy.clean_inbox"
+						"expr": "$.state.vars.phase1.policy.delete_source_policy.clean_inbox"
 					},
 					"examples": ["ask", "yes", "no"],
 					"help": "Enter ask, yes, or no.",
 					"label": "Clean inbox",
 					"prefill_expr": {
-						"expr": "$.state.vars.phase1.runtime.delete_source_policy.clean_inbox"
+						"expr": "$.state.vars.phase1.policy.delete_source_policy.clean_inbox"
 					},
 					"prompt": "Clean inbox after successful import?"
 				},
@@ -731,13 +838,13 @@
 			"op": {
 				"inputs": {
 					"default_expr": {
-						"expr": "$.state.vars.phase1.runtime.skip_processed_books.mode"
+						"expr": "$.state.vars.phase1.policy.skip_processed_books_policy.mode"
 					},
 					"examples": ["yes", "no"],
 					"help": "Enter yes to skip books that were already processed successfully.",
 					"label": "Skip processed books",
 					"prefill_expr": {
-						"expr": "$.state.vars.phase1.runtime.skip_processed_books.mode"
+						"expr": "$.state.vars.phase1.policy.skip_processed_books_policy.mode"
 					},
 					"prompt": "Skip books already processed successfully?"
 				},
@@ -758,13 +865,13 @@
 			"op": {
 				"inputs": {
 					"default_expr": {
-						"expr": "$.state.vars.phase1.runtime.conflict_policy.mode"
+						"expr": "$.state.vars.phase1.policy.conflict_policy.mode"
 					},
 					"examples": ["ask", "skip", "overwrite"],
 					"help": "Choose ask, skip, or overwrite for destination conflicts.",
 					"label": "File conflicts",
 					"prefill_expr": {
-						"expr": "$.state.vars.phase1.runtime.conflict_policy.mode"
+						"expr": "$.state.vars.phase1.policy.conflict_policy.mode"
 					},
 					"prompt": "How should existing destination files be handled?"
 				},
@@ -791,7 +898,7 @@
 					{
 						"to_path": "$.state.answers.parallelism.workers",
 						"value": {
-							"expr": "$.state.vars.phase1.runtime.parallelism.workers"
+							"expr": "$.state.vars.phase1.policy.parallelism.workers"
 						}
 					}
 				]

@@ -125,20 +125,29 @@ def test_wizard_definition_history_is_bounded_and_ordered(tmp_path: Path) -> Non
     assert base.get("version") == 3
     nodes_any = base.get("nodes")
     assert isinstance(nodes_any, list)
-    assert len(nodes_any) >= 7
+    help_editable_indices = [
+        index
+        for index, node_any in enumerate(nodes_any)
+        if isinstance(node_any, dict)
+        and isinstance(node_any.get("op"), dict)
+        and isinstance(node_any["op"].get("inputs"), dict)
+        and "help" in node_any["op"]["inputs"]
+    ]
+    assert len(help_editable_indices) >= 6
 
     # Generate valid variants by changing prompt help on distinct nodes.
     defs: list[dict] = []
     for i in range(6):
         d = dict(base)
         nodes: list[dict] = []
+        target_index = help_editable_indices[i]
         for index, node_any in enumerate(nodes_any):
             node = dict(node_any) if isinstance(node_any, dict) else {}
             op_any = node.get("op")
             op = dict(op_any) if isinstance(op_any, dict) else {}
             inputs_any = op.get("inputs")
             inputs = dict(inputs_any) if isinstance(inputs_any, dict) else {}
-            if index == i:
+            if index == target_index:
                 help_text = str(inputs.get("help") or "")
                 inputs["help"] = f"{help_text} history marker {i + 1}".strip()
             op["inputs"] = inputs

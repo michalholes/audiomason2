@@ -8,6 +8,7 @@ from __future__ import annotations
 from typing import Any
 
 from . import (
+    call_v1,
     control_v1,
     data_v1,
     fork_join_v1,
@@ -23,6 +24,7 @@ from . import (
 _REGISTRY_ENTRIES: list[dict[str, Any]] = sorted(
     [
         *ui_v1.REGISTRY_ENTRIES,
+        *call_v1.REGISTRY_ENTRIES,
         *control_v1.REGISTRY_ENTRIES,
         *data_v1.REGISTRY_ENTRIES,
         *io_v1.REGISTRY_ENTRIES,
@@ -39,6 +41,7 @@ _REGISTRY_ENTRIES: list[dict[str, Any]] = sorted(
 
 NON_INTERACTIVE_IDS: set[str] = {
     "ui.message",
+    "call.invoke",
     "ctrl.if",
     "ctrl.switch",
     "ctrl.guard",
@@ -104,6 +107,8 @@ def execute_non_prompt(
 
     if primitive_id == "ui.message":
         return ui_v1.execute_non_prompt(primitive_id, primitive_version, inputs), jobs
+    if primitive_id == "call.invoke":
+        return call_v1.execute(primitive_id, primitive_version, inputs, state), jobs
     if primitive_id.startswith("ctrl."):
         return control_v1.execute(primitive_id, primitive_version, inputs), jobs
     if primitive_id.startswith("data."):

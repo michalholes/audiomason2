@@ -496,19 +496,19 @@ def _collect_v3_prompt_payload(
     seed_defined = "prefill" in metadata or "default_value" in metadata
 
     if label:
-        print_fn(f"Label: {label}")
+        print_fn(label)
     if prompt:
-        print_fn(f"Prompt: {prompt}")
+        print_fn(prompt)
     if help_text:
-        print_fn(f"Help: {help_text}")
+        print_fn(help_text)
     if hint:
-        print_fn(f"Hint: {hint}")
+        print_fn(f"Note: {hint}")
     if isinstance(examples, list) and examples:
         print_fn("Examples:")
         for example in examples:
             print_fn(f"  - {_stringify_prompt_value(example)}")
     if seed_defined:
-        print_fn(f"Prefill: {_stringify_prompt_value(seed)}")
+        print_fn(f"Suggested: {_stringify_prompt_value(seed)}")
     if primitive_id == "ui.prompt_select":
         _display_prompt_select_items(metadata, print_fn=print_fn)
 
@@ -545,6 +545,8 @@ def _collect_v3_prompt_payload(
     nav_result = _handle_inline_nav(raw)
     if nav_result is not None:
         return nav_result
+    if raw == "" and primitive_id == "ui.prompt_text" and not seed_defined:
+        return {"value": None}, None
     value = seed if raw == "" and confirm_defaults and seed_defined else _parse_prompt_value(raw)
     key = "value" if primitive_id == "ui.prompt_text" else "selection"
     return {key: value}, None

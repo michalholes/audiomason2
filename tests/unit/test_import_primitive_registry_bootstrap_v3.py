@@ -18,6 +18,7 @@ save_primitive_registry = import_module(
 
 BASELINE_IDS = {
     ("ui.message", 1),
+    ("call.invoke", 1),
     ("ui.prompt_text", 1),
     ("ui.prompt_select", 1),
     ("ui.prompt_confirm", 1),

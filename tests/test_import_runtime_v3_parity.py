@@ -208,11 +208,11 @@ def test_cli_and_web_share_same_prompt_metadata_projection(tmp_path: Path) -> No
 
     assert rc == 0
     joined = "\n".join(printed)
-    assert f"Label: {model['label']}" in joined
-    assert f"Prompt: {model['prompt']}" in joined
-    assert f"Help: {model['help']}" in joined
-    assert f"Hint: {model['hint']}" in joined
-    assert f"Prefill: {model['prefill']}" in joined
+    assert model["label"] in joined
+    assert model["prompt"] in joined
+    assert model["help"] in joined
+    assert f"Note: {model['hint']}" in joined
+    assert f"Suggested: {model['prefill']}" in joined
 
 
 def test_autofill_path_is_backend_driven_for_cli_and_web(tmp_path: Path) -> None:
@@ -242,7 +242,8 @@ def test_autofill_path_is_backend_driven_for_cli_and_web(tmp_path: Path) -> None
     assert rc == 0
     joined = "\n".join(printed)
     assert '"status": "completed"' in joined
-    assert "Prompt: Enter the final display name" not in joined
+    assert "Suggested:" not in joined
+    assert "(Enter=default)" not in joined
 
 
 def _write_selection_tree(tmp_path: Path) -> None:

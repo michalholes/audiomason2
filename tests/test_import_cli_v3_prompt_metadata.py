@@ -54,6 +54,41 @@ PROMPT_FLOW = {
     "edges": [{"from": "ask_name", "to": "stop"}],
 }
 
+PROMPT_FLOW_NO_DEFAULT = {
+    "version": 3,
+    "entry_step_id": "ask_name",
+    "nodes": [
+        {
+            "step_id": "ask_name",
+            "op": {
+                "primitive_id": "ui.prompt_text",
+                "primitive_version": 1,
+                "inputs": {
+                    "label": "Display name",
+                    "prompt": "Enter an optional display name",
+                    "help": "Blank Enter should keep the value unset",
+                },
+                "writes": [
+                    {
+                        "to_path": "$.state.answers.ask_name.value",
+                        "value": {"expr": "$.op.outputs.value"},
+                    }
+                ],
+            },
+        },
+        {
+            "step_id": "stop",
+            "op": {
+                "primitive_id": "ctrl.stop",
+                "primitive_version": 1,
+                "inputs": {},
+                "writes": [],
+            },
+        },
+    ],
+    "edges": [{"from": "ask_name", "to": "stop"}],
+}
+
 
 def _make_engine(tmp_path: Path) -> tuple[ImportWizardEngine, ConfigResolver]:
     roots = {
@@ -113,12 +148,12 @@ def test_cli_renderer_renders_v3_prompt_metadata_and_accepts_prefill(tmp_path: P
 
     assert rc == 0
     joined = "\n".join(printed)
-    assert "Label: Display name" in joined
-    assert "Prompt: Enter the final display name" in joined
-    assert "Help: CLI and Web must render the same metadata" in joined
-    assert "Hint: Press Enter to accept the backend prefill" in joined
+    assert "Display name" in joined
+    assert "Enter the final display name" in joined
+    assert "CLI and Web must render the same metadata" in joined
+    assert "Note: Press Enter to accept the backend prefill" in joined
     assert "Examples:" in joined
-    assert "Prefill: Ada" in joined
+    assert "Suggested: Ada" in joined
     assert '"status": "completed"' in joined
     assert '"value": "Ada"' in joined
 
@@ -134,3 +169,25 @@ def test_cli_renderer_prefill_dict_preserves_unicode_rendering() -> None:
     assert '"title": "Obrazy vepsan\u00e9 do vzduchu"' in rendered
     assert "\\u00e1" not in rendered
     assert "\\u00e9" not in rendered
+
+
+def test_cli_renderer_blank_enter_without_seed_submits_null(tmp_path: Path) -> None:
+    engine, resolver = _make_engine(tmp_path)
+    fs = engine.get_file_service()
+    atomic_write_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_REL_PATH, PROMPT_FLOW_NO_DEFAULT)
+
+    printed: list[str] = []
+    inputs = iter([""])
+
+    rc = run_launcher(
+        engine=engine,
+        resolver=resolver,
+        cli_overrides={},
+        input_fn=lambda _prompt: next(inputs),
+        print_fn=printed.append,
+    )
+
+    assert rc == 0
+    joined = "\n".join(printed)
+    assert "Suggested:" not in joined
+    assert '"value": null' in joined
