@@ -213,7 +213,6 @@ async def test_import_ui_default_v3_auto_enters_processing(
     await expect(page.locator("#startProcessing")).to_have_count(0)
 
     await page.locator("#submit").click()
-
     await expect(page.locator("#step")).to_contain_text("Step: processing")
     await expect(page.locator("#step")).to_contain_text("Session status: processing")
     await expect(page.locator("#startProcessing")).to_have_count(0)
