@@ -110,6 +110,9 @@ def resolve_inputs(step: dict[str, Any], state: dict[str, Any]) -> dict[str, Any
         if primitive_id == "flow.loop" and key == "param_bindings" and isinstance(value, list):
             out[str(key)] = deepcopy(value)
             continue
+        if primitive_id in {"data.filter", "data.map"} and key in {"condition_expr", "value_expr"}:
+            out[str(key)] = deepcopy(value)
+            continue
         if phase2:
             out[str(key)] = resolve_phase2_input_value(
                 value,

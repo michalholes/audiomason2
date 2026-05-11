@@ -208,7 +208,9 @@ def test_hidden_steps_auto_advance_without_extra_submit_calls(tmp_path: Path) ->
     trace = [entry["step_id"] for entry in state["trace"]]
     assert trace == [
         "select_authors",
+        "resolve_author_ids",
         "select_books",
+        "resolve_book_ids",
         "plan_preview_batch",
         "phase1_runtime_defaults",
         "metadata_validate_initial",

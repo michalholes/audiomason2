@@ -51,6 +51,7 @@ NON_INTERACTIVE_IDS: set[str] = {
     "data.group_by",
     "data.sort",
     "data.format",
+    "source.resolve_selection",
     "io.list",
     "io.stat",
     "io.read_meta",
@@ -108,8 +109,8 @@ def execute_non_prompt(
         return call_v1.execute(primitive_id, primitive_version, inputs, state), jobs
     if primitive_id.startswith("ctrl."):
         return control_v1.execute(primitive_id, primitive_version, inputs), jobs
-    if primitive_id.startswith("data."):
-        return data_v1.execute(primitive_id, primitive_version, inputs), jobs
+    if primitive_id.startswith("data.") or primitive_id == "source.resolve_selection":
+        return data_v1.execute(primitive_id, primitive_version, inputs, state), jobs
     if primitive_id.startswith("io."):
         return io_v1.execute(primitive_id, primitive_version, inputs), jobs
     if primitive_id == JOB_EMIT_ID:

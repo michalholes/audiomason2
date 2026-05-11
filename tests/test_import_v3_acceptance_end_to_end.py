@@ -112,7 +112,9 @@ def test_default_v3_cli_acceptance_keeps_selection_and_plan_state(tmp_path: Path
     }
     assert [entry["step_id"] for entry in state["trace"]] == [
         "select_authors",
+        "resolve_author_ids",
         "select_books",
+        "resolve_book_ids",
         "plan_preview_batch",
         "phase1_runtime_defaults",
         "metadata_validate_initial",
