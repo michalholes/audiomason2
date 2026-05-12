@@ -376,7 +376,9 @@ def build_phase1_metadata_projection(
     source_author = str(first_book.get("source_author") or _ROOT_AUDIO_AUTHOR)
     source_title = str(first_book.get("source_title") or _ROOT_AUDIO_TITLE)
 
-    author_answer = _answer_dict(state, "effective_author")
+    author_answer = _answer_dict(state, "store_author_item")
+    if not author_answer.get("author"):
+        author_answer = _answer_dict(state, "effective_author")
     title_answer = _answer_dict(state, "effective_title")
     merged_answer = _answer_dict(state, "effective_author_title")
 

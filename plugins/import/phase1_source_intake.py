@@ -360,6 +360,16 @@ def build_phase1_source_projection(
             ),
             "autofill_if": allow_autofill and len(author_ids) == 1,
             "selected_ids": selected_author_ids,
+            "author_label_list": [
+                book_meta[author_to_books[aid][0]]["author_label"]
+                for aid in author_ids
+                if author_to_books.get(aid)
+            ],
+            "selected_author_label_list": [
+                book_meta[author_to_books[aid][0]]["author_label"]
+                if author_to_books.get(aid) else ""
+                for aid in selected_author_ids
+            ],
         },
         "select_books": {
             "ordered_ids": book_ids,

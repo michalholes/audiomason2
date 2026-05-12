@@ -111,7 +111,7 @@ def test_selection_expr_grammar_and_stable_ordering(tmp_path: Path) -> None:
 
     # Whitespace + duplicates + reverse order in expression must not affect output order.
     state = engine.submit_step(session_id, "select_books", {"selection": " 2, 1, 1 "})
-    assert state.get("current_step_id") == "effective_author"
+    assert state.get("current_step_id") == "effective_author_item"
     assert state.get("selected_book_ids") == item_ids
 
 

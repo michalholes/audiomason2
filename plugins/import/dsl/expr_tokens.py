@@ -39,8 +39,8 @@ _KEYWORDS = {
     "null": "NULL",
 }
 
-_DOUBLE_OPS = {"==", "!=", "<=", ">="}
-_SINGLE_OPS = {"<", ">"}
+_DOUBLE_OPS = {"==", "!=", "<=", ">=", "//"}
+_SINGLE_OPS = {"<", ">", "+", "*", "/", "%"}
 
 
 def _error(
@@ -226,12 +226,28 @@ def tokenize_expr(
             idx = nxt
             continue
 
-        if ch.isdigit() or (ch == "-" and idx + 1 < len(expr) and expr[idx + 1].isdigit()):
+        # "-" is a unary negative sign only when NOT following a value token
+        _prev_is_value = bool(tokens) and tokens[-1].kind in {
+            "NUMBER", "STRING", "BOOLEAN", "NULL", "RPAREN", "RBRACKET"
+        }
+        _is_neg_num = (
+            ch == "-"
+            and idx + 1 < len(expr)
+            and expr[idx + 1].isdigit()
+            and not _prev_is_value
+        )
+        if ch.isdigit() or _is_neg_num:
             ok, number_value, nxt, err = _read_number(expr, pos=idx, path=path)
             if not ok:
                 return False, None, err
             tokens.append(ExprToken(kind="NUMBER", value=number_value, start=idx, end=nxt))
             idx = nxt
+            continue
+
+        if ch == "-":
+            # binary minus (e.g. after a value token or when next char is not a digit)
+            tokens.append(ExprToken(kind="OP", value=ch, start=idx, end=idx + 1))
+            idx += 1
             continue
 
         if ch.isalpha() or ch == "_":

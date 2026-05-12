@@ -118,7 +118,10 @@ def test_default_v3_cli_acceptance_keeps_selection_and_plan_state(tmp_path: Path
         "plan_preview_batch",
         "phase1_runtime_defaults",
         "metadata_validate_initial",
-        "effective_author",
+        "init_author_loop",
+        "effective_author_item",
+        "store_author_item",
+        "author_loop_check",
         "metadata_validate_after_author",
         "effective_title",
         "metadata_validate_after_title",
@@ -151,7 +154,7 @@ def test_default_v3_cli_acceptance_keeps_selection_and_plan_state(tmp_path: Path
     joined = "\n".join(printed)
     assert "Step: select_authors" in joined
     assert "Step: select_books" in joined
-    assert "Step: effective_author" in joined
+    assert "Step: effective_author_item" in joined
     assert "Step: final_summary_confirm" in joined
 
     for hidden_step in [

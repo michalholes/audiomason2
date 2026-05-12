@@ -142,7 +142,7 @@ def test_select_books_ok_auto_advances_past_plan_preview(tmp_path: Path) -> None
     assert state.get("current_step_id") == "select_books"
 
     state = engine.submit_step(session_id, "select_books", {"selection": "1"})
-    assert state.get("current_step_id") == "effective_author"
+    assert state.get("current_step_id") == "effective_author_item"
 
 
 def test_final_summary_confirm_uses_confirm_start_gate(tmp_path: Path) -> None:
@@ -197,9 +197,9 @@ def test_hidden_steps_auto_advance_without_extra_submit_calls(tmp_path: Path) ->
     assert state.get("current_step_id") == "select_books"
 
     state = engine.submit_step(session_id, "select_books", {"selection": "1"})
-    assert state.get("current_step_id") == "effective_author"
+    assert state.get("current_step_id") == "effective_author_item"
 
-    state = engine.submit_step(session_id, "effective_author", {"value": "Author A"})
+    state = engine.submit_step(session_id, "effective_author_item", {"value": "Author A"})
     assert state.get("current_step_id") == "effective_title"
 
     state = engine.submit_step(session_id, "effective_title", {"value": "Book A"})
@@ -214,7 +214,10 @@ def test_hidden_steps_auto_advance_without_extra_submit_calls(tmp_path: Path) ->
         "plan_preview_batch",
         "phase1_runtime_defaults",
         "metadata_validate_initial",
-        "effective_author",
+        "init_author_loop",
+        "effective_author_item",
+        "store_author_item",
+        "author_loop_check",
         "metadata_validate_after_author",
         "effective_title",
         "metadata_validate_after_title",

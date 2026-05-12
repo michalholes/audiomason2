@@ -16,6 +16,7 @@ from . import (
     job_v1,
     loop_v1,
     parallel_v1,
+    source_v1,
     subflow_v1,
     ui_v1,
 )
@@ -30,6 +31,7 @@ _REGISTRY_ENTRIES: list[dict[str, Any]] = sorted(
         *job_v1.REGISTRY_ENTRIES,
         *parallel_v1.REGISTRY_ENTRIES,
         *fork_join_v1.REGISTRY_ENTRIES,
+        *source_v1.REGISTRY_ENTRIES,
         *subflow_v1.REGISTRY_ENTRIES,
         *loop_v1.REGISTRY_ENTRIES,
     ],
@@ -51,6 +53,9 @@ NON_INTERACTIVE_IDS: set[str] = {
     "data.group_by",
     "data.sort",
     "data.format",
+    "source.build_catalog",
+    "source.normalize_label",
+    "source.keys",
     "source.resolve_selection",
     "io.list",
     "io.stat",
@@ -111,6 +116,8 @@ def execute_non_prompt(
         return control_v1.execute(primitive_id, primitive_version, inputs), jobs
     if primitive_id.startswith("data.") or primitive_id == "source.resolve_selection":
         return data_v1.execute(primitive_id, primitive_version, inputs, state), jobs
+    if primitive_id in {"source.build_catalog", "source.normalize_label", "source.keys"}:
+        return source_v1.execute(primitive_id, primitive_version, inputs, state), jobs
     if primitive_id.startswith("io."):
         return io_v1.execute(primitive_id, primitive_version, inputs), jobs
     if primitive_id == JOB_EMIT_ID:

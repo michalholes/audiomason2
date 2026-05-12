@@ -144,7 +144,7 @@ def test_plan_uses_canonical_target_and_persisted_rename_outputs(tmp_path: Path)
 
     state = engine.submit_step(session_id, "select_authors", {"selection": "1"})
     state = engine.submit_step(session_id, "select_books", {"selection": "1"})
-    state = engine.submit_step(session_id, "effective_author", {"value": "Canonical Author"})
+    state = engine.submit_step(session_id, "effective_author_item", {"value": "Canonical Author"})
     state = engine.submit_step(session_id, "effective_title", {"value": "Canonical Book"})
 
     plan = engine.compute_plan(session_id)

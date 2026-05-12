@@ -11,6 +11,7 @@ from .expr_parser import (
     CallNode,
     ExprAst,
     ExprParseError,
+    IndexNode,
     LiteralNode,
     PathNode,
     UnaryOpNode,
@@ -96,6 +97,8 @@ class _Evaluator:
             return self._eval_binary(node)
         if isinstance(node, CallNode):
             return self._eval_call(node)
+        if isinstance(node, IndexNode):
+            return self._eval_index(node)
         return _fail(
             self._path,
             "internal_error",
@@ -162,6 +165,15 @@ class _Evaluator:
         ok, value, error = self.eval(node.operand)
         if not ok:
             return False, None, error
+        if node.op == "neg":
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                return _fail(
+                    self._path,
+                    "type_mismatch",
+                    "neg_requires_number",
+                    {"type": type(value).__name__},
+                )
+            return True, -value, None
         if node.op != "not":
             return _fail(
                 self._path,
@@ -216,11 +228,59 @@ class _Evaluator:
             )
         if op == "in":
             return _eval_in(left=left, right=right, path=self._path)
+        if op in {"+", "-", "*", "/", "//", "%"}:
+            return _eval_arith(op=op, left=left, right=right, path=self._path)
         return _fail(
             self._path,
             "internal_error",
             "unknown_binary_operator",
             {"op": op},
+        )
+
+    def _eval_index(self, node: IndexNode) -> EvalResult:
+        ok, target, error = self.eval(node.target)
+        if not ok:
+            return False, None, error
+        ok, index, error = self.eval(node.index)
+        if not ok:
+            return False, None, error
+        if isinstance(target, list):
+            if not isinstance(index, int) or isinstance(index, bool):
+                return _fail(
+                    self._path,
+                    "type_mismatch",
+                    "list_index_requires_int",
+                    {"index_type": type(index).__name__},
+                )
+            if index < -len(target) or index >= len(target):
+                return _fail(
+                    self._path,
+                    "missing_path",
+                    "list_index_out_of_range",
+                    {"index": index, "length": len(target)},
+                )
+            return True, target[index], None
+        if isinstance(target, dict):
+            if not isinstance(index, str):
+                return _fail(
+                    self._path,
+                    "type_mismatch",
+                    "dict_index_requires_string",
+                    {"index_type": type(index).__name__},
+                )
+            if index not in target:
+                return _fail(
+                    self._path,
+                    "missing_path",
+                    "dict_key_missing",
+                    {"key": index},
+                )
+            return True, target[index], None
+        return _fail(
+            self._path,
+            "type_mismatch",
+            "index_requires_list_or_dict",
+            {"target_type": type(target).__name__},
         )
 
     def _eval_call(self, node: CallNode) -> EvalResult:
@@ -267,6 +327,40 @@ def _compare_str(op: str, left: str, right: str) -> bool:
     if op == ">":
         return left > right
     return left >= right
+
+
+def _eval_arith(*, op: str, left: Any, right: Any, path: str) -> EvalResult:
+    """Evaluate arithmetic binary operators +, -, *, /, //, %."""
+    _is_num = lambda v: isinstance(v, (int, float)) and not isinstance(v, bool)
+    if not _is_num(left) or not _is_num(right):
+        # String concatenation with +
+        if op == "+" and isinstance(left, str) and isinstance(right, str):
+            return True, left + right, None
+        return _fail(
+            path,
+            "type_mismatch",
+            "arithmetic_requires_numbers",
+            {"op": op, "left_type": type(left).__name__, "right_type": type(right).__name__},
+        )
+    if op == "+":
+        return True, left + right, None
+    if op == "-":
+        return True, left - right, None
+    if op == "*":
+        return True, left * right, None
+    if op == "/":
+        if right == 0:
+            return _fail(path, "arithmetic_error", "division_by_zero", {"op": op})
+        return True, left / right, None
+    if op == "//":
+        if right == 0:
+            return _fail(path, "arithmetic_error", "division_by_zero", {"op": op})
+        return True, left // right, None
+    if op == "%":
+        if right == 0:
+            return _fail(path, "arithmetic_error", "division_by_zero", {"op": op})
+        return True, left % right, None
+    return _fail(path, "internal_error", "unknown_arith_op", {"op": op})
 
 
 def _eval_in(*, left: Any, right: Any, path: str) -> EvalResult:

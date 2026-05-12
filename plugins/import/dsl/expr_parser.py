@@ -41,7 +41,14 @@ class CallNode:
     args: tuple[Any, ...]
 
 
-ExprAst = LiteralNode | PathNode | UnaryOpNode | BinaryOpNode | CallNode
+@dataclass(frozen=True)
+class IndexNode:
+    """Postfix index operation: expr[n] or expr[key]."""
+    target: Any
+    index: Any  # int (list index) or str (dict key) or ExprAst (dynamic)
+
+
+ExprAst = LiteralNode | PathNode | UnaryOpNode | BinaryOpNode | CallNode | IndexNode
 
 
 @dataclass(frozen=True)
@@ -138,7 +145,7 @@ class _Parser:
         return self._parse_compare()
 
     def _parse_compare(self) -> ExprAst | ExprParseError:
-        left = self._parse_primary()
+        left = self._parse_add_sub()
         if isinstance(left, ExprParseError):
             return left
         token = self._peek()
@@ -152,11 +159,78 @@ class _Parser:
             "in",
         }:
             op = self._advance().value
-            right = self._parse_primary()
+            right = self._parse_add_sub()
             if isinstance(right, ExprParseError):
                 return right
             return BinaryOpNode(op=op, left=left, right=right)
         return left
+
+    def _parse_add_sub(self) -> ExprAst | ExprParseError:
+        left = self._parse_mul_div()
+        if isinstance(left, ExprParseError):
+            return left
+        while True:
+            token = self._peek()
+            if token.kind == "OP" and token.value in {"+", "-"}:
+                op = self._advance().value
+                right = self._parse_mul_div()
+                if isinstance(right, ExprParseError):
+                    return right
+                left = BinaryOpNode(op=op, left=left, right=right)
+            else:
+                break
+        return left
+
+    def _parse_mul_div(self) -> ExprAst | ExprParseError:
+        left = self._parse_unary_minus()
+        if isinstance(left, ExprParseError):
+            return left
+        while True:
+            token = self._peek()
+            if token.kind == "OP" and token.value in {"*", "/", "//", "%"}:
+                op = self._advance().value
+                right = self._parse_unary_minus()
+                if isinstance(right, ExprParseError):
+                    return right
+                left = BinaryOpNode(op=op, left=left, right=right)
+            else:
+                break
+        return left
+
+    def _parse_unary_minus(self) -> ExprAst | ExprParseError:
+        if self._peek().kind == "OP" and self._peek().value == "-":
+            self._advance()
+            operand = self._parse_unary_minus()
+            if isinstance(operand, ExprParseError):
+                return operand
+            return UnaryOpNode(op="neg", operand=operand)
+        return self._parse_postfix()
+
+    def _parse_postfix(self) -> ExprAst | ExprParseError:
+        node = self._parse_primary()
+        if isinstance(node, ExprParseError):
+            return node
+        while self._match("LBRACKET") is not None:
+            idx_token = self._peek()
+            if idx_token.kind == "NUMBER" and isinstance(idx_token.value, int):
+                index_node: ExprAst = LiteralNode(value=self._advance().value)
+            elif idx_token.kind == "STRING":
+                index_node = LiteralNode(value=self._advance().value)
+            else:
+                # Dynamic index expression
+                index_node = self._parse_or()
+                if isinstance(index_node, ExprParseError):
+                    return index_node
+            if self._match("RBRACKET") is None:
+                end = self._peek()
+                return _error(
+                    code="invalid_expr_syntax",
+                    path=self._path,
+                    reason="missing_rbracket",
+                    meta={"offset": end.start},
+                )
+            node = IndexNode(target=node, index=index_node)
+        return node
 
     def _parse_primary(self) -> ExprAst | ExprParseError:
         token = self._peek()
@@ -278,12 +352,10 @@ class _Parser:
                 elif item.kind == "NUMBER" and isinstance(item.value, int):
                     segments.append(int(self._advance().value))
                 else:
-                    return _error(
-                        code="invalid_expr_syntax",
-                        path=self._path,
-                        reason="invalid_bracket_segment",
-                        meta={"offset": item.start},
-                    )
+                    # Dynamic index expression -- stop PathNode here, let
+                    # _parse_postfix wrap the result in an IndexNode.
+                    self._idx -= 1  # un-consume LBRACKET
+                    break
                 if self._match("RBRACKET") is None:
                     token = self._peek()
                     return _error(
