@@ -13,7 +13,6 @@ from ..detached_runtime import rehydrate_detached_runtime_from_bootstrap
 from ..discovery import run_discovery
 from ..fingerprints import sha256_hex
 
-
 _TRAILING_TAG_RE = re.compile(r"(?:\s*(?:\([^)]*\)|\[[^]]*\]))+\s*$")
 
 

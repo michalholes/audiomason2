@@ -331,7 +331,8 @@ def _compare_str(op: str, left: str, right: str) -> bool:
 
 def _eval_arith(*, op: str, left: Any, right: Any, path: str) -> EvalResult:
     """Evaluate arithmetic binary operators +, -, *, /, //, %."""
-    _is_num = lambda v: isinstance(v, (int, float)) and not isinstance(v, bool)
+    def _is_num(v: Any) -> bool:
+        return isinstance(v, (int, float)) and not isinstance(v, bool)
     if not _is_num(left) or not _is_num(right):
         # String concatenation with +
         if op == "+" and isinstance(left, str) and isinstance(right, str):

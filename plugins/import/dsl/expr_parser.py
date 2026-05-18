@@ -218,9 +218,10 @@ class _Parser:
                 index_node = LiteralNode(value=self._advance().value)
             else:
                 # Dynamic index expression
-                index_node = self._parse_or()
-                if isinstance(index_node, ExprParseError):
-                    return index_node
+                dyn = self._parse_or()
+                if isinstance(dyn, ExprParseError):
+                    return dyn
+                index_node = dyn
             if self._match("RBRACKET") is None:
                 end = self._peek()
                 return _error(
