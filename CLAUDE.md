@@ -9,21 +9,28 @@ Two authority files govern all work in this repository:
 - **`governance/governance_local.jsonl`** — cross-repo rules (anti-monolith, docs-gate, specification discipline, code quality, bug discipline). Read this before making any changes.
 - **`governance/specification.jsonl`** — authoritative specification of what this repo does, must do, and must not do. The single source of truth for this codebase.
 
-## Querying the specification
+## What to read before making changes
 
-`governance/specification.jsonl` is the authoritative spec for this repo. Do not read it in full — query it by capability tag using `spec_navigator.py` from the governance toolkit:
+**Step 1 — always, for every task:** read `governance_local.jsonl` in full (24 rules, ~3 KB). These are the cross-repo constraints that apply unconditionally.
+
+**Step 2 — before touching any file:** query the relevant subset of `governance/specification.jsonl` using `spec_navigator.py`. Do not read the full spec — it has 521 rules.
 
 ```bash
-# See all available domain tags with rule counts
+# See available domain tags
 python3 /home/pi/governance/src/governance/spec_navigator.py governance/specification.jsonl --list-tags
 
-# Get rules relevant to your change — pick tags based on what the file imports/does
+# Query by the domain tags that match your task
 python3 /home/pi/governance/src/governance/spec_navigator.py governance/specification.jsonl --tags PLUGIN REGISTRY
 python3 /home/pi/governance/src/governance/spec_navigator.py governance/specification.jsonl --tags FILE_IO
 python3 /home/pi/governance/src/governance/spec_navigator.py governance/specification.jsonl --tags ARCH
 ```
 
-**Workflow:** read the file you are about to change → identify what domain concepts it uses (PluginRegistry → `REGISTRY`, file I/O → `FILE_IO`, plugin code → `PLUGIN`) → query those tags → read the returned rules before making changes.
+**Which tags to use:** look at what the file you are changing imports and does, then pick the matching tags:
+- Code in `plugins/` or using `PluginRegistry`/`PluginLoader` → `PLUGIN`, `REGISTRY`
+- Code touching file system or using file_io plugin → `FILE_IO`
+- Core architectural changes → `ARCH`
+- Configuration → `CONFIG`
+- Web/API endpoints → `ENDPOINT`
 
 Available tags: `ARCH`, `ARTIFACT`, `CONFIG`, `CORE`, `ENDPOINT`, `ERROR`, `FILE_IO`, `LAYOUT`, `PLUGIN`, `REGISTRY`, `UI`
 
