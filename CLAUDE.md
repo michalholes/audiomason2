@@ -41,6 +41,16 @@ Available tags: `ARCH`, `ARTIFACT`, `CONFIG`, `CORE`, `ENDPOINT`, `ERROR`, `FILE
 - A single change must not touch 3+ ownership areas (`src`, `plugins`, `badguys`, `scripts`, `tests`, `docs`)
 - Specification changes must be committed before implementation changes
 
+## After every change
+
+When the implementation is complete, run Amp to validate all gates (ruff, mypy, pytest, compile, docs, monolith) and commit:
+
+```bash
+python3 /home/pi/patchhub/scripts/am_patch.py -s "your commit message"
+```
+
+Amp detects the repo root from cwd, runs all gates, commits and pushes on success. If a gate fails, fix it and rerun. Task is not done until Amp passes.
+
 ## Commands
 
 ```bash
