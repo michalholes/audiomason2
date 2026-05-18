@@ -9,7 +9,25 @@ Two authority files govern all work in this repository:
 - **`governance/governance_local.jsonl`** — cross-repo rules (anti-monolith, docs-gate, specification discipline, code quality, bug discipline). Read this before making any changes.
 - **`governance/specification.jsonl`** — authoritative specification of what this repo does, must do, and must not do. The single source of truth for this codebase.
 
-Key rules to internalize from `governance_local.jsonl`:
+## Querying the specification
+
+`governance/specification.jsonl` is the authoritative spec for this repo. Do not read it in full — query it by capability tag using `spec_navigator.py` from the governance toolkit:
+
+```bash
+# See all available domain tags with rule counts
+python3 /home/pi/governance/src/governance/spec_navigator.py governance/specification.jsonl --list-tags
+
+# Get rules relevant to your change — pick tags based on what the file imports/does
+python3 /home/pi/governance/src/governance/spec_navigator.py governance/specification.jsonl --tags PLUGIN REGISTRY
+python3 /home/pi/governance/src/governance/spec_navigator.py governance/specification.jsonl --tags FILE_IO
+python3 /home/pi/governance/src/governance/spec_navigator.py governance/specification.jsonl --tags ARCH
+```
+
+**Workflow:** read the file you are about to change → identify what domain concepts it uses (PluginRegistry → `REGISTRY`, file I/O → `FILE_IO`, plugin code → `PLUGIN`) → query those tags → read the returned rules before making changes.
+
+Available tags: `ARCH`, `ARTIFACT`, `CONFIG`, `CORE`, `ENDPOINT`, `ERROR`, `FILE_IO`, `LAYOUT`, `PLUGIN`, `REGISTRY`, `UI`
+
+## Key rules to internalize from `governance_local.jsonl`:
 - Any change to `src/`, `plugins/`, or `docs/` requires a new file under `docs/change_fragments/`
 - Files ≥ 1300 LOC must not grow at all; files ≥ 900 LOC have restricted growth
 - No catchall filenames (`utils.py`, `helpers.py`, etc.) or directories
