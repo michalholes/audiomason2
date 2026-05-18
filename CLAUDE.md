@@ -1,0 +1,74 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Governance
+
+Two authority files govern all work in this repository:
+
+- **`governance/governance_local.jsonl`** — cross-repo rules (anti-monolith, docs-gate, specification discipline, code quality, bug discipline). Read this before making any changes.
+- **`governance/specification.jsonl`** — authoritative specification of what this repo does, must do, and must not do. The single source of truth for this codebase.
+
+Key rules to internalize from `governance_local.jsonl`:
+- Any change to `src/`, `plugins/`, or `docs/` requires a new file under `docs/change_fragments/`
+- Files ≥ 1300 LOC must not grow at all; files ≥ 900 LOC have restricted growth
+- No catchall filenames (`utils.py`, `helpers.py`, etc.) or directories
+- A single change must not touch 3+ ownership areas (`src`, `plugins`, `badguys`, `scripts`, `tests`, `docs`)
+- Specification changes must be committed before implementation changes
+
+## Commands
+
+```bash
+# Install with dev dependencies
+pip install -e ".[dev]"
+
+# Run all tests
+pytest
+
+# Run a single test file
+pytest tests/path/to/test_file.py
+
+# Run a single test
+pytest tests/path/to/test_file.py::test_name
+
+# Lint
+ruff check src/ plugins/ badguys/ tests/
+
+# Type check
+mypy src/
+
+# Run Amp (patch runner) — from /home/pi/patchhub
+python3 scripts/am_patch.py ISSUE_ID "commit message" patches/issue_<ISSUE>_v<N>.zip --target-repo-name audiomason2
+```
+
+## Architecture
+
+AudioMason2 is a plugin-based audiobook processing pipeline.
+
+**`src/audiomason/core/`** — framework kernel:
+- `pipeline.py` / `orchestration.py` — pipeline execution and phase orchestration
+- `plugin_registry.py` / `loader.py` — plugin discovery and loading
+- `interfaces.py` — base interfaces all plugins implement
+- `process_contract_authority.py` / `process_contract_runtime.py` — process job contract enforcement
+- `events.py` / `log_bus.py` — event and log routing between core and plugins
+
+**`src/audiomason/api/`** — public API surface (config, plugin queries)
+
+**`plugins/<name>/`** — each plugin is self-contained: `plugin.py` (logic), `plugin.yaml` (manifest). Plugins must not import from other plugins. Each plugin owns its area exclusively.
+
+**`badguys/`** — integration test suite runner. Executes recipe-based test suites against the live system.
+
+**`docs/change_fragments/`** — one file per change that touches `src/`, `plugins/`, or `docs/`. Never edit `docs/changes.md` directly.
+
+## Ownership areas
+
+| Area | Path |
+|---|---|
+| `src` | `src/` |
+| `plugins` | `plugins/` |
+| `badguys` | `badguys/` |
+| `scripts` | `scripts/` |
+| `tests` | `tests/` |
+| `docs` | `docs/` |
+
+A single change must not span 3+ of these areas.
