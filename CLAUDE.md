@@ -17,12 +17,12 @@ Two authority files govern all work in this repository:
 
 ```bash
 # See available domain tags
-python3 /home/pi/governance/src/governance/spec_navigator.py governance/specification.jsonl --list-tags
+python3 governance/spec_navigator.py governance/specification.jsonl --list-tags
 
 # Query by the domain tags that match your task
-python3 /home/pi/governance/src/governance/spec_navigator.py governance/specification.jsonl --tags PLUGIN REGISTRY
-python3 /home/pi/governance/src/governance/spec_navigator.py governance/specification.jsonl --tags FILE_IO
-python3 /home/pi/governance/src/governance/spec_navigator.py governance/specification.jsonl --tags ARCH
+python3 governance/spec_navigator.py governance/specification.jsonl --tags PLUGIN REGISTRY
+python3 governance/spec_navigator.py governance/specification.jsonl --tags FILE_IO
+python3 governance/spec_navigator.py governance/specification.jsonl --tags ARCH
 ```
 
 **Which tags to use:** look at what the file you are changing imports and does, then pick the matching tags:
