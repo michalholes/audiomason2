@@ -33,6 +33,11 @@ jobs:
           . .venv/bin/activate
           python -m mypy src plugins
 
+      - name: Pyright
+        run: |
+          . .venv/bin/activate
+          pyright
+
       - name: Install Playwright browser
         run: |
           . .venv/bin/activate
@@ -42,5 +47,3 @@ jobs:
         run: |
           . .venv/bin/activate
           pytest
-
-
