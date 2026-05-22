@@ -153,5 +153,3 @@ async def test_import_ui_run_wizard_happy_path(page: Page, e2e_web_base_url: str
     await expect(page.locator("#step")).to_contain_text("Step: stop")
     await expect(page.locator("#step")).to_contain_text("Session status: completed")
     await probe.assert_clean()
-
-

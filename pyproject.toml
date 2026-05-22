@@ -61,14 +61,19 @@ build-backend = "setuptools.build_meta"
 mypy_path = "src"
 explicit_package_bases = true
 namespace_packages = true
+files = ["src", "plugins"]
 exclude = ["patches/", "scripts", "badguys", "tests/", "venv/", "__pycache__/"]
 python_version = "3.11"
 strict = false
-warn_return_any = false
+warn_return_any = true
 warn_unused_configs = true
 disallow_untyped_defs = false      
-disallow_any_generics = false      
-disallow_subclassing_any = false   
+disallow_any_generics = true
+disallow_subclassing_any = true
+disallow_any_unimported = true
+disallow_any_expr = true
+disallow_any_decorated = true
+disallow_any_explicit = true
 disallow_untyped_calls = false     
 disallow_incomplete_defs = false   
 check_untyped_defs = true
@@ -91,6 +96,7 @@ exclude = ["patches", "audit"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "N", "W", "UP", "B", "SIM"]
+extend-select = ["ANN401"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

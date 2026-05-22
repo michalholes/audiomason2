@@ -28,6 +28,7 @@ LiteralNode = _parser.LiteralNode
 # Helpers
 # ---------------------------------------------------------------------------
 
+
 def _eval(expr: str, *, state: object = None, inputs: object = None) -> tuple:
     return eval_expr_ref(
         {"expr": expr},
@@ -39,6 +40,7 @@ def _eval(expr: str, *, state: object = None, inputs: object = None) -> tuple:
 # ---------------------------------------------------------------------------
 # Parser: operator precedence
 # ---------------------------------------------------------------------------
+
 
 class TestParserPrecedence:
     def test_mul_binds_tighter_than_add(self) -> None:
@@ -79,6 +81,7 @@ class TestParserPrecedence:
 # ---------------------------------------------------------------------------
 # Evaluator: basic arithmetic
 # ---------------------------------------------------------------------------
+
 
 class TestArithEval:
     @pytest.mark.parametrize(
@@ -141,6 +144,7 @@ class TestArithEval:
 # Evaluator: arithmetic with path references
 # ---------------------------------------------------------------------------
 
+
 class TestArithWithPaths:
     def test_add_path_and_literal(self) -> None:
         ok, value, err = _eval(
@@ -175,6 +179,7 @@ class TestArithWithPaths:
 # Evaluator: postfix indexing
 # ---------------------------------------------------------------------------
 
+
 class TestIndexEval:
     def test_list_index_zero(self) -> None:
         ok, value, err = _eval('split("a,b,c", ",")[0]')
@@ -204,9 +209,7 @@ class TestIndexEval:
         assert ok is True and value == "y"
 
     def test_index_result_used_in_comparison(self) -> None:
-        ok, value, err = _eval(
-            'split("a,b,c", ",")[0] == "a"'
-        )
+        ok, value, err = _eval('split("a,b,c", ",")[0] == "a"')
         assert ok is True and value is True
 
     def test_index_result_in_arithmetic(self) -> None:
@@ -220,6 +223,7 @@ class TestIndexEval:
 # ---------------------------------------------------------------------------
 # Evaluator: error cases
 # ---------------------------------------------------------------------------
+
 
 class TestArithErrors:
     def test_type_mismatch_string_plus_number(self) -> None:
@@ -295,6 +299,7 @@ class TestArithErrors:
 # ---------------------------------------------------------------------------
 # Tokenizer: ensure '-' is handled correctly in context
 # ---------------------------------------------------------------------------
+
 
 class TestTokenizerMinus:
     def test_binary_minus_after_number(self) -> None:

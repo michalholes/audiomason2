@@ -367,7 +367,8 @@ def build_phase1_source_projection(
             ],
             "selected_author_label_list": [
                 book_meta[author_to_books[aid][0]]["author_label"]
-                if author_to_books.get(aid) else ""
+                if author_to_books.get(aid)
+                else ""
                 for aid in selected_author_ids
             ],
         },

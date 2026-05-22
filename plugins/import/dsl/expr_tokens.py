@@ -228,13 +228,15 @@ def tokenize_expr(
 
         # "-" is a unary negative sign only when NOT following a value token
         _prev_is_value = bool(tokens) and tokens[-1].kind in {
-            "NUMBER", "STRING", "BOOLEAN", "NULL", "RPAREN", "RBRACKET"
+            "NUMBER",
+            "STRING",
+            "BOOLEAN",
+            "NULL",
+            "RPAREN",
+            "RBRACKET",
         }
         _is_neg_num = (
-            ch == "-"
-            and idx + 1 < len(expr)
-            and expr[idx + 1].isdigit()
-            and not _prev_is_value
+            ch == "-" and idx + 1 < len(expr) and expr[idx + 1].isdigit() and not _prev_is_value
         )
         if ch.isdigit() or _is_neg_num:
             ok, number_value, nxt, err = _read_number(expr, pos=idx, path=path)

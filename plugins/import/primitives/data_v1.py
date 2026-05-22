@@ -153,8 +153,7 @@ def execute(
     if primitive_id == "source.resolve_selection":
         ordered_any = inputs.get("ordered_ids")
         ordered = [
-            x for x in (ordered_any if isinstance(ordered_any, list) else [])
-            if isinstance(x, str)
+            x for x in (ordered_any if isinstance(ordered_any, list) else []) if isinstance(x, str)
         ]
         expr_raw = inputs.get("selection_expr")
         expr = str(expr_raw).strip() if isinstance(expr_raw, str) else "all"

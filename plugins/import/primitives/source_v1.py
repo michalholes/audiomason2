@@ -57,7 +57,7 @@ def _strip_source_prefix(*, rel_path: str, source_prefix: str) -> str:
         return ""
     prefix = source_prefix + "/"
     if rel_path.startswith(prefix):
-        return rel_path[len(prefix):]
+        return rel_path[len(prefix) :]
     return rel_path
 
 

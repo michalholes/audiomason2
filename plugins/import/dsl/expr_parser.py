@@ -44,6 +44,7 @@ class CallNode:
 @dataclass(frozen=True)
 class IndexNode:
     """Postfix index operation: expr[n] or expr[key]."""
+
     target: Any
     index: Any  # int (list index) or str (dict key) or ExprAst (dynamic)
 
