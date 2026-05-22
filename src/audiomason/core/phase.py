@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import builtins
 import contextlib
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Generator
 from contextvars import ContextVar
 from enum import StrEnum
 
@@ -52,7 +52,7 @@ class PhaseGuard:
 
     @staticmethod
     @contextlib.contextmanager
-    def processing() -> Iterator[None]:
+    def processing() -> Generator[None, None, None]:
         token = _CURRENT_PHASE.set(Phase.PROCESSING)
         depth = _INPUT_HOOK_DEPTH.get()
 

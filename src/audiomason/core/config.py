@@ -12,7 +12,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeGuard
 
 import yaml
 
@@ -20,6 +20,10 @@ from audiomason.core.errors import ConfigError
 
 ALLOWED_LOGGING_LEVELS = frozenset({"quiet", "normal", "verbose", "debug"})
 DEFAULT_LOGGING_LEVEL = "normal"
+
+
+def _is_str_any_dict(value: Any) -> TypeGuard[dict[str, Any]]:
+    return isinstance(value, dict)
 
 
 @dataclass
@@ -109,7 +113,7 @@ def _flatten_items(data: dict[str, Any], prefix: str = "") -> list[tuple[str, An
     for key, value in data.items():
         key_path = f"{prefix}.{key}" if prefix else str(key)
 
-        if isinstance(value, dict):
+        if _is_str_any_dict(value):
             items.extend(_flatten_items(value, key_path))
         else:
             items.append((key_path, value))
@@ -495,7 +499,7 @@ class ConfigResolver:
         try:
             with open(path) as f:
                 data = yaml.safe_load(f)
-                return data if isinstance(data, dict) else {}
+                return data if _is_str_any_dict(data) else {}
         except Exception as e:
             raise ConfigError(f"Failed to load config from {path}: {e}") from e
 
@@ -510,7 +514,7 @@ class ConfigResolver:
         current: Any = data
 
         for part in parts:
-            if not isinstance(current, dict):
+            if not _is_str_any_dict(current):
                 return None
             current = current.get(part)
             if current is None:

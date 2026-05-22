@@ -13,6 +13,10 @@ from typing import Any
 from audiomason.core.context import ProcessingContext
 
 
+def _new_job_meta() -> dict[str, str]:
+    return {}
+
+
 @dataclass(frozen=True)
 class ProcessRequest:
     contexts: list[ProcessingContext]
@@ -26,4 +30,4 @@ class ProcessContractRequest:
     plugin_name: str
     entrypoint_name: str
     plugin_loader: Any
-    job_meta: dict[str, str] = field(default_factory=dict)
+    job_meta: dict[str, str] = field(default_factory=_new_job_meta)

@@ -108,14 +108,15 @@ __all__ = [
 ]
 
 
-def main():
+def main() -> None:
     """Main entry point for audiomason CLI."""
     import asyncio
     import importlib.util
     import sys
+    from collections.abc import Coroutine
     from pathlib import Path
 
-    def _run_cli(coro) -> None:
+    def _run_cli(coro: Coroutine[object, object, object]) -> None:
         """Run a coroutine in a dedicated event loop."""
         loop = asyncio.new_event_loop()
         try:

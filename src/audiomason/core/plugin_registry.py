@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeGuard, cast
 
 from audiomason.core.config_service import ConfigService
 from audiomason.core.errors import PluginNotFoundError, PluginValidationError
@@ -15,6 +15,10 @@ from audiomason.core.plugin_callable_authority import (
 
 if TYPE_CHECKING:
     from audiomason.core.loader import PluginLoader, PluginManifest
+
+
+def _is_str_any_dict(value: Any) -> TypeGuard[dict[str, Any]]:
+    return isinstance(value, dict)
 
 
 @dataclass(frozen=True)
@@ -58,18 +62,20 @@ class PluginRegistry:
             return []
 
         reg = cfg.get("plugin_registry")
-        if isinstance(reg, dict):
+        if _is_str_any_dict(reg):
             disabled = reg.get("disabled")
             if isinstance(disabled, list):
-                return [str(x) for x in disabled]
+                disabled_list = cast(list[object], disabled)
+                return [str(x) for x in disabled_list]
 
         plugins = cfg.get("plugins")
-        if not isinstance(plugins, dict):
+        if not _is_str_any_dict(plugins):
             return []
         disabled = plugins.get("disabled")
         if not isinstance(disabled, list):
             return []
-        return [str(x) for x in disabled]
+        disabled_values = cast(list[object], disabled)
+        return [str(x) for x in disabled_values]
 
     def is_enabled(self, plugin_id: str) -> bool:
         disabled = set(self._get_disabled())
@@ -99,23 +105,21 @@ class PluginRegistry:
             return {}
 
         plugins = cfg.get("plugins")
-        if not isinstance(plugins, dict):
+        if not _is_str_any_dict(plugins):
             return {}
 
         plugin_node = plugins.get(plugin_id)
-        if not isinstance(plugin_node, dict):
+        if not _is_str_any_dict(plugin_node):
             return {}
 
         cfg_node = plugin_node.get("config")
-        if not isinstance(cfg_node, dict):
+        if not _is_str_any_dict(cfg_node):
             return {}
 
         return dict(cfg_node)
 
     def set_plugin_config(self, plugin_id: str, config: dict[str, Any]) -> None:
         """Write plugin config mapping into host user config."""
-        if not isinstance(config, dict):
-            raise TypeError("config must be a dict")
         self._config.set_value(f"plugins.{plugin_id}.config", dict(config))
 
     def ensure_plugin_config_defaults(self, plugin_id: str, config_schema: dict[str, Any]) -> bool:
@@ -128,7 +132,7 @@ class PluginRegistry:
 
         Returns True if any write occurred, else False.
         """
-        if not isinstance(config_schema, dict) or config_schema == {}:
+        if config_schema == {}:
             return False
 
         existing = self.get_plugin_config(plugin_id)
@@ -136,7 +140,7 @@ class PluginRegistry:
 
         for key in sorted(config_schema.keys()):
             meta = config_schema.get(key)
-            if not isinstance(meta, dict):
+            if not _is_str_any_dict(meta):
                 continue
             if "default" not in meta:
                 continue
@@ -147,7 +151,7 @@ class PluginRegistry:
 
         return changed
 
-    def _discard_published_wizard_callables(self, plugin_id: str) -> None:
+    def discard_published_callables(self, plugin_id: str) -> None:
         """Remove cached callable publication data for one plugin."""
         existing_defs = self._wizard_callables_by_plugin.pop(plugin_id, ())
         for existing in existing_defs:
@@ -155,7 +159,7 @@ class PluginRegistry:
             if current == existing:
                 self._wizard_callables_by_operation.pop(existing.operation_id, None)
 
-    def _publish_wizard_callable_manifest(
+    def publish_callable_manifest(
         self,
         *,
         plugin_dir: Path,
@@ -167,7 +171,7 @@ class PluginRegistry:
             plugin_dir=plugin_dir,
             manifest_pointer=manifest.wizard_callable_manifest_pointer,
         )
-        self._discard_published_wizard_callables(manifest.name)
+        self.discard_published_callables(manifest.name)
         for definition in definitions:
             current = self._wizard_callables_by_operation.get(definition.operation_id)
             if current is not None and current.plugin_id != definition.plugin_id:
@@ -180,6 +184,17 @@ class PluginRegistry:
         self._wizard_callables_by_plugin[manifest.name] = definitions
         return definitions
 
+    def _discard_published_wizard_callables(self, plugin_id: str) -> None:
+        self.discard_published_callables(plugin_id)
+
+    def _publish_wizard_callable_manifest(
+        self,
+        *,
+        plugin_dir: Path,
+        manifest: PluginManifest,
+    ) -> tuple[RegisteredWizardCallable, ...]:
+        return self.publish_callable_manifest(plugin_dir=plugin_dir, manifest=manifest)
+
     def _resolve_cached_wizard_callable(
         self,
         operation_id: str,
@@ -188,7 +203,7 @@ class PluginRegistry:
         if item is None:
             return None
         if not self.is_enabled(item.plugin_id):
-            self._discard_published_wizard_callables(item.plugin_id)
+            self.discard_published_callables(item.plugin_id)
             return None
         return item
 
@@ -196,9 +211,9 @@ class PluginRegistry:
         for plugin_dir in loader.discover():
             manifest = loader.load_manifest_only(plugin_dir)
             if not self.is_enabled(manifest.name):
-                self._discard_published_wizard_callables(manifest.name)
+                self.discard_published_callables(manifest.name)
                 continue
-            self._publish_wizard_callable_manifest(
+            self.publish_callable_manifest(
                 plugin_dir=plugin_dir,
                 manifest=manifest,
             )

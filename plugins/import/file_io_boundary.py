@@ -9,8 +9,9 @@ ASCII-only.
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, cast
+from typing import Any, cast
 
 from plugins.file_io.import_runtime import normalize_relative_path
 from plugins.file_io.service import FileService, RootName

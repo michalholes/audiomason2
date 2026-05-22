@@ -11,6 +11,7 @@ import sys
 import threading
 import time
 from pathlib import Path
+from types import TracebackType
 
 
 class ProcessContractRuntime:
@@ -117,7 +118,12 @@ class OSErrorGuard:
     def __enter__(self) -> None:
         return None
 
-    def __exit__(self, exc_type, exc, tb) -> bool:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> bool:
         return exc_type is not None and issubclass(exc_type, OSError)
 
 

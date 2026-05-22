@@ -15,8 +15,9 @@ import hashlib
 import mimetypes
 import shutil
 from collections import Counter
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, cast
+from typing import Any, cast
 from urllib.parse import urlparse
 
 from mutagen.id3 import ID3

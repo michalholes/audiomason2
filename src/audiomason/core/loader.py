@@ -8,7 +8,7 @@ import sys
 import types
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeGuard, cast
 
 import yaml
 
@@ -16,6 +16,16 @@ if TYPE_CHECKING:
     from audiomason.core.plugin_registry import PluginRegistry
 
 from audiomason.core.errors import PluginError, PluginNotFoundError, PluginValidationError
+
+
+def _is_str_any_dict(value: Any) -> TypeGuard[dict[str, Any]]:
+    return isinstance(value, dict)
+
+
+def _require_str(value: Any, *, field: str, manifest_path: Path) -> str:
+    if not isinstance(value, str):
+        raise PluginError(f"Invalid '{field}' in manifest {manifest_path}: must be string")
+    return value
 
 
 @dataclass
@@ -142,21 +152,17 @@ class PluginLoader:
 
         # Registry enforcement
         if self._registry is not None and not self._registry.is_enabled(manifest.name):
-            self._registry._discard_published_wizard_callables(manifest.name)
+            self._registry.discard_published_callables(manifest.name)
             raise PluginError(f"Plugin is disabled: {manifest.name}")
 
         if self._registry is not None:
-            self._registry._publish_wizard_callable_manifest(
+            self._registry.publish_callable_manifest(
                 plugin_dir=plugin_dir,
                 manifest=manifest,
             )
 
         # Plugin config default normalization (host config)
-        if (
-            self._registry is not None
-            and isinstance(manifest.config_schema, dict)
-            and manifest.config_schema
-        ):
+        if self._registry is not None and manifest.config_schema:
             self._registry.ensure_plugin_config_defaults(manifest.name, manifest.config_schema)
 
         # Validate if requested
@@ -256,13 +262,23 @@ class PluginLoader:
 
         try:
             with open(manifest_path) as f:
-                data = yaml.safe_load(f)
+                raw_data = yaml.safe_load(f)
 
-            interfaces = data.get("interfaces", [])
-            if not isinstance(interfaces, list) or not all(isinstance(x, str) for x in interfaces):
+            if not _is_str_any_dict(raw_data):
+                raise PluginError(f"Invalid manifest {manifest_path}: root must be a mapping")
+            data = raw_data
+
+            interfaces_raw = data.get("interfaces", [])
+            if not isinstance(interfaces_raw, list):
                 raise PluginError(
                     f"Invalid 'interfaces' in manifest {manifest_path}: must be list[str]"
                 )
+            interfaces_list = cast(list[object], interfaces_raw)
+            if not all(isinstance(item, str) for item in interfaces_list):
+                raise PluginError(
+                    f"Invalid 'interfaces' in manifest {manifest_path}: must be list[str]"
+                )
+            interfaces = [str(item) for item in interfaces_list]
 
             cli_commands: list[str] = []
             if "ICLICommands" in interfaces:
@@ -275,7 +291,8 @@ class PluginLoader:
                     raise PluginError(
                         f"Invalid 'cli_commands' in manifest {manifest_path}: must be list[str]"
                     )
-                for cmd in raw_cli_commands:
+                cli_commands_list = cast(list[object], raw_cli_commands)
+                for cmd in cli_commands_list:
                     if not isinstance(cmd, str):
                         raise PluginError(
                             f"Invalid 'cli_commands' in manifest {manifest_path}: must be list[str]"
@@ -285,7 +302,33 @@ class PluginLoader:
                             f"Invalid CLI command name '{cmd}' in {manifest_path}: "
                             "must match ^[a-z0-9-]+$"
                         )
-                cli_commands = list(raw_cli_commands)
+                cli_commands = [str(cmd) for cmd in cli_commands_list]
+
+            hooks_raw = data.get("hooks", [])
+            if not isinstance(hooks_raw, list):
+                raise PluginError(f"Invalid 'hooks' in manifest {manifest_path}: must be list[str]")
+            hooks_list = cast(list[object], hooks_raw)
+            if not all(isinstance(item, str) for item in hooks_list):
+                raise PluginError(f"Invalid 'hooks' in manifest {manifest_path}: must be list[str]")
+            hooks = [str(item) for item in hooks_list]
+
+            dependencies_raw = data.get("dependencies", {})
+            if not _is_str_any_dict(dependencies_raw):
+                raise PluginError(
+                    f"Invalid 'dependencies' in manifest {manifest_path}: must be mapping"
+                )
+
+            config_schema_raw = data.get("config_schema", {})
+            if not _is_str_any_dict(config_schema_raw):
+                raise PluginError(
+                    f"Invalid 'config_schema' in manifest {manifest_path}: must be mapping"
+                )
+
+            test_level = _require_str(
+                data.get("test_level", "basic"),
+                field="test_level",
+                manifest_path=manifest_path,
+            )
 
             wizard_callable_manifest_pointer = data.get("wizard_callable_manifest_pointer")
             if wizard_callable_manifest_pointer is not None and not isinstance(
@@ -298,18 +341,38 @@ class PluginLoader:
                 )
 
             return PluginManifest(
-                name=data["name"],
-                version=data["version"],
-                description=data.get("description", ""),
-                author=data.get("author", "Unknown"),
-                license=data.get("license", "Unknown"),
-                entrypoint=data["entrypoint"],
+                name=_require_str(data.get("name"), field="name", manifest_path=manifest_path),
+                version=_require_str(
+                    data.get("version"),
+                    field="version",
+                    manifest_path=manifest_path,
+                ),
+                description=_require_str(
+                    data.get("description", ""),
+                    field="description",
+                    manifest_path=manifest_path,
+                ),
+                author=_require_str(
+                    data.get("author", "Unknown"),
+                    field="author",
+                    manifest_path=manifest_path,
+                ),
+                license=_require_str(
+                    data.get("license", "Unknown"),
+                    field="license",
+                    manifest_path=manifest_path,
+                ),
+                entrypoint=_require_str(
+                    data.get("entrypoint"),
+                    field="entrypoint",
+                    manifest_path=manifest_path,
+                ),
                 interfaces=interfaces,
                 cli_commands=cli_commands,
-                hooks=data.get("hooks", []),
-                dependencies=data.get("dependencies", {}),
-                config_schema=data.get("config_schema", {}),
-                test_level=data.get("test_level", "basic"),
+                hooks=hooks,
+                dependencies=dependencies_raw,
+                config_schema=config_schema_raw,
+                test_level=test_level,
                 wizard_callable_manifest_pointer=wizard_callable_manifest_pointer,
             )
         except Exception as e:
@@ -403,7 +466,7 @@ class PluginLoader:
         Raises:
             PluginValidationError: If validation fails
         """
-        validation_errors = []
+        validation_errors: list[str] = []
 
         # 1. Module file exists
         module_name = manifest.entrypoint.split(":")[0]
@@ -477,7 +540,7 @@ class PluginLoader:
                     __import__(dep_name)
                 except ImportError:
                     # Check if it's a conditional dependency
-                    if isinstance(dep_info, dict) and dep_info.get("optional", False):
+                    if _is_str_any_dict(dep_info) and dep_info.get("optional", False):
                         # Optional dependency - just warning
                         pass
                     else:

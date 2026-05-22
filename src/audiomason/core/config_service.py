@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeGuard
 
 import yaml
 
@@ -24,6 +24,10 @@ def _default_user_config_path() -> Path:
     return Path.home() / ".config/audiomason/config.yaml"
 
 
+def _is_str_any_dict(value: Any) -> TypeGuard[dict[str, Any]]:
+    return isinstance(value, dict)
+
+
 def _load_yaml_dict(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {}
@@ -31,7 +35,7 @@ def _load_yaml_dict(path: Path) -> dict[str, Any]:
         data = yaml.safe_load(path.read_text(encoding="utf-8"))
     except Exception as e:
         raise ConfigError(f"Failed to load config from {path}: {e}") from e
-    return data if isinstance(data, dict) else {}
+    return data if _is_str_any_dict(data) else {}
 
 
 def _dump_yaml_dict(data: dict[str, Any]) -> str:
@@ -52,7 +56,7 @@ def _set_nested(data: dict[str, Any], key_path: str, value: Any) -> None:
     cur: dict[str, Any] = data
     for part in parts[:-1]:
         nxt = cur.get(part)
-        if not isinstance(nxt, dict):
+        if not _is_str_any_dict(nxt):
             nxt = {}
             cur[part] = nxt
         cur = nxt
@@ -87,7 +91,7 @@ def _unset_nested(data: dict[str, Any], key_path: str) -> bool:
 
     for part in parts[:-1]:
         nxt = cur.get(part)
-        if not isinstance(nxt, dict):
+        if not _is_str_any_dict(nxt):
             return False
         stack.append((cur, part))
         cur = nxt

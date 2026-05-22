@@ -5,6 +5,10 @@ from enum import StrEnum
 from typing import Any
 
 
+def _new_meta() -> dict[str, str]:
+    return {}
+
+
 class JobType(StrEnum):
     PROCESS = "process"
     DAEMON = "daemon"
@@ -41,7 +45,7 @@ class Job:
     cancel_requested: bool = False
     error: str | None = None
 
-    meta: dict[str, str] = field(default_factory=dict)
+    meta: dict[str, str] = field(default_factory=_new_meta)
 
     def transition(self, new_state: JobState) -> None:
         allowed = _ALLOWED_TRANSITIONS.get(self.state, set())

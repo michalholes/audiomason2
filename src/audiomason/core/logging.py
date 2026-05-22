@@ -40,17 +40,17 @@ class VerbosityLevel(IntEnum):
 
 
 # Global verbosity level
-_VERBOSITY: VerbosityLevel = VerbosityLevel.NORMAL
+_verbosity: VerbosityLevel = VerbosityLevel.NORMAL
 
 # Deprecated log file path (kept for compatibility; core does not write files)
-_DEPRECATED_LOG_FILE: Path | None = None
+_deprecated_log_file: Path | None = None
 
 # Color support
-_USE_COLORS: bool = True
+_use_colors: bool = True
 
 # Backward compatible log sink
-_LOG_SINK: Callable[[str], None] | None = None
-_LEGACY_SINK_ADAPTER: Callable[[LogRecord], None] | None = None
+_log_sink: Callable[[str], None] | None = None
+_legacy_sink_adapter: Callable[[LogRecord], None] | None = None
 
 
 def set_verbosity(level: int | VerbosityLevel) -> None:
@@ -59,12 +59,12 @@ def set_verbosity(level: int | VerbosityLevel) -> None:
     Args:
         level: Verbosity level (0-3 or VerbosityLevel enum)
     """
-    global _VERBOSITY
+    global _verbosity
 
-    if isinstance(level, int):
+    if not isinstance(level, VerbosityLevel):
         level = VerbosityLevel(level)
 
-    _VERBOSITY = level
+    _verbosity = level
 
 
 def get_verbosity() -> VerbosityLevel:
@@ -73,7 +73,7 @@ def get_verbosity() -> VerbosityLevel:
     Returns:
         Current verbosity level
     """
-    return _VERBOSITY
+    return _verbosity
 
 
 def apply_logging_policy(policy: LoggingPolicy) -> None:
@@ -100,8 +100,8 @@ def set_log_file(path: Path | str | None) -> None:
     Args:
         path: Path to log file or None.
     """
-    global _DEPRECATED_LOG_FILE
-    _DEPRECATED_LOG_FILE = None if path is None else Path(path)
+    global _deprecated_log_file
+    _deprecated_log_file = None if path is None else Path(path)
 
 
 def set_colors(enabled: bool) -> None:
@@ -110,8 +110,8 @@ def set_colors(enabled: bool) -> None:
     Args:
         enabled: Whether to use colors
     """
-    global _USE_COLORS
-    _USE_COLORS = enabled
+    global _use_colors
+    _use_colors = enabled
 
 
 def set_log_sink(sink: Callable[[str], None] | None) -> None:
@@ -122,14 +122,14 @@ def set_log_sink(sink: Callable[[str], None] | None) -> None:
     Args:
         sink: Callback receiving a single log line, or None to disable.
     """
-    global _LOG_SINK
-    global _LEGACY_SINK_ADAPTER
+    global _log_sink
+    global _legacy_sink_adapter
 
-    if _LEGACY_SINK_ADAPTER is not None:
-        get_log_bus().unsubscribe_all(_LEGACY_SINK_ADAPTER)
-        _LEGACY_SINK_ADAPTER = None
+    if _legacy_sink_adapter is not None:
+        get_log_bus().unsubscribe_all(_legacy_sink_adapter)
+        _legacy_sink_adapter = None
 
-    _LOG_SINK = sink
+    _log_sink = sink
 
     if sink is None:
         return
@@ -140,13 +140,13 @@ def set_log_sink(sink: Callable[[str], None] | None) -> None:
         except Exception:
             return
 
-    _LEGACY_SINK_ADAPTER = _adapter
+    _legacy_sink_adapter = _adapter
     get_log_bus().subscribe_all(_adapter)
 
 
 def get_log_sink() -> Callable[[str], None] | None:
     """Get the current global log sink callback (if any)."""
-    return _LOG_SINK
+    return _log_sink
 
 
 class AudioMasonLogger:
@@ -179,7 +179,7 @@ class AudioMasonLogger:
         Returns:
             True if should log
         """
-        return level <= _VERBOSITY
+        return level <= _verbosity
 
     def _format_message(self, level: str, message: str) -> str:
         """Format log message.
@@ -192,7 +192,7 @@ class AudioMasonLogger:
             Formatted message
         """
         # Add color if enabled
-        if _USE_COLORS and sys.stdout.isatty():
+        if _use_colors and sys.stdout.isatty():
             color = self.COLORS.get(level, "")
             reset = self.COLORS["RESET"]
             return f"{color}[{level.lower()}]{reset} {message}"

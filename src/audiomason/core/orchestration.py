@@ -17,7 +17,7 @@ import time
 from collections.abc import Coroutine
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from audiomason.core.config import ConfigResolver
 from audiomason.core.context import ProcessingContext
@@ -44,6 +44,10 @@ def _utcnow_iso() -> str:
     return datetime.now(UTC).isoformat()
 
 
+def utcnow_iso() -> str:
+    return _utcnow_iso()
+
+
 _LOGGER = get_logger(__name__)
 
 
@@ -68,6 +72,10 @@ def _emit_diag(event: str, *, operation: str, data: dict[str, Any]) -> None:
         get_event_bus().publish(event, envelope)
     except Exception as e:
         _LOGGER.warning(f"diagnostic emission failed: {type(e).__name__}: {e}")
+
+
+def emit_diag(event: str, *, operation: str, data: dict[str, Any]) -> None:
+    _emit_diag(event, operation=operation, data=data)
 
 
 def _parse_verbosity(value: object) -> VerbosityLevel:
@@ -204,15 +212,20 @@ class Orchestrator:
             if not isinstance(pipeline_path, str) or not pipeline_path:
                 raise RuntimeError("missing pipeline_path")
             try:
-                sources = json.loads(sources_json)
+                loaded_sources = json.loads(sources_json)
             except Exception:
-                sources = []
-            if not isinstance(sources, list):
+                loaded_sources = []
+
+            sources: list[str]
+            if isinstance(loaded_sources, list):
+                loaded_list = cast(list[object], loaded_sources)
+                sources = [str(item) for item in loaded_list]
+            else:
                 sources = []
 
             contexts: list[ProcessingContext] = []
-            for i, s in enumerate(sources, 1):
-                contexts.append(ProcessingContext(id=f"ctx_{i}", source=Path(str(s))))
+            for i, source_item in enumerate(sources, 1):
+                contexts.append(ProcessingContext(id=f"ctx_{i}", source=Path(source_item)))
 
             process_request = ProcessRequest(
                 contexts=contexts,
@@ -483,6 +496,9 @@ class Orchestrator:
             _LOGGER.error(f"failed: {e}")
         finally:
             set_log_sink(prev_sink)
+
+    async def run_process_contract_job(self, job_id: str, request: ProcessContractRequest) -> None:
+        await self._run_process_contract_job(job_id, request)
 
     async def _run_process_job(self, job_id: str, request: ProcessRequest) -> None:
         prev_sink = get_log_sink()

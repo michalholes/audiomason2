@@ -6,12 +6,16 @@ import json
 import re
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import Any, TypeGuard, cast
 
 from audiomason.core.errors import PluginError, PluginValidationError
 
 _ALLOWED_EXECUTION_MODES = {"inline", "job"}
 _IDENTIFIER_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def _is_str_any_dict(value: Any) -> TypeGuard[dict[str, Any]]:
+    return isinstance(value, dict)
 
 
 @dataclass(frozen=True)
@@ -63,7 +67,7 @@ def _load_manifest_json(manifest_path: Path) -> dict[str, Any]:
         raise PluginValidationError(
             f"Failed to load wizard callable manifest from {manifest_path}: {exc}"
         ) from exc
-    if not isinstance(data, dict):
+    if not _is_str_any_dict(data):
         raise PluginValidationError(
             f"Invalid wizard callable manifest {manifest_path}: root must be an object"
         )
@@ -94,15 +98,17 @@ def load_wizard_callable_definitions(
         raise PluginValidationError(
             f"Invalid wizard callable manifest {manifest_path}: operations must be a list"
         )
+    operations_list = cast(list[object], operations)
 
     seen_operation_ids: set[str] = set()
     definitions: list[RegisteredWizardCallable] = []
-    for index, item in enumerate(operations):
-        if not isinstance(item, dict):
+    for index, item_obj in enumerate(operations_list):
+        if not _is_str_any_dict(item_obj):
             raise PluginValidationError(
                 f"Invalid wizard callable manifest entry {index} in {manifest_path}: "
                 "operation must be an object"
             )
+        item = item_obj
 
         operation_id = _ensure_ascii_text(
             item.get("operation_id"),

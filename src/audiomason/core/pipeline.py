@@ -12,7 +12,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeGuard, cast
 
 import yaml
 
@@ -21,6 +21,16 @@ from audiomason.core.diagnostics import build_envelope
 from audiomason.core.errors import PipelineError
 from audiomason.core.events import get_event_bus
 from audiomason.core.logging import get_logger
+
+
+def _is_str_any_dict(value: Any) -> TypeGuard[dict[str, Any]]:
+    return isinstance(value, dict)
+
+
+def _require_str(value: Any, *, field: str) -> str:
+    if not isinstance(value, str):
+        raise PipelineError(f"Invalid pipeline step field '{field}': expected string")
+    return value
 
 
 @dataclass
@@ -186,27 +196,62 @@ class PipelineExecutor:
 
         try:
             with open(yaml_path) as f:
-                data = yaml.safe_load(f)
+                raw_data = yaml.safe_load(f)
+
+            if not _is_str_any_dict(raw_data):
+                raise PipelineError("Invalid pipeline YAML: root must be a mapping")
+            data = raw_data
 
             if "pipeline" not in data:
                 raise PipelineError("Invalid pipeline YAML: missing 'pipeline' key")
 
-            pipeline_data = data["pipeline"]
+            pipeline_data_raw = data["pipeline"]
+            if not _is_str_any_dict(pipeline_data_raw):
+                raise PipelineError("Invalid pipeline YAML: 'pipeline' must be a mapping")
+            pipeline_data = pipeline_data_raw
 
-            steps = []
-            for step_data in pipeline_data.get("steps", []):
+            raw_steps = pipeline_data.get("steps", [])
+            if not isinstance(raw_steps, list):
+                raise PipelineError("Invalid pipeline YAML: 'steps' must be a list")
+            raw_steps_list = cast(list[object], raw_steps)
+
+            steps: list[PipelineStep] = []
+            for step_data_raw in raw_steps_list:
+                if not _is_str_any_dict(step_data_raw):
+                    raise PipelineError("Invalid pipeline YAML: each step must be a mapping")
+                step_data = step_data_raw
+
+                after_raw = step_data.get("after", [])
+                if not isinstance(after_raw, list):
+                    raise PipelineError("Invalid pipeline YAML: 'after' must be list[str]")
+                after_list = cast(list[object], after_raw)
+                if not all(isinstance(item, str) for item in after_list):
+                    raise PipelineError("Invalid pipeline YAML: 'after' must be list[str]")
+
+                parallel_raw = step_data.get("parallel", False)
+                if not isinstance(parallel_raw, bool):
+                    raise PipelineError("Invalid pipeline YAML: 'parallel' must be bool")
+
                 step = PipelineStep(
-                    id=step_data["id"],
-                    plugin=step_data["plugin"],
-                    interface=step_data["interface"],
-                    after=step_data.get("after", []),
-                    parallel=step_data.get("parallel", False),
+                    id=_require_str(step_data.get("id"), field="id"),
+                    plugin=_require_str(step_data.get("plugin"), field="plugin"),
+                    interface=_require_str(step_data.get("interface"), field="interface"),
+                    after=[str(item) for item in after_list],
+                    parallel=parallel_raw,
                 )
                 steps.append(step)
 
+            name = pipeline_data.get("name", "unnamed")
+            if not isinstance(name, str):
+                raise PipelineError("Invalid pipeline YAML: 'name' must be string")
+
+            description = pipeline_data.get("description", "")
+            if not isinstance(description, str):
+                raise PipelineError("Invalid pipeline YAML: 'description' must be string")
+
             return Pipeline(
-                name=pipeline_data.get("name", "unnamed"),
-                description=pipeline_data.get("description", ""),
+                name=name,
+                description=description,
                 steps=steps,
             )
 

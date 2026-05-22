@@ -72,11 +72,11 @@ class LogBus:
                 sys.stderr.write(msg)
 
 
-_LOG_BUS: LogBus | None = None
+_log_bus: LogBus | None = None
 
 
 def get_log_bus() -> LogBus:
-    global _LOG_BUS
-    if _LOG_BUS is None:
-        _LOG_BUS = LogBus()
-    return _LOG_BUS
+    global _log_bus
+    if _log_bus is None:
+        _log_bus = LogBus()
+    return _log_bus

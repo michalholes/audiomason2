@@ -206,7 +206,7 @@ class CheckpointManager:
         Returns:
             List of checkpoint info dicts
         """
-        checkpoints = []
+        checkpoints: list[dict[str, Any]] = []
 
         for checkpoint_file in self.checkpoint_dir.glob("*.json"):
             try:

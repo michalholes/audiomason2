@@ -8,6 +8,30 @@ from pathlib import Path
 from typing import Any
 
 
+def _new_metadata() -> dict[str, Any]:
+    return {}
+
+
+def _new_completed_steps() -> list[str]:
+    return []
+
+
+def _new_converted_files() -> list[Path]:
+    return []
+
+
+def _new_timings() -> dict[str, float]:
+    return {}
+
+
+def _new_errors() -> list[Exception]:
+    return []
+
+
+def _new_warnings() -> list[str]:
+    return []
+
+
 class State(Enum):
     """Processing state."""
 
@@ -41,7 +65,7 @@ class PreflightResult:
     has_title: bool = False
     has_author: bool = False
     has_year: bool = False
-    existing_metadata: dict[str, Any] = field(default_factory=dict)
+    existing_metadata: dict[str, Any] = field(default_factory=_new_metadata)
 
     # Cover detection
     has_embedded_cover: bool = False
@@ -127,7 +151,7 @@ class ProcessingContext:
     state: State = State.INIT
     current_step: str | None = None
     progress: float = 0.0  # 0.0 - 1.0
-    completed_steps: list[str] = field(default_factory=list)
+    completed_steps: list[str] = field(default_factory=_new_completed_steps)
 
     # ===========================================
     #  WORKING PATHS
@@ -141,17 +165,17 @@ class ProcessingContext:
     # ===========================================
 
     # Generated files
-    converted_files: list[Path] = field(default_factory=list)
+    converted_files: list[Path] = field(default_factory=_new_converted_files)
     cover_path: Path | None = None
 
     # Metadata
-    final_metadata: dict[str, Any] = field(default_factory=dict)
+    final_metadata: dict[str, Any] = field(default_factory=_new_metadata)
 
     # ===========================================
     #  PROFILING
     # ===========================================
 
-    timings: dict[str, float] = field(default_factory=dict)  # step_name -> seconds
+    timings: dict[str, float] = field(default_factory=_new_timings)  # step_name -> seconds
     start_time: float | None = None
     end_time: float | None = None
 
@@ -159,8 +183,8 @@ class ProcessingContext:
     #  ERROR HANDLING
     # ===========================================
 
-    errors: list[Exception] = field(default_factory=list)
-    warnings: list[str] = field(default_factory=list)
+    errors: list[Exception] = field(default_factory=_new_errors)
+    warnings: list[str] = field(default_factory=_new_warnings)
 
     # ===========================================
     #  PERSISTENCE (for resume)

@@ -6,7 +6,17 @@ Provides REST API endpoints for managing configuration.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
+
+
+def _as_str_any_dict(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        return {}
+    raw = cast(dict[object, Any], value)
+    normalized: dict[str, Any] = {}
+    for key, item in raw.items():
+        normalized[str(key)] = item
+    return normalized
 
 
 class ConfigAPI:
@@ -19,6 +29,7 @@ class ConfigAPI:
             config_file: Path to config file
         """
         self.config_file = config_file
+        self.config: dict[str, Any] = {}
         self.config_file.parent.mkdir(parents=True, exist_ok=True)
         self._load_config()
 
@@ -28,7 +39,7 @@ class ConfigAPI:
             import yaml
 
             with open(self.config_file) as f:
-                self.config = yaml.safe_load(f) or {}
+                self.config = _as_str_any_dict(yaml.safe_load(f))
         else:
             self.config = self._get_defaults()
 
@@ -161,7 +172,7 @@ class ConfigAPI:
 
         return {"message": "Configuration updated"}
 
-    def _deep_merge(self, base: dict, updates: dict) -> None:
+    def _deep_merge(self, base: dict[str, Any], updates: dict[str, Any]) -> None:
         """Deep merge updates into base dict.
 
         Args:
@@ -169,8 +180,11 @@ class ConfigAPI:
             updates: Updates to merge
         """
         for key, value in updates.items():
-            if key in base and isinstance(base[key], dict) and isinstance(value, dict):
-                self._deep_merge(base[key], value)
+            current = base.get(key)
+            if isinstance(current, dict) and isinstance(value, dict):
+                nested = _as_str_any_dict(current)
+                base[key] = nested
+                self._deep_merge(nested, _as_str_any_dict(value))
             else:
                 base[key] = value
 

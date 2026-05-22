@@ -12,13 +12,14 @@ import fcntl
 from collections.abc import Iterator
 from importlib import import_module
 from pathlib import Path
+from types import TracebackType
 from typing import Any, Protocol, TypeGuard
 
 from audiomason.core.jobs.api import JobService
 from audiomason.core.jobs.model import JobState, JobType
 from audiomason.core.jobs.store import JobStore
 from audiomason.core.loader import PluginLoader
-from audiomason.core.orchestration import OP_RUN_JOB, Orchestrator, _emit_diag, _utcnow_iso
+from audiomason.core.orchestration import OP_RUN_JOB, Orchestrator, emit_diag, utcnow_iso
 from audiomason.core.orchestration_models import ProcessContractRequest
 from audiomason.core.process_job_contracts import resolve_process_job_contract
 
@@ -39,7 +40,12 @@ class _ClaimedJob(contextlib.AbstractContextManager[bool]):
             return False
         return True
 
-    def __exit__(self, exc_type, exc, tb) -> None:
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
         if self._fd is None:
             return None
         with contextlib.suppress(OSError):
@@ -61,10 +67,10 @@ def _mark_job_running(orch: Orchestrator, job_id: str) -> None:
     if job.state != JobState.PENDING:
         return
     job.transition(JobState.RUNNING)
-    job.started_at = _utcnow_iso()
+    job.started_at = utcnow_iso()
     orch.jobs.store.save_job(job)
     orch.jobs.append_log_line(job_id, "started")
-    _emit_diag(
+    emit_diag(
         "diag.job.start",
         operation=OP_RUN_JOB,
         data={"job_id": job_id, "job_type": "process", "status": "running"},
@@ -175,7 +181,7 @@ def _run_claimed_job(orch: Orchestrator, job_id: str) -> None:
 
     _mark_job_running(orch, job_id)
     request = _build_request(dict(job.meta))
-    asyncio.run(orch._run_process_contract_job(job_id, request))
+    asyncio.run(orch.run_process_contract_job(job_id, request))
 
 
 def _process_job(store: JobStore, *, job_id: str) -> None:
@@ -190,11 +196,11 @@ def _process_job(store: JobStore, *, job_id: str) -> None:
             job = orch.get_job(job_id)
             if job.state == JobState.PENDING:
                 job.transition(JobState.RUNNING)
-                job.started_at = _utcnow_iso()
+                job.started_at = utcnow_iso()
             if job.state == JobState.RUNNING:
                 job.transition(JobState.FAILED)
                 job.error = str(e)
-                job.finished_at = _utcnow_iso()
+                job.finished_at = utcnow_iso()
                 orch.jobs.store.save_job(job)
 
 

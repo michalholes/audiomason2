@@ -14,9 +14,9 @@ import shutil
 import subprocess
 import tarfile
 import zipfile
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from pathlib import Path
-from typing import Callable, Literal, cast
+from typing import Literal, cast
 
 from audiomason.core.config import ConfigResolver
 from audiomason.core.errors import FileError

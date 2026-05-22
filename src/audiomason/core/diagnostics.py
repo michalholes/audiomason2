@@ -12,7 +12,7 @@ from __future__ import annotations
 import json
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, TypeGuard
 
 from audiomason.core.config import ConfigError, ConfigResolver
 from audiomason.core.events import get_event_bus
@@ -23,6 +23,10 @@ _logger = get_logger(__name__)
 
 _TRUE_VALUES = {"1", "true", "yes", "on"}
 _FALSE_VALUES = {"0", "false", "no", "off"}
+
+
+def _is_str_any_dict(value: Any) -> TypeGuard[dict[str, Any]]:
+    return isinstance(value, dict)
 
 
 def build_envelope(
@@ -96,7 +100,7 @@ def is_diagnostics_enabled(resolver: ConfigResolver) -> bool:
 
 
 def _is_envelope(obj: Any) -> bool:
-    if not isinstance(obj, dict):
+    if not _is_str_any_dict(obj):
         return False
 
     required = {"event", "component", "operation", "timestamp", "data"}
@@ -109,10 +113,10 @@ def _is_envelope(obj: Any) -> bool:
         return False
 
     data = obj.get("data")
-    return isinstance(data, dict)
+    return _is_str_any_dict(data)
 
 
-_SINK_INSTALLED = False
+_sink_installed = False
 
 
 def install_jsonl_sink(*, resolver: ConfigResolver) -> None:
@@ -125,8 +129,8 @@ def install_jsonl_sink(*, resolver: ConfigResolver) -> None:
 
     When diagnostics are disabled, the subscriber performs no file IO.
     """
-    global _SINK_INSTALLED
-    if _SINK_INSTALLED:
+    global _sink_installed
+    if _sink_installed:
         return
 
     def _on_any_event(event: str, data: dict[str, Any]) -> None:
@@ -166,4 +170,4 @@ def install_jsonl_sink(*, resolver: ConfigResolver) -> None:
             _logger.warning(f"Diagnostics sink write failed: {type(e).__name__}: {e}")
 
     get_event_bus().subscribe_all(_on_any_event)
-    _SINK_INSTALLED = True
+    _sink_installed = True
