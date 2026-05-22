@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, cast
 
 from plugins.file_io.import_runtime import normalize_relative_path
 from plugins.file_io.service import FileService, RootName
@@ -47,7 +47,7 @@ def _materialize_root_dir(fs: FileService, root: str | RootName) -> Path:
     root_name = _normalize_root_name(root)
     root_dir = getattr(fs, "root_dir", None)
     if callable(root_dir):
-        return root_dir(root_name)
+        return cast(Callable[[RootName], Path], root_dir)(root_name)
     root_cfg = getattr(fs, "_root", None)
     if callable(root_cfg):
         cfg = root_cfg(root_name)
@@ -68,10 +68,11 @@ def _materialize_local_path(
     rel = normalize_relative_path(rel_path)
     resolver = getattr(fs, "_resolve_local_path", None)
     if callable(resolver):
-        return resolver(root_name, rel, silent_polling_read=silent_polling_read)
+        resolved = resolver(root_name, rel, silent_polling_read=silent_polling_read)
+        return cast(Path, resolved)
     resolve_abs = getattr(fs, "resolve_abs_path", None)
     if callable(resolve_abs):
-        return resolve_abs(root_name, rel)
+        return cast(Callable[[RootName, str], Path], resolve_abs)(root_name, rel)
     base = _materialize_root_dir(fs, root_name)
     if not rel:
         return base

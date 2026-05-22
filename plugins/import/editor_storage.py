@@ -279,6 +279,8 @@ def _best_effort_fsync(f: Any) -> None:
             flush()
         fileno = getattr(f, "fileno", None)
         if callable(fileno):
-            os.fsync(fileno())
+            fd = fileno()
+            if isinstance(fd, int):
+                os.fsync(fd)
     except Exception:
         return

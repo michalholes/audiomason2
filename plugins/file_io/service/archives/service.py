@@ -16,7 +16,7 @@ import tarfile
 import zipfile
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Literal, cast
+from typing import Callable, Literal, cast
 
 from audiomason.core.config import ConfigResolver
 from audiomason.core.errors import FileError
@@ -118,7 +118,7 @@ def _tarinfo_deterministic(name: str, size: int) -> tarfile.TarInfo:
 def _local_path(fs: FileService, root: RootName, rel_path: str) -> Path:
     resolver = getattr(fs, "_resolve_local_path", None)
     if callable(resolver):
-        return resolver(root, rel_path)
+        return cast(Callable[[RootName, str], Path], resolver)(root, rel_path)
     return fs.resolve_abs_path(root, rel_path)
 
 

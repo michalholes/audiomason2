@@ -6,8 +6,9 @@ ASCII-only.
 from __future__ import annotations
 
 import shutil
+from collections.abc import Awaitable
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from plugins.file_io.import_runtime import normalize_relative_path, publish_staged
 from plugins.file_io.service.types import RootName
@@ -210,12 +211,16 @@ async def _run_audio_import(
             ):
                 detect = getattr(plugin, "_detect_chapters", None)
                 if callable(detect):
-                    chapters = await detect(source_file)
+                    detected = detect(source_file)
+                    if isinstance(detected, Awaitable):
+                        chapters = cast(list[dict[str, Any]] | None, await detected)
             plan = plugin.plan_import_conversion(source_file, output_dir, chapters=chapters)
             execute_plan = getattr(plugin, "_execute_plan", None)
             if not callable(execute_plan):
                 raise RuntimeError("audio_processor missing _execute_plan")
-            await execute_plan(plan)
+            execute_result = execute_plan(plan)
+            if isinstance(execute_result, Awaitable):
+                await execute_result
     finally:
         for key, value in original_values.items():
             if value is not None:

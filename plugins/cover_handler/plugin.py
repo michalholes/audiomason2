@@ -16,7 +16,7 @@ import mimetypes
 import shutil
 from collections import Counter
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, cast
 from urllib.parse import urlparse
 
 from mutagen.id3 import ID3
@@ -120,15 +120,21 @@ def _path_to_relative(*, root_dir: Path, abs_path: Path) -> str:
 def _file_service_root_dir(file_service: Any, root_name: Any) -> Path:
     getter = getattr(file_service, "_root_dir_path", None)
     if callable(getter):
-        return getter(root_name)
-    return file_service.root_dir(root_name)
+        return cast(Callable[[Any], Path], getter)(root_name)
+    fallback = getattr(file_service, "root_dir", None)
+    if callable(fallback):
+        return cast(Callable[[Any], Path], fallback)(root_name)
+    raise AttributeError("file_service has no root directory accessor")
 
 
 def _file_service_resolve_path(file_service: Any, root_name: Any, rel_path: str) -> Path:
     getter = getattr(file_service, "_resolve_local_path", None)
     if callable(getter):
-        return getter(root_name, rel_path)
-    return file_service.resolve_abs_path(root_name, rel_path)
+        return cast(Callable[[Any, str], Path], getter)(root_name, rel_path)
+    fallback = getattr(file_service, "resolve_abs_path", None)
+    if callable(fallback):
+        return cast(Callable[[Any, str], Path], fallback)(root_name, rel_path)
+    raise AttributeError("file_service has no path resolver")
 
 
 class CoverHandlerPlugin:

@@ -1,0 +1,13 @@
+{
+  "pythonVersion": "3.11",
+  "typeCheckingMode": "basic",
+  "include": ["src", "plugins"],
+  "strict": ["src"],
+  "exclude": [
+    "tests",
+    "patches",
+    "scripts",
+    "badguys",
+    "**/__pycache__"
+  ]
+}

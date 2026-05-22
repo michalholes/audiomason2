@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import shutil
 from pathlib import Path
+from typing import Callable, cast
 
 from audiomason.core.errors import FileError
 
@@ -55,7 +56,7 @@ def target_root_for_mode(mode: str) -> RootName:
 def _local_path(fs: FileService, root: RootName, rel_path: str) -> Path:
     resolver = getattr(fs, "_resolve_local_path", None)
     if callable(resolver):
-        return resolver(root, rel_path)
+        return cast(Callable[[RootName, str], Path], resolver)(root, rel_path)
     return fs.resolve_abs_path(root, rel_path)
 
 

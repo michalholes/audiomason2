@@ -208,7 +208,11 @@ def install_processed_registry_subscriber(*, resolver: Any) -> None:
             job_requests=job_requests_any,
         )
 
-    core_facade.get_bus().subscribe_all(_on_any)
+    bus = core_facade.get_bus()
+    subscribe_all = getattr(bus, "subscribe_all", None)
+    if not callable(subscribe_all):
+        return
+    subscribe_all(_on_any)
     _INSTALLED = True
 
 

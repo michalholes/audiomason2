@@ -32,6 +32,10 @@ from .file_io_boundary import materialize_root_dir
 _METADATA_OPENLIBRARY_TIMEOUT_SECONDS = 2.0
 
 
+class _EventBus(Protocol):
+    def publish(self, event: str, payload: dict[str, Any]) -> None: ...
+
+
 def _detached_runtime_from_meta(*, job_meta: dict[str, Any]) -> DetachedImportRuntime | None:
     try:
         bootstrap = load_detached_runtime_bootstrap_from_meta(job_meta=job_meta)
@@ -120,7 +124,8 @@ def emit_required(
             payload[key] = ctx[key]
 
     try:
-        _get_bus().publish(
+        bus = _get_bus()
+        bus.publish(
             event,
             build_envelope(
                 event=event,
@@ -133,16 +138,18 @@ def emit_required(
         return
 
 
-def _get_bus():
+def _get_bus() -> _EventBus:
     # Prefer the import engine test seam when present.
     try:
         engine_mod = import_module("plugins.import.engine")
         fn = getattr(engine_mod, "get_event_bus", None)
         if callable(fn):
-            return fn()
+            bus = fn()
+            if callable(getattr(bus, "publish", None)):
+                return cast(_EventBus, bus)
     except Exception:
         pass
-    return _core_get_event_bus()
+    return cast(_EventBus, _core_get_event_bus())
 
 
 class _RuntimeImportPlugin:

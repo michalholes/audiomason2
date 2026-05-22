@@ -6,7 +6,7 @@ import traceback
 from contextlib import suppress
 from typing import Any
 
-from fastapi import FastAPI, Request
+from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import JSONResponse
 
 from audiomason.core.diagnostics import build_envelope
@@ -280,6 +280,19 @@ class WebInterfacePlugin:
                         "phase": "build_router",
                         "exc_type": "ValueError",
                         "exc_message": "get_fastapi_router returned None",
+                        "plugin_origin": plugin_origin,
+                    },
+                )
+                logger.info(f"import_ui_mount: failed phase=build_router origin={plugin_origin}")
+                return
+
+            if not isinstance(router, APIRouter):
+                _emit(
+                    "web_interface.import_ui_mount_failed",
+                    {
+                        "phase": "build_router",
+                        "exc_type": "TypeError",
+                        "exc_message": "get_fastapi_router must return APIRouter",
                         "plugin_origin": plugin_origin,
                     },
                 )

@@ -8,7 +8,7 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-import anyio
+from anyio.to_thread import run_sync
 
 from audiomason.core import ProcessingContext
 from audiomason.core.config import ConfigResolver
@@ -137,11 +137,11 @@ class FileIOPlugin:
         import uuid
 
         stage_dir = self.stage_dir / f"book_{uuid.uuid4().hex[:8]}"
-        await anyio.to_thread.run_sync(lambda: stage_dir.mkdir(parents=True, exist_ok=True))
+        await run_sync(lambda: stage_dir.mkdir(parents=True, exist_ok=True))
 
         # Copy source to stage
         staged_file = stage_dir / source.name
-        await anyio.to_thread.run_sync(shutil.copy2, source, staged_file)
+        await run_sync(shutil.copy2, source, staged_file)
 
         # Update context
         context.stage_dir = stage_dir
@@ -171,14 +171,14 @@ class FileIOPlugin:
         title_clean = self._sanitize_filename(title)
 
         output_dir = self.output_dir / f"{author_clean} - {title_clean}"
-        await anyio.to_thread.run_sync(lambda: output_dir.mkdir(parents=True, exist_ok=True))
+        await run_sync(lambda: output_dir.mkdir(parents=True, exist_ok=True))
 
         # Move files
         exported = []
         for file in context.converted_files:
             if file.exists():
                 dest = output_dir / file.name
-                await anyio.to_thread.run_sync(shutil.move, str(file), str(dest))
+                await run_sync(shutil.move, str(file), str(dest))
                 exported.append(dest)
 
         context.output_path = output_dir
@@ -191,7 +191,7 @@ class FileIOPlugin:
             def _rmtree(p: Path) -> None:
                 shutil.rmtree(p, ignore_errors=True)
 
-            await anyio.to_thread.run_sync(_rmtree, stage_dir)
+            await run_sync(_rmtree, stage_dir)
 
         return context
 
