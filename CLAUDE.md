@@ -46,7 +46,7 @@ Available tags: `ARCH`, `ARTIFACT`, `CONFIG`, `CORE`, `ENDPOINT`, `ERROR`, `FILE
 When the implementation is complete, run Amp to validate all gates (ruff, mypy, pytest, compile, docs, monolith) and commit:
 
 ```bash
-python3 /home/pi/patchhub/scripts/am_patch.py -s "your commit message"
+python3 /home/pi/gitrepos/patchhub/scripts/am_patch.py -s "your commit message"
 ```
 
 Amp detects the repo root from cwd, runs all gates, commits and pushes on success. If a gate fails, fix it and rerun. Task is not done until Amp passes.
@@ -72,7 +72,7 @@ ruff check src/ plugins/ badguys/ tests/
 # Type check
 mypy src/
 
-# Run Amp (patch runner) — from /home/pi/patchhub
+# Run Amp (patch runner) — from /home/pi/gitrepos/patchhub
 python3 scripts/am_patch.py ISSUE_ID "commit message" patches/issue_<ISSUE>_v<N>.zip --target-repo-name audiomason2
 ```
 
