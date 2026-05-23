@@ -11,7 +11,7 @@ ASCII-only.
 
 from __future__ import annotations
 
-from typing import TypeGuard
+from typing import TypeGuard, cast
 
 from plugins.file_io.service import FileService
 from plugins.file_io.service.types import RootName
@@ -39,7 +39,9 @@ WIZARD_DEFINITION_REL_PATH = "import/definitions/wizard_definition.json"
 
 
 def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
-    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+    if not isinstance(value, dict):
+        return False
+    return all(isinstance(key, str) for key in cast(dict[object, object], value))
 
 
 def _as_str_object_dict(value: object) -> dict[str, object]:
@@ -310,10 +312,13 @@ def build_effective_workflow_snapshot(
 
     if version == 1:
         steps_any = wizard_definition.get("steps")
-        if not isinstance(steps_any, list):
+        if not _is_object_list(steps_any):
             raise FinalizeError("wizard_definition steps must be a list")
-        for s in steps_any:
-            sid = s.get("step_id") if isinstance(s, dict) else None
+        steps = _as_dict_list(steps_any)
+        if len(steps) != len(steps_any):
+            raise FinalizeError("wizard_definition contains invalid step_id")
+        for s in steps:
+            sid = s.get("step_id")
             if not isinstance(sid, str) or not sid:
                 raise FinalizeError("wizard_definition contains invalid step_id")
             if sid in OPTIONAL_STEP_IDS and not _is_enabled(sid, flow_config):
@@ -324,13 +329,16 @@ def build_effective_workflow_snapshot(
         return ordered
 
     if version == 2:
-        graph_any = wizard_definition.get("graph")
-        nodes_any = graph_any.get("nodes") if isinstance(graph_any, dict) else None
-        if not isinstance(nodes_any, list):
+        graph_any = _as_str_object_dict(wizard_definition.get("graph"))
+        nodes_any = graph_any.get("nodes")
+        if not _is_object_list(nodes_any):
             raise FinalizeError("wizard_definition graph nodes must be a list")
+        nodes = _as_dict_list(nodes_any)
+        if len(nodes) != len(nodes_any):
+            raise FinalizeError("wizard_definition graph contains invalid step_id")
 
-        for n in nodes_any:
-            sid = n.get("step_id") if isinstance(n, dict) else None
+        for n in nodes:
+            sid = n.get("step_id")
             if not isinstance(sid, str) or not sid:
                 raise FinalizeError("wizard_definition graph contains invalid step_id")
             if sid in OPTIONAL_STEP_IDS and not _is_enabled(sid, flow_config):
@@ -342,11 +350,14 @@ def build_effective_workflow_snapshot(
 
     if version == 3:
         nodes_any = wizard_definition.get("nodes")
-        if not isinstance(nodes_any, list):
+        if not _is_object_list(nodes_any):
             raise FinalizeError("wizard_definition nodes must be a list")
+        nodes = _as_dict_list(nodes_any)
+        if len(nodes) != len(nodes_any):
+            raise FinalizeError("wizard_definition contains invalid step_id")
 
-        for n in nodes_any:
-            sid = n.get("step_id") if isinstance(n, dict) else None
+        for n in nodes:
+            sid = n.get("step_id")
             if not isinstance(sid, str) or not sid:
                 raise FinalizeError("wizard_definition contains invalid step_id")
             if sid in OPTIONAL_STEP_IDS and not _is_enabled(sid, flow_config):
@@ -403,17 +414,18 @@ def validate_wizard_definition_constraints_v2(wd: dict[str, object]) -> None:
         raise FinalizeError("wizard_definition must be version 2")
 
     graph_any = wd.get("graph")
-    if not isinstance(graph_any, dict):
+    if not _is_str_object_dict(graph_any):
         raise FinalizeError("wizard_definition graph must be an object")
 
     nodes_any = graph_any.get("nodes")
-    if not isinstance(nodes_any, list) or not nodes_any:
+    if not _is_object_list(nodes_any) or not nodes_any:
         raise FinalizeError("wizard_definition graph nodes must be a non-empty list")
+    nodes = _as_dict_list(nodes_any)
+    if len(nodes) != len(nodes_any):
+        raise FinalizeError("wizard_definition graph nodes must be objects")
 
     step_order: list[str] = []
-    for n in nodes_any:
-        if not isinstance(n, dict):
-            raise FinalizeError("wizard_definition graph nodes must be objects")
+    for n in nodes:
         sid = n.get("step_id")
         if not isinstance(sid, str) or not sid:
             raise FinalizeError("wizard_definition graph node step_id must be a string")
@@ -465,15 +477,16 @@ def enforce_mandatory_constraints(step_order: list[str]) -> None:
 
 def _validate_v1_steps(wd: dict[str, object]) -> None:
     steps_any = wd.get("steps")
-    if not isinstance(steps_any, list) or not steps_any:
+    if not _is_object_list(steps_any) or not steps_any:
         raise FinalizeError("wizard_definition steps must be a non-empty list")
+    steps = _as_dict_list(steps_any)
+    if len(steps) != len(steps_any):
+        raise FinalizeError("wizard_definition steps must be objects")
 
     known = _known_step_ids()
 
     seen: set[str] = set()
-    for s in steps_any:
-        if not isinstance(s, dict):
-            raise FinalizeError("wizard_definition steps must be objects")
+    for s in steps:
         sid = s.get("step_id")
         if not isinstance(sid, str) or not sid:
             raise FinalizeError("wizard_definition step_id must be a non-empty string")
@@ -487,7 +500,7 @@ def _validate_v1_steps(wd: dict[str, object]) -> None:
 
 def _validate_v2_graph(wd: dict[str, object]) -> None:
     graph_any = wd.get("graph")
-    if not isinstance(graph_any, dict):
+    if not _is_str_object_dict(graph_any):
         raise FinalizeError("wizard_definition graph must be an object")
 
     _assert_exact_keys(
@@ -501,17 +514,17 @@ def _validate_v2_graph(wd: dict[str, object]) -> None:
         raise FinalizeError("wizard_definition graph entry_step_id must be a string")
 
     nodes_any = graph_any.get("nodes")
-    if not isinstance(nodes_any, list) or not nodes_any:
+    if not _is_object_list(nodes_any) or not nodes_any:
         raise FinalizeError("wizard_definition graph nodes must be a non-empty list")
+    nodes_raw = _as_dict_list(nodes_any)
+    if len(nodes_raw) != len(nodes_any):
+        raise FinalizeError("wizard_definition graph nodes must be objects")
 
     known = _known_step_ids()
 
     nodes: list[str] = []
     seen: set[str] = set()
-    for n in nodes_any:
-        if not isinstance(n, dict):
-            raise FinalizeError("wizard_definition graph nodes must be objects")
-
+    for n in nodes_raw:
         _assert_exact_keys(obj=n, allowed={"step_id"}, context="wizard_definition graph node")
 
         sid = n.get("step_id")
@@ -529,16 +542,16 @@ def _validate_v2_graph(wd: dict[str, object]) -> None:
         raise FinalizeError("wizard_definition graph entry_step_id must exist in nodes")
 
     edges_any = graph_any.get("edges")
-    if not isinstance(edges_any, list):
+    if not _is_object_list(edges_any):
         raise FinalizeError("wizard_definition graph edges must be a list")
+    edges = _as_dict_list(edges_any)
+    if len(edges) != len(edges_any):
+        raise FinalizeError("wizard_definition graph edges must be objects")
 
     outgoing: dict[str, list[dict[str, object]]] = {sid: [] for sid in nodes}
     priorities_by_from: dict[str, set[int]] = {sid: set() for sid in nodes}
 
-    for e in edges_any:
-        if not isinstance(e, dict):
-            raise FinalizeError("wizard_definition graph edges must be objects")
-
+    for e in edges:
         _assert_exact_keys(
             obj=e,
             allowed={"from_step_id", "to_step_id", "priority", "when"},
@@ -585,14 +598,16 @@ def _validate_v2_graph(wd: dict[str, object]) -> None:
                 "AMBIGUOUS_TRANSITION: " + frm + " edges=" + str(len(unconditional))
             )
 
-    _validate_v2_reachability(entry_any, nodes, edges_any)
+    _validate_v2_reachability(entry_any, nodes, edges)
 
 
-def _validate_v2_reachability(entry: str, nodes: list[str], edges_any: list[object]) -> None:
+def _validate_v2_reachability(
+    entry: str,
+    nodes: list[str],
+    edges_any: list[dict[str, object]],
+) -> None:
     adj: dict[str, set[str]] = {n: set() for n in nodes}
     for e in edges_any:
-        if not isinstance(e, dict):
-            continue
         frm = e.get("from_step_id")
         to = e.get("to_step_id")
         if isinstance(frm, str) and isinstance(to, str) and frm in adj and to in adj:
@@ -659,11 +674,11 @@ def _known_step_ids() -> set[str]:
 
 
 def _is_enabled(step_id: str, flow_config: dict[str, object]) -> bool:
-    steps_any = flow_config.get("steps") if isinstance(flow_config, dict) else None
-    if not isinstance(steps_any, dict):
+    steps_any = flow_config.get("steps")
+    if not _is_str_object_dict(steps_any):
         return True
     cfg_any = steps_any.get(step_id)
-    if not isinstance(cfg_any, dict):
+    if not _is_str_object_dict(cfg_any):
         return True
     enabled = cfg_any.get("enabled")
     if enabled is None:

@@ -64,9 +64,6 @@ def normalize_rel_path(rel_path: str) -> PurePosixPath:
     Raises:
         InvalidRelativePathError
     """
-    if rel_path is None:
-        raise InvalidRelativePathError("Path is required")
-
     # Normalize separators for consistent behavior across clients.
     rel_path = str(rel_path).replace("\\", "/")
 
@@ -116,7 +113,7 @@ def resolve_path(
 
     start = time.perf_counter()
 
-    base = {"root": root_value, "rel_path": rel_path}
+    base: dict[str, object] = {"root": root_value, "rel_path": rel_path}
     _safe_publish(
         "operation.start",
         build_envelope(
@@ -131,7 +128,7 @@ def resolve_path(
         abs_path = _resolve_path_checked(root_dir, rel_path)
 
         duration_ms = int((time.perf_counter() - start) * 1000)
-        end_data = {
+        end_data: dict[str, object] = {
             "root": root_value,
             "rel_path": rel_path,
             "resolved_path": str(abs_path),
@@ -154,7 +151,7 @@ def resolve_path(
         return abs_path
     except Exception as e:
         duration_ms = int((time.perf_counter() - start) * 1000)
-        end_data = {
+        error_data: dict[str, object] = {
             "root": root_value,
             "rel_path": rel_path,
             "status": "failed",
@@ -169,7 +166,7 @@ def resolve_path(
                 event="operation.end",
                 component="file_io",
                 operation="file_io.resolve",
-                data=end_data,
+                data=error_data,
             ),
         )
         _logger.warning(

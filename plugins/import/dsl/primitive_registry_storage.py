@@ -10,7 +10,7 @@ ASCII-only.
 
 from __future__ import annotations
 
-from typing import TypeGuard
+from typing import TypeGuard, cast
 
 from plugins.file_io.service import FileService
 from plugins.file_io.service.types import RootName
@@ -24,7 +24,11 @@ REL_PATH = "import/definitions/primitive_registry.json"
 def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
     if not isinstance(value, dict):
         return False
-    return all(isinstance(key, str) for key in value)
+    return all(isinstance(key, str) for key in cast(dict[object, object], value))
+
+
+def _is_object_list(value: object) -> TypeGuard[list[object]]:
+    return isinstance(value, list)
 
 
 def _as_str_object_dict(value: object) -> dict[str, object]:
@@ -60,11 +64,10 @@ DEFAULT_REGISTRY: dict[str, object] = {
 
 def _merge_required_primitives(registry: dict[str, object]) -> dict[str, object]:
     prims_any = registry.get("primitives")
-    primitives = (
-        [dict(item) for item in prims_any if _is_str_object_dict(item)]
-        if isinstance(prims_any, list)
-        else []
-    )
+    if _is_object_list(prims_any):
+        primitives = [dict(item) for item in prims_any if _is_str_object_dict(item)]
+    else:
+        primitives = []
     seen: set[tuple[str, int]] = set()
     for item in primitives:
         primitive_id = item.get("primitive_id")
@@ -88,9 +91,9 @@ def _merge_required_primitives(registry: dict[str, object]) -> dict[str, object]
 def _canonicalize_validated_registry(obj: object) -> dict[str, object]:
     reg = validate_primitive_registry(obj)
     canon_any = canonicalize_primitive_registry(_merge_required_primitives(reg))
-    if not isinstance(canon_any, dict):
+    if not _is_str_object_dict(canon_any):
         raise ValueError("primitive registry must be an object")
-    return validate_primitive_registry(canon_any)
+    return validate_primitive_registry(dict(canon_any))
 
 
 def bootstrap_primitive_registry_if_missing(fs: FileService) -> bool:

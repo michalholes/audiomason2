@@ -7,7 +7,7 @@ ASCII-only.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, TypeGuard
+from typing import TYPE_CHECKING, TypeGuard, cast
 
 from plugins.file_io.service.types import RootName
 
@@ -19,11 +19,11 @@ from .engine_conflicts import (
     persist_conflict_resolution,
 )
 from .engine_util import (
-    _derive_selection_items,
-    _emit_required,
-    _exception_envelope,
-    _iso_utc_now,
-    _parse_selection_expr,
+    derive_selection_items,
+    emit_required_event,
+    exception_envelope,
+    iso_utc_now,
+    parse_selection_expr,
     sync_session_cursor,
 )
 from .errors import StepSubmissionError, ascii_message, invariant_violation
@@ -38,11 +38,15 @@ if TYPE_CHECKING:
 def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
     if not isinstance(value, dict):
         return False
-    return all(isinstance(key, str) for key in value)
+    return all(isinstance(key, str) for key in cast(dict[object, object], value))
 
 
 def _as_str_object_dict(value: object) -> dict[str, object]:
     return dict(value) if _is_str_object_dict(value) else {}
+
+
+def _is_object_list(value: object) -> TypeGuard[list[object]]:
+    return isinstance(value, list)
 
 
 def _selection_ids_from_value(*, ordered_ids: list[str], selection: object) -> list[str]:
@@ -50,15 +54,19 @@ def _selection_ids_from_value(*, ordered_ids: list[str], selection: object) -> l
         return []
 
     ordered_set = set(ordered_ids)
-    if isinstance(selection, list):
-        if all(isinstance(item, str) for item in selection):
-            requested = [str(item) for item in selection]
+    if _is_object_list(selection):
+        values = selection
+        if all(isinstance(item, str) for item in values):
+            requested = [str(item) for item in values]
             if all(item in ordered_set for item in requested):
                 requested_set = set(requested)
                 return [item_id for item_id in ordered_ids if item_id in requested_set]
             return []
-        if all(isinstance(item, int) and not isinstance(item, bool) for item in selection):
-            requested_indices = {int(item) for item in selection if int(item) > 0}
+        if all(isinstance(item, int) and not isinstance(item, bool) for item in values):
+            requested_indices: set[int] = set()
+            for item in values:
+                if isinstance(item, int) and not isinstance(item, bool) and item > 0:
+                    requested_indices.add(item)
             return [
                 item_id
                 for index, item_id in enumerate(ordered_ids, start=1)
@@ -73,7 +81,7 @@ def _selection_ids_from_value(*, ordered_ids: list[str], selection: object) -> l
         return []
 
     try:
-        requested_indices = set(_parse_selection_expr(selection, max_index=len(ordered_ids)))
+        requested_indices = set(parse_selection_expr(selection, max_index=len(ordered_ids)))
     except ValueError:
         return []
 
@@ -84,12 +92,11 @@ def _selection_ids_from_value(*, ordered_ids: list[str], selection: object) -> l
 
 def _load_v3_discovery(*, engine: ImportWizardEngine, session_id: str) -> list[dict[str, object]]:
     session_dir = f"import/sessions/{session_id}"
-    discovery_any = read_json(engine._fs, RootName.WIZARDS, f"{session_dir}/discovery.json")
-    if not isinstance(discovery_any, list) or not all(
-        isinstance(item, dict) for item in discovery_any
-    ):
+    fs = engine.get_file_service()
+    discovery_any = read_json(fs, RootName.WIZARDS, f"{session_dir}/discovery.json")
+    if not _is_object_list(discovery_any):
         return []
-    return [dict(item) for item in discovery_any]
+    return [dict(item) for item in discovery_any if _is_str_object_dict(item)]
 
 
 def _ordered_ids_from_state(*, state: dict[str, object], step_id: str) -> list[str]:
@@ -99,7 +106,7 @@ def _ordered_ids_from_state(*, state: dict[str, object], step_id: str) -> list[s
     prompt = _as_str_object_dict(prompt_any)
     key = "filtered_ids" if step_id == "select_books" else "ordered_ids"
     ordered_ids_any = prompt.get(key)
-    if not isinstance(ordered_ids_any, list):
+    if not _is_object_list(ordered_ids_any):
         return []
     return [item for item in ordered_ids_any if isinstance(item, str)]
 
@@ -122,7 +129,7 @@ def _derive_v3_selected_ids(
     if not discovery:
         return []
 
-    authors_items, books_items = _derive_selection_items(discovery)
+    authors_items, books_items = derive_selection_items(discovery)
     items = authors_items if step_id == "select_authors" else books_items
     ordered_ids = [
         str(item.get("item_id")) for item in items if isinstance(item.get("item_id"), str)
@@ -165,7 +172,7 @@ def _validate_v3_selection_payload(
     raise StepSubmissionError("selection out of range")
 
 
-def _sync_v3_legacy_state(
+def sync_v3_legacy_state(
     *, engine: ImportWizardEngine, session_id: str, state: dict[str, object]
 ) -> dict[str, object]:
     answers = _as_str_object_dict(state.get("answers"))
@@ -208,11 +215,11 @@ def _sync_v3_legacy_state(
 
 def _needs_v3_plan_refresh(state: dict[str, object]) -> bool:
     computed_any = state.get("computed")
-    if isinstance(computed_any, dict) and "plan_summary" in computed_any:
+    if _is_str_object_dict(computed_any) and "plan_summary" in computed_any:
         return False
 
     trace_any = state.get("trace")
-    if not isinstance(trace_any, list):
+    if not _is_object_list(trace_any):
         return False
 
     return any(
@@ -229,7 +236,7 @@ def submit_step_impl(
     payload: dict[str, object],
 ) -> dict[str, object]:
     try:
-        state = engine._load_state(session_id)
+        state = engine.load_state(session_id)
         phase_any = state.get("phase")
         phase = phase_any if isinstance(phase_any, int) else 1
         if phase == 2:
@@ -242,7 +249,7 @@ def submit_step_impl(
         if state.get("status") != "in_progress":
             raise StepSubmissionError("session is not in progress")
 
-        _emit_required(
+        emit_required_event(
             "step.submit",
             "step.submit",
             {
@@ -258,10 +265,7 @@ def submit_step_impl(
             },
         )
 
-        if not isinstance(payload, dict):
-            raise StepSubmissionError("payload must be an object")
-
-        effective_model = engine._load_effective_model(session_id)
+        effective_model = engine.load_effective_model(session_id)
         if is_v3_effective_model(effective_model):
             _validate_v3_selection_payload(
                 engine=engine,
@@ -277,31 +281,31 @@ def submit_step_impl(
                 step_id=step_id,
                 payload=payload,
             )
-            next_state = _sync_v3_legacy_state(
+            next_state = sync_v3_legacy_state(
                 engine=engine,
                 session_id=session_id,
                 state=next_state,
             )
             session_dir = f"import/sessions/{session_id}"
-            discovery_any = read_json(engine._fs, RootName.WIZARDS, f"{session_dir}/discovery.json")
-            if (
-                phase1_session_authority_applies(effective_model=effective_model)
-                and isinstance(discovery_any, list)
-                and all(isinstance(item, dict) for item in discovery_any)
-            ):
+            fs = engine.get_file_service()
+            discovery_any = read_json(fs, RootName.WIZARDS, f"{session_dir}/discovery.json")
+            if phase1_session_authority_applies(
+                effective_model=effective_model
+            ) and _is_object_list(discovery_any):
+                discovery = [dict(item) for item in discovery_any if _is_str_object_dict(item)]
                 vars_state = _as_str_object_dict(next_state.get("vars"))
                 vars_state["phase1"] = build_phase1_projection(
-                    discovery=discovery_any,
+                    discovery=discovery,
                     state=next_state,
-                    fs=engine._fs,
+                    fs=fs,
                 )
                 next_state["vars"] = vars_state
-            next_state["updated_at"] = _iso_utc_now()
-            engine._persist_state(session_id, next_state)
+            next_state["updated_at"] = iso_utc_now()
+            engine.persist_state(session_id, next_state)
             if _needs_v3_plan_refresh(next_state):
                 engine.compute_plan(session_id)
-                next_state = engine._load_state(session_id)
-            engine._append_decision(
+                next_state = engine.load_state(session_id)
+            engine.append_decision(
                 session_id,
                 step_id=step_id,
                 payload=dict(payload),
@@ -310,10 +314,10 @@ def submit_step_impl(
             )
             return next_state
         steps_any = effective_model.get("steps")
-        if not isinstance(steps_any, list):
+        if not _is_object_list(steps_any):
             raise StepSubmissionError("effective model missing steps")
         steps = [s for s in steps_any if _is_str_object_dict(s)]
-        flow_cfg_norm = engine._load_effective_flow_config(session_id)
+        flow_cfg_norm = engine.load_effective_flow_config(session_id)
 
         step_ids = {str(s.get("step_id")) for s in steps if isinstance(s.get("step_id"), str)}
         if step_id not in step_ids and step_id not in CONDITIONAL_STEP_IDS:
@@ -334,7 +338,7 @@ def submit_step_impl(
         if step_id in {"plan_preview_batch", "processing"}:
             raise StepSubmissionError("computed-only step cannot be submitted")
 
-        normalized_payload = engine._validate_and_canonicalize_payload(
+        normalized_payload = engine.validate_and_canonicalize_payload(
             step_id=step_id,
             schema=schema,
             payload=payload,
@@ -363,16 +367,18 @@ def submit_step_impl(
 
         if step_id == "select_authors":
             sel = normalized_payload.get("selection")
-            if isinstance(sel, list):
-                selected_author_ids = [item for item in sel if isinstance(item, str)]
-                if len(selected_author_ids) == len(sel):
+            if _is_object_list(sel):
+                selection_items = sel
+                selected_author_ids = [item for item in selection_items if isinstance(item, str)]
+                if len(selected_author_ids) == len(selection_items):
                     state["selected_author_ids"] = selected_author_ids
 
         if step_id == "select_books":
             sel = normalized_payload.get("selection")
-            if isinstance(sel, list):
-                selected_book_ids = [item for item in sel if isinstance(item, str)]
-                if len(selected_book_ids) == len(sel):
+            if _is_object_list(sel):
+                selection_items = sel
+                selected_book_ids = [item for item in selection_items if isinstance(item, str)]
+                if len(selected_book_ids) == len(selection_items):
                     state["selected_book_ids"] = selected_book_ids
 
         if step_id == "effective_author_title":
@@ -381,20 +387,20 @@ def submit_step_impl(
         completed_any = state.get("completed_step_ids")
         completed = (
             [item for item in completed_any if isinstance(item, str)]
-            if isinstance(completed_any, list)
+            if _is_object_list(completed_any)
             else []
         )
         if step_id not in completed:
             completed.append(step_id)
         state["completed_step_ids"] = completed
 
-        next_step = engine._next_step_after_submit(
+        next_step = engine.next_step_after_submit(
             step_id=step_id,
             state=state,
             flow_cfg_norm=flow_cfg_norm,
         )
 
-        state["current_step_id"] = engine._auto_advance_computed_steps(
+        state["current_step_id"] = engine.auto_advance_computed_steps(
             session_id=session_id,
             state=state,
             next_step_id=next_step,
@@ -402,25 +408,28 @@ def submit_step_impl(
         )
         sync_session_cursor(state, step_id=str(state.get("current_step_id") or ""))
 
-        state["updated_at"] = _iso_utc_now()
-        engine._append_decision(
+        state["updated_at"] = iso_utc_now()
+        engine.append_decision(
             session_id,
             step_id=step_id,
             payload=normalized_payload,
             result="accepted",
             error=None,
         )
-        engine._persist_state(session_id, state)
+        engine.persist_state(session_id, state)
         return state
     except Exception as e:
-        engine._append_decision(
+        engine.append_decision(
             session_id,
             step_id=step_id,
-            payload=payload if isinstance(payload, dict) else {"_invalid_payload": True},
+            payload=dict(payload),
             result="rejected",
             error={
                 "type": e.__class__.__name__,
                 "message": ascii_message(str(e) or e.__class__.__name__),
             },
         )
-        return _exception_envelope(e)
+        return exception_envelope(e)
+
+
+_sync_v3_legacy_state = sync_v3_legacy_state

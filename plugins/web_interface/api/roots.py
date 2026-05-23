@@ -36,6 +36,10 @@ def _resolve_show_jobs_root(resolver: ConfigResolver) -> bool:
     return True
 
 
+def resolve_show_jobs_root(resolver: ConfigResolver) -> bool:
+    return _resolve_show_jobs_root(resolver)
+
+
 def mount_roots(app: FastAPI) -> None:
     def list_roots(request: Request) -> dict[str, object]:
         resolver = _get_resolver(request)

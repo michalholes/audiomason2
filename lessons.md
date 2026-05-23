@@ -25,3 +25,41 @@
 - affected workflow step or files: `plugins/metadata_openlibrary/plugin.py`, `plugins/import/metadata_boundary.py`, `plugins/import/phase1_metadata_flow.py`.
 - safety class: instruction-only
 - scope: inside current issue scope
+
+## 2026-05-23
+
+### Optimization 5: Public engine boundary wrappers before strict cross-module cleanup
+- impact: Materially reduced `reportPrivateUsage` churn by centralizing class-internal access through explicit public wrappers, then switching satellite modules in one pass.
+- affected workflow step or files: `plugins/import/engine.py` wrapper surface first, then dependent modules (`engine_processing.py`, `engine_session_create.py`, `engine_step_submit.py`, `flow_config_*`, API boundaries).
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 6: Shared mapping normalizer for strict `reportUnknown*` hotspots
+- impact: Reduced multi-file strict churn by fixing `Mapping[Unknown, Unknown]` at boundaries once (`cast(Mapping[object, object], value)` + reusable normalizer), preventing repeated key/value unknown cascades.
+- affected workflow step or files: helper blocks like `_dict_str_object(...)` across plugin/API modules (`cmd_interface`, `diagnostics_console`, `ui_schema`, `debug_bundle`, `id3_tagger`).
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 6: Replace raw `isinstance(dict/list)` narrowing with typed guards at boundaries
+- impact: Reduced repeat pyright reruns by preventing `Unknown` propagation from `dict[Unknown, Unknown]` and `list[Unknown]` in strict mode.
+- affected workflow step or files: import cluster strict cleanup (`preview.py`, `conflicts.py`, `wizard_editor_storage.py`, `expr_eval.py`, `cli_*`, `plan.py`, `field_schema_validation.py`).
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 7: Avoid custom `Mapping.get` overloads in mutable views
+- impact: Prevented repeated `reportIncompatibleMethodOverride` churn by relying on inherited `MutableMapping.get` unless custom behavior is truly required.
+- affected workflow step or files: strict cleanup for mapping view adapters like `plugins/import/step_catalog.py`.
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 8: Repo-wide codemod for `_is_str_object_dict` guard shape
+- impact: Material reduction in lint/type iteration count by converting all key-check guards to one pyright-safe and ruff-safe expression in a single pass.
+- affected workflow step or files: all strict guard helpers under `plugins/import/**`, `plugins/metadata_*`, and similar modules using `cast(dict[object, object], value).keys()` loops.
+- safety class: instruction-only
+- scope: inside current issue scope
+
+### Optimization 9: Compatibility seams via typed function hooks (not `globals().get`)
+- impact: Avoided repeated strict-tool churn by preserving monkeypatch/back-compat hooks without introducing `Any` from `globals()` access or pyright constant-redefinition noise.
+- affected workflow step or files: compatibility entrypoints in `plugins/import/processed_registry_required.py` (`install_processed_registry_subscriber`, `_install_processed_registry_subscriber`, `_set_installed_compat`).
+- safety class: instruction-only
+- scope: inside current issue scope

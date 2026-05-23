@@ -41,7 +41,9 @@ class _ConfigResolver(Protocol):
 
 
 def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
-    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+    if not isinstance(value, dict):
+        return False
+    return all(isinstance(key, str) for key in cast(dict[object, object], value))
 
 
 def _is_object_list(value: object) -> TypeGuard[list[object]]:
@@ -80,7 +82,7 @@ def _cfg_get(resolver: object, key: str, default: object) -> object:
         resolved = resolver.resolve(key)
     except Exception:
         return default
-    if isinstance(resolved, tuple) and resolved:
+    if resolved:
         return resolved[0]
     return default
 
@@ -154,8 +156,10 @@ def run_launcher(
         mode="stage",
         intent=None,
     )
-    error = _is_str_object_dict(state) and _is_str_object_dict(state.get("error"))
-    error_payload = state.get("error") if error else {}
+    error_payload: dict[str, object] = {}
+    error_any = state.get("error")
+    if _is_str_object_dict(error_any):
+        error_payload = error_any
     if _is_str_object_dict(error_payload) and error_payload.get("code") == "SESSION_START_CONFLICT":
         if cfg.noninteractive:
             print_fn(_json_dump({"state": state}))
@@ -229,14 +233,6 @@ def _apply_overrides(cfg: RendererConfig, overrides: dict[str, object]) -> Rende
         max_list_items=max_list_items,
         nav_ui=cfg.nav_ui,
     )
-
-
-def _pick_root(*_args: object, **_kwargs: object) -> str:  # pragma: no cover
-    raise RuntimeError("_pick_root moved to cli_launcher_facade")
-
-
-def _pick_path(*_args: object, **_kwargs: object) -> str:  # pragma: no cover
-    raise RuntimeError("_pick_path moved to cli_launcher_facade")
 
 
 def _render_loop(
@@ -524,7 +520,7 @@ def _collect_v3_prompt_payload(
     prompt = str(metadata.get("prompt") or "")
     help_text = str(metadata.get("help") or "")
     hint = str(metadata.get("hint") or "")
-    examples = metadata.get("examples")
+    examples_any = metadata.get("examples")
     seed = _prompt_seed_value(metadata)
     seed_defined = "prefill" in metadata or "default_value" in metadata
 
@@ -536,9 +532,9 @@ def _collect_v3_prompt_payload(
         print_fn(help_text)
     if hint:
         print_fn(f"Note: {hint}")
-    if isinstance(examples, list) and examples:
+    if _is_object_list(examples_any) and examples_any:
         print_fn("Examples:")
-        for example in examples:
+        for example in examples_any:
             print_fn(f"  - {_stringify_prompt_value(example)}")
     if seed_defined:
         print_fn(f"Suggested: {_stringify_prompt_value(seed)}")

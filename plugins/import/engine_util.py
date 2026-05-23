@@ -8,7 +8,7 @@ ASCII-only.
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from typing import TypeGuard
+from typing import TypeGuard, cast
 
 from .engine_diagnostics_required import emit_required
 from .errors import (
@@ -25,27 +25,29 @@ from .field_schema_validation import FieldSchemaValidationError
 from .fingerprints import sha256_hex
 
 
-def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
-    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+def is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    if not isinstance(value, dict):
+        return False
+    return all(isinstance(key, str) for key in cast(dict[object, object], value))
 
 
-def _is_object_list(value: object) -> TypeGuard[list[object]]:
+def is_object_list(value: object) -> TypeGuard[list[object]]:
     return isinstance(value, list)
 
 
-def _as_str_object_dict(value: object) -> dict[str, object]:
-    return dict(value) if _is_str_object_dict(value) else {}
+def as_str_object_dict(value: object) -> dict[str, object]:
+    return dict(value) if is_str_object_dict(value) else {}
 
 
-def _selection_item_sort_key(item: dict[str, str]) -> tuple[str, str]:
+def selection_item_sort_key(item: dict[str, str]) -> tuple[str, str]:
     return (item.get("label", ""), item.get("item_id", ""))
 
 
-def _to_ascii(text: str) -> str:
+def to_ascii(text: str) -> str:
     return text.encode("ascii", errors="replace").decode("ascii")
 
 
-def _derive_selection_items(
+def derive_selection_items(
     discovery: list[dict[str, object]],
 ) -> tuple[list[dict[str, str]], list[dict[str, str]]]:
     authors: dict[str, dict[str, str]] = {}
@@ -53,7 +55,7 @@ def _derive_selection_items(
 
     dirs: list[str] = []
     for it in discovery:
-        if not (_is_str_object_dict(it) and it.get("kind") == "dir"):
+        if not (is_str_object_dict(it) and it.get("kind") == "dir"):
             continue
         rel_any = it.get("relative_path")
         if not isinstance(rel_any, str):
@@ -76,9 +78,9 @@ def _derive_selection_items(
         pairs.add(("(root)", "(root)"))
 
     for author_key, book_key in sorted(pairs):
-        author_label = _to_ascii(author_key)
+        author_label = to_ascii(author_key)
         label = author_key if author_key == book_key else f"{author_key} / {book_key}"
-        book_label = _to_ascii(label)
+        book_label = to_ascii(label)
 
         author_id = "author:" + sha256_hex(f"a|{author_key}".encode())[:16]
         book_id = "book:" + sha256_hex(f"b|{author_key}|{book_key}".encode())[:16]
@@ -92,31 +94,31 @@ def _derive_selection_items(
             {"item_id": book_id, "label": book_label, "display_label": label},
         )
 
-    authors_items = sorted(list(authors.values()), key=_selection_item_sort_key)
-    books_items = sorted(list(books.values()), key=_selection_item_sort_key)
+    authors_items = sorted(list(authors.values()), key=selection_item_sort_key)
+    books_items = sorted(list(books.values()), key=selection_item_sort_key)
     return authors_items, books_items
 
 
-def _inject_selection_items(
+def inject_selection_items(
     *,
     effective_model: dict[str, object],
     authors_items: list[dict[str, str]],
     books_items: list[dict[str, str]],
 ) -> dict[str, object]:
     steps_any = effective_model.get("steps")
-    if not _is_object_list(steps_any):
+    if not is_object_list(steps_any):
         return effective_model
 
-    steps: list[dict[str, object]] = [dict(step) for step in steps_any if _is_str_object_dict(step)]
+    steps: list[dict[str, object]] = [dict(step) for step in steps_any if is_str_object_dict(step)]
     for step in steps:
         step_id = step.get("step_id")
         if step_id not in {"select_authors", "select_books"}:
             continue
         fields_any = step.get("fields")
-        if not _is_object_list(fields_any):
+        if not is_object_list(fields_any):
             continue
         fields: list[dict[str, object]] = [
-            dict(field) for field in fields_any if _is_str_object_dict(field)
+            dict(field) for field in fields_any if is_str_object_dict(field)
         ]
         for fld in fields:
             if fld.get("type") != "multi_select_indexed":
@@ -127,7 +129,7 @@ def _inject_selection_items(
     return effective_model
 
 
-def _emit_required(event: str, operation: str, data: dict[str, object]) -> None:
+def emit_required_event(event: str, operation: str, data: dict[str, object]) -> None:
     required_ctx: dict[str, object] = {}
     for key in [
         "session_id",
@@ -140,7 +142,7 @@ def _emit_required(event: str, operation: str, data: dict[str, object]) -> None:
     emit_required(event=event, operation=operation, data=data, required_ctx=required_ctx)
 
 
-def _iso_utc_now() -> str:
+def iso_utc_now() -> str:
     # RFC3339 / ISO-8601 in UTC (Z suffix).
     return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
@@ -149,7 +151,7 @@ def sync_session_cursor(
     state: dict[str, object], *, step_id: str | None = None
 ) -> dict[str, object]:
     cursor_any = state.get("cursor")
-    cursor = _as_str_object_dict(cursor_any)
+    cursor = as_str_object_dict(cursor_any)
     if step_id is None:
         step_id = str(state.get("current_step_id") or cursor.get("step_id") or "")
     cursor["step_id"] = str(step_id or "")
@@ -164,7 +166,7 @@ MAX_TRACE_EVENTS = 1000
 
 def append_trace_event(state: dict[str, object], event: dict[str, object]) -> dict[str, object]:
     trace_any = state.get("trace")
-    trace = [item for item in trace_any] if _is_object_list(trace_any) else []
+    trace = [item for item in trace_any] if is_object_list(trace_any) else []
     item = dict(event)
     item["seq"] = len(trace) + 1
     trace.append(item)
@@ -177,7 +179,7 @@ def append_trace_event(state: dict[str, object], event: dict[str, object]) -> di
     return state
 
 
-def _ensure_session_state_fields(state: dict[str, object]) -> dict[str, object]:
+def ensure_session_state_fields(state: dict[str, object]) -> dict[str, object]:
     """Ensure SessionState contains minimally required fields (spec 10.*).
 
     This is a backward-compatible upgrader for existing sessions.
@@ -210,9 +212,9 @@ def _ensure_session_state_fields(state: dict[str, object]) -> dict[str, object]:
     inputs_any = state.get("inputs")
 
     if (
-        _is_str_object_dict(answers_any)
+        is_str_object_dict(answers_any)
         and not answers_any
-        and _is_str_object_dict(inputs_any)
+        and is_str_object_dict(inputs_any)
         and inputs_any
     ):
         state["answers"] = dict(inputs_any)
@@ -221,21 +223,21 @@ def _ensure_session_state_fields(state: dict[str, object]) -> dict[str, object]:
     sync_session_cursor(state)
 
     jobs_any = state.get("jobs")
-    jobs = _as_str_object_dict(jobs_any)
-    if "emitted" not in jobs or not _is_object_list(jobs.get("emitted")):
+    jobs = as_str_object_dict(jobs_any)
+    if "emitted" not in jobs or not is_object_list(jobs.get("emitted")):
         jobs["emitted"] = []
         changed = True
-    if "submitted" not in jobs or not _is_object_list(jobs.get("submitted")):
+    if "submitted" not in jobs or not is_object_list(jobs.get("submitted")):
         jobs["submitted"] = []
         changed = True
     state["jobs"] = jobs
 
     if changed:
-        state["updated_at"] = _iso_utc_now()
+        state["updated_at"] = iso_utc_now()
     return state
 
 
-def _exception_envelope(exc: Exception) -> dict[str, object]:
+def exception_envelope(exc: Exception) -> dict[str, object]:
     if isinstance(exc, SessionNotFoundError):
         return error_envelope(
             "NOT_FOUND",
@@ -295,7 +297,7 @@ def _exception_envelope(exc: Exception) -> dict[str, object]:
     )
 
 
-def _parse_selection_expr(expr: str, *, max_index: int | None) -> list[int]:
+def parse_selection_expr(expr: str, *, max_index: int | None) -> list[int]:
     text = expr.strip().lower()
     if text == "all":
         if max_index is None:
@@ -334,3 +336,17 @@ def _parse_selection_expr(expr: str, *, max_index: int | None) -> list[int]:
     if max_index is not None and any(i > max_index for i in result):
         raise ValueError("selection out of range")
     return result
+
+
+_is_str_object_dict = is_str_object_dict
+_is_object_list = is_object_list
+_as_str_object_dict = as_str_object_dict
+_selection_item_sort_key = selection_item_sort_key
+_to_ascii = to_ascii
+_derive_selection_items = derive_selection_items
+_inject_selection_items = inject_selection_items
+_emit_required = emit_required_event
+_iso_utc_now = iso_utc_now
+_ensure_session_state_fields = ensure_session_state_fields
+_exception_envelope = exception_envelope
+_parse_selection_expr = parse_selection_expr

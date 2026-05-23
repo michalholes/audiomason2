@@ -3,7 +3,7 @@ from __future__ import annotations
 import io
 import zipfile
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, cast
 
 from fastapi import FastAPI, File, HTTPException, UploadFile
 
@@ -15,15 +15,26 @@ from ..util.fs import find_repo_root
 from ..util.yamlutil import safe_load_yaml
 
 
+def _dict_str_object(value: object) -> dict[str, object]:
+    if not isinstance(value, dict):
+        return {}
+    out: dict[str, object] = {}
+    for key, item in cast(dict[object, object], value).items():
+        if isinstance(key, str):
+            out[key] = item
+    return out
+
+
 def _read_plugin_meta(path: Path) -> dict[str, object]:
     y = path / "plugin.yaml"
     meta: dict[str, object] = {"name": path.name}
     if y.exists():
-        obj = safe_load_yaml(y.read_text(encoding="utf-8"))
-        if isinstance(obj, dict):
-            meta.update({k: obj.get(k) for k in ["name", "version", "description"] if k in obj})
-            if "interfaces" in obj:
-                meta["interfaces"] = obj.get("interfaces")
+        obj_map = _dict_str_object(safe_load_yaml(y.read_text(encoding="utf-8")))
+        for key in ["name", "version", "description"]:
+            if key in obj_map:
+                meta[key] = obj_map[key]
+        if "interfaces" in obj_map:
+            meta["interfaces"] = obj_map["interfaces"]
     meta.setdefault("version", "")
     meta.setdefault("interfaces", "")
     return meta

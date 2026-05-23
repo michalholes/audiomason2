@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Hashable
 from dataclasses import dataclass
-from typing import TypeGuard
+from typing import TypeGuard, cast
 
 from .expr_parser import (
     BinaryOpNode,
@@ -32,7 +32,9 @@ EvalResult = tuple[bool, object | None, ExprEvalError | None]
 
 
 def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
-    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+    if not isinstance(value, dict):
+        return False
+    return all(isinstance(key, str) for key in cast(dict[object, object], value))
 
 
 def _error(
@@ -72,6 +74,18 @@ def _is_expr_ref(value: object) -> TypeGuard[dict[str, str]]:
     return set(value.keys()) == {"expr"} and isinstance(value.get("expr"), str)
 
 
+def _is_object_list(value: object) -> TypeGuard[list[object]]:
+    return isinstance(value, list)
+
+
+def _is_object_dict(value: object) -> TypeGuard[dict[object, object]]:
+    return isinstance(value, dict)
+
+
+def _is_bool_list(value: object) -> TypeGuard[list[bool]]:
+    return _is_object_list(value) and all(isinstance(item, bool) for item in value)
+
+
 class _Evaluator:
     def __init__(
         self,
@@ -101,14 +115,7 @@ class _Evaluator:
             return self._eval_binary(node)
         if isinstance(node, CallNode):
             return self._eval_call(node)
-        if isinstance(node, IndexNode):
-            return self._eval_index(node)
-        return _fail(
-            self._path,
-            "internal_error",
-            "unknown_ast_node",
-            {"node_type": type(node).__name__},
-        )
+        return self._eval_index(node)
 
     def _eval_path(self, node: PathNode) -> EvalResult:
         root_name = "$." + ".".join(node.root)
@@ -131,7 +138,7 @@ class _Evaluator:
         for segment in node.segments:
             if isinstance(segment, str):
                 current_path = f"{current_path}.{segment}"
-                if not isinstance(current, dict):
+                if not _is_object_dict(current):
                     return _fail(
                         self._path,
                         "invalid_path_access",
@@ -148,7 +155,7 @@ class _Evaluator:
                 current = current[segment]
                 continue
             current_path = f"{current_path}[{segment}]"
-            if not isinstance(current, list):
+            if not _is_object_list(current):
                 return _fail(
                     self._path,
                     "invalid_path_access",
@@ -248,7 +255,7 @@ class _Evaluator:
         ok, index, error = self.eval(node.index)
         if not ok:
             return False, None, error
-        if isinstance(target, list):
+        if _is_object_list(target):
             if not isinstance(index, int) or isinstance(index, bool):
                 return _fail(
                     self._path,
@@ -264,7 +271,7 @@ class _Evaluator:
                     {"index": index, "length": len(target)},
                 )
             return True, target[index], None
-        if isinstance(target, dict):
+        if _is_object_dict(target):
             if not isinstance(index, str):
                 return _fail(
                     self._path,
@@ -404,7 +411,11 @@ def _fn_len(args: list[object], path: str) -> EvalResult:
     if err is not None:
         return False, None, err
     value = args[0]
-    if isinstance(value, (str, list, dict)):
+    if isinstance(value, str):
+        return True, len(value), None
+    if _is_object_list(value):
+        return True, len(value), None
+    if _is_object_dict(value):
         return True, len(value), None
     return _fail(
         path,
@@ -419,15 +430,13 @@ def _fn_bool_list(name: str, args: list[object], path: str) -> EvalResult:
     if err is not None:
         return False, None, err
     value = args[0]
-    if not isinstance(value, list):
+    if not _is_bool_list(value):
         return _fail(
             path,
             "type_mismatch",
             f"{name}_requires_list",
             {"type": type(value).__name__},
         )
-    if not all(isinstance(item, bool) for item in value):
-        return _fail(path, "type_mismatch", f"{name}_requires_bool_items")
     return True, any(value) if name == "any" else all(value), None
 
 

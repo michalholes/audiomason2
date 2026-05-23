@@ -10,11 +10,11 @@ from audiomason.core.events import get_event_bus
 
 _MAX_EVENTS = 2000
 
-_LOCK = threading.Lock()
-_COND = threading.Condition(_LOCK)
-_EVENTS: deque[tuple[int, str]] = deque(maxlen=_MAX_EVENTS)
-_NEXT_ID = 1
-_INSTALLED = False
+_lock = threading.Lock()
+_cond = threading.Condition(_lock)
+_events: deque[tuple[int, str]] = deque(maxlen=_MAX_EVENTS)
+_next_id = 1
+_installed = False
 
 
 def install_event_tap() -> None:
@@ -22,8 +22,8 @@ def install_event_tap() -> None:
 
     This is installed once per process to avoid per-connection subscriptions.
     """
-    global _INSTALLED
-    if _INSTALLED:
+    global _installed
+    if _installed:
         return
 
     def _on_any(event: str, data: dict[str, object]) -> None:
@@ -41,15 +41,15 @@ def install_event_tap() -> None:
         except Exception:
             return
 
-        global _NEXT_ID
-        with _COND:
-            eid = _NEXT_ID
-            _NEXT_ID += 1
-            _EVENTS.append((eid, payload))
-            _COND.notify_all()
+        global _next_id
+        with _cond:
+            eid = _next_id
+            _next_id += 1
+            _events.append((eid, payload))
+            _cond.notify_all()
 
     get_event_bus().subscribe_all(_on_any)
-    _INSTALLED = True
+    _installed = True
 
 
 def snapshot(*, since_id: int = 0, limit: int = 200) -> list[tuple[int, str]]:
@@ -59,8 +59,8 @@ def snapshot(*, since_id: int = 0, limit: int = 200) -> list[tuple[int, str]]:
     if limit > 2000:
         limit = 2000
 
-    with _LOCK:
-        items = [(eid, payload) for (eid, payload) in _EVENTS if eid > since_id]
+    with _lock:
+        items = [(eid, payload) for (eid, payload) in _events if eid > since_id]
     if len(items) > limit:
         items = items[-limit:]
     return items
@@ -78,8 +78,8 @@ def stream(*, since_id: int = 0, heartbeat_s: float = 15.0) -> Iterator[tuple[in
             continue
 
         # Wait for new items (or heartbeat).
-        with _COND:
-            _COND.wait(timeout=max(0.1, float(heartbeat_s)))
+        with _cond:
+            _cond.wait(timeout=max(0.1, float(heartbeat_s)))
 
         # Heartbeat to keep SSE alive. Do not emit an SSE id for heartbeat.
         now = time.time()

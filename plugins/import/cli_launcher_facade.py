@@ -9,7 +9,7 @@ ASCII-only.
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Protocol
+from typing import Protocol, TypeGuard
 
 from plugins.file_io.service.types import RootName
 
@@ -38,6 +38,10 @@ class _LauncherConfig(Protocol):
 
 class _SupportsStartProcessing(Protocol):
     def start_processing(self, session_id: str, body: dict[str, object]) -> dict[str, object]: ...
+
+
+def _is_object_list(value: object) -> TypeGuard[list[object]]:
+    return isinstance(value, list)
 
 
 def resolve_launcher_inputs(
@@ -180,16 +184,16 @@ def begin_phase2(
     """
     result = engine.start_processing(session_id, {"confirm": True})
 
-    job_ids = result.get("job_ids") if isinstance(result, dict) else None
-    batch_size = result.get("batch_size") if isinstance(result, dict) else None
+    job_ids_any = result.get("job_ids")
+    batch_size_any = result.get("batch_size")
 
-    if isinstance(job_ids, list):
-        print_fn("job_ids: " + ", ".join(str(x) for x in job_ids))
-    if isinstance(batch_size, int):
-        print_fn(f"batch_size: {batch_size}")
+    if _is_object_list(job_ids_any):
+        print_fn("job_ids: " + ", ".join(str(job_id) for job_id in job_ids_any))
+    if isinstance(batch_size_any, int) and not isinstance(batch_size_any, bool):
+        print_fn(f"batch_size: {batch_size_any}")
 
     print_fn(_json_dump(result))
-    if isinstance(result, dict) and "error" in result:
+    if "error" in result:
         return 1
     return 0
 

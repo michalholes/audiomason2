@@ -6,22 +6,24 @@ ASCII-only.
 from __future__ import annotations
 
 import shutil
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Protocol, TypeGuard, cast, runtime_checkable
+from typing import Protocol, TypeGuard, cast
 
 from plugins.file_io.import_runtime import normalize_relative_path, publish_staged
 from plugins.file_io.service import FileService
 from plugins.file_io.service.types import RootName
 
 from .cover_boundary import apply_cover_candidate as apply_cover_candidate_ref
-from .engine_util import _emit_required
+from .engine_util import emit_required_event
 from .file_io_boundary import materialize_local_path
 from .storage import read_json
 
 
 def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
-    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+    if not isinstance(value, dict):
+        return False
+    return all(isinstance(key, str) for key in cast(dict[object, object], value))
 
 
 def _is_object_list(value: object) -> TypeGuard[list[object]]:
@@ -76,15 +78,7 @@ class _AudioProcessorPlugin(Protocol):
         chapters: list[dict[str, object]] | None,
     ) -> object: ...
 
-    def _execute_plan(self, plan: object) -> object: ...
-
-
-@runtime_checkable
-class _AudioProcessorDetectChapters(Protocol):
-    def _detect_chapters(
-        self,
-        source_file: Path,
-    ) -> list[dict[str, object]] | Awaitable[list[dict[str, object]] | None] | None: ...
+    pass
 
 
 class _CoverHandlerPlugin(Protocol):
@@ -252,13 +246,29 @@ def _resolve_work_relative_path(job_id: str, action_index: int, target_rel: str)
     return normalize_relative_path(f"import/process_runtime/{job_id}/{action_index:04d}/{suffix}")
 
 
-def _source_directory(source_path: Path) -> Path:
-    return source_path if source_path.is_dir() else source_path.parent
+def _detect_chapters(
+    plugin: object,
+    source_file: Path,
+) -> list[dict[str, object]] | Awaitable[list[dict[str, object]] | None] | None:
+    detector = cast(object, getattr(plugin, "_detect_chapters", None))
+    if not callable(detector):
+        return None
+    detect_fn = cast(
+        Callable[
+            [Path],
+            list[dict[str, object]] | Awaitable[list[dict[str, object]] | None] | None,
+        ],
+        detector,
+    )
+    return detect_fn(source_file)
 
 
-def _first_audio_source(source_path: Path) -> Path | None:
-    sources = _iter_audio_sources(source_path)
-    return sources[0] if sources else None
+def _execute_plan(plugin: object, plan: object) -> object:
+    execute = cast(object, getattr(plugin, "_execute_plan", None))
+    if not callable(execute):
+        raise ValueError("audio_processor._execute_plan is required")
+    execute_fn = cast(Callable[[object], object], execute)
+    return execute_fn(plan)
 
 
 async def _run_audio_import(
@@ -291,19 +301,15 @@ async def _run_audio_import(
             output_dir = work_path / relative_parent
             output_dir.mkdir(parents=True, exist_ok=True)
             chapters: list[dict[str, object]] | None = None
-            if (
-                plugin.split_chapters
-                and source_file.suffix.lower() in _CHAPTER_SUFFIXES
-                and isinstance(plugin_raw, _AudioProcessorDetectChapters)
-            ):
-                detected = plugin_raw._detect_chapters(source_file)
+            if plugin.split_chapters and source_file.suffix.lower() in _CHAPTER_SUFFIXES:
+                detected = _detect_chapters(plugin_raw, source_file)
                 if isinstance(detected, Awaitable):
                     detected_resolved = await detected
                     chapters = _as_dict_list(detected_resolved)
                 elif _is_object_list(detected):
                     chapters = _as_dict_list(detected)
             plan = plugin.plan_import_conversion(source_file, output_dir, chapters=chapters)
-            execute_result = plugin._execute_plan(plan)
+            execute_result = _execute_plan(plugin_raw, plan)
             if isinstance(execute_result, Awaitable):
                 await execute_result
     finally:
@@ -444,7 +450,7 @@ async def run_phase2_job_requests(
     actions = _as_dict_list(job_requests_any.get("actions"))
     diagnostics_context = _as_str_object_dict(job_requests_any.get("diagnostics_context"))
 
-    _emit_required(
+    emit_required_event(
         "phase2.runner.start",
         "phase2.runner.start",
         {
@@ -473,7 +479,7 @@ async def run_phase2_job_requests(
         _remove_path(work_path)
         work_path.mkdir(parents=True, exist_ok=True)
 
-        _emit_required(
+        emit_required_event(
             "phase2.action.start",
             "phase2.action.start",
             {
@@ -523,7 +529,7 @@ async def run_phase2_job_requests(
                 continue
             raise ValueError(f"Unsupported capability kind: {kind}")
 
-        _emit_required(
+        emit_required_event(
             "phase2.action.end",
             "phase2.action.end",
             {
@@ -534,7 +540,7 @@ async def run_phase2_job_requests(
             },
         )
 
-    _emit_required(
+    emit_required_event(
         "phase2.runner.end",
         "phase2.runner.end",
         {

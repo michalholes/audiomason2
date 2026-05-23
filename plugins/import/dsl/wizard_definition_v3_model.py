@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import re
 from copy import deepcopy
-from typing import NoReturn, TypeGuard
+from typing import NoReturn, TypeGuard, cast
 
 from ..field_schema_validation import FieldSchemaValidationError
 from .primitive_registry_model import primitive_index
@@ -69,7 +69,9 @@ def _assert_exact_keys(obj: dict[str, object], *, allowed: set[str], path: str) 
 
 
 def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
-    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+    if not isinstance(value, dict):
+        return False
+    return all(isinstance(key, str) for key in cast(dict[object, object], value))
 
 
 def _is_object_list(value: object) -> TypeGuard[list[object]]:
@@ -136,7 +138,7 @@ def _validate_json_like(value: object, *, path: str) -> None:
         return
     if _is_str_object_dict(value):
         for key, item in value.items():
-            if not isinstance(key, str) or not key:
+            if not key:
                 _raise("object keys must be non-empty strings", path=path, reason="invalid_type")
             _ascii_only(key, path=f"{path}.{key}")
             _validate_json_like(item, path=f"{path}.{key}")
@@ -195,7 +197,7 @@ def _validate_macro_defs(macros_any: object) -> dict[str, dict[str, object]]:
     macros: dict[str, dict[str, object]] = {}
     for macro_id, macro_any in sorted(macros_any.items()):
         path = f"$.macros.{macro_id}"
-        if not isinstance(macro_id, str) or not macro_id:
+        if not macro_id:
             _raise(
                 "macro id must be a non-empty string",
                 path="$.macros",
@@ -749,7 +751,7 @@ def _validate_graph(
         if not _is_str_object_dict(inputs_any):
             _raise("inputs must be an object", path=f"{nfx}.op.inputs", reason="invalid_type")
         for key, value in inputs_any.items():
-            if not isinstance(key, str) or not key:
+            if not key:
                 _raise(
                     "inputs keys must be non-empty strings",
                     path=f"{nfx}.op.inputs",
@@ -821,7 +823,7 @@ def _validated_libraries(wd: dict[str, object]) -> dict[str, dict[str, object]]:
     libraries: dict[str, dict[str, object]] = {}
     for library_id, library_any in sorted(libraries_any.items()):
         path = f"$.libraries.{library_id}"
-        if not isinstance(library_id, str) or not library_id:
+        if not library_id:
             _raise(
                 "library id must be a non-empty string",
                 path="$.libraries",
@@ -842,7 +844,7 @@ def _validated_libraries(wd: dict[str, object]) -> dict[str, dict[str, object]]:
             if not _is_str_object_dict(returns_any):
                 _raise("returns must be an object", path=f"{path}.returns", reason="invalid_type")
             for key, value in returns_any.items():
-                if not isinstance(key, str) or not key:
+                if not key:
                     _raise(
                         "returns keys must be non-empty strings",
                         path=f"{path}.returns",

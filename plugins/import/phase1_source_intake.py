@@ -17,7 +17,9 @@ from .phase1_policy_flow import build_phase1_policy_projection
 
 
 def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
-    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+    if not isinstance(value, dict):
+        return False
+    return all(isinstance(key, str) for key in cast(dict[object, object], value))
 
 
 def _is_object_list(value: object) -> TypeGuard[list[object]]:
@@ -556,12 +558,13 @@ def build_phase1_projection(
         "two_pass_order": _as_str_list(policy_projection.get("two_pass_order")),
         "phase2_inputs": phase2_inputs,
     }
+    phase2_inputs_runtime: dict[str, object] = {key: value for key, value in phase2_inputs.items()}
     phase1_projection["runtime"] = _build_runtime_projection(
         state=state,
         metadata_projection=metadata_projection,
         cover_projection=cover_projection,
         policy_projection=policy_projection,
-        phase2_inputs=phase2_inputs,
+        phase2_inputs=phase2_inputs_runtime,
     )
     return phase1_projection
 

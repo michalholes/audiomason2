@@ -8,7 +8,7 @@ ASCII-only.
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import TypeGuard
+from typing import TypeGuard, cast
 
 from plugins.file_io.service import FileService
 
@@ -17,7 +17,9 @@ from .fingerprints import fingerprint_json
 
 
 def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
-    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+    if not isinstance(value, dict):
+        return False
+    return all(isinstance(key, str) for key in cast(dict[object, object], value))
 
 
 def _is_object_list(value: object) -> TypeGuard[list[object]]:
@@ -83,8 +85,6 @@ def load_effective_model_runtime(
     """Load immutable snapshot model, then apply runtime-only enrichments."""
 
     effective_model = load_effective_model(session_id)
-    if not isinstance(effective_model, dict):
-        return effective_model
 
     if not needs_runtime_selection_items(effective_model):
         return effective_model
@@ -128,9 +128,6 @@ def upgrade_legacy_selection_snapshot_if_needed(
     try:
         effective_model = load_effective_model(session_id)
     except Exception:
-        return loaded_state
-
-    if not isinstance(effective_model, dict):
         return loaded_state
 
     try:

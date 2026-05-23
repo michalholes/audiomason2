@@ -9,17 +9,18 @@ ASCII-only.
 from __future__ import annotations
 
 import shutil
+from collections.abc import Callable
 from importlib import import_module
 from pathlib import Path
 from typing import Protocol, TypeGuard, cast
 
+from audiomason.core import PluginLoader
 from audiomason.core.diagnostics import build_envelope
 from audiomason.core.events import get_event_bus as _core_get_event_bus
 from audiomason.core.jobs.api import JobService
 from audiomason.core.jobs.model import JobType
 from audiomason.core.jobs.store import JobStore
 from audiomason.core.orchestration import Orchestrator
-from audiomason.core.process_contract_authority import _ContractPluginLoader
 from audiomason.core.process_job_contracts import IMPORT_PROCESS_CONTRACT_ID
 from plugins.file_io.service import FileService
 from plugins.file_io.service.types import RootName
@@ -34,6 +35,18 @@ from .file_io_boundary import materialize_root_dir
 _METADATA_OPENLIBRARY_TIMEOUT_SECONDS = 2.0
 
 
+def _builtin_plugins_dir() -> Path:
+    plugins_pkg = import_module("plugins")
+    pkg_file = plugins_pkg.__file__
+    if not isinstance(pkg_file, str) or not pkg_file:
+        raise RuntimeError("plugins package path unavailable")
+    return Path(pkg_file).resolve().parent
+
+
+def _user_plugins_dir() -> Path:
+    return Path.home() / ".audiomason/plugins"
+
+
 class _EventBus(Protocol):
     def publish(self, event: str, payload: dict[str, object]) -> None: ...
 
@@ -43,7 +56,9 @@ class _SupportsFileService(Protocol):
 
 
 def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
-    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+    if not isinstance(value, dict):
+        return False
+    return all(isinstance(key, str) for key in cast(dict[object, object], value))
 
 
 def _as_str_object_dict(value: object) -> dict[str, object]:
@@ -180,7 +195,8 @@ def _get_bus() -> _EventBus:
         engine_mod = import_module("plugins.import.engine")
         fn = cast(object, getattr(engine_mod, "get_event_bus", None))
         if callable(fn):
-            bus = cast(object, fn())
+            get_bus_fn = cast(Callable[[], object], fn)
+            bus = get_bus_fn()
             publish = cast(object, getattr(bus, "publish", None))
             if callable(publish):
                 return cast(_EventBus, bus)
@@ -237,9 +253,20 @@ def _plugin_loader(*, engine: _SupportsFileService) -> _ProcessContractPluginLoa
 
 
 def resolve_import_plugin(*, plugin_name: str) -> object:
-    empty_meta: dict[str, str] = {}
-    loader = _ContractPluginLoader(job_meta=empty_meta, contract_plugin_name=plugin_name)
-    plugin = loader.get_plugin(plugin_name)
+    loader = PluginLoader(
+        builtin_plugins_dir=_builtin_plugins_dir(),
+        user_plugins_dir=_user_plugins_dir(),
+    )
+    plugin_dir: Path | None = None
+    for discovered in loader.discover():
+        manifest = loader.load_manifest_only(discovered)
+        if manifest.name == plugin_name:
+            plugin_dir = discovered
+            break
+    if plugin_dir is None:
+        raise RuntimeError(f"required_process_plugin_not_found:{plugin_name}")
+
+    plugin = loader.load_plugin(plugin_dir, validate=False)
     if plugin_name == "metadata_openlibrary":
         tuned_plugin = cast(_MetadataOpenLibraryTuningPlugin, plugin)
         empty_config: dict[str, object] = {}

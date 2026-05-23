@@ -28,16 +28,26 @@ from .process_contract_completion import (
 )
 from .storage import read_json
 
-_INSTALLED = False
-_REGISTERED_FILE_SERVICES: list[FileService] = []
+_installed = False
+_registered_file_services: list[FileService] = []
+# Backward-compatible globals used by tests and older code paths.
+_INSTALLED: bool = cast(bool, False)
+_REGISTERED_FILE_SERVICES: list[FileService] = _registered_file_services
 
 
 def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
-    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+    if not isinstance(value, dict):
+        return False
+    return all(isinstance(key, str) for key in cast(dict[object, object], value))
 
 
 def _as_str_object_dict(value: object) -> dict[str, object]:
     return dict(value) if _is_str_object_dict(value) else {}
+
+
+def _set_installed_compat(value: bool) -> None:
+    compat_globals = cast(dict[str, object], globals())
+    compat_globals["_INSTALLED"] = value
 
 
 def _file_service_signature(fs: FileService) -> tuple[tuple[str, str], ...]:
@@ -50,10 +60,10 @@ def _file_service_signature(fs: FileService) -> tuple[tuple[str, str], ...]:
 
 def _register_file_service(fs: FileService) -> None:
     sig = _file_service_signature(fs)
-    for existing in _REGISTERED_FILE_SERVICES:
+    for existing in _registered_file_services:
         if _file_service_signature(existing) == sig:
             return
-    _REGISTERED_FILE_SERVICES.append(fs)
+    _registered_file_services.append(fs)
 
 
 def _file_service_from_detached_runtime(job_meta: dict[str, object]) -> FileService | None:
@@ -103,7 +113,7 @@ def _candidate_from_registered_file_services(
     rel_path: str,
 ) -> tuple[FileService, dict[str, object]] | None:
     matches: list[tuple[int, FileService, dict[str, object]]] = []
-    for fs in _REGISTERED_FILE_SERVICES:
+    for fs in _registered_file_services:
         if not fs.exists(root, rel_path):
             continue
         try:
@@ -112,7 +122,7 @@ def _candidate_from_registered_file_services(
             continue
         if not _is_str_object_dict(job_requests_any):
             continue
-        if len(_REGISTERED_FILE_SERVICES) == 1:
+        if len(_registered_file_services) == 1:
             return fs, job_requests_any
         score = _match_score(job_meta=job_meta, job_requests=job_requests_any)
         if score < 0:
@@ -138,13 +148,14 @@ def _candidate_from_registered_file_services(
     return fs, job_requests
 
 
-def install_processed_registry_subscriber(*, resolver: object) -> None:
+def _install_processed_registry_subscriber_impl(*, resolver: object) -> None:
     """Install the processed registry subscriber (idempotent)."""
 
-    global _INSTALLED
+    global _installed, _INSTALLED
+    _installed = _INSTALLED
     fs = file_io_facade.file_service_from_resolver(resolver)
     _register_file_service(fs)
-    if _INSTALLED:
+    if _installed:
         return
 
     def _on_any(event: str, payload: dict[str, object]) -> None:
@@ -222,8 +233,15 @@ def install_processed_registry_subscriber(*, resolver: object) -> None:
     if not callable(subscribe_all):
         return
     cast(Callable[[Callable[[str, dict[str, object]], None]], None], subscribe_all)(_on_any)
-    _INSTALLED = True
+    _installed = True
+    _set_installed_compat(True)
 
 
-# Backward-compatible name used by older code paths.
-_install_processed_registry_subscriber = install_processed_registry_subscriber
+def install_processed_registry_subscriber(*, resolver: object) -> None:
+    """Install processed-registry subscriber via compatibility hook."""
+
+    _install_processed_registry_subscriber(resolver=resolver)
+
+
+def _install_processed_registry_subscriber(*, resolver: object) -> None:
+    _install_processed_registry_subscriber_impl(resolver=resolver)

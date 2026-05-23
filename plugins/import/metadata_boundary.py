@@ -12,7 +12,6 @@ from typing import Protocol, TypeGuard, cast
 from audiomason.core.config_service import ConfigService
 from audiomason.core.errors import PluginNotFoundError
 from audiomason.core.loader import PluginLoader
-from audiomason.core.orchestration import _run_coro_sync
 from audiomason.core.plugin_callable_authority import (
     RegisteredWizardCallable,
     resolve_registered_wizard_callable,
@@ -43,7 +42,9 @@ class _MetadataPhase1ValidationPlugin(Protocol):
 
 
 def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
-    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+    if not isinstance(value, dict):
+        return False
+    return all(isinstance(key, str) for key in cast(dict[object, object], value))
 
 
 def _as_str_object_dict(value: object) -> dict[str, object]:
@@ -76,19 +77,19 @@ def _builtin_plugins_dir() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
-_CALLABLE_AUTHORITY: tuple[PluginRegistry, PluginLoader] | None = None
+_callable_authority_cache: tuple[PluginRegistry, PluginLoader] | None = None
 
 
 def _callable_authority() -> tuple[PluginRegistry, PluginLoader]:
-    global _CALLABLE_AUTHORITY
-    if _CALLABLE_AUTHORITY is None:
+    global _callable_authority_cache
+    if _callable_authority_cache is None:
         registry = PluginRegistry(ConfigService())
         loader = PluginLoader(
             builtin_plugins_dir=_builtin_plugins_dir(),
             registry=registry,
         )
-        _CALLABLE_AUTHORITY = (registry, loader)
-    return _CALLABLE_AUTHORITY
+        _callable_authority_cache = (registry, loader)
+    return _callable_authority_cache
 
 
 def _tune_metadata_plugin(
@@ -167,7 +168,14 @@ def _run_phase1_validation_job(
         asyncio.get_running_loop()
     except RuntimeError:
         try:
-            _run_coro_sync(_runner())
+            loop = asyncio.new_event_loop()
+            try:
+                asyncio.set_event_loop(loop)
+                loop.run_until_complete(_runner())
+                loop.run_until_complete(loop.shutdown_asyncgens())
+            finally:
+                asyncio.set_event_loop(None)
+                loop.close()
         except Exception:
             return dict(_DEFAULT_RESULT)
         return dict(result_box["result"])
@@ -180,12 +188,8 @@ def _validate_author_title_payload(author: str, title: str) -> dict[str, object]
     try:
         build_job, plugin = _resolve_phase1_validation_authority()
         job = build_job(author, title)
-        if not isinstance(job, dict):
-            return dict(_DEFAULT_RESULT)
         result = _run_phase1_validation_job(job=dict(job), plugin=plugin)
     except Exception:
-        return dict(_DEFAULT_RESULT)
-    if not isinstance(result, dict):
         return dict(_DEFAULT_RESULT)
     author_payload = result.get("author")
     book_payload = result.get("book")

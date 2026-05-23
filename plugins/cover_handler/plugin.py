@@ -17,7 +17,7 @@ import shutil
 from collections import Counter
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Protocol, TypeGuard, runtime_checkable
+from typing import Protocol, TypeGuard, cast, runtime_checkable
 from urllib.parse import urlparse
 
 from mutagen.id3 import ID3
@@ -60,6 +60,17 @@ def _to_int_or_default(value: object, default: int) -> int:
     return default
 
 
+def _dict_str_object(value: object) -> dict[str, object]:
+    if not isinstance(value, Mapping):
+        return {}
+    mapping = cast(Mapping[object, object], value)
+    out: dict[str, object] = {}
+    for key, item in mapping.items():
+        if isinstance(key, str):
+            out[key] = item
+    return out
+
+
 def _to_bytes_or_none(value: object) -> bytes | None:
     if isinstance(value, bytes):
         return value
@@ -71,33 +82,18 @@ def _to_bytes_or_none(value: object) -> bytes | None:
 
 
 @runtime_checkable
-class _SupportsGetAll(Protocol):
-    def getall(self, key: str) -> list[object]: ...
-
-
-@runtime_checkable
 class _SupportsDataAttr(Protocol):
     data: object
 
 
 @runtime_checkable
-class _SupportsGet(Protocol):
-    def get(self, key: str, default: object | None = None) -> object: ...
-
-
-@runtime_checkable
-class _FileServiceRootDirPath(Protocol):
-    def _root_dir_path(self, root_name: object) -> Path: ...
+class _SupportsID3GetAll(Protocol):
+    def getall(self, key: str) -> list[object]: ...
 
 
 @runtime_checkable
 class _FileServiceRootDir(Protocol):
     def root_dir(self, root_name: object) -> Path: ...
-
-
-@runtime_checkable
-class _FileServiceResolveLocalPath(Protocol):
-    def _resolve_local_path(self, root_name: object, rel_path: str) -> Path: ...
 
 
 @runtime_checkable
@@ -142,19 +138,16 @@ def _has_embedded_artwork(audio_file: Path) -> bool:
     suffix = audio_file.suffix.lower()
     try:
         if suffix == ".mp3":
-            mp3_tags: object = ID3(str(audio_file))
-            if not isinstance(mp3_tags, _SupportsGetAll):
-                return False
-            apic_frames = mp3_tags.getall("APIC")
+            mp3_tags = ID3(str(audio_file))
+            id3_tags = cast(_SupportsID3GetAll, mp3_tags)
+            apic_frames = id3_tags.getall("APIC")
             return any(
                 bool(_to_bytes_or_none(frame.data))
                 for frame in apic_frames
                 if isinstance(frame, _SupportsDataAttr)
             )
         if suffix in {".m4a", ".m4b"}:
-            mp4_tags: object = MP4(str(audio_file)).tags
-            if not isinstance(mp4_tags, _SupportsGet):
-                return False
+            mp4_tags = _dict_str_object(MP4(str(audio_file)).tags)
             covers_any = mp4_tags.get("covr")
             covers = covers_any if _is_object_list(covers_any) else []
             return any(bool(_to_bytes_or_none(item)) for item in covers)
@@ -188,16 +181,12 @@ def _path_to_relative(*, root_dir: Path, abs_path: Path) -> str:
 
 
 def _file_service_root_dir(file_service: object, root_name: object) -> Path:
-    if isinstance(file_service, _FileServiceRootDirPath):
-        return file_service._root_dir_path(root_name)
     if isinstance(file_service, _FileServiceRootDir):
         return file_service.root_dir(root_name)
     raise AttributeError("file_service has no root directory accessor")
 
 
 def _file_service_resolve_path(file_service: object, root_name: object, rel_path: str) -> Path:
-    if isinstance(file_service, _FileServiceResolveLocalPath):
-        return file_service._resolve_local_path(root_name, rel_path)
     if isinstance(file_service, _FileServiceResolveAbsPath):
         return file_service.resolve_abs_path(root_name, rel_path)
     raise AttributeError("file_service has no path resolver")
@@ -820,7 +809,7 @@ class CoverHandlerPlugin:
                 stderr=asyncio.subprocess.PIPE,
             )
 
-            stdout, stderr = await proc.communicate()
+            _stdout, stderr = await proc.communicate()
 
             if proc.returncode != 0:
                 error_msg = stderr.decode() if stderr else "Unknown error"

@@ -7,7 +7,7 @@ ASCII-only.
 
 from __future__ import annotations
 
-from typing import TypeGuard
+from typing import TypeGuard, cast
 
 from plugins.file_io.import_runtime import normalize_relative_path
 
@@ -15,7 +15,9 @@ from .fingerprints import fingerprint_json
 
 
 def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
-    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+    if not isinstance(value, dict):
+        return False
+    return all(isinstance(key, str) for key in cast(dict[object, object], value))
 
 
 def _is_object_list(value: object) -> TypeGuard[list[object]]:
@@ -134,7 +136,7 @@ def _cover_candidate_for_action(
             return {
                 key: str(value)
                 for key, value in candidate.items()
-                if isinstance(key, str) and isinstance(value, str) and value
+                if isinstance(value, str) and value
             }
 
     candidates_any = covers_policy.get("candidates")
@@ -147,9 +149,7 @@ def _cover_candidate_for_action(
         if str(candidate.get("source_relative_path") or "") != source_relative_path:
             continue
         return {
-            key: str(value)
-            for key, value in candidate.items()
-            if isinstance(key, str) and isinstance(value, str) and value
+            key: str(value) for key, value in candidate.items() if isinstance(value, str) and value
         }
     return None
 

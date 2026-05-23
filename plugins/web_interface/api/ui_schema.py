@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Mapping
+from typing import cast
 
 from fastapi import FastAPI
 
@@ -14,8 +15,9 @@ from .debug_bundle import mount_debug_bundle
 def _dict_str_object(value: object) -> dict[str, object]:
     if not isinstance(value, Mapping):
         return {}
+    mapping = cast(Mapping[object, object], value)
     out: dict[str, object] = {}
-    for key, item in value.items():
+    for key, item in mapping.items():
         if isinstance(key, str):
             out[key] = item
     return out
@@ -203,13 +205,14 @@ def _default_pages() -> dict[str, dict[str, object]]:
             layout = _dict_str_object(logs_page.get("layout"))
             logs_children = layout.get("children")
             if isinstance(logs_children, list):
+                children = cast(list[object], logs_children)
                 debug_feed_content: dict[str, str] = {"type": "ui_debug_feed"}
                 debug_card: dict[str, object] = {
                     "type": "card",
                     "title": "Browser debug (client-side)",
                     "content": debug_feed_content,
                 }
-                logs_children.insert(
+                children.insert(
                     0,
                     debug_card,
                 )
@@ -283,9 +286,10 @@ def mount_ui_schema(app: FastAPI) -> None:
         ov = _load_overrides()
         pov = ov.get("pages")
         if isinstance(pov, Mapping):
-            for k, v in pov.items():
+            pov_map = cast(Mapping[object, object], pov)
+            for k, v in pov_map.items():
                 if isinstance(k, str) and isinstance(v, Mapping):
-                    pages[k] = _dict_str_object(v)
+                    pages[k] = _dict_str_object(cast(object, v))
         return {"items": [{"id": k, "title": v.get("title", k)} for k, v in pages.items()]}
 
     def ui_page(page_id: str) -> dict[str, object]:
@@ -294,7 +298,7 @@ def mount_ui_schema(app: FastAPI) -> None:
         pov = _dict_str_object(ov.get("pages"))
         override_page = pov.get(page_id)
         if isinstance(override_page, Mapping):
-            pages[page_id] = _dict_str_object(override_page)
+            pages[page_id] = _dict_str_object(cast(object, override_page))
         return pages.get(page_id, pages["dashboard"])
 
     def ui_config_get() -> dict[str, object]:
@@ -310,9 +314,9 @@ def mount_ui_schema(app: FastAPI) -> None:
         p = ui_overrides_path()
         p.parent.mkdir(parents=True, exist_ok=True)
         data = body.get("data")
-        data_out = _dict_str_object(data)
+        data_out: dict[str, object] = _dict_str_object(data)
         if not data_out:
-            data_out = dict(body) if body else {"pages": {}, "nav": []}
+            data_out = dict(body) if body else {"pages": cast(object, {}), "nav": cast(object, [])}
         p.write_text(json.dumps(data_out, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         out: dict[str, object] = {"ok": True, "info": "user"}
         if debug_enabled():

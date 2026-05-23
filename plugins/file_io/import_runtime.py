@@ -5,9 +5,7 @@ ASCII-only.
 
 from __future__ import annotations
 
-import shutil
 from pathlib import Path
-from typing import Protocol, runtime_checkable
 
 from audiomason.core.errors import FileError
 
@@ -22,11 +20,6 @@ _ARCHIVE_SUFFIXES: dict[ArchiveFormat, tuple[str, ...]] = {
     ArchiveFormat.RAR: (".rar",),
     ArchiveFormat.SEVEN_Z: (".7z",),
 }
-
-
-@runtime_checkable
-class _SupportsLocalPathResolver(Protocol):
-    def _resolve_local_path(self, root: RootName, rel_path: str) -> Path: ...
 
 
 def normalize_relative_path(rel_path: str) -> str:
@@ -56,12 +49,6 @@ def target_root_for_mode(mode: str) -> RootName:
     if mode_text == "inplace":
         return RootName.OUTBOX
     raise ValueError("mode must be 'stage' or 'inplace'")
-
-
-def _local_path(fs: FileService, root: RootName, rel_path: str) -> Path:
-    if isinstance(fs, _SupportsLocalPathResolver):
-        return fs._resolve_local_path(root, rel_path)
-    return fs.resolve_abs_path(root, rel_path)
 
 
 def _path_kind(fs: FileService, root: RootName, rel_path: str) -> str:
@@ -134,23 +121,6 @@ def inspect_source(
         "kind": source_kind,
         "archive_format": archive_format,
     }
-
-
-def _remove_path(path: Path) -> None:
-    if not path.exists():
-        return
-    if path.is_dir():
-        shutil.rmtree(path)
-    else:
-        path.unlink()
-
-
-def _copy_path(src: Path, dst: Path) -> None:
-    if src.is_dir():
-        shutil.copytree(src, dst)
-    else:
-        dst.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(src, dst)
 
 
 def _fallback_relative_path(fs: FileService, root: RootName, rel_path: str) -> str:

@@ -20,7 +20,7 @@ def _build_default_catalog() -> dict[str, object]:
     from .step_catalog import build_default_step_catalog_projection
 
     projection = build_default_step_catalog_projection()
-    steps = []
+    steps: list[dict[str, object]] = []
     for step_id in projection:
         entry = projection[step_id]
         steps.append(

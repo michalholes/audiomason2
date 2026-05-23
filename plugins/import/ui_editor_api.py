@@ -32,7 +32,9 @@ from .wizard_definition_model import (
 
 
 def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
-    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+    if not isinstance(value, dict):
+        return False
+    return all(isinstance(key, str) for key in cast(dict[object, object], value))
 
 
 def _is_object_list(value: object) -> TypeGuard[list[object]]:
@@ -48,7 +50,7 @@ class _RouteRegistrar(Protocol):
 
 
 class _EditorEngine(Protocol):
-    _fs: FileService
+    def get_file_service(self) -> FileService: ...
 
 
 def bind_editor_routes(
@@ -263,7 +265,7 @@ def _history_items(ids: list[str]) -> dict[str, object]:
 
 
 def _engine_fs(engine: _EditorEngine) -> FileService:
-    return engine._fs
+    return engine.get_file_service()
 
 
 def _validate_editor_condition_shape(cond: object, *, path: str) -> None:

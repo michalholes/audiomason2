@@ -16,7 +16,7 @@ def safe_dump_yaml(obj: object) -> str | None:
     except Exception:
         return None
     try:
-        rendered: object = yaml.safe_dump(obj, sort_keys=False)
-        return rendered if isinstance(rendered, str) else None
+        rendered = yaml.safe_dump(obj, sort_keys=False)
+        return rendered
     except Exception:
         return None

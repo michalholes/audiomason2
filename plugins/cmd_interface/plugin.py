@@ -92,8 +92,9 @@ class _TUIPluginFactory(Protocol):
 def _dict_str_object(value: object) -> dict[str, object]:
     if not isinstance(value, Mapping):
         return {}
+    mapping = cast(Mapping[object, object], value)
     out: dict[str, object] = {}
-    for key, item in value.items():
+    for key, item in mapping.items():
         if isinstance(key, str):
             out[key] = item
     return out
@@ -257,7 +258,7 @@ class CLIPlugin:
         - audiomason -v process book.m4a
         """
         # Check all arguments for verbosity flags
-        args_to_remove = []
+        args_to_remove: list[int] = []
 
         for i, arg in enumerate(sys.argv):
             if arg in ("-q", "--quiet"):
@@ -635,7 +636,7 @@ class CLIPlugin:
         Returns:
             Dict of file -> PreflightResult
         """
-        results = {}
+        results: dict[Path, PreflightResult] = {}
 
         for file in files:
             result = PreflightResult()
@@ -800,7 +801,7 @@ class CLIPlugin:
         Returns:
             (files, options) tuple
         """
-        files = []
+        files: list[Path] = []
         options: dict[str, object] = {}
         i = 0
 
@@ -1021,8 +1022,8 @@ class CLIPlugin:
 
             if self.verbosity >= VerbosityLevel.DEBUG:
                 log.debug("Web plugin initialized with:")
-                log.debug(f"  - config_resolver: {config_resolver is not None}")
-                log.debug(f"  - plugin_loader: {loader is not None}")
+                log.debug(f"  - config_resolver: {type(config_resolver).__name__}")
+                log.debug(f"  - plugin_loader: {type(loader).__name__}")
                 log.debug(f"  - verbosity: {self.verbosity}")
 
             await web_plugin.run()

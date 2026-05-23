@@ -9,7 +9,7 @@ ASCII-only.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Protocol, TypeGuard, cast
+from typing import TYPE_CHECKING, TypeGuard, cast
 
 from plugins.file_io.service.types import RootName
 
@@ -20,12 +20,12 @@ from .detached_runtime import build_detached_runtime_bootstrap
 from .engine_actions_v3 import build_runtime_flow_model, initialize_state
 from .engine_session_guards import validate_root_and_path
 from .engine_util import (
-    _derive_selection_items,
-    _emit_required,
-    _ensure_session_state_fields,
-    _exception_envelope,
-    _inject_selection_items,
-    _iso_utc_now,
+    derive_selection_items,
+    emit_required_event,
+    ensure_session_state_fields,
+    exception_envelope,
+    inject_selection_items,
+    iso_utc_now,
 )
 from .errors import FinalizeError
 from .fingerprints import fingerprint_json, sha256_hex
@@ -44,14 +44,10 @@ if TYPE_CHECKING:
     from .engine import ImportWizardEngine
 
 
-class _SupportsResolve(Protocol):
-    def resolve(self, key: str) -> tuple[object, object]: ...
-
-
 def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
     if not isinstance(value, dict):
         return False
-    return all(isinstance(key, str) for key in value)
+    return all(isinstance(key, str) for key in cast(dict[object, object], value))
 
 
 def _as_str_object_dict(value: object) -> dict[str, object]:
@@ -99,16 +95,17 @@ def _build_session_start_context(
         raise ValueError(str(v.get("error") or "invalid root/path"))
     root, relative_path = v
 
-    mode = engine._validate_mode(mode)
+    mode = engine.validate_mode(mode)
 
-    ensure_default_models(engine._fs)
-    flow_cfg = read_json(engine._fs, RootName.WIZARDS, "import/config/flow_config.json")
-    flow_cfg_norm = engine._normalize_flow_config(flow_cfg)
+    fs = engine.get_file_service()
+    ensure_default_models(fs)
+    flow_cfg = read_json(fs, RootName.WIZARDS, "import/config/flow_config.json")
+    flow_cfg_norm = engine.normalize_flow_config(flow_cfg)
     if flow_overrides is not None:
-        flow_cfg_norm = engine._merge_flow_config_overrides(flow_cfg_norm, flow_overrides)
+        flow_cfg_norm = engine.merge_flow_config_overrides(flow_cfg_norm, flow_overrides)
 
     wizard_definition = load_or_bootstrap_wizard_definition(
-        engine._fs,
+        fs,
         bootstrap_default_version=_preferred_bootstrap_default_version(engine=engine),
     )
     version_any = wizard_definition.get("version")
@@ -121,12 +118,12 @@ def _build_session_start_context(
             flow_config=flow_cfg_norm,
         )
 
-    discovery = discovery_mod.run_discovery(engine._fs, root=root, relative_path=relative_path)
+    discovery = discovery_mod.run_discovery(fs, root=root, relative_path=relative_path)
     discovery_fingerprint = fingerprint_json(discovery)
 
-    authors_items, books_items = _derive_selection_items(discovery)
+    authors_items, books_items = derive_selection_items(discovery)
     if effective_model.get("flowmodel_kind") != "dsl_step_graph_v3":
-        effective_model = _inject_selection_items(
+        effective_model = inject_selection_items(
             effective_model=effective_model,
             authors_items=authors_items,
             books_items=books_items,
@@ -134,10 +131,7 @@ def _build_session_start_context(
 
     model_fingerprint = fingerprint_json(effective_model)
 
-    diagnostics_enabled = False
-    if engine._has_key("diagnostics.enabled"):
-        resolver = cast(_SupportsResolve, engine._resolver)
-        diagnostics_enabled = bool(resolver.resolve("diagnostics.enabled")[0])
+    diagnostics_enabled = engine.resolve_bool("diagnostics.enabled", default=False)
 
     effective_config: dict[str, object] = {
         "version": 1,
@@ -192,7 +186,7 @@ def resolve_session_start_context(
             flow_overrides=flow_overrides,
         )
     except Exception as e:
-        return _exception_envelope(e)
+        return exception_envelope(e)
 
 
 def resolve_session_start_conflict(
@@ -211,7 +205,7 @@ def resolve_session_start_conflict(
         flow_overrides=flow_overrides,
     )
     state_path = f"import/sessions/{ctx.session_id}/state.json"
-    if not engine._fs.exists(RootName.WIZARDS, state_path):
+    if not engine.file_exists(RootName.WIZARDS, state_path):
         return None
     return SessionStartConflict(
         root=ctx.root,
@@ -233,14 +227,14 @@ def _session_diag(ctx: SessionStartContext) -> dict[str, object]:
 def _runtime_vars(*, engine: ImportWizardEngine) -> dict[str, object]:
     return {
         "runtime": {
-            "detached_runtime": build_detached_runtime_bootstrap(fs=engine._fs),
+            "detached_runtime": build_detached_runtime_bootstrap(fs=engine.get_file_service()),
         }
     }
 
 
 def emit_session_start_diagnostics(*, ctx: SessionStartContext) -> None:
     diag = _session_diag(ctx)
-    _emit_required(
+    emit_required_event(
         "model.load",
         "model.load",
         {
@@ -250,7 +244,7 @@ def emit_session_start_diagnostics(*, ctx: SessionStartContext) -> None:
             "mode": ctx.mode,
         },
     )
-    _emit_required(
+    emit_required_event(
         "model.validate",
         "model.validate",
         {
@@ -269,13 +263,14 @@ def resume_session_from_context(
 ) -> dict[str, object]:
     session_dir = f"import/sessions/{ctx.session_id}"
     state_path = f"{session_dir}/state.json"
-    loaded_state_any = read_json(engine._fs, RootName.WIZARDS, state_path)
+    fs = engine.get_file_service()
+    loaded_state_any = read_json(fs, RootName.WIZARDS, state_path)
     loaded_state = _as_str_object_dict(loaded_state_any)
     if not loaded_state:
         raise FinalizeError("session state must be an object")
 
     derived = _as_str_object_dict(loaded_state.get("derived"))
-    _emit_required(
+    emit_required_event(
         "session.resume",
         "session.resume",
         {
@@ -285,8 +280,8 @@ def resume_session_from_context(
             "effective_config_fingerprint": derived.get("effective_config_fingerprint"),
         },
     )
-    loaded_state = _ensure_session_state_fields(loaded_state)
-    runtime_fp = engine._runtime_effective_model_fingerprint(ctx.session_id)
+    loaded_state = ensure_session_state_fields(loaded_state)
+    runtime_fp = engine.runtime_effective_model_fingerprint(ctx.session_id)
     if runtime_fp and loaded_state.get("model_fingerprint") != runtime_fp:
         loaded_state["model_fingerprint"] = runtime_fp
     if phase1_session_authority_applies(effective_model=ctx.effective_model):
@@ -294,18 +289,18 @@ def resume_session_from_context(
         vars_state["phase1"] = build_phase1_projection(
             discovery=ctx.discovery,
             state=loaded_state,
-            fs=engine._fs,
+            fs=fs,
         )
         loaded_state["vars"] = vars_state
     if ctx.effective_model.get("flowmodel_kind") == "dsl_step_graph_v3":
-        from .engine_step_submit import _sync_v3_legacy_state
+        from .engine_step_submit import sync_v3_legacy_state
 
-        loaded_state = _sync_v3_legacy_state(
+        loaded_state = sync_v3_legacy_state(
             engine=engine,
             session_id=ctx.session_id,
             state=loaded_state,
         )
-    engine._persist_state(ctx.session_id, loaded_state)
+    engine.persist_state(ctx.session_id, loaded_state)
     return loaded_state
 
 
@@ -317,7 +312,7 @@ def create_new_session_from_context(
     session_dir = f"import/sessions/{ctx.session_id}"
     state_path = f"{session_dir}/state.json"
 
-    _emit_required(
+    emit_required_event(
         "session.start",
         "session.start",
         {
@@ -331,50 +326,52 @@ def create_new_session_from_context(
         },
     )
 
+    fs = engine.get_file_service()
     atomic_write_json(
-        engine._fs, RootName.WIZARDS, f"{session_dir}/effective_model.json", ctx.effective_model
+        fs, RootName.WIZARDS, f"{session_dir}/effective_model.json", ctx.effective_model
     )
     atomic_write_json(
-        engine._fs,
+        fs,
         RootName.WIZARDS,
         f"{session_dir}/effective_workflow.json",
         ctx.wizard_definition,
     )
     atomic_write_json(
-        engine._fs,
+        fs,
         RootName.WIZARDS,
         f"{session_dir}/effective_config.json",
         ctx.effective_config,
     )
-    atomic_write_json(engine._fs, RootName.WIZARDS, f"{session_dir}/discovery.json", ctx.discovery)
+    atomic_write_json(fs, RootName.WIZARDS, f"{session_dir}/discovery.json", ctx.discovery)
 
     action_jobs = extract_action_job_requests(ctx.effective_model)
     if action_jobs is not None:
         atomic_write_json(
-            engine._fs,
+            fs,
             RootName.WIZARDS,
             f"{session_dir}/action_jobs.json",
             action_jobs,
         )
 
     atomic_write_text(
-        engine._fs,
+        fs,
         RootName.WIZARDS,
         f"{session_dir}/discovery_fingerprint.txt",
         ctx.discovery_fingerprint + "\n",
     )
     atomic_write_text(
-        engine._fs,
+        fs,
         RootName.WIZARDS,
         f"{session_dir}/effective_config_fingerprint.txt",
         ctx.effective_config_fingerprint + "\n",
     )
 
-    created_at = _iso_utc_now()
+    created_at = iso_utc_now()
     steps_any = ctx.effective_model.get("steps")
     if not isinstance(steps_any, list) or not steps_any:
         raise FinalizeError("effective_model must contain at least one step")
-    first = _as_str_object_dict(steps_any[0])
+    steps = cast(list[object], steps_any)
+    first = _as_str_object_dict(steps[0])
     start_step_id = str(first.get("step_id") or "")
     if not start_step_id:
         raise FinalizeError("effective_model first step must have step_id")
@@ -424,11 +421,11 @@ def create_new_session_from_context(
             "phase1": build_phase1_projection(
                 discovery=ctx.discovery,
                 state=state,
-                fs=engine._fs,
+                fs=fs,
             ),
         }
     if ctx.effective_model.get("flowmodel_kind") == "dsl_step_graph_v3":
-        from .engine_step_submit import _sync_v3_legacy_state
+        from .engine_step_submit import sync_v3_legacy_state
 
         state = initialize_state(
             state=state,
@@ -441,16 +438,16 @@ def create_new_session_from_context(
             vars_state["phase1"] = build_phase1_projection(
                 discovery=ctx.discovery,
                 state=state,
-                fs=engine._fs,
+                fs=fs,
             )
             state["vars"] = vars_state
-        state = _sync_v3_legacy_state(
+        state = sync_v3_legacy_state(
             engine=engine,
             session_id=ctx.session_id,
             state=state,
         )
-    atomic_write_json(engine._fs, RootName.WIZARDS, state_path, state)
-    engine._append_decision(
+    atomic_write_json(fs, RootName.WIZARDS, state_path, state)
+    engine.append_decision(
         ctx.session_id,
         step_id="__system__",
         payload={
@@ -485,6 +482,6 @@ def create_session_impl(
     emit_session_start_diagnostics(ctx=ctx)
 
     state_path = f"import/sessions/{ctx.session_id}/state.json"
-    if engine._fs.exists(RootName.WIZARDS, state_path):
+    if engine.file_exists(RootName.WIZARDS, state_path):
         return resume_session_from_context(engine=engine, ctx=ctx)
     return create_new_session_from_context(engine=engine, ctx=ctx)

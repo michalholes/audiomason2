@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from functools import partial
-from typing import TypeGuard
+from typing import TypeGuard, cast
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote_plus
 from urllib.request import Request, urlopen
@@ -240,7 +240,9 @@ class GoogleBooksPlugin:
 
 
 def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
-    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+    if not isinstance(value, dict):
+        return False
+    return all(isinstance(key, str) for key in cast(dict[object, object], value))
 
 
 def _is_object_list(value: object) -> TypeGuard[list[object]]:

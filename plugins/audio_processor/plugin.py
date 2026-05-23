@@ -8,7 +8,7 @@ from __future__ import annotations
 import asyncio
 import shutil
 from pathlib import Path
-from typing import TypeGuard
+from typing import TypeGuard, cast
 
 from audiomason.core import ProcessingContext
 from audiomason.core.errors import AudioMasonError
@@ -27,7 +27,9 @@ _CHAPTER_FORMATS = {".m4a", ".m4b"}
 
 
 def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
-    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+    if not isinstance(value, dict):
+        return False
+    return all(isinstance(key, str) for key in cast(dict[object, object], value))
 
 
 def _is_object_list(value: object) -> TypeGuard[list[object]]:

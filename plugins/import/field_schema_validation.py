@@ -8,7 +8,7 @@ ASCII-only.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TypeGuard
+from typing import TypeGuard, cast
 
 
 @dataclass
@@ -40,7 +40,9 @@ def _is_object_list(value: object) -> TypeGuard[list[object]]:
 
 
 def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
-    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+    if not isinstance(value, dict):
+        return False
+    return all(isinstance(key, str) for key in cast(dict[object, object], value))
 
 
 def _ascii_only(*, value: str, path: str, meta: dict[str, object]) -> None:
@@ -144,7 +146,7 @@ def validate_settings_schema_fields(*, step_id: str, fields_any: object) -> list
                 meta={"step_id": step_id, "key": key, "type": type_name},
             )
 
-        out_field = {"key": key, "type": type_name, "required": required}
+        out_field: dict[str, object] = {"key": key, "type": type_name, "required": required}
         if "default" in field_any:
             out_field["default"] = field_any.get("default")
 
@@ -278,14 +280,17 @@ def validate_step_fields(*, step_id: str, fields_any: object) -> list[dict[str, 
                 meta={"step_id": step_id, "name": name, "type": ftype},
             )
 
-        constraints = fld.get("constraints")
-        if constraints is not None and not isinstance(constraints, dict):
-            raise FieldSchemaValidationError(
-                message="field.constraints must be an object",
-                path=f"{pfx}.constraints",
-                reason="invalid_type",
-                meta={"step_id": step_id, "name": name, "type": ftype},
-            )
+        constraints_any = fld.get("constraints")
+        constraints: dict[str, object] | None = None
+        if constraints_any is not None:
+            if not _is_str_object_dict(constraints_any):
+                raise FieldSchemaValidationError(
+                    message="field.constraints must be an object",
+                    path=f"{pfx}.constraints",
+                    reason="invalid_type",
+                    meta={"step_id": step_id, "name": name, "type": ftype},
+                )
+            constraints = constraints_any
 
         if ftype == "number":
             if constraints is None:

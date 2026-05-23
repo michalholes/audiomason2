@@ -186,18 +186,6 @@ def tokenize_expr(
 ]:
     """Tokenize a baseline ExprRef expression."""
 
-    if not isinstance(expr, str):
-        return (
-            False,
-            None,
-            _error(
-                code="invalid_expr_syntax",
-                path=path,
-                reason="expr_not_string",
-                meta={},
-            ),
-        )
-
     tokens: list[ExprToken] = []
     idx = 0
     while idx < len(expr):

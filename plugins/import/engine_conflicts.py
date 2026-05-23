@@ -8,11 +8,11 @@ ASCII-only.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, TypeGuard
+from typing import TYPE_CHECKING, TypeGuard, cast
 
 from plugins.file_io.service.types import RootName
 
-from .engine_util import _iso_utc_now
+from .engine_util import iso_utc_now
 from .errors import StepSubmissionError
 from .storage import atomic_write_json
 
@@ -23,11 +23,15 @@ if TYPE_CHECKING:
 def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
     if not isinstance(value, dict):
         return False
-    return all(isinstance(key, str) for key in value)
+    return all(isinstance(key, str) for key in cast(dict[object, object], value))
 
 
 def _as_str_object_dict(value: object) -> dict[str, object]:
     return dict(value) if _is_str_object_dict(value) else {}
+
+
+def _is_object_list(value: object) -> TypeGuard[list[object]]:
+    return isinstance(value, list)
 
 
 def apply_conflict_policy(*, state: dict[str, object], payload: dict[str, object]) -> None:
@@ -48,7 +52,7 @@ def apply_conflict_policy(*, state: dict[str, object], payload: dict[str, object
 
     items = conflicts.get("items")
     present = bool(conflicts.get("present"))
-    if isinstance(items, list):
+    if _is_object_list(items):
         present = present or bool(items)
 
     if policy != "ask":
@@ -86,11 +90,11 @@ def persist_conflict_resolution(
     payload: dict[str, object],
 ) -> None:
     conflicts = state.get("conflicts")
-    if not isinstance(conflicts, dict):
+    if not _is_str_object_dict(conflicts):
         return
     derived = _as_str_object_dict(state.get("derived"))
     record = {
-        "at": _iso_utc_now(),
+        "at": iso_utc_now(),
         "policy": str(conflicts.get("policy") or ""),
         "conflict_fingerprint": str(derived.get("conflict_fingerprint") or ""),
         "payload": dict(payload),

@@ -5,7 +5,7 @@ ASCII-only.
 
 from __future__ import annotations
 
-from typing import TypedDict
+from typing import TypedDict, TypeGuard, cast
 
 FlowGraphInputs = dict[str, object]
 FlowGraphConflicts = dict[str, object]
@@ -23,9 +23,15 @@ class FlowGraphStateView(TypedDict):
 
 
 def _dict_view(raw: object) -> dict[str, object]:
-    if isinstance(raw, dict):
-        return raw
+    if _is_str_object_dict(raw):
+        return dict(raw)
     return {}
+
+
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    if not isinstance(value, dict):
+        return False
+    return all(isinstance(key, str) for key in cast(dict[object, object], value))
 
 
 def build_flow_graph_state_view(state: dict[str, object]) -> FlowGraphStateView:

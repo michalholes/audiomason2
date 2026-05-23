@@ -42,7 +42,8 @@ class _UrlOpenResponse(Protocol):
 def _headers_to_dict(headers_obj: object) -> dict[str, str]:
     headers: dict[str, str] = {}
     if isinstance(headers_obj, Mapping):
-        for key, value in headers_obj.items():
+        mapping = cast(Mapping[object, object], headers_obj)
+        for key, value in mapping.items():
             headers[str(key).lower()] = str(value)
         return headers
     if isinstance(headers_obj, _SupportsItems):
@@ -92,7 +93,7 @@ def run_smoke(base_url: str, timeout_s: float, paths: Iterable[str]) -> dict[str
             except Exception:
                 item["preview"] = repr(preview)
         except urllib.error.HTTPError as e:
-            item["status"] = int(e.code) if isinstance(e.code, int) else 0
+            item["status"] = int(e.code)
             item["ms"] = int((time.time() - t0) * 1000)
             item["error"] = f"HTTPError: {e}"
         except Exception as e:

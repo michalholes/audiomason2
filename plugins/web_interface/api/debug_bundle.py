@@ -21,7 +21,7 @@ from plugins.file_io.service.service import FileService
 from plugins.file_io.service.types import RootName
 
 from ..util.status import build_status
-from .roots import _resolve_show_jobs_root
+from .roots import resolve_show_jobs_root
 
 _FIXED_ZIP_DT = (2000, 1, 1, 0, 0, 0)
 
@@ -49,8 +49,9 @@ class _StateView(Protocol):
 def _dict_str_object(value: object) -> dict[str, object]:
     if not isinstance(value, Mapping):
         return {}
+    mapping = cast(Mapping[object, object], value)
     out: dict[str, object] = {}
-    for key, item in value.items():
+    for key, item in mapping.items():
         if isinstance(key, str):
             out[key] = item
     return out
@@ -96,16 +97,19 @@ def _get_file_service(request: Request) -> FileService:
 
 def _sanitize(obj: object) -> object:
     """Redact known secrets from dict/list structures."""
-    if isinstance(obj, dict):
+    if isinstance(obj, Mapping):
+        mapping = cast(Mapping[object, object], obj)
         out: dict[str, object] = {}
-        for k, v in obj.items():
-            if isinstance(k, str) and _SECRET_KEY_RE.search(k):
-                out[k] = "***REDACTED***"
+        for k, v in mapping.items():
+            key_text = k if isinstance(k, str) else str(k)
+            if _SECRET_KEY_RE.search(key_text):
+                out[key_text] = "***REDACTED***"
             else:
-                out[k] = _sanitize(v)
+                out[key_text] = _sanitize(v)
         return out
     if isinstance(obj, list):
-        return [_sanitize(v) for v in obj]
+        values = cast(list[object], obj)
+        return [_sanitize(v) for v in values]
     return obj
 
 
@@ -165,7 +169,7 @@ def _try_find_git_sha() -> str | None:
 
 
 def _api_roots(request: Request, resolver: ConfigResolver) -> dict[str, object]:
-    show_jobs = _resolve_show_jobs_root(resolver)
+    show_jobs = resolve_show_jobs_root(resolver)
     items: list[dict[str, str]] = [
         {"id": "inbox", "label": "Inbox"},
         {"id": "stage", "label": "Stage"},
@@ -245,7 +249,7 @@ def _plugin_info(request: Request) -> dict[str, object]:
             if is_dataclass(man):
                 manifests[name] = {"dataclass": type(man).__name__}
             elif isinstance(man, Mapping):
-                manifests[name] = _dict_str_object(man)
+                manifests[name] = _dict_str_object(cast(object, man))
             else:
                 manifests[name] = {"value": str(man)}
         except Exception:

@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING
 
 from .dsl.flowmodel_v3 import FLOWMODEL_KIND, build_flow_model_v3
 from .dsl.interpreter_v3 import run_automatic_steps
-from .engine_util import _iso_utc_now, sync_session_cursor
+from .engine_util import iso_utc_now, sync_session_cursor
 from .errors import StepSubmissionError, invariant_violation
 
 if TYPE_CHECKING:
@@ -39,14 +39,14 @@ def initialize_state(
 def apply_action_v3(
     *, engine: ImportWizardEngine, session_id: str, action: str
 ) -> dict[str, object]:
-    state = engine._load_state(session_id)
-    effective_model = engine._load_effective_model(session_id)
+    state = engine.load_state(session_id)
+    effective_model = engine.load_effective_model(session_id)
     if not is_v3_effective_model(effective_model):
         raise StepSubmissionError("session is not v3")
     if action == "cancel":
         state["status"] = "aborted"
-        state["updated_at"] = _iso_utc_now()
-        engine._persist_state(session_id, state)
+        state["updated_at"] = iso_utc_now()
+        engine.persist_state(session_id, state)
         return state
     if state.get("status") != "in_progress":
         return invariant_violation(

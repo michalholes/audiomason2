@@ -6,9 +6,9 @@ ASCII-only.
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import TypeGuard
+from typing import TypeGuard, cast
 
-from ..engine_util import _emit_required, append_trace_event, sync_session_cursor
+from ..engine_util import append_trace_event, emit_required_event, sync_session_cursor
 from ..errors import FinalizeError, StepSubmissionError
 from ..primitives import (
     CTRL_STOP_ID,
@@ -36,7 +36,9 @@ from .subflow_runtime import (
 
 
 def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
-    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+    if not isinstance(value, dict):
+        return False
+    return all(isinstance(key, str) for key in cast(dict[object, object], value))
 
 
 def _is_object_list(value: object) -> TypeGuard[list[object]]:
@@ -376,7 +378,7 @@ def _emit_runtime_boundary(
     if error is not None:
         data["error_type"] = error.__class__.__name__
         data["error_message"] = str(error) or error.__class__.__name__
-    _emit_required(
+    emit_required_event(
         event=event,
         operation="runtime.boundary",
         data={**_runtime_diag_context(state, session_id), **data},

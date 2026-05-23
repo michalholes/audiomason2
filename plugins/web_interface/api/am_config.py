@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from typing import cast
 
 from fastapi import FastAPI, HTTPException, Request
 
@@ -15,7 +16,7 @@ def _dict_str_object(value: object) -> dict[str, object]:
     if not isinstance(value, Mapping):
         return {}
     out: dict[str, object] = {}
-    for key, item in value.items():
+    for key, item in cast(Mapping[object, object], value).items():
         if isinstance(key, str):
             out[key] = item
     return out

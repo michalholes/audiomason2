@@ -8,7 +8,7 @@ ASCII-only.
 from __future__ import annotations
 
 from copy import deepcopy
-from typing import TypeGuard
+from typing import TypeGuard, cast
 
 from .errors import FinalizeError
 from .field_schema_validation import FieldSchemaValidationError
@@ -19,7 +19,9 @@ _ALLOWED_STEP_KEYS = {"enabled"}
 
 
 def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
-    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+    if not isinstance(value, dict):
+        return False
+    return all(isinstance(key, str) for key in cast(dict[object, object], value))
 
 
 def normalize_flow_config(raw: object) -> dict[str, object]:
@@ -53,7 +55,7 @@ def normalize_flow_config(raw: object) -> dict[str, object]:
 
     steps: dict[str, object] = {}
     for step_id, cfg_any in steps_doc.items():
-        if not isinstance(step_id, str) or not step_id:
+        if not step_id:
             raise ValueError("flow_config.steps keys must be non-empty strings")
         if not _is_str_object_dict(cfg_any):
             raise ValueError("flow_config.steps.<step_id> must be an object")
@@ -106,7 +108,7 @@ def validate_flow_config_editor_boundary(raw: object) -> dict[str, object]:
 
         normalized_defaults: dict[str, object] = {}
         for key, value in sorted(defaults_obj.items()):
-            if not isinstance(key, str) or not key:
+            if not key:
                 raise FieldSchemaValidationError(
                     message="flow_config defaults keys must be non-empty strings",
                     path=f"$.defaults.{step_id}",

@@ -8,7 +8,7 @@ ASCII-only.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Protocol, cast
+from typing import Protocol, TypeGuard, cast
 
 from audiomason.core.config_service import ConfigService
 from audiomason.core.errors import PluginError, PluginNotFoundError
@@ -68,19 +68,29 @@ def _builtin_plugins_dir() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
-_CALLABLE_AUTHORITY: tuple[PluginRegistry, PluginLoader] | None = None
+_callable_authority_cache: tuple[PluginRegistry, PluginLoader] | None = None
+
+
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    if not isinstance(value, dict):
+        return False
+    return all(isinstance(key, str) for key in cast(dict[object, object], value))
+
+
+def _is_object_list(value: object) -> TypeGuard[list[object]]:
+    return isinstance(value, list)
 
 
 def _callable_authority() -> tuple[PluginRegistry, PluginLoader]:
-    global _CALLABLE_AUTHORITY
-    if _CALLABLE_AUTHORITY is None:
+    global _callable_authority_cache
+    if _callable_authority_cache is None:
         registry = PluginRegistry(ConfigService())
         loader = PluginLoader(
             builtin_plugins_dir=_builtin_plugins_dir(),
             registry=registry,
         )
-        _CALLABLE_AUTHORITY = (registry, loader)
-    return _CALLABLE_AUTHORITY
+        _callable_authority_cache = (registry, loader)
+    return _callable_authority_cache
 
 
 _LEGACY_METHOD_ALIASES = {
@@ -129,7 +139,7 @@ def _legacy_cover_callable(
                 except TypeError:
                     kwargs.pop("group_root", None)
                     candidates_any = _discover_method(source_dir, **kwargs)
-                if not isinstance(candidates_any, list):
+                if not _is_object_list(candidates_any):
                     return []
                 return [
                     canonicalize_path_candidate(
@@ -139,7 +149,7 @@ def _legacy_cover_callable(
                         source_relative_path=source_relative_path,
                     )
                     for candidate in candidates_any
-                    if isinstance(candidate, dict)
+                    if _is_str_object_dict(candidate)
                 ]
 
             return _discover_for_ref
@@ -277,12 +287,11 @@ def discover_cover_candidates(
     )
     return [
         canonicalize_ref_candidate(
-            candidate=dict(candidate),
+            candidate={key: value for key, value in candidate.items()},
             source_root=root_name,
             source_relative_path=source_relative_path,
         )
         for candidate in candidates
-        if isinstance(candidate, dict)
     ]
 
 

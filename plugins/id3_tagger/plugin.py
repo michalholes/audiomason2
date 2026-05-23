@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Mapping
 from pathlib import Path
-from typing import Protocol, runtime_checkable
+from typing import Protocol, cast, runtime_checkable
 
 from audiomason.core import ProcessingContext
 from audiomason.core.errors import AudioMasonError
@@ -41,8 +41,9 @@ _RESERVED_TAG_KEYS = {
 def _dict_str_object(value: object) -> dict[str, object]:
     if not isinstance(value, Mapping):
         return {}
+    mapping = cast(Mapping[object, object], value)
     result: dict[str, object] = {}
-    for key, item in value.items():
+    for key, item in mapping.items():
         if isinstance(key, str):
             result[key] = item
     return result
@@ -324,7 +325,7 @@ class ID3TaggerPlugin:
             if proc.returncode != 0:
                 return {}
 
-            metadata = {}
+            metadata: dict[str, str] = {}
             for line in stdout.decode().split("\n"):
                 if line.startswith("TAG:"):
                     line = line[4:]

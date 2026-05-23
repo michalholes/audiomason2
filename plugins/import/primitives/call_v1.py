@@ -65,7 +65,9 @@ class _KeywordCallable(Protocol):
 
 
 def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
-    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+    if not isinstance(value, dict):
+        return False
+    return all(isinstance(key, str) for key in cast(dict[object, object], value))
 
 
 def _as_str_object_dict(value: object) -> dict[str, object]:
@@ -107,19 +109,19 @@ def _builtin_plugins_dir() -> Path:
     return Path(pkg_file).resolve().parent
 
 
-_AUTHORITY_CACHE: tuple[PluginRegistry, PluginLoader] | None = None
+_authority_cache: tuple[PluginRegistry, PluginLoader] | None = None
 
 
 def _callable_authority() -> tuple[PluginRegistry, PluginLoader]:
-    global _AUTHORITY_CACHE
-    if _AUTHORITY_CACHE is not None:
-        return _AUTHORITY_CACHE
+    global _authority_cache
+    if _authority_cache is not None:
+        return _authority_cache
     registry = PluginRegistry(ConfigService())
     loader = PluginLoader(
         builtin_plugins_dir=_builtin_plugins_dir(),
         registry=registry,
     )
-    _AUTHORITY_CACHE = (registry, loader)
+    _authority_cache = (registry, loader)
     return registry, loader
 
 
@@ -195,7 +197,7 @@ def _execute_inline(*, binding: _ResolvedCallableBinding, args: dict[str, object
 def _execute_job(*, binding: _ResolvedCallableBinding, args: dict[str, object]) -> object:
     build_job = cast(_KeywordCallable, binding.callable_obj)
     job = build_job(**dict(args))
-    if not isinstance(job, dict):
+    if not _is_str_object_dict(job):
         raise RuntimeError("wizard_callable_job_builder_must_return_object")
     plugin = cast(_JobExecutorPlugin, binding.plugin_obj)
     return _run_coro_blocking(plugin.execute_job(dict(job)))

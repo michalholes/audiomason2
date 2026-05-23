@@ -6,7 +6,7 @@ import asyncio
 import re
 import unicodedata
 from functools import partial
-from typing import TypeGuard
+from typing import TypeGuard, cast
 from urllib.error import HTTPError, URLError
 from urllib.parse import quote_plus
 from urllib.request import Request, urlopen
@@ -16,7 +16,9 @@ from audiomason.core.serde import json_loads_object
 
 
 def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
-    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+    if not isinstance(value, dict):
+        return False
+    return all(isinstance(key, str) for key in cast(dict[object, object], value))
 
 
 def _is_object_list(value: object) -> TypeGuard[list[object]]:
@@ -184,7 +186,7 @@ class OpenLibraryPlugin:
         self.max_response_bytes = _to_int_or_default(max_bytes, self.DEFAULT_MAX_RESPONSE_BYTES)
 
     def build_fetch_request(self, query: dict[str, object]) -> dict[str, object]:
-        payload = dict(query) if isinstance(query, dict) else {}
+        payload = dict(query)
         return {
             "request_version": self.REQUEST_VERSION,
             "operation": "fetch",
@@ -220,7 +222,7 @@ class OpenLibraryPlugin:
         }
 
     def build_job(self, request: dict[str, object]) -> dict[str, object]:
-        payload = dict(request) if isinstance(request, dict) else {}
+        payload = dict(request)
         return {
             "job_type": self.JOB_TYPE,
             "job_version": self.JOB_VERSION,
@@ -408,11 +410,8 @@ class OpenLibraryPlugin:
         query_norm = self._normalize_text(name)
         best: tuple[tuple[int, int, str, str], str] | None = None
         for doc in docs:
-            raw_authors = doc.get("author_name")
-            if not isinstance(raw_authors, list):
-                continue
-            for raw_name in raw_authors:
-                candidate = str(raw_name or "").strip()
+            for raw_name in _as_str_list(doc.get("author_name")):
+                candidate = raw_name.strip()
                 if not self._normalize_text(candidate):
                     continue
                 rank = self._candidate_rank(query_norm, candidate)

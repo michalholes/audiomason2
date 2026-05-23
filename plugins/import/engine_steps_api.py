@@ -8,11 +8,11 @@ ASCII-only.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, TypeGuard
+from typing import TYPE_CHECKING, TypeGuard, cast
 
 from .dsl.flowmodel_v3 import FLOWMODEL_KIND
 from .dsl.interpreter_v3 import prompt_ui_from_resolved_inputs, resolve_inputs
-from .engine_util import _exception_envelope
+from .engine_util import exception_envelope
 from .primitives import is_prompt_primitive
 from .prompt_select_ui_projection import build_prompt_select_ui_items
 
@@ -23,7 +23,11 @@ if TYPE_CHECKING:
 def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
     if not isinstance(value, dict):
         return False
-    return all(isinstance(key, str) for key in value)
+    return all(isinstance(key, str) for key in cast(dict[object, object], value))
+
+
+def _is_object_list(value: object) -> TypeGuard[list[object]]:
+    return isinstance(value, list)
 
 
 def get_step_definition_impl(
@@ -34,15 +38,16 @@ def get_step_definition_impl(
     This is a UI helper. It does not perform any state transitions.
     """
     try:
-        effective_model = engine._load_effective_model(session_id)
-        state = engine._load_state(session_id)
+        effective_model = engine.load_effective_model(session_id)
+        state = engine.load_state(session_id)
         steps_any = effective_model.get("steps")
-        if not isinstance(steps_any, list):
+        if not _is_object_list(steps_any):
             raise ValueError("effective model missing steps")
+        steps = steps_any
         cursor = state.get("cursor")
         cursor_dict = cursor if _is_str_object_dict(cursor) else {}
         current_step_id = str(cursor_dict.get("step_id") or state.get("current_step_id") or "")
-        for step in steps_any:
+        for step in steps:
             if not _is_str_object_dict(step) or step.get("step_id") != step_id:
                 continue
             out = dict(step)
@@ -71,4 +76,4 @@ def get_step_definition_impl(
             return out
         raise ValueError("unknown step_id")
     except Exception as e:
-        return _exception_envelope(e)
+        return exception_envelope(e)

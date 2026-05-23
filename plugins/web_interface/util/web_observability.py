@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 import traceback
-from collections.abc import Iterator
+from collections.abc import Generator
 from contextlib import contextmanager, suppress
 from typing import Protocol, cast, runtime_checkable
 
@@ -46,7 +46,7 @@ def web_operation(
     name: str,
     ctx: dict[str, object] | None = None,
     component: str = "web_interface",
-) -> Iterator[None]:
+) -> Generator[None, None, None]:
     """Emit diagnostics + core log records for a web internal operation.
 
     This is intended for call boundaries inside the web plugin (handler -> service).

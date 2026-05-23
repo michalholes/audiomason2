@@ -11,7 +11,7 @@ ASCII-only.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Protocol, TypeGuard
+from typing import Protocol, TypeGuard, cast
 
 from plugins.file_io.service import FileService
 from plugins.file_io.service.types import RootName
@@ -22,15 +22,17 @@ from .storage import atomic_write_json, read_json
 
 
 class _PatchEngine(Protocol):
-    _fs: FileService
+    def get_file_service(self) -> FileService: ...
 
-    def _normalize_flow_config(self, raw: object) -> dict[str, object]: ...
+    def normalize_flow_config(self, raw: object) -> dict[str, object]: ...
 
     def validate_flow_config(self, flow_config_json: object) -> dict[str, object]: ...
 
 
 def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
-    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+    if not isinstance(value, dict):
+        return False
+    return all(isinstance(key, str) for key in cast(dict[object, object], value))
 
 
 def _is_object_list(value: object) -> TypeGuard[list[object]]:
@@ -112,18 +114,19 @@ def apply_patch_request(engine: _PatchEngine, body: object) -> dict[str, object]
         ops.append(PatchOp(op="set", path=path, value=value))
 
     # Read -> apply -> validate -> normalize -> atomic write -> return.
-    ensure_default_models(engine._fs)
-    current = read_json(engine._fs, RootName.WIZARDS, "import/config/flow_config.json")
-    base = engine._normalize_flow_config(current)
+    fs = engine.get_file_service()
+    ensure_default_models(fs)
+    current = read_json(fs, RootName.WIZARDS, "import/config/flow_config.json")
+    base = engine.normalize_flow_config(current)
     patched = apply_ops(base, ops)
 
     validated = engine.validate_flow_config(patched)
     if validated.get("ok") is not True:
         return validated
 
-    normalized = engine._normalize_flow_config(patched)
+    normalized = engine.normalize_flow_config(patched)
     atomic_write_json(
-        engine._fs,
+        fs,
         RootName.WIZARDS,
         "import/config/flow_config.json",
         normalized,

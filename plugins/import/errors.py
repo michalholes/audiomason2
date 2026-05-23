@@ -6,6 +6,13 @@ ASCII-only.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TypeGuard, cast
+
+
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    if not isinstance(value, dict):
+        return False
+    return all(isinstance(key, str) for key in cast(dict[object, object], value))
 
 
 def _ascii_message(message: str) -> str:
@@ -61,7 +68,7 @@ def error_envelope(
 
     safe_details: list[dict[str, object]] = []
     for d in details or []:
-        if not isinstance(d, dict):
+        if not _is_str_object_dict(d):
             continue
         path = d.get("path")
         reason = d.get("reason")
@@ -70,9 +77,8 @@ def error_envelope(
             path = "$"
         if not isinstance(reason, str) or not reason:
             reason = "invalid_detail"
-        if not isinstance(meta, dict):
-            meta = {}
-        safe_details.append(_detail(path, reason, meta))
+        meta_obj = dict(meta) if _is_str_object_dict(meta) else {}
+        safe_details.append(_detail(path, reason, meta_obj))
 
     return ErrorEnvelope(
         code=code, message=_ascii_message(str(message)), details=safe_details

@@ -34,7 +34,13 @@ HISTORY_LIMIT = 5
 
 
 def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
-    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+    if not isinstance(value, dict):
+        return False
+    return all(isinstance(key, str) for key in cast(dict[object, object], value))
+
+
+def _is_object_list(value: object) -> TypeGuard[list[object]]:
+    return isinstance(value, list)
 
 
 @runtime_checkable
@@ -54,7 +60,7 @@ def _derived_editor_catalog(fs: FileService) -> dict[str, object]:
         wizard_definition=wizard_definition,
         flow_config=flow_config,
     )
-    steps = [
+    steps: list[dict[str, object]] = [
         {
             "step_id": step_id,
             "title": str(entry.get("title") or step_id),
@@ -261,9 +267,9 @@ def _load_history_index(fs: FileService, *, kind: str) -> list[str]:
     if not fs.exists(RootName.WIZARDS, path):
         return []
     data = _load_json(fs, RootName.WIZARDS, path)
-    if not isinstance(data, list) or not all(isinstance(x, str) for x in data):
+    if not _is_object_list(data) or not all(isinstance(x, str) for x in data):
         return []
-    return list(data)
+    return [x for x in data if isinstance(x, str)]
 
 
 def _store_history_entry(fs: FileService, *, kind: str, fingerprint: str, obj: object) -> None:

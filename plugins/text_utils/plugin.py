@@ -221,7 +221,7 @@ class TextUtilsPlugin:
         }
 
         words = text.split()
-        result = []
+        result: list[str] = []
 
         for i, word in enumerate(words):
             # First and last words always capitalized

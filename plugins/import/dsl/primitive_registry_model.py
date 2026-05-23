@@ -21,13 +21,15 @@ ASCII-only.
 
 from __future__ import annotations
 
-from typing import TypeGuard
+from typing import TypeGuard, cast
 
 from ..field_schema_validation import FieldSchemaValidationError
 
 
 def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
-    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+    if not isinstance(value, dict):
+        return False
+    return all(isinstance(key, str) for key in cast(dict[object, object], value))
 
 
 def _is_object_list(value: object) -> TypeGuard[list[object]]:
@@ -178,7 +180,7 @@ def _validate_schema_subset(schema_any: object, *, path: str) -> None:
                 meta={},
             )
         for k, v in props.items():
-            if not isinstance(k, str) or not k:
+            if not k:
                 raise FieldSchemaValidationError(
                     message="schema.properties keys must be non-empty strings",
                     path=f"{path}.properties",

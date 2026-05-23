@@ -10,7 +10,7 @@ ASCII-only.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, TypeGuard
+from typing import TYPE_CHECKING, TypeGuard, cast
 
 from plugins.file_io.service import FileService
 from plugins.file_io.service.types import RootName
@@ -25,7 +25,11 @@ if TYPE_CHECKING:  # pragma: no cover
 def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
     if not isinstance(value, dict):
         return False
-    return all(isinstance(key, str) for key in value)
+    return all(isinstance(key, str) for key in cast(dict[object, object], value))
+
+
+def _is_object_list(value: object) -> TypeGuard[list[object]]:
+    return isinstance(value, list)
 
 
 def write_preview_artifact(
@@ -76,7 +80,7 @@ def preview_action_impl(
 
     from .errors import StepSubmissionError, invariant_violation
 
-    state = engine._load_state(session_id)
+    state = engine.load_state(session_id)
     phase_any = state.get("phase")
     phase = phase_any if isinstance(phase_any, int) else 1
     if phase == 2:
@@ -89,12 +93,12 @@ def preview_action_impl(
     if state.get("status") != "in_progress":
         raise StepSubmissionError("session is not in progress")
 
-    if not isinstance(payload, dict):
+    if not _is_str_object_dict(payload):
         raise StepSubmissionError("payload must be an object")
 
-    effective_model = engine._load_effective_model(session_id)
+    effective_model = engine.load_effective_model(session_id)
     steps_any = effective_model.get("steps")
-    if not isinstance(steps_any, list):
+    if not _is_object_list(steps_any):
         raise StepSubmissionError("effective model missing steps")
 
     steps = [s for s in steps_any if _is_str_object_dict(s)]
@@ -123,7 +127,7 @@ def preview_action_impl(
     if not isinstance(preview_action_any, dict):
         raise StepSubmissionError("step.preview_action must be an object")
 
-    normalized_payload = engine._validate_and_canonicalize_payload(
+    normalized_payload = engine.validate_and_canonicalize_payload(
         step_id=step_id,
         schema=schema,
         payload=payload,
@@ -131,7 +135,7 @@ def preview_action_impl(
     )
 
     derived_any = state.get("derived")
-    if not isinstance(derived_any, dict):
+    if not _is_str_object_dict(derived_any):
         raise StepSubmissionError("session state missing derived")
     discovery_fp = derived_any.get("discovery_fingerprint")
     eff_cfg_fp = derived_any.get("effective_config_fingerprint")
@@ -141,7 +145,7 @@ def preview_action_impl(
         raise StepSubmissionError("session state missing effective_config_fingerprint")
 
     return write_preview_artifact(
-        fs=engine._fs,
+        fs=engine.get_file_service(),
         session_id=session_id,
         step_id=step_id,
         payload=normalized_payload,

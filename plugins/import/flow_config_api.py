@@ -7,7 +7,7 @@ ASCII-only.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, TypeGuard, cast
 
 from plugins.file_io.service.types import RootName
 
@@ -22,21 +22,27 @@ if TYPE_CHECKING:  # pragma: no cover
     from .engine import ImportWizardEngine
 
 
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    if not isinstance(value, dict):
+        return False
+    return all(isinstance(key, str) for key in cast(dict[object, object], value))
+
+
 def merge_flow_config_overrides(
     base: dict[str, object],
     overrides: dict[str, object],
 ) -> dict[str, object]:
-    if not isinstance(overrides, dict):
-        raise ValueError("flow_overrides must be an object")
     if "steps" not in overrides:
         return base
     merged = dict(base)
-    steps = dict(cast(dict[str, object], merged.get("steps") or {}))
-    raw_steps = overrides.get("steps")
-    if not isinstance(raw_steps, dict):
+    steps_any = merged.get("steps")
+    steps: dict[str, object] = dict(steps_any) if _is_str_object_dict(steps_any) else {}
+    raw_steps_any = overrides.get("steps")
+    if not _is_str_object_dict(raw_steps_any):
         raise ValueError("flow_overrides.steps must be an object")
-    for step_id, cfg in raw_steps.items():
-        if not isinstance(step_id, str) or not step_id:
+    for step_id, cfg_any in raw_steps_any.items():
+        cfg = cfg_any if _is_str_object_dict(cfg_any) else None
+        if not step_id:
             raise ValueError("flow_overrides.steps keys must be strings")
         if not isinstance(cfg, dict):
             raise ValueError("flow_overrides.steps.<step_id> must be an object")
@@ -55,9 +61,10 @@ def merge_flow_config_overrides(
 def get_flow_config(self: ImportWizardEngine) -> dict[str, object]:
     """Return the current normalized FlowConfig JSON."""
 
-    ensure_flow_config_exists(self._fs)
+    fs = self.get_file_service()
+    ensure_flow_config_exists(fs)
     flow_cfg = read_json(
-        self._fs,
+        fs,
         RootName.WIZARDS,
         "import/config/flow_config.json",
     )
@@ -75,11 +82,12 @@ def set_flow_config(self: ImportWizardEngine, flow_config_json: object) -> dict[
     if validated.get("ok") is not True:
         return validated
 
-    ensure_flow_config_exists(self._fs)
+    fs = self.get_file_service()
+    ensure_flow_config_exists(fs)
 
     normalized = normalize_flow_config(flow_config_json)
     atomic_write_json(
-        self._fs,
+        fs,
         RootName.WIZARDS,
         "import/config/flow_config.json",
         normalized,
@@ -94,11 +102,12 @@ def reset_flow_config(self: ImportWizardEngine) -> dict[str, object]:
     if validated.get("ok") is not True:
         return validated
 
-    ensure_flow_config_exists(self._fs)
+    fs = self.get_file_service()
+    ensure_flow_config_exists(fs)
 
     normalized = normalize_flow_config(DEFAULT_FLOW_CONFIG)
     atomic_write_json(
-        self._fs,
+        fs,
         RootName.WIZARDS,
         "import/config/flow_config.json",
         normalized,

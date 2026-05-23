@@ -7,7 +7,21 @@ ASCII-only.
 
 from __future__ import annotations
 
+from typing import TypeGuard, cast
+
 from plugins.file_io.service import FileService, RootName
+
+
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    if not isinstance(value, dict):
+        return False
+    return all(isinstance(key, str) for key in cast(dict[object, object], value))
+
+
+def _as_dict_list(value: object) -> list[dict[str, object]]:
+    if not isinstance(value, list):
+        return []
+    return [item for item in cast(list[object], value) if _is_str_object_dict(item)]
 
 
 def _conflict_sort_key(conflict: dict[str, object]) -> tuple[str, str]:
@@ -52,16 +66,14 @@ def scan_conflicts(
 
     tgt_root = _target_root(str(mode))
 
-    selected_any = plan.get("selected_books")
-    if not isinstance(selected_any, list):
-        selected_any = []
+    selected = _as_dict_list(plan.get("selected_books"))
 
-    if not selected_any:
+    if not selected:
         src_any = plan.get("source")
-        if isinstance(src_any, dict):
+        if _is_str_object_dict(src_any):
             rel_any = src_any.get("relative_path")
             if isinstance(rel_any, str):
-                selected_any = [
+                selected = [
                     {
                         "book_id": f"implicit:{_normalize_rel_path(rel_any)}",
                         "proposed_target_relative_path": rel_any,
@@ -69,9 +81,7 @@ def scan_conflicts(
                 ]
 
     conflicts: list[dict[str, object]] = []
-    for it in selected_any:
-        if not isinstance(it, dict):
-            continue
+    for it in selected:
         book_id_any = it.get("book_id")
         tgt_any = it.get("proposed_target_relative_path")
         if not isinstance(book_id_any, str) or not book_id_any:

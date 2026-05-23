@@ -213,8 +213,6 @@ def mount_fs(app: FastAPI) -> None:
         overwrite: int = Form(1),
         file: UploadFile = File(...),  # noqa: B008
     ) -> dict[str, object]:
-        if file is None:
-            raise HTTPException(status_code=400, detail="file is required")
         fs = _get_file_service(request)
         r = _parse_root(root)
         rel = _norm_rel_path(path)

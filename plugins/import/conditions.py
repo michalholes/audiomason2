@@ -30,13 +30,15 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable
-from typing import TypeGuard
+from typing import TypeGuard, cast
 
 from .flow_graph_state_view import FlowGraphStateView
 
 
 def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
-    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+    if not isinstance(value, dict):
+        return False
+    return all(isinstance(key, str) for key in cast(dict[object, object], value))
 
 
 def _is_object_list(value: object) -> TypeGuard[list[object]]:
@@ -197,7 +199,7 @@ def _get_path(
             warn("INVALID_CONDITION_PATH", {"path": path})
         return default
 
-    cur = obj
+    cur: object = obj
     for raw_part in runtime_path.split("."):
         part = raw_part.strip()
         if not part:
@@ -208,7 +210,7 @@ def _get_path(
         key = m.group("key")
         idx_s = m.group("idx")
 
-        if isinstance(cur, dict):
+        if _is_str_object_dict(cur):
             if key not in cur:
                 return default
             cur = cur[key]
@@ -216,7 +218,7 @@ def _get_path(
             return default
 
         if idx_s is not None:
-            if not isinstance(cur, list):
+            if not _is_object_list(cur):
                 return default
             idx = int(idx_s)
             if idx < 0 or idx >= len(cur):

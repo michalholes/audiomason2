@@ -15,6 +15,7 @@ import sys
 import time
 from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import cast
 
 from plugins.file_io.service.service import FileService
 from plugins.file_io.service.types import RootName
@@ -23,6 +24,17 @@ from audiomason.core.config import ConfigResolver
 from audiomason.core.config_service import ConfigService
 from audiomason.core.errors import PluginError
 from audiomason.core.serde import json_loads_object
+
+
+def _dict_str_object(value: object) -> dict[str, object]:
+    if not isinstance(value, Mapping):
+        return {}
+    mapping = cast(Mapping[object, object], value)
+    out: dict[str, object] = {}
+    for key, item in mapping.items():
+        if isinstance(key, str):
+            out[key] = item
+    return out
 
 
 @dataclass(frozen=True)
@@ -109,8 +121,8 @@ def _format_event_line(evt: dict[str, object]) -> str:
     if isinstance(operation, str) and operation:
         parts.append(operation)
 
-    data = evt.get("data")
-    if isinstance(data, dict):
+    data = _dict_str_object(evt.get("data"))
+    if data:
         job_id = data.get("job_id")
         if isinstance(job_id, str) and job_id:
             parts.append(f"job={job_id}")
@@ -492,10 +504,7 @@ class DiagnosticsConsolePlugin:
         ) as f:
             data = f.read()
 
-        if not isinstance(data, (bytes, bytearray)):
-            raise PluginError("syslog read returned non-bytes")
-
-        b = bytes(data)
+        b = data
         new_bytes = b[offset:]
         if not new_bytes:
             return offset
@@ -527,10 +536,7 @@ class DiagnosticsConsolePlugin:
         if not isinstance(parsed, Mapping):
             return s
 
-        obj: dict[str, object] = {}
-        for key, value in parsed.items():
-            if isinstance(key, str):
-                obj[key] = value
+        obj = _dict_str_object(cast(object, parsed))
 
         level = obj.get("level")
         logger = obj.get("logger")
@@ -566,10 +572,7 @@ class DiagnosticsConsolePlugin:
         ) as f:
             data = f.read()
 
-        if not isinstance(data, (bytes, bytearray)):
-            raise PluginError("diagnostics sink read returned non-bytes")
-
-        new_bytes = bytes(data)[offset:]
+        new_bytes = data[offset:]
         if not new_bytes:
             return printed, offset
 
@@ -594,10 +597,7 @@ class DiagnosticsConsolePlugin:
                 print("WARN: invalid jsonl event")
                 continue
 
-            evt: dict[str, object] = {}
-            for key, value in parsed_evt.items():
-                if isinstance(key, str):
-                    evt[key] = value
+            evt = _dict_str_object(cast(object, parsed_evt))
 
             print(_format_event_line(evt))
             printed += 1

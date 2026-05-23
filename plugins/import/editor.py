@@ -42,8 +42,14 @@ class _SaveFn(Protocol):
     def __call__(self, obj: object) -> None: ...
 
 
+def _empty_meta() -> dict[str, object]:
+    return {}
+
+
 def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
-    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+    if not isinstance(value, dict):
+        return False
+    return all(isinstance(key, str) for key in cast(dict[object, object], value))
 
 
 def show_catalog(engine: ImportWizardEngine) -> EditorResult:
@@ -77,7 +83,7 @@ def save_catalog_validated(engine: ImportWizardEngine) -> EditorResult:
             "error": {
                 "code": "INVARIANT_VIOLATION",
                 "message": "catalog is immutable; editor may only modify flow_config",
-                "details": [{"path": "$.catalog", "reason": "immutable", "meta": {}}],
+                "details": [{"path": "$.catalog", "reason": "immutable", "meta": _empty_meta()}],
             }
         },
     )
@@ -90,7 +96,7 @@ def save_flow_validated(engine: ImportWizardEngine) -> EditorResult:
             "error": {
                 "code": "INVARIANT_VIOLATION",
                 "message": "flow is immutable; editor may only modify flow_config",
-                "details": [{"path": "$.flow", "reason": "immutable", "meta": {}}],
+                "details": [{"path": "$.flow", "reason": "immutable", "meta": _empty_meta()}],
             }
         },
     )
@@ -111,7 +117,7 @@ def edit_catalog_interactive(engine: ImportWizardEngine) -> EditorResult:
             "error": {
                 "code": "INVARIANT_VIOLATION",
                 "message": "catalog is immutable; editor may only modify flow_config",
-                "details": [{"path": "$.catalog", "reason": "immutable", "meta": {}}],
+                "details": [{"path": "$.catalog", "reason": "immutable", "meta": _empty_meta()}],
             }
         },
     )
@@ -142,7 +148,7 @@ def reset_catalog_to_defaults(engine: ImportWizardEngine) -> EditorResult:
             "error": {
                 "code": "INVARIANT_VIOLATION",
                 "message": "catalog is immutable; editor may only modify flow_config",
-                "details": [{"path": "$.catalog", "reason": "immutable", "meta": {}}],
+                "details": [{"path": "$.catalog", "reason": "immutable", "meta": _empty_meta()}],
             }
         },
     )

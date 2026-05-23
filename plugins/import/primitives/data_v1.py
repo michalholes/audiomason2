@@ -8,7 +8,7 @@ from __future__ import annotations
 from typing import TypeGuard
 
 from ..dsl.expr_eval import eval_expr_ref
-from ..engine_util import _parse_selection_expr
+from ..engine_util import parse_selection_expr
 
 
 def _is_object_list(value: object) -> TypeGuard[list[object]]:
@@ -146,7 +146,7 @@ def execute(
         condition_expr = inputs.get("condition_expr")
         if condition_expr is None:
             return {"items": list(items)}
-        result = []
+        result: list[object] = []
         for item in items:
             ok, value = _eval_item_expr(condition_expr, item=item, state=_state)
             if ok and value is True:
@@ -160,12 +160,12 @@ def execute(
         value_expr = inputs.get("value_expr")
         if value_expr is None:
             return {"items": list(items)}
-        result = []
+        mapped: list[object] = []
         for item in items:
             ok, value = _eval_item_expr(value_expr, item=item, state=_state)
             if ok:
-                result.append(value)
-        return {"items": result}
+                mapped.append(value)
+        return {"items": mapped}
     if primitive_id == "source.resolve_selection":
         ordered = _as_str_list(inputs.get("ordered_ids"))
         expr_raw = inputs.get("selection_expr")
@@ -173,7 +173,7 @@ def execute(
         if not expr:
             expr = "all"
         try:
-            indices = _parse_selection_expr(expr, max_index=len(ordered))
+            indices = parse_selection_expr(expr, max_index=len(ordered))
         except ValueError:
             return {"selected_ids": []}
         return {"selected_ids": [ordered[i - 1] for i in indices if 1 <= i <= len(ordered)]}

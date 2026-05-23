@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import re
 import unicodedata
-from typing import TypeGuard
+from typing import TypeGuard, cast
 
 from ..detached_runtime import rehydrate_detached_runtime_from_bootstrap
 from ..discovery import run_discovery
@@ -17,7 +17,9 @@ _TRAILING_TAG_RE = re.compile(r"(?:\s*(?:\([^)]*\)|\[[^]]*\]))+\s*$")
 
 
 def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
-    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+    if not isinstance(value, dict):
+        return False
+    return all(isinstance(key, str) for key in cast(dict[object, object], value))
 
 
 def _as_str_object_dict(value: object) -> dict[str, object]:

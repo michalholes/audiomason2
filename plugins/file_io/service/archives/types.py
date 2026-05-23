@@ -9,6 +9,10 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 
 
+def _empty_details() -> dict[str, object]:
+    return {}
+
+
 class ArchiveFormat(StrEnum):
     ZIP = "zip"
     TAR = "tar"
@@ -43,7 +47,7 @@ class DetectedArchiveFormat:
 class OpEvent:
     op: str
     phase: OpPhase
-    details: dict[str, object] = field(default_factory=dict)
+    details: dict[str, object] = field(default_factory=_empty_details)
 
 
 @dataclass(frozen=True)

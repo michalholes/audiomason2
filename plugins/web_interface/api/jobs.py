@@ -1,64 +1,14 @@
 from __future__ import annotations
 
 import json
-from typing import Protocol, cast
+from typing import cast
 
 from fastapi import FastAPI, HTTPException, Request
 
 from audiomason.core.jobs.model import Job, JobType
 from audiomason.core.orchestration import Orchestrator
-from plugins.file_io.service.service import FileService
-from plugins.file_io.service.types import RootName
 
 from ..util.web_observability import web_operation
-
-
-class _StateView(Protocol):
-    config_resolver: object
-    file_service: object
-
-
-def _get_resolver(request: Request) -> object:
-    state = cast(_StateView, request.state)
-    try:
-        return state.config_resolver
-    except Exception:
-        return None
-
-
-def _get_file_service(request: Request) -> FileService:
-    state = cast(_StateView, request.state)
-    try:
-        fs = state.file_service
-    except Exception:
-        fs = None
-    if isinstance(fs, FileService):
-        return fs
-    resolver = _get_resolver(request)
-    from audiomason.core.config import ConfigResolver
-
-    cr = resolver if isinstance(resolver, ConfigResolver) else ConfigResolver()
-    fs = FileService.from_resolver(cr)
-    state.file_service = fs
-    return fs
-
-
-def _parse_root_name(root: str) -> RootName:
-    try:
-        return RootName(root)
-    except Exception as e:
-        raise HTTPException(status_code=400, detail="invalid root") from e
-
-
-def _norm_rel_path(p: str) -> str:
-    p = p.strip()
-    if not p:
-        return "."
-    p = p.lstrip("/")
-    parts = [x for x in p.split("/") if x not in {"", "."}]
-    if any(x == ".." for x in parts):
-        raise HTTPException(status_code=400, detail="invalid path")
-    return "/".join(parts) if parts else "."
 
 
 def _serialize_job(job: Job) -> dict[str, object]:
@@ -111,7 +61,8 @@ def mount_jobs(app: FastAPI) -> None:
             raise HTTPException(status_code=400, detail="pipeline_path is required")
         if not isinstance(sources, list) or not sources:
             raise HTTPException(status_code=400, detail="sources must be a non-empty list")
-        srcs: list[str] = [str(x) for x in sources]
+        source_items = cast(list[object], sources)
+        srcs: list[str] = [str(x) for x in source_items]
 
         with web_operation(
             request,

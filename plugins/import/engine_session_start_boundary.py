@@ -108,5 +108,5 @@ def start_user_facing_session(
         return resume_session_from_context(engine=engine, ctx=ctx)
 
     session_dir = f"import/sessions/{ctx.session_id}"
-    engine._fs.delete_path(RootName.WIZARDS, session_dir, missing_ok=False)
+    engine.delete_path(RootName.WIZARDS, session_dir, missing_ok=False)
     return create_new_session_from_context(engine=engine, ctx=ctx)

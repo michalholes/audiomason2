@@ -8,6 +8,7 @@ from __future__ import annotations
 import shutil
 from collections.abc import Mapping
 from pathlib import Path
+from typing import cast
 
 from anyio.to_thread import run_sync
 
@@ -30,8 +31,9 @@ from .service import ArchiveService, FileService, RootName
 def _dict_str_object(value: object) -> dict[str, object]:
     if not isinstance(value, Mapping):
         return {}
+    typed_mapping = cast(Mapping[object, object], value)
     result: dict[str, object] = {}
-    for key, item in value.items():
+    for key, item in typed_mapping.items():
         if isinstance(key, str):
             result[key] = item
     return result
@@ -197,7 +199,7 @@ class FileIOPlugin:
         await run_sync(_mkdir_parents, output_dir)
 
         # Move files
-        exported = []
+        exported: list[Path] = []
         for file in context.converted_files:
             if file.exists():
                 dest = output_dir / file.name

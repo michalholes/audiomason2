@@ -12,9 +12,12 @@ ASCII-only.
 
 from __future__ import annotations
 
+from typing import TypeGuard, cast
+
 from plugins.file_io.service import FileService
 from plugins.file_io.service.types import RootName
 
+from .dsl.default_wizard_v3 import build_default_wizard_definition_v3
 from .dsl.primitive_registry_storage import (
     bootstrap_primitive_registry_if_missing,
     load_or_bootstrap_primitive_registry,
@@ -27,8 +30,8 @@ from .wizard_definition_model import (
 )
 from .wizard_definition_model import (
     WIZARD_DEFINITION_REL_PATH,
-    _validated_bootstrap_definition,
     canonicalize_wizard_definition,
+    load_or_bootstrap_wizard_definition,
     migrate_v1_to_v2,
     validate_wizard_definition_constraints_v2,
     validate_wizard_definition_structure,
@@ -45,6 +48,18 @@ HISTORY_LIMIT = 5
 DEFAULT_WIZARD_DEFINITION = _DEFAULT_WIZARD_DEFINITION
 
 
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    if not isinstance(value, dict):
+        return False
+    return all(isinstance(key, str) for key in cast(dict[object, object], value))
+
+
+def _is_str_list(value: object) -> TypeGuard[list[str]]:
+    return isinstance(value, list) and all(
+        isinstance(item, str) for item in cast(list[object], value)
+    )
+
+
 def _validated_editor_definition(fs: FileService, obj: object) -> dict[str, object]:
     canon = canonicalize_to_supported(fs, obj)
     if canon.get("version") != 3:
@@ -53,17 +68,17 @@ def _validated_editor_definition(fs: FileService, obj: object) -> dict[str, obje
 
 
 def canonicalize_to_supported(fs: FileService, obj: object) -> dict[str, object]:
-    if not isinstance(obj, dict):
+    if not _is_str_object_dict(obj):
         raise ValueError("wizard_definition must be an object")
 
-    wd: dict[str, object] = obj
+    wd: dict[str, object] = dict(obj)
     if wd.get("version") == 1:
         wd = migrate_v1_to_v2(wd)
 
     validate_wizard_definition_structure(wd)
     wd_any = canonicalize_wizard_definition(wd)
 
-    if not isinstance(wd_any, dict):
+    if not _is_str_object_dict(wd_any):
         raise ValueError("wizard_definition must be an object")
 
     wd = wd_any
@@ -84,7 +99,7 @@ def canonicalize_to_supported(fs: FileService, obj: object) -> dict[str, object]
 def ensure_wizard_definition_active_exists(fs: FileService) -> dict[str, object]:
     bootstrap_primitive_registry_if_missing(fs)
 
-    canon_default = _validated_bootstrap_definition(fs, bootstrap_default_version=3)
+    canon_default = load_or_bootstrap_wizard_definition(fs, bootstrap_default_version=3)
     atomic_write_json_if_missing(
         fs,
         RootName.WIZARDS,
@@ -181,7 +196,7 @@ def _read_wizard_definition_draft_lineage(fs: FileService) -> str | None:
     if not fs.exists(RootName.WIZARDS, WIZARD_DEFINITION_DRAFT_META_REL_PATH):
         return None
     data = read_json(fs, RootName.WIZARDS, WIZARD_DEFINITION_DRAFT_META_REL_PATH)
-    if not isinstance(data, dict):
+    if not _is_str_object_dict(data):
         return None
     value = data.get("source_active_fingerprint")
     if not isinstance(value, str) or not value:
@@ -319,7 +334,7 @@ def save_wizard_definition_with_history(fs: FileService, obj: object) -> None:
 
 def reset_wizard_definition(fs: FileService, obj: object | None = None) -> None:
     if obj is None:
-        obj = _validated_bootstrap_definition(fs, bootstrap_default_version=3)
+        obj = build_default_wizard_definition_v3()
     save_wizard_definition_with_history(fs, obj)
 
 
@@ -343,7 +358,7 @@ def _load_history_index(fs: FileService) -> list[str]:
     if not fs.exists(RootName.WIZARDS, path):
         return []
     data = read_json(fs, RootName.WIZARDS, path)
-    if not isinstance(data, list) or not all(isinstance(x, str) for x in data):
+    if not _is_str_list(data):
         return []
     return list(data)
 

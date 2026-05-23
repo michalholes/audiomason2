@@ -27,7 +27,7 @@ ASCII-only.
 from __future__ import annotations
 
 from contextlib import suppress
-from typing import TypeGuard
+from typing import TypeGuard, cast
 
 from plugins.file_io.service import FileService, RootName
 
@@ -38,7 +38,9 @@ _SCHEMA_VERSION = 1
 
 
 def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
-    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+    if not isinstance(value, dict):
+        return False
+    return all(isinstance(key, str) for key in cast(dict[object, object], value))
 
 
 def _is_object_list(value: object) -> TypeGuard[list[object]]:
@@ -63,8 +65,8 @@ def _to_int_or_default(value: object, default: int) -> int:
 def load_registry(fs: FileService) -> dict[str, object]:
     if fs.exists(RootName.WIZARDS, _REGISTRY_PATH):
         data = read_json(fs, RootName.WIZARDS, _REGISTRY_PATH)
-        if isinstance(data, dict):
-            return data
+        if _is_str_object_dict(data):
+            return dict(data)
     return {"schema_version": _SCHEMA_VERSION, "books": {}}
 
 
@@ -87,9 +89,7 @@ def _normalize_authority(action_any: dict[str, object]) -> dict[str, object]:
     book_any = authority.get("book")
     book = _as_str_object_dict(book_any)
     normalized_book = {
-        key: str(value)
-        for key, value in book.items()
-        if isinstance(key, str) and isinstance(value, str) and value
+        key: str(value) for key, value in book.items() if isinstance(value, str) and value
     }
 
     meta_any = authority.get("metadata_tags")
@@ -102,12 +102,12 @@ def _normalize_authority(action_any: dict[str, object]) -> dict[str, object]:
         "field_map": {
             str(key): str(value)
             for key, value in field_map.items()
-            if isinstance(key, str) and isinstance(value, str) and value
+            if isinstance(value, str) and value
         },
         "values": {
             str(key): str(value)
             for key, value in values.items()
-            if isinstance(key, str) and isinstance(value, str) and value
+            if isinstance(value, str) and value
         },
     }
     track_start = meta.get("track_start")
@@ -118,9 +118,7 @@ def _normalize_authority(action_any: dict[str, object]) -> dict[str, object]:
     publish_any = authority.get("publish")
     publish = _as_str_object_dict(publish_any)
     normalized_publish = {
-        key: str(value)
-        for key, value in publish.items()
-        if isinstance(key, str) and isinstance(value, str) and value
+        key: str(value) for key, value in publish.items() if isinstance(value, str) and value
     }
 
     out: dict[str, object] = {}
@@ -205,9 +203,6 @@ def apply_successful_job_requests(fs: FileService, job_requests: dict[str, objec
 
     The caller is responsible for ensuring the corresponding job completed successfully.
     """
-
-    if not isinstance(job_requests, dict):
-        return False
 
     idem_key = job_requests.get("idempotency_key")
     config_fp = job_requests.get("config_fingerprint")

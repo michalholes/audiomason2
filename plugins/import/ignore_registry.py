@@ -5,7 +5,7 @@ ASCII-only.
 
 from __future__ import annotations
 
-from typing import TypeGuard
+from typing import TypeGuard, cast
 
 from plugins.file_io.service import FileService, RootName
 
@@ -17,7 +17,13 @@ _SCHEMA_VERSION = 1
 
 
 def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
-    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+    if not isinstance(value, dict):
+        return False
+    return all(isinstance(key, str) for key in cast(dict[object, object], value))
+
+
+def _is_object_list(value: object) -> TypeGuard[list[object]]:
+    return isinstance(value, list)
 
 
 def load_registry(fs: FileService) -> dict[str, object]:
@@ -29,7 +35,7 @@ def load_registry(fs: FileService) -> dict[str, object]:
 
 
 def _normalize_sources(data: object) -> list[dict[str, str]]:
-    if not isinstance(data, list):
+    if not _is_object_list(data):
         return []
     seen: dict[tuple[str, str], dict[str, str]] = {}
     for item in data:

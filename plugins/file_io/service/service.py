@@ -9,7 +9,7 @@ from __future__ import annotations
 import shutil
 import time
 import traceback
-from collections.abc import Iterable, Iterator, Mapping
+from collections.abc import Generator, Iterable, Mapping
 from contextlib import contextmanager
 from pathlib import Path
 from typing import BinaryIO, Protocol, cast, runtime_checkable
@@ -58,7 +58,7 @@ def _observe_operation(
     *,
     operation: str,
     base: Mapping[str, object],
-) -> Iterator[dict[str, object]]:
+) -> Generator[dict[str, object], None, None]:
     start = time.perf_counter()
 
     _safe_publish(
@@ -169,8 +169,6 @@ class _CountingBinaryIO:
 
     def write(self, b: bytes | bytearray | memoryview) -> int:
         n = self._raw.write(b)
-        if n is None:
-            n = len(b)
         self.bytes_written += int(n)
         return int(n)
 
@@ -530,7 +528,7 @@ class FileService:
         rel_path: str,
         *,
         silent_polling_read: bool = False,
-    ) -> Iterator[BinaryIO]:
+    ) -> Generator[BinaryIO, None, None]:
         abs_path = resolve_path(
             self._root(root).dir_path,
             rel_path,
@@ -562,7 +560,7 @@ class FileService:
         *,
         overwrite: bool = False,
         mkdir_parents: bool = True,
-    ) -> Iterator[BinaryIO]:
+    ) -> Generator[BinaryIO, None, None]:
         abs_path = resolve_path(self._root(root).dir_path, rel_path, root_name=root)
         base = {
             "root": root.value,
@@ -584,7 +582,7 @@ class FileService:
     @contextmanager
     def open_append(
         self, root: RootName, rel_path: str, *, mkdir_parents: bool = True
-    ) -> Iterator[BinaryIO]:
+    ) -> Generator[BinaryIO, None, None]:
         abs_path = resolve_path(self._root(root).dir_path, rel_path, root_name=root)
         base = {
             "root": root.value,

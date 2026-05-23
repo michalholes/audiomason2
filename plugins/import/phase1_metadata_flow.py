@@ -8,13 +8,15 @@ from __future__ import annotations
 import re
 import unicodedata
 from copy import deepcopy
-from typing import TypeGuard
+from typing import TypeGuard, cast
 
 from .metadata_boundary import validate_author_title
 
 
 def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
-    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+    if not isinstance(value, dict):
+        return False
+    return all(isinstance(key, str) for key in cast(dict[object, object], value))
 
 
 def _is_object_list(value: object) -> TypeGuard[list[object]]:
@@ -427,9 +429,7 @@ def build_phase1_metadata_projection(
 
     author_override_present = author_override_raw is not None
     title_override_present = title_override_raw is not None
-    explicit_validation, explicit_validation_step, explicit_validation_present = (
-        _explicit_validation_from_state(state)
-    )
+    explicit_validation, explicit_validation_step, _ = _explicit_validation_from_state(state)
 
     if explicit_validation is not None:
         requested_author = _normalize_root_audio_value(

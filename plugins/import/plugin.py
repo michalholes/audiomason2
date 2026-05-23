@@ -27,7 +27,7 @@ class ImportPlugin:
         # Fallback resolver is for tests only. Real hosts must provide a resolver.
         self._resolver = resolver or ConfigResolver(cli_args={})
         self.engine = ImportWizardEngine(resolver=self._resolver)
-        processed_registry_required._install_processed_registry_subscriber(resolver=self._resolver)
+        processed_registry_required.install_processed_registry_subscriber(resolver=self._resolver)
 
     async def run_process_contract(
         self, *, job_id: str, job_meta: dict[str, object], plugin_loader: object

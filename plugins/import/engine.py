@@ -10,7 +10,7 @@ ASCII-only.
 
 from __future__ import annotations
 
-from typing import TypeGuard
+from typing import TypeGuard, cast
 
 from audiomason.core.config import ConfigResolver
 from plugins.file_io.service import FileService
@@ -26,13 +26,13 @@ from .engine_session_create import create_session_impl
 from .engine_step_submit import submit_step_impl
 from .engine_steps_api import get_step_definition_impl
 from .engine_util import (
-    _derive_selection_items,
-    _emit_required,
-    _ensure_session_state_fields,
-    _exception_envelope,
-    _inject_selection_items,
-    _iso_utc_now,
-    _parse_selection_expr,
+    derive_selection_items,
+    emit_required_event,
+    ensure_session_state_fields,
+    exception_envelope,
+    inject_selection_items,
+    iso_utc_now,
+    parse_selection_expr,
 )
 from .engine_validation_api import (
     validate_catalog_impl,
@@ -74,7 +74,9 @@ from .wizard_definition_model import (
 
 
 def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
-    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+    if not isinstance(value, dict):
+        return False
+    return all(isinstance(key, str) for key in cast(dict[object, object], value))
 
 
 def _is_object_list(value: object) -> TypeGuard[list[object]]:
@@ -156,6 +158,135 @@ class ImportWizardEngine:
         """
         return self._fs
 
+    def file_exists(self, root: RootName, relative_path: str) -> bool:
+        return self._fs.exists(root, relative_path)
+
+    def delete_path(self, root: RootName, relative_path: str, *, missing_ok: bool) -> None:
+        self._fs.delete_path(root, relative_path, missing_ok=missing_ok)
+
+    def has_key(self, key: str) -> bool:
+        return self._has_key(key)
+
+    def resolve_bool(self, key: str, *, default: bool = False) -> bool:
+        try:
+            value, _ = self._resolver.resolve(key)
+            return bool(value)
+        except Exception:
+            return default
+
+    def load_state(self, session_id: str) -> dict[str, object]:
+        return self._load_state(session_id)
+
+    def persist_state(self, session_id: str, state: dict[str, object]) -> None:
+        self._persist_state(session_id, state)
+
+    def load_effective_model(self, session_id: str) -> dict[str, object]:
+        return self._load_effective_model(session_id)
+
+    def append_decision(
+        self,
+        session_id: str,
+        *,
+        step_id: str,
+        payload: dict[str, object],
+        result: str,
+        error: dict[str, object] | None,
+    ) -> None:
+        self._append_decision(
+            session_id,
+            step_id=step_id,
+            payload=payload,
+            result=result,
+            error=error,
+        )
+
+    def validate_mode(self, mode: str) -> str:
+        return self._validate_mode(mode)
+
+    def normalize_flow_config(self, raw: object) -> dict[str, object]:
+        return self._normalize_flow_config(raw)
+
+    def merge_flow_config_overrides(
+        self, base: dict[str, object], overrides: dict[str, object]
+    ) -> dict[str, object]:
+        return self._merge_flow_config_overrides(base, overrides)
+
+    def load_effective_flow_config(self, session_id: str) -> dict[str, object]:
+        return self._load_effective_flow_config(session_id)
+
+    def runtime_effective_model_fingerprint(self, session_id: str) -> str:
+        return self._runtime_effective_model_fingerprint(session_id)
+
+    def get_or_create_job(self, session_id: str, state: dict[str, object], idem_key: str) -> str:
+        return self._get_or_create_job(session_id, state, idem_key)
+
+    def scan_conflicts(self, session_id: str, state: dict[str, object]) -> list[dict[str, object]]:
+        return self._scan_conflicts(session_id, state)
+
+    def resolve_flag_for_scan(
+        self,
+        *,
+        state: dict[str, object],
+        policy: str,
+        current_fp: str,
+        current_conflicts: list[dict[str, object]],
+    ) -> bool:
+        return self._resolve_flag_for_scan(
+            state=state,
+            policy=policy,
+            current_fp=current_fp,
+            current_conflicts=current_conflicts,
+        )
+
+    def session_step_order(self, session_id: str) -> list[str]:
+        return self._session_step_order(session_id)
+
+    def enter_phase_2(self, session_id: str, state: dict[str, object]) -> None:
+        self._enter_phase_2(session_id, state)
+
+    def next_step_after_submit(
+        self,
+        *,
+        step_id: str,
+        state: dict[str, object],
+        flow_cfg_norm: dict[str, object],
+    ) -> str:
+        return self._next_step_after_submit(
+            step_id=step_id,
+            state=state,
+            flow_cfg_norm=flow_cfg_norm,
+        )
+
+    def auto_advance_computed_steps(
+        self,
+        *,
+        session_id: str,
+        state: dict[str, object],
+        next_step_id: str,
+        flow_cfg_norm: dict[str, object],
+    ) -> str:
+        return self._auto_advance_computed_steps(
+            session_id=session_id,
+            state=state,
+            next_step_id=next_step_id,
+            flow_cfg_norm=flow_cfg_norm,
+        )
+
+    def validate_and_canonicalize_payload(
+        self,
+        *,
+        step_id: str,
+        schema: dict[str, object],
+        payload: dict[str, object],
+        state: dict[str, object],
+    ) -> dict[str, object]:
+        return self._validate_and_canonicalize_payload(
+            step_id=step_id,
+            schema=schema,
+            payload=payload,
+            state=state,
+        )
+
     def get_flow_model(self) -> dict[str, object]:
         """Return FlowModel JSON for the current configuration (spec 10.5)."""
         ensure_default_models(self._fs)
@@ -185,7 +316,7 @@ class ImportWizardEngine:
                 flow_overrides=flow_overrides,
             )
         except Exception as e:
-            return _exception_envelope(e)
+            return exception_envelope(e)
 
     def _create_session_impl(
         self,
@@ -257,7 +388,7 @@ class ImportWizardEngine:
             out["effective_model"] = load_effective_model_json(fs=self._fs, session_id=session_id)
             return out
         except Exception as e:
-            return _exception_envelope(e)
+            return exception_envelope(e)
 
     def get_step_definition(self, session_id: str, step_id: str) -> dict[str, object]:
         return get_step_definition_impl(engine=self, session_id=session_id, step_id=step_id)
@@ -283,7 +414,7 @@ class ImportWizardEngine:
                 payload=payload,
             )
         except Exception as e:
-            return _exception_envelope(e)
+            return exception_envelope(e)
 
     def _auto_advance_computed_steps(
         self,
@@ -309,7 +440,7 @@ class ImportWizardEngine:
             self.compute_plan(session_id)
         except PlanSelectionError:
             state["current_step_id"] = "select_books"
-            state["updated_at"] = _iso_utc_now()
+            state["updated_at"] = iso_utc_now()
             self._persist_state(session_id, state)
             return "select_books"
 
@@ -472,7 +603,7 @@ class ImportWizardEngine:
         if not isinstance(expr, str):
             raise StepSubmissionError(f"field '{expr_key}' must be str")
 
-        indices = _parse_selection_expr(expr, max_index=len(ordered_ids))
+        indices = parse_selection_expr(expr, max_index=len(ordered_ids))
         # Stable selection: preserve discovery order while honoring indices.
         selected_indices = set(indices)
         selected_ids: list[str] = []
@@ -508,7 +639,7 @@ class ImportWizardEngine:
 
             if action == "cancel":
                 state["status"] = "aborted"
-                state["updated_at"] = _iso_utc_now()
+                state["updated_at"] = iso_utc_now()
                 self._append_decision(
                     session_id,
                     step_id="__system__",
@@ -543,7 +674,7 @@ class ImportWizardEngine:
                 else:
                     state["current_step_id"] = next_step_id
 
-            state["updated_at"] = _iso_utc_now()
+            state["updated_at"] = iso_utc_now()
             self._append_decision(
                 session_id,
                 step_id="__system__",
@@ -554,13 +685,13 @@ class ImportWizardEngine:
             self._persist_state(session_id, state)
             return state
         except Exception as e:
-            return _exception_envelope(e)
+            return exception_envelope(e)
 
     def compute_plan(self, session_id: str) -> dict[str, object]:
         state = self._load_state(session_id)
         derived = _as_str_object_dict(state.get("derived"))
 
-        _emit_required(
+        emit_required_event(
             "plan.compute",
             "plan.compute",
             {
@@ -602,7 +733,7 @@ class ImportWizardEngine:
 
         # Update conflict fingerprint during plan preview.
         self._update_conflicts(session_id, state)
-        state["updated_at"] = _iso_utc_now()
+        state["updated_at"] = iso_utc_now()
         self._append_decision(
             session_id,
             step_id="__system__",
@@ -654,14 +785,14 @@ class ImportWizardEngine:
 
         job_id = self._get_or_create_job(session_id, state, idem_key)
         plan_path = f"{session_dir}/plan.json"
-        plan = (
+        plan_any: object = (
             read_json(self._fs, RootName.WIZARDS, plan_path)
             if self._fs.exists(RootName.WIZARDS, plan_path)
             else {}
         )
-        plan = plan if _is_str_object_dict(plan) else {}
+        plan = _as_str_object_dict(plan_any)
 
-        result = {"job_ids": [job_id], "batch_size": planned_units_count(plan)}
+        result: dict[str, object] = {"job_ids": [job_id], "batch_size": planned_units_count(plan)}
         finalize_any = _as_str_object_dict(state.get("computed")).get("finalize")
         if _is_str_object_dict(finalize_any):
             result["finalize"] = dict(finalize_any)
@@ -703,7 +834,7 @@ class ImportWizardEngine:
 
         state["phase"] = 2
         state["status"] = "processing"
-        state["updated_at"] = _iso_utc_now()
+        state["updated_at"] = iso_utc_now()
         self._persist_state(session_id, state)
 
     def _validate_mode(self, mode: str) -> str:
@@ -799,8 +930,8 @@ class ImportWizardEngine:
 
         # Conflict scan side effect is engine-owned (spec 10.3.4) but branching is graph-owned.
         if step_id == "final_summary_confirm":
-            inputs = state.get("inputs") or {}
-            payload = inputs.get("final_summary_confirm") if _is_str_object_dict(inputs) else None
+            inputs = _as_str_object_dict(state.get("inputs"))
+            payload = inputs.get("final_summary_confirm")
             confirm = payload.get("confirm_start") if _is_str_object_dict(payload) else None
             if confirm is True:
                 conflicts = state.get("conflicts")
@@ -820,7 +951,7 @@ class ImportWizardEngine:
             return self._is_step_enabled(sid, flow_cfg_norm)
 
         def debug_log(kind: str, payload: dict[str, object]) -> None:
-            _emit_required(
+            emit_required_event(
                 "flow_graph.debug",
                 "flow_graph.debug",
                 {
@@ -980,7 +1111,7 @@ class ImportWizardEngine:
         if not _is_str_object_dict(state_any):
             raise FinalizeError("state.json is invalid")
 
-        state = _ensure_session_state_fields(state_any)
+        state = ensure_session_state_fields(state_any)
         discovery_path = f"{session_dir}/discovery.json"
         if self._fs.exists(RootName.WIZARDS, discovery_path):
             discovery_any = read_json(self._fs, RootName.WIZARDS, discovery_path)
@@ -1035,8 +1166,8 @@ class ImportWizardEngine:
             return effective_model
 
         discovery = _as_dict_list(discovery_any)
-        authors_items, books_items = _derive_selection_items(discovery)
-        return _inject_selection_items(
+        authors_items, books_items = derive_selection_items(discovery)
+        return inject_selection_items(
             effective_model=effective_model,
             authors_items=authors_items,
             books_items=books_items,
@@ -1064,7 +1195,7 @@ class ImportWizardEngine:
     ) -> None:
         session_dir = f"import/sessions/{session_id}"
         entry: dict[str, object] = {
-            "at": _iso_utc_now(),
+            "at": iso_utc_now(),
             "step_id": step_id,
             "payload": dict(payload),
             "result": result,

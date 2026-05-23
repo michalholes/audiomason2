@@ -7,7 +7,7 @@ It must be deterministic and ASCII-only.
 from __future__ import annotations
 
 from collections.abc import Iterator, MutableMapping
-from typing import TypeGuard, TypeVar, overload
+from typing import TypeGuard, TypeVar, cast, overload
 
 from .defaults import DEFAULT_FLOW_CONFIG
 from .dsl.default_wizard_v3 import build_default_wizard_definition_v3
@@ -19,26 +19,13 @@ _MISSING = object()
 
 
 def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
-    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+    if not isinstance(value, dict):
+        return False
+    return all(isinstance(key, str) for key in cast(dict[object, object], value))
 
 
 def _is_object_list(value: object) -> TypeGuard[list[object]]:
     return isinstance(value, list)
-
-
-def _field(
-    *,
-    key: str,
-    type_name: str,
-    required: bool = False,
-    default: object = "",
-) -> dict[str, object]:
-    return {
-        "key": key,
-        "type": type_name,
-        "required": bool(required),
-        "default": default,
-    }
 
 
 def _schema(fields: list[dict[str, object]]) -> dict[str, object]:
@@ -140,15 +127,6 @@ class _DerivedStepCatalogView(MutableMapping[str, dict[str, object]]):
         return len(self._merged())
 
     @overload
-    def get(self, key: str, default: None = None) -> dict[str, object] | None: ...
-
-    @overload
-    def get(self, key: str, default: _TDefault) -> dict[str, object] | _TDefault: ...
-
-    def get(self, key: str, default: object = None) -> object:
-        return self._merged().get(key, default)
-
-    @overload
     def pop(self, key: str) -> dict[str, object]: ...
 
     @overload
@@ -178,23 +156,6 @@ def build_authority_known_step_ids() -> set[str]:
     """Return a derived compatibility-only step id snapshot."""
 
     return set(build_default_step_catalog_projection()) | set(CANONICAL_STEP_ORDER)
-
-
-def _legacy_catalog_step_ids() -> tuple[str, ...]:
-    definition = build_default_wizard_definition_v3()
-    nodes_any = definition.get("nodes")
-    if not _is_object_list(nodes_any):
-        raise FinalizeError("default wizard_definition nodes must be a list")
-    step_ids: list[str] = []
-    for node_any in nodes_any:
-        if not _is_str_object_dict(node_any):
-            raise FinalizeError("default wizard_definition node must be an object")
-        step_id = node_any.get("step_id")
-        if not isinstance(step_id, str) or not step_id:
-            raise FinalizeError("default wizard_definition step_id must be a non-empty string")
-        if step_id not in step_ids:
-            step_ids.append(step_id)
-    return tuple(step_ids)
 
 
 def build_default_step_catalog_projection() -> dict[str, dict[str, object]]:

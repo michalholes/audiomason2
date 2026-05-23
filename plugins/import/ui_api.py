@@ -15,7 +15,9 @@ from plugins.file_io.service import FileService
 
 
 def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
-    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+    if not isinstance(value, dict):
+        return False
+    return all(isinstance(key, str) for key in cast(dict[object, object], value))
 
 
 class _UiEngine(Protocol):
@@ -63,9 +65,10 @@ def build_router(*, engine: object):
     except Exception as e:  # pragma: no cover
         raise RuntimeError("fastapi is required for import UI router") from e
 
-    from .engine import ImportWizardEngine, _exception_envelope
+    from .engine import ImportWizardEngine
     from .engine_diagnostics_required import start_process_runtime
     from .engine_session_start_boundary import ALLOWED_USER_START_INTENTS, start_user_facing_session
+    from .engine_util import exception_envelope
     from .field_schema_validation import FieldSchemaValidationError
     from .session_effective_model import EffectiveModelJsonError
     from .ui_editor_api import bind_editor_routes
@@ -250,7 +253,7 @@ def build_router(*, engine: object):
             }
             return json_response(status_code=400, content=env)
         except Exception as e:
-            env_error: dict[str, object] = _exception_envelope(e)
+            env_error = exception_envelope(e)
             return json_response(
                 status_code=_status_code_for_envelope(env_error),
                 content=env_error,

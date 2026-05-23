@@ -8,17 +8,23 @@ ASCII-only.
 
 from __future__ import annotations
 
-from typing import TypeGuard
+from typing import TypeGuard, cast
 
 from .fingerprints import sha256_hex
 
 
 def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
-    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+    if not isinstance(value, dict):
+        return False
+    return all(isinstance(key, str) for key in cast(dict[object, object], value))
 
 
 def _item_sort_key(item: dict[str, str]) -> tuple[str, str]:
     return (item.get("label", ""), item.get("item_id", ""))
+
+
+def _is_object_list(value: object) -> TypeGuard[list[object]]:
+    return isinstance(value, list)
 
 
 def _to_ascii(text: str) -> str:
@@ -99,7 +105,7 @@ def inject_selection_items(
     books_items: list[dict[str, str]],
 ) -> dict[str, object]:
     steps_any = effective_model.get("steps")
-    if not isinstance(steps_any, list):
+    if not _is_object_list(steps_any):
         return effective_model
 
     steps: list[dict[str, object]] = [dict(step) for step in steps_any if _is_str_object_dict(step)]
@@ -108,7 +114,7 @@ def inject_selection_items(
         if step_id not in {"select_authors", "select_books"}:
             continue
         fields_any = step.get("fields")
-        if not isinstance(fields_any, list):
+        if not _is_object_list(fields_any):
             continue
         fields: list[dict[str, object]] = [
             dict(field) for field in fields_any if _is_str_object_dict(field)

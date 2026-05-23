@@ -8,14 +8,16 @@ ASCII-only.
 from __future__ import annotations
 
 from pathlib import PurePosixPath
-from typing import TypeGuard
+from typing import TypeGuard, cast
 
 from .phase1_metadata_flow import build_phase1_metadata_projection
 from .phase1_source_intake import build_phase1_source_projection
 
 
 def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
-    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+    if not isinstance(value, dict):
+        return False
+    return all(isinstance(key, str) for key in cast(dict[object, object], value))
 
 
 def _as_str_object_dict(value: object) -> dict[str, object]:
@@ -74,8 +76,6 @@ def _audio_rel_paths_for_unit(
     scoped_prefix = _normalize_rel_path(source_relative_path)
     matched: list[str] = []
     for item in discovery:
-        if not isinstance(item, dict):
-            continue
         if str(item.get("kind") or "") not in {"file", "bundle"}:
             continue
         rel_any = item.get("relative_path")
@@ -135,7 +135,7 @@ def _authority_book_meta(
         source_book_meta = _as_nested_str_object_dict(source_meta_any)
         return authority_book_meta, source_book_meta
 
-    phase1_state = {
+    phase1_state: dict[str, object] = {
         "source": {"root": root, "relative_path": relative_path},
         "answers": dict(inputs),
         "selected_book_ids": list(selected_book_ids),
@@ -159,7 +159,7 @@ def _filter_discovery_for_books(
     source_relative_path: str,
 ) -> list[dict[str, object]]:
     source_prefix = _normalize_rel_path(source_relative_path)
-    prefixes = []
+    prefixes: list[str] = []
     for u in selected_units:
         p = str(u.get("source_relative_path") or "")
         if p == "":
@@ -207,8 +207,6 @@ def compute_plan(
 
     selected_units: list[dict[str, object]] = []
     for book_id in selected_book_ids:
-        if not isinstance(book_id, str):
-            continue
         source_meta = dict(source_book_meta.get(book_id) or {})
         authority_meta = dict(authority_book_meta.get(book_id) or {})
         source_rel = _normalize_rel_path(str(source_meta.get("source_relative_path") or ""))

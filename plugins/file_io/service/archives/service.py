@@ -116,7 +116,7 @@ def _tarinfo_deterministic(name: str, size: int) -> tarfile.TarInfo:
 
 
 def _local_path(fs: FileService, root: RootName, rel_path: str) -> Path:
-    return fs._resolve_local_path(root, rel_path)
+    return fs.resolve_abs_path(root, rel_path)
 
 
 def _zipinfo_filename(info: zipfile.ZipInfo) -> str:

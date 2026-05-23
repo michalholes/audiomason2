@@ -8,13 +8,13 @@ ASCII-only.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, TypeGuard
+from typing import TYPE_CHECKING, TypeGuard, cast
 
 from plugins.file_io.service.types import RootName
 
 from . import engine_diagnostics_required as diagnostics_required
 from .detached_runtime import build_detached_runtime_bootstrap
-from .engine_util import _emit_required, _exception_envelope, _iso_utc_now
+from .engine_util import emit_required_event, exception_envelope, iso_utc_now
 from .errors import FinalizeError, error_envelope, invariant_violation, validation_error
 from .fingerprints import fingerprint_json
 from .job_requests import build_job_requests, planned_units_count
@@ -27,7 +27,9 @@ if TYPE_CHECKING:
 
 
 def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
-    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+    if not isinstance(value, dict):
+        return False
+    return all(isinstance(key, str) for key in cast(dict[object, object], value))
 
 
 def _as_str_object_dict(value: object) -> dict[str, object]:
@@ -62,8 +64,6 @@ def _to_int_or_default(value: object, default: int) -> int:
 
 
 def _validate_start_processing_body(body: dict[str, object]) -> dict[str, object] | None:
-    if not isinstance(body, dict):
-        raise ValueError("body must be an object")
     confirm = body.get("confirm")
     if confirm is not True:
         return validation_error(
@@ -94,7 +94,7 @@ def _merge_session_job_state(
     jobs["emitted"] = emitted
     jobs["submitted"] = submitted
     state["jobs"] = jobs
-    state["updated_at"] = _iso_utc_now()
+    state["updated_at"] = iso_utc_now()
     return state
 
 
@@ -109,13 +109,13 @@ def _record_session_job_state(
 ) -> dict[str, object]:
     latest_state = state
     if reload_state:
-        latest_state = engine._load_state(session_id)
+        latest_state = engine.load_state(session_id)
     latest_state = _merge_session_job_state(
         state=latest_state,
         job_id=job_id,
         mark_submitted=mark_submitted,
     )
-    engine._persist_state(session_id, latest_state)
+    engine.persist_state(session_id, latest_state)
     return latest_state
 
 
@@ -157,7 +157,7 @@ def _build_start_processing_result(
     job_id: str,
     plan: dict[str, object],
 ) -> dict[str, object]:
-    result = {"job_ids": [job_id], "batch_size": planned_units_count(plan)}
+    result: dict[str, object] = {"job_ids": [job_id], "batch_size": planned_units_count(plan)}
     computed = _as_str_object_dict(state.get("computed"))
     finalize_any = computed.get("finalize")
     if _is_str_object_dict(finalize_any):
@@ -178,17 +178,18 @@ def _load_job_requests_idempotent(
 
     session_dir = f"import/sessions/{session_id}"
     job_path = f"{session_dir}/job_requests.json"
-    if not engine._fs.exists(RootName.WIZARDS, job_path):
+    if not engine.file_exists(RootName.WIZARDS, job_path):
         raise FinalizeError("job_requests.json is missing")
 
-    job_requests_any = read_json(engine._fs, RootName.WIZARDS, job_path)
+    fs = engine.get_file_service()
+    job_requests_any = read_json(fs, RootName.WIZARDS, job_path)
     if not _is_str_object_dict(job_requests_any):
         raise FinalizeError("job_requests.json is invalid")
     idem_key = str(job_requests_any.get("idempotency_key") or "")
     if not idem_key:
         raise FinalizeError("job_requests.json missing idempotency_key")
 
-    job_id = engine._get_or_create_job(session_id, state, idem_key)
+    job_id = engine.get_or_create_job(session_id, state, idem_key)
     state = _record_session_job_state(
         engine=engine,
         session_id=session_id,
@@ -203,7 +204,7 @@ def _load_job_requests_idempotent(
         try:
             diagnostics_required.submit_process_job(engine=engine, job_id=job_id, verbosity=1)
         except Exception as e:
-            return _exception_envelope(e)
+            return exception_envelope(e)
         state = _record_session_job_state(
             engine=engine,
             session_id=session_id,
@@ -214,9 +215,9 @@ def _load_job_requests_idempotent(
         )
 
     plan_path = f"{session_dir}/plan.json"
-    plan_any = (
-        read_json(engine._fs, RootName.WIZARDS, plan_path)
-        if engine._fs.exists(RootName.WIZARDS, plan_path)
+    plan_any: object = (
+        read_json(fs, RootName.WIZARDS, plan_path)
+        if engine.file_exists(RootName.WIZARDS, plan_path)
         else {}
     )
     plan = _as_str_object_dict(plan_any)
@@ -230,11 +231,11 @@ def start_processing_impl(
     body: dict[str, object],
 ) -> dict[str, object]:
     try:
-        state = engine._load_state(session_id)
+        state = engine.load_state(session_id)
         phase = _to_int_or_default(state.get("phase"), 1)
         session_dir = f"import/sessions/{session_id}"
         job_path = f"{session_dir}/job_requests.json"
-        if phase == 2 and engine._fs.exists(RootName.WIZARDS, job_path):
+        if phase == 2 and engine.file_exists(RootName.WIZARDS, job_path):
             return _load_job_requests_idempotent(
                 engine=engine,
                 session_id=session_id,
@@ -248,23 +249,23 @@ def start_processing_impl(
         if validation is not None:
             return validation
 
-        effective_model = engine._load_effective_model(session_id)
+        effective_model = engine.load_effective_model(session_id)
         if phase1_session_authority_applies(effective_model=effective_model):
             session_dir = f"import/sessions/{session_id}"
             discovery_rel = f"{session_dir}/discovery.json"
-            if engine._fs.exists(RootName.WIZARDS, discovery_rel):
-                discovery_any = read_json(engine._fs, RootName.WIZARDS, discovery_rel)
-                if isinstance(discovery_any, list) and all(
-                    isinstance(item, dict) for item in discovery_any
-                ):
+            if engine.file_exists(RootName.WIZARDS, discovery_rel):
+                fs = engine.get_file_service()
+                discovery_any = read_json(fs, RootName.WIZARDS, discovery_rel)
+                discovery = _as_dict_list(discovery_any)
+                if discovery:
                     vars_doc = _as_str_object_dict(state.get("vars"))
                     vars_doc["phase1"] = build_phase1_projection(
-                        discovery=discovery_any,
+                        discovery=discovery,
                         state=state,
-                        fs=engine._fs,
+                        fs=fs,
                     )
                     state["vars"] = vars_doc
-                    engine._persist_state(session_id, state)
+                    engine.persist_state(session_id, state)
         vars_doc = _as_str_object_dict(state.get("vars"))
         phase1 = _as_str_object_dict(vars_doc.get("phase1"))
         answers = _as_str_object_dict(state.get("answers"))
@@ -277,7 +278,7 @@ def start_processing_impl(
                 meta={},
             )
 
-        _emit_required(
+        emit_required_event(
             "finalize.request",
             "finalize.request",
             {
@@ -303,10 +304,10 @@ def start_processing_impl(
         policy = str(conflicts.get("policy") or "ask")
         derived = _as_str_object_dict(state.get("derived"))
         preview_fp = str(derived.get("conflict_fingerprint") or "")
-        current_conflicts = _as_dict_list(engine._scan_conflicts(session_id, state))
+        current_conflicts = _as_dict_list(engine.scan_conflicts(session_id, state))
         current_fp = fingerprint_json(current_conflicts)
 
-        resolved = engine._resolve_flag_for_scan(
+        resolved = engine.resolve_flag_for_scan(
             state=state,
             policy=policy,
             current_fp=current_fp,
@@ -322,17 +323,18 @@ def start_processing_impl(
             "resolved": resolved,
             "policy": policy,
         }
+        fs = engine.get_file_service()
         atomic_write_json(
-            engine._fs,
+            fs,
             RootName.WIZARDS,
             f"{session_dir}/conflicts.json",
             current_conflicts,
         )
-        state["updated_at"] = _iso_utc_now()
-        engine._persist_state(session_id, state)
+        state["updated_at"] = iso_utc_now()
+        engine.persist_state(session_id, state)
 
         if policy == "ask" and current_conflicts:
-            step_order = engine._session_step_order(session_id)
+            step_order = engine.session_step_order(session_id)
             if "resolve_conflicts_batch" not in step_order:
                 return invariant_violation(
                     message="resolve_conflicts_batch missing under ask policy",
@@ -364,15 +366,16 @@ def start_processing_impl(
 
         # Ensure plan exists.
         plan_path = f"{session_dir}/plan.json"
-        if engine._fs.exists(RootName.WIZARDS, plan_path):
-            plan_any = read_json(engine._fs, RootName.WIZARDS, plan_path)
+        if engine.file_exists(RootName.WIZARDS, plan_path):
+            fs = engine.get_file_service()
+            plan_any = read_json(fs, RootName.WIZARDS, plan_path)
             if not _is_str_object_dict(plan_any):
                 plan = engine.compute_plan(session_id)
             else:
                 plan = dict(plan_any)
             if _plan_requires_canonical_refresh(plan):
                 discovery_rel = f"{session_dir}/discovery.json"
-                if engine._fs.exists(RootName.WIZARDS, discovery_rel):
+                if engine.file_exists(RootName.WIZARDS, discovery_rel):
                     plan = engine.compute_plan(session_id)
                 else:
                     plan = _coerce_legacy_plan_authority(plan)
@@ -412,23 +415,23 @@ def start_processing_impl(
         from . import engine as eng_mod
 
         eng_mod.atomic_write_text(
-            engine._fs,
+            engine.get_file_service(),
             RootName.WIZARDS,
             job_path,
             job_bytes.decode("utf-8"),
         )
 
-        job_any = read_json(engine._fs, RootName.WIZARDS, job_path)
+        job_any = read_json(engine.get_file_service(), RootName.WIZARDS, job_path)
         if not _is_str_object_dict(job_any):
             raise FinalizeError("job_requests.json is invalid")
         idem_key = str(job_any.get("idempotency_key") or "")
         if not idem_key:
             raise FinalizeError("job_requests.json missing idempotency_key")
 
-        engine._enter_phase_2(session_id, state)
-        state = engine._load_state(session_id)
+        engine.enter_phase_2(session_id, state)
+        state = engine.load_state(session_id)
 
-        job_id = engine._get_or_create_job(session_id, state, idem_key)
+        job_id = engine.get_or_create_job(session_id, state, idem_key)
         state = _record_session_job_state(
             engine=engine,
             session_id=session_id,
@@ -437,7 +440,7 @@ def start_processing_impl(
             mark_submitted=False,
         )
 
-        _emit_required(
+        emit_required_event(
             "job.create",
             "job.create",
             {
@@ -465,7 +468,7 @@ def start_processing_impl(
             try:
                 diagnostics_required.submit_process_job(engine=engine, job_id=job_id, verbosity=1)
             except Exception as e:
-                return _exception_envelope(e)
+                return exception_envelope(e)
             state = _record_session_job_state(
                 engine=engine,
                 session_id=session_id,
@@ -477,4 +480,4 @@ def start_processing_impl(
 
         return _build_start_processing_result(state=state, job_id=job_id, plan=plan)
     except Exception as e:
-        return _exception_envelope(e)
+        return exception_envelope(e)

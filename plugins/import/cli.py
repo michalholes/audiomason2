@@ -46,7 +46,9 @@ from .wizard_editor import (
 
 
 def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
-    return isinstance(value, dict) and all(isinstance(key, str) for key in value)
+    if not isinstance(value, dict):
+        return False
+    return all(isinstance(key, str) for key in cast(dict[object, object], value))
 
 
 def _is_object_list(value: object) -> TypeGuard[list[object]]:
@@ -536,16 +538,16 @@ def _run_legacy(argv: list[str], *, engine: ImportWizardEngine) -> int:
                 )
                 _dump(env)
                 raise SystemExit(1) from None
-            payload = payload_any
-            if not isinstance(payload, dict):
+            if not _is_str_object_dict(payload_any):
                 env = _error_envelope(
                     code="invalid_payload",
                     message_id="cli.payload_not_object",
                     default_message="payload must be a JSON object",
-                    details={"type": type(payload).__name__},
+                    details={"type": type(payload_any).__name__},
                 )
                 _dump(env)
                 raise SystemExit(1)
+            payload = dict(payload_any)
 
             state = engine.submit_step(ns.session_id, ns.step_id, payload)
             out = {

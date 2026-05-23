@@ -13,6 +13,7 @@ import json
 import time
 from collections.abc import Iterator, Mapping
 from dataclasses import dataclass
+from typing import cast
 
 from audiomason.core.log_bus import LogRecord
 from audiomason.core.serde import json_loads_object
@@ -56,9 +57,7 @@ class SyslogService:
     def read_all_raw(self) -> str:
         with self._fs.open_read(RootName.STAGE, self._filename) as f:
             data = f.read()
-        if not isinstance(data, (bytes, bytearray)):
-            raise TypeError("syslog read returned non-bytes")
-        return bytes(data).decode("utf-8", errors="replace")
+        return data.decode("utf-8", errors="replace")
 
     def tail_lines_raw(self, n: int) -> list[str]:
         if n <= 0:
@@ -87,10 +86,7 @@ class SyslogService:
             ) as f:
                 data = f.read()
 
-            if not isinstance(data, (bytes, bytearray)):
-                raise TypeError("syslog read returned non-bytes")
-
-            b = bytes(data)
+            b = data
             new_bytes = b[offset:]
             if new_bytes:
                 offset += len(new_bytes)
@@ -122,8 +118,9 @@ class SyslogService:
                 out.append(s)
                 continue
 
+            parsed_map = cast(Mapping[object, object], parsed)
             obj: dict[str, object] = {}
-            for key, value in parsed.items():
+            for key, value in parsed_map.items():
                 if isinstance(key, str):
                     obj[key] = value
 
@@ -145,11 +142,11 @@ class SyslogService:
 
     def _encode_record(self, record: LogRecord) -> bytes:
         if self._disk_format == "plain":
-            plain = record.plain if record.plain is not None else ""
+            plain = record.plain
             return (plain + "\n").encode("utf-8")
 
         # jsonl
-        msg = record.plain if record.plain is not None else ""
+        msg = record.plain
         obj: dict[str, object] = {
             "level": record.level_name,
             "logger": record.logger_name,

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TypeGuard
+from typing import TypeGuard, cast
 
 from .conditions import eval_condition, find_invalid_condition_path
 from .errors import FinalizeError
@@ -44,6 +44,26 @@ def _edge_priority(edge: FlowEdge) -> int:
     return edge.priority
 
 
+def _is_str_object_dict(value: object) -> TypeGuard[dict[str, object]]:
+    if not isinstance(value, dict):
+        return False
+    return all(isinstance(key, str) for key in cast(dict[object, object], value))
+
+
+def _as_str_object_dict(value: object) -> dict[str, object]:
+    return dict(value) if _is_str_object_dict(value) else {}
+
+
+def _is_object_list(value: object) -> TypeGuard[list[object]]:
+    return isinstance(value, list)
+
+
+def _as_dict_list(value: object) -> list[dict[str, object]]:
+    if not _is_object_list(value):
+        return []
+    return [item for item in value if _is_str_object_dict(item)]
+
+
 def normalize_to_graph(
     wizard_definition: dict[str, object],
     *,
@@ -65,12 +85,15 @@ def normalize_to_graph(
 
     if version == 1:
         steps_any = wizard_definition.get("steps")
-        if not isinstance(steps_any, list) or not steps_any:
+        if not _is_object_list(steps_any) or not steps_any:
             raise FinalizeError("wizard_definition steps must be a non-empty list")
+        steps = _as_dict_list(steps_any)
+        if len(steps) != len(steps_any):
+            raise FinalizeError("wizard_definition contains invalid step_id")
 
         nodes_v1: list[str] = []
-        for s in steps_any:
-            sid = s.get("step_id") if isinstance(s, dict) else None
+        for s in steps:
+            sid = s.get("step_id")
             if not isinstance(sid, str) or not sid:
                 raise FinalizeError("wizard_definition contains invalid step_id")
             if sid not in known_step_ids:
@@ -96,7 +119,7 @@ def normalize_to_graph(
 
     if version == 2:
         graph_any = wizard_definition.get("graph")
-        if not isinstance(graph_any, dict):
+        if not _is_str_object_dict(graph_any):
             raise FinalizeError("wizard_definition graph must be an object")
 
         entry_any = graph_any.get("entry_step_id")
@@ -105,13 +128,16 @@ def normalize_to_graph(
         entry = entry_any
 
         nodes_any = graph_any.get("nodes")
-        if not isinstance(nodes_any, list) or not nodes_any:
+        if not _is_object_list(nodes_any) or not nodes_any:
             raise FinalizeError("wizard_definition graph nodes must be a non-empty list")
+        nodes = _as_dict_list(nodes_any)
+        if len(nodes) != len(nodes_any):
+            raise FinalizeError("wizard_definition graph nodes must contain step_id strings")
 
         nodes_v2: list[str] = []
         seen: set[str] = set()
-        for n in nodes_any:
-            sid = n.get("step_id") if isinstance(n, dict) else None
+        for n in nodes:
+            sid = n.get("step_id")
             if not isinstance(sid, str) or not sid:
                 raise FinalizeError("wizard_definition graph nodes must contain step_id strings")
             if sid in seen:
@@ -125,13 +151,14 @@ def normalize_to_graph(
             raise FinalizeError("wizard_definition graph entry_step_id must exist in nodes")
 
         edges_any = graph_any.get("edges")
-        if not isinstance(edges_any, list):
+        if not _is_object_list(edges_any):
             raise FinalizeError("wizard_definition graph edges must be a list")
+        edges = _as_dict_list(edges_any)
+        if len(edges) != len(edges_any):
+            raise FinalizeError("wizard_definition graph edges must be objects")
 
         edges_v2: list[FlowEdge] = []
-        for e in edges_any:
-            if not isinstance(e, dict):
-                raise FinalizeError("wizard_definition graph edges must be objects")
+        for e in edges:
             frm = e.get("from_step_id")
             to = e.get("to_step_id")
             if not isinstance(frm, str) or not frm:
@@ -176,13 +203,16 @@ def normalize_to_graph(
         entry = entry_any
 
         nodes_any = wizard_definition.get("nodes")
-        if not isinstance(nodes_any, list) or not nodes_any:
+        if not _is_object_list(nodes_any) or not nodes_any:
             raise FinalizeError("wizard_definition nodes must be a non-empty list")
+        nodes = _as_dict_list(nodes_any)
+        if len(nodes) != len(nodes_any):
+            raise FinalizeError("wizard_definition nodes must contain step_id strings")
 
         nodes_v3: list[str] = []
         seen_v3: set[str] = set()
-        for n in nodes_any:
-            sid = n.get("step_id") if isinstance(n, dict) else None
+        for n in nodes:
+            sid = n.get("step_id")
             if not isinstance(sid, str) or not sid:
                 raise FinalizeError("wizard_definition nodes must contain step_id strings")
             if sid in seen_v3:
@@ -196,14 +226,15 @@ def normalize_to_graph(
             raise FinalizeError("wizard_definition entry_step_id must exist in nodes")
 
         edges_any = wizard_definition.get("edges")
-        if not isinstance(edges_any, list):
+        if not _is_object_list(edges_any):
             raise FinalizeError("wizard_definition edges must be a list")
+        edges = _as_dict_list(edges_any)
+        if len(edges) != len(edges_any):
+            raise FinalizeError("wizard_definition edges must be objects")
 
         priorities: dict[str, int] = {}
         edges_v3: list[FlowEdge] = []
-        for e in edges_any:
-            if not isinstance(e, dict):
-                raise FinalizeError("wizard_definition edges must be objects")
+        for e in edges:
             frm = e.get("from")
             to = e.get("to")
             if not isinstance(frm, str) or not frm:
@@ -474,10 +505,11 @@ def _summarize_when(when: object | None) -> str:
         return "<unconditional>"
     if isinstance(when, bool):
         return "true" if when else "false"
-    if isinstance(when, dict):
-        op = when.get("op")
+    when_obj = _as_str_object_dict(when)
+    if when_obj:
+        op = when_obj.get("op")
         if isinstance(op, str) and op:
-            path = when.get("path")
+            path = when_obj.get("path")
             if isinstance(path, str) and path:
                 return f"{op}:{path}"
             return op
